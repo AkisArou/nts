@@ -174,6 +174,29 @@ double nts_crypto_keygen_run(double job);
 void nts_crypto_keygen_release(double job);
 void nts_crypto_keygen_queue(double job, NtsHeader *done);
 
+/* Key agreement (`dh.c`): `DiffieHellman` and `ECDH` objects by handle, with
+ * statuses mirrored by `src/dh.ts`, and the stateless `diffieHellman()`. */
+double nts_crypto_dh_status(void);
+double nts_crypto_dh_new_size(double bits, double generator);
+double nts_crypto_dh_new_prime(NtsView *prime, double generator);
+double nts_crypto_dh_new_prime_generator(NtsView *prime, NtsView *generator);
+double nts_crypto_dh_group(NtsString *name);
+double nts_crypto_dh_check(double handle);
+NtsView *nts_crypto_dh_generate_keys(double handle);
+NtsView *nts_crypto_dh_get(double handle, double which);
+bool nts_crypto_dh_set_key(double handle, NtsView *key, bool private_key);
+NtsView *nts_crypto_dh_compute_secret(double handle, NtsView *key);
+double nts_crypto_ecdh_new(NtsString *curve);
+bool nts_crypto_ecdh_generate_keys(double handle);
+NtsView *nts_crypto_ecdh_compute_secret(double handle, NtsView *key);
+NtsView *nts_crypto_ecdh_get_public_key(double handle, double form);
+NtsView *nts_crypto_ecdh_get_private_key(double handle);
+double nts_crypto_ecdh_set_private_key(double handle, NtsView *key);
+double nts_crypto_ecdh_set_public_key(double handle, NtsView *key);
+NtsView *nts_crypto_ecdh_convert_key(NtsView *key, NtsString *curve, double form);
+NtsView *nts_crypto_dh_stateless(double private_key, double public_key);
+void nts_crypto_dh_stateless_job(double private_key, double public_key, NtsHeader *done);
+
 /* FIPS mode: whether OpenSSL's default properties ask for FIPS, and setting
  * them. False from `set` is a failure whose cause is on the error record. */
 bool nts_crypto_fips_enabled(void);

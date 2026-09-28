@@ -37,6 +37,13 @@ function callable(Class) {
     return new Class(...args);
   }
   Constructor.prototype = Class.prototype;
+  // One function in node, so an instance's `constructor` is the exported one.
+  Object.defineProperty(Class.prototype, "constructor", {
+    configurable: true,
+    enumerable: false,
+    writable: true,
+    value: Constructor,
+  });
   arity(Constructor, Class.length);
   return Constructor;
 }
@@ -80,6 +87,9 @@ function applyDescriptors(exports) {
 const ORDER = [
   "createCipheriv",
   "createDecipheriv",
+  "createDiffieHellman",
+  "createDiffieHellmanGroup",
+  "createECDH",
   "createHash",
   "createHmac",
   "createPrivateKey",
@@ -87,9 +97,11 @@ const ORDER = [
   "createSecretKey",
   "createSign",
   "createVerify",
+  "diffieHellman",
   "getCiphers",
   "getCipherInfo",
   "getCurves",
+  "getDiffieHellman",
   "getHashes",
   "hkdf",
   "hkdfSync",
@@ -119,6 +131,9 @@ const ORDER = [
   "hash",
   "Cipheriv",
   "Decipheriv",
+  "DiffieHellman",
+  "DiffieHellmanGroup",
+  "ECDH",
   "Hash",
   "Hmac",
   "KeyObject",
@@ -126,6 +141,32 @@ const ORDER = [
   "Verify",
   "secureHeapUsed",
 ];
+
+/**
+ * Node's constructors are functions that construct themselves without `new`;
+ * `Hash` and `Hmac` also warn that they are deprecated. Made once per export
+ * table, because each class's prototype names its wrapper as `constructor`.
+ */
+const constructorTables = new WeakMap();
+
+function constructorsOf(exports) {
+  let constructors = constructorTables.get(exports);
+  if (constructors === undefined) {
+    constructors = {
+      Cipheriv: callable(exports.Cipheriv),
+      Decipheriv: callable(exports.Decipheriv),
+      Sign: callable(exports.Sign),
+      DiffieHellman: callable(exports.DiffieHellman),
+      DiffieHellmanGroup: callable(exports.DiffieHellmanGroup),
+      ECDH: Object.assign(callable(exports.ECDH), { convertKey: exports.ECDH.convertKey }),
+      Verify: callable(exports.Verify),
+      Hash: deprecate(callable(exports.Hash), "crypto.Hash constructor is deprecated.", "DEP0179"),
+      Hmac: deprecate(callable(exports.Hmac), "crypto.Hmac constructor is deprecated.", "DEP0181"),
+    };
+    constructorTables.set(exports, constructors);
+  }
+  return constructors;
+}
 
 export function shape(exports) {
   // A compiled module may publish none of this yet; guarded so each test fails
@@ -135,16 +176,7 @@ export function shape(exports) {
     shaped.add(exports);
     applyDescriptors(exports);
   }
-  // Node's constructors are functions that construct themselves without
-  // `new`; `Hash` and `Hmac` also warn that they are deprecated.
-  const constructors = {
-    Cipheriv: callable(exports.Cipheriv),
-    Decipheriv: callable(exports.Decipheriv),
-    Sign: callable(exports.Sign),
-    Verify: callable(exports.Verify),
-    Hash: deprecate(callable(exports.Hash), "crypto.Hash constructor is deprecated.", "DEP0179"),
-    Hmac: deprecate(callable(exports.Hmac), "crypto.Hmac constructor is deprecated.", "DEP0181"),
-  };
+  const constructors = constructorsOf(exports);
   const module = {};
   for (const name of ORDER) {
     const value = constructors[name] ?? exports[name];

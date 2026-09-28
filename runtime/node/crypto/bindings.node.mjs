@@ -976,3 +976,197 @@ globalThis.nts_crypto_keygen_queue = (job, done) => {
     }
   });
 };
+
+// -- key agreement ------------------------------------------------------------
+
+/** `DiffieHellman`, `DiffieHellmanGroup` and `ECDH` objects, node's own, by handle. */
+const agreements = [];
+let dhStatus = 0;
+
+const holdAgreement = (object) => agreements.push(object);
+const agreementAt = (handle) => agreements[handle - 1];
+
+globalThis.nts_crypto_dh_status = () => dhStatus;
+
+/** A construction's status, as `dh.c` reports it, from node's refusal. */
+function dhConstructed(make, bits) {
+  try {
+    return holdAgreement(make());
+  } catch (error) {
+    failed(error);
+    if (error?.code === "ERR_INVALID_ARG_VALUE") return error.message === "Invalid prime" ? -2 : -1;
+    return bits !== undefined && bits < 2 ? -4 : -3;
+  }
+}
+
+globalThis.nts_crypto_dh_new_size = (bits, generator) =>
+  dhConstructed(() => crypto.createDiffieHellman(bits, generator), bits);
+globalThis.nts_crypto_dh_new_prime = (prime, generator) =>
+  dhConstructed(() => crypto.createDiffieHellman(Buffer.from(prime), generator));
+globalThis.nts_crypto_dh_new_prime_generator = (prime, generator) =>
+  dhConstructed(() => crypto.createDiffieHellman(Buffer.from(prime), Buffer.from(generator)));
+
+globalThis.nts_crypto_dh_group = (name) => {
+  try {
+    return holdAgreement(crypto.getDiffieHellman(name));
+  } catch {
+    return 0;
+  }
+};
+
+globalThis.nts_crypto_dh_check = (handle) => agreementAt(handle).verifyError;
+
+/** A call whose failure `dh.c` reports as NULL. */
+function bytesOrNull(call) {
+  try {
+    return view(call());
+  } catch {
+    return null;
+  }
+}
+
+globalThis.nts_crypto_dh_generate_keys = (handle) => bytesOrNull(() => agreementAt(handle).generateKeys());
+
+const DH_PARTS = ["getPrime", "getGenerator", "getPublicKey", "getPrivateKey"];
+
+globalThis.nts_crypto_dh_get = (handle, which) => bytesOrNull(() => agreementAt(handle)[DH_PARTS[which]]());
+
+globalThis.nts_crypto_dh_set_key = (handle, key, privateKey) => {
+  try {
+    const dh = agreementAt(handle);
+    if (privateKey) dh.setPrivateKey(key);
+    else dh.setPublicKey(key);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const SECRET_STATUSES = new Map([
+  ["Unspecified validation error", -1],
+  ["Supplied key is too small", -2],
+  ["Supplied key is too large", -3],
+  ["Supplied key is invalid", -4],
+]);
+
+globalThis.nts_crypto_dh_compute_secret = (handle, key) => {
+  try {
+    return view(agreementAt(handle).computeSecret(key));
+  } catch (error) {
+    dhStatus = SECRET_STATUSES.get(error?.message) ?? -5;
+    return null;
+  }
+};
+
+globalThis.nts_crypto_ecdh_new = (curve) => {
+  try {
+    return holdAgreement(crypto.createECDH(curve));
+  } catch (error) {
+    return error?.code === "ERR_CRYPTO_INVALID_CURVE" ? -1 : 0;
+  }
+};
+
+globalThis.nts_crypto_ecdh_generate_keys = (handle) => {
+  try {
+    agreementAt(handle).generateKeys();
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** `dh.c`'s ECDH statuses, from node's codes. */
+function ecdhStatusOf(error) {
+  switch (error?.code) {
+    case "ERR_CRYPTO_INVALID_CURVE":
+      return -1;
+    case "ERR_CRYPTO_INVALID_KEYPAIR":
+      return -2;
+    case "ERR_CRYPTO_ECDH_INVALID_PUBLIC_KEY":
+      return -3;
+    case "ERR_CRYPTO_INVALID_KEYTYPE":
+      return -5;
+    default:
+      return error?.message === "Failed to convert Buffer to EC_POINT" ? -3 : 0;
+  }
+}
+
+globalThis.nts_crypto_ecdh_compute_secret = (handle, key) => {
+  try {
+    return view(agreementAt(handle).computeSecret(key));
+  } catch (error) {
+    dhStatus = ecdhStatusOf(error);
+    return null;
+  }
+};
+
+const POINT_FORMATS = { 2: "compressed", 4: "uncompressed", 6: "hybrid" };
+
+globalThis.nts_crypto_ecdh_get_public_key = (handle, form) =>
+  bytesOrNull(() => agreementAt(handle).getPublicKey(undefined, POINT_FORMATS[form]));
+globalThis.nts_crypto_ecdh_get_private_key = (handle) => bytesOrNull(() => agreementAt(handle).getPrivateKey());
+
+globalThis.nts_crypto_ecdh_set_private_key = (handle, key) => {
+  try {
+    agreementAt(handle).setPrivateKey(key);
+    return 1;
+  } catch (error) {
+    return ecdhStatusOf(error);
+  }
+};
+
+/** Node's own `setPublicKey` warns DEP0031 too; the TypeScript has already. */
+globalThis.nts_crypto_ecdh_set_public_key = (handle, key) => {
+  const noDeprecation = process.noDeprecation;
+  process.noDeprecation = true;
+  try {
+    agreementAt(handle).setPublicKey(key);
+    return 1;
+  } catch (error) {
+    return ecdhStatusOf(error);
+  } finally {
+    process.noDeprecation = noDeprecation;
+  }
+};
+
+globalThis.nts_crypto_ecdh_convert_key = (key, curve, form) => {
+  try {
+    return view(crypto.ECDH.convertKey(key, curve, undefined, undefined, POINT_FORMATS[form]));
+  } catch (error) {
+    dhStatus = ecdhStatusOf(error);
+    return null;
+  }
+};
+
+/**
+ * The two keys as PEM: node's JavaScript compares two key objects' types
+ * before anything is parsed, which the TypeScript has already done, and a
+ * mismatch it lets through -- keys given as PEM -- is OpenSSL's to refuse, as
+ * it is `dh.c`'s.
+ */
+function pemOf(handle) {
+  const key = keyAt(handle);
+  return key.export({ type: key.type === "private" ? "pkcs8" : "spki", format: "pem" });
+}
+
+const agreementKeys = (privateKey, publicKey) => ({ privateKey: pemOf(privateKey), publicKey: pemOf(publicKey) });
+
+globalThis.nts_crypto_dh_stateless = (privateKey, publicKey) => {
+  try {
+    return view(crypto.diffieHellman(agreementKeys(privateKey, publicKey)));
+  } catch (error) {
+    failed(error);
+    return null;
+  }
+};
+
+globalThis.nts_crypto_dh_stateless_job = (privateKey, publicKey, done) => {
+  crypto.diffieHellman(agreementKeys(privateKey, publicKey), (error, secret) => {
+    if (error) {
+      failed(error);
+      done(false, noBytes);
+    } else {
+      done(true, view(secret));
+    }
+  });
+};

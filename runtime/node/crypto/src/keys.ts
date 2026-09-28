@@ -274,6 +274,11 @@ function asymmetricKeyTypeOf(handle: KeyObjectHandle): string | undefined {
   return name === "" ? undefined : name;
 }
 
+/** Node's `getKeyObjectAsymmetricKeyType`: read from the slot, not the replaceable getter. */
+export function asymmetricKeyTypeOfKey(key: KeyObject): string | undefined {
+  return asymmetricKeyTypeOf(asymmetricHandleOf(key));
+}
+
 export class AsymmetricKeyObject extends KeyObject {
   #details: AsymmetricKeyDetails | undefined;
 

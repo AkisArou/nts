@@ -319,3 +319,49 @@ declare function nts_crypto_keygen_run(job: number): number;
 declare function nts_crypto_keygen_release(job: number): void;
 /** @ntsAbi managed */
 declare function nts_crypto_keygen_queue(job: number, done: (ok: boolean, key: number) => void): void;
+
+/** Key agreement: `DiffieHellman` and `ECDH` handles, and the stateless form. */
+/** @ntsAbi managed */
+declare function nts_crypto_dh_status(): number;
+/** @ntsAbi managed */
+declare function nts_crypto_dh_new_size(bits: number, generator: number): number;
+/** @ntsAbi managed */
+declare function nts_crypto_dh_new_prime(prime: Uint8Array, generator: number): number;
+/** @ntsAbi managed */
+declare function nts_crypto_dh_new_prime_generator(prime: Uint8Array, generator: Uint8Array): number;
+/** @ntsAbi managed */
+declare function nts_crypto_dh_group(name: string): number;
+/** @ntsAbi managed */
+declare function nts_crypto_dh_check(handle: number): number;
+/** @ntsAbi managed */
+declare function nts_crypto_dh_generate_keys(handle: number): Uint8Array | null;
+/** @ntsAbi managed */
+declare function nts_crypto_dh_get(handle: number, which: number): Uint8Array | null;
+/** @ntsAbi managed */
+declare function nts_crypto_dh_set_key(handle: number, key: Uint8Array, privateKey: boolean): boolean;
+/** @ntsAbi managed */
+declare function nts_crypto_dh_compute_secret(handle: number, key: Uint8Array): Uint8Array | null;
+/** @ntsAbi managed */
+declare function nts_crypto_ecdh_new(curve: string): number;
+/** @ntsAbi managed */
+declare function nts_crypto_ecdh_generate_keys(handle: number): boolean;
+/** @ntsAbi managed */
+declare function nts_crypto_ecdh_compute_secret(handle: number, key: Uint8Array): Uint8Array | null;
+/** @ntsAbi managed */
+declare function nts_crypto_ecdh_get_public_key(handle: number, form: number): Uint8Array | null;
+/** @ntsAbi managed */
+declare function nts_crypto_ecdh_get_private_key(handle: number): Uint8Array | null;
+/** @ntsAbi managed */
+declare function nts_crypto_ecdh_set_private_key(handle: number, key: Uint8Array): number;
+/** @ntsAbi managed */
+declare function nts_crypto_ecdh_set_public_key(handle: number, key: Uint8Array): number;
+/** @ntsAbi managed */
+declare function nts_crypto_ecdh_convert_key(key: Uint8Array, curve: string, form: number): Uint8Array | null;
+/** @ntsAbi managed */
+declare function nts_crypto_dh_stateless(privateKey: number, publicKey: number): Uint8Array | null;
+/** @ntsAbi managed */
+declare function nts_crypto_dh_stateless_job(
+  privateKey: number,
+  publicKey: number,
+  done: (ok: boolean, secret: Uint8Array) => void,
+): void;

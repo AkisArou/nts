@@ -1,11 +1,11 @@
-/* `crypto.c`, `cipher.c`, `keys.c`, `sig.c`, `rsa.c` and `keygen.c`, called directly.
+/* `crypto.c`, `cipher.c`, `keys.c`, `sig.c`, `rsa.c`, `keygen.c` and `dh.c`, called directly.
  *
  * The TypeScript over these natives runs on node against node's own crypto,
  * so nothing but this runs the C: the compiled lane refuses every public
  * crypto function today, for compiler reasons recorded with the module. Each
  * check is a published known answer -- FIPS 180 and 202 digests, RFC 4231
  * HMAC, RFC 6070 PBKDF2, RFC 5869 HKDF, RFC 7914 scrypt, SP 800-38A AES,
- * RFC 8032 Ed25519 --
+ * RFC 8032 Ed25519, RFC 7748 X25519 --
  * or a round trip through OpenSSL, or node's own behaviour where it is
  * node's rather than a standard's: PBKDF2 and HKDF of length 0 fail, scrypt's
  * answers empty, SHAKE's default length, which statuses a cipher answers.
@@ -619,6 +619,73 @@ static void key_generation(void) {
                 keygen_calls == 1 && keygen_ok && key_type_is(keygen_key, "ec"));
 }
 
+/* ------------------------------------------------------- key agreement */
+
+static void key_agreement(void) {
+    double alice = nts_crypto_dh_group(text("modp14"));
+    double bob = nts_crypto_dh_group(text("MODP14"));
+    expect_true("a MODP group is found in any case", alice > 0 && bob > 0);
+    expect_true("  and its parameters pass DH_check", nts_crypto_dh_check(alice) == 0);
+    NtsView *alice_public = nts_crypto_dh_generate_keys(alice);
+    NtsView *bob_public = nts_crypto_dh_generate_keys(bob);
+    NtsView *alice_secret = nts_crypto_dh_compute_secret(alice, bob_public);
+    expect_true("two parties agree on a secret the prime's size",
+                alice_secret != NULL && nts_view_byte_length(alice_secret) == 256 &&
+                    same_bytes(alice_secret, nts_crypto_dh_compute_secret(bob, alice_public)));
+    unsigned char one = 1;
+    expect_true("a public key of 1 is too small",
+                nts_crypto_dh_compute_secret(alice, bytes(&one, 1)) == NULL && nts_crypto_dh_status() == -2);
+    expect_true("an unknown group is none", nts_crypto_dh_group(text("modp3")) == 0);
+    expect_true("a prime of one bit is refused", nts_crypto_dh_new_size(1, 2) == -4);
+    expect_true("  with OpenSSL's reason", errors_mention("modulus too small"));
+
+    double ours = nts_crypto_ecdh_new(text("prime256v1"));
+    double theirs = nts_crypto_ecdh_new(text("prime256v1"));
+    expect_true("an ECDH object on a NIST name is refused, as node takes short names only",
+                nts_crypto_ecdh_new(text("P-256")) == -1);
+    nts_crypto_ecdh_generate_keys(ours);
+    nts_crypto_ecdh_generate_keys(theirs);
+    NtsView *our_point = nts_crypto_ecdh_get_public_key(ours, 4);
+    NtsView *their_point = nts_crypto_ecdh_get_public_key(theirs, 2);
+    expect_true("a P-256 point is 65 bytes, or 33 compressed",
+                nts_view_byte_length(our_point) == 65 && nts_view_byte_length(their_point) == 33);
+    expect_true("  and converts between the two",
+                same_bytes(nts_crypto_ecdh_convert_key(our_point, text("prime256v1"), 2),
+                           nts_crypto_ecdh_get_public_key(ours, 2)));
+    NtsView *shared = nts_crypto_ecdh_compute_secret(ours, their_point);
+    expect_true("two ECDH parties agree on the x-coordinate, 32 bytes",
+                shared != NULL && nts_view_byte_length(shared) == 32 &&
+                    same_bytes(shared, nts_crypto_ecdh_compute_secret(theirs, our_point)));
+    expect_true("bytes that are no point are the public key's fault",
+                nts_crypto_ecdh_compute_secret(ours, utf8("nope")) == NULL && nts_crypto_dh_status() == -3);
+    unsigned char zero = 0;
+    expect_true("a private key of 0 is not on the curve's range",
+                nts_crypto_ecdh_set_private_key(ours, bytes(&zero, 1)) == -5);
+    expect_true("a private key of 1 is accepted", nts_crypto_ecdh_set_private_key(ours, bytes(&one, 1)) == 1);
+    expect_true("  and its public key is the generator",
+                is_hex(nts_crypto_ecdh_get_public_key(ours, 4),
+                       "046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296"
+                       "4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5"));
+
+    double x_private = nts_crypto_key_from_okp(
+        text("X25519"), hex("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a"), true);
+    double x_public = nts_crypto_key_from_okp(
+        text("X25519"), hex("de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f"), false);
+    expect_true("X25519, RFC 7748 section 6.1",
+                is_hex(nts_crypto_dh_stateless(x_private, x_public),
+                       "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742"));
+    double ec = nts_crypto_key_parse_private(1, -1, file(KEYS "ec_p256_private.pem"), bytes("", 0), false);
+    expect_true("an X25519 key and an EC key agree on nothing", nts_crypto_dh_stateless(x_private, ec) == NULL);
+    expect_true("  and OpenSSL says why", errors_mention("operation not supported for this keytype") ||
+                                              errors_mention("different"));
+    int before = jobs_done;
+    nts_crypto_dh_stateless_job(x_private, x_public, &job_callback);
+    uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+    expect_true("an agreement job calls back once, with the same secret",
+                jobs_done == before + 1 && job_ok &&
+                    strcmp(job_hex, "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742") == 0);
+}
+
 int main(void) {
     digests();
     derivations();
@@ -627,6 +694,7 @@ int main(void) {
     signatures();
     rsa_encryption();
     key_generation();
+    key_agreement();
     printf("%d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;
 }

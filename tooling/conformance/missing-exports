@@ -33,14 +33,6 @@ url.URLPattern: a WHATWG global owned by runtime/web-platform; node re-exports i
 # Each group below is its own part of OpenSSL, and none is refused.
 crypto.encapsulate: key encapsulation, post-quantum ML-KEM, which this module does not have yet
 crypto.decapsulate: as crypto.encapsulate
-crypto.createDiffieHellman: Diffie-Hellman and ECDH, OpenSSL's DH and EC key agreement
-crypto.createDiffieHellmanGroup: as crypto.createDiffieHellman
-crypto.getDiffieHellman: as crypto.createDiffieHellman
-crypto.DiffieHellman: as crypto.createDiffieHellman
-crypto.DiffieHellmanGroup: as crypto.createDiffieHellman
-crypto.createECDH: as crypto.createDiffieHellman
-crypto.ECDH: as crypto.createDiffieHellman
-crypto.diffieHellman: as crypto.createDiffieHellman
 crypto.checkPrime: primes, OpenSSL's BN_generate_prime_ex and BN_check_prime
 crypto.checkPrimeSync: as crypto.checkPrime
 crypto.generatePrime: as crypto.checkPrime

@@ -166,6 +166,32 @@ abstract class NodeURIError extends URIError {
   }
 }
 
+/**
+ * The bases for the errors node throws from C++, where `THROW_ERR_*` makes a
+ * built-in error and sets `code` on it, and nothing else. Its `toString` is
+ * therefore the built-in's -- `Error: Unknown DH group`, with no code in it --
+ * and a test matching `String(error)` against that sees the difference from
+ * the JavaScript factory's form. The `_BINDING` classes below, and each code
+ * node defines only in `node_errors.h`, extend these.
+ */
+abstract class NativeError extends NodeError {
+  override toString(): string {
+    return `${this.name}: ${this.message}`;
+  }
+}
+
+abstract class NativeTypeError extends NodeTypeError {
+  override toString(): string {
+    return `${this.name}: ${this.message}`;
+  }
+}
+
+abstract class NativeRangeError extends NodeRangeError {
+  override toString(): string {
+    return `${this.name}: ${this.message}`;
+  }
+}
+
 /** `Invalid socket address`.
  *
  * Node throws this from C++ rather than from `lib/internal/errors.js`, which is
@@ -340,7 +366,7 @@ function formatExpected(
  * escape hatch for the ones it does not, and it exists so that matching node
  * does not mean weakening the template.
  */
-export class ERR_INVALID_ARG_TYPE_BINDING extends NodeTypeError {
+export class ERR_INVALID_ARG_TYPE_BINDING extends NativeTypeError {
   override get ["constructor"](): unknown {
     return TypeError;
   }
@@ -2005,7 +2031,7 @@ export class ERR_PERFORMANCE_MEASURE_INVALID_OPTIONS extends NodeTypeError {
  * A histogram's `record(0n)` is `value is out of range`, because node's
  * C++ checks the bigint after the JavaScript let it through.
  */
-export class ERR_OUT_OF_RANGE_BINDING extends NodeRangeError {
+export class ERR_OUT_OF_RANGE_BINDING extends NativeRangeError {
   override get ["constructor"](): unknown {
     return RangeError;
   }
@@ -2050,7 +2076,7 @@ export class ERR_DNS_SET_SERVERS_FAILED extends NodeError {
  * of the template's `The argument ... Received`: the resolver's
  * `setLocalAddress` validates in C++ and says only `Invalid IP address.`.
  */
-export class ERR_INVALID_ARG_VALUE_BINDING extends NodeTypeError {
+export class ERR_INVALID_ARG_VALUE_BINDING extends NativeTypeError {
   override get ["constructor"](): unknown {
     return TypeError;
   }
@@ -2082,7 +2108,7 @@ export class ERR_CRYPTO_HASH_UPDATE_FAILED extends NodeError {
 }
 
 /** `Invalid digest: md55`, from the KDFs, `Hmac` and the one-shot signatures, all of which node checks in C++. */
-export class ERR_CRYPTO_INVALID_DIGEST extends NodeTypeError {
+export class ERR_CRYPTO_INVALID_DIGEST extends NativeTypeError {
   override get ["constructor"](): unknown {
     return TypeError;
   }
@@ -2097,7 +2123,7 @@ export class ERR_CRYPTO_INVALID_DIGEST extends NodeTypeError {
  * `ERR_CRYPTO_INVALID_DIGEST` in C++'s other words: `Sign` and `Verify` say only
  * `Invalid digest`, and RSA-PSS key generation `Invalid MGF1 digest: sha0`.
  */
-export class ERR_CRYPTO_INVALID_DIGEST_BINDING extends NodeTypeError {
+export class ERR_CRYPTO_INVALID_DIGEST_BINDING extends NativeTypeError {
   override get ["constructor"](): unknown {
     return TypeError;
   }
@@ -2109,14 +2135,68 @@ export class ERR_CRYPTO_INVALID_DIGEST_BINDING extends NodeTypeError {
 }
 
 /** `Invalid key length`: more HKDF output than 255 blocks of the digest can make. */
-export class ERR_CRYPTO_INVALID_KEYLEN extends NodeRangeError {
+export class ERR_CRYPTO_INVALID_KEYLEN extends NativeRangeError {
   override get ["constructor"](): unknown {
     return RangeError;
   }
   override readonly code = "ERR_CRYPTO_INVALID_KEYLEN";
 
+  constructor(message = "Invalid key length") {
+    super(message);
+  }
+}
+
+/** A key that is not what the operation needs, in C++'s words: `Supplied key is invalid`. */
+export class ERR_CRYPTO_INVALID_KEYTYPE extends NativeRangeError {
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
+  override readonly code = "ERR_CRYPTO_INVALID_KEYTYPE";
+
+  constructor(message = "Invalid key type") {
+    super(message);
+  }
+}
+
+/** `Invalid key pair`: an ECDH object whose keys do not belong together. */
+export class ERR_CRYPTO_INVALID_KEYPAIR extends NativeRangeError {
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
+  override readonly code = "ERR_CRYPTO_INVALID_KEYPAIR";
+
   constructor() {
-    super("Invalid key length");
+    super("Invalid key pair");
+  }
+}
+
+/** `Invalid ECDH format: hybird`. */
+export class ERR_CRYPTO_ECDH_INVALID_FORMAT extends NodeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_CRYPTO_ECDH_INVALID_FORMAT";
+
+  constructor(format: string) {
+    super(`Invalid ECDH format: ${format}`);
+  }
+}
+
+/** `Public key is not valid for specified curve`. */
+export class ERR_CRYPTO_ECDH_INVALID_PUBLIC_KEY extends NodeError {
+  override readonly code = "ERR_CRYPTO_ECDH_INVALID_PUBLIC_KEY";
+
+  constructor() {
+    super("Public key is not valid for specified curve");
+  }
+}
+
+/** `Incompatible key types for Diffie-Hellman: ec and dh`. */
+export class ERR_CRYPTO_INCOMPATIBLE_KEY extends NodeError {
+  override readonly code = "ERR_CRYPTO_INCOMPATIBLE_KEY";
+
+  constructor(name: string, detail: string) {
+    super(`Incompatible ${name}: ${detail}`);
   }
 }
 
@@ -2125,7 +2205,7 @@ export class ERR_CRYPTO_INVALID_KEYLEN extends NodeRangeError {
  * one -- node keeps this code rather than a decorated OpenSSL error, for
  * backward compatibility, and says so beside the throw.
  */
-export class ERR_CRYPTO_INVALID_SCRYPT_PARAMS extends NodeRangeError {
+export class ERR_CRYPTO_INVALID_SCRYPT_PARAMS extends NativeRangeError {
   override get ["constructor"](): unknown {
     return RangeError;
   }
@@ -2137,7 +2217,7 @@ export class ERR_CRYPTO_INVALID_SCRYPT_PARAMS extends NodeRangeError {
 }
 
 /** `Input buffers must have the same byte length`, from `timingSafeEqual`. */
-export class ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH extends NodeRangeError {
+export class ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH extends NativeRangeError {
   override get ["constructor"](): unknown {
     return RangeError;
   }
@@ -2161,7 +2241,7 @@ export class ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE extends NodeTypeError {
 }
 
 /** `Unknown cipher`, from C++, for a name OpenSSL does not know. */
-export class ERR_CRYPTO_UNKNOWN_CIPHER extends NodeError {
+export class ERR_CRYPTO_UNKNOWN_CIPHER extends NativeError {
   override readonly code = "ERR_CRYPTO_UNKNOWN_CIPHER";
 
   constructor() {
@@ -2170,7 +2250,7 @@ export class ERR_CRYPTO_UNKNOWN_CIPHER extends NodeError {
 }
 
 /** `Invalid initialization vector`: the wrong length, or none where one is needed. */
-export class ERR_CRYPTO_INVALID_IV extends NodeTypeError {
+export class ERR_CRYPTO_INVALID_IV extends NativeTypeError {
   override get ["constructor"](): unknown {
     return TypeError;
   }
@@ -2182,7 +2262,7 @@ export class ERR_CRYPTO_INVALID_IV extends NodeTypeError {
 }
 
 /** An authentication tag refused, in C++'s own words: `Invalid authentication tag length: 5`. */
-export class ERR_CRYPTO_INVALID_AUTH_TAG extends NodeTypeError {
+export class ERR_CRYPTO_INVALID_AUTH_TAG extends NativeTypeError {
   override get ["constructor"](): unknown {
     return TypeError;
   }
@@ -2194,7 +2274,7 @@ export class ERR_CRYPTO_INVALID_AUTH_TAG extends NodeTypeError {
 }
 
 /** `Invalid message length`: more than CCM's nonce leaves room to count. */
-export class ERR_CRYPTO_INVALID_MESSAGELEN extends NodeRangeError {
+export class ERR_CRYPTO_INVALID_MESSAGELEN extends NativeRangeError {
   override get ["constructor"](): unknown {
     return RangeError;
   }
@@ -2222,7 +2302,7 @@ export class ERR_CRYPTO_INVALID_STATE extends NodeError {
  * `Invalid state`, as C++ throws it: `final()` after `final()`. `Sign` and
  * `Verify` say why: `Not initialised`.
  */
-export class ERR_CRYPTO_INVALID_STATE_BINDING extends NodeError {
+export class ERR_CRYPTO_INVALID_STATE_BINDING extends NativeError {
   override readonly code = "ERR_CRYPTO_INVALID_STATE";
 
   constructor(message = "Invalid state") {
@@ -2231,7 +2311,7 @@ export class ERR_CRYPTO_INVALID_STATE_BINDING extends NodeError {
 }
 
 /** A crypto operation that failed with nothing from OpenSSL to say why, in C++'s own words. */
-export class ERR_CRYPTO_OPERATION_FAILED extends NodeError {
+export class ERR_CRYPTO_OPERATION_FAILED extends NativeError {
   override readonly code = "ERR_CRYPTO_OPERATION_FAILED";
 
   constructor(message = "Operation failed") {
@@ -2240,7 +2320,7 @@ export class ERR_CRYPTO_OPERATION_FAILED extends NodeError {
 }
 
 /** `Invalid digest used`: an OAEP hash OpenSSL does not know, as C++ words it. */
-export class ERR_OSSL_EVP_INVALID_DIGEST extends NodeError {
+export class ERR_OSSL_EVP_INVALID_DIGEST extends NativeError {
   override readonly code = "ERR_OSSL_EVP_INVALID_DIGEST";
 
   constructor() {
@@ -2249,7 +2329,7 @@ export class ERR_OSSL_EVP_INVALID_DIGEST extends NodeError {
 }
 
 /** `Unknown DH group`: a group name OpenSSL has no prime for. */
-export class ERR_CRYPTO_UNKNOWN_DH_GROUP extends NodeError {
+export class ERR_CRYPTO_UNKNOWN_DH_GROUP extends NativeError {
   override readonly code = "ERR_CRYPTO_UNKNOWN_DH_GROUP";
 
   constructor() {
@@ -2279,7 +2359,7 @@ export class ERR_CRYPTO_SIGN_KEY_REQUIRED extends NodeError {
 }
 
 /** An operation OpenSSL could do and node declines, in C++'s own words. */
-export class ERR_CRYPTO_UNSUPPORTED_OPERATION extends NodeError {
+export class ERR_CRYPTO_UNSUPPORTED_OPERATION extends NativeError {
   override readonly code = "ERR_CRYPTO_UNSUPPORTED_OPERATION";
 
   constructor(message: string) {
@@ -2291,7 +2371,7 @@ export class ERR_CRYPTO_UNSUPPORTED_OPERATION extends NodeError {
  * `ERR_MISSING_ARGS` as C++ throws it, with its own sentence rather than the
  * template's list: `options.plaintextLength required for CCM mode with AAD`.
  */
-export class ERR_MISSING_ARGS_BINDING extends NodeTypeError {
+export class ERR_MISSING_ARGS_BINDING extends NativeTypeError {
   override get ["constructor"](): unknown {
     return TypeError;
   }
@@ -2312,7 +2392,7 @@ export class ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS extends NodeError {
 }
 
 /** The same code as C++ throws it for a raw import: `...is incompatible with the key type`. */
-export class ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS_BINDING extends NodeError {
+export class ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS_BINDING extends NativeError {
   override readonly code = "ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS";
 
   constructor() {
@@ -2325,7 +2405,7 @@ export class ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS_BINDING extends NodeError {
  * throws its own words -- `Invalid JWK RSA key`, `Invalid JWK format` -- which
  * are passed in.
  */
-export class ERR_CRYPTO_INVALID_JWK extends NodeTypeError {
+export class ERR_CRYPTO_INVALID_JWK extends NativeTypeError {
   override get ["constructor"](): unknown {
     return TypeError;
   }
@@ -2337,7 +2417,7 @@ export class ERR_CRYPTO_INVALID_JWK extends NodeTypeError {
 }
 
 /** `Unsupported JWK Key Type.`: a key JWK has no form for. */
-export class ERR_CRYPTO_JWK_UNSUPPORTED_KEY_TYPE extends NodeError {
+export class ERR_CRYPTO_JWK_UNSUPPORTED_KEY_TYPE extends NativeError {
   override readonly code = "ERR_CRYPTO_JWK_UNSUPPORTED_KEY_TYPE";
 
   constructor() {
@@ -2346,7 +2426,7 @@ export class ERR_CRYPTO_JWK_UNSUPPORTED_KEY_TYPE extends NodeError {
 }
 
 /** `Unsupported JWK EC curve: secp224r1.` */
-export class ERR_CRYPTO_JWK_UNSUPPORTED_CURVE extends NodeError {
+export class ERR_CRYPTO_JWK_UNSUPPORTED_CURVE extends NativeError {
   override readonly code = "ERR_CRYPTO_JWK_UNSUPPORTED_CURVE";
 
   constructor(message: string) {
@@ -2355,7 +2435,7 @@ export class ERR_CRYPTO_JWK_UNSUPPORTED_CURVE extends NodeError {
 }
 
 /** `Invalid EC curve name`. */
-export class ERR_CRYPTO_INVALID_CURVE extends NodeTypeError {
+export class ERR_CRYPTO_INVALID_CURVE extends NativeTypeError {
   override get ["constructor"](): unknown {
     return TypeError;
   }
@@ -2367,7 +2447,7 @@ export class ERR_CRYPTO_INVALID_CURVE extends NodeTypeError {
 }
 
 /** `Passphrase required for encrypted key`. */
-export class ERR_MISSING_PASSPHRASE extends NodeTypeError {
+export class ERR_MISSING_PASSPHRASE extends NativeTypeError {
   override get ["constructor"](): unknown {
     return TypeError;
   }
