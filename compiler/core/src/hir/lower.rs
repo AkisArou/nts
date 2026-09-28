@@ -13940,18 +13940,38 @@ impl<'a> FuncBuilder<'a> {
     /// A `NodeList` is an encoding artifact rather than a construct, so it is not
     /// something the lowering should have to know about at every step.
     fn children(&self, id: NodeId) -> Vec<NodeId> {
-        self.node(id)
-            .children
-            .iter()
-            .flat_map(|child| {
-                let node = self.node(*child);
-                if node.kind == NodeKind::List {
-                    node.children.clone()
-                } else {
-                    vec![*child]
-                }
-            })
-            .collect()
+        // **One allocation, not one per child.** The `flat_map` this replaces
+        // returned a `Vec` from every closure call -- `node.children.clone()`
+        // for a list and `vec![*child]` for everything else -- so a node of N
+        // children cost N+1 allocations, and nearly every arm of lowering asks
+        // this.
+        //
+        // The GTK lane profiled it and then measured it: on a one-button GTK
+        // program, whose 650-odd functions are mostly generated bindings, a warm
+        // `emit-c` goes from 52.78 G instructions to 29.64 G -- **-43.8%**,
+        // repeatable to 0.01%, emitting the identical program. On
+        // `runtime/node/http` the same change is -0.19%. Both are right: a
+        // `List` node is what makes this clone rather than push, so a program
+        // whose declarations are mostly generated argument lists pays N+1
+        // almost everywhere and hand-written code pays it rarely. The magnitude
+        // is a property of the program's shape, not of the corpus chosen.
+        //
+        // The capacity is the child count, exact whenever no child is a list --
+        // the common case -- and grown once otherwise. Returning a slice or an
+        // iterator would remove the last allocation too, and is a change to
+        // several hundred call sites rather than to this one; this is the part
+        // that can be had for nothing.
+        let children = &self.node(id).children;
+        let mut flat = Vec::with_capacity(children.len());
+        for child in children {
+            let node = self.node(*child);
+            if node.kind == NodeKind::List {
+                flat.extend_from_slice(&node.children);
+            } else {
+                flat.push(*child);
+            }
+        }
+        flat
     }
 
     /// The parent a child would name, with list nodes stepped over.
