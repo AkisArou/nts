@@ -31,6 +31,18 @@
 // run's five causes (an array given for a `{ length }` record, and that one)
 // are the JVM's alone; C was measured answering right.
 //
+// **A MISSING class is usually the JVM's own refusal**, not an emitter gap:
+// `emit-jvm` declines a class under NTS4009 when one of its overrides has
+// another representation than the method it overrides ("dispatch would
+// silently reach the wrong one"), and what references it then does not
+// resolve. C and LLVM have no such check and dispatch anyway -- a narrowed
+// parameter read at an erased argument is SIGSEGV on C
+// (a-writable-override-narrowing-an-erased-chunk, child_process's
+// `ChildWritable._write`). So read (E) through the declines: fewer parameters
+// and a covariant record return are the JVM's alone (C ignores extra
+// arguments; the subtype's record extends the base's), and a narrowed
+// parameter is live on C.
+//
 // Declines are not failures: `emit-jvm` names what it cannot call (a native C
 // function) and writes the rest, and the rest must verify. A module whose
 // `emit-jvm` writes no class is NOT MEASURED.
