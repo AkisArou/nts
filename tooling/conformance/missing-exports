@@ -31,14 +31,10 @@ url.URLPattern: a WHATWG global owned by runtime/web-platform; node re-exports i
 # node:crypto is its digests, MACs, symmetric ciphers, key derivations,
 # random numbers and key objects so far.
 # Each group below is its own part of OpenSSL, and none is refused.
-crypto.generateKeyPair: key-pair generation, EVP_PKEY_keygen per family; keys themselves are here
+crypto.generateKeyPair: key-pair generation, EVP_PKEY_keygen per family; keys themselves are here; the next part of node:crypto
 crypto.generateKeyPairSync: as crypto.generateKeyPair
 crypto.generateKey: key generation, which for a secret key is random bytes and for the rest needs EVP_PKEY; not yet written
 crypto.generateKeySync: as crypto.generateKey
-crypto.privateDecrypt: RSA encryption, EVP_PKEY_encrypt over the keys here; the next part of node:crypto
-crypto.privateEncrypt: as crypto.privateDecrypt
-crypto.publicDecrypt: as crypto.privateDecrypt
-crypto.publicEncrypt: as crypto.privateDecrypt
 crypto.encapsulate: key encapsulation, post-quantum ML-KEM, which this module does not have yet
 crypto.decapsulate: as crypto.encapsulate
 crypto.createDiffieHellman: Diffie-Hellman and ECDH, OpenSSL's DH and EC key agreement
@@ -49,7 +45,6 @@ crypto.DiffieHellmanGroup: as crypto.createDiffieHellman
 crypto.createECDH: as crypto.createDiffieHellman
 crypto.ECDH: as crypto.createDiffieHellman
 crypto.diffieHellman: as crypto.createDiffieHellman
-crypto.getCurves: as crypto.createDiffieHellman
 crypto.checkPrime: primes, OpenSSL's BN_generate_prime_ex and BN_check_prime
 crypto.checkPrimeSync: as crypto.checkPrime
 crypto.generatePrime: as crypto.checkPrime

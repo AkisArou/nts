@@ -4,10 +4,11 @@
 // `createHash` and `hash`, `createHmac` over secret keys, `createCipheriv`
 // and `createDecipheriv`, `pbkdf2`, `hkdf` and `scrypt`, the random bytes,
 // integers and UUIDs, and `timingSafeEqual`. Asymmetric keys, and signatures
-// with them: `createPublicKey` and `createPrivateKey`, `createSign`,
-// `createVerify`, `sign` and `verify`.
+// and RSA encryption with them: `createPublicKey` and `createPrivateKey`,
+// `createSign`, `createVerify`, `sign` and `verify`, `publicEncrypt` and its
+// three relatives.
 //
-// Not yet: key generation, RSA encryption, Diffie-Hellman and ECDH, primes,
+// Not yet: key generation, Diffie-Hellman and ECDH, primes,
 // X.509, and Web Crypto's `subtle`. Each is its own part of OpenSSL, and
 // `tooling/conformance/missing-exports` lists the names.
 
@@ -19,8 +20,21 @@ import { isAnyArrayBuffer, isArrayBufferView } from "../../util/src/types.ts";
 import { Hash, Hmac } from "./hash.ts";
 import { bytesOf, OpenSSLError } from "./util.ts";
 
+export { getCurves } from "./util.ts";
+
 export { createHash, createHmac, getHashes, hash } from "./hash.ts";
-export { Cipheriv, createCipheriv, createDecipheriv, Decipheriv, getCipherInfo, getCiphers } from "./cipher.ts";
+export {
+  Cipheriv,
+  createCipheriv,
+  createDecipheriv,
+  Decipheriv,
+  getCipherInfo,
+  getCiphers,
+  privateDecrypt,
+  privateEncrypt,
+  publicDecrypt,
+  publicEncrypt,
+} from "./cipher.ts";
 export { createPrivateKey, createPublicKey, createSecretKey, KeyObject } from "./keys.ts";
 export { createSign, createVerify, Sign, sign, Verify, verify } from "./sig.ts";
 export { hkdf, hkdfSync, pbkdf2, pbkdf2Sync, scrypt, scryptSync } from "./kdf.ts";

@@ -186,6 +186,8 @@ declare function nts_crypto_key_from_jwk_rsa(components: Uint8Array[], privateKe
 /** @ntsAbi managed */
 declare function nts_crypto_key_curve_known(curve: string): boolean;
 /** @ntsAbi managed */
+declare function nts_crypto_curve_names(): string[];
+/** @ntsAbi managed */
 declare function nts_crypto_key_from_jwk_ec(
   curve: string,
   x: Uint8Array,
@@ -270,3 +272,16 @@ declare function nts_crypto_sign_job(
   signature: Uint8Array,
   done: (ok: boolean, bytes: Uint8Array) => void,
 ): void;
+
+/** RSA encryption: operations are `RsaOperation`; a digest id of -1 is none. */
+/** @ntsAbi managed */
+declare function nts_crypto_rsa_implicit_rejection(key: number): number;
+/** @ntsAbi managed */
+declare function nts_crypto_public_key_cipher(
+  operation: number,
+  key: number,
+  data: Uint8Array,
+  padding: number,
+  digest: number,
+  label: Uint8Array,
+): Uint8Array | null;

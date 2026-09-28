@@ -114,6 +114,7 @@ double nts_crypto_key_parse_public(double format, double type, NtsView *data, Nt
                                    bool has_passphrase);
 double nts_crypto_key_from_jwk_rsa(NtsArray *components, bool private_key);
 bool nts_crypto_key_curve_known(NtsString *curve);
+NtsArray *nts_crypto_curve_names(void);
 double nts_crypto_key_from_jwk_ec(NtsString *curve, NtsView *x, NtsView *y, NtsView *d, bool private_key);
 double nts_crypto_key_from_okp(NtsString *curve, NtsView *raw, bool private_key);
 double nts_crypto_key_from_raw_ec(NtsString *curve, NtsView *raw, bool private_key);
@@ -148,6 +149,13 @@ NtsView *nts_crypto_sign_job_sync(bool verify, double key, NtsView *data, double
 void nts_crypto_sign_job(bool verify, double key, NtsView *data, double digest,
                          double salt_length, double padding, NtsView *context, NtsView *signature,
                          NtsHeader *done);
+
+/* RSA encryption (`rsa.c`): an operation, numbered as `src/cipher.ts`
+ * numbers them, and the implicit-rejection check before a PKCS#1 v1.5
+ * private decryption. A digest id of -1 is none. */
+double nts_crypto_rsa_implicit_rejection(double key);
+NtsView *nts_crypto_public_key_cipher(double operation, double key, NtsView *data, double padding,
+                                      double digest, NtsView *label);
 
 /* FIPS mode: whether OpenSSL's default properties ask for FIPS, and setting
  * them. False from `set` is a failure whose cause is on the error record. */

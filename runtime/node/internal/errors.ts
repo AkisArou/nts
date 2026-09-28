@@ -2228,6 +2228,15 @@ export class ERR_CRYPTO_OPERATION_FAILED extends NodeError {
   }
 }
 
+/** `Invalid digest used`: an OAEP hash OpenSSL does not know, as C++ words it. */
+export class ERR_OSSL_EVP_INVALID_DIGEST extends NodeError {
+  override readonly code = "ERR_OSSL_EVP_INVALID_DIGEST";
+
+  constructor() {
+    super("Invalid digest used");
+  }
+}
+
 /** `No key provided to sign`. */
 export class ERR_CRYPTO_SIGN_KEY_REQUIRED extends NodeError {
   override readonly code = "ERR_CRYPTO_SIGN_KEY_REQUIRED";

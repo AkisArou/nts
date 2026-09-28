@@ -230,3 +230,15 @@ export function filterDuplicateStrings(names: readonly string[]): string[] {
   }
   return kept.sort();
 }
+
+let curveNames: string[] | undefined;
+
+/**
+ * `crypto.getCurves()`: OpenSSL's built-in elliptic curves, once per name
+ * regardless of case, sorted. Computed once, and a fresh array each time, as
+ * node's `cachedResult` hands out.
+ */
+export function getCurves(): string[] {
+  curveNames ??= filterDuplicateStrings(nts_crypto_curve_names());
+  return curveNames.slice();
+}

@@ -37,7 +37,14 @@ import type { WriteCallback } from "../../stream/src/writable.ts";
 import { isArrayBufferView } from "../../util/src/types.ts";
 import { constants } from "./constants.ts";
 import { checkUpdate, feed } from "./hash.ts";
-import { preparePrivateKey, preparePublicOrPrivateKey, privateKeyOf, publicOrPrivateKeyOf } from "./keys.ts";
+import {
+  keyOptionsOf,
+  preparePrivateKey,
+  preparePublicOrPrivateKey,
+  privateKeyOf,
+  publicOrPrivateKeyOf,
+} from "./keys.ts";
+import type { KeyOperationOptions } from "./keys.ts";
 import { asBuffer, bytesOf, digestId, getArrayBufferOrView, jobError, queuedCryptoError } from "./util.ts";
 
 /** `kSigEncDER` and `kSigEncP1363`. */
@@ -54,24 +61,6 @@ const DERIVE_FAILED = "Deriving bits failed";
 
 const noBytes = new Uint8Array(0);
 
-/**
- * The options a key argument may carry beside the key. Node reads them off
- * whatever the argument is; a string's or a buffer's are simply absent.
- */
-interface SignKeyOptions {
-  padding?: unknown;
-  saltLength?: unknown;
-  dsaEncoding?: unknown;
-  context?: unknown;
-}
-
-const noOptions: SignKeyOptions = {};
-
-function optionsOf(key: unknown): SignKeyOptions {
-  if (typeof key === "object" || key === undefined) return key as SignKeyOptions;
-  return noOptions;
-}
-
 /** Node's `getIntOption`, given the option's value: an int32, or absent. */
 function getIntOption(name: string, value: unknown): number | undefined {
   if (value === undefined) return undefined;
@@ -79,12 +68,12 @@ function getIntOption(name: string, value: unknown): number | undefined {
   throw new ERR_INVALID_ARG_VALUE(`options.${name}`, value);
 }
 
-function getPadding(options: SignKeyOptions): number | undefined {
+function getPadding(options: KeyOperationOptions): number | undefined {
   return getIntOption("padding", options.padding);
 }
 
 /** PSS without a salt length is the longest salt the key allows, as node chooses. */
-function getSaltLength(options: SignKeyOptions): number | undefined {
+function getSaltLength(options: KeyOperationOptions): number | undefined {
   const saltLength = getIntOption("saltLength", options.saltLength);
   if (options.padding === constants.RSA_PKCS1_PSS_PADDING && saltLength === undefined) {
     return constants.RSA_PSS_SALTLEN_MAX_SIGN;
@@ -95,7 +84,7 @@ function getSaltLength(options: SignKeyOptions): number | undefined {
 function getDSASignatureEncoding(key: unknown): number {
   if (typeof key !== "object") return SigEncoding.DER;
   // A destructuring default: `undefined` is DER, and `null` is refused.
-  const given = (key as SignKeyOptions).dsaEncoding;
+  const given = keyOptionsOf(key).dsaEncoding;
   const dsaEncoding = given === undefined ? "der" : given;
   if (dsaEncoding === "der") return SigEncoding.DER;
   if (dsaEncoding === "ieee-p1363") return SigEncoding.P1363;
@@ -103,7 +92,7 @@ function getDSASignatureEncoding(key: unknown): number {
 }
 
 /** Ed448's and ML-DSA's context string. */
-function getContext(options: SignKeyOptions): ArrayBufferView | undefined {
+function getContext(options: KeyOperationOptions): ArrayBufferView | undefined {
   const context = options?.context;
   if (context === undefined) return undefined;
   if (!isArrayBufferView(context)) {
@@ -182,7 +171,7 @@ export class Sign extends Writable {
   sign(privateKey: unknown, outputEncoding?: string): string | Buffer {
     if (!privateKey) throw new ERR_CRYPTO_SIGN_KEY_REQUIRED();
     const prepared = preparePrivateKey(privateKey, "privateKey");
-    const options = optionsOf(privateKey);
+    const options = keyOptionsOf(privateKey);
     const padding = getPadding(options);
     const saltLength = getSaltLength(options);
     const dsaEncoding = getDSASignatureEncoding(privateKey);
@@ -224,7 +213,7 @@ export class Verify extends Writable {
 
   verify(key: unknown, signature: unknown, signatureEncoding?: string): boolean {
     const prepared = preparePublicOrPrivateKey(key, "key");
-    const options = optionsOf(key);
+    const options = keyOptionsOf(key);
     const padding = getPadding(options);
     const saltLength = getSaltLength(options);
     const dsaEncoding = getDSASignatureEncoding(key);
@@ -341,7 +330,7 @@ export function sign(algorithm: unknown, data: unknown, key: unknown, callback?:
   if (callback !== undefined) validateFunction(callback, "callback");
   const bytes = bytesOf(getArrayBufferOrView(data, "data"));
   if (!key) throw new ERR_CRYPTO_SIGN_KEY_REQUIRED();
-  const options = optionsOf(key);
+  const options = keyOptionsOf(key);
   const padding = getPadding(options);
   const saltLength = getSaltLength(options);
   const dsaEncoding = getDSASignatureEncoding(key);
@@ -398,7 +387,7 @@ export function verify(
   if (algorithm !== null && algorithm !== undefined) validateString(algorithm, "algorithm");
   if (callback !== undefined) validateFunction(callback, "callback");
   const bytes = bytesOf(getArrayBufferOrView(data, "data"));
-  const options = optionsOf(key);
+  const options = keyOptionsOf(key);
   const padding = getPadding(options);
   const saltLength = getSaltLength(options);
   const dsaEncoding = getDSASignatureEncoding(key);

@@ -7,8 +7,8 @@
 // native context. Like `Hash`, these extend `Transform` outright where node's
 // are `LazyTransform`s.
 //
-// RSA's `publicEncrypt` and relatives are in the same file in node and need
-// asymmetric keys, which this module does not have yet.
+// RSA's `publicEncrypt` and relatives are in the same file in node, and at
+// its end here, over `rsa.c`.
 
 import { Buffer } from "../../buffer/src/main.ts";
 import {
@@ -22,7 +22,9 @@ import {
   ERR_CRYPTO_UNSUPPORTED_OPERATION,
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_ARG_VALUE,
+  ERR_INVALID_ARG_VALUE_BINDING,
   ERR_MISSING_ARGS_BINDING,
+  ERR_OSSL_EVP_INVALID_DIGEST,
   ERR_UNKNOWN_ENCODING,
 } from "../../internal/errors.ts";
 import { emitWarning } from "../../internal/process-warning.ts";
@@ -33,11 +35,20 @@ import { Transform } from "../../stream/src/main.ts";
 import type { TransformCallback, TransformOptions } from "../../stream/src/transform.ts";
 import { StringDecoder } from "../../string_decoder/src/main.ts";
 import { isArrayBufferView } from "../../util/src/types.ts";
-import { prepareSecretKey } from "./keys.ts";
+import { constants } from "./constants.ts";
+import {
+  keyOptionsOf,
+  preparePrivateKey,
+  preparePublicOrPrivateKey,
+  prepareSecretKey,
+  publicOrPrivateKeyOf,
+} from "./keys.ts";
 import {
   asBuffer,
   bytesOf,
   cipherId,
+  cryptoError,
+  digestId,
   filterDuplicateStrings,
   getArrayBufferOrView,
   parseEncoding,
@@ -474,4 +485,72 @@ export function getCipherInfo(nameOrNid: unknown, options?: unknown): CipherInfo
   if (facts[2]! !== 0) info.ivLength = facts[2]!;
   info.keyLength = facts[3]!;
   return info;
+}
+
+// -- RSA encryption: node's PublicKeyCipher -----------------------------------
+
+/** `rsa.c`'s operations. */
+const RsaOperation = { PublicEncrypt: 0, PrivateDecrypt: 1, PrivateEncrypt: 2, PublicDecrypt: 3 } as const;
+
+/** `rsa.c`'s answers about implicit rejection. */
+const ImplicitRejection = { Failed: 0, Unsupported: -1 } as const;
+
+/**
+ * Node's `rsaFunctionFor`, and then `PublicKeyCipher::Cipher` in its order:
+ * the key is parsed as public or private whatever the operation -- a
+ * private operation on a public key fails in OpenSSL, not in the parse -- and
+ * the padding is coerced as `Uint32Value` coerces it, after the parse.
+ */
+function publicKeyCipher(
+  operation: number,
+  defaultPadding: number,
+  isPrivate: boolean,
+  key: unknown,
+  buffer: unknown,
+): Buffer {
+  const prepared = isPrivate ? preparePrivateKey(key, "privateKey") : preparePublicOrPrivateKey(key);
+  const options = keyOptionsOf(key);
+  const padding = options.padding || defaultPadding;
+  const oaepHash = options.oaepHash;
+  const encoding = typeof options.encoding === "string" ? options.encoding : undefined;
+  if (oaepHash !== undefined) validateString(oaepHash, "key.oaepHash");
+  const label =
+    options.oaepLabel === undefined ? noBytes : bytesOf(getArrayBufferOrView(options.oaepLabel, "key.oaepLabel", encoding));
+  const data = bytesOf(getArrayBufferOrView(buffer, "buffer", encoding));
+
+  const native = publicOrPrivateKeyOf(prepared).native;
+  const paddingValue = Number(padding) >>> 0;
+  if (operation === RsaOperation.PrivateDecrypt && paddingValue === constants.RSA_PKCS1_PADDING) {
+    const answer = nts_crypto_rsa_implicit_rejection(native);
+    if (answer === ImplicitRejection.Failed) throw cryptoError("error:00000000:lib(0)::reason(0)");
+    if (answer === ImplicitRejection.Unsupported) {
+      throw new ERR_INVALID_ARG_VALUE_BINDING("RSA_PKCS1_PADDING is no longer supported for private decryption");
+    }
+  }
+  let digest = -1;
+  if (typeof oaepHash === "string") {
+    digest = digestId(oaepHash);
+    if (digest < 0) throw new ERR_OSSL_EVP_INVALID_DIGEST();
+  }
+  const out = nts_crypto_public_key_cipher(operation, native, data, paddingValue, digest, label);
+  // `ThrowCryptoError` with no words of node's own: with nothing queued it
+  // prints error zero, which is what these are.
+  if (out === null) throw cryptoError("error:00000000:lib(0)::reason(0)");
+  return asBuffer(out);
+}
+
+export function publicEncrypt(key: unknown, buffer: unknown): Buffer {
+  return publicKeyCipher(RsaOperation.PublicEncrypt, constants.RSA_PKCS1_OAEP_PADDING, false, key, buffer);
+}
+
+export function publicDecrypt(key: unknown, buffer: unknown): Buffer {
+  return publicKeyCipher(RsaOperation.PublicDecrypt, constants.RSA_PKCS1_PADDING, false, key, buffer);
+}
+
+export function privateEncrypt(key: unknown, buffer: unknown): Buffer {
+  return publicKeyCipher(RsaOperation.PrivateEncrypt, constants.RSA_PKCS1_PADDING, true, key, buffer);
+}
+
+export function privateDecrypt(key: unknown, buffer: unknown): Buffer {
+  return publicKeyCipher(RsaOperation.PrivateDecrypt, constants.RSA_PKCS1_OAEP_PADDING, true, key, buffer);
 }

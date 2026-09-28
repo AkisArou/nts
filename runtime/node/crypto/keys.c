@@ -460,6 +460,21 @@ double nts_crypto_key_from_raw_ec(NtsString *curve, NtsView *raw, bool private_k
     return key_claim(pkey);
 }
 
+/* ncrypto's `Ec::GetCurves`: OpenSSL's built-in curves by short name. */
+NtsArray *nts_crypto_curve_names(void) {
+    size_t count = EC_get_builtin_curves(NULL, 0);
+    EC_builtin_curve *curves = malloc((count == 0 ? 1 : count) * sizeof(EC_builtin_curve));
+    if (curves == NULL || EC_get_builtin_curves(curves, count) != count) count = 0;
+    NtsArray *names = nts_array_new(&nts_desc_ref, (double)count);
+    NtsString **items = NTS_ITEMS(names, NtsString *);
+    for (size_t i = 0; i < count; i++) {
+        const char *name = OBJ_nid2sn(curves[i].nid);
+        items[i] = nts_string_from_utf8(name, strlen(name));
+    }
+    free(curves);
+    return names;
+}
+
 /* --------------------------------------------------------- what a key is */
 
 /* Node's `GetAsymmetricKeyType`: the names a program sees, and "" for a key

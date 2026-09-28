@@ -510,8 +510,9 @@ globalThis.nts_crypto_key_parse_public = (format, type, data, passphrase, hasPas
   const options = { key: data, format: FORMATS[format] };
   if (type >= 0) options.type = ENCODINGS[type];
   if (hasPassphrase) options.passphrase = passphrase;
+  let publicKey;
   try {
-    return holdKey(crypto.createPublicKey(options));
+    publicKey = crypto.createPublicKey(options);
   } catch (publicError) {
     // A private key parses as one, and keeps its private half here as it
     // does in `keys.c`, where the key object's type is the TypeScript's.
@@ -522,6 +523,13 @@ globalThis.nts_crypto_key_parse_public = (format, type, data, passphrase, hasPas
       failed(publicError);
       return 0;
     }
+  }
+  // `createPublicKey` also accepts a private key, answering with its public
+  // half; `keys.c`, like node's C++, keeps the private key it parsed.
+  try {
+    return holdKey(crypto.createPrivateKey(options));
+  } catch {
+    return holdKey(publicKey);
   }
 };
 
@@ -579,6 +587,7 @@ globalThis.nts_crypto_key_from_raw_ec = (curve, raw, privateKey) => {
 };
 
 globalThis.nts_crypto_key_status = () => keyStatus;
+globalThis.nts_crypto_curve_names = () => crypto.getCurves();
 globalThis.nts_crypto_key_type = (handle) => keyAt(handle)?.asymmetricKeyType ?? "";
 
 globalThis.nts_crypto_key_details = (handle) => {
@@ -829,4 +838,48 @@ globalThis.nts_crypto_sign_job = (verify, key, data, digest, saltLength, padding
   };
   if (verify) crypto.verify(algorithm, data, options, signature, deliver);
   else crypto.sign(algorithm, data, options, deliver);
+};
+
+// -- RSA encryption -----------------------------------------------------------
+
+const RSA_OPERATIONS = [crypto.publicEncrypt, crypto.privateDecrypt, crypto.privateEncrypt, crypto.publicDecrypt];
+
+/**
+ * A held key as node's RSA functions should see it. A public key goes as its
+ * PEM: node's JavaScript refuses a public `KeyObject` for a private operation,
+ * where `rsa.c` -- like node's C++ given a public PEM -- lets OpenSSL refuse it.
+ */
+function rsaKey(handle) {
+  const key = keyAt(handle);
+  return key.type === "public" ? key.export({ type: "spki", format: "pem" }) : key;
+}
+
+/**
+ * Asked of node by decrypting a modulus's worth of zeros with PKCS#1 v1.5:
+ * with implicit rejection that answers, without it node refuses the padding,
+ * and a key that cannot decrypt fails in OpenSSL.
+ */
+globalThis.nts_crypto_rsa_implicit_rejection = (handle) => {
+  const key = keyAt(handle);
+  const size = Math.ceil((key.asymmetricKeyDetails?.modulusLength ?? 8) / 8);
+  try {
+    crypto.privateDecrypt({ key: rsaKey(handle), padding: crypto.constants.RSA_PKCS1_PADDING }, Buffer.alloc(size));
+    return 1;
+  } catch (error) {
+    if (error?.code === "ERR_INVALID_ARG_VALUE") return -1;
+    failed(error);
+    return 0;
+  }
+};
+
+globalThis.nts_crypto_public_key_cipher = (operation, handle, data, padding, digest, label) => {
+  const options = { key: rsaKey(handle), padding };
+  if (digest >= 0) options.oaepHash = names[digest];
+  if (label.length > 0) options.oaepLabel = label;
+  try {
+    return view(RSA_OPERATIONS[operation](options, data));
+  } catch (error) {
+    failed(error);
+    return null;
+  }
 };

@@ -1,4 +1,4 @@
-/* `crypto.c`, `cipher.c`, `keys.c` and `sig.c`, called directly.
+/* `crypto.c`, `cipher.c`, `keys.c`, `sig.c` and `rsa.c`, called directly.
  *
  * The TypeScript over these natives runs on node against node's own crypto,
  * so nothing but this runs the C: the compiled lane refuses every public
@@ -346,6 +346,14 @@ static void keys(void) {
                                                               nts_view_byte_length(parts[2]) == 32);
     expect_true("  which import back",
                 nts_crypto_key_equals(nts_crypto_key_from_jwk_ec(text("P-256"), parts[0], parts[1], parts[2], true), ec));
+    NtsArray *curves = nts_crypto_curve_names();
+    bool has_p256 = false;
+    for (uint32_t i = 0; i < curves->header.length; i++) {
+        char *name = string_of(NTS_ITEMS(curves, NtsString *)[i]);
+        has_p256 = has_p256 || strcmp(name, "prime256v1") == 0;
+        free(name);
+    }
+    expect_true("getCurves names prime256v1 among dozens", has_p256 && curves->header.length > 50);
     expect_true("an unknown curve is its own status",
                 nts_crypto_key_from_jwk_ec(text("nope"), parts[0], parts[1], parts[2], true) == -2);
     expect_true("a point off the curve is refused",
@@ -471,12 +479,55 @@ static void signatures(void) {
                 jobs_done == before + 1 && job_ok && strcmp(job_hex, "01") == 0);
 }
 
+/* ------------------------------------------------------ RSA encryption */
+
+static void rsa_encryption(void) {
+    NtsView *none = bytes("", 0);
+    double sha256 = nts_crypto_digest_id(text("sha256"));
+    double rsa = nts_crypto_key_parse_private(1, -1, file(KEYS "rsa_private.pem"), none, false);
+    double rsa_public = nts_crypto_key_parse_public(1, -1, file(KEYS "rsa_public.pem"), none, false);
+    NtsView *message = utf8("attack at dawn");
+
+    NtsView *oaep = nts_crypto_public_key_cipher(0, rsa_public, message, 4, -1, none);
+    expect_true("OAEP encrypts to the modulus's size", oaep != NULL && nts_view_byte_length(oaep) == 256);
+    expect_true("  and decrypts", same_bytes(nts_crypto_public_key_cipher(1, rsa, oaep, 4, -1, none), message));
+    expect_true("  but not under another digest", nts_crypto_public_key_cipher(1, rsa, oaep, 4, sha256, none) == NULL);
+    expect_true("  which OpenSSL explains", errors_mention("oaep decoding error"));
+
+    NtsView *labelled = nts_crypto_public_key_cipher(0, rsa_public, message, 4, sha256, utf8("label"));
+    expect_true("OAEP-SHA256 with a label round trips",
+                same_bytes(nts_crypto_public_key_cipher(1, rsa, labelled, 4, sha256, utf8("label")), message));
+    expect_true("  and needs the same label",
+                nts_crypto_public_key_cipher(1, rsa, labelled, 4, sha256, utf8("other")) == NULL);
+    nts_crypto_take_errors();
+
+    expect_true("PKCS#1 v1.5 private decryption has implicit rejection here", nts_crypto_rsa_implicit_rejection(rsa) == 1);
+    NtsView *pkcs1 = nts_crypto_public_key_cipher(0, rsa_public, message, 1, -1, none);
+    expect_true("  and round trips", same_bytes(nts_crypto_public_key_cipher(1, rsa, pkcs1, 1, -1, none), message));
+    double ec = nts_crypto_key_parse_private(1, -1, file(KEYS "ec_p256_private.pem"), none, false);
+    expect_true("an EC key cannot be asked", nts_crypto_rsa_implicit_rejection(ec) == 0);
+    nts_crypto_take_errors();
+
+    /* A PKCS#1 v1.5 signature is the private operation over a DigestInfo, so
+     * the two must agree to the byte. */
+    NtsView *digest_info = hex("3031300d060960864801650304020105000420"
+                               "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    NtsView *raw = nts_crypto_public_key_cipher(2, rsa, digest_info, 1, -1, none);
+    expect_true("privateEncrypt of SHA-256's DigestInfo for \"abc\" is its RSA signature",
+                same_bytes(raw, stream_sign(sha256, "abc", rsa, NAN, NAN)));
+    expect_true("  and publicDecrypt recovers the DigestInfo",
+                same_bytes(nts_crypto_public_key_cipher(3, rsa_public, raw, 1, -1, none), digest_info));
+    expect_true("a public key cannot decrypt", nts_crypto_public_key_cipher(1, rsa_public, oaep, 4, -1, none) == NULL);
+    nts_crypto_take_errors();
+}
+
 int main(void) {
     digests();
     derivations();
     ciphers();
     keys();
     signatures();
+    rsa_encryption();
     printf("%d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;
 }

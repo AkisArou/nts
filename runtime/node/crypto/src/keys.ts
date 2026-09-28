@@ -856,6 +856,31 @@ export function preparePublicOrPrivateKey(key: unknown, name = "key"): PreparedK
   return prepareAsymmetricKey(key, KeyContext.ConsumePublic, name);
 }
 
+/**
+ * The options a key argument may carry beside the key, for whichever
+ * operation takes it: `sign({ key, padding })`, `publicEncrypt({ key,
+ * oaepHash })`. Node reads them off the argument whatever it is; a string, a
+ * buffer and a key object carry none.
+ */
+export interface KeyOperationOptions {
+  padding?: unknown;
+  saltLength?: unknown;
+  dsaEncoding?: unknown;
+  context?: unknown;
+  oaepHash?: unknown;
+  oaepLabel?: unknown;
+  encoding?: unknown;
+}
+
+const noKeyOptions: KeyOperationOptions = {};
+
+/** The options beside a key argument; null and undefined are read, as node reads them, and throw. */
+export function keyOptionsOf(key: unknown): KeyOperationOptions {
+  if (typeof key !== "object" && key !== undefined) return noKeyOptions;
+  if (key instanceof KeyObject || isArrayBufferView(key) || isAnyArrayBuffer(key)) return noKeyOptions;
+  return key as KeyOperationOptions;
+}
+
 /** Node's `KeyObjectData::GetPrivateKeyFromJs`: the prepared key's handle, parsed if need be. */
 export function privateKeyOf(prepared: PreparedKey): KeyObjectHandle {
   return initAsymmetric(prepared, false);
