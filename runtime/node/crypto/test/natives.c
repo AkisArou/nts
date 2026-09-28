@@ -1,5 +1,5 @@
-/* `crypto.c`, `cipher.c`, `keys.c`, `sig.c`, `rsa.c`, `keygen.c`, `dh.c`, `prime.c`, `argon2.c`, `kem.c` and
- * `spkac.c`, called directly.
+/* `crypto.c`, `cipher.c`, `keys.c`, `sig.c`, `rsa.c`, `keygen.c`, `dh.c`, `prime.c`, `argon2.c`, `kem.c`,
+ * `spkac.c` and `x509.c`, called directly.
  *
  * The TypeScript over these natives runs on node against node's own crypto,
  * so nothing but this runs the C: the compiled lane refuses every public
@@ -892,6 +892,322 @@ static void spkac(void) {
                     nts_crypto_take_errors()->header.length == 3);
 }
 
+/* ------------------------------------------------------------ X.509 */
+
+#define X509E "third_party/node/test/fixtures/x509-escaping/"
+
+/* `test-x509-escaping`'s expectations for its `alt-N`, `info-N` and `subj-N`
+ * certificates, and three certificates `test-crypto-x509` writes inline --
+ * copied from those files by a script, not retyped. */
+static const char *const expected_alt_names[] = {
+    "DNS:\"good.example.com\\u002c DNS:evil.example.com\"",
+    "URI:http://example.com/",
+    "URI:http://example.com/?a=b&c=d",
+    "URI:\"http://example.com/a\\u002cb\"",
+    "URI:http://example.com/a%2Cb",
+    "URI:\"http://example.com/a\\u002c DNS:good.example.com\"",
+    "DNS:\"ex\\u00e4mple.com\"",
+    "DNS:\"\\\"evil.example.com\\\"\"",
+    "IP Address:8.8.8.8",
+    "IP Address:8.8.4.4",
+    "IP Address:<invalid length=5>",
+    "IP Address:<invalid length=6>",
+    "IP Address:A0B:C0D:E0F:0:0:0:7A7B:7C7D",
+    "email:foo@example.com",
+    "email:\"foo@example.com\\u002c DNS:good.example.com\"",
+    "DirName:\"L=Hannover\\u002cC=DE\"",
+    "DirName:\"L=M\xc3""\xbc""nchen\\u002cC=DE\"",
+    "DirName:\"L=Berlin\\\\\\u002c DNS:good.example.com\\u002cC=DE\"",
+    "DirName:\"L=Berlin\\\\\\u002c DNS:good.example.com\\u0000evil.example.com\\u002cC=DE\"",
+    "DirName:\"L=Berlin\\\\\\u002c DNS:good.example.com\\\\\\\\\\u0000evil.example.com\\u002cC=DE\"",
+    "DirName:\"L=Berlin\\u000d\\u000a\\u002cC=DE\"",
+    "DirName:\"L=Berlin/CN=good.example.com\\u002cC=DE\"",
+    "Registered ID:1.2.840.113549.1.1.11",
+    "Registered ID:1.3.9999.12.34",
+    "othername:XmppAddr:abc123",
+    "othername:\"XmppAddr:abc123\\u002c DNS:good.example.com\"",
+    "othername:\"XmppAddr:good.example.com\\u0000abc123\"",
+    "othername:<unsupported>",
+    "othername:SRVName:abc123",
+    "othername:<unsupported>",
+    "othername:\"SRVName:abc\\u0000def\"",
+};
+
+static const char *const expected_info_access[] = {
+    "OCSP - URI:\"http://good.example.com/\\u000aOCSP - URI:http://evil.example.com/\"",
+    "CA Issuers - URI:\"http://ca.example.com/\\u000aOCSP - URI:http://evil.example.com\"\nOCSP - DNS:\"good.example.com\\u000aOCSP - URI:http://ca.nodejs.org/ca.cert\"",
+    "1.3.9999.12.34 - URI:http://ca.example.com/",
+    "OCSP - othername:XmppAddr:good.example.com\nOCSP - othername:<unsupported>\nOCSP - othername:SRVName:abc123",
+    "OCSP - othername:\"XmppAddr:good.example.com\\u0000abc123\"",
+};
+
+static const char *const expected_subjects[] = {
+    "L=Somewhere\nCN=evil.example.com",
+    "L=Somewhere\\00evil.example.com",
+    "L=Somewhere\\0ACN=evil.example.com",
+    "L=Somewhere\\, CN = evil.example.com",
+    "L=Somewhere/CN=evil.example.com",
+    "L=M\xc3""\xbc""nchen\\\\\\0ACN=evil.example.com",
+    "L=Somewhere + CN=evil.example.com",
+    "L=Somewhere \\+ CN=evil.example.com",
+    "L=L1 + L=L2\nL=L3",
+    "L=L1\nL=L2\nL=L3",
+};
+
+static const char undecodable_key_pem[] =
+    "-----BEGIN CERTIFICATE-----\n"
+    "MIIDpDCCAw0CFEc1OZ8g17q+PZnna3iQ/gfoZ7f3MA0GCSqGSIb3DQEBBQUAMIHX\n"
+    "MRMwEQYLKwYBBAGCNzwCAQMTAkdJMR0wGwYDVQQPExRQcml2YXRlIE9yZ2FuaXph\n"
+    "dGlvbjEOMAwGA1UEBRMFOTkxOTExCzAJBgNVBAYTAkdJMRIwEAYDVQQIFAlHaWJy\n"
+    "YWx0YXIxEjAQBgNVBAcUCUdpYnJhbHRhcjEgMB4GA1UEChQXV0hHIChJbnRlcm5h\n"
+    "dGlvbmFsKSBMdGQxHDAaBgNVBAsUE0ludGVyYWN0aXZlIEJldHRpbmcxHDAaBgNV\n"
+    "BAMUE3d3dy53aWxsaWFtaGlsbC5jb20wIhgPMjAxNDAyMDcwMDAwMDBaGA8yMDE1\n"
+    "MDIyMTIzNTk1OVowgbAxCzAJBgNVBAYTAklUMQ0wCwYDVQQIEwRSb21lMRAwDgYD\n"
+    "VQQHEwdQb21lemlhMRYwFAYDVQQKEw1UZWxlY29taXRhbGlhMRIwEAYDVQQrEwlB\n"
+    "RE0uQVAuUE0xHTAbBgNVBAMTFHd3dy50ZWxlY29taXRhbGlhLml0MTUwMwYJKoZI\n"
+    "hvcNAQkBFiZ2YXNlc2VyY2l6aW9wb3J0YWxpY29AdGVsZWNvbWl0YWxpYS5pdDCB\n"
+    "nzANBgkqhkiG9w0BAQEFAAOBjQA4gYkCgYEA5m/Vf7PevH+inMfUJOc8GeR7WVhM\n"
+    "CQwcMM5k46MSZo7kCk7VZuaq5G2JHGAGnLPaPUkeXlrf5qLpTxXXxHNtz+WrDlFt\n"
+    "boAdnTcqpX3+72uBGOaT6Wi/9YRKuCs5D5/cAxAc3XjHfpRXMoXObj9Vy7mLndfV\n"
+    "/wsnTfU9QVeBkgsCAwEAAaOBkjCBjzAdBgNVHQ4EFgQUfLjAjEiC83A+NupGrx5+\n"
+    "Qe6nhRMwbgYIKwYBBQUHAQwEYjBgoV6gXDBaMFgwVhYJaW1hZ2UvZ2lmMCEwHzAH\n"
+    "BgUrDgMCGgQUS2u5KJYGDLvQUjibKaxLB4shBRgwJhYkaHR0cDovL2xvZ28udmVy\n"
+    "aXNpZ24uY29tL3ZzbG9nbzEuZ2lmMA0GCSqGSIb3DQEBBQUAA4GBALLiAMX0cIMp\n"
+    "+V/JgMRhMEUKbrt5lYKfv9dil/f22ezZaFafb070jGMMPVy9O3/PavDOkHtTv3vd\n"
+    "tAt3hIKFD1bJt6c6WtMH2Su3syosWxmdmGk5ihslB00lvLpfj/wed8i3bkcB1doq\n"
+    "UcXd/5qu2GhokrKU2cPttU+XAN2Om6a0\n"
+    "-----END CERTIFICATE-----\n";
+
+static const char utc_time_pem[] =
+    "-----BEGIN CERTIFICATE-----\n"
+    "MIIE/TCCAuWgAwIBAgIUHbXPaFnjeBehMvdHkXZ+E3a78QswDQYJKoZIhvcNAQEL\n"
+    "BQAwDTELMAkGA1UEBhMCS1IwIBgPMTk0OTEyMjUyMzU5NThaFw01MDAxMDEyMzU5\n"
+    "NThaMA0xCzAJBgNVBAYTAktSMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKC\n"
+    "AgEAtFfV2DB2dZFFaR1PPZMmyo0mSDAxGReoixxlhQTFZZymU71emWV/6gR8MxAE\n"
+    "L5+uzpgBvOZWgEbELWeV/gzZGU/x1Cki0dSJ0B8Qwr5HvKX6oOZrJ8t+wn4SRceq\n"
+    "r6MRPskDpTjnvelt+VURGmawtKKHll5fSqfjRWkQC8WQHdogXylRjd3oIh9p1D5P\n"
+    "hphK/jKddxsRkLhJKQWqTjAy2v8hsJAxvpCPnlqMCXxjbQV41UTY8+kY3RPG3d6c\n"
+    "yHBGM7dzM7XWVc79V9z/rjdRcxE2eBqrJT/yR3Cok8wWVVfQEgBfpolHUZxA8K4N\n"
+    "tubTez9zsJy7xUG7udf91wXWVHMBHXg6m/u5nIW0fAXGMtnG/H6FMyyBDbJoUlqm\n"
+    "VRTG71DzvBXpd/qx2P5LkU1JjWY3U8HSn6Q1DJzMIrbOmWpdlFYXxzLlXU2vG8Q3\n"
+    "PmdAHDDYW3M2YBVCdKqOtsuL2dMDuqRWdi3iCCPSR2UCm4HzAVYSe2FP8SPcY3xs\n"
+    "1NX+oDSpTxXruJYHGUp10/pXoqMrGT1IBgv2Dhsm3jcfRLSXkaBDJIKLO6dXmLBt\n"
+    "rlxM0DphiKnP6lDjpv7EDMdwsakz0zib3JrTmSLSbwZXR4abITmtbYbTpY3XAq7c\n"
+    "adO8YCMTCtb50ZbYEpGDAjOcWFHUlQQMsgZM2zc8ZHPY4EkCAwEAAaNTMFEwHQYD\n"
+    "VR0OBBYEFExDmZyzdo8ccjX7iFIwU7JYMV+qMB8GA1UdIwQYMBaAFExDmZyzdo8c\n"
+    "cjX7iFIwU7JYMV+qMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggIB\n"
+    "ADEF/JIH+Ku9NqrO47Q/CEn9qpIgmqX10d1joDjchPY3OHIIyt8Xpo845mPBTM7L\n"
+    "dnMJSlkzJEk0ep9qAGGdKpBnLq8B/1mgCWQ81jwrwdYSsY+4xark+7+y0fij6qAt\n"
+    "L4T6aA37nbV5q5/DMOwZucFwRTf9ZI1IjC+MaQmnV01vGCogqqfLQ9v26bVBRE1K\n"
+    "UIixH0r3f/LWtuo0KaebZbb+oq6Zb8ljKJaUlt5OB8Zy5NrcP69r29QJUR57ukT6\n"
+    "rt7fk5mOj2NBLMCErLHa7E6+GAUG94QEgdKzZ4yr2aduhMAfnOnK/HfuXO8TVa8/\n"
+    "+oYENr47M8x139+yu92C8Be1MRk0VHteBaScUL+IaY3HgGbYR1lT0azvIyBN/DCN\n"
+    "bYczI7JQGYVitLuaUYFw/RtK7Qg1957/ZmGeGa+86aTLXbqsGjI951D81EIzdqod\n"
+    "1QW/Jn3yMNeVIzF9eYVEy2DIJjGgM2A8NWbqfWGUAUMRgyTxH1j42tnWG3eRnMsX\n"
+    "UnQfpY8i3v6gYoNNgEZktrqgpmukTWgl08TlDtBCjXTBkcBt4dxDApeoy7XWKq+/\n"
+    "qBY/+uIsG30BRgJhAwApjdnCs7l5xpwtqluXFwOxyTWNV5IfChO7QFqWPlSVIHML\n"
+    "UidvpWWipVLZgK+oDks+bKTobcoXGW9oXobiIYqslXPy\n"
+    "-----END CERTIFICATE-----\n";
+
+static const char unknown_signature_pem[] =
+    "-----BEGIN CERTIFICATE-----\n"
+    "MIGXMHugAwIBAgIBATANBgkrBgEEAYaNHwEFADASMRAwDgYDVQQDEwdVbmtub3du\n"
+    "MB4XDTI0MDEwMTAwMDAwMFoXDTM0MDEwMTAwMDAwMFowEjEQMA4GA1UEAxMHVW5r\n"
+    "bm93bjAaMA0GCSqGSIb3DQEBAQUAAwkAAAAAAAAAAAAwDQYJKwYBBAGGjR8BBQAD\n"
+    "CQAAAAAAAAAAAA==\n"
+    "-----END CERTIFICATE-----\n";
+
+static bool string_is(NtsString *value, const char *expected) {
+    if (value == NULL) return false;
+    char *actual = string_of(value);
+    bool same = actual != NULL && strcmp(actual, expected) == 0;
+    if (!same) printf("     got %s\n", actual == NULL ? "(null)" : actual);
+    free(actual);
+    return same;
+}
+
+static double certificate(const char *path) { return nts_crypto_x509_parse(file(path)); }
+
+/* Each of upstream's escaping cases, which is every kind of general name the
+ * printer writes -- and every way of fooling a parser with one. */
+static void certificate_escaping(void) {
+    char path[160];
+    bool all = true;
+    for (size_t i = 0; i < sizeof(expected_alt_names) / sizeof(*expected_alt_names); i++) {
+        snprintf(path, sizeof(path), X509E "alt-%zu-cert.pem", i);
+        bool same = string_is(nts_crypto_x509_subject_alt_name(certificate(path)), expected_alt_names[i]);
+        if (!same) printf("     alt-%zu\n", i);
+        all = all && same;
+    }
+    expect_true("33 subject alternative names escaped as node escapes them", all);
+    all = true;
+    for (size_t i = 0; i < sizeof(expected_info_access) / sizeof(*expected_info_access); i++) {
+        snprintf(path, sizeof(path), X509E "info-%zu-cert.pem", i);
+        bool same = string_is(nts_crypto_x509_info_access(certificate(path)), expected_info_access[i]);
+        if (!same) printf("     info-%zu\n", i);
+        all = all && same;
+    }
+    expect_true("  the information access, one line per method", all);
+    all = true;
+    for (size_t i = 0; i < sizeof(expected_subjects) / sizeof(*expected_subjects); i++) {
+        snprintf(path, sizeof(path), X509E "subj-%zu-cert.pem", i);
+        double cert = certificate(path);
+        bool same = string_is(nts_crypto_x509_name(cert, false), expected_subjects[i]) &&
+                    string_is(nts_crypto_x509_name(cert, true), expected_subjects[i]);
+        if (!same) printf("     subj-%zu\n", i);
+        all = all && same;
+    }
+    expect_true("  and the multi-line subjects and issuers", all);
+}
+
+static void certificates(void) {
+    double agent1 = certificate(KEYS "agent1-cert.pem");
+    double ca1 = certificate(KEYS "ca1-cert.pem");
+    expect_true("agent1's certificate parses", agent1 > 0 && ca1 > 0);
+    expect_true("  its subject, one line per entry",
+                string_is(nts_crypto_x509_name(agent1, false),
+                          "C=US\nST=CA\nL=SF\nO=Joyent\nOU=Node.js\nCN=agent1\nemailAddress=ry@tinyclouds.org"));
+    expect_true("  its issuer",
+                string_is(nts_crypto_x509_name(agent1, true),
+                          "C=US\nST=CA\nL=SF\nO=Joyent\nOU=Node.js\nCN=ca1\nemailAddress=ry@tinyclouds.org"));
+    expect_true("  no subject alternative name", nts_crypto_x509_subject_alt_name(agent1) == NULL);
+    expect_true("  its information access",
+                string_is(nts_crypto_x509_info_access(agent1),
+                          "OCSP - URI:http://ocsp.nodejs.org/\nCA Issuers - URI:http://ca.nodejs.org/ca.cert"));
+    expect_true("  its validity as ASN1_TIME_print writes it",
+                string_is(nts_crypto_x509_valid_text(agent1, false), "Sep  3 21:40:37 2022 GMT") &&
+                    string_is(nts_crypto_x509_valid_text(agent1, true), "Jun 17 21:40:37 2296 GMT"));
+    expect_true("  and in seconds, 2296 past a 32-bit time_t",
+                nts_crypto_x509_valid_time(agent1, false) == 1662241237 &&
+                    nts_crypto_x509_valid_time(agent1, true) == 10302154837);
+    expect_true("  its SHA-1 fingerprint",
+                string_is(nts_crypto_x509_fingerprint(agent1, 0),
+                          "8B:89:16:C4:99:87:D2:13:1A:64:94:36:38:A5:32:01:F0:95:3B:53"));
+    expect_true("  its SHA-256 fingerprint",
+                string_is(nts_crypto_x509_fingerprint(agent1, 1),
+                          "2C:62:59:16:91:89:AB:90:6A:3E:98:88:A6:D3:C5:58:58:6C:AE:FF:9C:33:"
+                          "22:7C:B6:77:D3:34:E7:53:4B:05"));
+    expect_true("  its SHA-512 fingerprint",
+                string_is(nts_crypto_x509_fingerprint(agent1, 2),
+                          "0B:6F:D0:4D:6B:22:53:99:66:62:51:2D:2C:96:F2:58:3F:95:1C:CC:4C:44:"
+                          "9D:B5:59:AA:AD:A8:F6:2A:24:8A:BB:06:A5:26:42:52:30:A3:37:61:30:A9:"
+                          "5A:42:63:E0:21:2F:D6:70:63:07:96:6F:27:A7:78:12:08:02:7A:8B"));
+    expect_true("  its serial number in upper case",
+                string_is(nts_crypto_x509_serial_number(agent1), "147D36C1C2F74206DE9FAB5F2226D78ADB00A426"));
+    expect_true("  its signature algorithm, by long name and OID",
+                string_is(nts_crypto_x509_signature_algorithm(agent1), "sha256WithRSAEncryption") &&
+                    string_is(nts_crypto_x509_signature_algorithm_oid(agent1), "1.2.840.113549.1.1.11"));
+    NtsView *raw = nts_crypto_x509_raw(agent1);
+    expect_true("  its DER, which parses back to the same certificate",
+                raw != NULL && nts_view_byte_length(raw) == 1004 &&
+                    string_is(nts_crypto_x509_fingerprint(nts_crypto_x509_parse(raw), 0),
+                              "8B:89:16:C4:99:87:D2:13:1A:64:94:36:38:A5:32:01:F0:95:3B:53"));
+    char *pem = string_of(nts_crypto_x509_pem(agent1));
+    static const char pem_head[] =
+        "-----BEGIN CERTIFICATE-----\nMIID6DCCAtCgAwIBAgIUFH02wcL3Qgben6tfIibXitsApCYwDQYJKoZIhvcNAQEL\n";
+    expect_true("  its PEM", pem != NULL && strncmp(pem, pem_head, sizeof(pem_head) - 1) == 0);
+    free(pem);
+    expect_true("  no extended key usage, and it is no CA",
+                nts_crypto_x509_key_usage(agent1) == NULL && !nts_crypto_x509_check_ca(agent1));
+    expect_true("ca1 is a CA", nts_crypto_x509_check_ca(ca1));
+    expect_true("  and issued agent1, which did not issue itself",
+                nts_crypto_x509_check_issued(agent1, ca1) && !nts_crypto_x509_check_issued(agent1, agent1));
+
+    double ca_key = nts_crypto_x509_public_key(ca1);
+    double own_key = nts_crypto_x509_public_key(agent1);
+    expect_true("ca1's key verifies agent1's signature, agent1's own does not",
+                nts_crypto_x509_verify(agent1, ca_key) && !nts_crypto_x509_verify(agent1, own_key));
+    double private_key = nts_crypto_key_parse_private(1, -1, file(KEYS "agent1-key.pem"), bytes("", 0), false);
+    expect_true("agent1's private key is the certificate's",
+                nts_crypto_x509_check_private_key(agent1, private_key) &&
+                    !nts_crypto_x509_check_private_key(ca1, private_key));
+
+    expect_true("checkHost matches the common name",
+                nts_crypto_x509_check(agent1, 0, text("agent1"), 0) == 1 &&
+                    string_is(nts_crypto_x509_matched_host(agent1, text("agent1"), 0), "agent1") &&
+                    nts_crypto_x509_check(agent1, 0, text("agent2"), 0) == 0);
+    expect_true("  never with the subject never checked", nts_crypto_x509_check(agent1, 0, text("agent1"), 0x20) == 0);
+    expect_true("  and a NUL inside the name is an invalid name",
+                nts_crypto_x509_check(agent1, 0, nts_string_from_utf8("agent\0" "1", 7), 0) == -2);
+    expect_true("checkEmail matches the subject's address",
+                nts_crypto_x509_check(agent1, 1, text("ry@tinyclouds.org"), 0) == 1 &&
+                    nts_crypto_x509_check(agent1, 1, text("sally@example.com"), 0) == 0);
+    expect_true("checkIP matches nothing, and \"[::]\" is no address",
+                nts_crypto_x509_check(agent1, 2, text("127.0.0.1"), 0) == 0 &&
+                    nts_crypto_x509_check(agent1, 2, text("[::]"), 0) == -2);
+    expect_true("  nothing is left on the queue", nts_crypto_take_errors()->header.length == 3);
+
+    NtsArray *entries = nts_crypto_x509_name_entries(agent1, false);
+    NtsString **names = NTS_ITEMS(entries, NtsString *);
+    expect_true("the legacy subject, entry by entry",
+                entries->header.length == 14 && string_is(names[0], "C") && string_is(names[1], "US") &&
+                    string_is(names[12], "emailAddress") && string_is(names[13], "ry@tinyclouds.org"));
+    expect_true("  an RSA key, its modulus in BN_print's hex",
+                nts_crypto_x509_legacy_family(agent1) == 1 &&
+                    string_is(nts_crypto_x509_rsa_number(agent1, false),
+                              "D456320AFB20D3827093DC2C4284ED04DFBABD56E1DDAE529E28B790CD4256DB273349F3735FFD337C7A6363"
+                              "ECCA5A27B7F73DC7089A96C6D886DB0C62388F1CDD6A963AFCD599D5800E587A11F908960F84ED50BA25A283"
+                              "03ECDA6E684FBE7BAEDC9CE8801327B1697AF25097CEE3F175E400984C0DB6A8EB87BE03B4CF94774BA56FFF"
+                              "C8C63C68D6ADEB60ABBE69A7B14AB6A6B9E7BAA89B5ADAB8EB07897C07F6D4FA3D660DFF574107D28E8F6346"
+                              "7A788624C574197693E959CEA1362FFAE1BBA10C8C0D88840ABFEF103631B2E8F5C39B5548A7EA57E8A39F89"
+                              "291813F45A76C448033A2B7ED8403F4BAA147CF35E2D2554AA65CE49695797095BF4DC6B"));
+    expect_true("  its exponent and bits",
+                string_is(nts_crypto_x509_rsa_number(agent1, true), "0x10001") &&
+                    nts_crypto_x509_legacy_bits(agent1) == 2048);
+    NtsView *pubkey = nts_crypto_x509_legacy_public_key(agent1);
+    expect_true("  its SPKI", pubkey != NULL && nts_view_byte_length(pubkey) == 294 &&
+                                  nts_view_bytes(pubkey)[0] == 0x30 && nts_view_bytes(pubkey)[1] == 0x82);
+    expect_true("  and no curve", nts_crypto_x509_legacy_curve(agent1, false) == NULL);
+
+    /* `test-crypto-x509`'s own numbers for OpenSSL 3: an RSA-PSS key under
+     * `rsaEncryption`'s OID, with its restrictions or with none. */
+    double sha256 = nts_crypto_digest_id(text("sha256"));
+    NtsView *pss = nts_crypto_x509_legacy_public_key(certificate(KEYS "rsa_pss_cert_2048.pem"));
+    expect_true("an unrestricted RSA-PSS key's legacy SPKI",
+                pss != NULL && nts_view_byte_length(pss) == 292 &&
+                    is_hex(nts_crypto_digest(sha256, pss, -1),
+                           "dff998a209bfa2e6ded1208c6e57f5b6bdedfa44b631265e3e244f38e637f6e4"));
+    pss = nts_crypto_x509_legacy_public_key(certificate(KEYS "rsa_pss_cert_2048_sha256_sha256_16.pem"));
+    expect_true("  a restricted one's, its parameters re-encoded",
+                pss != NULL && nts_view_byte_length(pss) == 342 &&
+                    is_hex(nts_crypto_digest(sha256, pss, -1),
+                           "da0bcd53fbe3969c7cc2730f86abc34e0e1c340264bbdfa3faf01484c2eeece0"));
+
+    double ec = certificate(KEYS "ec-cert.pem");
+    NtsView *point = nts_crypto_x509_legacy_public_key(ec);
+    expect_true("an EC key's legacy fields: its point, as encoded",
+                nts_crypto_x509_legacy_family(ec) == 2 &&
+                    is_hex(point, "044a69c14731650736a9b4f1928f1511802d2a130f6f3ce484c942de2aaff83246f605d12772adf2f"
+                                  "cf7fc7b8157a8060e3b9a4ce6e8bbffe9eec06339dbdc4d70"));
+    expect_true("  its order's bits and both curve names",
+                nts_crypto_x509_legacy_bits(ec) == 256 && string_is(nts_crypto_x509_legacy_curve(ec, false), "prime256v1") &&
+                    string_is(nts_crypto_x509_legacy_curve(ec, true), "P-256"));
+    expect_true("  and no modulus", nts_crypto_x509_rsa_number(ec, false) == NULL);
+
+    NtsArray *usages = nts_crypto_x509_key_usage(certificate(KEYS "agent4-cert.pem"));
+    expect_true("an extended key usage, by OID",
+                usages != NULL && usages->header.length == 1 &&
+                    string_is(NTS_ITEMS(usages, NtsString *)[0], "1.3.6.1.5.5.7.3.2"));
+
+    double undecodable = nts_crypto_x509_parse(utf8(undecodable_key_pem));
+    expect_true("a certificate whose key does not decode parses",
+                undecodable > 0 && !nts_crypto_x509_check_issued(undecodable, undecodable));
+    expect_true("  and its key is a decode error", nts_crypto_x509_public_key(undecodable) == 0 &&
+                                                       errors_mention("decode error"));
+    double utc = nts_crypto_x509_parse(utf8(utc_time_pem));
+    expect_true("dates before 1970, UTCTime's 1949 and 1950",
+                nts_crypto_x509_valid_time(utc, false) == -631670402 &&
+                    nts_crypto_x509_valid_time(utc, true) == -631065602);
+    double unknown = nts_crypto_x509_parse(utf8(unknown_signature_pem));
+    expect_true("a signature algorithm OpenSSL does not know has no name, and its OID",
+                nts_crypto_x509_signature_algorithm(unknown) == NULL &&
+                    string_is(nts_crypto_x509_signature_algorithm_oid(unknown), "1.3.6.1.4.1.99999.1"));
+    expect_true("garbage is no certificate, and says why",
+                nts_crypto_x509_parse(utf8("garbage")) == 0 && errors_mention("no start line"));
+
+    certificate_escaping();
+}
+
 int main(void) {
     digests();
     derivations();
@@ -905,6 +1221,7 @@ int main(void) {
     argon2();
     key_encapsulation();
     spkac();
+    certificates();
     printf("%d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;
 }

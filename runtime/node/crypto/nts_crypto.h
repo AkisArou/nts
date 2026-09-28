@@ -227,6 +227,36 @@ bool nts_crypto_spkac_verify(NtsView *input);
 NtsView *nts_crypto_spkac_public_key(NtsView *input);
 NtsView *nts_crypto_spkac_challenge(NtsView *input);
 
+/* X509Certificate (`x509.c`): a certificate is a handle, 0 a failure to parse
+ * with its cause on the error record. A string answer of NULL is node's
+ * `undefined`. */
+double nts_crypto_x509_parse(NtsView *input);
+NtsString *nts_crypto_x509_name(double handle, bool issuer);
+NtsString *nts_crypto_x509_subject_alt_name(double handle);
+NtsString *nts_crypto_x509_info_access(double handle);
+NtsString *nts_crypto_x509_valid_text(double handle, bool to);
+double nts_crypto_x509_valid_time(double handle, bool to);
+NtsString *nts_crypto_x509_signature_algorithm(double handle);
+NtsString *nts_crypto_x509_signature_algorithm_oid(double handle);
+NtsString *nts_crypto_x509_fingerprint(double handle, double digest);
+NtsArray *nts_crypto_x509_key_usage(double handle);
+NtsString *nts_crypto_x509_serial_number(double handle);
+NtsString *nts_crypto_x509_pem(double handle);
+NtsView *nts_crypto_x509_raw(double handle);
+double nts_crypto_x509_public_key(double handle);
+bool nts_crypto_x509_check_ca(double handle);
+bool nts_crypto_x509_check_issued(double handle, double issuer);
+bool nts_crypto_x509_check_private_key(double handle, double key);
+bool nts_crypto_x509_verify(double handle, double key);
+double nts_crypto_x509_check(double handle, double kind, NtsString *subject, double flags);
+NtsString *nts_crypto_x509_matched_host(double handle, NtsString *subject, double flags);
+NtsArray *nts_crypto_x509_name_entries(double handle, bool issuer);
+double nts_crypto_x509_legacy_family(double handle);
+NtsString *nts_crypto_x509_rsa_number(double handle, bool exponent);
+NtsView *nts_crypto_x509_legacy_public_key(double handle);
+double nts_crypto_x509_legacy_bits(double handle);
+NtsString *nts_crypto_x509_legacy_curve(double handle, bool nist);
+
 /* FIPS mode: whether OpenSSL's default properties ask for FIPS, and setting
  * them. False from `set` is a failure whose cause is on the error record. */
 bool nts_crypto_fips_enabled(void);

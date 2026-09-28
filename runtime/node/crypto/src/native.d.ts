@@ -458,3 +458,64 @@ declare function nts_crypto_spkac_verify(input: Uint8Array): boolean;
 declare function nts_crypto_spkac_public_key(input: Uint8Array): Uint8Array | null;
 /** @ntsAbi managed */
 declare function nts_crypto_spkac_challenge(input: Uint8Array): Uint8Array | null;
+
+/** X509Certificate: a null string is node's `undefined`. */
+/** A certificate handle; 0 for a failure, its cause on the error record. */
+/** @ntsAbi managed */
+declare function nts_crypto_x509_parse(input: Uint8Array): number;
+/** @ntsAbi managed */
+declare function nts_crypto_x509_name(handle: number, issuer: boolean): string | null;
+/** @ntsAbi managed */
+declare function nts_crypto_x509_subject_alt_name(handle: number): string | null;
+/** @ntsAbi managed */
+declare function nts_crypto_x509_info_access(handle: number): string | null;
+/** @ntsAbi managed */
+declare function nts_crypto_x509_valid_text(handle: number, to: boolean): string | null;
+/** Seconds since the epoch. */
+/** @ntsAbi managed */
+declare function nts_crypto_x509_valid_time(handle: number, to: boolean): number;
+/** @ntsAbi managed */
+declare function nts_crypto_x509_signature_algorithm(handle: number): string | null;
+/** @ntsAbi managed */
+declare function nts_crypto_x509_signature_algorithm_oid(handle: number): string | null;
+/** @ntsAbi managed */
+declare function nts_crypto_x509_fingerprint(handle: number, digest: number): string | null;
+/** @ntsAbi managed */
+declare function nts_crypto_x509_key_usage(handle: number): string[] | null;
+/** @ntsAbi managed */
+declare function nts_crypto_x509_serial_number(handle: number): string | null;
+/** @ntsAbi managed */
+declare function nts_crypto_x509_pem(handle: number): string | null;
+/** @ntsAbi managed */
+declare function nts_crypto_x509_raw(handle: number): Uint8Array | null;
+/** A key handle; 0 for a failure, its cause on the error record. */
+/** @ntsAbi managed */
+declare function nts_crypto_x509_public_key(handle: number): number;
+/** @ntsAbi managed */
+declare function nts_crypto_x509_check_ca(handle: number): boolean;
+/** @ntsAbi managed */
+declare function nts_crypto_x509_check_issued(handle: number, issuer: number): boolean;
+/** @ntsAbi managed */
+declare function nts_crypto_x509_check_private_key(handle: number, key: number): boolean;
+/** @ntsAbi managed */
+declare function nts_crypto_x509_verify(handle: number, key: number): boolean;
+/** `CheckMatch`. */
+/** @ntsAbi managed */
+declare function nts_crypto_x509_check(handle: number, kind: number, subject: string, flags: number): number;
+/** @ntsAbi managed */
+declare function nts_crypto_x509_matched_host(handle: number, subject: string, flags: number): string | null;
+/** Each entry's name, then its value. */
+/** @ntsAbi managed */
+declare function nts_crypto_x509_name_entries(handle: number, issuer: boolean): string[];
+/** `LegacyKeyFamily`. */
+/** @ntsAbi managed */
+declare function nts_crypto_x509_legacy_family(handle: number): number;
+/** @ntsAbi managed */
+declare function nts_crypto_x509_rsa_number(handle: number, exponent: boolean): string | null;
+/** @ntsAbi managed */
+declare function nts_crypto_x509_legacy_public_key(handle: number): Uint8Array | null;
+/** -1 for none. */
+/** @ntsAbi managed */
+declare function nts_crypto_x509_legacy_bits(handle: number): number;
+/** @ntsAbi managed */
+declare function nts_crypto_x509_legacy_curve(handle: number, nist: boolean): string | null;

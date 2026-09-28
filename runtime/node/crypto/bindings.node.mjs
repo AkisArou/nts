@@ -1293,3 +1293,115 @@ const spkacOrNull = (value) => (typeof value === "string" ? null : view(value));
 
 globalThis.nts_crypto_spkac_public_key = (input) => spkacOrNull(crypto.Certificate.exportPublicKey(input));
 globalThis.nts_crypto_spkac_challenge = (input) => spkacOrNull(crypto.Certificate.exportChallenge(input));
+
+// -- X509Certificate ----------------------------------------------------------
+
+const certificates = [];
+const certificateAt = (handle) => certificates[handle - 1];
+const orNull = (value) => value ?? null;
+
+globalThis.nts_crypto_x509_parse = (input) => {
+  try {
+    return certificates.push(new crypto.X509Certificate(input));
+  } catch (error) {
+    failed(error);
+    return 0;
+  }
+};
+
+globalThis.nts_crypto_x509_name = (handle, issuer) => {
+  const cert = certificateAt(handle);
+  return orNull(issuer ? cert.issuer : cert.subject);
+};
+globalThis.nts_crypto_x509_subject_alt_name = (handle) => orNull(certificateAt(handle).subjectAltName);
+globalThis.nts_crypto_x509_info_access = (handle) => orNull(certificateAt(handle).infoAccess);
+globalThis.nts_crypto_x509_valid_text = (handle, to) => {
+  const cert = certificateAt(handle);
+  return orNull(to ? cert.validTo : cert.validFrom);
+};
+globalThis.nts_crypto_x509_valid_time = (handle, to) => {
+  const cert = certificateAt(handle);
+  return (to ? cert.validToDate : cert.validFromDate).getTime() / 1000;
+};
+globalThis.nts_crypto_x509_signature_algorithm = (handle) => orNull(certificateAt(handle).signatureAlgorithm);
+globalThis.nts_crypto_x509_signature_algorithm_oid = (handle) => orNull(certificateAt(handle).signatureAlgorithmOid);
+
+/** Indexed by `FingerprintDigest`. */
+const FINGERPRINTS = ["fingerprint", "fingerprint256", "fingerprint512"];
+
+globalThis.nts_crypto_x509_fingerprint = (handle, digest) => orNull(certificateAt(handle)[FINGERPRINTS[digest]]);
+globalThis.nts_crypto_x509_key_usage = (handle) => orNull(certificateAt(handle).keyUsage);
+globalThis.nts_crypto_x509_serial_number = (handle) => orNull(certificateAt(handle).serialNumber);
+globalThis.nts_crypto_x509_pem = (handle) => orNull(certificateAt(handle).toString());
+globalThis.nts_crypto_x509_raw = (handle) => view(certificateAt(handle).raw);
+
+globalThis.nts_crypto_x509_public_key = (handle) => {
+  try {
+    return holdKey(certificateAt(handle).publicKey);
+  } catch (error) {
+    failed(error);
+    return 0;
+  }
+};
+
+globalThis.nts_crypto_x509_check_ca = (handle) => certificateAt(handle).ca;
+globalThis.nts_crypto_x509_check_issued = (handle, issuer) => certificateAt(handle).checkIssued(certificateAt(issuer));
+globalThis.nts_crypto_x509_check_private_key = (handle, key) => certificateAt(handle).checkPrivateKey(keyAt(key));
+globalThis.nts_crypto_x509_verify = (handle, key) => certificateAt(handle).verify(publicHalf(keyAt(key)));
+
+/** OpenSSL's `X509_CHECK_FLAG_*` back into the options node's methods take. */
+function checkOptions(flags) {
+  return {
+    subject: flags & 0x1 ? "always" : flags & 0x20 ? "never" : "default",
+    wildcards: (flags & 0x2) === 0,
+    partialWildcards: (flags & 0x4) === 0,
+    multiLabelWildcards: (flags & 0x8) !== 0,
+    singleLabelSubdomains: (flags & 0x10) !== 0,
+  };
+}
+
+/** Indexed by `SubjectKind`. */
+const CHECKS = ["checkHost", "checkEmail", "checkIP"];
+
+/** `CheckMatch`, from what node's method answered or threw. */
+globalThis.nts_crypto_x509_check = (handle, kind, subject, flags) => {
+  try {
+    return certificateAt(handle)[CHECKS[kind]](subject, checkOptions(flags)) === undefined ? 0 : 1;
+  } catch (error) {
+    return error?.code === "ERR_INVALID_ARG_VALUE" ? -2 : -1;
+  }
+};
+
+globalThis.nts_crypto_x509_matched_host = (handle, subject, flags) =>
+  orNull(certificateAt(handle).checkHost(subject, checkOptions(flags)));
+
+/** The legacy object's fields, which is where node publishes what these ask. */
+const legacyOf = (handle) => certificateAt(handle).toLegacyObject();
+
+globalThis.nts_crypto_x509_name_entries = (handle, issuer) => {
+  const legacy = legacyOf(handle);
+  const entries = [];
+  for (const [key, value] of Object.entries(issuer ? legacy.issuer : legacy.subject)) {
+    for (const item of Array.isArray(value) ? value : [value]) entries.push(key, item);
+  }
+  return entries;
+};
+
+/** `LegacyKeyFamily`: RSA publishes a modulus, EC a point and no modulus. */
+globalThis.nts_crypto_x509_legacy_family = (handle) => {
+  const legacy = legacyOf(handle);
+  return legacy.modulus !== undefined ? 1 : legacy.pubkey !== undefined ? 2 : 0;
+};
+globalThis.nts_crypto_x509_rsa_number = (handle, exponent) => {
+  const legacy = legacyOf(handle);
+  return orNull(exponent ? legacy.exponent : legacy.modulus);
+};
+globalThis.nts_crypto_x509_legacy_public_key = (handle) => {
+  const pubkey = legacyOf(handle).pubkey;
+  return pubkey === undefined ? null : view(pubkey);
+};
+globalThis.nts_crypto_x509_legacy_bits = (handle) => legacyOf(handle).bits ?? -1;
+globalThis.nts_crypto_x509_legacy_curve = (handle, nist) => {
+  const legacy = legacyOf(handle);
+  return orNull(nist ? legacy.nistCurve : legacy.asn1Curve);
+};

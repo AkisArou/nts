@@ -148,6 +148,7 @@ const ORDER = [
   "KeyObject",
   "Sign",
   "Verify",
+  "X509Certificate",
   "secureHeapUsed",
 ];
 
@@ -229,4 +230,17 @@ export function shape(exports) {
     });
   }
   return module;
+}
+
+/**
+ * `internal/crypto/x509`, which `test-crypto-x509` asks for with
+ * `--expose-internals` to read the brand.
+ */
+export function internals(exports) {
+  return {
+    "internal/crypto/x509": {
+      X509Certificate: exports.X509Certificate,
+      isX509Certificate: exports.isX509Certificate,
+    },
+  };
 }

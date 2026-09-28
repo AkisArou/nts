@@ -14,7 +14,7 @@ runtime/node/buffer 373
 runtime/node/child_process 2086
 runtime/node/cluster 2192
 runtime/node/console 1729
-runtime/node/crypto 2271
+runtime/node/crypto 2304
 runtime/node/dgram 2173
 runtime/node/diagnostics_channel 273
 runtime/node/dns 298

@@ -19,11 +19,10 @@
 //
 // Key encapsulation: `encapsulate` and `decapsulate`.
 //
-// SPKAC: `Certificate`.
+// SPKAC: `Certificate`. X.509: `X509Certificate`.
 //
-// Not yet:
-// X.509, and Web Crypto's `subtle`. Each is its own part of OpenSSL, and
-// `tooling/conformance/missing-exports` lists the names.
+// Not yet: Web Crypto's `subtle`; `tooling/conformance/missing-exports` lists
+// the names.
 
 import {
   ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH,
@@ -62,6 +61,7 @@ export {
 } from "./dh.ts";
 export { decapsulate, encapsulate } from "./kem.ts";
 export { Certificate } from "./certificate.ts";
+export { isX509Certificate, X509Certificate } from "./x509.ts";
 export { generateKey, generateKeyPair, generateKeyPairSync, generateKeySync } from "./keygen.ts";
 export { argon2, argon2Sync, hkdf, hkdfSync, pbkdf2, pbkdf2Sync, scrypt, scryptSync } from "./kdf.ts";
 export {
