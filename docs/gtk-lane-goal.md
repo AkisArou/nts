@@ -1853,6 +1853,7 @@ one in two ways, both core gaps:
 | 2026-09-27 | 25 | 8 on main; 14 stop at the captured narrowed handle, Scale at `Object.entries` over a table, Stack at a `let` of a handle with no initializer, Context Menu at a record's fields (`new Gdk.Rectangle({ x, y })`, designed with the compiler lane) |
 | 2026-09-28 | 29 | **25 on main**, with the captured-handle fix (bd58854b9). Left: Stack (a `let` of a handle with no initializer), Scale (`Object.entries` over a table), Context Menu (record fields, designed), Boxed Lists (`GObject.TYPE_STRING` and `Gtk.ClosureExpression`, binding gaps) |
 | 2026-09-28 | 34 | **28**. Also left: Text Colors (a spread in call arguments, then an array stringified), Text View (destructuring a handle's property) |
+| 2026-09-28 | 50 | **41**: Link Button, Breakpoints and Shortcuts Window, each on its first build |
 | 2026-09-28 | 47 | **38**: About Dialog (GJS's `gettext` module, its import unchanged) and Notification (construct-only properties, `new Gio.ThemedIcon({ name })`) |
 | 2026-09-28 | 46 | **36**: List View with Sections, a `GtkStringList` subclass implementing `GtkSectionModel`. Its override writes C's out parameters through pointers where GJS returns `[start, end]`: an idiom gap, named below |
 | 2026-09-28 | 45 | **35**: Custom Widget, a class whose `Template` is `workbench.template` and whose `GTypeName` its template names, a handler GTK finds by name |

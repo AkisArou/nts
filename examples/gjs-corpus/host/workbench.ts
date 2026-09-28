@@ -10,6 +10,7 @@ import {
   AdwApplication,
   AdwApplicationWindow,
   AdwBanner,
+  AdwBreakpoint,
   AdwButtonRow,
   AdwCarousel,
   AdwComboRow,
@@ -33,6 +34,7 @@ import {
   GtkFlowBox,
   GtkImage,
   GtkLabel,
+  GtkLinkButton,
   GtkMenuButton,
   GtkPasswordEntry,
   GtkPicture,
@@ -216,6 +218,15 @@ function act(kind: string, id: string, args: string[], object: GObject | null, w
     case "action":
       if (!(object instanceof GtkWidget)) return false;
       object.activate_action(args[0], args.length > 1 ? g_variant_new_string(args[1]) : null);
+      return true;
+    case "visit":
+      if (!(object instanceof GtkLinkButton)) return false;
+      object.visited = true;
+      return true;
+    case "breakpoint":
+      if (!(object instanceof AdwBreakpoint)) return false;
+      if (args[0] === "apply") object.emit("apply");
+      else object.emit("unapply");
       return true;
     case "about": {
       const root = object instanceof GtkWidget ? object.get_root() : null;

@@ -1,0 +1,3 @@
+visible shortcuts_window
+click button
+visible shortcuts_window
