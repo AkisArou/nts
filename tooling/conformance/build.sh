@@ -319,6 +319,22 @@ case "$module" in
       module_libraries=(-lcares)
     fi
     ;;
+  crypto)
+    # **The machine's OpenSSL, because this checkout does not carry node's.**
+    # Node vendors `deps/openssl` and builds it from a generated per-arch
+    # config; that tree is not in `third_party/node/deps`, so the choice is the
+    # system libcrypto or none. Digests, MACs and KDFs are specified functions
+    # and do not differ between OpenSSL 3 releases; what can differ is the set
+    # `getHashes()` lists and the wording of an OpenSSL error string, which
+    # `nts_crypto.h` says beside the code that reads them.
+    if pkg-config --exists 'libcrypto >= 3.0'; then
+      read -r -a module_extra_flags <<< "$(pkg-config --cflags libcrypto)"
+      read -r -a module_libraries <<< "$(pkg-config --libs libcrypto)"
+    else
+      echo "crypto needs OpenSSL 3's libcrypto, and pkg-config finds none" >&2
+      exit 2
+    fi
+    ;;
 esac
 
 # Everything the compiler emitted, rather than the three files it used to

@@ -11,8 +11,8 @@
 // and the declarations are typed, which is the whole point of the exercise.
 
 import { getCIDR } from "../../internal/net.ts";
-import { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE } from "../../internal/errors.ts";
 import { systemError } from "../../internal/uv.ts";
+import { validateInt32 } from "../../internal/validators.ts";
 import { Buffer } from "../../buffer/src/main.ts";
 import { normalizeEncodingName, type Encoding } from "../../buffer/src/encodings.ts";
 
@@ -462,39 +462,6 @@ export function userInfo(options?: UserInfoOptions): UserInfo<string | Buffer> {
     homedir: userInfoString(homedirBytes, encoding),
     shell: hasShell !== 0 ? userInfoString(shellBytes, encoding) : null,
   };
-}
-
-/**
- * `validateInt32`, node `lib/internal/validators.js`.
- *
- * **`unknown`, not `number`, and that is the whole point of the first branch.**
- * Node's validator takes whatever the caller passed, which is why it can answer
- * `ERR_INVALID_ARG_TYPE` at all. Declared `number`, the `typeof` guard below is a
- * branch the declaration says can never be taken, and the compiled lane folded it
- * away: `os.setPriority(0, "x")` reached `Number.isInteger("x")` and answered
- * `ERR_OUT_OF_RANGE` where node answers `ERR_INVALID_ARG_TYPE`. The interpreted
- * lane passed the same test throughout, because there the guard still runs.
- *
- * A string can reach here because an overloaded function's second argument is not
- * checked at the wrapper -- `tooling/conformance/blockers/`
- * `an-overloads-second-argument-is-unchecked`. Two facts compose into the wrong
- * error type, and this is the half that lives in this file.
- */
-function validateInt32(
-  value: unknown,
-  name: string,
-  min = -2147483648,
-  max = 2147483647,
-): asserts value is number {
-  if (typeof value !== "number") {
-    throw new ERR_INVALID_ARG_TYPE(name, "number", value);
-  }
-  if (!Number.isInteger(value)) {
-    throw new ERR_OUT_OF_RANGE(name, "an integer", value);
-  }
-  if (value < min || value > max) {
-    throw new ERR_OUT_OF_RANGE(name, `>= ${min} && <= ${max}`, value);
-  }
 }
 
 /**

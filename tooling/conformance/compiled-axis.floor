@@ -8,6 +8,7 @@ buffer 2
 child_process 0
 cluster 0
 console 1
+crypto 0
 dgram 0
 diagnostics_channel 0
 dns 0

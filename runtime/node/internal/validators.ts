@@ -150,6 +150,29 @@ export function validateInteger(
   }
 }
 
+/**
+ * `validateInteger` with a signed 32-bit range by default, as node spells it.
+ *
+ * **`unknown`, not `number`, and that is the point of the type check inside.**
+ * Node's validator takes whatever the caller passed, which is why it can
+ * answer `ERR_INVALID_ARG_TYPE` at all. Declared `number`, that check is a
+ * branch the declaration says can never be taken, and the compiled lane folds
+ * it away: `os.setPriority(0, "x")` reached the integer check and answered
+ * `ERR_OUT_OF_RANGE` where node answers `ERR_INVALID_ARG_TYPE`, while the
+ * interpreted lane, where the check still runs, passed throughout. A string
+ * can arrive because an overloaded function's second argument is not checked
+ * at the wrapper -- `tooling/conformance/blockers/`
+ * `an-overloads-second-argument-is-unchecked`.
+ */
+export function validateInt32(
+  value: unknown,
+  name: string,
+  min = -2_147_483_648,
+  max = 2_147_483_647,
+): asserts value is number {
+  validateInteger(value, name, min, max);
+}
+
 /** Membership by `===`, with the allowed values named in the message. */
 export function validateOneOf<const Choices extends readonly unknown[]>(
   value: unknown,

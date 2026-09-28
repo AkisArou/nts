@@ -39,7 +39,12 @@ cd "$(dirname "$0")/../.."
 # reconciliation below, which is what now makes that state impossible.
 # `cluster`, the other unlisted one, went to `BLOCKED` for the reason recorded
 # there.
-FLOOR="assert async_hooks buffer child_process console dgram
+# **`crypto` joined on 2026-09-28, as a new module that builds.** It links the
+# machine's libcrypto (`build.sh` says why it is not node's), loads, and has no
+# undefined `nts_*` symbol. Building is all it does yet on this lane: every
+# public function cascades from five compiler gaps reported the same day, so
+# `compiled-axis.floor` holds it at 0.
+FLOOR="assert async_hooks buffer child_process console crypto dgram
 diagnostics_channel dns events fs http net os path process punycode querystring
 readline stream string_decoder timers tty url util zlib"
 

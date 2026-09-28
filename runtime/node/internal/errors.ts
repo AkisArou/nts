@@ -2060,3 +2060,178 @@ export class ERR_INVALID_ARG_VALUE_BINDING extends NodeTypeError {
     super(message);
   }
 }
+
+// -- node:crypto --------------------------------------------------------------
+
+/** `Digest already called`: a `Hash` read once is finished. */
+export class ERR_CRYPTO_HASH_FINALIZED extends NodeError {
+  override readonly code = "ERR_CRYPTO_HASH_FINALIZED";
+
+  constructor() {
+    super("Digest already called");
+  }
+}
+
+/** `Hash update failed`: OpenSSL refused input to a live context. */
+export class ERR_CRYPTO_HASH_UPDATE_FAILED extends NodeError {
+  override readonly code = "ERR_CRYPTO_HASH_UPDATE_FAILED";
+
+  constructor() {
+    super("Hash update failed");
+  }
+}
+
+/** `Invalid digest: md55`, from the KDFs and `Hmac`, all of which node checks in C++. */
+export class ERR_CRYPTO_INVALID_DIGEST extends NodeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_CRYPTO_INVALID_DIGEST";
+
+  constructor(digest: string) {
+    super(`Invalid digest: ${digest}`);
+  }
+}
+
+/** `Invalid key length`: more HKDF output than 255 blocks of the digest can make. */
+export class ERR_CRYPTO_INVALID_KEYLEN extends NodeRangeError {
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
+  override readonly code = "ERR_CRYPTO_INVALID_KEYLEN";
+
+  constructor() {
+    super("Invalid key length");
+  }
+}
+
+/**
+ * `Invalid scrypt params`, with OpenSSL's own reason after a colon when it gave
+ * one -- node keeps this code rather than a decorated OpenSSL error, for
+ * backward compatibility, and says so beside the throw.
+ */
+export class ERR_CRYPTO_INVALID_SCRYPT_PARAMS extends NodeRangeError {
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
+  override readonly code = "ERR_CRYPTO_INVALID_SCRYPT_PARAMS";
+
+  constructor(reason?: string) {
+    super(reason === undefined ? "Invalid scrypt params" : `Invalid scrypt params: ${reason}`);
+  }
+}
+
+/** `Input buffers must have the same byte length`, from `timingSafeEqual`. */
+export class ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH extends NodeRangeError {
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
+  override readonly code = "ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH";
+
+  constructor() {
+    super("Input buffers must have the same byte length");
+  }
+}
+
+/** `Invalid key object type public, expected secret.` */
+export class ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE extends NodeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE";
+
+  constructor(actual: string, expected: string) {
+    super(`Invalid key object type ${actual}, expected ${expected}.`);
+  }
+}
+
+/** `Unknown cipher`, from C++, for a name OpenSSL does not know. */
+export class ERR_CRYPTO_UNKNOWN_CIPHER extends NodeError {
+  override readonly code = "ERR_CRYPTO_UNKNOWN_CIPHER";
+
+  constructor() {
+    super("Unknown cipher");
+  }
+}
+
+/** `Invalid initialization vector`: the wrong length, or none where one is needed. */
+export class ERR_CRYPTO_INVALID_IV extends NodeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_CRYPTO_INVALID_IV";
+
+  constructor() {
+    super("Invalid initialization vector");
+  }
+}
+
+/** An authentication tag refused, in C++'s own words: `Invalid authentication tag length: 5`. */
+export class ERR_CRYPTO_INVALID_AUTH_TAG extends NodeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_CRYPTO_INVALID_AUTH_TAG";
+
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+/** `Invalid message length`: more than CCM's nonce leaves room to count. */
+export class ERR_CRYPTO_INVALID_MESSAGELEN extends NodeRangeError {
+  override get ["constructor"](): unknown {
+    return RangeError;
+  }
+  override readonly code = "ERR_CRYPTO_INVALID_MESSAGELEN";
+
+  constructor() {
+    super("Invalid message length");
+  }
+}
+
+/**
+ * `Invalid state for operation setAutoPadding`: a cipher asked for something
+ * its state does not allow, as node's JavaScript words it. C++ throws the same
+ * code with only `Invalid state`, which is `ERR_CRYPTO_INVALID_STATE_BINDING`.
+ */
+export class ERR_CRYPTO_INVALID_STATE extends NodeError {
+  override readonly code = "ERR_CRYPTO_INVALID_STATE";
+
+  constructor(operation: string) {
+    super(`Invalid state for operation ${operation}`);
+  }
+}
+
+/** `Invalid state`, as C++ throws it: `final()` after `final()`. */
+export class ERR_CRYPTO_INVALID_STATE_BINDING extends NodeError {
+  override readonly code = "ERR_CRYPTO_INVALID_STATE";
+
+  constructor() {
+    super("Invalid state");
+  }
+}
+
+/** An operation OpenSSL could do and node declines, in C++'s own words. */
+export class ERR_CRYPTO_UNSUPPORTED_OPERATION extends NodeError {
+  override readonly code = "ERR_CRYPTO_UNSUPPORTED_OPERATION";
+
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+/**
+ * `ERR_MISSING_ARGS` as C++ throws it, with its own sentence rather than the
+ * template's list: `options.plaintextLength required for CCM mode with AAD`.
+ */
+export class ERR_MISSING_ARGS_BINDING extends NodeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_MISSING_ARGS";
+
+  constructor(message: string) {
+    super(message);
+  }
+}

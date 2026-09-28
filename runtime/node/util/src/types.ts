@@ -49,9 +49,16 @@ export function isAnyArrayBuffer(value: unknown): value is ArrayBuffer | SharedA
   return isArrayBuffer(value) || isSharedArrayBuffer(value);
 }
 
-export const isArrayBufferView: (
-  value: unknown,
-) => value is ArrayBufferView = ArrayBuffer.isView;
+/**
+ * A declaration rather than `= ArrayBuffer.isView`, which node's is: the
+ * compiled lane cannot call through a module-scope name holding a function,
+ * and every module that asks this question -- `crypto` checks each argument
+ * with it -- lost the function that asked. Node's identity with
+ * `ArrayBuffer.isView` is not something its tests observe.
+ */
+export function isArrayBufferView(value: unknown): value is ArrayBufferView {
+  return ArrayBuffer.isView(value);
+}
 
 export function isDataView(value: unknown): value is DataView {
   return value instanceof DataView;

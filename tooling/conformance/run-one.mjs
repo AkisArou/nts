@@ -1210,10 +1210,11 @@ async function checkIfCollectableByCounting(factory, constructor, count, waitTim
 
 const commonGc = { onGC, checkIfCollectableByCounting };
 
-/** Node's `test/common/crypto` fact used by metadata/CLI consistency tests. */
-const commonCrypto = {
-  hasOpenSSL3: Number.parseInt(hostProcess.versions.openssl ?? "0", 10) >= 3,
-};
+// `test/common/crypto.js` is not substituted. It was a one-fact stand-in --
+// `hasOpenSSL3` -- while no crypto module existed, and thirteen crypto tests
+// then failed on `hasOpenSSL is not a function` before asserting anything. The
+// real helper loads through the shim like any other, so its `require('crypto')`
+// is ours in the crypto lane and node's, as infrastructure, everywhere else.
 
 /**
  * Let mixed tests import Node's private binding helper without claiming that
@@ -1333,7 +1334,6 @@ const testInfrastructure = new Map([
   [join(nodeTestRoot, "common/index.mjs"), common],
   [join(nodeTestRoot, "common/countdown.js"), Countdown],
   [join(nodeTestRoot, "common/gc.js"), commonGc],
-  [join(nodeTestRoot, "common/crypto.js"), commonCrypto],
   [join(nodeTestRoot, "common/tmpdir.js"), tmpdir],
   [join(nodeTestRoot, "common/fixtures.js"), fixtures],
   [join(nodeTestRoot, "common/hijackstdio.js"), hijackstdio],
@@ -1537,7 +1537,6 @@ function shimmedRequire(id, fromFile) {
   if (id.endsWith("../common")) return common;
   if (id.endsWith("common/countdown")) return Countdown;
   if (id.endsWith("common/gc")) return commonGc;
-  if (id.endsWith("common/crypto")) return commonCrypto;
   if (id.endsWith("common/tmpdir")) return tmpdir;
   if (id.endsWith("common/fixtures")) return fixtures;
   if (id.endsWith("common/hijackstdio")) return hijackstdio;

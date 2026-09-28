@@ -1,0 +1,5 @@
+# Each line: an upstream file, and why it does not measure node:crypto here.
+test-crypto-subtle-cross-realm.js: cross-module integration; reads `globalThis.crypto.subtle`, node's Web Crypto, which this module neither implements nor installs, so it passes with the module blanked
+test-crypto-subtle-zero-length.js: cross-module integration; AES-GCM through `globalThis.crypto.subtle`, node's Web Crypto, which this module neither implements nor installs, so it passes with the module blanked
+test-crypto-webcrypto-aes-decrypt-tag-too-small.js: cross-module integration; AES-GCM through `globalThis.crypto.subtle`, node's Web Crypto, which this module neither implements nor installs, so it passes with the module blanked
+test-crypto-secure-heap.js: host-binary subprocess; every assertion runs in a `process.execPath` child forked with `--secure-heap`, which loads node's own crypto, so it passes with the module blanked; a compiled program has no `--secure-heap`, and `secureHeapUsed()`'s answer without one is node's zeros
