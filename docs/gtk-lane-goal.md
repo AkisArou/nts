@@ -1853,6 +1853,7 @@ one in two ways, both core gaps:
 | 2026-09-27 | 25 | 8 on main; 14 stop at the captured narrowed handle, Scale at `Object.entries` over a table, Stack at a `let` of a handle with no initializer, Context Menu at a record's fields (`new Gdk.Rectangle({ x, y })`, designed with the compiler lane) |
 | 2026-09-28 | 29 | **25 on main**, with the captured-handle fix (bd58854b9). Left: Stack (a `let` of a handle with no initializer), Scale (`Object.entries` over a table), Context Menu (record fields, designed), Boxed Lists (`GObject.TYPE_STRING` and `Gtk.ClosureExpression`, binding gaps) |
 | 2026-09-28 | 34 | **28**. Also left: Text Colors (a spread in call arguments, then an array stringified), Text View (destructuring a handle's property) |
+| 2026-09-28 | 55 | **43**: Message Dialogs, its `await dialog.choose(…)` through the binding's promise form, stopped at `.catch(console.error)`: a promise's `then`/`catch` are not lowered, and 22 of Workbench's 104 demos write one (reported) |
 | 2026-09-28 | 54 | **43**: Grid View and Actions (GJS's `Variant.unpack()` as the typed getter). Network Monitor stops at a compiler defect with no root diagnostic: a capturing nested function called from a closure is never defined (reported, 12-line repro) |
 | 2026-09-28 | 51 | **41**: Search, ported and stopped at `new RegExp(...)` (a regex, not lowered yet) |
 | 2026-09-28 | 50 | **41**: Link Button, Breakpoints and Shortcuts Window, each on its first build |

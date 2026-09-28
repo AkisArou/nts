@@ -7,6 +7,7 @@
 // module Workbench imports: nts compiles no dynamic `import()`.
 import {
   AdwAboutDialog,
+  AdwAlertDialog,
   AdwApplication,
   AdwApplicationWindow,
   AdwBanner,
@@ -246,6 +247,14 @@ function act(kind: string, id: string, args: string[], object: GObject | null, w
       if (args[0] === "apply") object.emit("apply");
       else object.emit("unapply");
       return true;
+    case "respond": {
+      const root = object instanceof GtkWidget ? object.get_root() : null;
+      const dialog = root instanceof AdwApplicationWindow ? root.get_visible_dialog() : null;
+      if (!(dialog instanceof AdwAlertDialog)) return false;
+      // A response is the dialog's signal, which `choose` waits on.
+      dialog.emit("response", args[0]);
+      return true;
+    }
     case "about": {
       const root = object instanceof GtkWidget ? object.get_root() : null;
       const dialog = root instanceof AdwApplicationWindow ? root.get_visible_dialog() : null;

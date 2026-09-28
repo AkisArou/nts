@@ -45,6 +45,7 @@
     "list-view/nts.config.ts",
     "menu-button/nts.config.ts",
     "menu/nts.config.ts",
+    "message-dialogs/nts.config.ts",
     "navigation-view/nts.config.ts",
     "network-monitor/nts.config.ts",
     "notification/nts.config.ts",

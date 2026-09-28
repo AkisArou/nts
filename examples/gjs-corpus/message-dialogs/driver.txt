@@ -1,0 +1,6 @@
+click button_confirmation
+respond button_confirmation replace
+click button_error
+respond button_error okay
+click button_advanced
+respond button_advanced cancel

@@ -47,6 +47,7 @@
 //   level <id>     print a level bar's `value`
 //   visit <id>     mark a link button visited
 //   breakpoint <id> <apply|unapply> emit a breakpoint's signal
+//   respond <id> <response> answer the alert dialog shown in <id>'s window
 //   about <id>     print the about dialog shown in <id>'s window: its name,
 //                  comments and translator credits
 //   orientation <id> print a box's `orientation`
@@ -167,6 +168,7 @@ application.connect("activate", async () => {
     else if (kind === "level") console.log(`${id}.value ${object.value}`);
     else if (kind === "visit") object.visited = true;
     else if (kind === "breakpoint") object.emit(args[0]);
+    else if (kind === "respond") object.get_root().get_visible_dialog().emit("response", args[0]);
     else if (kind === "about") {
       const dialog = object.get_root().get_visible_dialog();
       console.log(`about ${dialog.application_name}|${dialog.comments}|${dialog.translator_credits}`);
