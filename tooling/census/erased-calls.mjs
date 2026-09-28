@@ -318,10 +318,11 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     new Promise((done) => {
       const child = spawn(NTS, args, { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
       let out = "";
+      let err = "";
       child.stdout.on("data", (d) => (out += d));
-      child.stderr.on("data", () => {});
+      child.stderr.on("data", (d) => (err += d));
       const timer = setTimeout(() => child.kill("SIGKILL"), 600_000);
-      child.on("close", (status) => { clearTimeout(timer); done({ status, out }); });
+      child.on("close", (status) => { clearTimeout(timer); done({ status, out, err }); });
     });
 
   const found = [];
@@ -331,7 +332,19 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   await Promise.all(Array.from({ length: WORKERS }, async () => {
     while (next < projects.length) {
       const p = projects[next++];
-      const r = await run(["hir", "--prepared", p.at]);
+      let r = await run(["hir", "--prepared", p.at]);
+      // A config declaring several products roots nothing until one is named,
+      // as `emit` does: `this config declares ["host", "host-llvm"]; name one
+      // with --product`. The products differ in backend, not in roots, so the
+      // first the compiler names is measured, and the label says which.
+      const products = /this config declares \[([^\]]*)\]; name one with --product/.exec(r.err)?.[1];
+      if (products) {
+        const product = /"([^"]+)"/.exec(products)?.[1];
+        if (product) {
+          r = await run(["hir", "--prepared", p.at, "--product", product]);
+          p.label = `${p.label} (product ${product})`;
+        }
+      }
       if (!/^\d+ function\(s\)/m.test(r.out)) {
         unmeasured.push(p.label);
         continue;
