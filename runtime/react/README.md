@@ -60,6 +60,17 @@ build:
 
 In the `react` suite, upstream's own build fails the same 2 tests.
 
+**Speed (JavaScript build).** Against upstream React built from the same
+source without Closure (upstream's rollup build, Closure off), measured by
+running the two alternately in each round on one core: mount 1.04×,
+updateEvery10th 1.00×, reverse 1.01×, swap 1.06×, removeOne 0.99×, clear
+1.01×, stateUpdates 1.03×. Upstream's published build, with Closure, is
+1–14% faster than ours. Most of the remaining gap is `swap`: our child
+reconciler is a class where upstream's is a closure per mode, so V8 shares
+one compiled `reconcileChildrenArray` between mounting and updating and
+deoptimises it every render. Upstream's shape waits on nts compiling a
+nested function that calls a sibling with a capture.
+
 **Native build.** The runtime compiles whole with nts. The GTK counter (a
 `main` that renders a Box holding a Label and a Button, with no hooks) runs
 natively on C under reference counting. It mounts, updates its label, and
