@@ -819,13 +819,21 @@ say(`  machine at end:   ${describeMachine(machineAtEnd)}`);
 // memory cap fires -- so the rate is `pswpin + pswpout` over the run, from
 // /proc/vmstat. The threshold, 256 pages/s (1 MB/s at 4 KB) averaged over the
 // whole run, is a judgement, printed beside the number it judges.
+//
+// **The threshold is a proxy, and the question has a direct test.** What it
+// guards against is an *outcome* moved by the load -- a timeout, a cap -- and
+// two runs of one compiler and harness under different loads either agree case
+// for case or they do not. On 2026-09-28 two runs at 502 and 2,458 pages/s
+// (a VM paging back in, 11.6 GB free throughout) agreed on all 30,179 rows. So
+// the warning names the control, rather than leaving a busy box unrecordable.
 const seconds = Math.max(1, (machineAtEnd.at - machineAtStart.at) / 1000);
 const pagingRate = (machineAtEnd.pages_swapped - machineAtStart.pages_swapped) / seconds;
 say(`  lowest available memory seen during the run: ${lowestAvailableGb} GB (needed ${REQUIRED_GB} to start)`);
 say(`  paging during the run: ${pagingRate.toFixed(1)} pages/s swapped in or out, over ${Math.round(seconds)} s`);
 if (pagingRate > 256 || Math.min(machineAtStart.available_gb, machineAtEnd.available_gb, lowestAvailableGb) < 4) {
   say("  DEGRADED MACHINE: over 256 pages/s of swap traffic, or under 4 GB available at one end of the run --");
-  say("  do not move a floor or re-derive the evidence set from this run");
+  say("  do not move a floor or re-derive the evidence set from this run, unless a second run's --rows agree");
+  say("  with its rows case for case: node tooling/census/rows.mjs --diff <first> <second> -- 0 moved");
 }
 say(`  runtime objects: ${objectTally.hit} cached, ${objectTally.miss} compiled (${OBJECT_CACHE})`);
 say(`  self-checks: control ${checks.control}, sabotage ${checks.sabotage}, refused ${checks.refused}`);
