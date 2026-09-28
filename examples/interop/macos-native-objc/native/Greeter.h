@@ -22,6 +22,8 @@ NS_ASSUME_NONNULL_BEGIN
 // Completes on another thread, as a framework's completion handler may,
 // with how many greetings there have been.
 - (void)greetLaterWithCompletion:(void (^)(NSInteger count))completion;
+// The same, with the greeting: a string a block is given.
+- (void)greetingLaterWithCompletion:(void (^)(NSString *greeting))completion;
 + (NSInteger)greetingCount;
 @end
 

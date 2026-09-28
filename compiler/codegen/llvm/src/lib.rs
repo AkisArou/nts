@@ -1382,6 +1382,12 @@ fn bridge_argument(
         let _ = writeln!(releases, "  call void @nts_release(ptr %s{at})");
         return Ok(format!("ptr %s{at}"));
     }
+    // An `NSString` a block is given: its text, copied in the same way.
+    if nts_core::hir::native::lent_ns_string(foreign, &to) {
+        let _ = writeln!(body, "  %s{at} = call ptr @nts_string_of_nsstring(ptr %a{at})");
+        let _ = writeln!(releases, "  call void @nts_release(ptr %s{at})");
+        return Ok(format!("ptr %s{at}"));
+    }
     // One pointer as another is the same address, as C's cast says.
     if from == to || matches!((&from, &to), (HirType::NativePointer(_), HirType::NativePointer(_))) {
         return Ok(format!("{to_ty} %a{at}"));
@@ -2209,7 +2215,9 @@ fn externals(program: &Program, platform: Platform) -> Vec<String> {
         .foreign_classes
         .iter()
         .flat_map(|class| &class.methods)
-        .any(|method| method.signature.parameters.iter().any(ns_string) || ns_string(&method.signature.result));
+        .any(|method| method.signature.parameters.iter().any(ns_string) || ns_string(&method.signature.result))
+        // And takes one a block is given (`native::block_role`).
+        || nts_codegen_common::objc::block_signatures(program).iter().any(|signature| signature.parameters.iter().any(ns_string));
     if crosses_ns_strings {
         for helper in ["nts_string_of_nsstring", "nts_nsstring_of", "nts_release"] {
             let helper = helper.to_owned();

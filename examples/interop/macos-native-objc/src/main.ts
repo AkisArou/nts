@@ -13,6 +13,8 @@
 //                    required method called back, then its optional one
 //   later 5          the `async` form Swift makes of the completion handler,
 //                    completed on another thread and awaited here
+//   greeting ...     the same, given a string: the `NSString` the block is
+//                    given, read as the program's string
 //   greeter gone     the Greeter released once the program drops it
 import { Greeter, GreeterAlive, GreeterWatch, type GreeterDelegate } from "objc:Greeter";
 import { NSObject } from "objc:Foundation";
@@ -44,6 +46,8 @@ async function greetings(watcher: Watcher): Promise<number> {
   console.log(`shouted ${greeter.greet({ withTimes: 1 })}`);
   watcher.shout = false;
   console.log(`later ${await greeter.greetLater()}`);
+  const greeting = await greeter.greetingLater();
+  console.log(`greeting ${greeting} (${greeting.length})`);
   return watch;
 }
 

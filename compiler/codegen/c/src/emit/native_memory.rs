@@ -892,6 +892,12 @@ fn bridge_argument(
         let _ = write!(releases, " nts_release((NtsHeader *)s{at});");
         return Ok(format!("s{at}"));
     }
+    // An `NSString` a block is given: its text, copied in the same way.
+    if nts_core::hir::native::lent_ns_string(ty, &param.ty) {
+        let _ = write!(copies, " NtsString *s{at} = nts_string_of_nsstring({slot});");
+        let _ = write!(releases, " nts_release((NtsHeader *)s{at});");
+        return Ok(format!("s{at}"));
+    }
     Ok(format!("({want}){slot}"))
 }
 

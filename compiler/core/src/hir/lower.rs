@@ -59711,7 +59711,7 @@ fn bridge_blocks(native: &mut super::native::Function, signature: &nts_semantic_
         let Some(parameter) = fed.and_then(|ts| signature.parameters.get(ts)) else { continue };
         let Type::FnPointer(declared) = native.parameters[at].clone() else { continue };
         match &mut native.roles[at] {
-            role @ Role::Plain if function(parameter.ty) => *role = super::native::block_role(declared),
+            role @ Role::Plain if function(parameter.ty) => *role = super::native::block_role(&declared),
             Role::Label { key, inner, .. } if **inner == Role::Plain => {
                 let key = key.clone();
                 let label = super::native::labels_of(snapshot, parameter.ty)
@@ -59719,7 +59719,7 @@ fn bridge_blocks(native: &mut super::native::Function, signature: &nts_semantic_
                 if !label.is_some_and(|(_, ty)| function(ty)) {
                     continue;
                 }
-                **inner = super::native::block_role(declared);
+                **inner = super::native::block_role(&declared);
             }
             _ => continue,
         }

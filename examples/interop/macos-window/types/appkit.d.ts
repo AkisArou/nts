@@ -1280,9 +1280,9 @@ declare module "objc:AppKit" {
     /** @ntsSelector paragraphRangeForRange: */
     paragraphRange(labels: { for: ByValue<NSRange> | Fields<NSRange> }): ByValue<NSRange>;
     /** @ntsSelector enumerateSubstringsInRange:options:usingBlock: */
-    enumerateSubstrings(labels: { in: ByValue<NSRange> | Fields<NSRange>; options: CEnum<NSString.EnumerationOptions | 0, UInt> }, block: (arg0: NSString | null, arg1: ByValue<NSRange>, arg2: ByValue<NSRange>, arg3: Ptr<ObjCBool>) => void): void;
+    enumerateSubstrings(labels: { in: ByValue<NSRange> | Fields<NSRange>; options: CEnum<NSString.EnumerationOptions | 0, UInt> }, block: (arg0: string | null, arg1: ByValue<NSRange>, arg2: ByValue<NSRange>, arg3: Ptr<ObjCBool>) => void): void;
     /** @ntsSelector enumerateLinesUsingBlock: */
-    enumerateLines(block: (arg0: NSString, arg1: Ptr<ObjCBool>) => void): void;
+    enumerateLines(block: (arg0: string, arg1: Ptr<ObjCBool>) => void): void;
     /** @ntsSelector dataUsingEncoding:allowLossyConversion: */
     data(labels: { using: UInt; allowLossyConversion: boolean }): NSData | null;
     /** @ntsSelector dataUsingEncoding: */
@@ -1346,7 +1346,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector stringByAddingPercentEncodingWithAllowedCharacters: */
     addingPercentEncoding(labels: { withAllowedCharacters: NSCharacterSet }): string | null;
     /** @ntsSelector enumerateLinguisticTagsInRange:scheme:options:orthography:usingBlock: */
-    enumerateLinguisticTags(labels: { in: ByValue<NSRange> | Fields<NSRange>; scheme: string; options: CEnum<NSLinguisticTagger.Options | 0, UInt>; orthography: NSOrthography | null }, block: (arg0: NSString | null, arg1: ByValue<NSRange>, arg2: ByValue<NSRange>, arg3: Ptr<ObjCBool>) => void): void;
+    enumerateLinguisticTags(labels: { in: ByValue<NSRange> | Fields<NSRange>; scheme: string; options: CEnum<NSLinguisticTagger.Options | 0, UInt>; orthography: NSOrthography | null }, block: (arg0: string | null, arg1: ByValue<NSRange>, arg2: ByValue<NSRange>, arg3: Ptr<ObjCBool>) => void): void;
     /** @ntsSelector sizeWithAttributes: */
     size(labels: { withAttributes: Map<string, NSObject> | null }): ByValue<CGSize>;
     /** @ntsSelector drawAtPoint:withAttributes: */

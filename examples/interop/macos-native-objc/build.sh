@@ -16,7 +16,8 @@
 #   oracle prints: an initializer with labels, a method, a property written and
 #   read, a class method, a TypeScript class adopting the header's protocol
 #   called back through its required and its optional method, the `async` form
-#   of a completion handler completed on another thread, and the Greeter
+#   of a completion handler completed on another thread -- with a number,
+#   and with a string the block is given -- and the Greeter
 #   released once the program drops it. stderr is empty.
 # - **Control:** under NoGc the Greeter outlives its last use, so the one
 #   lifetime line, and only that, differs from the oracle.
@@ -92,8 +93,8 @@ run_quietly() {
   fi
 }
 run_quietly "$out/oracle" "$out/expected"
-[ "$(wc -l <"$out/expected.txt")" -eq 11 ] ||
-  { echo "macos-native-objc: the oracle printed $(wc -l <"$out/expected.txt") lines, not 11" >&2; exit 1; }
+[ "$(wc -l <"$out/expected.txt")" -eq 13 ] ||
+  { echo "macos-native-objc: the oracle printed $(wc -l <"$out/expected.txt") lines, not 13" >&2; exit 1; }
 
 run_quietly "$out/greeter/macos-13-x86_64/greeter" "$out/actual"
 diff -u "$out/expected.txt" "$out/actual.txt"

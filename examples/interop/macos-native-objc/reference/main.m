@@ -36,6 +36,13 @@ static NSInteger greetings(Watcher *watcher) {
   }];
   dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
   printf("later %ld\n", (long)later);
+  __block NSString *greeting;
+  [greeter greetingLaterWithCompletion:^(NSString *text) {
+    greeting = text;
+    dispatch_semaphore_signal(done);
+  }];
+  dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
+  printf("greeting %s (%lu)\n", greeting.UTF8String, (unsigned long)greeting.length);
   return watch;
 }
 

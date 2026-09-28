@@ -33,6 +33,13 @@ static NSInteger greetings;
   });
 }
 
+- (void)greetingLaterWithCompletion:(void (^)(NSString *))completion {
+  NSString *greeting = [self greetWithTimes:2];
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_DEFAULT, 0), ^{
+    completion(greeting);
+  });
+}
+
 + (NSInteger)greetingCount {
   return greetings;
 }

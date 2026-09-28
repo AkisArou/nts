@@ -2309,8 +2309,11 @@ impl<'a> Model<'a> {
             }
         }
         pieces.push(&parameters[start..]);
+        // A string the block is given is the program's `string`: lowering
+        // copies the `NSString` in for the call (`native::block_role`), as it
+        // does a method's. Its result is still the object it is.
         for piece in pieces.iter().map(|p| p.trim()).filter(|p| !p.is_empty() && *p != "void") {
-            spelled.push(self.spell(class, &block_part(piece, &self.typedefs), Position::Block)?);
+            spelled.push(swift_string(self.spell(class, &block_part(piece, &self.typedefs), Position::Block)?));
         }
         // `NS_SWIFT_UI_ACTOR void (^)(BOOL)`: an attribute of the block, not
         // part of its result's type.
@@ -3167,15 +3170,17 @@ fn quoted_key(name: &str) -> String {
 enum Position {
     Parameter,
     Result,
-    /// A parameter or result of a block: an object as it is, since a block
-    /// bridges no string or array.
+    /// A parameter or result of a block, or of a protocol requirement: an
+    /// object as it is, since what calls it bridges no array. A string
+    /// parameter is made the program's string after spelling
+    /// ([`swift_string`]), where lowering copies it in.
     Block,
 }
 
-/// A requirement's `NSString` as Swift's `String`: the entry point copies a
-/// parameter in (`lent_ns_string`) and makes a result's `NSString`
-/// (`answered_ns_string`). An array or a dictionary still crosses as the
-/// object it is.
+/// A requirement's or a block's `NSString` as Swift's `String`: an entry
+/// point or a block's bridge copies a parameter in (`lent_ns_string`), and an
+/// entry point makes a result's `NSString` (`answered_ns_string`). An array or
+/// a dictionary still crosses as the object it is.
 fn swift_string(spelled: String) -> String {
     match spelled.as_str() {
         "NSString" => "string".to_owned(),
@@ -4376,16 +4381,17 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             "    /** @ntsSelector settleWith:completionHandler: */\n    settle(labels: { with: Shape }, handler: (arg0: Int) => void): void;",
             "    /** @ntsCall nts_async_Shape_settle */\n    settle(labels: { with: Shape }): Promise<Int>;",
             "    /** @ntsCall nts_async_Shape_fetch */\n    fetch(labels: { named: string }): Promise<Shape>;",
-            // Several values are Swift's tuple; a handler's values cross as
-            // the objects they are, as a block's do.
-            "    /** @ntsCall nts_async_Shape_pair */\n    pair(): Promise<[Shape, NSString]>;",
+            // Several values are Swift's tuple; a handler's string is the
+            // program's string, as a block's is, and an object is the object.
+            "    /** @ntsCall nts_async_Shape_pair */\n    pair(): Promise<[Shape, string]>;",
             // A class method's: a static, as Swift's `class func` is.
             "    /** @ntsCall nts_async_Shape_runGroup */\n    static runGroup(changes: (arg0: Shape) => void): Promise<void>;",
         ] {
             assert!(text.contains(expected), "no `{expected}` in:\n{text}");
         }
         for expected in [
-            "import { NSError, NSString, Shape } from \"objc:Fake\";",
+            // `NSString` is not among them: the handler's string is a string.
+            "import { NSError, Shape } from \"objc:Fake\";",
             "import type { Int } from \"objc:types\";",
             "import { nts_pending_begin, nts_pending_end } from \"c:pending\";",
             // Outstanding from before the message until the handler's first

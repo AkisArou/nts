@@ -2366,7 +2366,7 @@ fn closure_slots(
     };
     let context = Type::Pointer(Pointee::Void);
     if matches!(kind, ClosureKind::Block) {
-        return Ok(vec![(context, block_role(declared))]);
+        return Ok(vec![(context, block_role(&declared))]);
     }
     let mut callback = declared.parameters.clone();
     callback.push(context.clone());
@@ -2430,11 +2430,23 @@ fn closure_slots(
 /// `declared`: its one C slot is the block's address, and the trampoline the
 /// block's invoke calls takes the closure's context after the block's own
 /// parameters.
-pub(crate) fn block_role(declared: std::sync::Arc<FnPointer>) -> Role {
-    let mut callback = declared.parameters.clone();
+///
+/// A `string` parameter is the `NSString *` Objective-C gives a block, as
+/// Swift's `String` parameter of a closure bridges one -- not the C string
+/// a callback's is -- and the bridge copies its text in for the call
+/// ([`lent_ns_string`]): a completion handler's string reads as a string.
+pub(crate) fn block_role(declared: &FnPointer) -> Role {
+    let c_string = Encoding::Utf8.c_type();
+    let parameters: Vec<Type> = declared
+        .parameters
+        .iter()
+        .map(|ty| if *ty == c_string { Type::Pointer(Pointee::Opaque(Handle::ns_string())) } else { ty.clone() })
+        .collect();
+    let signature = std::sync::Arc::new(FnPointer::spell(parameters.clone(), (*declared.result).clone()));
+    let mut callback = parameters;
     callback.push(Type::Pointer(Pointee::Void));
     let bridge = std::sync::Arc::new(FnPointer::spell(callback, (*declared.result).clone()));
-    Role::Block { bridge, signature: declared }
+    Role::Block { bridge, signature }
 }
 
 /// The C signature the Objective-C runtime calls a method of a class the
