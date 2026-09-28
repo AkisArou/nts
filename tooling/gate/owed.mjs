@@ -143,6 +143,7 @@ export const RULES = [
     arms: [
       { kind: "answers", asks: "where releases go: the default provider is no-gc, rc.rs never runs, and a diff without --rc reads byte-identical whatever this changed", run: "node tooling/conformance/emitted-diff.mjs <before> <after> --rc --axis" },
       { kind: "answers", asks: "does every example still answer under counting", run: "NTS_RC=1 node tooling/differential/agree.mjs <before> <after>" },
+      { kind: "valid", asks: "is the runtime's counted LLVM IR valid -- `assembles` without --rc emits no release", run: "NTS_BIN=<after> node tooling/conformance/assembles.mjs --rc" },
     ],
   },
   {

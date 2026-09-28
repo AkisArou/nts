@@ -2,6 +2,7 @@
 //
 //   node tooling/conformance/assembles.mjs [project ...]   (default: runtime/node/*, runtime/web-platform)
 //   NTS_BIN=<a pinned copy> node tooling/conformance/assembles.mjs
+//   node tooling/conformance/assembles.mjs --rc      the counted IR, releases and all
 //
 // # Why
 //
@@ -65,6 +66,14 @@ const NTS = join(scratch, "nts");
 copyFileSync(SOURCE, NTS);
 chmodSync(NTS, 0o755);
 
+/**
+ * Reference counting emits releases as IR too, and without `--rc` the provider
+ * is no-gc and none are emitted: a counting change would assemble clean
+ * whatever it did. `--rc` (or NTS_RC=1, as agree.mjs reads it) assembles the
+ * counted IR; every run names its provider. 29 of 29 assembled under --rc
+ * when this arrived (2026-09-28).
+ */
+const RC = process.argv.includes("--rc") || (process.env.NTS_RC ?? "0") !== "0";
 const named = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const projects = (named.length > 0
   ? named
@@ -101,7 +110,7 @@ async function check(project, slot) {
   const ir = join(scratch, `${slot}.ll`);
   const { openSync, closeSync } = await import("node:fs");
   const fd = openSync(ir, "w");
-  const emit = await run(NTS, ["emit-llvm", project], fd);
+  const emit = await run(NTS, ["emit-llvm", project, ...(RC ? ["--rc"] : [])], fd);
   closeSync(fd);
   const size = statSync(ir).size;
   if (emit.error || emit.signal || size === 0) {
@@ -133,7 +142,7 @@ await Promise.all(Array.from({ length: Math.min(WORKERS, projects.length) }, asy
 const fresh = failed.filter((f) => !known.has(f.project));
 const held = failed.filter((f) => known.has(f.project));
 const expired = [...known.keys()].filter((p) => projects.includes(p) && !failed.some((f) => f.project === p) && !unmeasured.some((u) => u.startsWith(`${p}:`)));
-console.log(`  compiler ${SOURCE} (pinned), ${LLVM_AS}`);
+console.log(`  compiler ${SOURCE} (pinned), ${LLVM_AS}; provider ${RC ? "reference counting (--rc)" : "no-gc (releases are not emitted)"}`);
 console.log(`  ${assembled} of ${projects.length} module(s) assemble, ${(bytes / 1e6).toFixed(1)} MB of IR, in ${Math.round((Date.now() - started) / 1000)} s`);
 for (const f of fresh) console.log(`  DOES NOT ASSEMBLE  ${f.project}: ${f.error}\n                     ${f.line}`);
 for (const f of held) console.log(`  known              ${f.project}: ${f.error} -- ${known.get(f.project)}`);
