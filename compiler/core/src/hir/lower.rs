@@ -2226,12 +2226,39 @@ struct Capture {
 /// that blames the wrong thing: the closure is refused for finding no value for
 /// a name that never had one, and the message can only say how far away the
 /// declaration was.
+///
+/// **And the first sentence was false for one kind of function**, which is what
+/// `nested` is for. A nested `function` declaration that captures is lowered as
+/// a *closure body* ([`not_a_plain_function`]): there is one of it per call of
+/// its enclosing function, carrying an environment, and nothing emits it under
+/// its own name. So it is a local like any other and a sibling closure reading it
+/// must capture it. Without that, `Closure1#call` called `inner` and the cascade
+/// said "which nothing in this program defines" with no root diagnostic anywhere
+/// -- exactly the failure the paragraph above predicts. Found by the GTK lane in
+/// Workbench's Network Monitor and by the React lane in upstream's child
+/// reconciler.
 fn reached_by_name(
     probe: &FuncBuilder,
     snapshot: &SemanticSnapshot,
     symbol: SymbolId,
     record: &SymbolRecord,
+    nested: &rustc_hash::FxHashSet<NodeId>,
 ) -> bool {
+    // First, because both tests below would otherwise claim such a declaration:
+    // the kind test, and the `FUNCTION` flag on its symbol.
+    //
+    // `all` rather than `any`, and non-empty: a name some of whose declarations
+    // are reached by name *is* reached by name, and treating one as a capture
+    // when it is not refuses the closure for a binding the enclosing builder has
+    // no value for. The permissive direction is the unsafe one here.
+    if !record.declarations.is_empty()
+        && record
+            .declarations
+            .iter()
+            .all(|declaration| nested.contains(declaration))
+    {
+        return false;
+    }
     // There is one of it for the whole program, so copying a pointer to
     // it into every closure would be storage for nothing.
     if record.declarations.iter().any(|declaration| {
@@ -2894,11 +2921,196 @@ fn assigned_anywhere(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Vec<u3
     assigned
 }
 
+/// What one closure candidate captures from around it.
+///
+/// **Asked twice, which is why it is a function.** Once by [`nested_closures`],
+/// to find out which nested `function` declarations capture anything at all, and
+/// once by [`collect_closures`] for the closures the program keeps. A second
+/// derivation of "what is free in this body" would be two answers to the
+/// question a closure's whole layout rests on.
+fn captures_of(
+    probe: &FuncBuilder,
+    snapshot: &SemanticSnapshot,
+    id: NodeId,
+    settlers: &rustc_hash::FxHashMap<u32, bool>,
+    assigned: &[u32],
+    nested: &rustc_hash::FxHashSet<NodeId>,
+) -> ClosureInfo {
+    let mut info = ClosureInfo::as_written(id);
+
+    let mut subtree = Vec::new();
+    probe.subtree(id, &mut subtree);
+
+    // `this` first, so its field index is stable and a layout dump reads
+    // the way the program does.
+    //
+    // An arrow does not bind `this`; it inherits the enclosing one, which
+    // makes it a free variable like any other and it was the only one not
+    // treated as such. `self.this` inside a closure was the *closure
+    // object*, so `this.emit(...)` looked for `emit` on the closure's own
+    // layout and did not find it -- 17 sites named `emit`, 8 `#inScope`,
+    // and the whole of the "`v`, which `an anonymous type` does not
+    // declare" row, which is the same thing said about a field.
+    //
+    // `mentions_this` already knew how to ask: it stops at anything that
+    // rebinds `this` and descends through arrows, which is the rule.
+    if let Some(at) = probe
+        .node(id)
+        .children
+        .iter()
+        .find_map(|child| probe.first_this(*child))
+    {
+        info.captures.push(Capture {
+            symbol: THIS_CAPTURE,
+            settles: None,
+            name: "this".to_owned(),
+            at,
+            forward: false,
+            by_reference: false,
+        });
+    }
+
+    for read in &subtree {
+        let Some(symbol) = probe.node(*read).symbol else {
+            continue;
+        };
+        if !reads_a_name(probe, *read) {
+            continue;
+        }
+        if info.captures.iter().any(|had| had.symbol == symbol.0) {
+            continue;
+        }
+        let Some(record) = snapshot.symbols.get(symbol.0 as usize) else {
+            continue;
+        };
+        if names_only_a_type_parameter(probe, record) {
+            continue;
+        }
+        // Nothing to capture: a name declared outside the decoded files, or
+        // one the arrow declares itself.
+        if record.declarations.is_empty()
+            || record
+                .declarations
+                .iter()
+                .any(|declaration| subtree.contains(declaration))
+        {
+            continue;
+        }
+        if reached_by_name(probe, snapshot, symbol, record, nested) {
+            continue;
+        }
+        // A name declared *below* the arrow that reads it. The closure
+        // captures the binding, and where the closure is built that binding
+        // has no value -- so there is nothing to copy and it has to go
+        // through a cell, whether or not anything writes to it:
+        //
+        //     const onListening = () => { ...cleanup...; };
+        //     const cleanup = ...;
+        //
+        // Legal, because the body runs later.
+        let arrow = probe.node(id).origin.location;
+        let below = record.declarations.iter().all(|declaration| {
+            let declared = probe.node(*declaration).origin.location;
+            declared.file == arrow.file && declared.span.start > arrow.span.start
+        });
+        let mut by_reference = assigned.contains(&symbol.0) || below;
+        if by_reference {
+            match probe.rebinding_refusal(record, symbol.0, below) {
+                Rebinding::Refused(message) => {
+                    info.refusal = Some(message);
+                    break;
+                }
+                Rebinding::CopyIsExact => by_reference = false,
+                Rebinding::NotTheLoops => {}
+            }
+        }
+        info.captures.push(Capture {
+            symbol: symbol.0,
+            settles: settlers.get(&symbol.0).copied(),
+            name: record.name.clone(),
+            at: *read,
+            by_reference,
+            forward: below,
+        });
+    }
+    info
+}
+
+/// Every nested `function` declaration this program lowers as a closure body.
+///
+/// **A fixpoint, because the answer feeds itself.** Such a declaration is not
+/// reached by name -- there is one of it per call of its enclosing function,
+/// carrying an environment, and nothing emits it under its own name -- so
+/// [`reached_by_name`] has to answer `false` for one, and a *sibling* closure
+/// reading it captures it like any other local. Which means
+///
+/// ```ts
+/// function outer(n: number) {
+///   function a() { return n; }     // captures `n`, so a closure
+///   function b() { return a(); }   // captures `a`, so a closure too
+/// }
+/// ```
+///
+/// needs `a`'s answer before `b`'s. One pass takes `a` and leaves `b` emitted as
+/// a plain function calling a name nothing defines, which is what the GTK lane
+/// reported from Workbench's Network Monitor: `Closure1#call` calling `inner`,
+/// "which nothing in this program defines", with no root diagnostic anywhere.
+/// React's child reconciler is ~24 inner functions calling each other, so the
+/// chain is the population rather than a corner.
+///
+/// Monotone, so it converges: adding a declaration to the set can only add
+/// captures, never remove one. Bounded anyway, because a bound that is never
+/// reached costs nothing and a fixpoint that cannot end costs a build.
+fn nested_closures(
+    probe: &FuncBuilder,
+    snapshot: &SemanticSnapshot,
+    settlers: &rustc_hash::FxHashMap<u32, bool>,
+    assigned: &[u32],
+) -> rustc_hash::FxHashSet<NodeId> {
+    let candidates: Vec<NodeId> = snapshot
+        .nodes
+        .iter()
+        .enumerate()
+        .filter(|(_, node)| node.kind == NodeKind::Syntax(syntax::FUNCTION_DECLARATION))
+        .map(|(index, _)| NodeId(u32::try_from(index).unwrap_or(u32::MAX)))
+        .filter(|id| probe.is_nested_closure(*id))
+        .collect();
+    let mut found = rustc_hash::FxHashSet::default();
+    for _ in 0..NESTED_CLOSURE_ROUNDS {
+        let mut grew = false;
+        for id in &candidates {
+            if found.contains(id) {
+                continue;
+            }
+            if !captures_of(probe, snapshot, *id, settlers, assigned, &found)
+                .captures
+                .is_empty()
+            {
+                found.insert(*id);
+                grew = true;
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
+    found
+}
+
+/// The rounds [`nested_closures`] may take, one per level of a chain of nested
+/// functions calling each other. Eight is far past anything written: React's
+/// reconciler is ~24 functions wide and one deep.
+const NESTED_CLOSURE_ROUNDS: usize = 8;
+
 fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
     let probe = FuncBuilder::probe(snapshot);
     let settlers = settler_symbols(snapshot, &probe);
 
     let assigned = assigned_anywhere(snapshot, &probe);
+    // Before the loop, because `reached_by_name` consults it for every name any
+    // closure reads and the answer for one nested declaration depends on the
+    // others.
+    let nested = nested_closures(&probe, snapshot, &settlers, &assigned);
 
     let mut closures = Vec::new();
     for (index, node) in snapshot.nodes.iter().enumerate() {
@@ -2937,103 +3149,7 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
         if !is_closure {
             continue;
         }
-        let mut info = ClosureInfo::as_written(id);
-
-        let mut subtree = Vec::new();
-        probe.subtree(id, &mut subtree);
-
-        // `this` first, so its field index is stable and a layout dump reads
-        // the way the program does.
-        //
-        // An arrow does not bind `this`; it inherits the enclosing one, which
-        // makes it a free variable like any other and it was the only one not
-        // treated as such. `self.this` inside a closure was the *closure
-        // object*, so `this.emit(...)` looked for `emit` on the closure's own
-        // layout and did not find it -- 17 sites named `emit`, 8 `#inScope`,
-        // and the whole of the "`v`, which `an anonymous type` does not
-        // declare" row, which is the same thing said about a field.
-        //
-        // `mentions_this` already knew how to ask: it stops at anything that
-        // rebinds `this` and descends through arrows, which is the rule.
-        if let Some(at) = probe
-            .node(id)
-            .children
-            .iter()
-            .find_map(|child| probe.first_this(*child))
-        {
-            info.captures.push(Capture {
-                symbol: THIS_CAPTURE,
-                settles: None,
-                name: "this".to_owned(),
-                at,
-                forward: false,
-                by_reference: false,
-            });
-        }
-
-        for read in &subtree {
-            let Some(symbol) = probe.node(*read).symbol else {
-                continue;
-            };
-            if !reads_a_name(&probe, *read) {
-                continue;
-            }
-            if info.captures.iter().any(|had| had.symbol == symbol.0) {
-                continue;
-            }
-            let Some(record) = snapshot.symbols.get(symbol.0 as usize) else {
-                continue;
-            };
-            if names_only_a_type_parameter(&probe, record) {
-                continue;
-            }
-            // Nothing to capture: a name declared outside the decoded files, or
-            // one the arrow declares itself.
-            if record.declarations.is_empty()
-                || record
-                    .declarations
-                    .iter()
-                    .any(|declaration| subtree.contains(declaration))
-            {
-                continue;
-            }
-            if reached_by_name(&probe, snapshot, symbol, record) {
-                continue;
-            }
-            // A name declared *below* the arrow that reads it. The closure
-            // captures the binding, and where the closure is built that binding
-            // has no value -- so there is nothing to copy and it has to go
-            // through a cell, whether or not anything writes to it:
-            //
-            //     const onListening = () => { ...cleanup...; };
-            //     const cleanup = ...;
-            //
-            // Legal, because the body runs later.
-            let arrow = probe.node(id).origin.location;
-            let below = record.declarations.iter().all(|declaration| {
-                let declared = probe.node(*declaration).origin.location;
-                declared.file == arrow.file && declared.span.start > arrow.span.start
-            });
-            let mut by_reference = assigned.contains(&symbol.0) || below;
-            if by_reference {
-                match probe.rebinding_refusal(record, symbol.0, below) {
-                    Rebinding::Refused(message) => {
-                        info.refusal = Some(message);
-                        break;
-                    }
-                    Rebinding::CopyIsExact => by_reference = false,
-                    Rebinding::NotTheLoops => {}
-                }
-            }
-            info.captures.push(Capture {
-                symbol: symbol.0,
-                settles: settlers.get(&symbol.0).copied(),
-                name: record.name.clone(),
-                at: *read,
-                by_reference,
-                forward: below,
-            });
-        }
+        let info = captures_of(&probe, snapshot, id, &settlers, &assigned, &nested);
         closures.push(info);
     }
 
@@ -20676,29 +20792,46 @@ impl<'a> FuncBuilder<'a> {
     /// exactly the closure it was typed by, and a `let` may be reassigned with a
     /// different arrow, which is a different layout. A `let` falls through to
     /// the checker's type and is refused there as it was before.
+    ///
+    /// **And a nested `function` declaration is the other spelling.** One that
+    /// captures is lowered as a closure body ([`not_a_plain_function`]), so the
+    /// declaration *is* the closure node and there is no initializer to look
+    /// through. Without this arm the field was typed at the checker's answer for
+    /// the name -- the function type -- while the value stored in it was the
+    /// closure object, and `stored_capture` refused the pair by name. A
+    /// declaration cannot be reassigned at all, so the `const` argument above
+    /// applies to it a fortiori.
     fn closure_bound_to(&self, symbol: u32) -> Option<HirType> {
-        let declaration = self
-            .snapshot
-            .symbols
-            .get(symbol as usize)?
-            .declarations
+        let declarations = &self.snapshot.symbols.get(symbol as usize)?.declarations;
+        let node = match declarations
             .iter()
             .copied()
-            .find(|node| self.kind_of(*node) == Some(syntax::VARIABLE_DECLARATION))?;
-        if self.declaration_kind(declaration) != nts_semantic_schema::VariableKind::Const {
-            return None;
-        }
-        let initializer = self
-            .children(declaration)
-            .into_iter()
-            .find(|child| self.kind_of(*child) == Some(syntax::ARROW_FUNCTION))?;
+            .find(|node| self.kind_of(*node) == Some(syntax::FUNCTION_DECLARATION))
+        {
+            Some(declaration) if taken_as_a_closure(&self.closures, declaration) => declaration,
+            // A nested declaration that captures nothing is an ordinary function
+            // reached by name, and has no closure to be typed at.
+            Some(_) => return None,
+            None => {
+                let declaration = declarations
+                    .iter()
+                    .copied()
+                    .find(|node| self.kind_of(*node) == Some(syntax::VARIABLE_DECLARATION))?;
+                if self.declaration_kind(declaration) != nts_semantic_schema::VariableKind::Const {
+                    return None;
+                }
+                self.children(declaration)
+                    .into_iter()
+                    .find(|child| self.kind_of(*child) == Some(syntax::ARROW_FUNCTION))?
+            }
+        };
         // A refused closure has no layout to name, so this answers `None` and
         // the capture is refused with that closure's own reason rather than
         // with a missing layout.
         let index = self
             .closures
             .iter()
-            .position(|closure| closure.node == initializer && closure.refusal.is_none())?;
+            .position(|closure| closure.node == node && closure.refusal.is_none())?;
         Some(HirType::Managed(ManagedType::Object(closure_type(index))))
     }
 
