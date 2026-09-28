@@ -1,11 +1,12 @@
-/* `crypto.c`, `cipher.c`, `keys.c`, `sig.c`, `rsa.c`, `keygen.c`, `dh.c` and `prime.c`, called directly.
+/* `crypto.c`, `cipher.c`, `keys.c`, `sig.c`, `rsa.c`, `keygen.c`, `dh.c`, `prime.c` and `argon2.c`, called
+ * directly.
  *
  * The TypeScript over these natives runs on node against node's own crypto,
  * so nothing but this runs the C: the compiled lane refuses every public
  * crypto function today, for compiler reasons recorded with the module. Each
  * check is a published known answer -- FIPS 180 and 202 digests, RFC 4231
  * HMAC, RFC 6070 PBKDF2, RFC 5869 HKDF, RFC 7914 scrypt, SP 800-38A AES,
- * RFC 8032 Ed25519, RFC 7748 X25519 --
+ * RFC 8032 Ed25519, RFC 7748 X25519, RFC 9106 Argon2 --
  * or a round trip through OpenSSL, or node's own behaviour where it is
  * node's rather than a standard's: PBKDF2 and HKDF of length 0 fail, scrypt's
  * answers empty, SHAKE's default length, which statuses a cipher answers.
@@ -726,6 +727,35 @@ static void primes(void) {
     expect_true("a generation job answers a 16-bit safe prime", jobs_done == before + 2 && job_ok && strlen(job_hex) == 4);
 }
 
+/* --------------------------------------------------------------- argon2 */
+
+static void argon2(void) {
+    expect_true("this OpenSSL has Argon2", nts_crypto_argon2_supported());
+    unsigned char message[32], nonce[16], secret[8], ad[12];
+    memset(message, 0x01, sizeof(message));
+    memset(nonce, 0x02, sizeof(nonce));
+    memset(secret, 0x03, sizeof(secret));
+    memset(ad, 0x04, sizeof(ad));
+    static const char *const expected[] = {
+        "512b391b6f1162975371d30919734294f868e3be3984f3c1a13a4db9fabe4acb",
+        "c814d9d1dc7f37aa13f0d77f2494bda1c8de6b016dd388d29952a4c4672b6ce8",
+        "0d640df58d78766c08c037a34a8b53c9d01ef0452d75b65eb52520e96b01e659",
+    };
+    static const char *const names[] = {"Argon2d, RFC 9106 5.1", "Argon2i, RFC 9106 5.2", "Argon2id, RFC 9106 5.3"};
+    for (int type = 0; type < 3; type++) {
+        expect_true(names[type], is_hex(nts_crypto_argon2(type, bytes(message, 32), bytes(nonce, 16), 4, 32, 32, 3,
+                                                           bytes(secret, 8), bytes(ad, 12)),
+                                         expected[type]));
+    }
+    NtsView *empty = nts_crypto_argon2(2, bytes(message, 32), bytes(nonce, 16), 1, 0, 8, 1, bytes("", 0), bytes("", 0));
+    expect_true("a tag of no length is empty, and no failure", empty != NULL && nts_view_byte_length(empty) == 0);
+    int before = jobs_done;
+    nts_crypto_argon2_job(2, bytes(message, 32), bytes(nonce, 16), 4, 32, 32, 3, bytes(secret, 8), bytes(ad, 12),
+                          &job_callback);
+    uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+    expect_true("an Argon2 job derives the same tag", jobs_done == before + 1 && job_ok && strcmp(job_hex, expected[2]) == 0);
+}
+
 int main(void) {
     digests();
     derivations();
@@ -736,6 +766,7 @@ int main(void) {
     key_generation();
     key_agreement();
     primes();
+    argon2();
     printf("%d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;
 }

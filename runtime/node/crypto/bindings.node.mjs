@@ -1233,3 +1233,26 @@ globalThis.nts_crypto_prime_check_job = (candidate, checks, done) => {
     }
   });
 };
+
+// -- argon2 -------------------------------------------------------------------
+
+const ARGON2_TYPES = ["argon2d", "argon2i", "argon2id"];
+
+globalThis.nts_crypto_argon2_supported = () => typeof crypto.argon2Sync === "function";
+
+function argon2Parameters(pass, salt, lanes, keylen, memcost, iter, secret, ad) {
+  const parameters = { message: pass, nonce: salt, parallelism: lanes, tagLength: keylen, memory: memcost, passes: iter };
+  if (secret.length > 0) parameters.secret = secret;
+  if (ad.length > 0) parameters.associatedData = ad;
+  return parameters;
+}
+
+globalThis.nts_crypto_argon2 = (type, pass, salt, lanes, keylen, memcost, iter, secret, ad) =>
+  sync(() => crypto.argon2Sync(ARGON2_TYPES[type], argon2Parameters(pass, salt, lanes, keylen, memcost, iter, secret, ad)));
+
+globalThis.nts_crypto_argon2_job = (type, pass, salt, lanes, keylen, memcost, iter, secret, ad, done) =>
+  job(
+    (callback) =>
+      crypto.argon2(ARGON2_TYPES[type], argon2Parameters(pass, salt, lanes, keylen, memcost, iter, secret, ad), callback),
+    done,
+  );

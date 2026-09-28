@@ -208,6 +208,13 @@ bool nts_crypto_prime_candidate_ok(NtsView *candidate);
 double nts_crypto_prime_check(NtsView *candidate, double checks);
 void nts_crypto_prime_check_job(NtsView *candidate, double checks, NtsHeader *done);
 
+/* Argon2 (`argon2.c`): types are `ARGON2D`, `ARGON2I`, `ARGON2ID` as 0 to 2. */
+bool nts_crypto_argon2_supported(void);
+NtsView *nts_crypto_argon2(double type, NtsView *pass, NtsView *salt, double lanes, double keylen,
+                           double memcost, double iter, NtsView *secret, NtsView *ad);
+void nts_crypto_argon2_job(double type, NtsView *pass, NtsView *salt, double lanes, double keylen,
+                           double memcost, double iter, NtsView *secret, NtsView *ad, NtsHeader *done);
+
 /* FIPS mode: whether OpenSSL's default properties ask for FIPS, and setting
  * them. False from `set` is a failure whose cause is on the error record. */
 bool nts_crypto_fips_enabled(void);

@@ -13,6 +13,7 @@ import { getDefaultTriggerAsyncId } from "../../internal/async-hooks.ts";
 import { AsyncRequest } from "../../internal/async-request.ts";
 import type { RequestProvider } from "../../internal/async-request.ts";
 import {
+  ERR_CRYPTO_ARGON2_NOT_SUPPORTED,
   ERR_CRYPTO_INVALID_DIGEST,
   ERR_CRYPTO_INVALID_KEYLEN,
   ERR_CRYPTO_INVALID_SCRYPT_PARAMS,
@@ -24,6 +25,8 @@ import {
   validateFunction,
   validateInt32,
   validateInteger,
+  validateObject,
+  validateOneOf,
   validateString,
   validateUint32,
 } from "../../internal/validators.ts";
@@ -369,5 +372,109 @@ export function scryptSync(password: unknown, salt: unknown, keylen: unknown, op
     derived(
       nts_crypto_scrypt(checked.password, checked.salt, checked.N, checked.r, checked.p, checked.maxmem, checked.keylen),
     ),
+  );
+}
+
+// -- argon2 -------------------------------------------------------------------
+
+/** Node's names for the three algorithms, in `argon2.c`'s order. */
+const ARGON2_ALGORITHMS = ["argon2d", "argon2i", "argon2id"];
+
+const MAX_UINT32 = 2 ** 32 - 1;
+
+export interface Argon2Parameters {
+  message?: unknown;
+  nonce?: unknown;
+  parallelism?: unknown;
+  tagLength?: unknown;
+  memory?: unknown;
+  passes?: unknown;
+  secret?: unknown;
+  associatedData?: unknown;
+}
+
+interface Argon2Checked {
+  type: number;
+  message: Uint8Array;
+  nonce: Uint8Array;
+  secret: Uint8Array;
+  associatedData: Uint8Array;
+  parallelism: number;
+  tagLength: number;
+  memory: number;
+  passes: number;
+}
+
+/** An optional byte input, empty when absent, with its length bounded as node bounds it. */
+function argon2Bytes(value: unknown, name: string): Uint8Array {
+  if (value === undefined) return new Uint8Array(0);
+  const bytes = bytesOf(getArrayBufferOrView(value, name));
+  validateInteger(bytes.byteLength, `${name}.byteLength`, 0, MAX_UINT32);
+  return bytes;
+}
+
+/** Node's `check`. */
+function checkArgon2(algorithm: unknown, parameters: unknown): Argon2Checked {
+  if (!nts_crypto_argon2_supported()) throw new ERR_CRYPTO_ARGON2_NOT_SUPPORTED();
+  validateString(algorithm, "algorithm");
+  validateOneOf(algorithm, "algorithm", ARGON2_ALGORITHMS);
+  const type = ARGON2_ALGORITHMS.indexOf(algorithm);
+  validateObject(parameters, "parameters");
+  const given = parameters as Argon2Parameters;
+  const { parallelism, tagLength, memory, passes } = given;
+  const message = bytesOf(getArrayBufferOrView(given.message, "parameters.message"));
+  validateInteger(message.byteLength, "parameters.message.byteLength", 0, MAX_UINT32);
+  const nonce = bytesOf(getArrayBufferOrView(given.nonce, "parameters.nonce"));
+  validateInteger(nonce.byteLength, "parameters.nonce.byteLength", 8, MAX_UINT32);
+  validateInteger(parallelism, "parameters.parallelism", 1, 2 ** 24 - 1);
+  validateInteger(tagLength, "parameters.tagLength", 4, MAX_UINT32);
+  validateInteger(memory, "parameters.memory", 8 * parallelism, MAX_UINT32);
+  validateUint32(passes, "parameters.passes", true);
+  return {
+    type,
+    message,
+    nonce,
+    secret: argon2Bytes(given.secret, "parameters.secret"),
+    associatedData: argon2Bytes(given.associatedData, "parameters.associatedData"),
+    parallelism,
+    tagLength,
+    memory,
+    passes,
+  };
+}
+
+/** `crypto.argon2Sync(algorithm, parameters)`. */
+export function argon2Sync(algorithm: unknown, parameters: unknown): Buffer {
+  const p = checkArgon2(algorithm, parameters);
+  const tag = nts_crypto_argon2(
+    p.type,
+    p.message,
+    p.nonce,
+    p.parallelism,
+    p.tagLength,
+    p.memory,
+    p.passes,
+    p.secret,
+    p.associatedData,
+  );
+  return asBuffer(derived(tag));
+}
+
+/** `crypto.argon2(algorithm, parameters, callback)`. */
+export function argon2(algorithm: unknown, parameters: unknown, callback?: unknown): void {
+  const p = checkArgon2(algorithm, parameters);
+  validateFunction(callback, "callback");
+  const done = bufferJob("ARGON2REQUEST", callback as BufferCallback);
+  nts_crypto_argon2_job(
+    p.type,
+    p.message,
+    p.nonce,
+    p.parallelism,
+    p.tagLength,
+    p.memory,
+    p.passes,
+    p.secret,
+    p.associatedData,
+    done,
   );
 }

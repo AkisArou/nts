@@ -35,7 +35,8 @@ export type RequestProvider =
   | "KEYPAIRGENREQUEST"
   | "KEYGENREQUEST"
   | "RANDOMPRIMEREQUEST"
-  | "CHECKPRIMEREQUEST";
+  | "CHECKPRIMEREQUEST"
+  | "ARGON2REQUEST";
 
 export class AsyncRequest {
   #asyncId: number;

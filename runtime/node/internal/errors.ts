@@ -2349,6 +2349,15 @@ export class ERR_MISSING_OPTION extends NodeTypeError {
   }
 }
 
+/** `Argon2 algorithm not supported`: an OpenSSL older than 3.2. */
+export class ERR_CRYPTO_ARGON2_NOT_SUPPORTED extends NodeError {
+  override readonly code = "ERR_CRYPTO_ARGON2_NOT_SUPPORTED";
+
+  constructor() {
+    super("Argon2 algorithm not supported");
+  }
+}
+
 /** `No key provided to sign`. */
 export class ERR_CRYPTO_SIGN_KEY_REQUIRED extends NodeError {
   override readonly code = "ERR_CRYPTO_SIGN_KEY_REQUIRED";

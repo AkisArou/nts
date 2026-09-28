@@ -15,6 +15,8 @@
 //
 // Primes: `generatePrime` and `checkPrime`.
 //
+// Argon2: `argon2` and `argon2Sync`, OpenSSL 3.2's.
+//
 // Not yet:
 // X.509, and Web Crypto's `subtle`. Each is its own part of OpenSSL, and
 // `tooling/conformance/missing-exports` lists the names.
@@ -55,7 +57,7 @@ export {
   getDiffieHellman as createDiffieHellmanGroup,
 } from "./dh.ts";
 export { generateKey, generateKeyPair, generateKeyPairSync, generateKeySync } from "./keygen.ts";
-export { hkdf, hkdfSync, pbkdf2, pbkdf2Sync, scrypt, scryptSync } from "./kdf.ts";
+export { argon2, argon2Sync, hkdf, hkdfSync, pbkdf2, pbkdf2Sync, scrypt, scryptSync } from "./kdf.ts";
 export {
   checkPrime,
   checkPrimeSync,

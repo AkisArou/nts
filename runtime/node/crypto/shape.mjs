@@ -85,6 +85,8 @@ function applyDescriptors(exports) {
 
 /** Node's order, for the names this module publishes. */
 const ORDER = [
+  "argon2",
+  "argon2Sync",
   "checkPrime",
   "checkPrimeSync",
   "createCipheriv",

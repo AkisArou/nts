@@ -404,3 +404,32 @@ declare function nts_crypto_prime_check_job(
   checks: number,
   done: (ok: boolean, answer: Uint8Array) => void,
 ): void;
+
+/** Argon2: types are `Argon2Type`. */
+/** @ntsAbi managed */
+declare function nts_crypto_argon2_supported(): boolean;
+/** @ntsAbi managed */
+declare function nts_crypto_argon2(
+  type: number,
+  pass: Uint8Array,
+  salt: Uint8Array,
+  lanes: number,
+  keylen: number,
+  memcost: number,
+  iter: number,
+  secret: Uint8Array,
+  ad: Uint8Array,
+): Uint8Array | null;
+/** @ntsAbi managed */
+declare function nts_crypto_argon2_job(
+  type: number,
+  pass: Uint8Array,
+  salt: Uint8Array,
+  lanes: number,
+  keylen: number,
+  memcost: number,
+  iter: number,
+  secret: Uint8Array,
+  ad: Uint8Array,
+  done: (ok: boolean, tag: Uint8Array) => void,
+): void;
