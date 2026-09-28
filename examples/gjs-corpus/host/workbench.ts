@@ -7,6 +7,7 @@
 // module Workbench imports: nts compiles no dynamic `import()`.
 import {
   AdwAboutDialog,
+  AdwActionRow,
   AdwAlertDialog,
   AdwApplication,
   AdwApplicationWindow,
@@ -201,6 +202,7 @@ function act(kind: string, id: string, args: string[], object: GObject | null, w
       return true;
     case "activate":
       if (object instanceof AdwButtonRow) object.emit("activated");
+      else if (object instanceof AdwActionRow) object.emit("activated");
       else if (object instanceof AdwBanner) object.emit("button-clicked");
       else return false;
       return true;

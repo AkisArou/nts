@@ -1,0 +1,9 @@
+visible dialog
+click button
+visible dialog
+active dm_switch
+toggle dm_switch
+active dm_switch
+activate subpage_row
+click subpage_button
+click toast_button

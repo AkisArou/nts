@@ -53,6 +53,7 @@
     "overlay/nts.config.ts",
     "picture/nts.config.ts",
     "popovers/nts.config.ts",
+    "preferences-dialog/nts.config.ts",
     "radio-buttons/nts.config.ts",
     "revealer/nts.config.ts",
     "scale/nts.config.ts",
