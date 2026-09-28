@@ -24,6 +24,7 @@ import {
   GtkButton,
   GtkCalendar,
   GtkCheckButton,
+  GtkDropDown,
   GtkEmojiChooser,
   GtkEntry,
   GtkFlowBox,
@@ -135,8 +136,9 @@ function act(kind: string, id: string, args: string[], object: GObject | null): 
       else return false;
       return true;
     case "select":
-      if (!(object instanceof AdwComboRow)) return false;
-      object.selected = Number(args[0]);
+      if (object instanceof AdwComboRow) object.selected = Number(args[0]);
+      else if (object instanceof GtkDropDown) object.selected = Number(args[0]);
+      else return false;
       return true;
     case "revealed":
       if (object instanceof GtkActionBar) console.log(`${id}.revealed ${object.revealed}`);
