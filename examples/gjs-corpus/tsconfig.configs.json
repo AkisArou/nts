@@ -14,6 +14,7 @@
     }
   },
   "files": [
+    "accessibility/nts.config.ts",
     "action-bar/nts.config.ts",
     "banner/nts.config.ts",
     "boxed-lists/nts.config.ts",
