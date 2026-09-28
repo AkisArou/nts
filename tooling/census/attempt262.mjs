@@ -101,41 +101,40 @@ export function parseDiagnostics(text, bodyFirstLine = BODY_FIRST_LINE) {
   const seen = new Set();
   const found = [];
   for (const raw of text.split("\n")) {
-    const line = raw.trim();
-    let entry = null;
-    const located = /^(.*?):(\d+):(\d+):\s+(NTS\d{4})\s+(.*)$/.exec(line);
-    if (located) {
-      const [, file, row, , code, said] = located;
-      const where = !file.endsWith("src/main.ts")
-        ? "other"
-        : Number(row) >= bodyFirstLine - 1
-          ? "body"
-          : "harness";
-      const text = said.replace(/ is not supported by this lowering yet$/, "");
+    // `path:line:col: CODE message`, the one shape every diagnostic prints in.
+    // A checker diagnostic printed without its place until ff7e6444a, and a
+    // bare `TS2345 ...` is still read, as placed nowhere.
+    const said = /^(?:(.*?):(\d+):(\d+):\s+)?(NTS\d{4}|TS\d{4,5})\s+(.*)$/.exec(raw.trim());
+    if (said === null) continue;
+    const [, file, row, , code, message] = said;
+    const place =
+      file === undefined
+        ? { where: "none" }
+        : {
+            where: !file.endsWith("src/main.ts") ? "other" : Number(row) >= bodyFirstLine - 1 ? "body" : "harness",
+            // The line in the test body (1-based), so a later rule about `where`
+            // can be re-applied to stored rows instead of re-running them.
+            line: Number(row) - bodyFirstLine + 1,
+          };
+    let entry;
+    if (code.startsWith("NTS")) {
+      const text = message.replace(/ is not supported by this lowering yet$/, "");
       entry = {
         code,
         message: text.replace(/`[^`]*`/g, "`X`").replace(/\btype \d+/g, "type N").trim(),
         named: [...new Set(text.match(/`[^`]*`/g) ?? [])].map((quoted) => quoted.slice(1, -1)),
-        where,
-        // The line in the test body (1-based), so a later rule about `where`
-        // can be re-applied to stored rows instead of re-running them.
-        line: Number(row) - bodyFirstLine + 1,
+        ...place,
       };
     } else {
-      const checker = /^(?:\S+ )?(TS\d{4,5})\s+(.*)$/.exec(line);
-      if (checker) {
-        const [, code, said] = checker;
-        entry = {
-          code,
-          // `can't` is an apostrophe, not a quote: left in, it pairs with the
-          // next quote and the redaction eats the text between them.
-          message: redactQuoted(said),
-          named: [...new Set(unapostrophe(said).match(/'[^']*'/g) ?? [])].map((quoted) => quoted.slice(1, -1)),
-          where: "none",
-        };
-      }
+      entry = {
+        code,
+        // `can't` is an apostrophe, not a quote: left in, it pairs with the
+        // next quote and the redaction eats the text between them.
+        message: redactQuoted(message),
+        named: [...new Set(unapostrophe(message).match(/'[^']*'/g) ?? [])].map((quoted) => quoted.slice(1, -1)),
+        ...place,
+      };
     }
-    if (entry === null) continue;
     const key = `${entry.code} ${entry.message} ${entry.where} ${entry.named.join(",")}`;
     if (seen.has(key)) continue;
     seen.add(key);

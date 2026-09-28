@@ -93,6 +93,8 @@ export const ASKS = {
   memory: ["answers", "does counting leak or free twice, measured by live objects"],
   "example-refusals": ["valid", "is every example's recorded refusal row still exactly what lowering prints"],
   blockers: ["valid", "does every blocker still refuse with its `// expect:` line"],
+  "test262-cases": ["answers", "does every recorded test/language case still do what it did, read from the printed diagnostics"],
+  "test262-builtins-cases": ["answers", "the same over test/built-ins"],
   addons: ["valid", "does each runtime module build, load and publish something"],
 };
 
@@ -208,6 +210,17 @@ export const RULES = [
     arms: [{ kind: "answers", asks: "what node's own tests say of each compiled module", run: "node tooling/conformance/compiled-axis-floor.mjs   # lane-local, ~16 min" }],
   },
   {
+    // A printed diagnostic is an interface: eleven readers anchored on `^TS`,
+    // three of them gate steps, and ff7e6444a's diff showed neither an example
+    // nor a table -- nothing in it said who parses the line it changed.
+    name: "the printed diagnostics",
+    when: (p) => /^(tooling\/cli\/src|compiler\/diagnostics|tooling\/differential\/src)\//.test(p),
+    steps: ["outcomes", "integrity", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases"],
+    arms: [
+      { if: "it changes what a printed diagnostic line says or how it is shaped", kind: "valid", asks: "who parses this line: every reader of it, widened to accept both shapes before the shape changes", run: "git grep -nE 'TS(.d|.0-9)|refused:|not (rendered|emitted):' -- '*.mjs' '*.sh' '*.ts' ':!*.d.ts'   # `.` is the \\ of a JS reader's \\d and the [ of a shell one's [0-9]" },
+    ],
+  },
+  {
     name: "an instrument",
     when: (p) => /^tooling\/(conformance|census|differential|gate)\/.*\.(mjs|sh)$/.test(p),
     steps: [],
@@ -291,6 +304,8 @@ function selfTest() {
   const helper = names([{ path: "runtime/c/nts_runtime.h", added: false }]);
   if (!helper.includes("a runtime helper") || !helper.includes("the C runtime")) return `a runtime header change: ${helper}`;
   if (owed([]).length !== 0) return "an empty change owed something";
+  const printed = owed([{ path: "tooling/cli/src/main.rs", added: false }]).find((r) => r.name === "the printed diagnostics");
+  if (!printed?.steps.includes("test262-cases") || !printed.arms.some((a) => /git grep/.test(a.run))) return "a change to the driver's printing does not owe its readers";
   const order = gateSteps(owed([{ path: "compiler/codegen/llvm/src/lib.rs", added: false }]));
   if (order.join(" ") !== "build clippy tests llvm llvm-rc assembles") return `the LLVM backend's steps: ${order.join(" ")}`;
   // A step without its question could not say what it asks.

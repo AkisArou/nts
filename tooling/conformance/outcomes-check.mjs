@@ -292,7 +292,9 @@ function runCheck(dir) {
   if (/disagree/i.test(text)) return { category: "wrong-answer", nts: text };
   if (/nothing to check/.test(text) && /refused:/.test(text)) {
     const first = lines.find((l) => l.startsWith("refused:"));
-    return { category: "refused", nts: first.replace(/^refused:\s*/, "") };
+    // A location, if the line carries one, is where the fixture's text puts the
+    // refusal, not what was refused: moving a line must not change an outcome.
+    return { category: "refused", nts: first.replace(/^refused:\s*(?:\S+:\d+:\d+:\s+)?/, "") };
   }
   if (/agreed on every case/.test(text)) return { category: "agrees", nts: text };
   return { category: "not-measured", nts: text || `nts check exited ${ran.status} and said nothing that decides` };
