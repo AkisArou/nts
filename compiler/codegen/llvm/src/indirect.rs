@@ -77,20 +77,38 @@ pub(crate) fn call_returning(out: &str, callable: &str, arguments: Vec<String>, 
     }
 }
 
-/// Why `func` cannot be defined for C to call on `platform`, if it cannot.
-///
-/// A function C calls by name is defined with this backend's split of a
-/// sixteen-byte value, which is System V's: on Win64 C would pass a pointer
-/// where the definition reads two registers. A C-convention entry beside it
-/// would answer this, and is not written yet.
-pub(crate) fn unexportable(func: &Func, platform: Platform) -> Option<&'static str> {
-    let crosses = func.params.iter().any(|param| is_indirect(&param.ty)) || is_indirect(&func.return_type);
-    if func.exported && applies(platform) && crosses {
-        return Some(
-            "an exported function taking or returning an erased value or a bigint under Win64, which C passes through memory there; the C backend builds it",
-        );
+/// Whether `func` is defined behind a C-convention entry on `platform`: an
+/// exported function taking or returning a sixteen-byte value under Win64.
+/// Its body is defined with this backend's split of such a value, which is
+/// System V's -- two registers -- where C passes a pointer to a copy and
+/// returns an erased value through a hidden pointer; so the body is internal
+/// (`body_symbol`), and the exported name is an entry of C's shape that
+/// calls it (`c_entry` in `lib.rs`).
+pub(crate) fn behind_entry(func: &Func, platform: Platform) -> bool {
+    func.exported && applies(platform) && (func.params.iter().any(|param| is_indirect(&param.ty)) || is_indirect(&func.return_type))
+}
+
+/// The internal name the body of a function [`behind_entry`] is defined
+/// under, beside its exported entry.
+pub(crate) fn body_symbol(exported: &str) -> String {
+    format!("{exported}.body")
+}
+
+/// How `func`, whose symbol is `symbol`, is defined: its linkage, the name
+/// its body is defined under, and whether an entry of C's shape is exported
+/// beside it ([`behind_entry`]) -- which makes the body internal.
+pub(crate) fn definition(func: &Func, platform: Platform, symbol: String) -> (&'static str, String, bool) {
+    if behind_entry(func, platform) {
+        ("internal ", body_symbol(&symbol), true)
+    } else {
+        (if func.exported { "" } else { "internal " }, symbol, false)
     }
-    // The same on arm64, where C passes an erased value as `[2 x i64]`.
+}
+
+/// Why `func` cannot be defined for C to call on `platform`, if it cannot.
+pub(crate) fn unexportable(func: &Func, platform: Platform) -> Option<&'static str> {
+    // On arm64 C passes an erased value as `[2 x i64]`, where the definition
+    // reads two registers of other widths; no entry is written for it yet.
     let erased = func.params.iter().any(|param| param.ty == HirType::Erased) || func.return_type == HirType::Erased;
     (func.exported && platform.arch == crate::Arch::Aarch64 && erased).then_some(
         "an exported function taking or returning an erased value on arm64, which C passes as two words there; the C backend builds it",

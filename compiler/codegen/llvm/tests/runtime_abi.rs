@@ -170,3 +170,53 @@ fn arm64_passes_an_erased_value_as_two_words() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Win64: an exported function taking or returning a sixteen-byte value is
+/// defined internal, and exported through an entry of C's shape -- each such
+/// argument a pointer to C's copy, an erased result through the hidden
+/// pointer C passes first, an `i128` returned as `<2 x i64>` -- while one
+/// that crosses neither is exported as it is. On Windows a C caller of this
+/// program's `doubled` and `described` reads `2^71` and `42`.
+#[test]
+fn win64_exports_a_sixteen_byte_value_through_a_c_entry() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    let dir = std::env::temp_dir().join(format!("nts-runtime-abi-entry-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src/main.ts"),
+        "export function doubled(x: bigint): bigint { return x * 2n; }\n\
+         export function described(v: unknown): unknown { return typeof v === \"number\" ? v + 1 : \"other\"; }\n\
+         export function plain(x: number): number { return x * 3; }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("tsconfig.json"),
+        r#"{ "compilerOptions": { "target": "ESNext", "module": "ESNext", "moduleResolution": "bundler", "strict": true, "noEmit": true }, "include": ["src"] }"#,
+    )
+    .unwrap();
+    let tsconfig = Utf8Path::from_path(&dir).unwrap().join("tsconfig.json");
+    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).unwrap();
+    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+    let prepared = hir::prepare(&snapshot).unwrap();
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
+    for shape in [
+        "define internal i128 @doubled.body(i128 %v0)",
+        "define <2 x i64> @doubled(ptr %a0)",
+        "define internal { i32, i64 } @described.body(i32 %v0.tag, i64 %v0.bits)",
+        "define void @described(ptr sret({ i32, i64 }) align 8 %result, ptr %a0)",
+        "define double @plain(double %v0)",
+    ] {
+        assert!(emitted.text.contains(shape), "no `{shape}`:\n{}", emitted.text);
+    }
+    let Some(found) = lint(&emitted.text, "win64-entry") else {
+        eprintln!("skipped the lint: no opt");
+        return;
+    };
+    assert!(found.is_empty(), "calls that disagree with their declarations:\n{}", found.join("\n"));
+    let _ = std::fs::remove_dir_all(&dir);
+}

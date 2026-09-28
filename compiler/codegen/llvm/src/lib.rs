@@ -2405,7 +2405,7 @@ fn function(program: &Program, func: &Func, platform: Platform) -> Result<String
     prologue.extend(native::stack_arguments(func, platform));
     prologue.extend(native_memory::stack_storage(func, platform));
     prologue.extend(indirect::scratch(platform));
-    let linkage = if func.exported { "" } else { "internal " };
+    let (linkage, defined, entry) = indirect::definition(func, platform, symbol(&func.name));
     // `nounwind` on everything this compiler defines, for the reason above: the
     // language has no exceptions, so no frame here can be unwound through.
     //
@@ -2415,9 +2415,8 @@ fn function(program: &Program, func: &Func, platform: Platform) -> Result<String
     // would licence it to delete the loop.
     let _ = writeln!(
         out,
-        "define {linkage}{}{returns} {}({}) nounwind {{",
+        "define {linkage}{}{returns} {defined}({}) nounwind {{",
         extension(&func.return_type),
-        symbol(&func.name),
         params.join(", ")
     );
 
@@ -2496,6 +2495,67 @@ fn function(program: &Program, func: &Func, platform: Platform) -> Result<String
         // carries it: a phi's incoming value must be available in the
         // predecessor, so this is the only place it can go.
         let _ = writeln!(out, "  {}", terminator(func, &block.terminator)?);
+    }
+    let _ = writeln!(out, "}}");
+    Ok(if entry { out + &c_entry(func, returns)? } else { out })
+}
+
+/// The entry C calls an exported function through under Win64, where the
+/// function takes or returns a sixteen-byte value (`indirect::behind_entry`):
+/// each such argument a pointer to C's copy, loaded and split as the body
+/// takes it; an erased result written through the hidden pointer C passes
+/// first, and an `i128` returned in XMM0 as `<2 x i64>` -- as clang defines
+/// the same C function. Everything else passes through as it is.
+fn c_entry(func: &Func, returns: &str) -> Result<String, Diagnostic> {
+    let exported = symbol(&func.name);
+    let body = indirect::body_symbol(&exported);
+    let mut params = Vec::new();
+    let mut lines = Vec::new();
+    let mut arguments = Vec::new();
+    if func.return_type == HirType::Erased {
+        params.push(format!("ptr sret({ERASED_TYPE}) align 8 %result"));
+    }
+    for (at, param) in func.params.iter().enumerate() {
+        match &param.ty {
+            HirType::Erased => {
+                params.push(format!("ptr %a{at}"));
+                lines.push(format!("%a{at}.v = load {ERASED_TYPE}, ptr %a{at}, align 8"));
+                lines.push(format!("%a{at}.tag = extractvalue {ERASED_TYPE} %a{at}.v, 0"));
+                lines.push(format!("%a{at}.bits = extractvalue {ERASED_TYPE} %a{at}.v, 1"));
+                arguments.push(format!("i32 %a{at}.tag"));
+                arguments.push(format!("i64 %a{at}.bits"));
+            }
+            HirType::BigInt => {
+                params.push(format!("ptr %a{at}"));
+                lines.push(format!("%a{at}.v = load i128, ptr %a{at}, align 16"));
+                arguments.push(format!("i128 %a{at}.v"));
+            }
+            ty => {
+                let spelled = format!("{} {}%a{at}", ty_of(ty, func)?, extension(ty));
+                params.push(spelled.clone());
+                arguments.push(spelled);
+            }
+        }
+    }
+    let call = format!("{body}({})", arguments.join(", "));
+    let (result, finish) = match &func.return_type {
+        HirType::Erased => (
+            "void".to_owned(),
+            vec![format!("%r = call {ERASED_TYPE} {call}"), format!("store {ERASED_TYPE} %r, ptr %result, align 8"), "ret void".to_owned()],
+        ),
+        HirType::BigInt => (
+            "<2 x i64>".to_owned(),
+            vec![format!("%r = call i128 {call}"), "%r.v = bitcast i128 %r to <2 x i64>".to_owned(), "ret <2 x i64> %r.v".to_owned()],
+        ),
+        _ if returns == "void" => ("void".to_owned(), vec![format!("call void {call}"), "ret void".to_owned()]),
+        other => (
+            format!("{}{returns}", extension(other)),
+            vec![format!("%r = call {returns} {call}"), format!("ret {returns} %r")],
+        ),
+    };
+    let mut out = format!("define {result} {exported}({}) nounwind {{\nentry:\n", params.join(", "));
+    for line in lines.iter().chain(&finish) {
+        let _ = writeln!(out, "  {line}");
     }
     let _ = writeln!(out, "}}");
     Ok(out)

@@ -20,6 +20,8 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
 out="${TMPDIR:-/tmp}/nts-interop-on-win"
+backend="${NTS_WINDOWS_BACKEND:-c}"
+case "$backend" in c | llvm) ;; *) echo "NTS_WINDOWS_BACKEND is c or llvm, not $backend" >&2; exit 2 ;; esac
 names=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -34,6 +36,9 @@ mirror="$out/mirror"
 rm -rf "${mirror:?}"
 mkdir -p "$out"
 # A program rather than a command line: the examples quote `"$cc"`.
+#
+# NTS_WINDOWS_BACKEND=llvm builds the library with the LLVM backend instead
+# of C (`c`, the default).
 win_cc="$out/win-cc"
 printf '#!/bin/sh\nexec zig cc -target x86_64-windows-gnu -Wno-unused-command-line-argument "$@"\n' >"$win_cc"
 chmod +x "$win_cc"
@@ -55,7 +60,7 @@ for name in "${names[@]}"; do
   config="$copy/nts.config.ts"
   grep -qF 'target.linux({ backend: "c" })' "$config" ||
     { echo "$name: its config does not name target.linux({ backend: \"c\" }) once" >&2; status=1; continue; }
-  sed -i 's/target.linux({ backend: "c" })/target.windows({ arch: "x86_64", backend: "c" })/' "$config"
+  sed -i "s/target.linux({ backend: \"c\" })/target.windows({ arch: \"x86_64\", backend: \"$backend\" })/" "$config"
   # `CC` stays unset: `nts build` would take it for its own toolchain too, and
   # its Windows branch already chooses the right one. Only the consumer's
   # compiler is substituted.
