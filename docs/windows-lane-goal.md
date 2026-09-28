@@ -196,6 +196,15 @@ the same vtable calls on the VM measured the behaviour first.
   beside the bootstrapper, as a C# WinUI build does; without them
   `ensureCoreWebView2Async` rejects with 0x8007007E. winui-hello navigates
   one to a string and hears `navigationcompleted` (`web=true`).
+- **Values that may be absent:** an `IReference<T>` -- C#'s `T?`,
+  `toggle.isChecked`, a picker's `date`, a title bar's colours; 564 of them
+  across winui-hello's bindings -- is read as `T | null`, as the JavaScript
+  projection read one: a boolean, a number, an enum, a string, or a struct
+  as a plain object (`Copied<T>`). The compiler calls the reference's
+  `get_Value` itself (slot 6 of every `IReference<T>`) and gives it back;
+  `null` where there is none. Passed, one is still the reference
+  (`set date(value: IReference<...> | null)`): making one needs an object
+  implementing `IReference<T>` for the instantiation's IID, not built yet.
 - **Overloads:** a name two of a class's interfaces give as methods is
   declared once per interface, as C# overloads it (`frame.navigate(type)`,
   `frame.navigate(type, parameter)`); the checker's choice is the slot

@@ -1,7 +1,7 @@
 //! Native places are addresses. Member access and addrOf share this path so
 //! evaluating a receiver never performs an accidental aggregate copy/load.
 use super::{Branch, Diagnostic, FuncBuilder, HirType, Lent, ManagedType, NodeId, OpKind, Place, ValueId};
-use crate::hir::native::{Encoding, Handle, Pointee};
+use crate::hir::native::{Encoding, Handle, Pointee, Referenced, Scalar, Type, Written};
 use nts_semantic_schema::{LiteralValue, TypeKind, syntax};
 
 impl FuncBuilder<'_> {
@@ -329,6 +329,56 @@ impl FuncBuilder<'_> {
         let freed = self.push(OpKind::Convert(block), HirType::NativePointer(Pointee::Void), origin.clone());
         self.runtime_call("nts_winrt_free", vec![freed], HirType::Void, origin);
         Ok(array)
+    }
+
+    /// An `IReference<T>` a Windows Runtime call wrote, as the `T | null`
+    /// of `ty` (`Written::Reference`): `null` where the slot holds none, and
+    /// otherwise the reference's `get_Value` -- slot 6 of every
+    /// `IReference<T>` -- read into a local of the call's as a `T` result is
+    /// read, and the reference given back.
+    pub(super) fn read_reference(&mut self, id: NodeId, slot: ValueId, referenced: Referenced, ty: &HirType) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let index = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let reference = self.push(OpKind::NativeLoad { pointer: slot, index }, HirType::NativePointer(Pointee::Void), origin.clone());
+        let none = self.push(OpKind::ConstNull, HirType::NativePointer(Pointee::Void), origin.clone());
+        let missing = self.push(OpKind::Binary { op: super::BinOp::Eq, lhs: reference, rhs: none }, HirType::Bool, origin.clone());
+        let (read, merge) = (self.new_block(), self.new_block());
+        let result = self.push_block_param(merge, ty.clone(), origin.clone());
+        let absent = self.absent_at(OpKind::ConstNull, Some(ty.clone()), id)?;
+        self.terminate(super::Terminator::Branch { cond: missing, then_target: merge, then_args: vec![absent], else_target: read, else_args: Vec::new() });
+        self.switch_to(read);
+        let (held, written, as_read) = match referenced {
+            Referenced::Bool => (Pointee::Scalar(Scalar::UInt8), Written::Bool, None),
+            Referenced::Scalar(scalar) => (Pointee::Scalar(scalar), Written::Value, None),
+            Referenced::HString => (Pointee::Pointer(Box::new(Pointee::Void)), Written::HString, None),
+            Referenced::Copied => {
+                let HirType::Managed(ManagedType::Object(object)) = *ty else {
+                    return Err(self.unsupported(id, "a referenced struct read as something other than an object"));
+                };
+                let Some(record) = crate::hir::native::schema::copied(self.snapshot, object) else {
+                    return Err(self.unsupported(id, "a referenced struct whose object type names no struct"));
+                };
+                (Pointee::Record(record), Written::Copied, Some(ty.clone()))
+            }
+        };
+        let local = self.push(OpKind::NativeLocal { count: 1 }, HirType::NativePointer(held.clone()), origin.clone());
+        let get_value = crate::hir::native::Function::vtable_method(
+            "get_Value",
+            6,
+            vec![Type::Pointer(Pointee::Void), Type::Pointer(held)],
+        );
+        let status = self.push(
+            OpKind::Call { callee: super::Callee::Native(std::sync::Arc::new(get_value)), args: vec![reference, local], frame: None },
+            HirType::Int { bits: 32, signed: true },
+            origin.clone(),
+        );
+        self.throw_on_failure(id, status, Vec::new(), &origin)?;
+        let value = self.read_written(id, (local, None), written, as_read.as_ref(), &origin)?;
+        self.runtime_call("nts_com_release", vec![reference], HirType::Void, origin.clone());
+        let value = self.coerce(value, ty, id)?;
+        self.terminate(super::Terminator::Jump { target: merge, args: vec![value] });
+        self.switch_to(merge);
+        Ok(result)
     }
 
     /// A struct a Windows Runtime call wrote (`Written::Copied`), as a new

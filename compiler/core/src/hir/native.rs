@@ -562,6 +562,52 @@ pub enum Written {
     /// the caller owns a returned struct's strings. The slot is dead after,
     /// so none of `Record`'s storage rules reach the program.
     Copied,
+    /// An `IReference<T>` -- C#'s `T?` -- the program reads as `T | null`,
+    /// as the Windows Runtime's JavaScript projection read one: the slot
+    /// holds the reference, `null` where none was written, and otherwise its
+    /// `get_Value` (slot 6) is read into a local of the call's as `T` is
+    /// read, and the reference given back.
+    Reference(Referenced),
+}
+
+/// What an `IReference<T>` holds, as [`Written::Reference`] reads it: a
+/// one-byte boolean, a C scalar (a number, an enum), an `HSTRING`, or a
+/// struct copied into a plain object -- the one `T` names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Referenced {
+    Bool,
+    Scalar(Scalar),
+    HString,
+    Copied,
+}
+
+/// A written result of TypeScript type `T | null` where `T` is a value an
+/// `IReference<T>` holds -- no object, which is its own reference -- and
+/// what that `T` is.
+fn referenced(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Referenced> {
+    let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+    let TypeKind::Union(members) = kind(ty)? else { return None };
+    if !members.iter().any(|member| matches!(kind(*member), Some(TypeKind::Null))) {
+        return None;
+    }
+    let present: Vec<TypeId> = members.iter().copied().filter(|member| !matches!(kind(*member), Some(TypeKind::Null))).collect();
+    // `boolean | null` is `true | false | null` to the checker.
+    let boolean = |id: &TypeId| matches!(kind(*id), Some(TypeKind::Boolean | TypeKind::Literal(LiteralValue::Boolean(_))));
+    if !present.is_empty() && present.iter().all(boolean) {
+        return Some(Referenced::Bool);
+    }
+    let [value] = present.as_slice() else { return None };
+    let value = *value;
+    if string_encoding(snapshot, value) == Some(Encoding::HString) {
+        return Some(Referenced::HString);
+    }
+    if schema::copied(snapshot, value).is_some() {
+        return Some(Referenced::Copied);
+    }
+    match abi_type(snapshot, value)? {
+        Type::Scalar(scalar) => Some(Referenced::Scalar(scalar)),
+        _ => None,
+    }
 }
 
 /// What an array crossing an Objective-C message holds, as Swift bridges
@@ -637,6 +683,39 @@ fn no_abi_type(snapshot: &SemanticSnapshot, ty: TypeId, function: &str, paramete
 }
 
 impl Function {
+    /// A COM method the compiler calls itself, through slot `slot` of the
+    /// table of its first argument: `HRESULT (void *self, ...)`, answered as
+    /// the status, which the caller checks. What reads an `IReference<T>`'s
+    /// `get_Value`, which no declaration of the program's names.
+    pub(crate) fn vtable_method(name: &str, slot: u32, parameters: Vec<Type>) -> Self {
+        let count = parameters.len();
+        Self {
+            name: name.to_owned(),
+            convention: Convention::C,
+            parameters,
+            result: Type::Scalar(Scalar::Int32),
+            // A COM method keeps nothing of what it is passed but a reference
+            // it counts, which is not what this is asked for.
+            retention: vec![Retention::NotRetained; count],
+            variadic: None,
+            declared_at: None,
+            roles: vec![Role::Plain; count],
+            returns_string: None,
+            returns_array: None,
+            returns_dictionary: None,
+            returns_set: None,
+            send: None,
+            returns_owned: false,
+            consumes: Vec::new(),
+            frameworks: Vec::new(),
+            libraries: Vec::new(),
+            defaults: Vec::new(),
+            result_as: None,
+            vtable: Some(Vtable { slot, method: name.to_owned(), factory: None }),
+            hresult: false,
+        }
+    }
+
     /// A receiver the call supplies, as C parameter 0 (`Role::Receiver`): a
     /// runtime class's static, called on its factory. No argument feeds it,
     /// so a declared parameter's argument index is its index in the
@@ -2995,6 +3074,11 @@ fn written_slot(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option
     {
         let block = Pointee::Pointer(Box::new(Pointee::Void));
         return Ok(Some((Type::Pointer(Pointee::Pointer(Box::new(block))), Written::ReceivedStrings)));
+    }
+    // A value or `null`, as the `IReference<T>` that holds it: the
+    // reference's pointer, read after.
+    if let Some(value) = referenced(snapshot, ty) {
+        return Ok(Some((Type::Pointer(Pointee::Pointer(Box::new(Pointee::Void))), Written::Reference(value))));
     }
     let (written, kind) = if string_encoding(snapshot, ty) == Some(Encoding::HString) {
         (Type::Pointer(Pointee::Void), Written::HString)

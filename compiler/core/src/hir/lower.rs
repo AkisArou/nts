@@ -47882,6 +47882,10 @@ impl<'a> FuncBuilder<'a> {
                 let ty = typed.cloned().or_else(|| self.type_of(id)).ok_or_else(|| self.unrepresentable(id, "a copied struct"))?;
                 self.object_from_copied(id, slot, &ty)?
             }
+            super::native::Written::Reference(referenced) => {
+                let ty = typed.cloned().or_else(|| self.type_of(id)).ok_or_else(|| self.unrepresentable(id, "a referenced value"))?;
+                self.read_reference(id, slot, referenced, &ty)?
+            }
             super::native::Written::Bool => {
                 let index = first(self);
                 let byte_type = HirType::Int { bits: 8, signed: false };

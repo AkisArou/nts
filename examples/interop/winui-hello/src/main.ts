@@ -58,7 +58,8 @@ import { Application, FocusState, Window } from "winrt:Microsoft.UI.Xaml";
 import type { IFrameworkElementOverrides, ILaunchActivatedEventArgs } from "winrt:Microsoft.UI.Xaml";
 import type { IPointerRoutedEventArgs } from "winrt:Microsoft.UI.Xaml.Input";
 import { AutomationPeer, ButtonAutomationPeer, FrameworkElementAutomationPeer } from "winrt:Microsoft.UI.Xaml.Automation.Peers";
-import { Button, Frame, MenuFlyout, MenuFlyoutItem, Page, StackPanel, TextBlock, WebView2, XamlControlsResources } from "winrt:Microsoft.UI.Xaml.Controls";
+import { Button, CalendarDatePicker, Frame, MenuFlyout, MenuFlyoutItem, Page, StackPanel, TextBlock, WebView2, XamlControlsResources } from "winrt:Microsoft.UI.Xaml.Controls";
+import { ToggleButton } from "winrt:Microsoft.UI.Xaml.Controls.Primitives";
 import { ContentCoordinateConverter, ContentIsland } from "winrt:Microsoft.UI.Content";
 import { ElementCompositionPreview } from "winrt:Microsoft.UI.Xaml.Hosting";
 import { TypeKind } from "winrt:Windows.UI.Xaml.Interop";
@@ -250,23 +251,36 @@ class App extends Application {
     // A context menu shown both ways: `showAt(target)`, `FlyoutBase`'s,
     // through its interface, and `showAt(target, point)`, `MenuFlyout`'s
     // own -- one name, overloaded across the class and its base as C#'s is.
-    const menu = new MenuFlyout();
-    const item = new MenuFlyoutItem();
-    item.text = "item";
-    menu.items.Append(item);
-    menu.showAt(button);
-    const openedAtTarget = menu.isOpen;
-    menu.hide();
-    menu.showAt(button, { x: 4, y: 4 });
-    const openedAtPoint = menu.isOpen;
-    menu.hide();
-    const menus = String(openedAtTarget) + ":" + String(openedAtPoint);
+    // Each menu's `opening` counted, and the count read once the browser
+    // below has loaded: a menu opens as XAML gets to it, and on a busy
+    // machine not before `showAt` returns.
+    const menu = (): MenuFlyout => {
+      const made = new MenuFlyout();
+      const item = new MenuFlyoutItem();
+      item.text = "item";
+      made.items.Append(item);
+      made.addEventListener("opening", () => {
+        this.menusOpened += 1;
+      });
+      return made;
+    };
+    menu().showAt(button);
+    menu().showAt(button, { x: 4, y: 4 });
+    // Values that may be absent, C#'s `bool?` and `DateTimeOffset?`: an
+    // `IReference<T>` read as `T | null`, its `get_Value` called where the
+    // reference is there -- a toggle starts unchecked -- and `null` where it
+    // is not: a date picker starts with no date.
+    const checked = new ToggleButton().isChecked;
+    const date = new CalendarDatePicker().date;
+    const nullable = String(checked) + ":" + (date === null ? "none" : String(date.universalTime));
     const line =
       "title=" + window.title + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
         " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(button.entered) +
-        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " isButton=" + String(isButton) + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " navigated=" + String(navigated) + " page=" + page.name + ":" + String(page.kind) + " current=" + current.name + " onPage=" + String(onPage) + " back=" + String(back) + " menus=" + menus + " vector=" + vector + " islands=" + String(island) + " replaced=" + replaced + " points=" + points + " rebuilt=" + String(this.rebuilt());
+        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " isButton=" + String(isButton) + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " navigated=" + String(navigated) + " page=" + page.name + ":" + String(page.kind) + " current=" + current.name + " onPage=" + String(onPage) + " back=" + String(back) + " nullable=" + nullable + " vector=" + vector + " islands=" + String(island) + " replaced=" + replaced + " points=" + points + " rebuilt=" + String(this.rebuilt());
     this.browse(window, line);
   }
+
+  menusOpened = 0;
 
   // A browser, `WebView2`, as the window's content: its `CoreWebView2`
   // made (`ensureCoreWebView2Async`, an action awaited), a page navigated
@@ -281,7 +295,7 @@ class App extends Application {
       core.addEventListener("navigationcompleted", (_sender, args) => resolve(args.isSuccess));
       core.navigateToString("<p>nts</p>");
     });
-    console.log(line + " web=" + String(succeeded));
+    console.log(line + " web=" + String(succeeded) + " menus=" + String(this.menusOpened));
     this.exit();
   }
 }

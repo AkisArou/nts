@@ -784,6 +784,10 @@ fn composable_classes_are_constructed_as_themselves() {
     assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
     let module = std::fs::read_to_string(out.join("Windows.UI.Xaml.Controls.d.ts")).unwrap();
     overloads_are_declared(&module);
+    // An `IReference<T>` -- C#'s `T?` -- is read as `T | null`, a struct as
+    // a plain object; one is still passed as the reference.
+    assert!(module.contains("get date(): Copied<DateTime> | null;"), "no nullable date");
+    assert!(module.contains("set date(value: IReference<ByValue<DateTime>> | null);"), "no reference set");
     let button = &module[module.find("export namespace Button {").expect("no Button namespace")..];
     let button = &button[..button.find("\n  }").unwrap()];
     assert!(

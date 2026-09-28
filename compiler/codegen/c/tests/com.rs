@@ -769,6 +769,60 @@ export function run(): boolean {
     windows_syntax(&dir, &emitted);
 }
 
+/// An `IReference<T>` read as `T | null`: the reference written to the
+/// result slot, `null` where there is none, and otherwise its `get_Value`
+/// (slot 6) read into a local -- a boolean as one byte, a struct copied
+/// into a plain object -- and the reference given back.
+#[test]
+fn a_reference_is_read_as_its_value_or_null() {
+    let binding = r#"declare module "winrt:Windows.Data.Json" {
+  import type { c_float, Struct } from "c:types";
+  import type { ComClass, Copied, HString } from "winrt:types";
+  export type Point = Struct<{ x: c_float; y: c_float }, "Windows_Foundation_Point">;
+  export interface IJsonValueMethods {
+    /**
+     * @ntsVtable 10 get_Checked
+     * @ntsHresult
+     */
+    get_Checked(this: IJsonValue): boolean | null;
+    /**
+     * @ntsVtable 11 get_Where
+     * @ntsHresult
+     */
+    get_Where(this: IJsonValue): Copied<Point> | null;
+  }
+  export type IJsonValue = ComClass<"IJsonValue"> & IJsonValueMethods;
+  /**
+   * @ntsVtable 6 Parse
+   * @ntsHresult
+   * @ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C
+   */
+  export function Parse(input: HString): IJsonValue;
+}
+"#;
+    let source = r#"import { Parse } from "winrt:Windows.Data.Json";
+export function run(): number {
+  const value = Parse("[]");
+  const checked = value.get_Checked();
+  const where = value.get_Where();
+  return (checked === null ? 2 : checked ? 1 : 0) + (where === null ? 0 : where.x);
+}
+"#;
+    let Some((dir, prepared)) = prepare("references", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    let run = &text[text.find("run(").expect("no run")..];
+    assert_eq!(run.matches("[6])(").count(), 3, "not Parse and two `get_Value`s through slot 6:\n{run}");
+    assert!(run.matches("nts_com_release(").count() >= 2, "a reference is not given back:\n{run}");
+
+    windows_syntax(&dir, &emitted);
+}
+
 /// A sealed runtime class (`@ntsRuntimeClass`), declared as a TypeScript
 /// class of its constructors: `new Uri()` activates it (`@ntsActivate`), and
 /// `new Uri(text)` calls the activation factory's method the checker chose,

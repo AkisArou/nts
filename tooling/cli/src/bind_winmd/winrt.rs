@@ -1728,17 +1728,53 @@ impl Writer<'_> {
     /// What a method or a property answers, as the program reads it: any
     /// object as `Inspectable`, which the call unboxes into the string,
     /// number or boolean a boxed `IPropertyValue` holds -- `button.content`
-    /// reads back the `"Press"` it was given -- and everything else as
-    /// [`Self::spell`] spells it.
+    /// reads back the `"Press"` it was given -- an `IReference<T>` as `T |
+    /// null` (`toggle.isChecked` is `boolean | null`), and everything else
+    /// as [`Self::spell`] spells it.
     fn answered(&mut self, ty: &Type) -> Result<String, String> {
         if matches!(ty, Type::Object) {
             self.brands.insert("Inspectable");
             return Ok("Inspectable".to_owned());
         }
+        if let Some(value) = self.referenced(ty)? {
+            return Ok(format!("{value} | null"));
+        }
         if let Type::Array(element) = ty {
             return self.received(element);
         }
         self.spell(ty, false)
+    }
+
+    /// The value an `IReference<T>` holds -- C#'s `T?` -- as the program
+    /// reads it: a boolean, a number or an enum as a scalar is, a string, or
+    /// a struct as a plain object (`Copied<T>`). `None` for anything else,
+    /// and for a `Guid`, which nobody reads as its four fields: those stay
+    /// the reference.
+    fn referenced(&mut self, ty: &Type) -> Result<Option<String>, String> {
+        let Type::ClassName(named) = ty else { return Ok(None) };
+        let [value] = named.generics.as_slice() else { return Ok(None) };
+        if named.namespace != "Windows.Foundation" || generic_base(&named.name) != "IReference" {
+            return Ok(None);
+        }
+        Ok(Some(match value {
+            Type::Bool => "boolean".to_owned(),
+            Type::String | Type::I8 | Type::U8 | Type::I16 | Type::U16 | Type::Char | Type::I32 | Type::U32 | Type::I64 | Type::U64 | Type::F32 | Type::F64 => {
+                self.spell(value, false)?
+            }
+            Type::ValueName(name) if is_guid(name) => return Ok(None),
+            Type::ValueName(name) => {
+                let def = self.find(&name.namespace, &name.name)?;
+                match def.category() {
+                    TypeCategory::Enum => self.spell(value, false)?,
+                    TypeCategory::Struct if self.struct_refusal(def, 0).is_none() => {
+                        self.brands.insert("Copied");
+                        format!("Copied<{}>", self.named(&name.namespace, &name.name))
+                    }
+                    _ => return Ok(None),
+                }
+            }
+            _ => return Ok(None),
+        }))
     }
 
     /// A delegate where a method takes one: `Delegate<(sender: S, args: A) =>
