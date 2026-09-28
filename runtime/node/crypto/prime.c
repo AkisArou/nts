@@ -2,13 +2,12 @@
  * `RandomPrimeJob` and `CheckPrimeJob` (`src/crypto/crypto_random.cc`) over
  * ncrypto's `BignumPointer::generate` and `isPrime`.
  *
- * `checkPrime` honours its `checks` option through `BN_is_prime_ex`, which
- * OpenSSL 3 deprecates in favour of `BN_check_prime`, a function that takes
- * no round count: node calls the former, and a program that asks for more
- * rounds gets them. */
-#define OPENSSL_SUPPRESS_DEPRECATED
+ * `checkPrime` takes a `checks` option, and with OpenSSL 3 node ignores it:
+ * ncrypto's provider build calls `BN_check_prime`, which chooses its own
+ * number of rounds, and so does this. */
 #include <openssl/bn.h>
 #include <openssl/err.h>
+#include <openssl/rand.h>
 #include <stdlib.h>
 #include <string.h>
 #include "crypto_internal.h"
@@ -68,13 +67,12 @@ static PrimeJob *prime_job_new(double bits, bool safe, NtsView *add, bool has_ad
     return job;
 }
 
+/* ncrypto's `BignumPointer::generate`, which makes sure the CSPRNG is seeded
+ * first: `BN_generate_prime_ex` draws from it. */
 static bool prime_job_run(void *state) {
     PrimeJob *job = state;
-    BN_CTX *ctx = BN_CTX_new();
-    bool ok = ctx != NULL &&
-              BN_generate_prime_ex2(job->prime, job->bits, job->safe, job->add, job->rem, NULL, ctx) == 1;
-    BN_CTX_free(ctx);
-    return ok;
+    (void)RAND_status();
+    return BN_generate_prime_ex(job->prime, job->bits, job->safe, job->add, job->rem, NULL) != 0;
 }
 
 /* `RandomPrimeTraits::EncodeOutput`: the prime's own length in bytes. */
@@ -120,7 +118,6 @@ void nts_crypto_prime_generate_job(double bits, bool safe, NtsView *add, bool ha
 /* A candidate and its answer. */
 typedef struct {
     BIGNUM *candidate;
-    int checks;
     unsigned char answer;
 } CheckJob;
 
@@ -130,11 +127,12 @@ static void check_job_dispose(void *state) {
     free(job);
 }
 
-/* `CheckPrimeTraits::DeriveBits`: a negative answer is a failure. */
+/* `CheckPrimeTraits::DeriveBits` over ncrypto's `isPrime`: a negative answer
+ * is a failure. */
 static bool check_job_run(void *state) {
     CheckJob *job = state;
     BN_CTX *ctx = BN_CTX_new();
-    int answer = ctx == NULL ? -1 : BN_is_prime_ex(job->candidate, job->checks, ctx, NULL);
+    int answer = ctx == NULL ? -1 : BN_check_prime(job->candidate, ctx, NULL);
     BN_CTX_free(ctx);
     job->answer = answer > 0;
     return answer >= 0;
@@ -147,11 +145,13 @@ static void check_job_deliver(void *state, bool ok, NtsHeader *done) {
 
 static const NtsCryptoWork check_work = {check_job_run, check_job_deliver, check_job_dispose};
 
+/* `checks` is validated and carried as node carries it, and unused: see the
+ * top of the file. */
 static CheckJob *check_job_new(NtsView *candidate, double checks) {
+    (void)checks;
     CheckJob *job = calloc(1, sizeof(CheckJob));
     if (job == NULL) return NULL;
     job->candidate = BN_bin2bn(nts_view_bytes(candidate), (int)nts_view_byte_length(candidate), NULL);
-    job->checks = (int)checks;
     if (job->candidate == NULL) {
         check_job_dispose(job);
         return NULL;

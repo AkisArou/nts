@@ -5,7 +5,6 @@
  *
  * Each leaves OpenSSL's queue as it found it, as ncrypto's do: a malformed
  * SPKAC is an answer (false, or nothing), not an error. */
-#include <ctype.h>
 #include <openssl/asn1.h>
 #include <openssl/bio.h>
 #include <openssl/err.h>
@@ -18,12 +17,10 @@
 #include "nts_crypto.h"
 #include "shared.h"
 
-/* The SPKAC base64 with trailing whitespace chopped off, as ncrypto chops it. */
+/* The SPKAC decoded. OpenSSL's base64 decoding drops trailing whitespace
+ * itself; ncrypto trims it only for BoringSSL, whose decoder does not. */
 static NETSCAPE_SPKI *spkac_of(NtsView *input) {
-    const char *text = (const char *)nts_view_bytes(input);
-    size_t length = (size_t)nts_view_byte_length(input);
-    while (length > 0 && isspace((unsigned char)text[length - 1])) length--;
-    return NETSCAPE_SPKI_b64_decode(text, (int)length);
+    return NETSCAPE_SPKI_b64_decode((const char *)nts_view_bytes(input), (int)nts_view_byte_length(input));
 }
 
 /* `certVerifySpkac`: the signature checks against the key it carries. */

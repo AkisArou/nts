@@ -2,10 +2,11 @@
  * (`src/crypto/crypto_argon2.cc`) over ncrypto's `argon2`, which is OpenSSL
  * 3.2's `ARGON2D`, `ARGON2I` and `ARGON2ID` key derivations.
  *
- * As ncrypto does, each derivation fetches its KDF in a library context of
- * its own: Argon2 runs its lanes on threads, which OpenSSL allows per context,
- * and a private context keeps concurrent derivations from contending for the
- * default one. */
+ * As ncrypto does, a derivation of more than one lane fetches its KDF in a
+ * library context of its own, where it may run its lanes on threads -- OpenSSL
+ * allows threads per context -- after asking the default context that Argon2
+ * exists at all, since a new context inherits no configuration. One lane uses
+ * the default context. */
 #include <openssl/core_names.h>
 #include <openssl/crypto.h>
 #include <openssl/err.h>
@@ -85,10 +86,17 @@ static bool argon2_run(void *state) {
     if (job->out == NULL) return false;
     if (job->keylen == 0) return true;
     if (job->type < 0 || job->type > 2) return false;
-    OSSL_LIB_CTX *libctx = OSSL_LIB_CTX_new();
+    OSSL_LIB_CTX *libctx = NULL;
     EVP_KDF *kdf = NULL;
     EVP_KDF_CTX *kctx = NULL;
-    bool ok = libctx != NULL && (job->lanes <= 1 || OSSL_set_max_threads(libctx, job->lanes) == 1);
+    bool ok = true;
+    if (job->lanes > 1) {
+        EVP_KDF *available = EVP_KDF_fetch(NULL, algorithms[job->type], NULL);
+        ok = available != NULL;
+        EVP_KDF_free(available);
+        if (ok) libctx = OSSL_LIB_CTX_new();
+        ok = ok && libctx != NULL && OSSL_set_max_threads(libctx, job->lanes) == 1;
+    }
     if (ok) kdf = EVP_KDF_fetch(libctx, algorithms[job->type], NULL);
     if (kdf != NULL) kctx = EVP_KDF_CTX_new(kdf);
     ok = ok && kctx != NULL;

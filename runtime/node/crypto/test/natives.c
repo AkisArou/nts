@@ -424,6 +424,13 @@ static void signatures(void) {
     expect_true("  and not for other data",
                 is_hex(nts_crypto_sign_job_sync(true, point, utf8("x"), -1, NAN, NAN, none, ed_sig), "00"));
     expect_true("an Ed25519 key cannot finish a stream", nts_crypto_key_is_one_shot(seed));
+    double ctx_seed = nts_crypto_key_from_okp(
+        text("Ed25519"), hex("0305334e381af78f141cb666f6199f57bc3495335a256a95bd2a55bf546663f6"), true);
+    expect_true("Ed25519ctx, RFC 8032 7.2 -- a context switches the instance, not only a parameter",
+                is_hex(nts_crypto_sign_job_sync(false, ctx_seed, hex("f726936d19c800494e3fdaff20b276a8"), -1, NAN, NAN,
+                                                hex("666f6f"), none),
+                       "55a4cc2f70a54e04288c5f4cd1e45a7bb520b36292911876cada7323198dd87a"
+                       "8b36950b95130022907a7fb7c4e9b2d5f6cca685a587b4b21f4b888e4e7edb0d"));
 
     unsigned char identity[32] = {1};
     unsigned char small_order_sig[64] = {1};
@@ -637,6 +644,45 @@ static void key_agreement(void) {
     expect_true("a public key of 1 is too small",
                 nts_crypto_dh_compute_secret(alice, bytes(&one, 1)) == NULL && nts_crypto_dh_status() == -2);
     expect_true("an unknown group is none", nts_crypto_dh_group(text("modp3")) == 0);
+
+    /* `verifyError` is ncrypto's `CheckDhParams`, not `DH_check`: these are
+     * node's own answers for the inputs `test-crypto-dh-curves` uses. */
+    const char *oakley = "ffffffffffffffffc90fdaa22168c234c4c6628b80dc1cd129024e088a67cc74"
+                         "020bbea63b139b22514a08798e3404ddef9519b3cd3a431b302b0a6df25f1437"
+                         "4fe1356d6d51c245e485b576625e7ec6f44c42e9a637ed6b0bff5cb6f406b7ed"
+                         "ee386bfb5a899fa5ae9f24117c4b1fe649286651ece65381ffffffffffffffff";
+    char not_prime[257];
+    snprintf(not_prime, sizeof(not_prime), "%s", oakley);
+    not_prime[254] = 'f';
+    not_prime[255] = 'd';
+    unsigned char two = 2;
+    unsigned char twenty_three = 23;
+    expect_true("verifyError: the second Oakley group is sound",
+                nts_crypto_dh_check(nts_crypto_dh_new_prime(hex(oakley), 2)) == 0);
+    expect_true("  its last byte changed is DH_CHECK_P_NOT_PRIME",
+                nts_crypto_dh_check(nts_crypto_dh_new_prime_generator(hex(not_prime), bytes(&two, 1))) == 1);
+    expect_true("  a prime that is not safe is DH_CHECK_P_NOT_SAFE_PRIME",
+                nts_crypto_dh_check(nts_crypto_dh_new_prime_generator(
+                    hex("d2d6d13e1c1e0bbb63c742199dee010411f089ac74f0f7213348388280700fd6"
+                        "0ef9c1e7b096a4257dcbce61c544a5d1d23db4c49c63ce302f63be5cf5804327"),
+                    bytes(&two, 1))) == 2);
+    expect_true("  the prime 2 with generator 2 is 139, as node reports",
+                nts_crypto_dh_check(nts_crypto_dh_new_prime(bytes(&two, 1), 2)) == 139);
+    expect_true("  23 is only too small, 128",
+                nts_crypto_dh_check(nts_crypto_dh_new_prime_generator(bytes(&twenty_three, 1), bytes(&two, 1))) == 128);
+    expect_true("  and the RFC 2409 groups, which OpenSSL has no name for, are checked and sound",
+                nts_crypto_dh_check(nts_crypto_dh_group(text("modp1"))) == 0 &&
+                    nts_crypto_dh_check(nts_crypto_dh_group(text("modp2"))) == 0);
+    double explicit_dh = nts_crypto_dh_new_prime(hex(oakley), 2);
+    double group_dh = nts_crypto_dh_group(text("modp2"));
+    NtsView *explicit_public = nts_crypto_dh_generate_keys(explicit_dh);
+    NtsView *group_public = nts_crypto_dh_generate_keys(group_dh);
+    expect_true("an explicit key and the same group agree, one by derivation and one by arithmetic",
+                same_bytes(nts_crypto_dh_compute_secret(explicit_dh, group_public),
+                           nts_crypto_dh_compute_secret(group_dh, explicit_public)));
+    NtsView *kept = nts_crypto_dh_get(group_dh, 3);
+    nts_crypto_dh_generate_keys(group_dh);
+    expect_true("generating again keeps a private key already there", same_bytes(nts_crypto_dh_get(group_dh, 3), kept));
     expect_true("a prime of one bit is refused", nts_crypto_dh_new_size(1, 2) == -4);
     expect_true("  with OpenSSL's reason", errors_mention("modulus too small"));
 
@@ -698,7 +744,7 @@ static void primes(void) {
     unsigned char four = 4;
     unsigned char mersenne[] = {0x7f, 0xff, 0xff, 0xff};
     expect_true("4 is not", nts_crypto_prime_check(bytes(&four, 1), 0) == 0);
-    expect_true("2^31 - 1 is, with twenty rounds asked", nts_crypto_prime_check(bytes(mersenne, 4), 20) == 1);
+    expect_true("2^31 - 1 is, whatever rounds are asked -- OpenSSL 3 chooses", nts_crypto_prime_check(bytes(mersenne, 4), 20) == 1);
 
     unsigned char add = 12;
     unsigned char rem = 11;

@@ -17,6 +17,7 @@
 #include <openssl/ec.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
+#include <openssl/objects.h>
 #include <openssl/param_build.h>
 #include <openssl/rsa.h>
 #include <stdlib.h>
@@ -292,11 +293,25 @@ static EVP_PKEY_CTX *dsa_setup(Keygen *keygen) {
     return NULL;
 }
 
+/* ncrypto's `setEcParameters` in its OpenSSL 3 form: the group by short name
+ * and the encoding by name, as provider parameters. */
+static bool set_ec_parameters(EVP_PKEY_CTX *ctx, int nid, int param_encoding) {
+    const char *group = OBJ_nid2sn(nid);
+    const char *encoding = param_encoding == OPENSSL_EC_EXPLICIT_CURVE ? OSSL_PKEY_EC_ENCODING_EXPLICIT
+                                                                       : OSSL_PKEY_EC_ENCODING_GROUP;
+    if (group == NULL) return false;
+    OSSL_PARAM params[] = {
+        OSSL_PARAM_construct_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME, (char *)group, 0),
+        OSSL_PARAM_construct_utf8_string(OSSL_PKEY_PARAM_EC_ENCODING, (char *)encoding, 0),
+        OSSL_PARAM_construct_end(),
+    };
+    return EVP_PKEY_CTX_set_params(ctx, params) == 1;
+}
+
 static EVP_PKEY_CTX *ec_setup(Keygen *keygen) {
     EVP_PKEY_CTX *param_ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, NULL);
     bool ok = param_ctx != NULL && EVP_PKEY_paramgen_init(param_ctx) == 1 &&
-              EVP_PKEY_CTX_set_ec_paramgen_curve_nid(param_ctx, keygen->nid) == 1 &&
-              EVP_PKEY_CTX_set_ec_param_enc(param_ctx, keygen->param_encoding) == 1;
+              set_ec_parameters(param_ctx, keygen->nid, keygen->param_encoding);
     if (ok) return context_from_parameters(param_ctx);
     EVP_PKEY_CTX_free(param_ctx);
     return NULL;

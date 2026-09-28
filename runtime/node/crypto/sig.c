@@ -47,17 +47,34 @@ static bool is_rsa_variant(EVP_PKEY *pkey) {
     return id == EVP_PKEY_RSA || id == EVP_PKEY_RSA2 || id == EVP_PKEY_RSA_PSS;
 }
 
+/* The post-quantum signature families, ML-DSA and SLH-DSA: node's
+ * `IsPqcSignatureKeyId`. */
+static bool is_post_quantum_signature(int id) {
+    switch (id) {
+    case EVP_PKEY_ML_DSA_44:
+    case EVP_PKEY_ML_DSA_65:
+    case EVP_PKEY_ML_DSA_87:
+    case EVP_PKEY_SLH_DSA_SHA2_128F:
+    case EVP_PKEY_SLH_DSA_SHA2_128S:
+    case EVP_PKEY_SLH_DSA_SHA2_192F:
+    case EVP_PKEY_SLH_DSA_SHA2_192S:
+    case EVP_PKEY_SLH_DSA_SHA2_256F:
+    case EVP_PKEY_SLH_DSA_SHA2_256S:
+    case EVP_PKEY_SLH_DSA_SHAKE_128F:
+    case EVP_PKEY_SLH_DSA_SHAKE_128S:
+    case EVP_PKEY_SLH_DSA_SHAKE_192F:
+    case EVP_PKEY_SLH_DSA_SHAKE_192S:
+    case EVP_PKEY_SLH_DSA_SHAKE_256F:
+    case EVP_PKEY_SLH_DSA_SHAKE_256S: return true;
+    default: return false;
+    }
+}
+
 /* ncrypto's `isOneShotVariant`: a key that signs the message, not a digest of
  * it, and so cannot finish a stream. */
 static bool is_one_shot_variant(EVP_PKEY *pkey) {
-    switch (nts_crypto_key_id(pkey)) {
-    case EVP_PKEY_ED25519:
-    case EVP_PKEY_ED448:
-    case EVP_PKEY_ML_DSA_44:
-    case EVP_PKEY_ML_DSA_65:
-    case EVP_PKEY_ML_DSA_87: return true;
-    default: return false;
-    }
+    int id = nts_crypto_key_id(pkey);
+    return id == EVP_PKEY_ED25519 || id == EVP_PKEY_ED448 || is_post_quantum_signature(id);
 }
 
 bool nts_crypto_key_is_one_shot(double key) {
@@ -315,14 +332,8 @@ static bool has_small_order_point(EVP_PKEY *pkey, const unsigned char *signature
 
 /* Node's `SupportsContextString`: Ed25519, Ed448 and ML-DSA take one. */
 static bool supports_context_string(EVP_PKEY *pkey) {
-    switch (nts_crypto_key_id(pkey)) {
-    case EVP_PKEY_ED25519:
-    case EVP_PKEY_ED448:
-    case EVP_PKEY_ML_DSA_44:
-    case EVP_PKEY_ML_DSA_65:
-    case EVP_PKEY_ML_DSA_87: return true;
-    default: return false;
-    }
+    int id = nts_crypto_key_id(pkey);
+    return id == EVP_PKEY_ED25519 || id == EVP_PKEY_ED448 || is_post_quantum_signature(id);
 }
 
 /* A `SignConfiguration`, its inputs copied: a job's run on the pool thread
@@ -393,20 +404,23 @@ static bool sign_job_run(void *state) {
         return false;
     }
     EVP_PKEY_CTX *pctx = NULL;
-    OSSL_PARAM params[] = {
-        OSSL_PARAM_construct_octet_string(OSSL_SIGNATURE_PARAM_CONTEXT_STRING, job->context,
-                                          job->context_length),
-        OSSL_PARAM_construct_end(),
-    };
     int init;
     if (has_context) {
-        /* ncrypto's `signInitWithContext`: the parameters reach the key's
-         * provider only through the `_ex` initialisers, which name the
-         * digest rather than take it. */
-        const char *md = job->md == NULL ? NULL : EVP_MD_get0_name(job->md);
-        init = job->verify
-                   ? EVP_DigestVerifyInit_ex(ctx, &pctx, md, NULL, NULL, job->pkey, params)
-                   : EVP_DigestSignInit_ex(ctx, &pctx, md, NULL, NULL, job->pkey, params);
+        /* ncrypto's `signInitWithContext` and `verifyInitWithContext`: the
+         * context reaches the key's provider as a parameter, with no digest --
+         * the keys that take one sign the message itself. Ed25519 also needs
+         * its `Ed25519ctx` instance named, without which OpenSSL signs as plain
+         * Ed25519 and ignores the context. */
+        OSSL_PARAM params[3];
+        size_t n = 0;
+        if (nts_crypto_key_id(job->pkey) == EVP_PKEY_ED25519) {
+            params[n++] = OSSL_PARAM_construct_utf8_string(OSSL_SIGNATURE_PARAM_INSTANCE, "Ed25519ctx", 0);
+        }
+        params[n++] = OSSL_PARAM_construct_octet_string(OSSL_SIGNATURE_PARAM_CONTEXT_STRING, job->context,
+                                                        job->context_length);
+        params[n] = OSSL_PARAM_construct_end();
+        init = job->verify ? EVP_DigestVerifyInit_ex(ctx, &pctx, NULL, NULL, NULL, job->pkey, params)
+                           : EVP_DigestSignInit_ex(ctx, &pctx, NULL, NULL, NULL, job->pkey, params);
     } else {
         init = job->verify ? EVP_DigestVerifyInit(ctx, &pctx, job->md, NULL, job->pkey)
                            : EVP_DigestSignInit(ctx, &pctx, job->md, NULL, job->pkey);
