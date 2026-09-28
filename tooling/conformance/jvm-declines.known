@@ -1,0 +1,17 @@
+# Every NTS4009 shape emit-jvm declines over the runtime, classified. An NTS4009 is
+# an override whose representation differs from the method it overrides: the JVM
+# refuses it by name, and C and LLVM dispatch it without a check. So each shape is
+# either the JVM's alone by construction, or live on C (and then a fixture shows
+# it), or owned and not yet measured. jvm-verifies.mjs fails on a shape not here.
+# shape<TAB>verdict<TAB>why -- shapes are normalised (ClosureN, $N$, FnN, TypeN).
+ChildWritable._write (Lnts/rt/NtsViewU8;Ljava/lang/String;Lnts/gen/FnN;)V over (Lnts/rt/NtsValue;Ljava/lang/String;Lnts/gen/FnN;)V	live-on-c	a narrowed parameter read at an erased argument: SIGSEGV on C, a-writable-override-narrowing-an-erased-chunk (child_process, cluster)
+Transform._read ()V over (D)V	jvm-only	fewer parameters: C ignores the rest, an-override-declaring-fewer-parameters; the JVM needs a bridge
+DuplexSide._read ()V over (D)V	jvm-only	fewer parameters: C ignores the rest, an-override-declaring-fewer-parameters; the JVM needs a bridge
+IncomingMessage._read ()V over (D)V	jvm-only	fewer parameters: C ignores the rest, an-override-declaring-fewer-parameters; the JVM needs a bridge
+PerformanceNodeEntry.toJSON ()Lnts/gen/PerformanceEntryDetailJSON; over ()Lnts/gen/PerformanceEntryJSON;	jvm-only	a covariant record that extends the base's: a-covariant-record-that-extends-the-base
+PerformanceMark.toJSON ()Lnts/gen/PerformanceEntryDetailJSON; over ()Lnts/gen/PerformanceEntryJSON;	jvm-only	a covariant record that extends the base's: a-covariant-record-that-extends-the-base
+PerformanceMeasure.toJSON ()Lnts/gen/PerformanceEntryDetailJSON; over ()Lnts/gen/PerformanceEntryJSON;	jvm-only	a covariant record that extends the base's: a-covariant-record-that-extends-the-base
+PerformanceNodeTiming.toJSON ()Lnts/gen/PerformanceNodeTimingJSON; over ()Lnts/gen/PerformanceEntryJSON;	jvm-only	a covariant record repeating the base's fields in its order: a-covariant-record-that-repeats-the-base (reordered would be live: a-covariant-record-with-the-base-fields-reordered)
+PerformanceResourceTiming.toJSON ()Lnts/gen/PerformanceResourceTimingJSON; over ()Lnts/gen/PerformanceEntryJSON;	jvm-only	a covariant record repeating the base's fields in its order: a-covariant-record-that-repeats-the-base
+ClosureN.call (Lnts/gen/ReadableStreamDefaultController$N$;)V over (Lnts/gen/ReadableStreamDefaultController$N$;)V	unmeasured	a closure called at another instantiation of ReadableStreamDefaultController: one layout (#stream), methods compiled per R; owned by the conformance lane
+User.update (Lnts/gen/TypeN;)Ljava/lang/String; over (Lnts/rt/NtsValue;)Ljava/lang/String;	live-on-c	a narrowed parameter read at an erased argument: SIGSEGV on C, an-override-reading-an-erased-argument (outcomes only; the React reconciler's shape)

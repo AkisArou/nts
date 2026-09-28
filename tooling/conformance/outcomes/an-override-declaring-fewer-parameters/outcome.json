@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: fewer (override)=read;same (control)=read 16;",
+  "node": "exit 1; nts: uncaught Observed: fewer (override)=read;same (control)=read 16;",
+  "measured_with": "82c65520cbe233b6",
+  "source": "measured"
+}

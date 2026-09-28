@@ -67,6 +67,7 @@ import { describe, provenanceOf } from "./pin.mjs";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 const KNOWN = join(HERE, "jvm-verifies.known");
+const DECLINES = join(HERE, "jvm-declines.known");
 const DRIVER = join(HERE, "JvmVerify.java");
 const SOURCE = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
 const JAVA = process.env.JAVA_HOME ? join(process.env.JAVA_HOME, "bin/java") : "java";
@@ -135,6 +136,26 @@ export function readVerify(text) {
   return { invalid: lines("INVALID"), missing: lines("MISSING"), verified: Number(summary[1]), total: Number(summary[2]) };
 }
 
+/**
+ * An NTS4009 decline, normalised to its shape: an override whose
+ * representation differs from the method it overrides, with the compiler's
+ * numbering (closures, generic instances, signature layouts) taken out so one
+ * shape across programs and runs is one key.
+ */
+export function declineShape(line) {
+  const m = /NTS4009 `([^`]+)` is `([^`]+)` where the method it overrides is `([^`]+)`/.exec(line);
+  if (!m) return null;
+  const plain = (t) => t.replace(/Closure\d+/g, "ClosureN").replace(/\$\d+\$/g, "$N$").replace(/Fn[\d_]*__\d+/g, "FnN").replace(/Type\d+/g, "TypeN");
+  return `${plain(m[1])} ${plain(m[2])} over ${plain(m[3])}`;
+}
+/** jvm-declines.known: shape -> { verdict, why }; verdict is jvm-only, live-on-c or unmeasured. */
+const declinesKnown = new Map(
+  (existsSync(DECLINES) ? readFileSync(DECLINES, "utf8") : "")
+    .split("\n").filter((l) => l.trim() !== "" && !l.startsWith("#"))
+    .map((l) => l.split("\t")).map(([shape, verdict, why]) => [shape, { verdict, why: why ?? "" }]),
+);
+const declines = new Map();
+
 const failed = [];
 const unmeasured = [];
 const invalidHir = [];
@@ -146,6 +167,10 @@ async function check(project, slot) {
   rmSync(out, { recursive: true, force: true });
   const emit = await run(NTS, ["emit-jvm", where.get(project) ?? project, "--out", out]);
   const jar = join(out, "nts-runtime.jar");
+  for (const line of emit.out.split("\n")) {
+    const shape = declineShape(line);
+    if (shape) declines.set(shape, (declines.get(shape) ?? new Set()).add(project));
+  }
   // Invalid HIR emits nothing on any backend, and is its own outcome, which
   // outcomes-check records: counted, not "not measured".
   if (/refusing to emit code from invalid HIR/.test(emit.out)) {
@@ -191,6 +216,20 @@ for (const f of held) console.log(`  known            ${f.project}: ${f.invalid.
 for (const p of expired) console.log(`  ^ ${p} verifies now: remove it from tooling/conformance/jvm-verifies.known`);
 if (invalidHir.length > 0) console.log(`  invalid HIR, so nothing to verify (outcomes records it): ${invalidHir.length} -- ${invalidHir.map((p) => p.split("/").pop()).join(", ")}`);
 for (const u of unmeasured.sort()) console.log(`  NOT MEASURED     ${u}`);
-const ok = fresh.length === 0 && unmeasured.length === 0 && classes > 0;
-console.log(ok ? `  every module verifies, or is known not to (${held.length})` : `  ${fresh.length} new failure(s), ${unmeasured.length} not measured`);
+// Every NTS4009 is a dispatch C and LLVM perform without checking, so each
+// shape must be classified: the JVM's alone by construction, live on C (with
+// the fixture that shows it), or owned and not yet measured.
+const unclassified = [...declines.keys()].filter((k) => !declinesKnown.has(k));
+if (declines.size > 0) {
+  const by = new Map();
+  for (const k of declines.keys()) {
+    const v = declinesKnown.get(k)?.verdict ?? "UNCLASSIFIED";
+    by.set(v, (by.get(v) ?? 0) + 1);
+  }
+  console.log(`  NTS4009 declines: ${declines.size} shape(s) -- ${[...by].map(([v, n]) => `${n} ${v}`).join(", ")}`);
+  for (const k of [...declines.keys()].filter((k) => declinesKnown.get(k)?.verdict === "live-on-c")) console.log(`    live on C  ${k.slice(0, 110)} -- ${declinesKnown.get(k).why}`);
+  for (const k of unclassified) console.log(`    UNCLASSIFIED  ${k.slice(0, 150)}  (${[...declines.get(k)].slice(0, 3).join(", ")})`);
+}
+const ok = fresh.length === 0 && unmeasured.length === 0 && classes > 0 && unclassified.length === 0;
+console.log(ok ? `  every module verifies, or is known not to (${held.length}); every NTS4009 decline classified` : `  ${fresh.length} new failure(s), ${unmeasured.length} not measured, ${unclassified.length} unclassified decline shape(s)`);
 process.exit(ok ? 0 : 1);
