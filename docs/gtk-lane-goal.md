@@ -1791,11 +1791,22 @@ one in two ways, both core gaps:
 | 2026-09-27 | 25 | 8 on main; 14 stop at the captured narrowed handle, Scale at `Object.entries` over a table, Stack at a `let` of a handle with no initializer, Context Menu at a record's fields (`new Gdk.Rectangle({ x, y })`, designed with the compiler lane) |
 | 2026-09-28 | 29 | **25 on main**, with the captured-handle fix (bd58854b9). Left: Stack (a `let` of a handle with no initializer), Scale (`Object.entries` over a table), Context Menu (record fields, designed), Boxed Lists (`GObject.TYPE_STRING` and `Gtk.ClosureExpression`, binding gaps) |
 | 2026-09-28 | 34 | **28**. Also left: Text Colors (a spread in call arguments, then an array stringified), Text View (destructuring a handle's property) |
+| 2026-09-28 | 46 | **36**: List View with Sections, a `GtkStringList` subclass implementing `GtkSectionModel`. Its override writes C's out parameters through pointers where GJS returns `[start, end]`: an idiom gap, named below |
 | 2026-09-28 | 45 | **35**: Custom Widget, a class whose `Template` is `workbench.template` and whose `GTypeName` its template names, a handler GTK finds by name |
 | 2026-09-28 | 44 | **34**: Column View (an interface requiring another, now assignable to it) and List View with a Tree (a callback answering the class where C declared the interface, on LLVM). Drop Down's third gap (its subclass's own properties) is cleared; its two binding gaps remain |
 | 2026-09-28 | 42 | **32** on main f3f4ac28e. Left, each named: a fundamental GType (Boxed Lists, Drop Down, Accessibility), GIR constants (Accessibility), record fields (Context Menu), a construct-only property no constructor takes (Notification), `Object.entries` over a table (Scale), a `let` of a handle with no initializer (Stack, Carousel), a property written through a union of handles (Carousel), a spread in call arguments (Text Colors), destructuring a handle's property (Text View) |
 
 ### What the corpus found beyond its blockers
+
+**An override's out parameters are pointers, where GJS returns them.** GJS
+writes `vfunc_get_section(position) { return [start, end]; }`, and a port
+writes `out_start[0] = start` through the `Ptr<CNumber<"uint">>` the binding
+declares (List View with Sections; `Square`'s `vfunc_measure` in
+gtk-subclass). A call already answers GJS's way, a tuple for its out
+parameters. An override could too: the binder declares the tuple result,
+and the entry point writes each element through its pointer where the
+pointer is not NULL. Not built yet; it changes `Square`'s working override,
+so it lands with that arm rewritten.
 
 Ports that pass still surfaced binding and harness gaps, each fixed or
 named:

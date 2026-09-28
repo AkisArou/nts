@@ -35,6 +35,7 @@
     "image/nts.config.ts",
     "label/nts.config.ts",
     "level-bars/nts.config.ts",
+    "list-view-sections/nts.config.ts",
     "list-view-tree/nts.config.ts",
     "list-view/nts.config.ts",
     "menu-button/nts.config.ts",
