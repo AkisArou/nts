@@ -1277,8 +1277,11 @@ fn pause(
 /// The resumption, as a function.
 ///
 /// One parameter and no result: everything it reads is in the frame and
-/// everything it produces goes into the frame's promise. Not exported -- it is
-/// reached through the subscription the suspension left behind, never by name.
+/// everything it produces goes into the frame's promise. Not exported: it is
+/// reached through the subscription the suspension left behind -- except a
+/// published generator's, which the generated header's `<name>_next` calls
+/// by name, and which is therefore public all the same
+/// (`nts_codegen_common::symbols::is_public`).
 fn assembled_resume(
     name: &str,
     func: &Func,

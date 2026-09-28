@@ -4122,12 +4122,7 @@ fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
 /// was already happening. Measured before and after: 1.81us and 1.82us.
 fn signature(program: &Program, func: &Func) -> Result<String, Diagnostic> {
     let returns = return_c_type(program, &func.return_type, &func.origin)?;
-    let public = func.exported
-        || program.public_api.iter().any(|(name, _)| *name == func.name)
-        || program.generators.iter().any(|generator| {
-            generator.resume == func.name
-                && program.public_api.iter().any(|(name, _)| *name == generator.constructor)
-        });
+    let public = nts_codegen_common::symbols::is_public(program, func);
     let mut params = Vec::new();
     for (index, param) in func.params.iter().enumerate() {
         let ty = c_type_of(program, &param.ty, &param.origin)?;

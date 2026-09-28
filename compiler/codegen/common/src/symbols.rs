@@ -685,6 +685,24 @@ pub fn jvm_class_name(package: &str, raw: &str) -> String {
     format!("{package}/{}", jvm_member_name(raw))
 }
 
+/// Whether `func` is part of the artifact's ABI, and so defined with a
+/// symbol other objects link against: exported, published by name
+/// (`public_api`), or the resumption of a generator a published function
+/// returns -- which the generated header's `<name>_next` calls by name.
+///
+/// The same answer for both backends, for the reason the name is: the C
+/// backend decided it in its `signature` and the LLVM one from `exported`
+/// alone, so an
+/// exported generator's `counted__resume` linked from C's object and was
+/// internal in LLVM's.
+#[must_use]
+pub fn is_public(program: &nts_core::hir::Program, func: &nts_core::hir::Func) -> bool {
+    let published = |name: &str| program.public_api.iter().any(|(published, _)| published == name);
+    func.exported
+        || published(&func.name)
+        || program.generators.iter().any(|generator| generator.resume == func.name && published(&generator.constructor))
+}
+
 #[cfg(test)]
 mod jvm_tests {
     use super::*;

@@ -4498,3 +4498,51 @@ int thing_record(struct _Thing *t) { return t->record; }
     let Some((_, outputs)) = run_on_both_backends("static-probe", source, hir::Provider::NoGc, library, &caller) else { return; };
     for output in outputs { assert_eq!(output, "53"); }
 }
+
+/// An exported generator, walked from C by the generated header's
+/// `counted_next`, which calls its resumption by name: that resumption is
+/// part of the ABI on both backends (`symbols::is_public`). LLVM defined it
+/// `internal`, from `exported` alone, and the caller did not link.
+#[test]
+fn an_exported_generators_resumption_links_from_c_on_both_backends() {
+    let Some((dir, prepared)) = prepare(
+        "generator-resume",
+        r"
+        export function* counted(n: number): Generator<number> {
+            for (let i = 0; i < n; i++) yield i;
+        }
+    ",
+    ) else {
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    assert!(c.is_complete(), "{:?}", c.diagnostics);
+    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+    std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+    for file in c.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
+    std::fs::write(
+        dir.join("caller.c"),
+        "#include \"program.h\"\n\
+         int main(void) {\n\
+         \x20 counted_return_t *walk = counted(3);\n\
+         \x20 double value = -1;\n\
+         \x20 for (int i = 0; i < 3; i++)\n\
+         \x20   if (!counted_next(walk, &value) || value != i) return 1;\n\
+         \x20 return counted_next(walk, &value) ? 2 : 0;\n\
+         }\n",
+    )
+    .unwrap();
+    for source in ["caller.c", "nts_runtime.c"] {
+        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", source]);
+    }
+    for (source, object, binary) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
+        clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-Wno-override-module", "-c", source, "-o", object]);
+        clang(&dir, &[object, "caller.o", "nts_runtime.o", "-lm", "-o", binary]);
+        assert!(Command::new(dir.join(binary)).status().unwrap().success(), "{binary}");
+    }
+}

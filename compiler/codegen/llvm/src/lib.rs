@@ -2405,7 +2405,8 @@ fn function(program: &Program, func: &Func, platform: Platform) -> Result<String
     prologue.extend(native::stack_arguments(func, platform));
     prologue.extend(native_memory::stack_storage(func, platform));
     prologue.extend(indirect::scratch(platform));
-    let (linkage, defined, entry) = indirect::definition(func, platform, symbol(&func.name));
+    let public = nts_codegen_common::symbols::is_public(program, func);
+    let (linkage, defined, entry) = indirect::definition(func, platform, (symbol(&func.name), public));
     // `nounwind` on everything this compiler defines, for the reason above: the
     // language has no exceptions, so no frame here can be unwound through.
     //

@@ -94,14 +94,15 @@ pub(crate) fn body_symbol(exported: &str) -> String {
     format!("{exported}.body")
 }
 
-/// How `func`, whose symbol is `symbol`, is defined: its linkage, the name
+/// How `func`, whose symbol is `symbol`, is defined: its linkage -- external
+/// where it is `public` (`nts_codegen_common::symbols::is_public`) -- the name
 /// its body is defined under, and whether an entry of C's shape is exported
-/// beside it ([`behind_entry`]) -- which makes the body internal.
-pub(crate) fn definition(func: &Func, platform: Platform, symbol: String) -> (&'static str, String, bool) {
+/// beside it ([`behind_entry`]), which makes the body internal.
+pub(crate) fn definition(func: &Func, platform: Platform, (symbol, public): (String, bool)) -> (&'static str, String, bool) {
     if behind_entry(func, platform) {
         ("internal ", body_symbol(&symbol), true)
     } else {
-        (if func.exported { "" } else { "internal " }, symbol, false)
+        (if public { "" } else { "internal " }, symbol, false)
     }
 }
 
