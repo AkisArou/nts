@@ -253,16 +253,31 @@ pub(crate) fn run(request: &Request) -> Result<Output> {
         // declares on them.
         objc.extend(swift.extended_by(framework_of(request)).into_iter().filter(|class| headers.supers.contains_key(class)));
     }
+    // A class that does not exist at the deployment target -- introduced
+    // after it, or deprecated by it -- is not bound, as a member is not, and
+    // a signature naming one is not either: bound, a program using it
+    // typechecks and then dies at launch, the runtime having no such class.
+    let (platform, target) = deployment_target(&request.target)?;
+    let unavailable: BTreeMap<String, String> = headers
+        .supers
+        .keys()
+        .filter_map(|class| {
+            let symbol = swift.by_usr.get(&format!("c:objc(cs){class}"))?;
+            availability(symbol, platform, target).err().map(|reason| (class.clone(), reason))
+        })
+        .collect();
+    let unbound: Vec<(String, String)> = objc.iter().filter_map(|class| Some((class.clone(), unavailable.get(class)?.clone()))).collect();
+    objc.retain(|class| !unavailable.contains_key(class));
     let bound = closure(&objc, &headers.supers)?;
     let protocols: BTreeSet<String> = request.protocols.iter().cloned().collect();
     let constants = swift.constants(&bound);
     let mut symbols = cf::functions(&swift, &cf_types, &request.functions);
     symbols.extend(constants.keys().cloned());
     let bodies = dump(request, &unit, &Wanted::Bodies(&bound, &protocols, &symbols))?;
-    let (platform, target) = deployment_target(&request.target)?;
     let package = request.package.then(|| framework_of(request).to_owned());
-    let mut model = Model::read(&swift, &headers, &bodies, &bound, cf_types, target, Ownership { package, provided: request.provided.clone() });
-    model.platform = platform;
+    let deployment = Deployment { platform, target, unavailable };
+    let mut model = Model::read(&swift, &headers, &bodies, &bound, cf_types, deployment, Ownership { package, provided: request.provided.clone() });
+    model.unbound = unbound;
     model.read_cf(&bodies.functions, &request.functions);
     model.read_constants(&constants, &bodies.variables);
     model.settle_protocols();
@@ -396,6 +411,38 @@ fn translation_unit(request: &Request) -> Result<tempfile_path::TempFile> {
         let _ = writeln!(text, "#import \"{}\"", project.header.display());
     }
     tempfile_path::TempFile::with(".m", &text)
+}
+
+/// What a binding is for, which every member is read against: the platform
+/// and version it deploys to, and the classes that do not exist there. Given
+/// to `Model::read`, which spells each member as it reads it -- a platform
+/// set after it left an iOS binding's members checked against their macOS
+/// availability.
+struct Deployment {
+    platform: &'static str,
+    target: Version,
+    unavailable: BTreeMap<String, String>,
+}
+
+/// Whether a symbol exists at `target` on `platform`: introduced by it, and
+/// not deprecated by it -- Swift warns at every use of one that is. One rule
+/// for a class and a member.
+fn availability(symbol: &Symbol, platform: &str, target: Version) -> std::result::Result<(), String> {
+    for availability in &symbol.availability {
+        if availability.is_unconditionally_deprecated {
+            return Err("deprecated".to_owned());
+        }
+        if availability.domain.as_deref() != Some(platform) {
+            continue;
+        }
+        if let Some(introduced) = availability.introduced.filter(|v| *v > target) {
+            return Err(format!("introduced in {platform} {}.{}", introduced.major, introduced.minor));
+        }
+        if let Some(deprecated) = availability.deprecated.filter(|v| *v <= target) {
+            return Err(format!("deprecated in {platform} {}.{}", deprecated.major, deprecated.minor));
+        }
+    }
+    Ok(())
 }
 
 /// Each requested class and every ancestor, root first.
@@ -1295,6 +1342,11 @@ struct Model<'a> {
     /// Classes a signature names that are not bound, by Objective-C name,
     /// with their nearest bound ancestor's.
     mentioned: BTreeMap<String, Option<String>>,
+    /// Classes that do not exist at the deployment target, by Objective-C
+    /// name, with why: never bound, mentioned, or spelled in a signature.
+    unavailable: BTreeMap<String, String>,
+    /// Those the program asked for, which the binding says it left out.
+    unbound: Vec<(String, String)>,
     records: BTreeSet<String>,
     enums: BTreeMap<String, Enum>,
     /// What each module the binding imports from provides it, by module.
@@ -1382,10 +1434,11 @@ impl<'a> Model<'a> {
         bodies: &'a Dumped,
         bound: &'a BTreeSet<String>,
         cf_types: BTreeMap<String, String>,
-        target: Version,
+        deployment: Deployment,
         ownership: Ownership,
     ) -> Self {
         let Ownership { package, provided } = ownership;
+        let Deployment { platform, target, unavailable } = deployment;
         let mut typedefs = headers.typedefs.clone();
         for decl in bodies.bodies.values().flatten() {
             if decl.get("kind").and_then(Value::as_str) == Some("ObjCTypeParamDecl")
@@ -1401,12 +1454,14 @@ impl<'a> Model<'a> {
             typedefs,
             bound,
             target,
-            platform: "macOS",
+            platform,
             classes: Vec::new(),
             protocols: Vec::new(),
             declared_protocols: bodies.protocols.keys().cloned().collect(),
             c_function: false,
             mentioned: BTreeMap::new(),
+            unavailable,
+            unbound: Vec::new(),
             records: BTreeSet::new(),
             enums: BTreeMap::new(),
             imports: BTreeMap::new(),
@@ -1772,24 +1827,18 @@ impl<'a> Model<'a> {
         }
     }
 
-    /// Whether the member exists at the deployment target: introduced by it,
-    /// and not deprecated by it -- Swift warns at every use of one that is.
+    /// Whether the member exists at the deployment target ([`availability`]).
     fn available(&self, symbol: &Symbol) -> std::result::Result<(), String> {
-        for availability in &symbol.availability {
-            if availability.is_unconditionally_deprecated {
-                return Err("deprecated".to_owned());
-            }
-            if availability.domain.as_deref() != Some(self.platform) {
-                continue;
-            }
-            if let Some(introduced) = availability.introduced.filter(|v| *v > self.target) {
-                return Err(format!("introduced in {} {}.{}", self.platform, introduced.major, introduced.minor));
-            }
-            if let Some(deprecated) = availability.deprecated.filter(|v| *v <= self.target) {
-                return Err(format!("deprecated in {} {}.{}", self.platform, deprecated.major, deprecated.minor));
-            }
+        availability(symbol, self.platform, self.target)
+    }
+
+    /// A class as a signature spells it -- refused where the class does not
+    /// exist at the deployment target, as the member naming it then cannot.
+    fn class_type(&mut self, class: &str) -> std::result::Result<String, String> {
+        if let Some(reason) = self.unavailable.get(class) {
+            return Err(format!("`{}`, {reason}", self.swift.class(class)));
         }
-        Ok(())
+        Ok(self.object(class))
     }
 
     /// Whether a symbol is a static member, its TypeScript name (none for an
@@ -2144,7 +2193,7 @@ impl<'a> Model<'a> {
                 return Err(format!("a collection, `{base}`, which crosses as an object when it is bound"));
             }
             if self.headers.supers.contains_key(base) {
-                return Ok(or_null(self.object(base)));
+                return Ok(or_null(self.class_type(base)?));
             }
             return self.unsafe_pointer(&written, pointee, &desugared, position);
         }
@@ -2350,7 +2399,7 @@ impl<'a> Model<'a> {
             if class == "NSString" {
                 "string".to_owned()
             } else if self.headers.supers.contains_key(class) {
-                self.object(class)
+                self.class_type(class)?
             } else {
                 return Err(format!("a dictionary of `{value}`"));
             }
@@ -2765,7 +2814,7 @@ impl<'a> Model<'a> {
             return Ok("string".to_owned());
         }
         if self.headers.supers.contains_key(class) {
-            return Ok(self.object(class));
+            return self.class_type(class);
         }
         Err(format!("an array of `{argument}`"))
     }
@@ -3401,6 +3450,12 @@ fn render(request: &Request, model: &Model) -> String {
         }
     }
     let _ = writeln!(out, " */\ndeclare module \"{}\" {{", request.module);
+    if !model.unbound.is_empty() {
+        let _ = writeln!(out, "  // Classes not bound, each for the reason given -- the runtime has none of them:");
+        for (class, reason) in &model.unbound {
+            let _ = writeln!(out, "  //   {}: {reason}", model.swift.class(class));
+        }
+    }
     for (module, names) in &model.imports {
         let _ = writeln!(out, "  import type {{ {} }} from \"{module}\";", names.iter().copied().collect::<Vec<_>>().join(", "));
     }
@@ -4413,6 +4468,69 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
         ] {
             assert!(values.contains(expected), "no `{expected}` in:\n{values}");
         }
+    }
+
+    /// A class the deployment target does not have is not bound -- the
+    /// binding says so, with why -- and a member of a class it does have is
+    /// not bound where its signature names one: bound, either typechecks and
+    /// dies at launch, the runtime having no such class. No stub stands in.
+    #[test]
+    fn a_class_introduced_after_the_target_is_not_bound_nor_named() {
+        let root = std::env::temp_dir().join(format!("nts-bind-objc-late-{}", std::process::id()));
+        let headers = root.join("System/Library/Frameworks/Late.framework/Headers");
+        let symbols = root.join("symbolgraph");
+        std::fs::create_dir_all(&headers).unwrap();
+        std::fs::create_dir_all(&symbols).unwrap();
+        std::fs::write(
+            headers.join("Late.h"),
+            "typedef long NSInteger;\n@interface Root\n+ (instancetype)alloc;\n- (instancetype)init;\n@end\n\
+             @interface Glass : Root\n@end\n@interface Menu : Root\n- (Glass *)glass;\n- (NSInteger)count;\n@end\n",
+        )
+        .unwrap();
+        let symbol = |usr: &str, kind: &str, title: &str, path: &str, availability: &str| {
+            format!(
+                r#"{{"identifier":{{"precise":"{usr}","interfaceLanguage":"swift"}},"kind":{{"identifier":"{kind}"}},"names":{{"title":"{title}"}},"accessLevel":"public","pathComponents":[{path}],"availability":[{availability}]}}"#
+            )
+        };
+        let symbols_json = [
+            symbol("c:objc(cs)Root", "swift.class", "Root", r#""Root""#, ""),
+            symbol("c:objc(cs)Glass", "swift.class", "Glass", r#""Glass""#, r#"{"domain":"macOS","introduced":{"major":26,"minor":0}}"#),
+            symbol("c:objc(cs)Menu", "swift.class", "Menu", r#""Menu""#, ""),
+            symbol("c:objc(cs)Menu(im)glass", "swift.method", "glass()", r#""Menu","glass()""#, ""),
+            symbol("c:objc(cs)Menu(im)count", "swift.method", "count()", r#""Menu","count()""#, ""),
+        ]
+        .join(",");
+        std::fs::write(symbols.join("Late.symbols.json"), format!(r#"{{"symbols":[{symbols_json}]}}"#)).unwrap();
+        std::fs::write(symbols.join("ObjectiveC.symbols.json"), r#"{"symbols":[]}"#).unwrap();
+        let request = Request {
+            frameworks: vec!["Late".to_owned()],
+            module: "objc:Late".to_owned(),
+            classes: vec!["Menu".to_owned(), "Glass".to_owned()],
+            protocols: Vec::new(),
+            functions: Vec::new(),
+            names: Vec::new(),
+            package: false,
+            sdk: root.to_string_lossy().into_owned(),
+            target: "x86_64-apple-macos13".to_owned(),
+            symbols: Some(symbols),
+            records: BTreeMap::new(),
+            lent: Lent::default(),
+            provided: BTreeSet::new(),
+            project: None,
+        };
+        let text = match run(&request) {
+            Ok(output) => output.binding,
+            Err(error) if Command::new("clang").arg("--version").output().is_err() => {
+                eprintln!("skipped: no clang ({error})");
+                return;
+            }
+            Err(error) => panic!("{error:#}"),
+        };
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(text.contains("//   Glass: introduced in macOS 26.0"), "the binding does not say why Glass is left out:\n{text}");
+        assert!(!text.contains("@ntsClass Glass"), "Glass was bound or stubbed:\n{text}");
+        assert!(text.contains("count(): Int;"), "Menu lost a member that names no late class:\n{text}");
+        assert!(text.contains("`Glass`, introduced in macOS 26.0"), "Menu.glass was not refused for naming Glass:\n{text}");
     }
 
     #[test]
