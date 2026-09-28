@@ -47,6 +47,7 @@ navigation AB>ABC>AB>CAB user>CA>CAB app>CA heard=2
 toggles ab active=b acb kept=b Bee ab
 dialog true true true true responded=cancel Cancel,OK>Cancel,Delete,OK>Erase false>Cancel,OK
 preferences one removed=true shown=one
+prefspage two>one>one
 toasts 1 0
 breakpoints A+ | A- B+ | A+
 window-breakpoint W+ true false W+ true

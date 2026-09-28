@@ -470,6 +470,8 @@ interface Prop {
   controlledBy?: string;
   /** For a prop that names a child (a Stack's visible child), the getter that finds it by that name. */
   namesChildBy?: string;
+  /** For a prop that names an item of an "adds" container, set by its node (itemNamingProps). */
+  namesItemBy?: { name: string; select: string };
   value: ValueKind;
   /** The value that restores GTK's default when the prop is removed, or null when there is none to say. */
   reset: string | null;
@@ -680,6 +682,15 @@ const childNamingProps = new Map([
   ["Gtk.Stack", new Map([["visible-child-name", "get_child_by_name"]])],
   ["Adw.ViewStack", new Map([["visible-child-name", "get_child_by_name"]])],
   ["Adw.ToggleGroup", new Map([["active-name", "get_toggle_by_name"]])],
+]);
+
+// The same for a container that adds its items (the "adds" protocol) and has
+// no getter to find one by name (a PreferencesDialog's pages): the node knows
+// its items, so it sets the prop only when one has the name, and an item
+// whose name the prop holds selects itself when it is added. Each entry
+// gives the item's name getter and the container's method that selects it.
+const itemNamingProps = new Map([
+  ["Adw.PreferencesDialog", new Map([["visible-page-name", { name: "get_name", select: "set_visible_page" }]])],
 ]);
 
 // Containers that place a child with parameters of its own, or in groups,
@@ -960,6 +971,7 @@ function model(gir: Gir, bindings: Bindings, target: string): Model {
           const readType = p.readable && read !== undefined ? handlerType(read, handlerTypes, bindings) : null;
           const controlled = readType !== null && controlledProps.get(qualified(source))?.includes(p.name) === true;
           const namesChildBy = childNamingProps.get(qualified(source))?.get(p.name);
+          const namesItemBy = itemNamingProps.get(qualified(source))?.get(p.name);
           props.push({
             jsx: camel(p.name),
             setter,
@@ -967,6 +979,7 @@ function model(gir: Gir, bindings: Bindings, target: string): Model {
             reset,
             ...(controlled ? { controlledBy: getter } : {}),
             ...(namesChildBy !== undefined ? { namesChildBy } : {}),
+            ...(namesItemBy !== undefined ? { namesItemBy } : {}),
           });
           if (readType !== null) {
             signals.push({
@@ -1203,9 +1216,11 @@ function emit(m: Model, target: Target): string {
     const fn = lower(t);
     line();
     line(`export function ${fn}Prop(gtk: ${t.ts}, key: string, value: unknown): boolean {`);
-    if (t.props.length > 0) {
+    // A prop naming an item is its node's, which knows the items.
+    const setHere = t.props.filter((p) => p.namesItemBy === undefined);
+    if (setHere.length > 0) {
       line("  switch (key) {");
-      for (const p of t.props) {
+      for (const p of setHere) {
         line(`    case "${p.jsx}":`);
         line(`      ${assign(p)}`);
         line("      return true;");
@@ -1297,6 +1312,11 @@ function emit(m: Model, target: Target): string {
     line("  private adds(child: WidgetNode): void {");
     narrowed(adds.add, adds.addType).forEach((l) => line(l));
     line("    this.items.push(child);");
+    for (const p of w.props.filter((q) => q.namesItemBy !== undefined)) {
+      line(`    if (widget.${p.namesItemBy!.name}() === this.prop("${p.jsx}")) {`);
+      line(`      this.gtk.${p.namesItemBy!.select}(widget);`);
+      line("    }");
+    }
     line("  }");
     line("  private takes(child: WidgetNode): void {");
     line("    const at = this.items.indexOf(child);");
@@ -1342,7 +1362,19 @@ function emit(m: Model, target: Target): string {
     line(`    super("${w.ts}", gtk);`);
     line("    this.gtk = gtk;");
     line("  }");
+    const itemNamers = w.adds === undefined ? [] : w.props.filter((p) => p.namesItemBy !== undefined);
     line("  setProp(key: string, value: unknown): boolean {");
+    for (const p of itemNamers) {
+      const itemType = w.adds!.addType;
+      line(`    if (key === "${p.jsx}") {`);
+      line("      // Names one of its items: set once one has the name; an item it");
+      line("      // names selects itself when it is added.");
+      line(`      if (typeof value === "string" && this.items.some((item) => item.widget instanceof ${itemType} && item.widget.${p.namesItemBy!.name}() === value)) {`);
+      line(`        this.gtk.${p.setter}(value);`);
+      line("      }");
+      line("      return true;");
+      line("    }");
+    }
     line(`    return ${fn}Prop(this.gtk, key, value);`);
     line("  }");
     line("  connectSignal(key: string, slot: SignalSlot): boolean {");

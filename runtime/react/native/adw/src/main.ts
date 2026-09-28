@@ -69,6 +69,9 @@
 //   preferences  a PreferencesDialog's children are its pages, added to it
 //             and not made its content: the first is shown, another taken out
 //             leaves it
+//   prefspage a PreferencesDialog's visiblePageName, applied before its pages
+//             existed, shows the page it names once added; an update shows
+//             another; a name no page has leaves the page shown
 //   toasts    a ToastOverlay's Toast elements show while rendered: one React
 //             takes out is dismissed unheard; the user dismissing one is heard
 //   breakpoints  a BreakpointBin's Breakpoint elements: of those whose
@@ -756,6 +759,18 @@ function main(): void {
     preferring += " removed=" + String(widget(pageTwo).get_parent() === null) + " shown=" + String(prefsWidget.get_visible_page_name());
   }
   react_gtk_log("preferences " + preferring);
+
+  const named = createInstance("AdwPreferencesDialog", { visiblePageName: "two" }, shown, 0, {});
+  appendInitialChild(named, createInstance("AdwPreferencesPage", { name: "one", title: "One" }, shown, 0, {}));
+  appendInitialChild(named, createInstance("AdwPreferencesPage", { name: "two", title: "Two" }, shown, 0, {}));
+  const namedWidget = widget(named);
+  const pageShown = (): string => (namedWidget instanceof AdwPreferencesDialog ? String(namedWidget.get_visible_page_name()) : "?");
+  let naming = pageShown();
+  commitUpdate(named, "AdwPreferencesDialog", { visiblePageName: "two" }, { visiblePageName: "one" }, {});
+  naming += ">" + pageShown();
+  commitUpdate(named, "AdwPreferencesDialog", { visiblePageName: "one" }, { visiblePageName: "three" }, {});
+  naming += ">" + pageShown();
+  react_gtk_log("prefspage " + naming);
 
   // Toasts shown while rendered: React taking one out is not heard; the
   // user dismissing one is.

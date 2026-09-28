@@ -2855,9 +2855,6 @@ export function preferencesDialogProp(gtk: AdwPreferencesDialog, key: string, va
     case "visiblePage":
       if (value instanceof AdwPreferencesPage) gtk.set_visible_page(value);
       return true;
-    case "visiblePageName":
-      gtk.set_visible_page_name(typeof value === "string" ? value : "");
-      return true;
   }
   return dialogProp(gtk, key, value);
 }
@@ -4982,6 +4979,14 @@ export class AdwPreferencesDialogNode extends WidgetNode {
     this.gtk = gtk;
   }
   setProp(key: string, value: unknown): boolean {
+    if (key === "visiblePageName") {
+      // Names one of its items: set once one has the name; an item it
+      // names selects itself when it is added.
+      if (typeof value === "string" && this.items.some((item) => item.widget instanceof AdwPreferencesPage && item.widget.get_name() === value)) {
+        this.gtk.set_visible_page_name(value);
+      }
+      return true;
+    }
     return preferencesDialogProp(this.gtk, key, value);
   }
   connectSignal(key: string, slot: SignalSlot): boolean {
@@ -5016,6 +5021,9 @@ export class AdwPreferencesDialogNode extends WidgetNode {
     }
     this.gtk.add(widget);
     this.items.push(child);
+    if (widget.get_name() === this.prop("visiblePageName")) {
+      this.gtk.set_visible_page(widget);
+    }
   }
   private takes(child: WidgetNode): void {
     const at = this.items.indexOf(child);
