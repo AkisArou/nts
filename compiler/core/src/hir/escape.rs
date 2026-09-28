@@ -179,6 +179,89 @@ fn stores_into(func: &Func) -> Vec<(u32, u32)> {
     pairs
 }
 
+/// Parameter slots whose *contents* leave, because this body reads a field of one
+/// and lets what it read escape.
+///
+/// The third obligation a callee publishes, beside [`stores_into`] and
+/// [`returned_params`], and the one that was missing. `FieldSet`'s rule is "what
+/// goes in is reachable from wherever the container is -- and *no further*", so a
+/// container this function allocated and confines keeps its contents in the
+/// frame. That sentence is false for a container **passed to a function that
+/// copies its fields out**, and nothing said so:
+///
+/// ```ts
+/// let heard = "";
+/// const make = (title: string) => () => { heard += title };
+/// handlers.push(make("A"));            // handlers outlives the block
+/// ```
+///
+/// `make`'s closure is an allocation `build` confines, so the cell holding
+/// `heard` was confined with it -- on the **stack**, `NTS_IMMORTAL`. But
+/// `make`'s body reads the cell out of its own receiver and stores it in the
+/// closure it returns, which is pushed into a module-level array. The handlers
+/// then held a pointer into a dead frame: the React lane found it as a dangling
+/// reference the collector tripped over at exit, and the same program with the
+/// closures built *directly* heap-allocates the cell correctly, because there the
+/// store's container is the escaping closure itself.
+///
+/// So the escape happens in a function the caller cannot see, and this is what
+/// tells it. Note what is published: the slot whose **contents** escape, not the
+/// slot. Marking the parameter escaping would be sound and would send every
+/// receiver of a `return this.items` to the heap, which is the allocation this
+/// whole pass exists to avoid.
+///
+/// Recomputed each round of the program fixpoint, because it reads this
+/// function's own answer about what escapes -- the same reason
+/// `escaping_params` is.
+fn leaks_its_fields(func: &Func, escapes: &Escapes) -> FxHashSet<u32> {
+    // Everything an op takes as an operand, so a read that goes *only* to the
+    // return terminator can be told from one that is handed somewhere.
+    let mut handed_on: FxHashSet<ValueId> = FxHashSet::default();
+    for block in &func.blocks {
+        for value in &block.ops {
+            handed_on.extend(super::verify::operands(&func.values[value.0 as usize].kind));
+        }
+    }
+    let mut slots = FxHashSet::default();
+    for block in &func.blocks {
+        for value in &block.ops {
+            let container = match &func.values[value.0 as usize].kind {
+                OpKind::FieldGet { object, .. } | OpKind::OpenFieldGet { object, .. } => *object,
+                OpKind::ArrayGet { array, .. } => *array,
+                OpKind::SharedFieldGet { value, .. } => *value,
+                _ => continue,
+            };
+            // **Returning a field read is not leaking it**, and that is
+            // `returned_params`' argument rather than a new one: handing the
+            // caller something reachable from what it is already holding does
+            // not make it outlive the caller's frame. `reader(o) { return o.f }`
+            // is the test that says so, and the first version of this failed it
+            // -- it marked slot 0 leaking, so every object anything stored into
+            // `a` went to the heap because something, somewhere, read a field of
+            // `a` and gave it back.
+            //
+            // So the read has to be handed to an *op*: stored into a container,
+            // passed to a call, erased. A read that only reaches the terminator
+            // is excluded.
+            //
+            // What that leaves, named rather than hidden: if the caller lets the
+            // *result* of such a call escape -- `globalThis.x = reader(a)` -- the
+            // contents do escape and nothing here says so. It is the same
+            // if-the-result-escapes edge `returned_params` publishes for a
+            // returned parameter, one level in, and it is a **pre-existing**
+            // hole rather than one this introduces: before this function, a
+            // field read's obligation was not published at all.
+            if let OpKind::Param(slot) = func.values[container.0 as usize].kind
+                && escapes.escapes(*value)
+                && handed_on.contains(value)
+            {
+                slots.insert(slot);
+            }
+        }
+    }
+    slots
+}
+
 /// Which parameter slots a function returns.
 ///
 /// Returning a parameter hands the caller back something it is already holding.
@@ -226,6 +309,10 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
     // Every parameter starts held, and is released to `escapes` by evidence.
     let mut escaping_params: Vec<FxHashSet<u32>> =
         program.funcs.iter().map(|_| FxHashSet::default()).collect();
+    // And every parameter starts with its contents held, for the same reason and
+    // in the same direction. See `leaks_its_fields`.
+    let mut leaking: Vec<FxHashSet<u32>> =
+        program.funcs.iter().map(|_| FxHashSet::default()).collect();
     let mut results: Vec<Escapes> = Vec::new();
 
     for _ in 0..ROUND_CAP {
@@ -233,7 +320,18 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
             .funcs
             .iter()
             .map(|func| {
-                analyze(func, &by_name, &in_slot, &arity, &escaping_params, &handed_back, &put_into)
+                analyze(
+                    func,
+                    &Summaries {
+                        by_name: &by_name,
+                        in_slot: &in_slot,
+                        arity: &arity,
+                        escaping_params: &escaping_params,
+                        handed_back: &handed_back,
+                        put_into: &put_into,
+                        leaking: &leaking,
+                    },
+                )
             })
             .collect();
 
@@ -243,6 +341,14 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
                 // Parameter `i` is value `i`, the convention the whole backend
                 // shares.
                 if results[index].escapes(ValueId(slot)) && escaping_params[index].insert(slot) {
+                    changed = true;
+                }
+            }
+            // Monotone in the same direction: a slot whose contents are shown to
+            // leave never goes back to held, so the least fixpoint is safe to
+            // read only once it has converged.
+            for slot in leaks_its_fields(func, &results[index]) {
+                if leaking[index].insert(slot) {
                     changed = true;
                 }
             }
@@ -334,15 +440,32 @@ fn buffers(ty: &HirType) -> bool {
 }
 
 /// One function, given what each callee does with its parameters.
-fn analyze(
-    func: &Func,
-    by_name: &FxHashMap<&str, usize>,
-    in_slot: &FxHashMap<u32, Vec<usize>>,
-    arity: &[usize],
-    escaping_params: &[FxHashSet<u32>],
-    handed_back: &[FxHashSet<u32>],
-    put_into: &[Vec<(u32, u32)>],
-) -> Escapes {
+/// What the rest of the program has been shown to do with what it is handed.
+///
+/// One struct because these travel together and are read together: four
+/// per-function summaries, each a *least* fixpoint the caller must not read
+/// before it converges, plus the two indexes that say which function a callee
+/// names. Passing them one at a time is what took `analyze` past clippy's
+/// argument limit, and the limit was right -- a reader of the call site could
+/// not tell which slice meant what.
+struct Summaries<'a> {
+    /// Which function each name is.
+    by_name: &'a FxHashMap<&'a str, usize>,
+    /// Which functions a dispatch slot can reach.
+    in_slot: &'a FxHashMap<u32, Vec<usize>>,
+    arity: &'a [usize],
+    /// Parameter slots the callee lets escape. See `analyze_program`.
+    escaping_params: &'a [FxHashSet<u32>],
+    /// Parameter slots the callee returns. See [`returned_params`].
+    handed_back: &'a [FxHashSet<u32>],
+    /// `(what, into)` slot pairs the callee stores. See [`stores_into`].
+    put_into: &'a [Vec<(u32, u32)>],
+    /// Parameter slots whose *contents* the callee lets escape. See
+    /// [`leaks_its_fields`].
+    leaking: &'a [FxHashSet<u32>],
+}
+
+fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
     let mut escapes = Escapes::default();
     // What each store makes reachable, and from where. Deferred rather than
     // decided here, because whether it escapes is a question about the
@@ -355,6 +478,10 @@ fn analyze(
     // What an edge handed to a block parameter: if the parameter escapes, so
     // does the argument it arrived as. See `escape_through`.
     let mut carried: Vec<(ValueId, ValueId)> = Vec::new();
+    // Containers handed to a function that reads their fields out and lets what
+    // it read escape. What is *in* them escapes; they themselves need not.
+    // See `leaks_its_fields`.
+    let mut contents_leave: FxHashSet<ValueId> = FxHashSet::default();
     // Which allocations can run more than once with an earlier result still
     // reachable. See `repeats`.
     let repeated = repeats(func);
@@ -446,21 +573,19 @@ fn analyze(
                     escaped(&mut escapes, func, *stored);
                 }
                 OpKind::Call { callee, args, .. } => {
-                    let Some(targets) = bodies_reached(callee, by_name, in_slot) else {
+                    let Some(targets) = bodies_reached(callee, of.by_name, of.in_slot) else {
                         gone_into_the_unknown(&mut escapes, func, callee, args);
                         continue;
                     };
-                    escape_into(
-                        &mut escapes,
-                        func,
-                        args,
-                        targets,
-                        arity,
-                        escaping_params,
-                    );
+                    escape_into(&mut escapes, func, args, targets, of.arity, of.escaping_params);
                     let one = matches!(callee, Callee::Direct(_));
                     for target in targets {
-                        for slot in &handed_back[*target] {
+                        for slot in &of.leaking[*target] {
+                            if let Some(argument) = args.get(*slot as usize) {
+                                contents_leave.insert(*argument);
+                            }
+                        }
+                        for slot in &of.handed_back[*target] {
                             if let Some(argument) = args.get(*slot as usize) {
                                 aliased_by.push((*value, *argument));
                             }
@@ -470,7 +595,7 @@ fn analyze(
                             func,
                             &repeated,
                             args,
-                            &put_into[*target],
+                            &of.put_into[*target],
                             one,
                             &mut reachable_from,
                         );
@@ -511,7 +636,7 @@ fn analyze(
     loop {
         let before = escapes.values.len();
         for (container, stored) in &reachable_from {
-            if escapes.escapes(*container) {
+            if escapes.escapes(*container) || contents_leave.contains(container) {
                 escaped(&mut escapes, func, *stored);
             }
         }
