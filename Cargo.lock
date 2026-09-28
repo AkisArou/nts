@@ -305,6 +305,7 @@ dependencies = [
  "nts-codegen-jvm",
  "nts-codegen-llvm",
  "nts-core",
+ "nts-diagnostics",
  "nts-frontend-ts",
  "nts-semantic-schema",
  "xxhash-rust",
