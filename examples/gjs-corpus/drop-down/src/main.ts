@@ -1,7 +1,7 @@
 // Workbench's "Drop Down" demo (CC0, workbenchdev/demos), ported.
 import { GListStore } from "c:Gio-2.0";
-import type { Property } from "c:types";
-import { G_TYPE_STRING, GObject } from "c:GObject-2.0";
+import type { Properties, Property } from "c:types";
+import { G_TYPE_STRING, GObject, type GObjectProps } from "c:GObject-2.0";
 import { GtkClosureExpression, GtkDropDown, GtkPropertyExpression, GtkStringObject } from "c:Gtk-4.0";
 import { run, type Workbench } from "../../host/workbench.ts";
 
@@ -10,6 +10,10 @@ import { run, type Workbench } from "../../host/workbench.ts";
 class KeyValuePair extends GObject {
   key: Property<string> = "";
   value: Property<string> = "";
+  // The constructor GJS infers, in TypeScript's one line.
+  constructor(props: Properties<KeyValuePair, GObjectProps> = {}) {
+    super(props);
+  }
 }
 
 function demo(workbench: Workbench): void {
