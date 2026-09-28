@@ -1,0 +1,6 @@
+{
+  "//": "DESIGN.md's Journal app: React on real GTK widgets through react-gtk, with the React Compiler stage. The GIR bindings are GTK's platform packages, which `nts build` installs from the store and links into node_modules/@nts.",
+  "extends": "../../tsconfig.native.json",
+  "compilerOptions": { "jsx": "react-jsx" },
+  "include": ["src", "../../../native/libc.d.ts"]
+}
