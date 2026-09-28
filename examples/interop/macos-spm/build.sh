@@ -10,8 +10,10 @@
 #   SwiftPM's own `swift-package dump-package`, compiles each library target
 #   -- `Tally` from its sources, bound from its `include/`, and linked with the
 #   Core Foundation its linker settings name; `Blink` as a Swift module, bound
-#   from the header Swift writes for it. Nothing resolves. The build log must
-#   say nothing was refused.
+#   from the header Swift writes for it, over its package's C targets --
+#   `CBlink`, which it imports, and `CBlinkCore`, whose header `CBlink`'s
+#   includes -- each compiled with its dependencies' `include/` searched, as
+#   SwiftPM does. Nothing resolves. The build log must say nothing was refused.
 # - **Oracle:** `reference/main.m`, compiled with the packages' sources by the
 #   same toolchain, and run on the same Mac.
 # - **Main (C) and LLVM:** the program prints exactly what the oracle prints.
@@ -66,7 +68,7 @@ fi
 for arch in x86_64 aarch64; do
   file -b "$out/spm/macos-13-$arch/spm" | grep -q "Mach-O" ||
     { echo "macos-spm: no $arch Mach-O executable" >&2; exit 1; }
-  for object in Tally/Tally.m.o Blink.swift.o; do
+  for object in Tally/Tally.m.o Blink.swift.o CBlink/cblink.c.o CBlinkCore/cblink_core.c.o; do
     [ -f "$out/spm/macos-13-$arch/$object" ] ||
       { echo "macos-spm: the package's $object was not compiled for $arch" >&2; exit 1; }
   done
@@ -119,12 +121,26 @@ mkdir -p "$resource"
 for part in shims clang; do
   [ -e "$resource/$part" ] || ln -s "$swift/usr/lib/swift/$part" "$resource/$part"
 done
-"$swift/usr/bin/swift-frontend" -frontend -c "$source/Packages/Blink/Sources/Blink/Blink.swift" -module-name Blink \
+# Blink's C targets as SwiftPM makes them modules when a target has no
+# umbrella header of its name: an umbrella directory, its `include/`.
+sources="$source/Packages/Blink/Sources"
+mkdir -p "$out/c-maps"
+for target in CBlink CBlinkCore; do
+  printf 'module %s {\n  umbrella "%s"\n  export *\n}\n' "$target" "$sources/$target/include" >"$out/c-maps/$target.modulemap"
+done
+"$swift/usr/bin/swift-frontend" -frontend -c "$sources/Blink/Blink.swift" -module-name Blink \
   -parse-as-library -O -target x86_64-apple-macos13 -sdk "$sdk" -resource-dir "$resource" -I "$resource/shims" \
-  -module-cache-path "$apple/swift-oracle-modules" -emit-objc-header-path "$out/Blink-Swift.h" -o "$out/Blink.o"
+  -module-cache-path "$apple/swift-oracle-modules" -emit-objc-header-path "$out/Blink-Swift.h" -o "$out/Blink.o" \
+  -Xcc -fmodule-map-file="$out/c-maps/CBlink.modulemap" -Xcc -fmodule-map-file="$out/c-maps/CBlinkCore.modulemap" \
+  -Xcc -I"$sources/CBlink/include" -Xcc -I"$sources/CBlinkCore/include"
+clang -target x86_64-apple-macos13 -isysroot "$sdk" -Wall -Werror -I "$sources/CBlinkCore/include" \
+  -c "$sources/CBlinkCore/cblink_core.c" -o "$out/cblink_core.o"
+clang -target x86_64-apple-macos13 -isysroot "$sdk" -Wall -Werror -I "$sources/CBlink/include" -I "$sources/CBlinkCore/include" \
+  -c "$sources/CBlink/cblink.c" -o "$out/cblink.o"
 clang -target x86_64-apple-macos13 -isysroot "$sdk" -fuse-ld=lld -x objective-c -fobjc-arc -fmodules -Wall -Werror \
   -I "$source/Packages/Tally/Sources/Tally/include" -I "$out" "$source/reference/main.m" \
-  "$source/Packages/Tally/Sources/Tally/Tally.m" -x none "$out/Blink.o" -framework Foundation -framework CoreFoundation \
+  "$source/Packages/Tally/Sources/Tally/Tally.m" -x none "$out/Blink.o" "$out/cblink.o" "$out/cblink_core.o" \
+  -framework Foundation -framework CoreFoundation \
   -L"$sdk/usr/lib/swift" -Wl,-rpath,/usr/lib/swift -o "$out/oracle"
 
 if ! "$root/tooling/apple/run.sh" --reachable; then
@@ -141,8 +157,8 @@ run_quietly() {
   fi
 }
 run_quietly "$out/oracle" "$out/expected"
-[ "$(wc -l <"$out/expected.txt")" -eq 2 ] ||
-  { echo "macos-spm: the oracle printed $(wc -l <"$out/expected.txt") lines, not 2" >&2; exit 1; }
+[ "$(wc -l <"$out/expected.txt")" -eq 3 ] ||
+  { echo "macos-spm: the oracle printed $(wc -l <"$out/expected.txt") lines, not 3" >&2; exit 1; }
 
 run_quietly "$out/spm/macos-13-x86_64/spm" "$out/actual"
 diff -u "$out/expected.txt" "$out/actual.txt"

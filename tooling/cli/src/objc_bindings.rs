@@ -362,7 +362,7 @@ impl ObjcBindings {
         let (header, runtime_names) = match (headers.as_slice(), swift.as_slice()) {
             ([], []) => return self.library_module(project, module, platform),
             ([header], []) => (header.clone(), BTreeMap::new()),
-            ([], [dir]) => swift_header(project, module, &swift_sources(dir), &[], &[], platform)?,
+            ([], [dir]) => swift_header(project, module, &swift_sources(dir), &[], &[], &[], platform)?,
             _ => anyhow::bail!(
                 "`objc:{module}` is named by more than one `native:` entry in {config}: {}",
                 headers.iter().chain(&swift).map(|path| path.as_str()).collect::<Vec<_>>().join(", ")
@@ -382,7 +382,8 @@ impl ObjcBindings {
     /// headers, with its header maps searched, and the header Swift writes for
     /// its Swift, where it has Swift.
     fn library_module(&self, project: &Utf8Path, module: &str, platform: &Platform) -> anyhow::Result<Option<bind_objc::Project>> {
-        let Some(library) = self.libraries()?.iter().find(|library| library.name == module) else { return Ok(None) };
+        let libraries = self.libraries()?;
+        let Some(library) = libraries.iter().find(|library| library.name == module) else { return Ok(None) };
         let search: Vec<std::path::PathBuf> = library.include.iter().map(|directory| directory.clone().into_std_path_buf()).collect();
         let sources: Vec<std::path::PathBuf> =
             library.source_files().into_iter().filter(|path| path.extension() == Some("swift")).map(Utf8PathBuf::into_std_path_buf).collect();
@@ -407,7 +408,14 @@ impl ObjcBindings {
         let mut search = search;
         let mut runtime_names = BTreeMap::new();
         if !sources.is_empty() {
-            let (header, names) = swift_header(project, module, &sources, &headers, &search, platform)?;
+            // The C and Objective-C modules of the same package it imports.
+            let imported: Vec<(&str, Vec<std::path::PathBuf>)> = library
+                .clang_dependencies(libraries)
+                .into_iter()
+                .map(|dependency| (dependency.name.as_str(), dependency.headers.iter().map(|header| header.clone().into_std_path_buf()).collect()))
+                .collect();
+            let imports: Vec<crate::swift::Clang<'_>> = imported.iter().map(|(name, headers)| crate::swift::Clang { name, headers }).collect();
+            let (header, names) = swift_header(project, module, &sources, &headers, &search, &imports, platform)?;
             let _ = writeln!(text, "#import \"{header}\"");
             search.extend(header.parent().map(|directory| directory.to_path_buf().into_std_path_buf()));
             runtime_names = names;
@@ -613,11 +621,13 @@ fn swift_header(
     sources: &[std::path::PathBuf],
     headers: &[std::path::PathBuf],
     search: &[std::path::PathBuf],
+    imports: &[crate::swift::Clang<'_>],
     platform: &Platform,
 ) -> anyhow::Result<(Utf8PathBuf, BTreeMap<String, String>)> {
     let mut bytes = Vec::new();
-    // The module's Objective-C too, which its Swift is compiled against.
-    for source in sources.iter().chain(headers) {
+    // The module's Objective-C too, and what it imports, which its Swift is
+    // compiled against.
+    for source in sources.iter().chain(headers).chain(imports.iter().flat_map(|import| import.headers)) {
         bytes.extend(source.to_string_lossy().as_bytes());
         bytes.extend(std::fs::read(source).unwrap_or_default());
     }
@@ -632,7 +642,7 @@ fn swift_header(
         std::fs::create_dir_all(modules.join(&keep))?;
         let written = modules.join(&keep).join(format!("{module}-Swift.written.h"));
         let target = crate::swift::Target { sdk: platform.sdk.as_std_path(), triple: &platform.triple };
-        crate::swift::toolchain()?.objc_header(&crate::swift::Module { name: module, sources, headers, search }, target, written.as_std_path())?;
+        crate::swift::toolchain()?.objc_header(&crate::swift::Module { name: module, sources, headers, search, imports }, target, written.as_std_path())?;
         std::fs::write(&header, as_objc_client(&std::fs::read_to_string(&written)?))?;
     }
     for entry in std::fs::read_dir(&modules).into_iter().flatten().flatten() {

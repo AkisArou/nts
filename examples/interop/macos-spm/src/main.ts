@@ -8,7 +8,9 @@
 //
 //   tally ...     an Objective-C target, bound from its `include/`, whose
 //                 Core Foundation its linker settings name
-//   blink ...     a Swift target, bound from the header Swift writes for it
+//   blink ...     a Swift target, bound from the header Swift writes for it,
+//                 whose rate is its package's C target's, `CBlink`, which
+//                 includes another's header, `CBlinkCore`
 import { Blink } from "objc:Blink";
 import { Tally } from "objc:Tally";
 
@@ -18,3 +20,4 @@ tally.add(4);
 console.log(`tally ${tally.count} ${tally.summary()}`);
 const blink = new Blink({ times: 3 });
 console.log(`blink ${blink.pattern()}`);
+console.log(`blink rate ${blink.rate()}`);

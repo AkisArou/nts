@@ -139,9 +139,35 @@ pub struct NativeModule {
     /// a pod's `vendored_frameworks` -- as the `.framework` or `.xcframework`
     /// bundles they are: a target links the slice that fits it.
     pub frameworks: Vec<Utf8PathBuf>,
+    /// The modules of the same resolution it depends on, by name: a
+    /// `SwiftPM` target's target dependencies, which its Swift imports and
+    /// whose public headers are on its search path.
+    pub depends: Vec<String>,
 }
 
 impl NativeModule {
+    /// The modules among `all` that this one depends on, directly or through
+    /// another, which have headers to import: what its Swift sees as a Clang
+    /// module each, as `SwiftPM` builds a Swift target over C ones. In a
+    /// stable order, each once; a name `all` does not have is another
+    /// resolution's, not this one's to find.
+    #[must_use]
+    pub fn clang_dependencies<'a>(&self, all: &'a [NativeModule]) -> Vec<&'a NativeModule> {
+        let mut found: Vec<&NativeModule> = Vec::new();
+        let mut pending: Vec<&str> = self.depends.iter().map(String::as_str).collect();
+        while let Some(name) = pending.pop() {
+            let Some(module) = all.iter().find(|module| module.name == name) else { continue };
+            if module.name == self.name || found.iter().any(|seen| seen.name == module.name) {
+                continue;
+            }
+            pending.extend(module.depends.iter().map(String::as_str));
+            found.push(module);
+        }
+        found.retain(|module| !module.headers.is_empty());
+        found.sort_by(|a, b| a.name.cmp(&b.name));
+        found
+    }
+
     /// Its source files: those `files` names, else every file beneath
     /// `sources` that is not inside a binary framework.
     #[must_use]
@@ -724,6 +750,36 @@ mod tests {
             .to_string();
         assert!(said.contains("vcpkg"), "does not name the resolver:\n{said}");
         assert!(said.contains("./deps/vcpkg.json"), "does not name the file:\n{said}");
+    }
+
+    fn module(name: &str, headers: bool, depends: &[&str]) -> NativeModule {
+        NativeModule {
+            name: name.to_owned(),
+            sources: Utf8PathBuf::from(name),
+            files: Some(Vec::new()),
+            headers: if headers { vec![Utf8PathBuf::from(format!("{name}/include/{name}.h"))] } else { Vec::new() },
+            include: Vec::new(),
+            frameworks: Vec::new(),
+            depends: depends.iter().map(|name| (*name).to_owned()).collect(),
+        }
+    }
+
+    /// What a Swift target imports is every C module it reaches, not only
+    /// those it names: `CBlink`'s header includes `CBlinkCore`'s. A target
+    /// with no headers has nothing to import, a name another resolution has
+    /// is not found here, and a cycle ends.
+    #[test]
+    fn a_swift_target_imports_what_its_dependencies_reach() {
+        let all = [
+            module("Blink", false, &["CBlink", "Elsewhere"]),
+            module("CBlink", true, &["CBlinkCore", "Shared"]),
+            module("CBlinkCore", true, &["CBlink"]),
+            module("Shared", false, &[]),
+        ];
+        let names: Vec<&str> = all[0].clang_dependencies(&all).iter().map(|module| module.name.as_str()).collect();
+        assert_eq!(names, ["CBlink", "CBlinkCore"]);
+        let from_core: Vec<&str> = all[2].clang_dependencies(&all).iter().map(|module| module.name.as_str()).collect();
+        assert_eq!(from_core, ["CBlink"], "a cycle back to itself is not an import of itself");
     }
 
     fn a_pin() -> Pin {

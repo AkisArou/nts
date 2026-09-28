@@ -1,3 +1,4 @@
+import CBlink
 import Foundation
 
 @objc public class Blink: NSObject {
@@ -9,5 +10,10 @@ import Foundation
 
     @objc public func pattern() -> String {
         Array(repeating: "*", count: times).joined(separator: " ")
+    }
+
+    /// Its rate, from the package's C target.
+    @objc public func rate() -> Int {
+        Int(cblink_rate(Int32(times)))
     }
 }

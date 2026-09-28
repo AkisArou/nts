@@ -75,7 +75,7 @@ pub(super) fn resolve(dir: &Utf8Path, id: &str, claim: &Dependencies) -> Result<
         } else {
             (None, frameworks_under(&sources))
         };
-        native.push(NativeModule { name: pod.clone(), headers, sources, files, include, frameworks });
+        native.push(NativeModule { name: pod.clone(), headers, sources, files, include, frameworks, depends: Vec::new() });
     }
     Ok(Resolution { libs: link_flags(&pods, &lock.pods)?, native, ..Resolution::default() })
 }

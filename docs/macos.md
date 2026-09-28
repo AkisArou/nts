@@ -272,17 +272,22 @@ import { Tally } from "objc:Tally";
   bound from its `include/`, a Swift one compiled and bound from the header
   Swift writes, a binary target by `path:` the `.xcframework` it is. Its
   linker settings are linked.
+- **A target's dependencies in its package** are on its search path, as
+  SwiftPM puts them: a C target's `include/` for whatever depends on it,
+  directly or through another, and a Swift target imports each C one it
+  reaches (`import CShim`) as a Clang module of its public headers.
 - `swift-package` is the Swift toolchain's; swift.org's Linux build links its
   distribution's libraries (on Arch, `libxml2.so.2` is `libxml2-legacy`).
-- Not read yet: a Swift target that imports a C target of its package, a
-  registry dependency, and a binary target by `url:`.
+- Not read yet: a registry dependency, and a binary target by `url:`.
 
 `examples/interop/macos-spm` is the fixture: an Objective-C package and a
-Swift one, against the same program in Objective-C.
+Swift one over two C targets of its own, against the same program in
+Objective-C.
 
-`examples/interop/macos-pods` is the fixture: three development pods -- one
+`examples/interop/macos-pods` is the fixture: four development pods -- one
 Objective-C with a private class in a directory of its own, one Swift, one an
-`.xcframework` Xcode made -- against the same program in Objective-C.
+`.xcframework` Xcode made, one of both languages -- against the same program
+in Objective-C.
 
 ## An application
 

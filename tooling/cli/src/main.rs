@@ -3719,7 +3719,7 @@ fn native_sources(
                     .map_err(|bad| anyhow!("{} is not UTF-8", bad.display()))?;
                 if compiled_here(&path, target, &entry.dir)? {
                     let object = Utf8PathBuf::from(format!("{}.o", path.file_name().unwrap_or("native")));
-                    found.push(NativeSource { directory: directory.clone(), path, module: module.clone(), include: Vec::new(), headers: Vec::new(), object });
+                    found.push(NativeSource { directory: directory.clone(), path, module: module.clone(), include: Vec::new(), headers: Vec::new(), imports: Vec::new(), object });
                 }
             }
         }
@@ -3744,6 +3744,10 @@ struct NativeSource {
     /// Its module's public Objective-C headers, where a library has them:
     /// what the module's Swift, where it has Swift too, sees as its own.
     headers: Vec<Utf8PathBuf>,
+    /// The C and Objective-C modules of the same resolution its module
+    /// depends on, by name with their public headers: what its Swift imports
+    /// (`NativeModule::clang_dependencies`).
+    imports: Vec<(String, Vec<Utf8PathBuf>)>,
     /// Its object, relative to the product's directory: a package's own
     /// source's is its file's name, and a library's is under the library's
     /// name, at its path in the library, so two pods' `Utils.m` are two
@@ -3781,7 +3785,8 @@ fn module_sources(modules: &[nts_build::dependencies::NativeModule], target: &nt
                 let relative = path.strip_prefix(&module.sources).unwrap_or(&path);
                 let object = Utf8PathBuf::from(&module.name).join(format!("{relative}.o"));
                 let (include, headers) = (module.include.clone(), module.headers.clone());
-                found.push(NativeSource { directory: module.sources.clone(), path, module: module.name.clone(), include, headers, object });
+                let imports = module.clang_dependencies(modules).into_iter().map(|dependency| (dependency.name.clone(), dependency.headers.clone())).collect();
+                found.push(NativeSource { directory: module.sources.clone(), path, module: module.name.clone(), include, headers, imports, object });
             }
         }
     }
@@ -6515,7 +6520,13 @@ fn compile_native(
         for (module, (sources, first)) in &swift {
             let headers: Vec<std::path::PathBuf> = first.headers.iter().map(|header| header.clone().into_std_path_buf()).collect();
             let search: Vec<std::path::PathBuf> = first.include.iter().map(|directory| directory.clone().into_std_path_buf()).collect();
-            let unit = crate::swift::Module { name: module, sources, headers: &headers, search: &search };
+            let imported: Vec<(&str, Vec<std::path::PathBuf>)> = first
+                .imports
+                .iter()
+                .map(|(name, headers)| (name.as_str(), headers.iter().map(|header| header.clone().into_std_path_buf()).collect()))
+                .collect();
+            let imports: Vec<crate::swift::Clang<'_>> = imported.iter().map(|(name, headers)| crate::swift::Clang { name, headers }).collect();
+            let unit = crate::swift::Module { name: module, sources, headers: &headers, search: &search, imports: &imports };
             // Its Objective-C reaches its Swift through the header Swift
             // writes, `#import "Mix-Swift.h"` or `<Mix/Mix-Swift.h>`, as
             // Xcode's derived sources have it: both are on the include path

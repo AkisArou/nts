@@ -12,6 +12,7 @@ int main(void) {
     printf("tally %ld %s\n", (long)tally.count, tally.summary.UTF8String);
     Blink *blink = [[Blink alloc] initWithTimes:3];
     printf("blink %s\n", blink.pattern.UTF8String);
+    printf("blink rate %ld\n", (long)[blink rate]);
   }
   return 0;
 }

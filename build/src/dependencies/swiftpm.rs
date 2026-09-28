@@ -181,15 +181,24 @@ fn modules_of(manifest: &Value, package: &Utf8Path) -> Result<(Vec<NativeModule>
         if !chosen.insert(name) {
             continue;
         }
-        for dependency in target.get("dependencies").and_then(Value::as_array).into_iter().flatten() {
-            if let Some(named) = dependency.pointer("/byName/0").or_else(|| dependency.pointer("/target/0")).and_then(Value::as_str) {
-                wanted.push(named);
-            }
-        }
+        wanted.extend(target_dependencies(target, &targets).iter().filter_map(|named| targets.get_key_value(named.as_str()).map(|(name, _)| *name)));
     }
     let mut modules = Vec::new();
     let mut libs = Vec::new();
-    for name in chosen {
+    // Each target's public headers, which `SwiftPM` puts on the search path
+    // of every target depending on it, directly or through another.
+    let mut public: BTreeMap<&str, Utf8PathBuf> = BTreeMap::new();
+    for name in &chosen {
+        let target = targets[name];
+        if target.get("type").and_then(Value::as_str) == Some("regular") {
+            let root = package.join(target.get("path").and_then(Value::as_str).map_or_else(|| format!("Sources/{name}"), str::to_owned));
+            let directory = root.join(target.get("publicHeadersPath").and_then(Value::as_str).unwrap_or("include"));
+            if directory.is_dir() {
+                public.insert(name, directory);
+            }
+        }
+    }
+    for name in chosen.iter().copied() {
         let target = targets[name];
         let kind = target.get("type").and_then(Value::as_str).unwrap_or_default();
         let path = target.get("path").and_then(Value::as_str);
@@ -199,10 +208,12 @@ fn modules_of(manifest: &Value, package: &Utf8Path) -> Result<(Vec<NativeModule>
                 let excluded: Vec<Utf8PathBuf> = strings(target.get("exclude")).into_iter().map(|path| root.join(path)).collect();
                 let listed = target.get("sources").and_then(Value::as_array).map(|sources| sources.iter().filter_map(Value::as_str).map(|path| root.join(path)).collect::<Vec<_>>());
                 let files = files_under(&root, listed.as_deref(), &excluded);
-                let public = root.join(target.get("publicHeadersPath").and_then(Value::as_str).unwrap_or("include"));
-                let headers = files_under(&public, None, &[]).into_iter().filter(|path| path.extension() == Some("h")).collect();
-                let include = [public, root.clone()].into_iter().filter(|dir| dir.is_dir()).collect();
-                modules.push(NativeModule { name: name.to_owned(), sources: root, files: Some(files), headers, include, frameworks: Vec::new() });
+                let own = root.join(target.get("publicHeadersPath").and_then(Value::as_str).unwrap_or("include"));
+                let headers = files_under(&own, None, &[]).into_iter().filter(|path| path.extension() == Some("h")).collect();
+                let depends = target_dependencies(target, &targets);
+                let mut include: Vec<Utf8PathBuf> = [own, root.clone()].into_iter().filter(|dir| dir.is_dir()).collect();
+                include.extend(reached(&depends, &targets).iter().filter_map(|dependency| public.get(dependency.as_str()).cloned()));
+                modules.push(NativeModule { name: name.to_owned(), sources: root, files: Some(files), headers, include, frameworks: Vec::new(), depends });
             }
             "binary" => {
                 let Some(path) = path else {
@@ -215,6 +226,7 @@ fn modules_of(manifest: &Value, package: &Utf8Path) -> Result<(Vec<NativeModule>
                     headers: Vec::new(),
                     include: Vec::new(),
                     frameworks: vec![package.join(path)],
+                    depends: Vec::new(),
                 });
             }
             // Tests, executables, plugins and macros are not what a program links.
@@ -223,6 +235,37 @@ fn modules_of(manifest: &Value, package: &Utf8Path) -> Result<(Vec<NativeModule>
         libs.extend(linker_settings(target));
     }
     Ok((modules, libs))
+}
+
+/// The targets of the same package `target` depends on: `"CShim"` and
+/// `.target(name: "CShim")` both. A `.product` is another package's, which
+/// that package's own resolution builds.
+fn target_dependencies(target: &Value, targets: &BTreeMap<&str, &Value>) -> Vec<String> {
+    target
+        .get("dependencies")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|dependency| dependency.pointer("/byName/0").or_else(|| dependency.pointer("/target/0")).and_then(Value::as_str))
+        .filter(|named| targets.contains_key(named))
+        .map(str::to_owned)
+        .collect()
+}
+
+/// `depends` and what each of them depends on in turn, each once.
+fn reached(depends: &[String], targets: &BTreeMap<&str, &Value>) -> Vec<String> {
+    let mut found: Vec<String> = Vec::new();
+    let mut pending: Vec<String> = depends.to_vec();
+    while let Some(name) = pending.pop() {
+        if found.contains(&name) {
+            continue;
+        }
+        if let Some(target) = targets.get(name.as_str()) {
+            pending.extend(target_dependencies(target, targets));
+        }
+        found.push(name);
+    }
+    found
 }
 
 /// A target's linker settings: `.linkedFramework("X")`, `.linkedLibrary("z")`.

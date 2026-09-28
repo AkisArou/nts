@@ -108,8 +108,18 @@ pub(crate) struct Module<'a> {
     /// one, as Xcode builds a target of both languages, so its Swift sees
     /// the Objective-C classes beside it without importing anything.
     pub(crate) headers: &'a [PathBuf],
-    /// Where those headers' own `#import`s are found.
+    /// Where its headers', and its imports', own `#import`s are found.
     pub(crate) search: &'a [PathBuf],
+    /// The C and Objective-C modules its Swift imports by name -- a
+    /// `SwiftPM` target's dependencies, `import CShim` -- each a Clang module
+    /// of its public headers.
+    pub(crate) imports: &'a [Clang<'a>],
+}
+
+/// A C or Objective-C module Swift imports: its name and public headers.
+pub(crate) struct Clang<'a> {
+    pub(crate) name: &'a str,
+    pub(crate) headers: &'a [PathBuf],
 }
 
 impl Toolchain {
@@ -167,22 +177,33 @@ impl Toolchain {
         command.arg("-frontend").args(["-module-name", module.name, "-parse-as-library"]);
         self.for_target(&mut command, target);
         if !module.headers.is_empty() {
-            let map = out.with_extension("modulemap");
-            let mut text = format!("module {} {{\n", module.name);
-            for header in module.headers {
-                let file = std::fs::canonicalize(header).with_context(|| format!("reading {}", header.display()))?;
-                let _ = writeln!(text, "  header {:?}", file.display().to_string());
-            }
-            text.push_str("  export *\n}\n");
-            std::fs::write(&map, text).with_context(|| format!("writing {}", map.display()))?;
+            let map = module_map(out, module.name, module.headers)?;
             command.arg("-import-underlying-module").arg("-Xcc").arg(format!("-fmodule-map-file={}", map.display()));
-            for directory in module.search {
-                command.arg("-Xcc").arg(format!("-I{}", directory.display()));
-            }
+        }
+        for import in module.imports {
+            let map = module_map(out, import.name, import.headers)?;
+            command.arg("-Xcc").arg(format!("-fmodule-map-file={}", map.display()));
+        }
+        for directory in module.search {
+            command.arg("-Xcc").arg(format!("-I{}", directory.display()));
         }
         command.args(module.sources);
         Ok(command)
     }
+}
+
+/// A module map of `headers` as the Clang module `name`, written beside `out`
+/// -- the build's, since a checkout is not the build's to write into.
+fn module_map(out: &Path, name: &str, headers: &[PathBuf]) -> Result<PathBuf> {
+    let map = out.with_extension(format!("{name}.modulemap"));
+    let mut text = format!("module {name} {{\n");
+    for header in headers {
+        let file = std::fs::canonicalize(header).with_context(|| format!("reading {}", header.display()))?;
+        let _ = writeln!(text, "  header {:?}", file.display().to_string());
+    }
+    text.push_str("  export *\n}\n");
+    std::fs::write(&map, text).with_context(|| format!("writing {}", map.display()))?;
+    Ok(map)
 }
 
 /// Runs `command`, which must write `made`; its errors, where it does not.
