@@ -26,7 +26,11 @@ export type RequestProvider =
   | "TCPCONNECTWRAP"
   | "PIPECONNECTWRAP"
   | "WRITEWRAP"
-  | "SHUTDOWNWRAP";
+  | "SHUTDOWNWRAP"
+  | "RANDOMBYTESREQUEST"
+  | "PBKDF2REQUEST"
+  | "DERIVEBITSREQUEST"
+  | "SCRYPTREQUEST";
 
 export class AsyncRequest {
   #asyncId: number;
@@ -42,14 +46,22 @@ export class AsyncRequest {
     }
   }
 
-  /** Run the request's callback in its scope, then retire the request. */
-  complete<Result>(callback: () => Result): Result {
+  /**
+   * Run the request's callback in its scope, then retire the request. Returns
+   * nothing: a generic result was refused by the compiled lane, and every
+   * caller is a completion that has nothing to hand back.
+   */
+  complete(callback: () => void): void {
     const prior = AsyncContextFrame.exchange(this.#contextFrame);
     emitBefore(this.#asyncId, this.#triggerAsyncId, this);
+    // `after` only when the callback returns. A callback that throws leaves
+    // its scope open, as node's does, so the `uncaughtException` handler runs
+    // inside the request; the process's fatal-exception path then closes
+    // every scope still open. `destroy` is queued either way.
     try {
-      return callback();
-    } finally {
+      callback();
       emitAfter(this.#asyncId);
+    } finally {
       emitDestroy(this.#asyncId);
       AsyncContextFrame.setCurrent(prior);
     }

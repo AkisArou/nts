@@ -224,6 +224,18 @@ export function hasAsyncIdStack(): boolean {
   return executionDepth > 0;
 }
 
+/**
+ * Node's `clearAsyncIdStack`: no scope open, and no id current. Run after an
+ * uncaught exception has been handled, when the scopes the throw unwound
+ * through have had their `after` and nothing is executing.
+ */
+export function clearAsyncIdStack(): void {
+  for (let i = 0; i < executionDepth; i++) executionResources[i] = undefined;
+  executionDepth = 0;
+  currentExecutionAsyncId = 0;
+  currentTriggerAsyncId = 0;
+}
+
 export function pushAsyncContext(asyncId: number, trigger: number, resource: object): void {
   if (executionDepth === executionAsyncIds.length) growExecutionStack();
   executionAsyncIds[executionDepth] = currentExecutionAsyncId;

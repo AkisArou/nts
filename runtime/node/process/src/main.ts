@@ -75,7 +75,16 @@ import { setProcessWarningHandler } from "../../internal/process-warning.ts";
 import { format } from "../../util/src/format.ts";
 import type { Architecture, Platform } from "../../os/src/main.ts";
 import { channel } from "../../diagnostics_channel/src/main.ts";
-import { emitAfter, emitBefore, getOrSetAsyncId } from "../../internal/async-hooks.ts";
+import {
+  afterHooksExist,
+  clearAsyncIdStack,
+  emitAfter,
+  emitBefore,
+  executionAsyncId,
+  getOrSetAsyncId,
+  hasAsyncIdStack,
+  popAsyncContext,
+} from "../../internal/async-hooks.ts";
 
 const execveChannel = channel("process.execve");
 
@@ -732,10 +741,12 @@ function fatalException(error: unknown, fromPromise?: boolean): boolean {
   if (captureCallback !== null) {
     captureCallback(error);
     handlingFatalException = false;
+    unwindAfterUncaught();
     return true;
   }
   if (process.emit("uncaughtException", error, origin)) {
     handlingFatalException = false;
+    unwindAfterUncaught();
     return true;
   }
 
@@ -754,6 +765,29 @@ function fatalException(error: unknown, fromPromise?: boolean): boolean {
   }
   handlingFatalException = false;
   return false;
+}
+
+/**
+ * The async scopes a handled exception unwound through, closed as node closes
+ * them: the handler ran inside them -- `executionAsyncId()` there is the
+ * throwing callback's -- and only now does each get its `after`, innermost
+ * first, before the stack is emptied. From node v24.20.0
+ * `lib/internal/process/execution.js` `createOnGlobalUncaughtException`.
+ */
+function unwindAfterUncaught(): void {
+  // `while`, where node has `do ... while`: node's stack bottoms out at id 0,
+  // so its first pass over an empty stack pops 0 and emits nothing. Ours
+  // bottoms out at the top-level id, and an unconditional first pass gave it
+  // an `after` whose `init` no hook ever saw
+  // (`async-hooks/test-unhandled-exception-valid-ids.js`).
+  if (afterHooksExist()) {
+    while (hasAsyncIdStack()) {
+      const asyncId = executionAsyncId();
+      if (asyncId === 0) popAsyncContext(0);
+      else emitAfter(asyncId);
+    }
+  }
+  clearAsyncIdStack();
 }
 
 function execve(
