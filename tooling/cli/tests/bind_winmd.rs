@@ -655,7 +655,8 @@ fn an_enum_array_is_its_integer_typed_array() {
 /// An array the callee fills (`FillArray`) is the program's, passed in and
 /// written into: objects (`GetMany` of an `IVector<IJsonValue>`) as
 /// `FilledHandles`, strings as `FilledStrings`, structs (`DistortPoints`'s
-/// `results`) as `FilledArray`.
+/// `results`) as `FilledArray`, booleans (`GetCurrentReading`'s buttons) as
+/// `FilledBooleans` -- and a `boolean[]` a call reads as `Booleans`.
 #[test]
 fn an_array_the_callee_fills_is_the_programs() {
     let Some(metadata) = winrt_metadata() else {
@@ -686,6 +687,20 @@ fn an_array_the_callee_fills_is_the_programs() {
         system.contains("GetMany(this: IVectorViewOfString, startIndex: CNumber<\"uint32\">, items: Counted<FilledStrings, CNumber<\"uint32\">, \"before\">): CNumber<\"uint32\">;"),
         "{system}"
     );
+    let _ = std::fs::remove_dir_all(&out);
+    // Booleans, whose `boolean[]` elements are the Windows Runtime's bytes:
+    // lent in place, to read or to fill.
+    let run = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .args(["bind-winmd", "Windows.Gaming.Input", "Windows.Foundation.Diagnostics", "--out"])
+        .arg(&out)
+        .env("NTS_WINRT_METADATA", &metadata)
+        .output()
+        .unwrap();
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    let gaming = std::fs::read_to_string(out.join("Windows.Gaming.Input.d.ts")).unwrap();
+    assert!(gaming.contains("buttonArray: Counted<FilledBooleans, CNumber<\"uint32\">, \"before\">"), "{gaming}");
+    let diagnostics = std::fs::read_to_string(out.join("Windows.Foundation.Diagnostics.d.ts")).unwrap();
+    assert!(diagnostics.contains("addBooleanArray(name: HString, value: Counted<Booleans, CNumber<\"uint32\">, \"before\">): void;"), "{diagnostics}");
     let _ = std::fs::remove_dir_all(&out);
 }
 
@@ -721,7 +736,9 @@ fn a_received_array_is_a_typed_array() {
         "{foundation}"
     );
     let refused = std::fs::read_to_string(out.join("Windows.Foundation.refused.txt")).unwrap();
-    assert!(refused.contains("IPropertyValue.GetBooleanArray\tan array of booleans, which no typed array holds"), "{refused}");
+    // Booleans are copied into a `boolean[]`; characters are not held yet.
+    assert!(foundation.contains("GetBooleanArray(this: IPropertyValue): { value: boolean[] };"), "{foundation}");
+    assert!(refused.contains("IPropertyValue.GetChar16Array\tan array of characters, which no typed array holds"), "{refused}");
     let _ = std::fs::remove_dir_all(&out);
 }
 

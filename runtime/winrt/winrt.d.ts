@@ -46,7 +46,10 @@ declare module "winrt:types" {
   // `IPropertyValue` for the call, as the Windows Runtime's JavaScript
   // projection boxed one -- `button.content = "Press"`. What a method
   // answering an object answers is the same set, unboxed: an `IPropertyValue`
-  // of an `Int32Array` is one, and of `HSTRING`s a `string[]`.
+  // of an `Int32Array` is one, and of `HSTRING`s a `string[]`. Not an array
+  // of booleans, either way: `Array.isArray` on an answer would then narrow
+  // to `string[] | boolean[]`, which no program could use as either, so an
+  // `IPropertyValue` of booleans is answered as the object it is.
   export type Inspectable =
     | IInspectable
     | string
@@ -70,6 +73,12 @@ declare module "winrt:types" {
   // `HString` argument is, and all of them given back after it.
   export type HStrings = readonly string[] & { readonly __c_strings?: "hstring" };
 
+  // A `boolean[]` where a call takes an array of the Windows Runtime's
+  // one-byte booleans (`Counted<Booleans, ...>`): lent in place, since a
+  // `boolean[]`'s elements are those bytes already, 0 or 1. `FilledBooleans`
+  // is one the callee fills where it is -- `GetCurrentReading`'s buttons.
+  export type Booleans = readonly boolean[] & { readonly __c_booleans?: "read" };
+  export type FilledBooleans = boolean[] & { readonly __c_booleans?: "filled" };
   // A struct holding a string -- `TypeName { Name: HSTRING; Kind }` -- as a
   // plain object, as the Windows Runtime's JavaScript projection held one:
   // `frame.navigate({ name: "App.MainPage", kind: TypeKind.metadata })`.

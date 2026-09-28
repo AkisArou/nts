@@ -406,6 +406,11 @@ pub enum Role {
     /// each object copied into the block for the call, which is freed after
     /// it.
     Records(std::sync::Arc<Record>),
+    /// A `boolean[]` as the Windows Runtime's block of one-byte booleans
+    /// (`Booleans`, `FilledBooleans` in `winrt:types`), its count a
+    /// parameter of its own: the array's own elements, which are those bytes
+    /// already, lent in place for the call to read or to fill.
+    Booleans,
     /// An array of objects the callee fills (`FilledHandles<H>` in
     /// `winrt:types`), its count a parameter of its own: the array's own
     /// block of handles lent in place, emptied first, so each reference the
@@ -546,10 +551,11 @@ pub enum Written {
     /// `HSTRING`s): each copied into a `string` of an array of the program's
     /// and deleted, and the block freed (`nts_winrt_received_strings`).
     ReceivedStrings,
-    /// An array of structs the callee allocated (`ReceiveArray` of a struct):
-    /// each copied into a new object of the program's (`Copied<T>`), and the
-    /// block freed. The struct is the slot's pointee.
-    ReceivedRecords,
+    /// An array the callee allocated (`ReceiveArray`) of elements each copied
+    /// into an array of the program's, and the block freed: structs, each
+    /// into a new object (`Copied<T>`), or one-byte booleans, into a
+    /// `boolean[]`. The element is the slot's pointee.
+    ReceivedElements,
     /// A struct the program reads as a plain object (`Copied<T>`): the slot
     /// is the struct, copied field by field into a new object of the
     /// result's type -- each `HSTRING` into a `string`, and deleted, since
@@ -687,6 +693,7 @@ impl Function {
                 | Role::Strings
                 | Role::HStrings
                 | Role::Records(_)
+                | Role::Booleans
                 | Role::FilledHandles
                 | Role::FilledStrings
                 | Role::FilledRecords(_)
@@ -2584,6 +2591,7 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
     let mut handles = None;
     let mut records = None;
     let mut filled = false;
+    let mut booleans = None;
     let mut value = None;
     let mut count = None;
     let mut after = true;
@@ -2609,6 +2617,7 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
                 "___c_handles" => handles = Some(text(property.ty)?),
                 "___c_records" => records = Some(defined(property.ty)?),
                 "___c_filled" => filled = true,
+                "___c_booleans" => booleans = Some(text(property.ty)?),
                 "___c_count" => count = Some(defined(property.ty)?),
                 "___c_count_at" => after = text(property.ty)? == "after",
                 _ => return None,
@@ -2616,15 +2625,16 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
         }
     }
     let value = value?;
-    if filled {
-        return filled_array(snapshot, value, (strings, handles, records)).map(|(role, managed, c)| NativeArray {
-            role,
-            managed,
-            c,
-            nullable,
-            count: count.map(|ty| (ty, after)),
-            value,
-        });
+    // The Windows Runtime's arrays that are not C's: booleans, and arrays
+    // the callee fills.
+    let windows = match booleans {
+        Some(access) => Some(booleans_array(snapshot, value, &access)),
+        None if filled => Some(filled_array(snapshot, value, (strings.clone(), handles.clone(), records))),
+        None => None,
+    };
+    if let Some(parts) = windows {
+        let (role, managed, c) = parts?;
+        return Some(NativeArray { role, managed, c, nullable, count: count.map(|ty| (ty, after)), value });
     }
     let char = Pointee::Scalar(Scalar::Char);
     let (role, managed, c) = match (strings, bytes, elements, handles) {
@@ -2722,6 +2732,22 @@ fn records_array(snapshot: &SemanticSnapshot, value: TypeId, record: TypeId) -> 
         return None;
     }
     Some((Role::Records(record.clone()), managed, Type::Pointer(Pointee::Record(record))))
+}
+
+/// `Booleans` or `FilledBooleans`: a `boolean[]`'s own elements, one byte
+/// each as the Windows Runtime's booleans are, read (`const`) or filled.
+fn booleans_array(snapshot: &SemanticSnapshot, value: TypeId, access: &str) -> Option<(Role, HirType, Type)> {
+    let managed = super::lower::representation(snapshot, value)?;
+    if managed != HirType::Managed(ManagedType::Array(Box::new(HirType::Bool))) {
+        return None;
+    }
+    let byte = Pointee::Scalar(Scalar::Bool8);
+    let c = match access {
+        "read" => Type::Pointer(Pointee::Const(Box::new(byte))),
+        "filled" => Type::Pointer(byte),
+        _ => return None,
+    };
+    Some((Role::Booleans, managed, c))
 }
 
 /// An array the callee fills (`FilledHandles`, `FilledStrings`,
@@ -2929,7 +2955,7 @@ fn hresult_result(
 /// The count slot a received array's comes after: the Windows Runtime's
 /// `ReceiveArray` is `UINT32 *count, T **elements`, in that order.
 fn received_count(written: Written, (parameters, roles): (&mut Vec<Type>, &mut Vec<Role>)) {
-    if matches!(written, Written::Received { .. } | Written::ReceivedHandles | Written::ReceivedStrings | Written::ReceivedRecords) {
+    if matches!(written, Written::Received { .. } | Written::ReceivedHandles | Written::ReceivedStrings | Written::ReceivedElements) {
         parameters.push(Type::Pointer(Pointee::Scalar(Scalar::UInt32)));
         roles.push(Role::ReceivedCount);
     }
@@ -2953,7 +2979,14 @@ fn written_slot(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option
     if let Some(TypeKind::Array(element)) = snapshot.types.get(ty.0 as usize).map(|record| &record.kind)
         && let Some(record) = schema::copied(snapshot, *element)
     {
-        return Ok(Some((Type::Pointer(Pointee::Pointer(Box::new(Pointee::Record(record)))), Written::ReceivedRecords)));
+        return Ok(Some((Type::Pointer(Pointee::Pointer(Box::new(Pointee::Record(record)))), Written::ReceivedElements)));
+    }
+    // An array of booleans, as its block of one-byte booleans, copied as a
+    // struct array's elements are.
+    if matches!(snapshot.types.get(ty.0 as usize).map(|record| &record.kind), Some(TypeKind::Array(element))
+        if matches!(snapshot.types.get(element.0 as usize).map(|record| &record.kind), Some(TypeKind::Boolean)))
+    {
+        return Ok(Some((Type::Pointer(Pointee::Pointer(Box::new(Pointee::Scalar(Scalar::Bool8)))), Written::ReceivedElements)));
     }
     // An array of strings, as its block of `HSTRING`s, which only the
     // runtime reads.

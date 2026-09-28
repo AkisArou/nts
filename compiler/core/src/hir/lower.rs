@@ -47851,12 +47851,12 @@ impl<'a> FuncBuilder<'a> {
             // The objects moved into an array of the program's made for
             // them, and the callee's block freed. Zeroed on a failed call,
             // which reads as empty.
-            super::native::Written::ReceivedRecords => {
+            super::native::Written::ReceivedElements => {
                 let Some(count) = count else {
                     return Err(self.unsupported(id, "a received array with no count slot before it"));
                 };
                 let ty = typed.cloned().or_else(|| self.type_of(id)).ok_or_else(|| self.unrepresentable(id, "a received array of structs"))?;
-                self.records_received(id, (slot, count), ty)?
+                self.elements_received(id, (slot, count), ty)?
             }
             super::native::Written::ReceivedStrings | super::native::Written::ReceivedHandles => {
                 self.read_received_references(id, written, (slot, count), typed, origin)?
@@ -49395,6 +49395,7 @@ impl<'a> FuncBuilder<'a> {
             Role::HStrings => self.lend_hstrings(array, want, lent, &origin),
             Role::Records(record) => self.records_argument(id, array, record, &want, lent)?,
             Role::FilledHandles => self.filled_handles(id, array, want, lent)?,
+            Role::Booleans => self.lend_booleans(id, array, want, lent),
             Role::FilledStrings => self.filled_block(id, array, Pointee::Pointer(Box::new(Pointee::Void)), want, lent),
             Role::FilledRecords(record) => self.filled_block(id, array, Pointee::Record(record.clone()), want, lent),
             _ => return Err(self.unsupported(id, "an array crossing as something no array is")),
@@ -49731,7 +49732,7 @@ impl<'a> FuncBuilder<'a> {
                     let ty = target.parameters[at].representation();
                     c_args.push(self.error_slot(argument.filter(|_| written), ty, converter, &mut lent, &origin));
                 }
-                Role::Strings | Role::HStrings | Role::Records(_) | Role::FilledHandles | Role::FilledStrings | Role::FilledRecords(_) => c_args.extend(
+                Role::Strings | Role::HStrings | Role::Records(_) | Role::Booleans | Role::FilledHandles | Role::FilledStrings | Role::FilledRecords(_) => c_args.extend(
                     argument.map(|array| self.lend_array(id, &role, array, target.parameters[at].representation(), &mut lent)).transpose()?,
                 ),
                 // A `Uint8Array` in place: its bytes, for the call, and the

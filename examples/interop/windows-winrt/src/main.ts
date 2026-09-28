@@ -45,12 +45,13 @@
 //   copied out, and the two boxes it makes, for the doubles and the strings,
 //   each given back after the call it was handed to (8 before `filled`); and
 //   the reference `distortPoints` is called through, `ICameraIntrinsics2`
-//   asked of the camera for the call and given back after it -- and 72
+//   asked of the camera for the call and given back after it -- and 73
 //   under `--rc` (`expected-rc.txt`), those and one for each
 //   object handed over, among them: the eleven of `filled` -- the parsed
 //   array, its `IVector`, the 9 emptied out of `items`, the two `GetMany`
 //   wrote, the query options, their filter, the camera, and the two items
-//   the loop reads, each held for its read (61 before `filled`) -- the nine of the `pairs` walk -- the
+//   the loop reads, each held for its read (61 before `filled`) -- the
+//   logging fields `elements` lends its booleans to (72 before them) -- the nine of the `pairs` walk -- the
 //   parsed object, its `IIterable`, the iterator, and each pair and the value
 //   read from it (46 before the walk) -- the one the
 //   `erased` arm's `get` is narrowed back through -- a COM value read out of
@@ -96,6 +97,7 @@ import { QueryOptions } from "winrt:Windows.Storage.Search";
 import { local } from "c:memory";
 import type { c_int64, c_uint, c_uint32 } from "c:types";
 import { GuidHelper, MemoryBuffer, PropertyValue, Uri } from "winrt:Windows.Foundation";
+import { LoggingFields } from "winrt:Windows.Foundation.Diagnostics";
 import { StringMap } from "winrt:Windows.Foundation.Collections";
 import { ThreadPool } from "winrt:Windows.System.Threading";
 import { StorageFolder } from "winrt:Windows.Storage";
@@ -186,6 +188,9 @@ function elements(): string {
   // A `string[]` where an object is taken is boxed the same way.
   const texts = PropertyValue.CreateStringArray(["one", "", "three"]);
   const boxed = PropertyValue.CreateInspectable(["boxed", "too"]);
+  // And booleans: a `boolean[]`'s own one-byte elements, lent in place --
+  // which a failed call would throw from, and nothing here can read back.
+  new LoggingFields().addBooleanArray("flags", [true, false, true]);
   return (ints instanceof Int32Array ? ints.join(":") : "not an Int32Array") + "/" +
     (doubles instanceof Float64Array ? doubles.join(":") : "not a Float64Array") + "/" +
     (Array.isArray(texts) ? texts.join("|") + ":" + String(texts.length) : "not an array") + "/" +

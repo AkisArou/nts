@@ -204,7 +204,7 @@ pub(crate) fn write(namespaces: &[String], metadata: &[Utf8PathBuf], out: &Utf8P
 /// The brands `c:types` declares, beside its `c_` scalars.
 const C_BRANDS: &[&str] = &["CBool", "CEnum", "CNumber", "Struct", "ByValue", "Fields", "Counted", "CBytes", "CElements", "CHandles", "ConstPtr"];
 /// The brands `winrt:types` declares.
-const WINRT_BRANDS: &[&str] = &["ComClass", "HString", "HStrings", "Copied", "CopiedArray", "FilledHandles", "FilledStrings", "FilledArray", "IInspectable", "Inspectable", "Delegate", "Event", "EventRegistrationToken", "Guid"];
+const WINRT_BRANDS: &[&str] = &["ComClass", "HString", "HStrings", "Copied", "CopiedArray", "FilledHandles", "FilledStrings", "FilledArray", "Booleans", "FilledBooleans", "IInspectable", "Inspectable", "Delegate", "Event", "EventRegistrationToken", "Guid"];
 
 /// The namespace a `winrt:` module names.
 pub(crate) fn namespace_of(module: &str) -> Option<String> {
@@ -1695,9 +1695,13 @@ impl Writer<'_> {
         if let Ok(typed) = typed_array(&self.enum_as_integer(element)) {
             return Ok(typed);
         }
-        // Strings, each copied into a `string` and deleted.
+        // Strings, each copied into a `string` and deleted; booleans, each
+        // copied.
         if matches!(element, Type::String) {
             return Ok("string[]".to_owned());
+        }
+        if matches!(element, Type::Bool) {
+            return Ok("boolean[]".to_owned());
         }
         // Structs, each copied into a plain object.
         if let Some(record) = self.plain_struct(element)? {
@@ -1729,6 +1733,8 @@ impl Writer<'_> {
     ///   in place where each is the interface C takes, and asked for it
     ///   element by element otherwise. One the callee fills (`GetMany`) is
     ///   lent in place, and written with references of the interface C names.
+    /// - Booleans: a `boolean[]`'s own elements, one byte each as the
+    ///   Windows Runtime's are, read or filled in place.
     /// - Strings and structs: copied into a block for the call, or -- where
     ///   the callee fills it -- out of one after it.
     fn lent_array(&mut self, element: &Type, written: bool) -> Result<Option<String>, String> {
@@ -1740,6 +1746,10 @@ impl Writer<'_> {
             self.brands.insert("CElements");
             let spelled = if written { spelled.to_owned() } else { format!("const {spelled}") };
             format!("CElements<{array}, \"{spelled}\">")
+        } else if matches!(element, Type::Bool) {
+            let brand = if written { "FilledBooleans" } else { "Booleans" };
+            self.brands.insert(brand);
+            brand.to_owned()
         } else if matches!(element, Type::String) {
             let brand = if written { "FilledStrings" } else { "HStrings" };
             self.brands.insert(brand);

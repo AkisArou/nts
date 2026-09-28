@@ -1492,7 +1492,7 @@ void nts_winrt_received_handles(NtsArray *into, void *block, uint32_t count) {
   CoTaskMemFree(block);
 }
 
-void *nts_winrt_filled_handles(const NtsArray *array) {
+void *nts_winrt_array_items(const NtsArray *array) {
   return NTS_ITEMS(array, void *);
 }
 

@@ -648,11 +648,71 @@ export function run(): number {
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
-    assert_eq!(text.matches("nts_winrt_filled_handles(").count(), 1, "the objects' own block is not lent:\n{text}");
+    assert_eq!(text.matches("nts_winrt_array_items(").count(), 1, "the objects' own block is not lent:\n{text}");
     assert_eq!(text.matches("nts_array_handles(").count(), 0, "a filled array is lent as one C reads, which refuses its NULLs:\n{text}");
     assert_eq!(text.matches("nts_winrt_alloc(").count(), 2, "the strings and the structs are not each given a block:\n{text}");
     assert_eq!(text.matches("nts_winrt_free(").count(), 4, "each block is not freed on both of its call's paths:\n{text}");
     assert_eq!(text.matches("nts_string_from_hstring(").count(), 2, "the strings are not copied in on both paths:\n{text}");
+
+    windows_syntax(&dir, &emitted);
+}
+
+/// Arrays of booleans, whose one-byte elements are the Windows Runtime's:
+/// lent in place to a call that reads them (`Booleans`) or fills them
+/// (`FilledBooleans`), with no block of the call's, and one handed back
+/// (`ReceiveArray`) copied into a `boolean[]` and the block freed.
+#[test]
+fn a_boolean_array_is_lent_in_place_and_received_by_copy() {
+    let binding = r#"declare module "winrt:Windows.Data.Json" {
+  import type { CNumber, Counted } from "c:types";
+  import type { Booleans, ComClass, FilledBooleans, HString } from "winrt:types";
+  export interface IJsonValueMethods {
+    /**
+     * @ntsVtable 10 Take
+     * @ntsHresult
+     */
+    Take(this: IJsonValue, flags: Counted<Booleans, CNumber<"uint32">, "before">): void;
+    /**
+     * @ntsVtable 11 Fill
+     * @ntsHresult
+     */
+    Fill(this: IJsonValue, flags: Counted<FilledBooleans, CNumber<"uint32">, "before">): void;
+    /**
+     * @ntsVtable 12 Give
+     * @ntsHresult
+     */
+    Give(this: IJsonValue): boolean[];
+  }
+  export type IJsonValue = ComClass<"IJsonValue"> & IJsonValueMethods;
+  /**
+   * @ntsVtable 6 Parse
+   * @ntsHresult
+   * @ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C
+   */
+  export function Parse(input: HString): IJsonValue;
+}
+"#;
+    let source = r#"import { Parse } from "winrt:Windows.Data.Json";
+export function run(): number {
+  const value = Parse("[]");
+  value.Take([true, false]);
+  const filled = [false, false];
+  value.Fill(filled);
+  const given = value.Give();
+  return (filled[0] ? 1 : 0) + (given[0] ? 2 : 0) + given.length;
+}
+"#;
+    let Some((dir, prepared)) = prepare("booleans", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    assert_eq!(text.matches("nts_winrt_array_items(").count(), 2, "the two arrays are not lent in place:\n{text}");
+    assert_eq!(text.matches("nts_winrt_alloc(").count(), 0, "a boolean array is copied into a block:\n{text}");
+    assert_eq!(text.matches("nts_winrt_free(").count(), 1, "the received block is not freed:\n{text}");
 
     windows_syntax(&dir, &emitted);
 }

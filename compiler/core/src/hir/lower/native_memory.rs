@@ -238,9 +238,20 @@ impl FuncBuilder<'_> {
             this.push(OpKind::ArraySet { array, index: at, value: none, checked: false }, HirType::Void, origin.clone());
             Ok(())
         })?;
-        let block = self.runtime_call("nts_winrt_filled_handles", vec![array], want, origin);
+        let block = self.runtime_call("nts_winrt_array_items", vec![array], want, origin);
         lent.push(Lent::Array { array });
         Ok(block)
+    }
+
+    /// A `boolean[]`'s own elements (`Role::Booleans`), lent in place for
+    /// a call to read or fill: one byte each, 0 or 1, as the Windows
+    /// Runtime's booleans are. NULL for a `null` array.
+    pub(super) fn lend_booleans(&mut self, id: NodeId, array: ValueId, want: HirType, lent: &mut Vec<Lent>) -> ValueId {
+        let origin = self.origin(id);
+        let absent = self.push(OpKind::ConstNull, want.clone(), origin.clone());
+        let block = self.unless_null(array, absent, &origin, |this| this.runtime_call("nts_winrt_array_items", vec![array], want, origin.clone()));
+        lent.push(Lent::Array { array });
+        block
     }
 
     /// A zeroed block of `array`'s length of what a call fills in
@@ -286,27 +297,33 @@ impl FuncBuilder<'_> {
         Ok(())
     }
 
-    /// An array of structs a call handed back (`Written::ReceivedRecords`):
-    /// each struct of the callee's block copied into a new object of the
-    /// program's, as a `Copied<T>` result is, and the block freed.
-    pub(super) fn records_received(&mut self, id: NodeId, (slot, count): (ValueId, ValueId), ty: HirType) -> Result<ValueId, Diagnostic> {
+    /// An array a call handed back whose elements are each copied
+    /// (`Written::ReceivedElements`): each struct of the callee's block into
+    /// a new object of the program's, as a `Copied<T>` result is, or each
+    /// one-byte boolean into a `boolean`; and the block freed.
+    pub(super) fn elements_received(&mut self, id: NodeId, (slot, count): (ValueId, ValueId), ty: HirType) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
         let HirType::Managed(ManagedType::Array(element)) = ty.clone() else {
-            return Err(self.unsupported(id, "a received array of structs read as something other than an array"));
+            return Err(self.unsupported(id, "a received array read as something other than an array"));
         };
-        let HirType::NativePointer(Pointee::Pointer(record)) = self.values[slot.0 as usize].ty.clone() else {
-            return Err(self.unsupported(id, "a received array of structs whose slot is not a pointer to them"));
+        let HirType::NativePointer(Pointee::Pointer(held)) = self.values[slot.0 as usize].ty.clone() else {
+            return Err(self.unsupported(id, "a received array whose slot is not a pointer to its elements"));
         };
+        let records = matches!(*held, Pointee::Record(_));
         let index = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
-        let block = self.push(OpKind::NativeLoad { pointer: slot, index }, HirType::NativePointer(*record), origin.clone());
+        let block = self.push(OpKind::NativeLoad { pointer: slot, index }, HirType::NativePointer(*held), origin.clone());
         let index = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
         let length = self.push(OpKind::NativeLoad { pointer: count, index }, HirType::Int { bits: 32, signed: false }, origin.clone());
         let length = self.coerce(length, &HirType::NUMBER, id)?;
         let array = self.push(OpKind::ArrayNew { length, zeroed: true }, ty, origin.clone());
         self.count_up(length, &origin, |this, at| {
-            let from = this.native_index_address(id, block, at)?;
-            let object = this.object_from_copied(id, from, &element)?;
-            this.push(OpKind::ArraySet { array, index: at, value: object, checked: false }, HirType::Void, origin.clone());
+            let value = if records {
+                let from = this.native_index_address(id, block, at)?;
+                this.object_from_copied(id, from, &element)?
+            } else {
+                this.read_place(id, &Place::NativeElement { pointer: block, index: at })?
+            };
+            this.push(OpKind::ArraySet { array, index: at, value, checked: false }, HirType::Void, origin.clone());
             Ok(())
         })?;
         let freed = self.push(OpKind::Convert(block), HirType::NativePointer(Pointee::Void), origin.clone());
