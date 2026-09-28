@@ -255,7 +255,15 @@ the same vtable calls on the VM measured the behaviour first.
   | a static on its factory, making an object | 118-124 ns | 129-137 ns (`--rc`; was 175-230) |
 
   An HSTRING result's remainder is the copy into a string the program owns,
-  which the floor never makes. The benchmark and its oracle are in
+  which the floor never makes.
+
+  A million elements of a `JsonArray` of a thousand, per element, medians
+  of five (`getat`, `getmany`): one `GetAt` each is 20.6 ns in C and
+  20.4-24 ns from nts under `--rc`; a thousand at a time through
+  `GetMany`, into the array's own block, is 22.4 ns in C and 22-23 ns from
+  nts. At the floor both ways -- and `GetMany` buys this collection
+  nothing per element, in C either: it is the same cost as `GetAt`. Without
+  a counting provider nts is 16-17 ns on both, since it gives nothing back. The benchmark and its oracle are in
   `~/.cache/nts/windows/benches/winrt-crossings`; C# (CsWinRT) is not
   measured yet: the VM has no .NET SDK.
 - **Awaitable operations and actions:** `await StorageFolder.
