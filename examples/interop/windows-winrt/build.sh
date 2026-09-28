@@ -5,8 +5,8 @@
 # What each arm asserts:
 #
 # - **The build:** `nts build` exits 0 and refuses nothing, with and without
-#   `--rc`. Its bindings are generated from the Windows Runtime's metadata by
-#   the build itself (`types/winrt`, `nts bind-winmd`).
+#   `--rc`. Its bindings are the Windows Runtime's platform packages, which
+#   the build installs from the store (`winrt_surface`).
 # - **The PE:** a console PE32+ for x86-64 that imports only Windows' own
 #   DLLs -- the Windows Runtime is `api-ms-win-core-winrt-*`, present on every
 #   Windows 10 and 11, with nothing to redistribute.

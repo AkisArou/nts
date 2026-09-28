@@ -150,9 +150,44 @@ pub(crate) fn index(directories: &[Utf8PathBuf]) -> Result<&'static Index> {
 /// `<namespace>.refused.txt` naming each item not bound and why. One summary
 /// line each.
 pub(crate) fn write(namespaces: &[String], metadata: &[Utf8PathBuf], out: &Utf8Path, command: &str) -> Result<Vec<String>> {
-    let index = index(metadata)?;
+    let modules = generate(namespaces, metadata, command)?;
     std::fs::create_dir_all(out).with_context(|| format!("creating {out}"))?;
     let mut lines = Vec::new();
+    for module in modules {
+        let namespace = &module.namespace.clone();
+        let path = out.join(format!("{namespace}.d.ts"));
+        std::fs::write(&path, &module.text).with_context(|| format!("writing {path}"))?;
+        // Written where there is one and removed where there is not, so a
+        // namespace that stopped declaring a `then` leaves no function behind
+        // for a stale `@ntsCall` to find.
+        let values_path = out.join(format!("{namespace}.values.ts"));
+        match &module.values {
+            Some(values) => std::fs::write(&values_path, values).with_context(|| format!("writing {values_path}"))?,
+            None if values_path.is_file() => std::fs::remove_file(&values_path).with_context(|| format!("removing {values_path}"))?,
+            None => {}
+        }
+        let refused = module.refused.iter().fold(String::new(), |mut text, (what, why)| {
+            let _ = writeln!(text, "{what}\t{why}");
+            text
+        });
+        let refused_path = out.join(format!("{namespace}.refused.txt"));
+        std::fs::write(&refused_path, refused).with_context(|| format!("writing {refused_path}"))?;
+        lines.push(format!(
+            "winrt:{}: {} interfaces, {} classes, {} methods; {} refused (see {namespace}.refused.txt)",
+            module.namespace,
+            module.interfaces,
+            module.classes,
+            module.methods,
+            module.refused.len()
+        ));
+    }
+    Ok(lines)
+}
+
+/// The modules binding `namespaces` makes: each asked for bound whole, and
+/// each of those names bound for the types named, to a fixed point.
+pub(crate) fn generate(namespaces: &[String], metadata: &[Utf8PathBuf], command: &str) -> Result<Vec<Module>> {
+    let index = index(metadata)?;
     for namespace in namespaces {
         let fetch = if namespace.starts_with("Microsoft.") {
             " -- it is the Windows App SDK's, which tooling/windows/fetch-winappsdk.sh fetches"
@@ -193,35 +228,7 @@ pub(crate) fn write(namespaces: &[String], metadata: &[Utf8PathBuf], out: &Utf8P
             break modules;
         }
     };
-    for module in modules {
-        let namespace = &module.namespace.clone();
-        let path = out.join(format!("{namespace}.d.ts"));
-        std::fs::write(&path, &module.text).with_context(|| format!("writing {path}"))?;
-        // Written where there is one and removed where there is not, so a
-        // namespace that stopped declaring a `then` leaves no function behind
-        // for a stale `@ntsCall` to find.
-        let values_path = out.join(format!("{namespace}.values.ts"));
-        match &module.values {
-            Some(values) => std::fs::write(&values_path, values).with_context(|| format!("writing {values_path}"))?,
-            None if values_path.is_file() => std::fs::remove_file(&values_path).with_context(|| format!("removing {values_path}"))?,
-            None => {}
-        }
-        let refused = module.refused.iter().fold(String::new(), |mut text, (what, why)| {
-            let _ = writeln!(text, "{what}\t{why}");
-            text
-        });
-        let refused_path = out.join(format!("{namespace}.refused.txt"));
-        std::fs::write(&refused_path, refused).with_context(|| format!("writing {refused_path}"))?;
-        lines.push(format!(
-            "winrt:{}: {} interfaces, {} classes, {} methods; {} refused (see {namespace}.refused.txt)",
-            module.namespace,
-            module.interfaces,
-            module.classes,
-            module.methods,
-            module.refused.len()
-        ));
-    }
-    Ok(lines)
+    Ok(modules)
 }
 
 /// The brands `c:types` declares, beside its `c_` scalars.

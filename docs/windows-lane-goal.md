@@ -120,6 +120,15 @@ the same vtable calls on the VM measured the behaviour first.
 
 - **Calls:** `@ntsVtable`, `@ntsHresult`, `@ntsFactory`, `Family::Com`,
   HSTRING both ways, and a failed HRESULT thrown with the system's text.
+- **Platform packages:** a program's `winrt:` imports are installed from
+  the platform store (`winrt_surface`, `nts_surfaces`), as GTK's and
+  Apple's are: one package per namespace imported and each namespace those
+  name (`@nts/winrt-windows.foundation`), and `@nts/platform-winrt` naming
+  them, generated once per set of roots, metadata release and generator,
+  and shared by every project on the machine. Not the whole contract: 282
+  namespaces, 26 MB and 4 s to generate once, but every program's check
+  0.11 s and 280 MB where its own closure is 0.03 s and 48 MB. A
+  `types/winrt` an older `nts` generated is removed, once, with a note.
 - **bind-winmd for WinRT:**
   - interfaces slot for slot;
   - generics, with instantiation IIDs computed by the pinterface SHA-1;

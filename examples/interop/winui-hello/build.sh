@@ -5,9 +5,10 @@
 # What each arm asserts:
 #
 # - **The build:** `nts build` exits 0 and refuses nothing, with and without
-#   `--rc`, on both backends. Its bindings come from the Windows App SDK's
-#   metadata (`types/winrt`), and the SDK's bootstrapper is built beside the
-#   program, which loads it to find the runtime installed on the machine.
+#   `--rc`, on both backends. Its bindings are the Windows App SDK's platform
+#   packages, which the build installs from the store (`winrt_surface`), and
+#   the SDK's bootstrapper is built beside the program, which loads it to find
+#   the runtime installed on the machine.
 # - **The PE:** a console PE32+ for x86-64 that imports only Windows' own DLLs:
 #   the bootstrapper is loaded, not linked.
 # - **On Windows, in the signed-in session** (`run.sh --interactive`; XAML

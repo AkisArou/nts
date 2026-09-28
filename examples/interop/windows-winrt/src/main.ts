@@ -89,7 +89,8 @@ import {
   releases,
   run_message_loop,
 } from "c:report";
-// Bound by `nts build` from the Windows Runtime's metadata into `types/winrt`.
+// The Windows Runtime's platform packages, which `nts build` installs from the
+// store.
 import { JsonArray, JsonObject, JsonValue } from "winrt:Windows.Data.Json";
 import type { IJsonValue } from "winrt:Windows.Data.Json";
 import { CameraIntrinsics } from "winrt:Windows.Media.Devices.Core";
