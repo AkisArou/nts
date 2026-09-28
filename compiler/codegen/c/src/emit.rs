@@ -685,11 +685,48 @@ fn drop_orphaned_bodies(
                         at,
                         name.clone(),
                         func.values[value.0 as usize].origin.clone(),
+                        "calls",
                     )),
+                    // **Taking a function value is a use of its `#call`**, and
+                    // this looked only for calls. A captureless closure emits as
+                    // the address of one immortal instance, and nothing checked
+                    // that the instance's table has anything in it -- so a body
+                    // that *hands the value on* rather than calling it survived
+                    // while its `#call` was dropped, and the program jumped
+                    // through a null table at whatever eventually called it.
+                    //
+                    // The React lane found it and it cost them days: `main_`
+                    // stores `&nts_fnval_NtsObj_Closure3117` into React's jsx
+                    // slot, `Closure3117#call` was refused for a reason inside
+                    // `useState`, `main` was **not** refused, the program built,
+                    // and `callComponent` called `descriptor->methods[35]` on a
+                    // descriptor whose methods pointer is `0`. Every line of the
+                    // cascade was true and none of them named `main`.
+                    //
+                    // `bridge_text` eight hundred lines down already asks this of
+                    // a *bridge* -- "a callback bridge whose closure publishes no
+                    // function" -- so the sibling that publishes a value to
+                    // compiled code was the one not asking. One of two paths
+                    // asking is the shape this file has now been fixed for four
+                    // times in a day.
+                    OpKind::ClosureStatic => {
+                        let op = &func.values[value.0 as usize];
+                        let call = layout_of(program, &op.ty, &op.origin)
+                            .ok()
+                            .and_then(nts_core::hir::Layout::closure_call)?;
+                        // **"holds a value of", not "calls"**, because this body
+                        // does neither a call nor anything a reader would look
+                        // for one at: it takes the function's address. Saying
+                        // "calls" would send them to a call site that is not
+                        // there, which is the class of wrongness the three
+                        // reasons below exist to avoid.
+                        (!defined.contains(call))
+                            .then(|| (at, call.to_owned(), op.origin.clone(), "holds a value of"))
+                    }
                     _ => None,
                 })
         });
-        let Some((at, missing, origin)) = orphan else {
+        let Some((at, missing, origin, how)) = orphan else {
             return;
         };
         let orphaned = bodies[at].2.name.clone();
@@ -723,7 +760,7 @@ fn drop_orphaned_bodies(
         };
         diagnostics.push(Diagnostic::error(
             "NTS2009",
-            format!("`{orphaned}` cannot be emitted because it calls `{missing}`, {why}"),
+            format!("`{orphaned}` cannot be emitted because it {how} `{missing}`, {why}"),
             origin.location,
         ));
         refused.push(orphaned);
