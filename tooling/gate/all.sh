@@ -2130,7 +2130,12 @@ interop() {
   #     as gtk-cycles does.
   # 34: `gtk-list`, a list view over a GListStore, its rows bound by a
   #     factory. It SKIPs as gtk-cycles does.
-  interop_floor=34
+  # 60 on 2026-09-28, counted from `git ls-files`: twenty-five projects had
+  #     arrived under a floor of 34 without moving it -- the padding by
+  #     addition described above, twenty-five times over -- and the sixtieth
+  #     is `gtk-gettext`, GJS's `gettext` module translating from a catalogue.
+  #     It SKIPs without glib-2.0, msgfmt or an en_US.UTF-8 locale.
+  interop_floor=60
   if [ "$((ran + skipped))" -lt "$interop_floor" ]; then
     printf '  expected %s interop project(s), saw %s\n' \
       "$interop_floor" "$((ran + skipped))"

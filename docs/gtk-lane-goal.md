@@ -972,6 +972,37 @@ class Stamp extends GtkBox {
   a resource`, on all four arms. build.sh compiles the resource with
   `glib-compile-resources` and names both files to the program.
 
+### GJS's `gettext` module
+
+A port keeps GJS's import line, `import { gettext as _ } from "gettext"`.
+The module is TypeScript, `runtime/gtk/gettext.ts`, with GJS's exports and
+what each is in GJS (`modules/script/_gettext.js`): GLib's `g_dgettext`
+family with no domain for the program's own, a `domain(name)` binding the
+three to one, and libc's `textdomain`, `bindtextdomain` (with the codeset
+UTF-8, as GJS sets it) and `setlocale`, declared in `runtime/gtk/libintl.d.ts`.
+
+- **How a program reaches it.** `runtime/gtk/tsconfig.json` maps the bare
+  name to the source, and a GTK program extends it, as a React program
+  extends `runtime/react/tsconfig.native.json`; every corpus port does.
+  Not a `paths` entry the GIR wrapper adds: a config's `paths` replaces the
+  one it extends, so a project with paths of its own would lose them.
+- **Its three functions under libc's names** are compiled under names of
+  their own (`export { setLocale as setlocale }`): a compiled function is
+  its C symbol, and they call libc's.
+- **A `char *` libc answers into its own storage** is declared `Ptr<c_char>`,
+  as the header says, and read with `stringFrom`; a `string` result is
+  `const char *` to the native witness unless the caller frees it.
+- **Not lowered yet:** a default import's member (`import Gettext from
+  "gettext"; Gettext.gettext(...)`), NTS1001 "`default`, a name from an
+  enclosing scope". The default export is there and typechecks.
+- `LocaleCategory` holds glibc's `LC_*` values, written out: the header's
+  constants reach a binding only once the constants fold lands.
+- Witness: `examples/interop/gtk-gettext` translates from a catalogue
+  build.sh compiles (`Saluton pomo pomoj Malfermi Saluton Untranslated`) on
+  all four arms, and with no catalogue bound answers each msgid, which is
+  its control. Without the base config the program is TS2307. The corpus's
+  About Dialog is ported with its import unchanged.
+
 ### Interfaces a class implements
 
 ```ts

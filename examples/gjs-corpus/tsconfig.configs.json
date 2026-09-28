@@ -14,6 +14,7 @@
     }
   },
   "files": [
+    "about-dialog/nts.config.ts",
     "accessibility/nts.config.ts",
     "action-bar/nts.config.ts",
     "banner/nts.config.ts",

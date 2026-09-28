@@ -6,6 +6,7 @@
 // A port's demo is a function the host calls, where the original runs as the
 // module Workbench imports: nts compiles no dynamic `import()`.
 import {
+  AdwAboutDialog,
   AdwApplication,
   AdwApplicationWindow,
   AdwBanner,
@@ -216,6 +217,13 @@ function act(kind: string, id: string, args: string[], object: GObject | null, w
       if (!(object instanceof GtkWidget)) return false;
       object.activate_action(args[0], args.length > 1 ? g_variant_new_string(args[1]) : null);
       return true;
+    case "about": {
+      const root = object instanceof GtkWidget ? object.get_root() : null;
+      const dialog = root instanceof AdwApplicationWindow ? root.get_visible_dialog() : null;
+      if (!(dialog instanceof AdwAboutDialog)) return false;
+      console.log(`about ${dialog.application_name}|${dialog.comments}|${dialog.translator_credits}`);
+      return true;
+    }
     case "click-child": {
       const child = object instanceof GtkFlowBox ? object.get_child_at_index(Number(args[0]))?.child : null;
       if (!(child instanceof GtkButton)) return false;

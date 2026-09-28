@@ -1,0 +1,9 @@
+{
+  "//": "The base of a GTK program written as GJS writes one: GJS's own modules, by the names GJS gives them, mapped to their sources here. A program extends this and keeps its own `include`.",
+  "extends": "../../tsconfig.fixtures.json",
+  "compilerOptions": {
+    "paths": {
+      "gettext": ["./gettext.ts"]
+    }
+  }
+}

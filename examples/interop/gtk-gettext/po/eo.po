@@ -1,0 +1,17 @@
+# The catalogue src/main.ts translates from, in Esperanto.
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Hello"
+msgstr "Saluton"
+
+msgid "apple"
+msgid_plural "apples"
+msgstr[0] "pomo"
+msgstr[1] "pomoj"
+
+msgctxt "menu"
+msgid "Open"
+msgstr "Malfermi"

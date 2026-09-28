@@ -41,6 +41,8 @@
 //   revealed <id>  print an action bar's or banner's `revealed`
 //   children <id>  print how many children a widget has
 //   click-child <id> <n> emit `clicked` on a flow box's nth child's widget
+//   about <id>     print the about dialog shown in <id>'s window: its name,
+//                  comments and translator credits
 //   orientation <id> print a box's `orientation`
 //
 // The demo's own `console.log` lines are the log, on stdout and whole: GJS
@@ -154,7 +156,10 @@ application.connect("activate", async () => {
     else if (kind === "pick") object.emit("emoji-picked", args[0]);
     else if (kind === "day") object.select_day(GLib.DateTime.new_local(Number(args[0]), Number(args[1]), Number(args[2]), 0, 0, 0));
     else if (kind === "action") object.activate_action(args[0], args.length > 1 ? GLib.Variant.new_string(args[1]) : null);
-    else if (kind === "click-child") object.get_child_at_index(Number(args[0])).child.emit("clicked");
+    else if (kind === "about") {
+      const dialog = object.get_root().get_visible_dialog();
+      console.log(`about ${dialog.application_name}|${dialog.comments}|${dialog.translator_credits}`);
+    } else if (kind === "click-child") object.get_child_at_index(Number(args[0])).child.emit("clicked");
     else if (kind === "activate-child") object.get_child_at_index(Number(args[0])).activate();
     else if (kind === "file") console.log(`${id}.file ${object instanceof Gtk.Picture ? object.file?.get_basename() : GLib.path_get_basename(object.file ?? "")}`);
     else if (kind === "sidebar-position") console.log(`${id}.sidebar_position ${object.sidebar_position}`);
