@@ -65,9 +65,10 @@ function read(path: string): Diagnostic[] {
 const BY_BACKEND = "refused by the backend (its own refusals are listed below)";
 
 // Lowering: `f` cannot be compiled because it calls `g`, and it calls `h`, and <reason>
-// A backend (NTS2009): `f` cannot be emitted because it calls `g`, which this backend refused above
+// A backend (NTS2009): `f` cannot be emitted because it calls `g` (or "holds a
+// value of `g`", a function value it hands on), which this backend refused above
 function cascade(diagnostic: Diagnostic): Cascade | null {
-  const emitted = /^`([^`]+)` cannot be emitted because it calls `([^`]+)`, which this backend refused above/.exec(diagnostic.message);
+  const emitted = /^`([^`]+)` cannot be emitted because it (?:calls|holds a value of) `([^`]+)`, which this backend refused above/.exec(diagnostic.message);
   if (emitted !== null) {
     return { refused: emitted[1]!, calls: [emitted[2]!], reason: BY_BACKEND, at: diagnostic };
   }
