@@ -43,6 +43,11 @@
 // arguments; the subtype's record extends the base's), and a narrowed
 // parameter is live on C.
 //
+// **Seen once, unattributed:** one runtime run on 2026-09-28 reported "1 not
+// measured" and did not say which module; the rerun and every run since
+// measured 29 of 29. Recorded so it is not read as a finding later, nor
+// forgotten if it recurs -- if it does, the NOT MEASURED line names the module.
+//
 // Declines are not failures: `emit-jvm` names what it cannot call (a native C
 // function) and writes the rest, and the rest must verify. A module whose
 // `emit-jvm` writes no class is NOT MEASURED.
