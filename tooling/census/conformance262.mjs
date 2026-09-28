@@ -700,6 +700,12 @@ const count = (list, pick) => {
 };
 const tally = Object.fromEntries(OUTCOMES.map((o) => [o, cases.filter((c) => c.outcome === o).length]));
 const summed = OUTCOMES.reduce((sum, o) => sum + tally[o], 0);
+// Negative-parse tests the compiler accepted: programs the specification says
+// must not parse, compiled. A count of its own because it is a ratchet of its
+// own -- `all.sh` holds it to a ceiling -- and because a pass count cannot show
+// it: these were once 1,600 *passes*, rejected by TypeScript type errors that
+// happened to fire on them, until the census compiled JavaScript as JavaScript.
+const negativesAccepted = cases.filter((c) => c.outcome === "fail" && c.cause?.startsWith("negative:parse accepted")).length;
 const excludedCases = cases.filter((c) => c.excluded.length > 0);
 const inScope = cases.filter((c) => c.excluded.length === 0);
 const inScopePass = inScope.filter((c) => c.outcome === "pass").length;
@@ -853,6 +859,7 @@ if (partial) {
   say(`  ${recordedFile ? "recorded cases" : "sample"}: ${tally.pass} of ${population.length} pass -- ` +
     "not a conformance rate; the denominator is not the suite");
   say(`  pass-count: ${tally.pass}`);
+  say(`  negatives-accepted: ${negativesAccepted}`);
 } else say(
   `  headline: ${inScopePass} of ${inScope.length} in-scope cases pass (${pct(inScopePass, inScope.length)}), ` +
     `excluding ${excludedCases.length} case(s) under ${exclusions.length} exclusion(s); ` +
@@ -860,6 +867,7 @@ if (partial) {
 );
 say("  `pass` is strict-pass: one strict variant per file, never promoted to a file pass");
 say(`  negatives: ${evidenceNote}`);
+if (!partial) say(`  negatives accepted (a program that must not parse, compiled): ${negativesAccepted}`);
 say(
   `  negatives passing only by an evidence override: ${passedByOverride} ` +
     `(${OVERRIDES.length} override(s) in test262-evidence-overrides.json, ${overrideCodes.size} applied, tsgo ${TSGO_PIN})`,

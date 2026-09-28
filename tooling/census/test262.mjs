@@ -49,7 +49,8 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { HARNESS, pinCompiler, workspace as scratchProject } from "./project.mjs";
+import { materialise, pinCompiler, workspace as scratchProject } from "./project.mjs";
+import { frontendFor } from "../conformance/pin.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -100,6 +101,13 @@ function cannotMeasure(why) {
 
 if (!existsSync(NTS)) cannotMeasure(`no compiler at ${NTS}; set NTS_BIN`);
 if (!existsSync(SUITE)) cannotMeasure("no test262 checkout; tooling/bootstrap/bootstrap.sh clones it");
+
+// The frontend the compiler under test runs with, as `run262.mjs` and
+// `conformance262.mjs` resolve it: a pinned copy in the scratch has no frontend
+// beside it, and the control then fails as a "frontend-crash".
+const FRONTEND = frontendFor(NTS, ROOT);
+if (!FRONTEND.exists) cannotMeasure(`no frontend at ${FRONTEND.path} -- set NTS_TSGO, or use a pin (it records its frontend)`);
+process.env.NTS_TSGO = FRONTEND.path;
 
 // Copied, so a twenty-minute census measures one binary rather than whichever
 // build happened to be at that path when each file's turn came.
@@ -164,7 +172,7 @@ const NTS_LINE = /^\s*--\s+\S+?:\d+:\d+\s+(NTS\d{4})\s+(.*)$/;
  * have said so.
  */
 // A checker diagnostic now carries its place, so the code is not always at
-// the line's start: `src/main.ts:12:5: TS2769 ...`. The prefix stays optional
+// the line's start: `src/main.js:12:5: TS2769 ...`. The prefix stays optional
 // because a rewritten source whose map cannot answer prints the bare code.
 const TS_LINE = /^(?:\S+ )?(TS\d{4,5})\s+(.*)$/;
 /** `N function(s), M construct(s) refused` -- the footer this reconciles against. */
@@ -179,10 +187,10 @@ function workspace(worker) {
   return scratchProject(join(SCRATCH, `w${worker}`));
 }
 
-function compile(dir, source) {
-  // The harness is prepended, so the unit stays a script: an `import` would
-  // make it a module and change top-level `var` scoping and `this`.
-  writeFileSync(join(dir, "src", "main.ts"), source);
+function compile(dir, body) {
+  // `project.mjs` lays the case out -- the stand-in and the test, two scripts --
+  // so this and `conformance262` compile one program for one file.
+  materialise(dir, body);
   try {
     return {
       out: execFileSync(PINNED, ["hir", join(dir, "tsconfig.json"), "--prepared"], {
@@ -260,7 +268,7 @@ const CONTROL = `const a = 1 + 1;\nif (a !== 2) { throw new Error("control"); }\
 
 function selfChecks() {
   const dir = workspace("control");
-  const control = classify(compile(dir, `"use strict";\n${HARNESS}${CONTROL}`));
+  const control = classify(compile(dir, CONTROL));
   if (control.bucket !== "lowers") {
     cannotMeasure(
       `the control program does not lower (${control.bucket}). ` +
@@ -276,10 +284,9 @@ function selfChecks() {
   // the lowerer never meets one. The arm fired on its first run and stopped the
   // census, which is what an arm is for, but the thing it caught was the choice
   // of sabotage rather than the reader. An `any` *parameter* is the shape the
-  // census is actually about, and it refuses.
-  const mutated = classify(
-    compile(dir, `"use strict";\n${HARNESS}function f(x: any): number { return x + 1; }\nif (f(1) !== 2) { throw new Error("s"); }\n`),
-  );
+  // census is actually about, and it refuses -- here as JavaScript writes it,
+  // unannotated, which is where a test262 file's `any` comes from.
+  const mutated = classify(compile(dir, `function f(x) { return x + 1; }\nif (f(1) !== 2) { throw new Error("s"); }\n`));
   if (mutated.bucket === "lowers") {
     cannotMeasure(
       "a program using `any` reported as lowering, so the outcome does not " +
@@ -317,8 +324,7 @@ const shape = (message) => message.replace(/`[^`]*`/g, "`X`").replace(/\s+/g, " 
 
 const dir = workspace(0);
 for (const record of planned) {
-  const source = `"use strict";\n${HARNESS}${readFileSync(join(SUITE, record.path), "utf8")}`;
-  const outcome = classify(compile(dir, source));
+  const outcome = classify(compile(dir, readFileSync(join(SUITE, record.path), "utf8")));
   compared += 1;
   if (rowsFile) {
     rows.push({

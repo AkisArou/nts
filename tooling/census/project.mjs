@@ -7,7 +7,7 @@
 // different programs while reporting the same corpus.
 
 import { createHash } from "node:crypto";
-import { chmodSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -37,12 +37,24 @@ const MEMBERS = [
  */
 export const PROVIDED_INCLUDES = new Set(["compareArray.js"]);
 
+/** Where `materialise` puts the stand-in and the test, relative to the workspace. */
+export const HARNESS_FILE = "src/harness.ts";
+export const TEST_FILE = "src/main.js";
+
 /**
- * Every source a case's stand-in can be made of, hashed: a row records it, so
- * rows from two stand-ins are two runs even under one compiler. Derived here,
- * beside the list, so a member added is a member hashed.
+ * What the test file holds before the test's own first line: the strict
+ * directive the initial lane injects, one line.
  */
-export const HARNESS_HASH = [HARNESS, HARNESS_DONOTEVALUATE, ...MEMBERS.map((m) => m.source)]
+const TEST_PRELUDE = '"use strict";\n';
+
+/**
+ * Every source a case's stand-in can be made of, and the layout it is placed
+ * in, hashed: a row records it, so rows from two stand-ins -- or from one
+ * stand-in laid out two ways -- are two runs even under one compiler. Derived
+ * here, beside the list, so a member added is a member hashed.
+ */
+const LAYOUT = `${HARNESS_FILE} + ${TEST_FILE} (allowJs, checkJs unset), test prelude ${JSON.stringify(TEST_PRELUDE)}`;
+export const HARNESS_HASH = [LAYOUT, HARNESS, HARNESS_DONOTEVALUATE, ...MEMBERS.map((m) => m.source)]
   .reduce((hash, source) => hash.update(source), createHash("sha256"))
   .digest("hex")
   .slice(0, 16);
@@ -70,6 +82,10 @@ export const bodyOf = (source) => source.replace(FRONTMATTER, "");
  * repository a probe that measured a different language than it meant to.
  */
 export function workspace(dir) {
+  // The workspace owns `src/`: a file a previous layout left there -- a
+  // `main.ts` beside today's `main.js` -- is compiled with it, and declares
+  // every name twice (TS2300).
+  rmSync(join(dir, "src"), { recursive: true, force: true });
   mkdirSync(join(dir, "src"), { recursive: true });
   writeFileSync(
     join(dir, "tsconfig.json"),
@@ -82,6 +98,21 @@ export function workspace(dir) {
           allowImportingTsExtensions: true,
           strict: true,
           noEmit: true,
+          // The test is JavaScript, compiled as JavaScript: the checker types
+          // it and reports syntax and early errors, not TypeScript's type
+          // errors. Its unannotated values reach lowering as `any`, which is
+          // `docs/any-unknown.md`'s "implicit values in unannotated JavaScript"
+          // -- the population NeedsRepresentation serves. Compiled as `.ts` it
+          // was 18,987 checker refusals, 2,818 of them syntax.
+          //
+          // **`checkJs` is left unset, and unset is not `false`.** TypeScript
+          // treats a JavaScript file with no `checkJs` at all as *plain JS* and
+          // still reports its early errors -- `let x; let x;` (TS2451), `eval`
+          // assigned in strict code (TS1100). An explicit `false` turns those
+          // off too: the first run of this layout accepted 2,951 negative-parse
+          // tests the checker had rejected, every one a SyntaxError test262
+          // requires.
+          allowJs: true,
         },
         include: ["src"],
       },
@@ -93,19 +124,30 @@ export function workspace(dir) {
 }
 
 /**
- * One test, as a single script.
+ * One test, as two global scripts: the stand-in in `HARNESS_FILE`, typed
+ * TypeScript, and the test in `TEST_FILE`, JavaScript as test262 wrote it.
  *
- * The harness is **prepended, not imported**. An `import` would make the unit a
- * module, which changes top-level `var` scoping and `this`;
- * `docs/conformance/test262.md` is explicit that the units "must not be
- * concatenated into a function or CommonJS wrapper: that changes global script
- * semantics, strict-directive reach, parse phases, and declaration visibility".
- * Prepending sibling top-level statements is none of those.
+ * Two source units in one realm is test262's own model -- harness files and
+ * the test "remain separate source units evaluated in one realm"
+ * (`docs/conformance/test262.md`). Neither imports the other: an `import`
+ * would make them modules, which changes top-level `var` scoping and `this`.
+ * Both carry the strict directive, as the prepended single script did.
  */
 export function materialise(dir, body) {
-  const source = `"use strict";\n${harnessFor(body)}${body}`;
-  writeFileSync(join(dir, "src", "main.ts"), source);
-  return source;
+  writeFileSync(join(dir, HARNESS_FILE), `"use strict";\n${harnessFor(body)}`);
+  writeFileSync(join(dir, TEST_FILE), `${TEST_PRELUDE}${body}`);
+}
+
+/**
+ * Where a diagnostic at `file:line` is: in the test (`line` then counted from
+ * the test's own first line), in the stand-in, or elsewhere. One definition,
+ * for every instrument that ranks causes: a cause in the stand-in is ours, and
+ * ranked as the test's it would top every table.
+ */
+export function placeOf(file, line) {
+  if (file.endsWith(TEST_FILE)) return { where: "body", line: line - TEST_PRELUDE.split("\n").length + 1 };
+  if (file.endsWith(HARNESS_FILE)) return { where: "harness" };
+  return { where: "other" };
 }
 
 /**

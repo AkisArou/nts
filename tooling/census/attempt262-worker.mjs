@@ -3,7 +3,7 @@
 //
 //   node tooling/census/attempt262-worker.mjs <scratch> <nts> <cc> <suite> [memory-cap-kb] [object-cache]
 //
-// **One workspace per worker, never shared.** `attempt` writes `src/main.ts`
+// **One workspace per worker, never shared.** `attempt` writes `src/main.js`
 // and then compiles it, so two attempts in one directory race on that file and
 // each reports a bucket for a program the other wrote -- `run262.mjs` records
 // two runs doing exactly that, an hour apart, with nothing in either report to

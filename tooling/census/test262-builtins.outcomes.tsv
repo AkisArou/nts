@@ -1,6 +1,6 @@
 # Test262 test/built-ins cases that ran, and what each did. Written by
 # tooling/census/conformance262.mjs --record; compared by --check.
-# compiler b9b01d5eaee61d7a, harness ff3c3cc1129b5d2b; machine at start: 19.7 GB available, swap 4.1/20 GB, load 28.6/30.9 (1m/5m), 32 cores; 4 worker(s)
+# compiler 62f0f9b5c336539e, harness 16b027e1d2ed8109; machine at start: 20.4 GB available, swap 3.5/20 GB, load 14.3/16.5 (1m/5m), 32 cores; 4 worker(s)
 test/built-ins/Array/from/from-string.js	pass	
 test/built-ins/Array/isArray/15.4.3.2-0-4.js	pass	
 test/built-ins/Array/isArray/15.4.3.2-0-7.js	pass	
@@ -101,11 +101,13 @@ test/built-ins/DataView/prototype/getUint32/return-values.js	pass
 test/built-ins/DataView/prototype/getUint8/return-value-clean-arraybuffer.js	pass	
 test/built-ins/DataView/prototype/getUint8/return-values-custom-offset.js	pass	
 test/built-ins/DataView/prototype/getUint8/return-values.js	pass	
+test/built-ins/Date/S15.9.2.1_A1.js	pass	
 test/built-ins/Date/TimeClip_negative_zero.js	pass	
 test/built-ins/Date/now/15.9.4.4-0-4.js	pass	
 test/built-ins/Date/prototype/getTime/this-value-invalid-date.js	pass	
 test/built-ins/Date/prototype/getTime/this-value-valid-date.js	pass	
 test/built-ins/Date/prototype/getTimezoneOffset/this-value-valid-date.js	pass	
+test/built-ins/Date/prototype/valueOf/S9.4_A3_T1.js	pass	
 test/built-ins/Date/prototype/valueOf/S9.4_A3_T2.js	pass	
 test/built-ins/Function/15.3.2.1-11-8-s.js	pass	
 test/built-ins/Function/15.3.2.1-11-9-s.js	pass	
@@ -186,8 +188,12 @@ test/built-ins/Math/log/S15.8.2.10_A3.js	pass
 test/built-ins/Math/log/S15.8.2.10_A4.js	pass	
 test/built-ins/Math/log/S15.8.2.10_A5.js	pass	
 test/built-ins/Math/log1p/specific-results.js	pass	
+test/built-ins/Math/max/15.8.2.11-1.js	fail	nts: uncaught Test262Error: sameValue
+test/built-ins/Math/max/Math.max_each-element-coerced.js	fail	nts: uncaught Test262Error: sameValue
 test/built-ins/Math/max/S15.8.2.11_A1.js	pass	
 test/built-ins/Math/max/zeros.js	pass	
+test/built-ins/Math/min/15.8.2.12-1.js	fail	nts: uncaught Test262Error: sameValue
+test/built-ins/Math/min/Math.min_each-element-coerced.js	fail	nts: uncaught Test262Error: sameValue
 test/built-ins/Math/min/S15.8.2.12_A1.js	pass	
 test/built-ins/Math/min/zeros.js	pass	
 test/built-ins/Math/pow/int32_min-exponent.js	pass	
@@ -223,6 +229,7 @@ test/built-ins/Math/trunc/Math.trunc_Success.js	pass
 test/built-ins/Math/trunc/Math.trunc_Zero.js	pass	
 test/built-ins/Math/trunc/trunc-sampleTests.js	pass	
 test/built-ins/Math/trunc/trunc-specialVals.js	pass	
+test/built-ins/NaN/S15.1.1.1_A1.js	pass	
 test/built-ins/NativeErrors/EvalError/constructor.js	pass	
 test/built-ins/NativeErrors/RangeError/constructor.js	pass	
 test/built-ins/NativeErrors/ReferenceError/constructor.js	pass	
@@ -364,6 +371,7 @@ test/built-ins/Number/string-numeric-separator-literal-sign-minus-dds-nsl-dd.js	
 test/built-ins/Number/string-numeric-separator-literal-sign-plus-dds-nsl-dd.js	pass	
 test/built-ins/Number/string-octal-literal-invald.js	pass	
 test/built-ins/Number/string-octal-literal.js	pass	
+test/built-ins/Object/entries/getter-removing-future-key.js	fail	nts: uncaught Test262Error: result has 2 items
 test/built-ins/Object/hasOwn/hasown_own_getter.js	pass	
 test/built-ins/Object/hasOwn/hasown_own_getter_and_setter.js	pass	
 test/built-ins/Object/hasOwn/hasown_own_property_exists.js	pass	
@@ -381,228 +389,206 @@ test/built-ins/Object/keys/15.2.3.14-3-5.js	pass
 test/built-ins/Object/prototype/hasOwnProperty/8.12.1-1_2.js	pass	
 test/built-ins/Object/prototype/hasOwnProperty/8.12.1-1_20.js	pass	
 test/built-ins/Object/prototype/hasOwnProperty/8.12.1-1_22.js	pass	
+test/built-ins/Object/values/getter-removing-future-key.js	fail	nts: uncaught Test262Error: result has 2 items
 test/built-ins/Promise/resolve/S25.4.4.5_A2.1_T1.js	fail	nts: uncaught Test262Error: The value of p1 is expected to equal the value of p2
 test/built-ins/RegExp/15.10.4.1-4.js	pass	
-test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_F-negated.js	pass	
-test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_F.js	pass	
-test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_Invalid-negated.js	pass	
-test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_Invalid.js	pass	
-test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_N-negated.js	pass	
-test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_N.js	pass	
-test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_No-negated.js	pass	
-test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_No.js	pass	
-test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_T-negated.js	pass	
-test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_T.js	pass	
-test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_Y-negated.js	pass	
-test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_Y.js	pass	
-test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_Yes-negated.js	pass	
-test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_Yes.js	pass	
-test/built-ins/RegExp/property-escapes/character-class-range-end.js	pass	
-test/built-ins/RegExp/property-escapes/character-class-range-no-dash-end.js	pass	
-test/built-ins/RegExp/property-escapes/character-class-range-no-dash-start.js	pass	
-test/built-ins/RegExp/property-escapes/character-class-range-start.js	pass	
-test/built-ins/RegExp/property-escapes/generated/strings/Basic_Emoji-negative-CharacterClass.js	pass	
-test/built-ins/RegExp/property-escapes/generated/strings/Basic_Emoji-negative-P.js	pass	
-test/built-ins/RegExp/property-escapes/generated/strings/Basic_Emoji-negative-u.js	pass	
-test/built-ins/RegExp/property-escapes/generated/strings/Emoji_Keycap_Sequence-negative-CharacterClass.js	pass	
-test/built-ins/RegExp/property-escapes/generated/strings/Emoji_Keycap_Sequence-negative-P.js	pass	
-test/built-ins/RegExp/property-escapes/generated/strings/Emoji_Keycap_Sequence-negative-u.js	pass	
-test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji-negative-CharacterClass.js	pass	
-test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji-negative-P.js	pass	
-test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji-negative-u.js	pass	
-test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_Flag_Sequence-negative-CharacterClass.js	pass	
-test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_Flag_Sequence-negative-P.js	pass	
-test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_Flag_Sequence-negative-u.js	pass	
-test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_Modifier_Sequence-negative-CharacterClass.js	pass	
-test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_Modifier_Sequence-negative-P.js	pass	
-test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_Modifier_Sequence-negative-u.js	pass	
-test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_Tag_Sequence-negative-CharacterClass.js	pass	
-test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_Tag_Sequence-negative-P.js	pass	
-test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_Tag_Sequence-negative-u.js	pass	
-test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_ZWJ_Sequence-negative-CharacterClass.js	pass	
-test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_ZWJ_Sequence-negative-P.js	pass	
-test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_ZWJ_Sequence-negative-u.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-In-prefix-Block-implicit-negated.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-In-prefix-Block-implicit.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-In-prefix-Script-implicit-negated.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-In-prefix-Script-implicit.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-In-prefix-Script-negated.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-In-prefix-Script.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-Is-prefix-Script-negated.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-Is-prefix-Script.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-circumflex-negation-negated.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-circumflex-negation.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-empty-negated.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-empty.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-invalid-negated.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-invalid.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-no-braces-negated.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-no-braces-value-negated.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-no-braces-value.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-no-braces.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-separator-and-value-only-negated.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-separator-and-value-only.js	pass	
+test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_F-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_F.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_Invalid-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_Invalid.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_N-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_N.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_No-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_No.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_T-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_T.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_Y-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_Y.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_Yes-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_Yes.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/character-class-range-end.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/character-class-range-no-dash-end.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/character-class-range-no-dash-start.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/character-class-range-start.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/generated/strings/Basic_Emoji-negative-CharacterClass.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/generated/strings/Basic_Emoji-negative-P.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/generated/strings/Basic_Emoji-negative-u.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/generated/strings/Emoji_Keycap_Sequence-negative-CharacterClass.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/generated/strings/Emoji_Keycap_Sequence-negative-P.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/generated/strings/Emoji_Keycap_Sequence-negative-u.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji-negative-CharacterClass.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji-negative-P.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji-negative-u.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_Flag_Sequence-negative-CharacterClass.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_Flag_Sequence-negative-P.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_Flag_Sequence-negative-u.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_Modifier_Sequence-negative-CharacterClass.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_Modifier_Sequence-negative-P.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_Modifier_Sequence-negative-u.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_Tag_Sequence-negative-CharacterClass.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_Tag_Sequence-negative-P.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_Tag_Sequence-negative-u.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_ZWJ_Sequence-negative-CharacterClass.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_ZWJ_Sequence-negative-P.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/generated/strings/RGI_Emoji_ZWJ_Sequence-negative-u.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-In-prefix-Block-implicit-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-In-prefix-Block-implicit.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-In-prefix-Script-implicit-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-In-prefix-Script-implicit.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-In-prefix-Script-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-In-prefix-Script.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-Is-prefix-Script-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-Is-prefix-Script.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-circumflex-negation-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-circumflex-negation.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-empty-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-empty.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-invalid-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-invalid.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-no-braces-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-no-braces-value-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-no-braces-value.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-no-braces.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-separator-and-value-only-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-separator-and-value-only.js	fail	accepted: was refused later (lowering)
 test/built-ins/RegExp/property-escapes/grammar-extension-separator-negated.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-separator-only-negated.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-separator-only.js	pass	
+test/built-ins/RegExp/property-escapes/grammar-extension-separator-only-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-separator-only.js	fail	accepted: was refused later (lowering)
 test/built-ins/RegExp/property-escapes/grammar-extension-separator.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-unclosed-negated.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-unclosed.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-unopened-negated.js	pass	
-test/built-ins/RegExp/property-escapes/grammar-extension-unopened.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-01-negated.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-01.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-02-negated.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-02.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-03-negated.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-03.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-04-negated.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-04.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-05-negated.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-05.js	pass	
+test/built-ins/RegExp/property-escapes/grammar-extension-unclosed-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-unclosed.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-unopened-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/grammar-extension-unopened.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-01-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-01.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-02-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-02.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-03-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-03.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-04-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-04.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-05-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-05.js	fail	accepted: was refused later (lowering)
 test/built-ins/RegExp/property-escapes/loose-matching-06-negated.js	pass	
 test/built-ins/RegExp/property-escapes/loose-matching-06.js	pass	
 test/built-ins/RegExp/property-escapes/loose-matching-07-negated.js	pass	
 test/built-ins/RegExp/property-escapes/loose-matching-07.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-08-negated.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-08.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-09-negated.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-09.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-10-negated.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-10.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-11-negated.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-11.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-12-negated.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-12.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-13-negated.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-13.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-14-negated.js	pass	
-test/built-ins/RegExp/property-escapes/loose-matching-14.js	pass	
-test/built-ins/RegExp/property-escapes/non-binary-property-without-value-General_Category-equals-negated.js	pass	
-test/built-ins/RegExp/property-escapes/non-binary-property-without-value-General_Category-equals.js	pass	
-test/built-ins/RegExp/property-escapes/non-binary-property-without-value-General_Category-negated.js	pass	
-test/built-ins/RegExp/property-escapes/non-binary-property-without-value-General_Category.js	pass	
-test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script-equals-negated.js	pass	
-test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script-equals.js	pass	
-test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script-negated.js	pass	
-test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script.js	pass	
-test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script_Extensions-equals-negated.js	pass	
-test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script_Extensions-equals.js	pass	
-test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script_Extensions-negated.js	pass	
-test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script_Extensions.js	pass	
-test/built-ins/RegExp/property-escapes/non-existent-binary-property-negated.js	pass	
-test/built-ins/RegExp/property-escapes/non-existent-binary-property.js	pass	
-test/built-ins/RegExp/property-escapes/non-existent-property-and-value-negated.js	pass	
-test/built-ins/RegExp/property-escapes/non-existent-property-and-value.js	pass	
-test/built-ins/RegExp/property-escapes/non-existent-property-existing-value-negated.js	pass	
-test/built-ins/RegExp/property-escapes/non-existent-property-existing-value.js	pass	
-test/built-ins/RegExp/property-escapes/non-existent-property-value-General_Category-negated.js	pass	
-test/built-ins/RegExp/property-escapes/non-existent-property-value-Script-negated.js	pass	
-test/built-ins/RegExp/property-escapes/non-existent-property-value-Script.js	pass	
-test/built-ins/RegExp/property-escapes/non-existent-property-value-Script_Extensions-negated.js	pass	
-test/built-ins/RegExp/property-escapes/non-existent-property-value-Script_Extensions.js	pass	
-test/built-ins/RegExp/property-escapes/non-existent-property-value-general-category.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Composition_Exclusion-negated.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Composition_Exclusion.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFC-negated.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFC.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFD-negated.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFD.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFKC-negated.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFKC.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFKD-negated.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFKD.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-FC_NFKC_Closure-negated.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-FC_NFKC_Closure.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Full_Composition_Exclusion-negated.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Full_Composition_Exclusion.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Grapheme_Link-negated.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Grapheme_Link.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Hyphen-negated.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Hyphen.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Alphabetic-negated.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Alphabetic.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Default_Ignorable_Code_Point-negated.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Default_Ignorable_Code_Point.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Grapheme_Extend-negated.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Grapheme_Extend.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_ID_Continue-negated.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_ID_Continue.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_ID_Start-negated.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_ID_Start.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Lowercase-negated.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Lowercase.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Math-negated.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Math.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Uppercase-negated.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Uppercase.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Prepended_Concatenation_Mark-negated.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-binary-property-Prepended_Concatenation_Mark.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-property-Block-with-value-negated.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-property-Block-with-value.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-property-FC_NFKC_Closure-negated.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-property-FC_NFKC_Closure.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-property-Line_Break-negated.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-property-Line_Break-with-value-negated.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-property-Line_Break-with-value.js	pass	
-test/built-ins/RegExp/property-escapes/unsupported-property-Line_Break.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-01.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-02.js	pass	
+test/built-ins/RegExp/property-escapes/loose-matching-08-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-08.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-09-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-09.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-10-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-10.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-11-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-11.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-12-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-12.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-13-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-13.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-14-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/loose-matching-14.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-binary-property-without-value-General_Category-equals-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-binary-property-without-value-General_Category-equals.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-binary-property-without-value-General_Category-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-binary-property-without-value-General_Category.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script-equals-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script-equals.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script_Extensions-equals-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script_Extensions-equals.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script_Extensions-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-binary-property-without-value-Script_Extensions.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-existent-binary-property-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-existent-binary-property.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-existent-property-and-value-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-existent-property-and-value.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-existent-property-existing-value-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-existent-property-existing-value.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-existent-property-value-General_Category-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-existent-property-value-Script-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-existent-property-value-Script.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-existent-property-value-Script_Extensions-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-existent-property-value-Script_Extensions.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/non-existent-property-value-general-category.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Composition_Exclusion-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Composition_Exclusion.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFC-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFC.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFD-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFD.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFKC-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFKC.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFKD-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Expands_On_NFKD.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-FC_NFKC_Closure-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-FC_NFKC_Closure.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Full_Composition_Exclusion-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Full_Composition_Exclusion.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Grapheme_Link-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Grapheme_Link.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Hyphen-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Hyphen.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Alphabetic-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Alphabetic.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Default_Ignorable_Code_Point-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Default_Ignorable_Code_Point.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Grapheme_Extend-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Grapheme_Extend.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_ID_Continue-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_ID_Continue.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_ID_Start-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_ID_Start.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Lowercase-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Lowercase.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Math-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Math.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Uppercase-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Other_Uppercase.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Prepended_Concatenation_Mark-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-binary-property-Prepended_Concatenation_Mark.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-property-Block-with-value-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-property-Block-with-value.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-property-FC_NFKC_Closure-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-property-FC_NFKC_Closure.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-property-Line_Break-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-property-Line_Break-with-value-negated.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-property-Line_Break-with-value.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/property-escapes/unsupported-property-Line_Break.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-01.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-02.js	fail	accepted: was refused later (lowering)
 test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-03.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-04.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-05.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-06.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-07.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-08.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-09.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-10.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-11.js	pass	
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-04.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-05.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-06.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-07.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-08.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-09.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-10.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-11.js	fail	accepted: was refused later (lowering)
 test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-12.js	fail	accepted: was refused later (lowering)
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-13.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-14.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-15.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-16.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-17.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-18.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-19.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-20.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-21.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-22.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-23.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-24.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-25.js	pass	
-test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-26.js	pass	
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-13.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-14.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-15.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-16.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-17.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-18.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-19.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-20.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-21.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-22.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-23.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-24.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-25.js	fail	accepted: was refused later (lowering)
+test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-26.js	fail	accepted: was refused later (lowering)
 test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-27.js	fail	accepted: was refused later (lowering)
 test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-28.js	fail	accepted: was refused later (lowering)
-test/built-ins/RegExp/prototype/unicodeSets/uv-flags.js	pass	
-test/built-ins/Set/prototype/add/preserves-insertion-order.js	pass	
+test/built-ins/RegExp/prototype/unicodeSets/uv-flags.js	fail	accepted: was refused later (lowering)
 test/built-ins/Set/prototype/add/returns-this-when-ignoring-duplicate.js	pass	
-test/built-ins/Set/prototype/add/returns-this.js	pass	
 test/built-ins/Set/prototype/add/will-not-add-duplicate-entry-initial-iterable.js	pass	
 test/built-ins/Set/prototype/add/will-not-add-duplicate-entry-normalizes-zero.js	pass	
-test/built-ins/Set/prototype/add/will-not-add-duplicate-entry.js	pass	
 test/built-ins/Set/prototype/delete/delete-entry-initial-iterable.js	pass	
 test/built-ins/Set/prototype/delete/delete-entry-normalizes-zero.js	pass	
-test/built-ins/Set/prototype/delete/delete-entry.js	pass	
-test/built-ins/Set/prototype/delete/returns-false-when-delete-is-noop.js	pass	
-test/built-ins/Set/prototype/delete/returns-true-when-delete-operation-occurs.js	pass	
-test/built-ins/Set/prototype/has/returns-false-when-undefined-added-deleted-not-present-undefined.js	pass	
-test/built-ins/Set/prototype/has/returns-false-when-value-not-present-boolean.js	pass	
-test/built-ins/Set/prototype/has/returns-false-when-value-not-present-nan.js	pass	
-test/built-ins/Set/prototype/has/returns-false-when-value-not-present-null.js	pass	
-test/built-ins/Set/prototype/has/returns-false-when-value-not-present-number.js	pass	
-test/built-ins/Set/prototype/has/returns-false-when-value-not-present-string.js	pass	
-test/built-ins/Set/prototype/has/returns-false-when-value-not-present-symbol.js	pass	
-test/built-ins/Set/prototype/has/returns-false-when-value-not-present-undefined.js	pass	
-test/built-ins/Set/prototype/has/returns-true-when-value-present-boolean.js	pass	
-test/built-ins/Set/prototype/has/returns-true-when-value-present-nan.js	pass	
-test/built-ins/Set/prototype/has/returns-true-when-value-present-null.js	pass	
-test/built-ins/Set/prototype/has/returns-true-when-value-present-number.js	pass	
-test/built-ins/Set/prototype/has/returns-true-when-value-present-string.js	pass	
-test/built-ins/Set/prototype/has/returns-true-when-value-present-symbol.js	pass	
-test/built-ins/Set/prototype/has/returns-true-when-value-present-undefined.js	pass	
-test/built-ins/Set/prototype/size/returns-count-of-present-values-before-after-add-delete.js	pass	
-test/built-ins/Set/prototype/size/returns-count-of-present-values-by-insertion.js	pass	
 test/built-ins/Set/prototype/size/returns-count-of-present-values-by-iterable.js	pass	
 test/built-ins/Set/set-iterable.js	pass	
 test/built-ins/String/S15.5.1.1_A1_T10.js	pass	
@@ -634,6 +620,7 @@ test/built-ins/String/fromCharCode/S9.7_A1.js	pass
 test/built-ins/String/fromCharCode/S9.7_A2.1.js	pass	
 test/built-ins/String/fromCharCode/S9.7_A2.2.js	pass	
 test/built-ins/String/fromCharCode/S9.7_A3.2_T1.js	pass	
+test/built-ins/String/prototype/charAt/S15.5.4.4_A1_T4.js	pass	
 test/built-ins/String/prototype/charAt/S15.5.4.4_A4_T1.js	pass	
 test/built-ins/String/prototype/charAt/S15.5.4.4_A4_T2.js	pass	
 test/built-ins/String/prototype/charAt/S15.5.4.4_A4_T3.js	pass	
@@ -675,9 +662,11 @@ test/built-ins/String/prototype/replaceAll/getSubstitution-0x0024.js	pass
 test/built-ins/String/prototype/replaceAll/replaceValue-value-replaces-string.js	pass	
 test/built-ins/String/prototype/replaceAll/searchValue-empty-string-this-empty-string.js	pass	
 test/built-ins/String/prototype/replaceAll/searchValue-empty-string.js	pass	
+test/built-ins/String/prototype/slice/S15.5.4.13_A1_T4.js	pass	
 test/built-ins/String/prototype/slice/S15.5.4.13_A2_T1.js	pass	
 test/built-ins/String/prototype/startsWith/searchstring-found-without-position.js	pass	
 test/built-ins/String/prototype/startsWith/searchstring-not-found-without-position.js	pass	
+test/built-ins/String/prototype/substring/S15.5.4.15_A2_T1.js	pass	
 test/built-ins/String/prototype/toLowerCase/Final_Sigma_U180E.js	fail	nts: uncaught Test262Error: Sigma preceded by LATIN CAPITAL LETTER A, MONGOLIAN VOWEL SEPARATOR
 test/built-ins/String/prototype/toLowerCase/S15.5.4.16_A1_T5.js	pass	
 test/built-ins/String/prototype/toLowerCase/special_casing.js	pass	
@@ -818,10 +807,13 @@ test/built-ins/encodeURIComponent/S15.1.3.4_A4_T1.js	pass
 test/built-ins/encodeURIComponent/S15.1.3.4_A4_T2.js	pass	
 test/built-ins/encodeURIComponent/S15.1.3.4_A4_T3.js	pass	
 test/built-ins/encodeURIComponent/S15.1.3.4_A4_T4.js	pass	
+test/built-ins/global/S10.2.3_A1.1_T1.js	pass	
+test/built-ins/global/S10.2.3_A1.2_T1.js	pass	
 test/built-ins/isFinite/return-false-on-nan-or-infinities.js	pass	
 test/built-ins/isFinite/return-true-for-valid-finite-numbers.js	pass	
 test/built-ins/isNaN/return-false-not-nan-numbers.js	pass	
 test/built-ins/parseFloat/15.1.2.3-2-1.js	pass	
+test/built-ins/parseFloat/S15.1.2.3_A1_T3.js	pass	
 test/built-ins/parseFloat/S15.1.2.3_A2_T1.js	pass	
 test/built-ins/parseFloat/S15.1.2.3_A2_T10.js	fail	nts: uncaught Test262Error: #1.1680
 test/built-ins/parseFloat/S15.1.2.3_A2_T10_U180E.js	pass	
@@ -863,6 +855,7 @@ test/built-ins/parseFloat/tonumber-numeric-separator-literal-nzd-nsl-dd.js	pass
 test/built-ins/parseFloat/tonumber-numeric-separator-literal-nzd-nsl-dds.js	pass	
 test/built-ins/parseFloat/tonumber-numeric-separator-literal-sign-plus-dds-nsl-dd.js	pass	
 test/built-ins/parseInt/15.1.2.2-2-1.js	pass	
+test/built-ins/parseInt/S15.1.2.2_A1_T3.js	pass	
 test/built-ins/parseInt/S15.1.2.2_A2_T1.js	pass	
 test/built-ins/parseInt/S15.1.2.2_A2_T10.js	fail	nts: uncaught Test262Error: parseInt(uspU[index] + "1") must return the same value returned by parseInt("1")
 test/built-ins/parseInt/S15.1.2.2_A2_T10_U180E.js	pass	
@@ -874,6 +867,7 @@ test/built-ins/parseInt/S15.1.2.2_A2_T6.js	pass
 test/built-ins/parseInt/S15.1.2.2_A2_T7.js	pass	
 test/built-ins/parseInt/S15.1.2.2_A2_T8.js	fail	nts: uncaught Test262Error: parseInt("\u20281") must return the same value returned by parseInt("1")
 test/built-ins/parseInt/S15.1.2.2_A2_T9.js	fail	nts: uncaught Test262Error: parseInt("\u20291") must return the same value returned by parseInt("1")
+test/built-ins/parseInt/S15.1.2.2_A3.1_T1.js	pass	
 test/built-ins/parseInt/S15.1.2.2_A3.2_T1.js	fail	nts: uncaught Test262Error: parseInt("11", Number.POSITIVE_INFINITY) must return the same value returned by parseInt("11", 10)
 test/built-ins/parseInt/S15.1.2.2_A3.2_T2.js	pass	
 test/built-ins/parseInt/S15.1.2.2_A3.2_T3.js	fail	nts: uncaught Test262Error: parseInt("11", 4294967298) must return the same value returned by parseInt("11", 2)

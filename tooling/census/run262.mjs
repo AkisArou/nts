@@ -60,7 +60,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 const SUITE = join(ROOT, "third_party/test262");
 // **Per process, because two runs in one directory measure each other.**
-// `attempt` writes `src/main.ts` and then compiles it, so two runs sharing a
+// `attempt` writes `src/main.js` and then compiles it, so two runs sharing a
 // workspace race on that file: the compiler reads whichever body landed last,
 // and both report a bucket for a program the other wrote. Two were found
 // running at once here, started an hour apart, with no flag between them and

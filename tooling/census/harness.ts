@@ -41,15 +41,16 @@
 // cases, 7 passed, 37 became lowering refusals, 0 became wrong answers, and
 // the 1,803 recorded cases did not move.
 //
-// # This is prepended, not imported
+// # A script beside the test, not imported
 //
-// The materialiser concatenates this ahead of the test body in one file. An
-// `import` would make the test a *module*, which changes top-level `var`
-// scoping and `this`, and `docs/conformance/test262.md` is explicit that the
-// units "must not be concatenated into a function or CommonJS wrapper: that
-// changes global script semantics, strict-directive reach, parse phases, and
-// declaration visibility". Prepending sibling top-level statements is none of
-// those things -- the test's statements stay top-level in one script.
+// The materialiser writes this as `src/harness.ts` and the test as
+// `src/main.js`: two global scripts in one program, which is test262's own
+// model -- harness files and the test are "separate source units evaluated in
+// one realm". Neither imports the other. An `import` would make the test a
+// *module*, which changes top-level `var` scoping and `this`, and
+// `docs/conformance/test262.md` says the units "must not be concatenated into
+// a function or CommonJS wrapper". It was prepended into one `.ts` file until
+// 2026-09-29; the test is JavaScript, and is compiled as JavaScript now.
 //
 // # What it is not
 //

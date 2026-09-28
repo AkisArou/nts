@@ -12,18 +12,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 
-import { environment, HARNESS, materialise, workspace } from "./project.mjs";
-
-/**
- * The first line of the test body, in the materialised `src/main.ts`.
- *
- * `materialise` writes `"use strict";\n` and then the harness, so every line
- * before this one is ours and not the test's. A refusal located there is a
- * fact about the stand-in, and ranking it as the test's cause would put the
- * harness at the top of the table -- which is the failure `harness.ts`'s own
- * header describes (918 refusals in one file, every one of them the harness).
- */
-export const BODY_FIRST_LINE = 1 + HARNESS.split("\n").length;
+import { environment, materialise, placeOf, workspace } from "./project.mjs";
 
 /** The text of a refusal, after the code: `… NTS1001 <this part>`. */
 const FIRST_REFUSAL = /NTS\d{4}\s+(.*?)(?: is not supported by this lowering yet)?$/m;
@@ -44,7 +33,7 @@ const FIRST_REFUSAL = /NTS\d{4}\s+(.*?)(?: is not supported by this lowering yet
  * rather than backticks, because that is how TypeScript quotes them.
  */
 // A checker diagnostic now carries its place, so the code is not always at
-// the line's start: `src/main.ts:12:5: TS2769 ...`. The prefix stays optional
+// the line's start: `src/main.js:12:5: TS2769 ...`. The prefix stays optional
 // because a rewritten source whose map cannot answer prints the bare code.
 const FIRST_TYPE_ERROR = /^(?:\S+ )?(TS\d{4,5})\s+(.*)$/m;
 
@@ -97,7 +86,7 @@ export function linkCommand(emitted) {
 const unapostrophe = (text) => text.replace(/(\w)'(t|s|re|ve|ll|d)\b/g, "$1\u2019$2");
 const redactQuoted = (text) => unapostrophe(text).replace(/'[^']*'/g, "'X'").replace(/\u2019/g, "'").trim();
 
-export function parseDiagnostics(text, bodyFirstLine = BODY_FIRST_LINE) {
+export function parseDiagnostics(text) {
   const seen = new Set();
   const found = [];
   for (const raw of text.split("\n")) {
@@ -107,15 +96,12 @@ export function parseDiagnostics(text, bodyFirstLine = BODY_FIRST_LINE) {
     const said = /^(?:(.*?):(\d+):(\d+):\s+)?(NTS\d{4}|TS\d{4,5})\s+(.*)$/.exec(raw.trim());
     if (said === null) continue;
     const [, file, row, , code, message] = said;
-    const place =
-      file === undefined
-        ? { where: "none" }
-        : {
-            where: !file.endsWith("src/main.ts") ? "other" : Number(row) >= bodyFirstLine - 1 ? "body" : "harness",
-            // The line in the test body (1-based), so a later rule about `where`
-            // can be re-applied to stored rows instead of re-running them.
-            line: Number(row) - bodyFirstLine + 1,
-          };
+    // A cause in the stand-in is a fact about the stand-in, and ranked as the
+    // test's it would top the table -- `harness.ts`'s header has the number
+    // (918 refusals in one file, every one of them the harness). `line`, in
+    // the test, is counted from its own first line, so a later rule about
+    // `where` can be re-applied to stored rows instead of re-running them.
+    const place = file === undefined ? { where: "none" } : placeOf(file, Number(row));
     let entry;
     if (code.startsWith("NTS")) {
       const text = message.replace(/ is not supported by this lowering yet$/, "");
@@ -270,10 +256,7 @@ export function capped(tools, command, args) {
 /** Compile, link and run one program body. Never reads an exit status alone. */
 export function attempt(dir, body, tools) {
   const { nts, cc } = tools;
-  const source = materialise(dir, body);
-  // Where the body starts in *this* case's file: the stand-in is not one length
-  // any more -- `throws` is spliced in only for a test that calls it.
-  const bodyFirst = source.slice(0, source.length - body.length).split("\n").length;
+  materialise(dir, body);
   const out = join(dir, "out");
 
   // **`spawnSync`, because both streams have to be read on success.**
@@ -327,7 +310,7 @@ export function attempt(dir, body, tools) {
         // alone silently splits in two the day a wording changes.
         code: type_error[1],
         first: type_error[2].replace(/'[^']*'/g, "'X'").trim(),
-        diagnostics: parseDiagnostics(diagnostics, bodyFirst),
+        diagnostics: parseDiagnostics(diagnostics),
       };
     }
     // **Invalid HIR is a compiler defect, not a decline.** The verifier caught
@@ -348,7 +331,7 @@ export function attempt(dir, body, tools) {
     // as "exited non-zero with no diagnostic" because only the exit-0 branch
     // below read NTS lines. A refusal, then, with its diagnostics.
     if (/NTS\d{4}/.test(diagnostics)) {
-      return { bucket: "unsupported", why: "backend", diagnostics: parseDiagnostics(diagnostics, bodyFirst) };
+      return { bucket: "unsupported", why: "backend", diagnostics: parseDiagnostics(diagnostics) };
     }
     return { bucket: "unsupported", why: "emit" };
   }
@@ -369,7 +352,7 @@ export function attempt(dir, body, tools) {
     return {
       bucket: "unsupported",
       why: "lowering",
-      diagnostics: parseDiagnostics(diagnostics, bodyFirst),
+      diagnostics: parseDiagnostics(diagnostics),
       first: first ? first[1].replace(/`[^`]*`/g, "`X`").trim() : undefined,
       // **The redaction that makes a row rankable destroys the work list.**
       // The largest actionable row is 147 files of ``\`X\`, a builtin this

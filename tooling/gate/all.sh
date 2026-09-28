@@ -1783,16 +1783,34 @@ test262() {
 # is not seen) and 1 when the outcomes do not reconcile or a recorded case
 # changed; a missing `pass-count:` line is a run that said nothing, and fails
 # rather than reading as zero.
-TEST262_LANGUAGE_PASS_FLOOR=5463
-# One recorded test262 directory, re-run and held to its record and its floor:
-# `test262_recorded <dir> <record> <floor> <floor variable name>`. Shared by
-# test262-cases and test262-builtins-cases, so the two steps cannot come to
-# disagree about what "measured" means.
+#
+# **A re-baseline, not a regression: 5,463 -> 4,632 on 2026-09-29.** The census
+# compiled test262 -- which is JavaScript -- as TypeScript until then, and
+# about 1,600 negative-parse tests counted as passes because a TypeScript
+# *type* error (TS2364, TS2300, TS7006, ...) happened to fire on them, not
+# because nts raises the early error the specification names. Compiled as
+# JavaScript, nts accepts them: they are recorded fails now, the verdict
+# they always had. Positive passes rose (+257) in the same change.
+#
+# **The negatives accepted are a ratchet of their own: a ceiling, and it may
+# not rise.** A program the specification says must not parse, compiled, is
+# counted apart from the pass count -- `negatives-accepted:` -- because the
+# pass count cannot show it: those 1,600 were passes. Lower the ceiling when
+# early errors land; raise it only with the cases named in the commit.
+TEST262_LANGUAGE_PASS_FLOOR=4632
+TEST262_LANGUAGE_NEGATIVES_ACCEPTED_CEILING=1551
+# One recorded test262 directory, re-run and held to its record, its floor and
+# its ceiling: `test262_recorded <dir> <record> <floor> <floor variable name>
+# <ceiling> <ceiling variable name>`. Shared by test262-cases and
+# test262-builtins-cases, so the two steps cannot come to disagree about what
+# "measured" means.
 test262_recorded() {
   under=$1
   record=$2
   floor=$3
   floor_name=$4
+  ceiling=$5
+  ceiling_name=$6
   if [ ! -d third_party/test262/.git ]; then
     echo "  no test262 checkout, so this says nothing; tooling/bootstrap/bootstrap.sh clones it"
     return 0
@@ -1805,7 +1823,7 @@ test262_recorded() {
   out=$(NTS_BIN="${NTS_BIN:-target/release/nts}" node tooling/census/conformance262.mjs \
     --under "$under" --recorded "$record" --jobs "$cap" 2>&1)
   status=$?
-  printf '%s\n' "$out" | awk '(/^  (outcome|pass|fail|refused|unsupported|no-verdict|sum|recorded cases|pass-count|reconciled|NOT RECONCILED|INSTRUMENT FAILURE|self-checks|compiler)/ || /REGRESSED|CHANGED|MISSING|FIXED|NEW (PASS|FAIL)|^              /) && !/ranked by|by what|by family/ && !/\((test262-exclusions|features)\.json\)$/'
+  printf '%s\n' "$out" | awk '(/^  (outcome|pass|fail|refused|unsupported|no-verdict|sum|recorded cases|pass-count|negatives-accepted|reconciled|NOT RECONCILED|INSTRUMENT FAILURE|self-checks|compiler)/ || /REGRESSED|CHANGED|MISSING|FIXED|NEW (PASS|FAIL)|^              /) && !/ranked by|by what|by family/ && !/\((test262-exclusions|features)\.json\)$/'
   [ "$status" -eq 0 ] || return 1
   passed=$(printf '%s\n' "$out" | awk '/^  pass-count: [0-9]+$/ { print $2 }')
   if [ -z "$passed" ]; then
@@ -1819,10 +1837,23 @@ test262_recorded() {
   if [ "$passed" -gt "$floor" ]; then
     echo "  $passed pass, above the floor of $floor: raise $floor_name in tooling/gate/all.sh"
   fi
+  accepted=$(printf '%s\n' "$out" | awk '/^  negatives-accepted: [0-9]+$/ { print $2 }')
+  if [ -z "$accepted" ]; then
+    echo "  no negatives-accepted line: the run counted nothing, which is not zero"
+    return 1
+  fi
+  if [ "$accepted" -gt "$ceiling" ]; then
+    echo "  $accepted negative-parse test(s) accepted, above the ceiling of $ceiling -- a program that must not parse, compiled"
+    return 1
+  fi
+  if [ "$accepted" -lt "$ceiling" ]; then
+    echo "  $accepted negative-parse test(s) accepted, below the ceiling of $ceiling: lower $ceiling_name in tooling/gate/all.sh"
+  fi
 }
 test262_cases() {
   test262_recorded test/language tooling/census/test262-language.outcomes.tsv \
-    "$TEST262_LANGUAGE_PASS_FLOOR" TEST262_LANGUAGE_PASS_FLOOR
+    "$TEST262_LANGUAGE_PASS_FLOOR" TEST262_LANGUAGE_PASS_FLOOR \
+    "$TEST262_LANGUAGE_NEGATIVES_ACCEPTED_CEILING" TEST262_LANGUAGE_NEGATIVES_ACCEPTED_CEILING
 }
 
 # Test262 `test/built-ins`, the same way, with its own record and floor --
@@ -1835,10 +1866,15 @@ test262_cases() {
 # not DEGRADED. The first full census (7c81431a, 38.7 pages/s) had 865 of
 # 23,812 -- 3.91% of the 22,101 in scope, with Temporal's 4,603 kept in the
 # denominator because nothing in docs/ makes it a non-goal. About 35 s.
-TEST262_BUILTINS_PASS_FLOOR=875
+# Re-baselined with the language floor on 2026-09-29 (875 -> 681), for the
+# same reason: negative-parse tests passing on a type error, and `any`
+# containers (`new Set()` is `Set<any>` in JavaScript) refused.
+TEST262_BUILTINS_PASS_FLOOR=681
+TEST262_BUILTINS_NEGATIVES_ACCEPTED_CEILING=185
 test262_builtins_cases() {
   test262_recorded test/built-ins tooling/census/test262-builtins.outcomes.tsv \
-    "$TEST262_BUILTINS_PASS_FLOOR" TEST262_BUILTINS_PASS_FLOOR
+    "$TEST262_BUILTINS_PASS_FLOOR" TEST262_BUILTINS_PASS_FLOOR \
+    "$TEST262_BUILTINS_NEGATIVES_ACCEPTED_CEILING" TEST262_BUILTINS_NEGATIVES_ACCEPTED_CEILING
 }
 
 # Defects pinned to what they do: `tooling/conformance/outcomes/`, where a wrong
