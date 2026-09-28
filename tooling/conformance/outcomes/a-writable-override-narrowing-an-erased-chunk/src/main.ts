@@ -14,6 +14,12 @@
 //     base (control): calls        1
 //
 // The control is a subclass that keeps the base's `unknown` parameter.
+//
+// **Refused by name since b09c3e6f6**, which hoisted the JVM's NTS4009 check
+// into lowering for this shape: it was SIGSEGV on C until then. The record is
+// the refusal; the arms that must stay silent beside it are
+// an-override-declaring-fewer-parameters, the two covariant-record fixtures
+// that keep the base's fields in order, and a-controller-stored-by-a-generic-branch.
 class Writable {
   calls = 0;
   _write(chunk: unknown, encoding: string, callback: () => void): void {

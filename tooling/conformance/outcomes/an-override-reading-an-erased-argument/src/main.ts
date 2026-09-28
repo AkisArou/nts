@@ -6,6 +6,12 @@
 // instance base under the public generic `Component<P>`. Found by the React lane
 // (~/.cache/nts-react/probes/override-erased), ported from its GTK shim to
 // observe/done.
+//
+// **Refused by name since b09c3e6f6**, which hoisted the JVM's NTS4009 check
+// into lowering for this shape: it was SIGSEGV on C until then. The record is
+// the refusal; the arms that must stay silent beside it are
+// an-override-declaring-fewer-parameters, the two covariant-record fixtures
+// that keep the base's fields in order, and a-controller-stored-by-a-generic-branch.
 class InstanceBase {
   props: unknown;
   constructor(props: unknown) {

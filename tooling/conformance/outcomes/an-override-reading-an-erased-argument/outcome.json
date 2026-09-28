@@ -1,8 +1,9 @@
 {
   "run": "build",
-  "category": "aborted",
-  "nts": "SIGSEGV",
+  "category": "refused",
+  "nts": "NTS1001 `User#update` is reached through `InstanceBase#update`, which passes parameter 1 as an erased value where this one declares a `Type19` -- one dispatch slot, two representations, so the value would be read as something it is not",
+  "ran": "exit 1; nts: uncaught Observed: ",
   "node": "exit 1; nts: uncaught Observed: calls=user 1 | base;",
-  "measured_with": "6f3d47600977042e",
+  "measured_with": "277c7f209946856b",
   "source": "measured"
 }

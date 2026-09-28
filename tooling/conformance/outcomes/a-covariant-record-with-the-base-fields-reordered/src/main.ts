@@ -10,6 +10,12 @@
 // **Expected, confirmed under node:**
 //
 //     through the base   r 4
+//
+// **Refused by name since b09c3e6f6**, which hoisted the JVM's NTS4009 check
+// into lowering for this shape: it was SIGSEGV on C until then. The record is
+// the refusal; the arms that must stay silent beside it are
+// an-override-declaring-fewer-parameters, the two covariant-record fixtures
+// that keep the base's fields in order, and a-controller-stored-by-a-generic-branch.
 interface EntryJSON {
   name: string;
   entryType: string;

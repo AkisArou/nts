@@ -1,8 +1,9 @@
 {
   "run": "build",
-  "category": "aborted",
-  "nts": "SIGSEGV",
+  "category": "refused",
+  "nts": "NTS1001 `ChildWritable#_write` is reached through `Writable#_write`, which passes parameter 1 as an erased value where this one declares a typed-array view -- one dispatch slot, two representations, so the value would be read as something it is not",
+  "ran": "exit 1; nts: uncaught Observed: written bytes=0;base (control): calls=0;",
   "node": "exit 1; nts: uncaught Observed: written bytes=3;base (control): calls=1;",
-  "measured_with": "82c65520cbe233b6",
+  "measured_with": "277c7f209946856b",
   "source": "measured"
 }
