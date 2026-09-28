@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Observed: number, through unknown=not a number;string, through unknown=not a string;boolean, through unknown=not true;record, through unknown=not a record;number, as number (control)=42;",
+  "node": "exit 1; nts: uncaught Observed: number, through unknown=42;string, through unknown=s4;boolean, through unknown=true;record, through unknown=7;number, as number (control)=42;",
+  "measured_with": "c0649ef99113ee81",
+  "source": "measured"
+}
