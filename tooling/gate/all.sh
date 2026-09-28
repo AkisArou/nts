@@ -712,7 +712,28 @@ profile() {
   #
   # Verified rather than taken: raising a ceiling on a number measured in another
   # tree is how a gate ends up green against a figure nobody can reproduce.
-  ceiling=15500
+  #
+  # Raised from 15500 for `runtime/node/crypto`, the same case again -- **new
+  # corpus rather than a regression**, and this step globs `runtime/node/*`, so a
+  # module joins it the moment its directory exists. Measured here, one binary
+  # pinned from a clean `f3f4ac28e`, counted exactly the way this step counts:
+  #
+  #     the 27 tracked modules        15347
+  #     crypto alone                   1054   (9 of them in crypto's own source;
+  #                                            the rest is the `stream` and
+  #                                            `internal` it imports)
+  #     together                      16401
+  #
+  # Both figures are **byte-identical to the node-port lane's**, which is the
+  # first time a ceiling request has reproduced here to the digit -- so this one
+  # is confirmed rather than reconciled. The slack is the same 210 the previous
+  # raise argued for, giving 16611, rounded to 16650.
+  #
+  # And a note for whoever raises it next: because the glob reads the *working
+  # tree*, an uncommitted module reddens this step for every lane before its own
+  # commit lands. That is what happened here, and it is why the ceiling moved
+  # ahead of the module rather than with it.
+  ceiling=16650
   # **A band, not a floor, and the difference is deliberate.**
   #
   # 17882 definitions at `9a9fa3a8`. A floor at that number would go red the
