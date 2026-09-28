@@ -28,26 +28,24 @@ util.setTraceSigInt: needs interrupt-safe SIGINT interception and a stack snapsh
 url.URLPattern: a WHATWG global owned by runtime/web-platform; node re-exports it from node:url and this profile will do the same when web-platform installs it
 
 # --- ordinary work, not scheduled --------------------------------------------
-# node:crypto is its digests, MACs, symmetric ciphers, key derivations and
-# random numbers so far.
+# node:crypto is its digests, MACs, symmetric ciphers, key derivations,
+# random numbers and key objects so far.
 # Each group below is its own part of OpenSSL, and none is refused.
-crypto.createPrivateKey: asymmetric keys, OpenSSL's EVP_PKEY and its encoders; the next part of node:crypto, and the KeyObject here is the secret kind only
-crypto.createPublicKey: as crypto.createPrivateKey
-crypto.generateKeyPair: as crypto.createPrivateKey
-crypto.generateKeyPairSync: as crypto.createPrivateKey
+crypto.generateKeyPair: key-pair generation, EVP_PKEY_keygen per family; keys themselves are here
+crypto.generateKeyPairSync: as crypto.generateKeyPair
 crypto.generateKey: key generation, which for a secret key is random bytes and for the rest needs EVP_PKEY; not yet written
 crypto.generateKeySync: as crypto.generateKey
-crypto.createSign: signatures, which need asymmetric keys
+crypto.createSign: signatures, EVP_DigestSign over the keys here; the next part of node:crypto
 crypto.createVerify: as crypto.createSign
 crypto.Sign: as crypto.createSign
 crypto.Verify: as crypto.createSign
 crypto.sign: as crypto.createSign
 crypto.verify: as crypto.createSign
-crypto.privateDecrypt: RSA encryption, which needs asymmetric keys
+crypto.privateDecrypt: RSA encryption, EVP_PKEY_encrypt over the keys here
 crypto.privateEncrypt: as crypto.privateDecrypt
 crypto.publicDecrypt: as crypto.privateDecrypt
 crypto.publicEncrypt: as crypto.privateDecrypt
-crypto.encapsulate: key encapsulation, which needs asymmetric keys
+crypto.encapsulate: key encapsulation, post-quantum ML-KEM, which this module does not have yet
 crypto.decapsulate: as crypto.encapsulate
 crypto.createDiffieHellman: Diffie-Hellman and ECDH, OpenSSL's DH and EC key agreement
 crypto.createDiffieHellmanGroup: as crypto.createDiffieHellman

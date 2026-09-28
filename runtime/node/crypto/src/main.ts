@@ -20,7 +20,7 @@ import { bytesOf, OpenSSLError } from "./util.ts";
 
 export { createHash, createHmac, getHashes, hash } from "./hash.ts";
 export { Cipheriv, createCipheriv, createDecipheriv, Decipheriv, getCipherInfo, getCiphers } from "./cipher.ts";
-export { createSecretKey, KeyObject } from "./keys.ts";
+export { createPrivateKey, createPublicKey, createSecretKey, KeyObject } from "./keys.ts";
 export { hkdf, hkdfSync, pbkdf2, pbkdf2Sync, scrypt, scryptSync } from "./kdf.ts";
 export {
   getRandomValues,

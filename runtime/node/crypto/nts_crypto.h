@@ -106,6 +106,29 @@ double nts_crypto_cipher_set_auth_tag(double handle, NtsView *tag);
 double nts_crypto_cipher_set_aad(double handle, NtsView *aad, double plaintext_length);
 void nts_crypto_cipher_release(double handle);
 
+/* Asymmetric keys (`keys.c`). A handle, or a status mirrored by
+ * `src/asymmetric.ts`; formats and encodings are numbered as it numbers them. */
+double nts_crypto_key_parse_private(double format, double type, NtsView *data, NtsView *passphrase,
+                                    bool has_passphrase);
+double nts_crypto_key_parse_public(double format, double type, NtsView *data, NtsView *passphrase,
+                                   bool has_passphrase);
+double nts_crypto_key_from_jwk_rsa(NtsArray *components, bool private_key);
+bool nts_crypto_key_curve_known(NtsString *curve);
+double nts_crypto_key_from_jwk_ec(NtsString *curve, NtsView *x, NtsView *y, NtsView *d, bool private_key);
+double nts_crypto_key_from_okp(NtsString *curve, NtsView *raw, bool private_key);
+double nts_crypto_key_from_raw_ec(NtsString *curve, NtsView *raw, bool private_key);
+double nts_crypto_key_status(void);
+NtsString *nts_crypto_key_type(double handle);
+NtsArray *nts_crypto_key_details(double handle);
+NtsArray *nts_crypto_key_detail_names(double handle);
+NtsView *nts_crypto_key_public_exponent(double handle);
+bool nts_crypto_key_equals(double a, double b);
+NtsView *nts_crypto_key_export_private(double handle, double format, double type, double cipher_id,
+                                       NtsView *passphrase);
+NtsView *nts_crypto_key_export_public(double handle, double format, double type);
+NtsArray *nts_crypto_key_export_jwk(double handle, bool private_key);
+NtsView *nts_crypto_key_export_raw(double handle, bool private_key, bool compressed);
+
 /* FIPS mode: whether OpenSSL's default properties ask for FIPS, and setting
  * them. False from `set` is a failure whose cause is on the error record. */
 bool nts_crypto_fips_enabled(void);

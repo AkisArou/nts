@@ -23,7 +23,11 @@ function fromOpenSSL(error) {
   const stack = Array.isArray(error?.opensslErrorStack) ? error.opensslErrorStack : [];
   if (!message.startsWith("error:") && stack.length === 0) return empty();
   const code = typeof error.code === "string" && error.code.startsWith("ERR_OSSL") ? error.code : "";
-  return [error.library ?? "", error.reason ?? "", code, message, ...[...stack].reverse()];
+  // Oldest first. A peeked error -- ciphers, keys -- is already the oldest
+  // entry of its own stack; a taken one is not on it.
+  const errors = [...stack].reverse();
+  if (errors[0] !== message) errors.unshift(message);
+  return [error.library ?? "", error.reason ?? "", code, ...errors];
 }
 
 function failed(error) {
@@ -450,4 +454,181 @@ globalThis.nts_crypto_cipher_set_aad = (handle, aad, plaintextLength) => {
 
 globalThis.nts_crypto_cipher_release = (handle) => {
   ciphers.delete(handle);
+};
+
+// -- asymmetric keys ----------------------------------------------------------
+
+const keyObjects = [];
+let keyStatus = 1;
+const FORMATS = ["der", "pem"];
+const ENCODINGS = ["pkcs1", "pkcs8", "spki", "sec1"];
+
+function holdKey(key) {
+  return keyObjects.push(key);
+}
+
+function keyAt(handle) {
+  return keyObjects[handle - 1];
+}
+
+function parseKey(create, format, type, data, passphrase, hasPassphrase) {
+  const options = { key: data, format: FORMATS[format] };
+  if (type >= 0) options.type = ENCODINGS[type];
+  if (hasPassphrase) options.passphrase = passphrase;
+  try {
+    return holdKey(create(options));
+  } catch (error) {
+    if (error?.code === "ERR_MISSING_PASSPHRASE") return -1;
+    failed(error);
+    return 0;
+  }
+}
+
+globalThis.nts_crypto_key_parse_private = (format, type, data, passphrase, hasPassphrase) =>
+  parseKey(crypto.createPrivateKey, format, type, data, passphrase, hasPassphrase);
+
+/** A public request keeps whatever was parsed -- a private key answers for its public half. */
+globalThis.nts_crypto_key_parse_public = (format, type, data, passphrase, hasPassphrase) => {
+  const options = { key: data, format: FORMATS[format] };
+  if (type >= 0) options.type = ENCODINGS[type];
+  if (hasPassphrase) options.passphrase = passphrase;
+  try {
+    return holdKey(crypto.createPublicKey(options));
+  } catch (publicError) {
+    // A private key parses as one, and keeps its private half here as it
+    // does in `keys.c`, where the key object's type is the TypeScript's.
+    try {
+      return holdKey(crypto.createPrivateKey(options));
+    } catch {
+      if (publicError?.code === "ERR_MISSING_PASSPHRASE") return -1;
+      failed(publicError);
+      return 0;
+    }
+  }
+};
+
+const b64 = (bytes) => Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("base64url");
+
+function jwkKey(jwk, privateKey) {
+  try {
+    return holdKey((privateKey ? crypto.createPrivateKey : crypto.createPublicKey)({ key: jwk, format: "jwk" }));
+  } catch {
+    return 0;
+  }
+}
+
+globalThis.nts_crypto_key_from_jwk_rsa = (parts, privateKey) => {
+  const names = ["n", "e", "d", "p", "q", "dp", "dq", "qi"];
+  const jwk = { kty: "RSA" };
+  parts.forEach((part, index) => {
+    jwk[names[index]] = b64(part);
+  });
+  return jwkKey(jwk, privateKey);
+};
+
+globalThis.nts_crypto_key_curve_known = (curve) => {
+  try {
+    crypto.createPublicKey({ key: { kty: "EC", crv: curve, x: "", y: "" }, format: "jwk" });
+    return true;
+  } catch (error) {
+    return error?.code !== "ERR_CRYPTO_INVALID_CURVE";
+  }
+};
+
+globalThis.nts_crypto_key_from_jwk_ec = (curve, x, y, d, privateKey) => {
+  const jwk = { kty: "EC", crv: curve, x: b64(x), y: b64(y) };
+  if (privateKey) jwk.d = b64(d);
+  return jwkKey(jwk, privateKey);
+};
+
+function rawKey(options, privateKey) {
+  try {
+    return holdKey((privateKey ? crypto.createPrivateKey : crypto.createPublicKey)(options));
+  } catch (error) {
+    return error?.code === "ERR_CRYPTO_INVALID_CURVE" ? -2 : 0;
+  }
+}
+
+globalThis.nts_crypto_key_from_okp = (curve, raw, privateKey) => {
+  if (!["Ed25519", "Ed448", "X25519", "X448"].includes(curve)) return -3;
+  const format = privateKey ? "raw-private" : "raw-public";
+  return rawKey({ key: raw, format, asymmetricKeyType: curve.toLowerCase() }, privateKey);
+};
+
+globalThis.nts_crypto_key_from_raw_ec = (curve, raw, privateKey) => {
+  const format = privateKey ? "raw-private" : "raw-public";
+  return rawKey({ key: raw, format, asymmetricKeyType: "ec", namedCurve: curve }, privateKey);
+};
+
+globalThis.nts_crypto_key_status = () => keyStatus;
+globalThis.nts_crypto_key_type = (handle) => keyAt(handle)?.asymmetricKeyType ?? "";
+
+globalThis.nts_crypto_key_details = (handle) => {
+  const details = keyAt(handle)?.asymmetricKeyDetails ?? {};
+  return [details.modulusLength ?? -1, details.divisorLength ?? -1, details.saltLength ?? -1];
+};
+
+globalThis.nts_crypto_key_detail_names = (handle) => {
+  const details = keyAt(handle)?.asymmetricKeyDetails ?? {};
+  return [details.namedCurve ?? "", details.hashAlgorithm ?? "", details.mgf1HashAlgorithm ?? ""];
+};
+
+globalThis.nts_crypto_key_public_exponent = (handle) => {
+  const exponent = keyAt(handle)?.asymmetricKeyDetails?.publicExponent;
+  if (exponent === undefined) return new Uint8Array(0);
+  let hex = exponent.toString(16);
+  if (hex.length % 2 !== 0) hex = `0${hex}`;
+  return new Uint8Array(Buffer.from(hex, "hex"));
+};
+
+/** `EVP_PKEY_eq` compares public halves, so this does. */
+const publicHalf = (key) => (key.type === "public" ? key : crypto.createPublicKey(key));
+globalThis.nts_crypto_key_equals = (a, b) => publicHalf(keyAt(a)).equals(publicHalf(keyAt(b)));
+
+globalThis.nts_crypto_key_export_private = (handle, format, type, cipherId, passphrase) => {
+  const options = { format: FORMATS[format], type: ENCODINGS[type] };
+  if (cipherId >= 0) {
+    options.cipher = cipherNames[cipherId];
+    options.passphrase = passphrase;
+  }
+  try {
+    return view(Buffer.from(keyAt(handle).export(options)));
+  } catch (error) {
+    failed(error);
+    return null;
+  }
+};
+
+globalThis.nts_crypto_key_export_public = (handle, format, type) => {
+  try {
+    return view(Buffer.from(publicHalf(keyAt(handle)).export({ format: FORMATS[format], type: ENCODINGS[type] })));
+  } catch (error) {
+    failed(error);
+    return null;
+  }
+};
+
+const JWK_ORDER = { RSA: ["n", "e", "d", "p", "q", "dp", "dq", "qi"], EC: ["x", "y", "d"], OKP: ["x", "d"] };
+
+globalThis.nts_crypto_key_export_jwk = (handle, privateKey) => {
+  const key = keyAt(handle);
+  try {
+    const jwk = (privateKey ? key : publicHalf(key)).export({ format: "jwk" });
+    keyStatus = 1;
+    return JWK_ORDER[jwk.kty].filter((name) => jwk[name] !== undefined).map((name) => new Uint8Array(Buffer.from(jwk[name], "base64url")));
+  } catch (error) {
+    keyStatus = error?.code === "ERR_CRYPTO_JWK_UNSUPPORTED_CURVE" ? -4 : -3;
+    return [];
+  }
+};
+
+globalThis.nts_crypto_key_export_raw = (handle, privateKey, compressed) => {
+  const key = keyAt(handle);
+  try {
+    const options = privateKey ? { format: "raw-private" } : { format: "raw-public" };
+    if (compressed) options.type = "compressed";
+    return view((privateKey ? key : publicHalf(key)).export(options));
+  } catch {
+    return null;
+  }
 };

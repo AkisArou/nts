@@ -90,6 +90,8 @@ static const EVP_CIPHER *algorithm_at(double id) {
     return algorithms[(size_t)id].cipher;
 }
 
+const EVP_CIPHER *nts_crypto_cipher_at(double id) { return algorithm_at(id); }
+
 double nts_crypto_cipher_id(NtsString *name) {
     size_t length = 0;
     char *utf8 = nts_node_to_utf8_alloc(name, &length);

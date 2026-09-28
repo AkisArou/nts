@@ -80,6 +80,18 @@ export function digestId(name: string): number {
   return id;
 }
 
+/** Name to cipher id, kept as `digestIds` keeps digests. */
+const cipherIds = new Map<string, number>();
+
+/** The cipher a name resolves to, or -1. */
+export function cipherId(name: string): number {
+  const cached = cipherIds.get(name);
+  if (cached !== undefined) return cached;
+  const id = nts_crypto_cipher_id(name);
+  if (id >= 0) cipherIds.set(name, id);
+  return id;
+}
+
 // -- encodings ----------------------------------------------------------------
 
 /**

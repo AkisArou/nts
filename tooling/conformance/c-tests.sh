@@ -113,6 +113,8 @@ for test_c in runtime/node/*/test/*.c; do
   module_libraries=""
   case "$module" in
     zlib) module_libraries="-lz -lbrotlienc -lbrotlidec -lzstd" ;;
+    # The same query `build.sh` makes, so the two cannot name different libraries.
+    crypto) module_libraries=$(pkg-config --libs libcrypto) ;;
   esac
 
   if ! clang -std=c11 -D_GNU_SOURCE -Wall -Wextra \

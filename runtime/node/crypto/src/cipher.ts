@@ -36,6 +36,7 @@ import { isArrayBufferView } from "../../util/src/types.ts";
 import { prepareSecretKey } from "./keys.ts";
 import {
   bytesOf,
+  cipherId,
   filterDuplicateStrings,
   getArrayBufferOrView,
   parseEncoding,
@@ -66,17 +67,6 @@ export interface CipherOptions extends TransformOptions {
 export interface AADOptions {
   encoding?: string;
   plaintextLength?: number;
-}
-
-/** Name to cipher id, kept here as `digestId` keeps digests. */
-const cipherIds = new Map<string, number>();
-
-function cipherId(name: string): number {
-  const cached = cipherIds.get(name);
-  if (cached !== undefined) return cached;
-  const id = nts_crypto_cipher_id(name);
-  if (id >= 0) cipherIds.set(name, id);
-  return id;
 }
 
 /** Node's `getUIntOption`: -1 for absent, and a refusal for anything not a uint32. */

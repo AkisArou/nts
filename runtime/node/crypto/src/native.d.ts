@@ -163,3 +163,63 @@ declare function nts_crypto_cipher_set_auth_tag(handle: number, tag: Uint8Array)
 declare function nts_crypto_cipher_set_aad(handle: number, aad: Uint8Array, plaintextLength: number): number;
 /** @ntsAbi managed */
 declare function nts_crypto_cipher_release(handle: number): void;
+
+/** Asymmetric keys: a handle, or a `KeyStatus`. */
+/** @ntsAbi managed */
+declare function nts_crypto_key_parse_private(
+  format: number,
+  type: number,
+  data: Uint8Array,
+  passphrase: Uint8Array,
+  hasPassphrase: boolean,
+): number;
+/** @ntsAbi managed */
+declare function nts_crypto_key_parse_public(
+  format: number,
+  type: number,
+  data: Uint8Array,
+  passphrase: Uint8Array,
+  hasPassphrase: boolean,
+): number;
+/** @ntsAbi managed */
+declare function nts_crypto_key_from_jwk_rsa(components: Uint8Array[], privateKey: boolean): number;
+/** @ntsAbi managed */
+declare function nts_crypto_key_curve_known(curve: string): boolean;
+/** @ntsAbi managed */
+declare function nts_crypto_key_from_jwk_ec(
+  curve: string,
+  x: Uint8Array,
+  y: Uint8Array,
+  d: Uint8Array,
+  privateKey: boolean,
+): number;
+/** @ntsAbi managed */
+declare function nts_crypto_key_from_okp(curve: string, raw: Uint8Array, privateKey: boolean): number;
+/** @ntsAbi managed */
+declare function nts_crypto_key_from_raw_ec(curve: string, raw: Uint8Array, privateKey: boolean): number;
+/** @ntsAbi managed */
+declare function nts_crypto_key_status(): number;
+/** @ntsAbi managed */
+declare function nts_crypto_key_type(handle: number): string;
+/** @ntsAbi managed */
+declare function nts_crypto_key_details(handle: number): number[];
+/** @ntsAbi managed */
+declare function nts_crypto_key_detail_names(handle: number): string[];
+/** @ntsAbi managed */
+declare function nts_crypto_key_public_exponent(handle: number): Uint8Array;
+/** @ntsAbi managed */
+declare function nts_crypto_key_equals(a: number, b: number): boolean;
+/** @ntsAbi managed */
+declare function nts_crypto_key_export_private(
+  handle: number,
+  format: number,
+  type: number,
+  cipherId: number,
+  passphrase: Uint8Array,
+): Uint8Array | null;
+/** @ntsAbi managed */
+declare function nts_crypto_key_export_public(handle: number, format: number, type: number): Uint8Array | null;
+/** @ntsAbi managed */
+declare function nts_crypto_key_export_jwk(handle: number, privateKey: boolean): Uint8Array[];
+/** @ntsAbi managed */
+declare function nts_crypto_key_export_raw(handle: number, privateKey: boolean, compressed: boolean): Uint8Array | null;

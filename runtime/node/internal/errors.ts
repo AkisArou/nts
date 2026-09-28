@@ -2235,3 +2235,79 @@ export class ERR_MISSING_ARGS_BINDING extends NodeTypeError {
     super(message);
   }
 }
+
+/** `The selected key encoding pkcs1 can only be used for RSA keys.` */
+export class ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS extends NodeError {
+  override readonly code = "ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS";
+
+  constructor(encoding: string, problem: string) {
+    super(`The selected key encoding ${encoding} ${problem}.`);
+  }
+}
+
+/** The same code as C++ throws it for a raw import: `...is incompatible with the key type`. */
+export class ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS_BINDING extends NodeError {
+  override readonly code = "ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS";
+
+  constructor() {
+    super("The selected key encoding is incompatible with the key type");
+  }
+}
+
+/**
+ * A JWK that cannot be a key. JavaScript's default is `Invalid JWK data`; C++
+ * throws its own words -- `Invalid JWK RSA key`, `Invalid JWK format` -- which
+ * are passed in.
+ */
+export class ERR_CRYPTO_INVALID_JWK extends NodeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_CRYPTO_INVALID_JWK";
+
+  constructor(message = "Invalid JWK data") {
+    super(message);
+  }
+}
+
+/** `Unsupported JWK Key Type.`: a key JWK has no form for. */
+export class ERR_CRYPTO_JWK_UNSUPPORTED_KEY_TYPE extends NodeError {
+  override readonly code = "ERR_CRYPTO_JWK_UNSUPPORTED_KEY_TYPE";
+
+  constructor() {
+    super("Unsupported JWK Key Type.");
+  }
+}
+
+/** `Unsupported JWK EC curve: secp224r1.` */
+export class ERR_CRYPTO_JWK_UNSUPPORTED_CURVE extends NodeError {
+  override readonly code = "ERR_CRYPTO_JWK_UNSUPPORTED_CURVE";
+
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+/** `Invalid EC curve name`. */
+export class ERR_CRYPTO_INVALID_CURVE extends NodeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_CRYPTO_INVALID_CURVE";
+
+  constructor() {
+    super("Invalid EC curve name");
+  }
+}
+
+/** `Passphrase required for encrypted key`. */
+export class ERR_MISSING_PASSPHRASE extends NodeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_MISSING_PASSPHRASE";
+
+  constructor(message: string) {
+    super(message);
+  }
+}

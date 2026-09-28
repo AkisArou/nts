@@ -60,6 +60,8 @@ const ORDER = [
   "createDecipheriv",
   "createHash",
   "createHmac",
+  "createPrivateKey",
+  "createPublicKey",
   "createSecretKey",
   "getCiphers",
   "getCipherInfo",
