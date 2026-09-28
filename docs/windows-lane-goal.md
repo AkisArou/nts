@@ -177,20 +177,30 @@ the same vtable calls on the VM measured the behaviour first.
     exits it never reaches, and `panel.children.size` released the panel
     between `get_Children` and `get_Size` -- XAML cleared the destroyed
     panel's children and the size read 0.
-- **What is left refused**, measured over winui-hello's bindings (the 83
-  namespaces its imports reach), 2026-09-28, after arrays the callee fills:
-  380 items, 312 of them a factory interface's composable `CreateInstance`,
-  which is its class's constructor and bound as that. Of the other 68: 25
-  delegates that return a value, are answered or are generic; 20 arrays --
-  of booleans, characters, `Guid`s or 64-bit integers, `PropertyValue`'s
-  boxing statics most of them, and the generic interfaces' own `GetMany`
-  and `ReplaceAll`, which their instantiations declare; 7 WebView2 members,
-  whose types are in a `.winmd` not fetched; 7 generic members with no
-  signature; 7 idiomatic names two surfaces give; 2 `in` parameters after
-  an `out` one. Before `Copied<T>`, struct `[out]` parameters and named
-  delegates, the same bindings refused 497, among them every `TypeName`
-  member, 22 struct `[out]`s and 60 delegates; before struct fields that
-  are booleans or objects, 402.
+- **What is left refused**, measured over winui-hello's bindings (the 85
+  namespaces its imports reach, WebView2's among them), 2026-09-28: 369
+  items, 312 of them a factory interface's composable `CreateInstance`,
+  which is its class's constructor and bound as that. Of the other 57: 25
+  delegates that return a value, are answered or are generic; 17 arrays --
+  of characters, `Guid`s or 64-bit integers, and the generic interfaces'
+  own `GetMany` and `ReplaceAll`, which their instantiations declare; 7
+  generic members with no signature; 6 idiomatic names a base class's
+  surface declares already; 2 `in` parameters after an `out` one. Before
+  `Copied<T>`, struct `[out]` parameters and named delegates, the same
+  bindings refused 497, among them every `TypeName` member, 22 struct
+  `[out]`s and 60 delegates; before struct fields that are booleans or
+  objects, 402; before arrays the callee fills, 386.
+- **WebView2:** `Microsoft.Web.WebView2.Core` is bound from
+  `Microsoft.Web.WebView2` (`WEBVIEW2_PACKAGE`, the version WinUI's
+  package depends on), 823 methods. A program using the Windows App SDK
+  ships its `WebView2Loader.dll` and `Microsoft.Web.WebView2.Core.dll`
+  beside the bootstrapper, as a C# WinUI build does; without them
+  `ensureCoreWebView2Async` rejects with 0x8007007E. winui-hello navigates
+  one to a string and hears `navigationcompleted` (`web=true`).
+- **Overloads:** a name two of a class's interfaces give as methods is
+  declared once per interface, as C# overloads it (`frame.navigate(type)`,
+  `frame.navigate(type, parameter)`); the checker's choice is the slot
+  called. One given as a property anywhere stays refused.
 - **Delegates and events:**
   - A TypeScript function is a COM delegate object whose `Invoke` is a
     per-signature adapter. The closure is lent until the object's count
@@ -286,15 +296,21 @@ the same vtable calls on the VM measured the behaviour first.
   A second `await` of one operation rejects with the operation's own refusal
   of a second `Completed` (0x80000018).
 - **Not yet:**
-  - Arrays of booleans, characters, `Guid`s and 64-bit integers (`bigint`
-    is not lowered), in any direction. Every other array crosses every way
-    the ABI has -- passed in, filled by the callee, handed back:
+  - Arrays of characters, `Guid`s and 64-bit integers (`bigint` is not
+    lowered), in any direction; and an `IPropertyValue` of booleans is not
+    unboxed, since `boolean[]` beside `string[]` in `Inspectable` would
+    narrow an unboxed answer to a union no program could use. Every other
+    array crosses every way the ABI has -- passed in, filled by the callee,
+    handed back:
     - Numbers, and enums as their 32-bit integer, as a typed array's
       elements, borrowed in place (`CElements<Int32Array, "const int32_t">`,
       `CBytes` for bytes); handed back as a typed array of the program's
       (`CopyToByteArray(buffer).value`), copied, the block freed; and as an
       object, boxed and unboxed as `IPropertyValue`, as the JavaScript
       projection did.
+    - Booleans (`Booleans`, `FilledBooleans`), a `boolean[]`'s own
+      elements, which are the Windows Runtime's one-byte booleans already:
+      lent in place to read or fill, and copied when handed back.
     - Objects (`CHandles`, `FilledHandles`), strings (`HStrings`,
       `FilledStrings`) and structs as plain objects (`CopiedArray`,
       `FilledArray`). An array the callee fills (`GetMany`,
