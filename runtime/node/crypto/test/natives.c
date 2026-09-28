@@ -209,6 +209,24 @@ static void derivations(void) {
     uv_run(uv_default_loop(), UV_RUN_DEFAULT);
     expect_true("a failing job calls back with ok false", jobs_done == 2 && !job_ok);
 
+    nts_crypto_digest_job(sha256, utf8("abc"), -1, &job_callback);
+    uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+    expect_true("a digest job, FIPS 180-2's sha256(abc)",
+                jobs_done == 3 && job_ok &&
+                    strcmp(job_hex, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad") == 0);
+    nts_crypto_digest_job(nts_crypto_digest_id(text("shake128")), utf8(""), 8, &job_callback);
+    uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+    expect_true("  an XOF's at the length asked", jobs_done == 4 && job_ok && strcmp(job_hex, "7f9c2ba4e88f827d") == 0);
+    nts_crypto_hmac_job(sha256, hex("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"), utf8("Hi There"), &job_callback);
+    uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+    expect_true("an HMAC job, RFC 4231 case 1",
+                jobs_done == 5 && job_ok &&
+                    strcmp(job_hex, "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7") == 0);
+    nts_crypto_hmac_job(sha256, bytes("", 0), bytes("", 0), &job_callback);
+    uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+    expect_true("  under an empty key", jobs_done == 6 && job_ok &&
+                    strcmp(job_hex, "b613679a0814d9ec772f95d778c35fc5ff1697c493715653c6c712144292c5ad") == 0);
+
     unsigned char zeros[64] = {0};
     NtsView *target = bytes(zeros, sizeof(zeros));
     expect_true("random fill fills", nts_crypto_random_fill(target, 8, 32));

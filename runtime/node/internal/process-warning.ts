@@ -67,3 +67,12 @@ export function emitWarning(message: string, name: string, code: string): void {
   // what sets `warning.code` on node's side. Node's own tests assert that code.
   emitProcessWarning(warning, code);
 }
+
+const experimentalWarnings = new Set<string>();
+
+/** Node's `emitExperimentalWarning`: once per feature for the process's life. */
+export function emitExperimentalWarning(feature: string): void {
+  if (experimentalWarnings.has(feature)) return;
+  experimentalWarnings.add(feature);
+  emitWarning(`${feature} is an experimental feature and might change at any time`, "ExperimentalWarning", "");
+}

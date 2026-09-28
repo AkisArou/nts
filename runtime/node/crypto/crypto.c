@@ -700,9 +700,32 @@ NtsView *nts_crypto_scrypt(NtsView *password, NtsView *salt, double n, double r,
                    out, (size_t)length);
 }
 
+/* A digest of `length` bytes into `out`, which an XOF takes as its output
+ * length and any other digest has as its size already. */
+static bool digest_into(const EVP_MD *md, const unsigned char *bytes, size_t size, unsigned char *out,
+                        size_t length) {
+    if (md == NULL) return false;
+    if (length == 0) return true;
+    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    bool ok = ctx != NULL && EVP_DigestInit_ex(ctx, md, NULL) == 1 && EVP_DigestUpdate(ctx, bytes, size) == 1 &&
+              (is_xof(md) ? EVP_DigestFinalXOF(ctx, out, length) == 1 : EVP_DigestFinal_ex(ctx, out, NULL) == 1);
+    EVP_MD_CTX_free(ctx);
+    return ok;
+}
+
+/* An HMAC of `data` under `key`, `length` being the digest's size. */
+static bool hmac_into(const EVP_MD *md, const unsigned char *key, size_t key_length, const unsigned char *data,
+                      size_t data_length, unsigned char *out, size_t length) {
+    static const unsigned char empty[1] = {0};
+    size_t written = 0;
+    return md != NULL && EVP_Q_mac(NULL, "HMAC", NULL, EVP_MD_get0_name(md), NULL, key_length == 0 ? empty : key,
+                                   key_length, data, data_length, out, length, &written) != NULL &&
+           written == length;
+}
+
 /* ------------------------------------------------------------------ jobs */
 
-typedef enum { JOB_RANDOM, JOB_PBKDF2, JOB_HKDF, JOB_SCRYPT, JOB_WORK } JobKind;
+typedef enum { JOB_RANDOM, JOB_PBKDF2, JOB_HKDF, JOB_SCRYPT, JOB_DIGEST, JOB_HMAC, JOB_WORK } JobKind;
 
 /* One unit of pool work. Inputs are private copies; `target` is the one
  * program object held, retained, and only touched on the loop thread. A
@@ -752,6 +775,13 @@ static void job_run(uv_work_t *request) {
     case JOB_SCRYPT:
         job->ok = scrypt(job->inputs[0], job->lengths[0], job->inputs[1], job->lengths[1], job->n,
                          job->r, job->p, job->maxmem, job->out, job->length);
+        break;
+    case JOB_DIGEST:
+        job->ok = digest_into(job->md, job->inputs[0], job->lengths[0], job->out, job->length);
+        break;
+    case JOB_HMAC:
+        job->ok = hmac_into(job->md, job->inputs[0], job->lengths[0], job->inputs[1], job->lengths[1], job->out,
+                            job->length);
         break;
     case JOB_WORK:
         job->ok = job->work->run(job->state);
@@ -857,6 +887,31 @@ void nts_crypto_scrypt_job(NtsView *password, NtsView *salt, double n, double r,
     job->maxmem = (uint64_t)maxmem;
     job->inputs[0] = copy_of(password, &job->lengths[0]);
     job->inputs[1] = copy_of(salt, &job->lengths[1]);
+    job_queue(job);
+}
+
+/* A digest on the thread pool, delivered to `done(ok, bytes)`: Web Crypto's
+ * `digest`, node's `HashJob`. `length` is an XOF's output length, or -1. */
+void nts_crypto_digest_job(double id, NtsView *input, double length, NtsHeader *done) {
+    const EVP_MD *md = digest_at(id);
+    size_t out_length = md == NULL ? 0 : (size_t)EVP_MD_get_size(md);
+    if (md != NULL && is_xof(md)) out_length = length >= 0 ? (size_t)length : shake_default(md);
+    Job *job = job_new(JOB_DIGEST, out_length, done);
+    if (job == NULL) return;
+    job->md = md;
+    job->inputs[0] = copy_of(input, &job->lengths[0]);
+    job_queue(job);
+}
+
+/* An HMAC on the thread pool, delivered to `done(ok, mac)`: node's
+ * `HmacJob`, which Web Crypto signs and verifies with. */
+void nts_crypto_hmac_job(double id, NtsView *key, NtsView *data, NtsHeader *done) {
+    const EVP_MD *md = digest_at(id);
+    Job *job = job_new(JOB_HMAC, md == NULL ? 0 : (size_t)EVP_MD_get_size(md), done);
+    if (job == NULL) return;
+    job->md = md;
+    job->inputs[0] = copy_of(key, &job->lengths[0]);
+    job->inputs[1] = copy_of(data, &job->lengths[1]);
     job_queue(job);
 }
 

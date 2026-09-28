@@ -85,6 +85,11 @@ void nts_crypto_scrypt_job(NtsView *password, NtsView *salt, double n, double r,
                            double p, double maxmem, double length,
                            NtsHeader *done);
 
+/* Web Crypto's pool work: a digest (`length` an XOF's, or -1) and an HMAC,
+ * each delivered to `done(ok, bytes)`. */
+void nts_crypto_digest_job(double id, NtsView *input, double length, NtsHeader *done);
+void nts_crypto_hmac_job(double id, NtsView *key, NtsView *data, NtsHeader *done);
+
 bool nts_crypto_timing_safe_equal(NtsView *a, NtsView *b);
 
 /* Symmetric ciphers (`cipher.c`). A negative id is a name OpenSSL does not

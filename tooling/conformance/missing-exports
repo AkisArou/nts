@@ -28,8 +28,5 @@ util.setTraceSigInt: needs interrupt-safe SIGINT interception and a stack snapsh
 url.URLPattern: a WHATWG global owned by runtime/web-platform; node re-exports it from node:url and this profile will do the same when web-platform installs it
 
 # --- ordinary work, not scheduled --------------------------------------------
-# node:crypto has everything but Web Crypto and OpenSSL engines.
-# Each group below is its own part of OpenSSL, and none is refused.
+# node:crypto has everything but OpenSSL engines.
 crypto.setEngine: OpenSSL engines, deprecated in OpenSSL 3; node throws when its OpenSSL has none
-crypto.webcrypto: Web Crypto, `globalThis.crypto`; its `getRandomValues` is here, `subtle` is not
-crypto.subtle: as crypto.webcrypto

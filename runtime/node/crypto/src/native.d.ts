@@ -113,6 +113,22 @@ declare function nts_crypto_scrypt_job(
   length: number,
   done: (ok: boolean, bytes: Uint8Array) => void,
 ): void;
+/** Web Crypto's digest on the thread pool; `length` an XOF's, or -1. */
+/** @ntsAbi managed */
+declare function nts_crypto_digest_job(
+  id: number,
+  input: Uint8Array,
+  length: number,
+  done: (ok: boolean, bytes: Uint8Array) => void,
+): void;
+/** Web Crypto's HMAC on the thread pool. */
+/** @ntsAbi managed */
+declare function nts_crypto_hmac_job(
+  id: number,
+  key: Uint8Array,
+  data: Uint8Array,
+  done: (ok: boolean, mac: Uint8Array) => void,
+): void;
 
 /** @ntsAbi managed */
 declare function nts_crypto_timing_safe_equal(a: Uint8Array, b: Uint8Array): boolean;

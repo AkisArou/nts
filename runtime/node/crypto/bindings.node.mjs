@@ -213,6 +213,28 @@ function oneShot(id, input, length) {
 globalThis.nts_crypto_digest = oneShot;
 globalThis.nts_crypto_digest_utf8 = oneShot;
 
+/**
+ * The pool's work, computed at once and delivered on a later turn of the
+ * loop, where `crypto.c` delivers it.
+ */
+function later(compute, done) {
+  let bytes = null;
+  try {
+    bytes = compute();
+  } catch (error) {
+    failed(error);
+  }
+  setImmediate(() => done(bytes !== null, bytes ?? new Uint8Array(0)));
+}
+
+globalThis.nts_crypto_digest_job = (id, input, length, done) => later(() => oneShot(id, input, length), done);
+
+globalThis.nts_crypto_hmac_job = (id, key, data, done) =>
+  later(() => {
+    const mac = crypto.createHmac(names[id], key).update(data).digest();
+    return new Uint8Array(mac.buffer, mac.byteOffset, mac.byteLength);
+  }, done);
+
 // -- random -------------------------------------------------------------------
 
 globalThis.nts_crypto_random_fill = (target, offset, size) => {

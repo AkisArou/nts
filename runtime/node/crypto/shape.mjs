@@ -75,12 +75,51 @@ function applyDescriptors(exports) {
       value: promisified,
     });
   }
+  if (exports.CryptoKey !== undefined) webCryptoDescriptors(exports);
   Object.defineProperty(exports.KeyObject.prototype, Symbol.toStringTag, {
     configurable: true,
     enumerable: false,
     writable: false,
     value: "KeyObject",
   });
+}
+
+/**
+ * Web Crypto's interfaces as node defines them: every member of a prototype
+ * enumerable, each with its `toStringTag`, and `SubtleCrypto.supports`
+ * enumerable too -- descriptors a TypeScript class does not produce.
+ */
+function webCryptoDescriptors(exports) {
+  const tag = (prototype, value) =>
+    Object.defineProperty(prototype, Symbol.toStringTag, { configurable: true, enumerable: false, writable: false, value });
+  const enumerable = (target, names) => {
+    for (const name of names) Object.defineProperty(target, name, { enumerable: true });
+  };
+  enumerable(exports.CryptoKey.prototype, ["type", "extractable", "algorithm", "usages"]);
+  tag(exports.CryptoKey.prototype, "CryptoKey");
+  enumerable(exports.Crypto.prototype, ["subtle", "getRandomValues", "randomUUID"]);
+  tag(exports.Crypto.prototype, "Crypto");
+  enumerable(exports.SubtleCrypto.prototype, [
+    "encrypt",
+    "decrypt",
+    "sign",
+    "verify",
+    "digest",
+    "generateKey",
+    "deriveKey",
+    "deriveBits",
+    "importKey",
+    "exportKey",
+    "wrapKey",
+    "unwrapKey",
+    "getPublicKey",
+    "encapsulateBits",
+    "encapsulateKey",
+    "decapsulateBits",
+    "decapsulateKey",
+  ]);
+  tag(exports.SubtleCrypto.prototype, "SubtleCrypto");
+  enumerable(exports.SubtleCrypto, ["supports"]);
 }
 
 /** Node's order, for the names this module publishes. */
@@ -203,6 +242,17 @@ export function shape(exports) {
     writable: false,
     value: exports.constants,
   });
+  // Web Crypto: node's accessors, one global object behind both.
+  const webcrypto = exports.webcrypto;
+  if (webcrypto !== undefined) {
+    Object.defineProperty(module, "webcrypto", { configurable: false, enumerable: true, get: () => webcrypto, set: undefined });
+    Object.defineProperty(module, "subtle", {
+      configurable: false,
+      enumerable: true,
+      get: () => webcrypto.subtle,
+      set: undefined,
+    });
+  }
   const getRandomValues = exports.getRandomValues;
   Object.defineProperty(module, "getRandomValues", {
     configurable: false,
@@ -233,8 +283,8 @@ export function shape(exports) {
 }
 
 /**
- * `internal/crypto/x509`, which `test-crypto-x509` asks for with
- * `--expose-internals` to read the brand.
+ * Node's internals that its tests ask for with `--expose-internals`: the
+ * X.509 brand, and Web Crypto's converters and registry.
  */
 export function internals(exports) {
   return {
@@ -242,5 +292,36 @@ export function internals(exports) {
       X509Certificate: exports.X509Certificate,
       isX509Certificate: exports.isX509Certificate,
     },
+    "internal/crypto/webidl": {
+      converters: exports.webCryptoConverters?.(),
+      requiredArguments: exports.webCryptoRequiredArguments,
+    },
+    "internal/crypto/util": {
+      bigIntArrayToUnsignedBigInt: exports.bigIntArrayToUnsignedBigInt,
+      bigIntArrayToUnsignedInt: exports.bigIntArrayToUnsignedInt,
+      kSupportedAlgorithms: exports.supportedAlgorithms?.(),
+      normalizeAlgorithm: exports.normalizeAlgorithm,
+      validateKeyOps: exports.validateKeyOps,
+    },
   };
+}
+
+/**
+ * Node's Web Crypto globals: `crypto`, a replaceable accessor, and the three
+ * interfaces. A sabotaged run installs an empty `crypto` rather than leaving
+ * node's, which every Web Crypto file would otherwise measure instead.
+ */
+export function installGlobals(underTest, rawExports) {
+  let crypto = underTest.webcrypto ?? {};
+  Object.defineProperty(globalThis, "crypto", {
+    configurable: true,
+    enumerable: true,
+    get: () => crypto,
+    set: (value) => {
+      crypto = value;
+    },
+  });
+  for (const name of ["Crypto", "CryptoKey", "SubtleCrypto"]) {
+    Object.defineProperty(globalThis, name, { configurable: true, enumerable: false, writable: true, value: rawExports[name] });
+  }
 }

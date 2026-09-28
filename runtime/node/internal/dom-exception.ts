@@ -11,6 +11,7 @@
 
 interface NodeDOMExceptionConstructor {
   new (message?: string, name?: string): Error;
+  new (message: string, options: { name: string; cause: unknown }): Error;
 }
 
 declare global {
@@ -19,4 +20,9 @@ declare global {
 
 export function domException(message: string, name: string): Error {
   return new globalThis.DOMException(message, name);
+}
+
+/** The same, carrying the error that caused it -- `new DOMException(message, { name, cause })`. */
+export function domExceptionWithCause(message: string, name: string, cause: unknown): Error {
+  return new globalThis.DOMException(message, { name, cause });
 }

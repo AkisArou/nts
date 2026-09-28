@@ -172,7 +172,6 @@ test-urlpattern-types.js: the subject is URLPattern, a WHATWG global in runtime/
 test-urlpattern.js: the subject is URLPattern, a WHATWG global in runtime/web-platform's lane rather than a node:url export
 test-vm-api-handles-getter-errors.js: the subject is node:vm, which this profile does not implement
 test-vm-syntax-error-stderr.js: the subject is node:vm, which this profile does not implement
-test-webcrypto-cryptokey-brand-check.js: reaches WebCrypto through the global `crypto`; it names `util` for `types.isCryptoKey`, but the subject is WebCrypto and is not in this profile
 test-webstream-encoding-inspect.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
 test-webstreams-abort-controller.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
 test-webstreams-adapters-writable-buffer-sources.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
@@ -189,22 +188,7 @@ test-whatwg-webstreams-encoding.js: the subject is the WHATWG streams surface, w
 test-windows-abort-exitcode.js: the subject is node's fatal-error reporting in a spawned process rather than a module
 test-dsa-fips-invalid-key.js: skips unless node's OpenSSL is a FIPS build, which neither lane's is, and its subject is DSA signing
 test-eslint-crypto-check.js: the subject is a lint rule in node's tools, not a module
-test-global-webcrypto.js: the subject is Web Crypto's globals -- `crypto`, `Crypto`, `SubtleCrypto` -- which node:crypto here does not install
 test-strace-openat-openssl.js: the subject is which files node's own OpenSSL opens at startup, observed with strace on a spawned node
 test-tls-cipher-list.js: the subject is node:tls's cipher list on a spawned node, not node:crypto
 test-tls-peer-certificate.js: the subject is node:tls, which this profile does not implement
-test-webcrypto-cryptokey-hidden-slots.js: the subject is Web Crypto's CryptoKey, which node:crypto here does not implement
-test-webcrypto-deduplicate-usages.js: the subject is Web Crypto's `subtle`, which node:crypto here does not implement
-test-webcrypto-derivebits-argon2.js: the subject is Web Crypto's `subtle`, which node:crypto here does not implement
-test-webcrypto-derivekey.js: the subject is Web Crypto's `subtle`, which node:crypto here does not implement
-test-webcrypto-digest.js: the subject is Web Crypto's `subtle`, which node:crypto here does not implement
-test-webcrypto-export-import-cfrg.js: the subject is Web Crypto's `subtle`, which node:crypto here does not implement
-test-webcrypto-export-import-ec.js: the subject is Web Crypto's `subtle`, which node:crypto here does not implement
-test-webcrypto-export-import-ml-dsa.js: the subject is Web Crypto's `subtle`, which node:crypto here does not implement
-test-webcrypto-export-import-ml-kem.js: the subject is Web Crypto's `subtle`, which node:crypto here does not implement
-test-webcrypto-export-import-rsa.js: the subject is Web Crypto's `subtle`, which node:crypto here does not implement
-test-webcrypto-export-import.js: the subject is Web Crypto's `subtle`, which node:crypto here does not implement
-test-webcrypto-keygen-kmac.js: the subject is Web Crypto's `subtle`, which node:crypto here does not implement
-test-webcrypto-sign-verify-eddsa.js: the subject is Web Crypto's `subtle`, which node:crypto here does not implement
-test-webcrypto-sign-verify-ml-dsa.js: the subject is Web Crypto's `subtle`, which node:crypto here does not implement
 test-tls-set-ciphers.js: the subject is node:tls cipher negotiation between a spawned server and client, which this profile does not implement; `util` is only for formatting

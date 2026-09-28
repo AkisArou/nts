@@ -21,8 +21,9 @@
 //
 // SPKAC: `Certificate`. X.509: `X509Certificate`.
 //
-// Not yet: Web Crypto's `subtle`; `tooling/conformance/missing-exports` lists
-// the names.
+// Web Crypto: `webcrypto`, its `subtle`, and the `Crypto`, `CryptoKey` and
+// `SubtleCrypto` interfaces, with the algorithms its registry lists
+// (`webcrypto/util.ts`).
 
 import {
   ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH,
@@ -62,6 +63,18 @@ export {
 export { decapsulate, encapsulate } from "./kem.ts";
 export { Certificate } from "./certificate.ts";
 export { isX509Certificate, X509Certificate } from "./x509.ts";
+export { Crypto, crypto as webcrypto, SubtleCrypto } from "./webcrypto/subtle.ts";
+export { CryptoKey } from "./webcrypto/key.ts";
+// Node's internals, for its tests (`shape.mjs`'s `internals`); the shape
+// publishes none of these names.
+export { requiredArguments as webCryptoRequiredArguments, webCryptoConverters } from "./webcrypto/webidl.ts";
+export {
+  bigIntArrayToUnsignedBigInt,
+  bigIntArrayToUnsignedInt,
+  normalizeAlgorithm,
+  supportedAlgorithms,
+  validateKeyOps,
+} from "./webcrypto/util.ts";
 export { generateKey, generateKeyPair, generateKeyPairSync, generateKeySync } from "./keygen.ts";
 export { argon2, argon2Sync, hkdf, hkdfSync, pbkdf2, pbkdf2Sync, scrypt, scryptSync } from "./kdf.ts";
 export {

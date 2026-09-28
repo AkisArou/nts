@@ -1,1 +1,1 @@
-^test-crypto(-.*)?\.m?js$
+^test-(crypto|webcrypto|global-webcrypto)(-.*)?\.m?js$
