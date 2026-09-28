@@ -621,7 +621,10 @@ const checks = selfChecks(SCRATCH, TOOLS, cannotMeasure);
 
 const cases = population.map((record) => {
   const source = readFileSync(join(SUITE, record.path), "utf8");
-  return { record, gap: harnessGap(record, source), excluded: excludedBy(record) };
+  // The spec section a test names -- for a negative, the rule that makes it an
+  // early error -- so an accepted negative can be ranked by the rule to build.
+  const esid = /^\s*esid:\s*(\S+)/m.exec(source.split("---*/")[0])?.[1] ?? "(no esid)";
+  return { record, gap: harnessGap(record, source), excluded: excludedBy(record), esid };
 });
 const toAttempt = cases.filter((c) => c.gap === null).map((c) => c.record.path);
 const rows = await runAll(toAttempt);
@@ -896,6 +899,11 @@ table("refused, ranked by SOLE root -- the most fixing that cause alone could cl
 table("refused, ranked by FIRST root -- where reduction starts:", rankFirst);
 table("refused, ranked by ANY root -- reach:", rankAny);
 table("names quoted by NTS roots (builtins, members), by cases:", rankNamed);
+// The early-error pass's work list: which rule each accepted negative needed.
+table(
+  "negatives accepted, by the spec section that makes each an early error (esid) -- the rules nts does not yet check:",
+  count(cases.filter((c) => c.outcome === "fail" && c.cause?.startsWith("negative:parse accepted")), (c) => c.esid),
+);
 say();
 say(`  exclusions: ${exclusions.length} entr(ies), ${audit.withoutReason.length} without a reason or authority, ` +
   `${audit.naming_nothing.length} naming a path the suite does not have, ${audit.unknownKind.length} of an unknown kind`);
