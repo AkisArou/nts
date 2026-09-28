@@ -186,10 +186,71 @@ fn dependencies_of(manifest: &Value, package: &Utf8Path, workspace: &Workspace) 
 }
 
 /// `swift-package dump-package`: the manifest of `package`, as `SwiftPM`
-/// evaluates it.
+/// evaluates it -- once for each manifest, toolchain and place, as `SwiftPM`
+/// caches a manifest itself. Evaluating one runs the Swift compiler, 0.2 s,
+/// and a build resolved each package's once per product, target and binding:
+/// 36 times for macos-spm's four, most of a rebuild's 16 s. Kept in the
+/// process, and on disk (`~/.cache/nts/swiftpm-manifests`), keyed by what the
+/// answer depends on: the manifest's text, where it is (a local dependency's
+/// path comes back absolute), and the toolchain.
 fn dump(package: &Utf8Path) -> Result<Value> {
     let tool = crate::swift::toolchain_root()?.join("usr").join("bin").join("swift-package");
-    let output = Command::new(&tool)
+    let cache = std::env::var_os("HOME").map(|home| std::path::Path::new(&home).join(".cache/nts/swiftpm-manifests"));
+    dump_with(&tool, cache.as_deref(), package)
+}
+
+/// [`dump`], with `tool` for `swift-package` and `cache` for where the
+/// answers are kept.
+fn dump_with(tool: &std::path::Path, cache: Option<&std::path::Path>, package: &Utf8Path) -> Result<Value> {
+    static KEPT: std::sync::OnceLock<std::sync::Mutex<BTreeMap<u64, Value>>> = std::sync::OnceLock::new();
+    // One package reached by two spellings -- the root as the config names it,
+    // and as a dependency's absolute path -- is one manifest.
+    let canonical = std::fs::canonicalize(package).ok().and_then(|path| Utf8PathBuf::from_path_buf(path).ok());
+    let package = canonical.as_deref().unwrap_or(package);
+    let manifest = std::fs::read(package.join("Package.swift")).with_context(|| format!("reading {package}/Package.swift"))?;
+    let stamp = std::fs::metadata(tool).map(|meta| format!("{}{:?}", meta.len(), meta.modified().ok())).unwrap_or_default();
+    let key = fnv(&[package.as_str().as_bytes(), &manifest, tool.to_string_lossy().as_bytes(), stamp.as_bytes()]);
+    let kept = KEPT.get_or_init(Default::default);
+    if let Some(value) = kept.lock().ok().and_then(|kept| kept.get(&key).cloned()) {
+        return Ok(value);
+    }
+    let file = cache.map(|cache| cache.join(format!("{key:016x}.json")));
+    let stored: Option<Value> = file.as_ref().and_then(|file| std::fs::read(file).ok()).and_then(|bytes| serde_json::from_slice(&bytes).ok());
+    let value = if let Some(value) = stored {
+        value
+    } else {
+        let value = evaluate(tool, package)?;
+        // Written whole, then renamed into place: a reader never sees half.
+        if let Some(file) = &file {
+            let partial = file.with_extension(format!("{}.partial", std::process::id()));
+            if file.parent().is_some_and(|dir| std::fs::create_dir_all(dir).is_ok())
+                && std::fs::write(&partial, serde_json::to_vec(&value).unwrap_or_default()).is_ok()
+            {
+                let _ = std::fs::rename(&partial, file);
+            }
+        }
+        value
+    };
+    if let Ok(mut kept) = kept.lock() {
+        kept.insert(key, value.clone());
+    }
+    Ok(value)
+}
+
+/// FNV-1a over `parts`, each followed by a separator so two splits of one
+/// text differ.
+fn fnv(parts: &[&[u8]]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in parts.iter().flat_map(|part| part.iter().chain(&[0xff])) {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0100_0000_01b3);
+    }
+    hash
+}
+
+/// Runs `swift-package dump-package` for `package`.
+fn evaluate(tool: &std::path::Path, package: &Utf8Path) -> Result<Value> {
+    let output = Command::new(tool)
         .args(["dump-package", "--package-path", package.as_str()])
         .output()
         .with_context(|| format!("running {}", tool.display()))?;
@@ -406,6 +467,40 @@ mod tests {
         std::fs::write(dir.join("Package.swift"), "// swift-tools-version:5.9\n").unwrap();
         let error = resolve(&dir, "macos-13", &claim()).unwrap_err().to_string();
         assert!(error.contains("run `swift package resolve`"), "{error}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A manifest is evaluated once for its text, place and toolchain, its
+    /// answer kept on disk, and evaluated again when its text changes. A cache
+    /// that never hits passes every other test, so this counts evaluations.
+    #[test]
+    fn a_manifest_is_evaluated_once_for_its_text() {
+        let dir = scratch("manifest-cache");
+        let tool = dir.join("swift-package");
+        let count = dir.join("count");
+        std::fs::write(&tool, format!("#!/bin/sh\necho x >> {count}\necho '{{\"name\": \"Probe\"}}'\n")).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let package = dir.join("Probe");
+        std::fs::create_dir_all(&package).unwrap();
+        std::fs::write(package.join("Package.swift"), "// swift-tools-version:5.9\n").unwrap();
+        let cache = dir.join("cache");
+        let evaluations = || std::fs::read_to_string(&count).map_or(0, |text| text.lines().count());
+        let first = dump_with(tool.as_std_path(), Some(cache.as_std_path()), &package).unwrap();
+        assert_eq!(first.get("name").and_then(Value::as_str), Some("Probe"));
+        dump_with(tool.as_std_path(), Some(cache.as_std_path()), &package).unwrap();
+        assert_eq!(evaluations(), 1, "the process evaluated one manifest twice");
+        // Kept on disk for the next process, which this one cannot be: its
+        // own memory answers first. The next build's 0 evaluations are the
+        // measurement's (macos-spm's rebuild), not this test's.
+        let kept = std::fs::read_dir(&cache).unwrap().count();
+        assert_eq!(kept, 1, "nothing, or more than one answer, was kept on disk");
+        std::fs::write(package.join("Package.swift"), "// swift-tools-version:5.9\n// changed\n").unwrap();
+        dump_with(tool.as_std_path(), Some(cache.as_std_path()), &package).unwrap();
+        assert_eq!(evaluations(), 2, "a changed manifest was answered from the old one");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
