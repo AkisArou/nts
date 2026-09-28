@@ -842,14 +842,28 @@ export function createPrivateKey(key: unknown): PrivateKeyObject {
   return new PrivateKeyObject(initAsymmetric(prepared, false));
 }
 
-/** A key to sign or decrypt with: a private key, and how the caller named it. */
-export function preparePrivateKey(key: unknown, name = "key"): KeyObjectHandle {
-  return initAsymmetric(prepareAsymmetricKey(key, KeyContext.ConsumePrivate, name), false);
+/**
+ * A key to sign or decrypt with, checked as node's JavaScript checks it. The
+ * key itself is made by `privateKeyOf`, later, as node's C++ makes it: the
+ * options beside the key are validated in between, so their errors come first.
+ */
+export function preparePrivateKey(key: unknown, name = "key"): PreparedKey {
+  return prepareAsymmetricKey(key, KeyContext.ConsumePrivate, name);
 }
 
 /** A key to verify or encrypt with: a public key, or a private key's public half. */
-export function preparePublicOrPrivateKey(key: unknown, name = "key"): KeyObjectHandle {
-  return initAsymmetric(prepareAsymmetricKey(key, KeyContext.ConsumePublic, name), true);
+export function preparePublicOrPrivateKey(key: unknown, name = "key"): PreparedKey {
+  return prepareAsymmetricKey(key, KeyContext.ConsumePublic, name);
+}
+
+/** Node's `KeyObjectData::GetPrivateKeyFromJs`: the prepared key's handle, parsed if need be. */
+export function privateKeyOf(prepared: PreparedKey): KeyObjectHandle {
+  return initAsymmetric(prepared, false);
+}
+
+/** Node's `KeyObjectData::GetPublicOrPrivateKeyFromJs`. */
+export function publicOrPrivateKeyOf(prepared: PreparedKey): KeyObjectHandle {
+  return initAsymmetric(prepared, true);
 }
 
 // -- secret keys --------------------------------------------------------------

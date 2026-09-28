@@ -29,7 +29,7 @@ import {
 } from "../../internal/validators.ts";
 import { isAnyArrayBuffer, isArrayBufferView } from "../../util/src/types.ts";
 import { KeyObject, prepareSecretKey } from "./keys.ts";
-import { bytesOf, digestId, getArrayBufferOrView, jobError, toBuf, validateByteSource } from "./util.ts";
+import { asBuffer, bytesOf, digestId, getArrayBufferOrView, jobError, toBuf, validateByteSource } from "./util.ts";
 import type { ByteSource } from "./util.ts";
 
 /** What node's `DeriveBitsJob` says when OpenSSL queued nothing to say instead. */
@@ -74,10 +74,6 @@ function derived(bytes: Uint8Array | null): Uint8Array {
   return bytes;
 }
 
-/** Bytes as a `Buffer` without copying: `Buffer.from(arrayBuffer)` in node. */
-function asBuffer(bytes: Uint8Array): Buffer {
-  return new Buffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength);
-}
 
 /** The digest a KDF names: `Digest::FromName`, refused in C++ as node refuses it. */
 function kdfDigest(name: string): number {

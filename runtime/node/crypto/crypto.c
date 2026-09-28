@@ -226,6 +226,8 @@ static const EVP_MD *digest_at(double id) {
     return digests[(size_t)id].md;
 }
 
+const EVP_MD *nts_crypto_digest_at(double id) { return digest_at(id); }
+
 double nts_crypto_digest_id(NtsString *name) {
     size_t length = 0;
     char *utf8 = nts_node_to_utf8_alloc(name, &length);
@@ -430,22 +432,27 @@ static bool context_update(Context *context, const void *bytes, size_t length) {
     return EVP_MAC_update(context->mac, bytes, length) == 1;
 }
 
+/* A refusal is recorded: `Sign#update` reports OpenSSL's cause, where `Hash`
+ * and `Hmac` have words of their own. */
 bool nts_crypto_update(double handle, NtsView *data) {
+    ERR_clear_error();
     Context *context = context_at(handle);
-    if (context == NULL) return false;
-    return context_update(context, nts_view_bytes(data), (size_t)nts_view_byte_length(data));
+    bool ok = context != NULL &&
+              context_update(context, nts_view_bytes(data), (size_t)nts_view_byte_length(data));
+    if (!ok) fail();
+    return ok;
 }
 
 /* The common case -- `update(string)` with no encoding or with UTF-8 -- without
  * the `Buffer` the TypeScript would otherwise build to carry the bytes. */
 bool nts_crypto_update_utf8(double handle, NtsString *data) {
+    ERR_clear_error();
     Context *context = context_at(handle);
-    if (context == NULL) return false;
     size_t length = 0;
-    char *utf8 = nts_node_to_utf8_alloc(data, &length);
-    if (utf8 == NULL) return false;
-    bool ok = context_update(context, utf8, length);
+    char *utf8 = context == NULL ? NULL : nts_node_to_utf8_alloc(data, &length);
+    bool ok = utf8 != NULL && context_update(context, utf8, length);
     free(utf8);
+    if (!ok) fail();
     return ok;
 }
 
@@ -453,6 +460,17 @@ bool nts_crypto_update_utf8(double handle, NtsString *data) {
  * the TypeScript keeps the bytes for a second reader (`_flush` and
  * `digest()` both read it, nodejs/node#28245). A zero-length XOF output
  * skips the finalisation, which segfaults on some platforms (openssl#9431). */
+static bool context_finish(Context *context, unsigned char *out) {
+    size_t length = context->length;
+    if (length == 0) return true;
+    if (context->kind == CONTEXT_HMAC) {
+        size_t written = 0;
+        return EVP_MAC_final(context->mac, out, &written, length) == 1;
+    }
+    if (is_xof(context->digest)) return EVP_DigestFinalXOF(context->md, out, length) == 1;
+    return EVP_DigestFinal_ex(context->md, out, NULL) == 1;
+}
+
 NtsView *nts_crypto_final(double handle) {
     ERR_clear_error();
     Context *context = context_at(handle);
@@ -460,17 +478,7 @@ NtsView *nts_crypto_final(double handle) {
     size_t length = context->length;
     unsigned char stack[EVP_MAX_MD_SIZE];
     unsigned char *out = length <= sizeof(stack) ? stack : malloc(length);
-    bool ok = out != NULL;
-    if (ok && length > 0) {
-        if (context->kind == CONTEXT_HMAC) {
-            size_t written = 0;
-            ok = EVP_MAC_final(context->mac, out, &written, length) == 1;
-        } else if (is_xof(context->digest)) {
-            ok = EVP_DigestFinalXOF(context->md, out, length) == 1;
-        } else {
-            ok = EVP_DigestFinal_ex(context->md, out, NULL) == 1;
-        }
-    }
+    bool ok = out != NULL && context_finish(context, out);
     NtsView *result = NULL;
     if (ok) {
         result = nts_view_from_bytes(out, (double)length);
@@ -480,6 +488,21 @@ NtsView *nts_crypto_final(double handle) {
     if (out != stack) free(out);
     context_free(context);
     return result;
+}
+
+/* A hash finished for `sig.c`, which signs the digest rather than exposing it:
+ * node's `Sign` is a `Hash` whose last step is a key operation. */
+unsigned char *nts_crypto_hash_take(double handle, size_t *length, const EVP_MD **md) {
+    Context *context = context_at(handle);
+    if (context == NULL || context->kind != CONTEXT_HASH) return NULL;
+    *length = context->length;
+    *md = context->digest;
+    unsigned char *out = malloc(*length == 0 ? 1 : *length);
+    bool ok = out != NULL && context_finish(context, out);
+    context_free(context);
+    if (ok) return out;
+    free(out);
+    return NULL;
 }
 
 void nts_crypto_release(double handle) {
@@ -669,13 +692,17 @@ NtsView *nts_crypto_scrypt(NtsView *password, NtsView *salt, double n, double r,
 
 /* ------------------------------------------------------------------ jobs */
 
-typedef enum { JOB_RANDOM, JOB_PBKDF2, JOB_HKDF, JOB_SCRYPT } JobKind;
+typedef enum { JOB_RANDOM, JOB_PBKDF2, JOB_HKDF, JOB_SCRYPT, JOB_WORK } JobKind;
 
 /* One unit of pool work. Inputs are private copies; `target` is the one
- * program object held, retained, and only touched on the loop thread. */
+ * program object held, retained, and only touched on the loop thread. A
+ * `JOB_WORK` is another translation unit's, which owns `state`. */
 typedef struct {
     uv_work_t request;
     JobKind kind;
+    NtsCryptoWork work;
+    void (*dispose)(void *state);
+    void *state;
     const EVP_MD *md;
     unsigned char *inputs[3];
     size_t lengths[3];
@@ -716,11 +743,15 @@ static void job_run(uv_work_t *request) {
         job->ok = scrypt(job->inputs[0], job->lengths[0], job->inputs[1], job->lengths[1], job->n,
                          job->r, job->p, job->maxmem, job->out, job->length);
         break;
+    case JOB_WORK:
+        job->ok = job->work(job->state, &job->out, &job->length);
+        break;
     }
     if (!job->ok) record_capture(&job->error);
 }
 
 static void job_free(Job *job) {
+    if (job->dispose != NULL) job->dispose(job->state);
     for (size_t i = 0; i < 3; i++) free(job->inputs[i]);
     free(job->out);
     record_clear(&job->error);
@@ -819,6 +850,27 @@ void nts_crypto_scrypt_job(NtsView *password, NtsView *salt, double n, double r,
     job->maxmem = (uint64_t)maxmem;
     job->inputs[0] = copy_of(password, &job->lengths[0]);
     job->inputs[1] = copy_of(salt, &job->lengths[1]);
+    job_queue(job);
+}
+
+/* Another translation unit's job, delivered as the derivations are: `done(ok,
+ * bytes)` on the loop thread, with the error record set from the pool thread's
+ * queue when `work` fails. `state` is disposed of after delivery, or at once
+ * if the job cannot be made. */
+void nts_crypto_queue_work(NtsCryptoWork work, void (*dispose)(void *state), void *state,
+                           NtsHeader *done) {
+    Job *job = calloc(1, sizeof(Job));
+    if (job == NULL) {
+        dispose(state);
+        return;
+    }
+    job->kind = JOB_WORK;
+    job->work = work;
+    job->dispose = dispose;
+    job->state = state;
+    nts_retain(done);
+    job->done = done;
+    job->request.data = job;
     job_queue(job);
 }
 

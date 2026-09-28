@@ -28,6 +28,11 @@ export function bytesOf(source: ByteSource): Uint8Array {
   return new Uint8Array(source);
 }
 
+/** Bytes as a `Buffer` without copying: `Buffer.from(arrayBuffer)` in node. */
+export function asBuffer(bytes: Uint8Array): Buffer {
+  return new Buffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength);
+}
+
 /** Node's `toBuf`: text through `Buffer.from`, where `buffer` means UTF-8. */
 export function toBuf(value: unknown, encoding?: string): unknown {
   if (typeof value === "string") {
@@ -154,8 +159,16 @@ export class OpenSSLError extends Error {
  * the operation, and the error carries nothing else.
  */
 export function cryptoError(fallback: string): OpenSSLError {
+  return queuedCryptoError() ?? new OpenSSLError(fallback);
+}
+
+/**
+ * `cryptoError` when OpenSSL queued something, and null when it did not -- for
+ * the callers that, like node's `CheckThrow`, throw an error of their own then.
+ */
+export function queuedCryptoError(): OpenSSLError | null {
   const record = nts_crypto_take_errors();
-  if (record.length === 3) return new OpenSSLError(fallback);
+  if (record.length === 3) return null;
   const error = new OpenSSLError(record[3]);
   if (record.length > 4) error.opensslErrorStack = record.slice(4).reverse();
   if (record[0] !== "") error.library = record[0];

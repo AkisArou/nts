@@ -3,11 +3,12 @@
 // The digests, MACs, symmetric ciphers, key derivations and random numbers:
 // `createHash` and `hash`, `createHmac` over secret keys, `createCipheriv`
 // and `createDecipheriv`, `pbkdf2`, `hkdf` and `scrypt`, the random bytes,
-// integers and UUIDs, and `timingSafeEqual`.
+// integers and UUIDs, and `timingSafeEqual`. Asymmetric keys, and signatures
+// with them: `createPublicKey` and `createPrivateKey`, `createSign`,
+// `createVerify`, `sign` and `verify`.
 //
-// Not yet: signatures, asymmetric keys and key generation,
-// Diffie-Hellman and ECDH, primes, X.509, and Web Crypto's
-// `subtle`. Each is its own part of OpenSSL, and
+// Not yet: key generation, RSA encryption, Diffie-Hellman and ECDH, primes,
+// X.509, and Web Crypto's `subtle`. Each is its own part of OpenSSL, and
 // `tooling/conformance/missing-exports` lists the names.
 
 import {
@@ -21,6 +22,7 @@ import { bytesOf, OpenSSLError } from "./util.ts";
 export { createHash, createHmac, getHashes, hash } from "./hash.ts";
 export { Cipheriv, createCipheriv, createDecipheriv, Decipheriv, getCipherInfo, getCiphers } from "./cipher.ts";
 export { createPrivateKey, createPublicKey, createSecretKey, KeyObject } from "./keys.ts";
+export { createSign, createVerify, Sign, sign, Verify, verify } from "./sig.ts";
 export { hkdf, hkdfSync, pbkdf2, pbkdf2Sync, scrypt, scryptSync } from "./kdf.ts";
 export {
   getRandomValues,

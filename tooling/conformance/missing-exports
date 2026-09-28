@@ -35,13 +35,7 @@ crypto.generateKeyPair: key-pair generation, EVP_PKEY_keygen per family; keys th
 crypto.generateKeyPairSync: as crypto.generateKeyPair
 crypto.generateKey: key generation, which for a secret key is random bytes and for the rest needs EVP_PKEY; not yet written
 crypto.generateKeySync: as crypto.generateKey
-crypto.createSign: signatures, EVP_DigestSign over the keys here; the next part of node:crypto
-crypto.createVerify: as crypto.createSign
-crypto.Sign: as crypto.createSign
-crypto.Verify: as crypto.createSign
-crypto.sign: as crypto.createSign
-crypto.verify: as crypto.createSign
-crypto.privateDecrypt: RSA encryption, EVP_PKEY_encrypt over the keys here
+crypto.privateDecrypt: RSA encryption, EVP_PKEY_encrypt over the keys here; the next part of node:crypto
 crypto.privateEncrypt: as crypto.privateDecrypt
 crypto.publicDecrypt: as crypto.privateDecrypt
 crypto.publicEncrypt: as crypto.privateDecrypt

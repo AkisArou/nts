@@ -223,3 +223,50 @@ declare function nts_crypto_key_export_public(handle: number, format: number, ty
 declare function nts_crypto_key_export_jwk(handle: number, privateKey: boolean): Uint8Array[];
 /** @ntsAbi managed */
 declare function nts_crypto_key_export_raw(handle: number, privateKey: boolean, compressed: boolean): Uint8Array | null;
+
+/** Signatures: a NaN padding or salt length is "not given"; a digest id of -1 is none. */
+/** @ntsAbi managed */
+declare function nts_crypto_sign_init(digest: number): number;
+/** @ntsAbi managed */
+declare function nts_crypto_key_is_one_shot(key: number): boolean;
+/** @ntsAbi managed */
+declare function nts_crypto_key_dsa_size(key: number): number;
+/** @ntsAbi managed */
+declare function nts_crypto_signature_to_p1363(size: number, der: Uint8Array): Uint8Array | null;
+/** @ntsAbi managed */
+declare function nts_crypto_signature_to_der(size: number, p1363: Uint8Array): Uint8Array | null;
+/** @ntsAbi managed */
+declare function nts_crypto_sign_final(hash: number, key: number, padding: number, saltLength: number): Uint8Array | null;
+/** @ntsAbi managed */
+declare function nts_crypto_verify_final(
+  hash: number,
+  key: number,
+  signature: Uint8Array,
+  padding: number,
+  saltLength: number,
+): number;
+/** @ntsAbi managed */
+declare function nts_crypto_sign_status(): number;
+/** @ntsAbi managed */
+declare function nts_crypto_sign_job_sync(
+  verify: boolean,
+  key: number,
+  data: Uint8Array,
+  digest: number,
+  saltLength: number,
+  padding: number,
+  context: Uint8Array,
+  signature: Uint8Array,
+): Uint8Array | null;
+/** @ntsAbi managed */
+declare function nts_crypto_sign_job(
+  verify: boolean,
+  key: number,
+  data: Uint8Array,
+  digest: number,
+  saltLength: number,
+  padding: number,
+  context: Uint8Array,
+  signature: Uint8Array,
+  done: (ok: boolean, bytes: Uint8Array) => void,
+): void;

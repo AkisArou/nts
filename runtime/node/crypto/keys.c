@@ -27,7 +27,7 @@
 #include "nts_crypto.h"
 #include "shared.h"
 
-/* Mirrored as `KeyFormat` and `KeyEncoding` in `src/asymmetric.ts`. */
+/* Mirrored as `KeyFormat` and `KeyEncoding` in `src/keys.ts`. */
 enum { kFormatDer = 0, kFormatPem = 1 };
 enum { kEncodingPkcs1 = 0, kEncodingPkcs8 = 1, kEncodingSpki = 2, kEncodingSec1 = 3 };
 

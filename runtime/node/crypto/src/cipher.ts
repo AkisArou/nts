@@ -35,6 +35,7 @@ import { StringDecoder } from "../../string_decoder/src/main.ts";
 import { isArrayBufferView } from "../../util/src/types.ts";
 import { prepareSecretKey } from "./keys.ts";
 import {
+  asBuffer,
   bytesOf,
   cipherId,
   filterDuplicateStrings,
@@ -108,9 +109,6 @@ function decoderFor(decoder: StringDecoder | null, encoding: string): StringDeco
   return current;
 }
 
-function asBuffer(bytes: Uint8Array): Buffer {
-  return new Buffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength);
-}
 
 const noBytes = new Uint8Array(0);
 

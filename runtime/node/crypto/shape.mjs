@@ -63,6 +63,8 @@ const ORDER = [
   "createPrivateKey",
   "createPublicKey",
   "createSecretKey",
+  "createSign",
+  "createVerify",
   "getCiphers",
   "getCipherInfo",
   "getHashes",
@@ -78,15 +80,19 @@ const ORDER = [
   "randomUUIDv7",
   "scrypt",
   "scryptSync",
+  "sign",
   "timingSafeEqual",
   "getFips",
   "setFips",
+  "verify",
   "hash",
   "Cipheriv",
   "Decipheriv",
   "Hash",
   "Hmac",
   "KeyObject",
+  "Sign",
+  "Verify",
   "secureHeapUsed",
 ];
 
@@ -103,6 +109,8 @@ export function shape(exports) {
   const constructors = {
     Cipheriv: callable(exports.Cipheriv),
     Decipheriv: callable(exports.Decipheriv),
+    Sign: callable(exports.Sign),
+    Verify: callable(exports.Verify),
     Hash: deprecate(callable(exports.Hash), "crypto.Hash constructor is deprecated.", "DEP0179"),
     Hmac: deprecate(callable(exports.Hmac), "crypto.Hmac constructor is deprecated.", "DEP0181"),
   };

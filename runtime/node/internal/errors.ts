@@ -2081,15 +2081,19 @@ export class ERR_CRYPTO_HASH_UPDATE_FAILED extends NodeError {
   }
 }
 
-/** `Invalid digest: md55`, from the KDFs and `Hmac`, all of which node checks in C++. */
+/**
+ * `Invalid digest: md55`, from the KDFs, `Hmac` and the one-shot signatures,
+ * all of which node checks in C++; `Sign` and `Verify` say only `Invalid
+ * digest`.
+ */
 export class ERR_CRYPTO_INVALID_DIGEST extends NodeTypeError {
   override get ["constructor"](): unknown {
     return TypeError;
   }
   override readonly code = "ERR_CRYPTO_INVALID_DIGEST";
 
-  constructor(digest: string) {
-    super(`Invalid digest: ${digest}`);
+  constructor(digest?: string) {
+    super(digest === undefined ? "Invalid digest" : `Invalid digest: ${digest}`);
   }
 }
 
@@ -2203,12 +2207,33 @@ export class ERR_CRYPTO_INVALID_STATE extends NodeError {
   }
 }
 
-/** `Invalid state`, as C++ throws it: `final()` after `final()`. */
+/**
+ * `Invalid state`, as C++ throws it: `final()` after `final()`. `Sign` and
+ * `Verify` say why: `Not initialised`.
+ */
 export class ERR_CRYPTO_INVALID_STATE_BINDING extends NodeError {
   override readonly code = "ERR_CRYPTO_INVALID_STATE";
 
+  constructor(message = "Invalid state") {
+    super(message);
+  }
+}
+
+/** A crypto operation that failed with nothing from OpenSSL to say why, in C++'s own words. */
+export class ERR_CRYPTO_OPERATION_FAILED extends NodeError {
+  override readonly code = "ERR_CRYPTO_OPERATION_FAILED";
+
+  constructor(message = "Operation failed") {
+    super(message);
+  }
+}
+
+/** `No key provided to sign`. */
+export class ERR_CRYPTO_SIGN_KEY_REQUIRED extends NodeError {
+  override readonly code = "ERR_CRYPTO_SIGN_KEY_REQUIRED";
+
   constructor() {
-    super("Invalid state");
+    super("No key provided to sign");
   }
 }
 

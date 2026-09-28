@@ -107,7 +107,7 @@ double nts_crypto_cipher_set_aad(double handle, NtsView *aad, double plaintext_l
 void nts_crypto_cipher_release(double handle);
 
 /* Asymmetric keys (`keys.c`). A handle, or a status mirrored by
- * `src/asymmetric.ts`; formats and encodings are numbered as it numbers them. */
+ * `src/keys.ts`; formats and encodings are numbered as it numbers them. */
 double nts_crypto_key_parse_private(double format, double type, NtsView *data, NtsView *passphrase,
                                     bool has_passphrase);
 double nts_crypto_key_parse_public(double format, double type, NtsView *data, NtsView *passphrase,
@@ -128,6 +128,26 @@ NtsView *nts_crypto_key_export_private(double handle, double format, double type
 NtsView *nts_crypto_key_export_public(double handle, double format, double type);
 NtsArray *nts_crypto_key_export_jwk(double handle, bool private_key);
 NtsView *nts_crypto_key_export_raw(double handle, bool private_key, bool compressed);
+
+/* Signatures (`sig.c`). The stream forms finish a hash context from
+ * `nts_crypto_hash_new`; the one-shot forms are node's `SignJob`, whose
+ * verification answers a byte. A NaN padding or salt length is "not given";
+ * a digest id of -1 is none. Statuses are mirrored by `src/sig.ts`. */
+double nts_crypto_sign_init(double digest);
+bool nts_crypto_key_is_one_shot(double key);
+double nts_crypto_key_dsa_size(double key);
+NtsView *nts_crypto_signature_to_p1363(double size, NtsView *der);
+NtsView *nts_crypto_signature_to_der(double size, NtsView *p1363);
+NtsView *nts_crypto_sign_final(double hash, double key, double padding, double salt_length);
+double nts_crypto_verify_final(double hash, double key, NtsView *signature, double padding,
+                               double salt_length);
+double nts_crypto_sign_status(void);
+NtsView *nts_crypto_sign_job_sync(bool verify, double key, NtsView *data, double digest,
+                                  double salt_length, double padding, NtsView *context,
+                                  NtsView *signature);
+void nts_crypto_sign_job(bool verify, double key, NtsView *data, double digest,
+                         double salt_length, double padding, NtsView *context, NtsView *signature,
+                         NtsHeader *done);
 
 /* FIPS mode: whether OpenSSL's default properties ask for FIPS, and setting
  * them. False from `set` is a failure whose cause is on the error record. */

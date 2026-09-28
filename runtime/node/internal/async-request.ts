@@ -30,7 +30,8 @@ export type RequestProvider =
   | "RANDOMBYTESREQUEST"
   | "PBKDF2REQUEST"
   | "DERIVEBITSREQUEST"
-  | "SCRYPTREQUEST";
+  | "SCRYPTREQUEST"
+  | "SIGNREQUEST";
 
 export class AsyncRequest {
   #asyncId: number;

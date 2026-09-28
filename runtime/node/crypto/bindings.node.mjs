@@ -30,8 +30,26 @@ function fromOpenSSL(error) {
   return [error.library ?? "", error.reason ?? "", code, ...errors];
 }
 
+/**
+ * Node decorates its exception by assigning these, so an accessor a program
+ * put on `Object.prototype` for one of them runs inside node's crypto, and
+ * what it throws replaces node's error (`test-crypto-sign-verify` does this).
+ * The TypeScript's own decoration assigns the same names in the same order,
+ * and would throw the same thing at the same step.
+ */
+const DECORATIONS = ["library", "reason", "code", "opensslErrorStack"];
+
+function decoratedByProgram() {
+  return DECORATIONS.some((name) => Object.getOwnPropertyDescriptor(Object.prototype, name)?.set !== undefined);
+}
+
 function failed(error) {
   record = fromOpenSSL(error);
+  // What a program's setter threw is not an OpenSSL error, and passes through.
+  if (record.length === 3 && decoratedByProgram()) {
+    record = empty();
+    throw error;
+  }
 }
 
 globalThis.nts_crypto_take_errors = () => {
@@ -631,4 +649,184 @@ globalThis.nts_crypto_key_export_raw = (handle, privateKey, compressed) => {
   } catch {
     return null;
   }
+};
+
+// -- signatures ---------------------------------------------------------------
+
+/**
+ * A signing stream's context: node's own `Sign` and `Verify`, fed alike,
+ * because which of them finishes is not known until then. `crypto.c`'s
+ * context is one digest, finished by either.
+ */
+globalThis.nts_crypto_sign_init = (id) => {
+  try {
+    const sign = crypto.createSign(names[id]);
+    const verify = crypto.createVerify(names[id]);
+    return claim({
+      update(data, encoding) {
+        sign.update(data, encoding);
+        verify.update(data, encoding);
+      },
+      sign,
+      verify,
+    });
+  } catch (error) {
+    failed(error);
+    return 0;
+  }
+};
+
+/** An option given at the ABI as NaN when absent. */
+const given = (value) => (Number.isNaN(value) ? undefined : value);
+
+const ONE_SHOT_TYPES = new Set(["ed25519", "ed448", "ml-dsa-44", "ml-dsa-65", "ml-dsa-87"]);
+
+globalThis.nts_crypto_key_is_one_shot = (handle) => ONE_SHOT_TYPES.has(keyAt(handle)?.asymmetricKeyType);
+
+/**
+ * The width of a curve's `r` and `s`, asked of node itself: half a P1363
+ * signature, from a key made once per curve.
+ */
+const curveWidths = new Map();
+
+function curveWidth(namedCurve) {
+  let width = curveWidths.get(namedCurve);
+  if (width === undefined) {
+    const { privateKey } = crypto.generateKeyPairSync("ec", { namedCurve });
+    width = crypto.sign("sha256", noBytes, { key: privateKey, dsaEncoding: "ieee-p1363" }).length / 2;
+    curveWidths.set(namedCurve, width);
+  }
+  return width;
+}
+
+globalThis.nts_crypto_key_dsa_size = (handle) => {
+  const key = keyAt(handle);
+  const details = key?.asymmetricKeyDetails;
+  if (key?.asymmetricKeyType === "dsa") return Math.ceil(details.divisorLength / 8);
+  if (key?.asymmetricKeyType === "ec") return curveWidth(details.namedCurve);
+  return 0;
+};
+
+/** A DER `SEQUENCE { INTEGER, INTEGER }`'s two magnitudes, or null. */
+function derIntegers(der) {
+  let at = 0;
+  const length = () => {
+    let size = der[at++];
+    if (size < 0x80) return size;
+    let count = size & 0x7f;
+    size = 0;
+    while (count-- > 0) size = size * 256 + der[at++];
+    return size;
+  };
+  if (der[at++] !== 0x30) return null;
+  const end = length() + at;
+  if (end > der.length) return null;
+  const integers = [];
+  for (let i = 0; i < 2; i++) {
+    if (at >= end || der[at++] !== 0x02) return null;
+    const size = length();
+    if (size === 0 || at + size > end || der[at] & 0x80) return null;
+    let start = at;
+    at += size;
+    while (start < at - 1 && der[start] === 0) start++;
+    integers.push(der.subarray(start, at));
+  }
+  return integers;
+}
+
+globalThis.nts_crypto_signature_to_p1363 = (size, der) => {
+  const integers = derIntegers(der);
+  if (integers === null) return null;
+  const out = new Uint8Array(2 * size);
+  for (let i = 0; i < 2; i++) {
+    const integer = integers[i][0] === 0 ? integers[i].subarray(1) : integers[i];
+    if (integer.length > size) return null;
+    out.set(integer, (i + 1) * size - integer.length);
+  }
+  return out;
+};
+
+globalThis.nts_crypto_signature_to_der = (size, p1363) => {
+  if (p1363.length !== 2 * size) return null;
+  const integer = (bytes) => {
+    let start = 0;
+    while (start < bytes.length - 1 && bytes[start] === 0) start++;
+    const magnitude = bytes.subarray(start);
+    const body = magnitude[0] & 0x80 ? [0, ...magnitude] : [...magnitude];
+    return [0x02, ...encodedLength(body.length), ...body];
+  };
+  const encodedLength = (n) => (n < 0x80 ? [n] : n < 0x100 ? [0x81, n] : [0x82, n >> 8, n & 0xff]);
+  const body = [...integer(p1363.subarray(0, size)), ...integer(p1363.subarray(size))];
+  return Uint8Array.from([0x30, ...encodedLength(body.length), ...body]);
+};
+
+function signOptions(handle, padding, saltLength) {
+  return { key: keyAt(handle), padding: given(padding), saltLength: given(saltLength) };
+}
+
+globalThis.nts_crypto_sign_final = (handle, key, padding, saltLength) => {
+  const context = contexts.get(handle);
+  contexts.delete(handle);
+  try {
+    return view(context.sign.sign(signOptions(key, padding, saltLength)));
+  } catch (error) {
+    failed(error);
+    return null;
+  }
+};
+
+globalThis.nts_crypto_verify_final = (handle, key, signature, padding, saltLength) => {
+  const context = contexts.get(handle);
+  contexts.delete(handle);
+  try {
+    return context.verify.verify(signOptions(key, padding, saltLength), signature) ? 1 : 0;
+  } catch (error) {
+    failed(error);
+    return -1;
+  }
+};
+
+let signStatus = 0;
+
+globalThis.nts_crypto_sign_status = () => signStatus;
+
+/** `sig.c`'s status for the step node's words name. */
+function signStatusOf(error) {
+  if (error?.message === "Context parameter is unsupported") return -3;
+  if (error?.message === "EVP_SignInit_ex failed") return -1;
+  return -2;
+}
+
+/** A `SignJob`'s arguments as `crypto.sign` and `crypto.verify` take them. */
+function jobArguments(key, digest, saltLength, padding, context) {
+  const options = { ...signOptions(key, padding, saltLength) };
+  if (context.length > 0) options.context = context;
+  return [digest < 0 ? null : names[digest], options];
+}
+
+globalThis.nts_crypto_sign_job_sync = (verify, key, data, digest, saltLength, padding, context, signature) => {
+  const [algorithm, options] = jobArguments(key, digest, saltLength, padding, context);
+  try {
+    signStatus = 0;
+    if (verify) return Uint8Array.of(crypto.verify(algorithm, data, options, signature) ? 1 : 0);
+    return view(crypto.sign(algorithm, data, options));
+  } catch (error) {
+    signStatus = signStatusOf(error);
+    failed(error);
+    return null;
+  }
+};
+
+globalThis.nts_crypto_sign_job = (verify, key, data, digest, saltLength, padding, context, signature, done) => {
+  const [algorithm, options] = jobArguments(key, digest, saltLength, padding, context);
+  const deliver = (error, result) => {
+    if (error) {
+      failed(error);
+      done(false, noBytes);
+    } else {
+      done(true, verify ? Uint8Array.of(result ? 1 : 0) : view(result));
+    }
+  };
+  if (verify) crypto.verify(algorithm, data, options, signature, deliver);
+  else crypto.sign(algorithm, data, options, deliver);
 };

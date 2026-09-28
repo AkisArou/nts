@@ -1,10 +1,11 @@
-/* `crypto.c`, `cipher.c` and `keys.c`, called directly.
+/* `crypto.c`, `cipher.c`, `keys.c` and `sig.c`, called directly.
  *
  * The TypeScript over these natives runs on node against node's own crypto,
  * so nothing but this runs the C: the compiled lane refuses every public
  * crypto function today, for compiler reasons recorded with the module. Each
  * check is a published known answer -- FIPS 180 and 202 digests, RFC 4231
- * HMAC, RFC 6070 PBKDF2, RFC 5869 HKDF, RFC 7914 scrypt, SP 800-38A AES --
+ * HMAC, RFC 6070 PBKDF2, RFC 5869 HKDF, RFC 7914 scrypt, SP 800-38A AES,
+ * RFC 8032 Ed25519 --
  * or a round trip through OpenSSL, or node's own behaviour where it is
  * node's rather than a standard's: PBKDF2 and HKDF of length 0 fail, scrypt's
  * answers empty, SHAKE's default length, which statuses a cipher answers.
@@ -17,6 +18,7 @@
 #define _GNU_SOURCE
 #endif
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -375,11 +377,106 @@ static void keys(void) {
     expect_true("  and OpenSSL says so", errors_mention("DECODER routines::unsupported"));
 }
 
+/* ---------------------------------------------------------- signatures */
+
+static bool same_bytes(NtsView *a, NtsView *b) {
+    return a != NULL && b != NULL && nts_view_byte_length(a) == nts_view_byte_length(b) &&
+           memcmp(nts_view_bytes(a), nts_view_bytes(b), (size_t)nts_view_byte_length(a)) == 0;
+}
+
+/* A stream's signature: `update` then `sign_final`, as `Sign` does it. */
+static NtsView *stream_sign(double digest, const char *data, double key, double padding, double salt) {
+    double handle = nts_crypto_sign_init(digest);
+    nts_crypto_update(handle, utf8(data));
+    return nts_crypto_sign_final(handle, key, padding, salt);
+}
+
+static double stream_verify(double digest, const char *data, double key, NtsView *signature, double padding,
+                            double salt) {
+    double handle = nts_crypto_sign_init(digest);
+    nts_crypto_update(handle, utf8(data));
+    return nts_crypto_verify_final(handle, key, signature, padding, salt);
+}
+
+static void signatures(void) {
+    NtsView *none = bytes("", 0);
+    double sha256 = nts_crypto_digest_id(text("sha256"));
+
+    double seed = nts_crypto_key_from_okp(
+        text("Ed25519"), hex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"), true);
+    double point = nts_crypto_key_from_okp(
+        text("Ed25519"), hex("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"), false);
+    NtsView *ed_sig = nts_crypto_sign_job_sync(false, seed, none, -1, NAN, NAN, none, none);
+    expect_true("Ed25519, RFC 8032 test 1",
+                is_hex(ed_sig, "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e3970"
+                               "1cf9b46bd25bf5f0595bbe24655141438e7a100b"));
+    expect_true("  verifies with its public key",
+                is_hex(nts_crypto_sign_job_sync(true, point, none, -1, NAN, NAN, none, ed_sig), "01"));
+    expect_true("  and not for other data",
+                is_hex(nts_crypto_sign_job_sync(true, point, utf8("x"), -1, NAN, NAN, none, ed_sig), "00"));
+    expect_true("an Ed25519 key cannot finish a stream", nts_crypto_key_is_one_shot(seed));
+
+    unsigned char identity[32] = {1};
+    unsigned char small_order_sig[64] = {1};
+    double weak = nts_crypto_key_from_okp(text("Ed25519"), bytes(identity, 32), false);
+    expect_true("a small-order key and signature verify nothing, as node decides",
+                is_hex(nts_crypto_sign_job_sync(true, weak, utf8("anything"), -1, NAN, NAN, none,
+                                                bytes(small_order_sig, 64)),
+                       "00"));
+    nts_crypto_take_errors();
+
+    double rsa = nts_crypto_key_parse_private(1, -1, file(KEYS "rsa_private.pem"), none, false);
+    double rsa_public = nts_crypto_key_parse_public(1, -1, file(KEYS "rsa_public.pem"), none, false);
+    expect_true("an RSA key can finish a stream", !nts_crypto_key_is_one_shot(rsa));
+    NtsView *streamed = stream_sign(sha256, "abc", rsa, NAN, NAN);
+    expect_true("an RSA stream signs with the key's size", streamed != NULL && nts_view_byte_length(streamed) == 256);
+    expect_true("  the same bytes as the one-shot form, PKCS#1 v1.5 being deterministic",
+                same_bytes(streamed, nts_crypto_sign_job_sync(false, rsa, utf8("abc"), sha256, NAN, NAN, none, none)));
+    expect_true("  which verify with the public key", stream_verify(sha256, "abc", rsa_public, streamed, NAN, NAN) == 1);
+    expect_true("  and not for other data", stream_verify(sha256, "abd", rsa_public, streamed, NAN, NAN) == 0);
+
+    NtsView *pss = stream_sign(sha256, "abc", rsa, 6, -2);
+    expect_true("RSA-PSS with the longest salt verifies with the salt recovered",
+                stream_verify(sha256, "abc", rsa_public, pss, 6, -2) == 1);
+    expect_true("  but not as PKCS#1 v1.5", stream_verify(sha256, "abc", rsa_public, pss, 1, NAN) == 0);
+
+    expect_true("an unknown padding fails", stream_sign(sha256, "abc", rsa, 99, NAN) == NULL);
+    expect_true("  with OpenSSL's reason", errors_mention("illegal or unsupported padding mode"));
+    expect_true("  and so does verifying with it", stream_verify(sha256, "abc", rsa_public, streamed, 99, NAN) == 0);
+
+    double handle = nts_crypto_sign_init(sha256);
+    nts_crypto_sign_final(handle, rsa, NAN, NAN);
+    expect_true("a finished stream is gone", nts_crypto_sign_final(handle, rsa, NAN, NAN) == NULL);
+    nts_crypto_take_errors();
+
+    NtsView *context = nts_crypto_sign_job_sync(false, rsa, utf8("abc"), sha256, NAN, NAN, utf8("ctx"), none);
+    expect_true("an RSA key refuses a context string", context == NULL && nts_crypto_sign_status() == -3);
+    nts_crypto_take_errors();
+
+    double ec = nts_crypto_key_parse_private(1, -1, file(KEYS "ec_p256_private.pem"), none, false);
+    expect_true("P-256's r and s are 32 bytes each", nts_crypto_key_dsa_size(ec) == 32);
+    expect_true("  and an RSA key has none", nts_crypto_key_dsa_size(rsa) == 0);
+    NtsView *der = stream_sign(sha256, "abc", ec, NAN, NAN);
+    NtsView *p1363 = nts_crypto_signature_to_p1363(32, der);
+    expect_true("an ECDSA signature converts to IEEE P1363", p1363 != NULL && nts_view_byte_length(p1363) == 64);
+    expect_true("  and back to the same DER", same_bytes(nts_crypto_signature_to_der(32, p1363), der));
+    expect_true("  which verifies", stream_verify(sha256, "abc", ec, der, NAN, NAN) == 1);
+    expect_true("P1363 of the wrong length is malformed", nts_crypto_signature_to_der(32, bytes(identity, 32)) == NULL);
+    expect_true("DER that does not parse does not convert", nts_crypto_signature_to_p1363(32, utf8("garbage")) == NULL);
+
+    nts_crypto_sign_job(true, ec, utf8("abc"), sha256, NAN, NAN, none, der, &job_callback);
+    int before = jobs_done;
+    uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+    expect_true("a verification job calls back once, with a true byte",
+                jobs_done == before + 1 && job_ok && strcmp(job_hex, "01") == 0);
+}
+
 int main(void) {
     digests();
     derivations();
     ciphers();
     keys();
+    signatures();
     printf("%d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;
 }

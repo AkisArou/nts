@@ -58,7 +58,7 @@ export type HmacOptions = TransformOptions;
  * Text or bytes into a live context. Text is written as node's `Decode`
  * writes it: an encoding it does not know is UTF-8, and so is `buffer`.
  */
-function feed(handle: number, data: unknown, encoding: unknown): boolean {
+export function feed(handle: number, data: unknown, encoding: unknown): boolean {
   if (typeof data === "string") {
     const as = parseEncoding(encoding, "utf8");
     if (as === "utf8" || as === "buffer") return nts_crypto_update_utf8(handle, data);
@@ -68,7 +68,7 @@ function feed(handle: number, data: unknown, encoding: unknown): boolean {
 }
 
 /** `update`'s argument checks, shared as node shares the method itself. */
-function checkUpdate(data: unknown, encoding: unknown): void {
+export function checkUpdate(data: unknown, encoding: unknown): void {
   if (typeof data === "string") {
     validateEncoding(data, encoding);
   } else if (!isArrayBufferView(data)) {
