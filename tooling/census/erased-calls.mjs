@@ -4,6 +4,8 @@
 //   node tooling/census/erased-calls.mjs [project ...]   (default: the runtime, runtime/react, examples/, outcomes)
 //   node tooling/census/erased-calls.mjs --test262 <rows> ...   and every test262 file those census rows saw reach lowering
 //   node tooling/census/erased-calls.mjs --origins [project ...]  and where each site's value was erased
+//   node tooling/census/erased-calls.mjs --every [project ...]    and every call through a function value,
+//                                                                 by where its callee came from
 //   node tooling/census/erased-calls.mjs --self-test
 //   NTS_BIN=<a pin> node tooling/census/erased-calls.mjs
 //
@@ -61,6 +63,33 @@ export function erasedCalls(text) {
       const args = m[3].split(",").map((a) => a.trim()).filter(Boolean).slice(1);
       const signature = `(${args.map((a) => plain(types.get(a) ?? "?")).join(", ")}) -> ${plain(m[4])}`;
       sites.push({ function: name, slot: Number(m[1]), arity: args.length, signature });
+    }
+  }
+  return sites;
+}
+
+/**
+ * Every call through a function value in one prepared listing -- each
+ * `call.closure` -- with where its callee came from: `unerase` (an erased
+ * value, the sites `erasedCalls` counts), `param`, `field.get`, a block
+ * argument, or whatever else defined it. `line` and `end` are where the
+ * calling function starts and ends in the source, so a caller can place it.
+ */
+export function closureCalls(text) {
+  const sites = [];
+  for (const fn of text.split(/\n(?=(?:export )?(?:declare )?func )/)) {
+    const name = /^(?:export )?(?:declare )?func (.+?)\(/.exec(fn)?.[1];
+    if (!name) continue;
+    const span = /^[^\n]*@ \S+?:(\d+):\d+ - \S+?:(\d+):\d+/.exec(fn);
+    const line = Number(span?.[1] ?? 0);
+    const end = Number(span?.[2] ?? 0);
+    const defs = new Map();
+    for (const m of fn.matchAll(/^ {2}(%\d+) = (\S+)/gm)) defs.set(m[1], m[2]);
+    for (const header of fn.matchAll(/^b\d+\((.*)\):$/gm)) {
+      for (const m of header[1].matchAll(/(%\d+):/g)) defs.set(m[1], "block-arg");
+    }
+    for (const m of fn.matchAll(/^ {2}(?:%\d+ = )?call\.closure\[\d+\] (%\d+)\(/gm)) {
+      sites.push({ function: name, line, end, via: defs.get(m[1]) ?? "?" });
     }
   }
   return sites;
@@ -202,6 +231,9 @@ function selfTest() {
   if (sites.length !== 2) return `${sites.length} site(s) read where two call through an unerase and one through a param`;
   if (sites[0].signature !== "(f64) -> f64" || sites[0].arity !== 1) return `the first site read as ${JSON.stringify(sites[0])}`;
   if (sites[1].signature !== "(managed<str>, managed<str>) -> managed<str>" || sites[1].slot !== 1) return `the second site read as ${JSON.stringify(sites[1])}`;
+  const every = closureCalls(listing.replace("func run(key: managed<str>) -> managed<str> {", "func run(key: managed<str>) -> managed<str> {  @ /x/src/main.ts:12:3 - /x/src/main.ts:14:4"));
+  if (every.map((c) => c.via).join(",") !== "unerase,param,unerase") return `every closure call read as ${every.map((c) => c.via).join(",")}, not unerase,param,unerase`;
+  if (every[0].line !== 12 || every[0].end !== 14 || every[2].line !== 0) return `a calling function placed at ${every.map((c) => `${c.line}-${c.end}`).join(",")}, not 12-14 and unplaced`;
   const program = [
     "func make() -> void {",
     "b0:",
@@ -238,7 +270,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     process.exit(2);
   }
   if (argv.includes("--self-test")) {
-    console.log("  self-test: sites through an unerase counted, one through a param not; signatures and slots read; origins matched, mismatched, unmade and outside each told apart");
+    console.log("  self-test: sites through an unerase counted, one through a param not; every closure call read with its callee's origin and place; signatures and slots read; origins matched, mismatched, unmade and outside each told apart");
     process.exit(0);
   }
 
@@ -296,8 +328,11 @@ if (!FRONTEND.exists) {
     }
     return cases.map((path, i) => {
       const dir = workspace(join(scratch, "t262", String(i)));
-      materialiseCase(dir, bodyOf(readFileSync(join(ROOT, "third_party/test262", path), "utf8")));
-      return { corpus: "test262", label: path, at: dir };
+      const body = bodyOf(readFileSync(join(ROOT, "third_party/test262", path), "utf8"));
+      const source = materialiseCase(dir, body);
+      // Where the test's own text starts: a calling function before it is the stand-in's.
+      const bodyFirst = source.slice(0, source.length - body.length).split("\n").length;
+      return { corpus: "test262", label: path, at: dir, bodyFirst };
     });
   }
 
@@ -333,6 +368,7 @@ if (!FRONTEND.exists) {
     });
 
   const found = [];
+  const every = [];
   const traced = [];
   const unmeasured = [];
   let next = 0;
@@ -358,6 +394,7 @@ if (!FRONTEND.exists) {
       }
       for (const s of erasedCalls(r.out)) found.push({ ...p, ...s });
       if (argv.includes("--origins")) for (const o of origins(r.out)) traced.push({ ...p, ...o });
+      if (argv.includes("--every")) for (const c of closureCalls(r.out)) every.push({ ...p, ...c });
     }
   }));
 
@@ -386,6 +423,41 @@ if (!FRONTEND.exists) {
       console.log(`    ${String(row.sites).padStart(4)} site(s) ${String(row.projects.size).padStart(3)} project(s) slot ${[...row.slots].join(",")}  ${sig}`);
     }
     if (signatures.size > 15) console.log(`    ... ${signatures.size - 15} more`);
+  }
+
+  // Every call through a function value, erased or not: what a change to how
+  // every closure is called would reach. Per corpus, the sites and the projects
+  // by where the callee came from; for test262, whether the calling function
+  // is the stand-in's or the test's, and which stand-in function.
+  if (argv.includes("--every")) {
+    for (const corpus of [...new Set(projects.map((p) => p.corpus))]) {
+      const measured = projects.filter((p) => p.corpus === corpus && !unmeasured.includes(p.label));
+      const sites = every.filter((c) => c.corpus === corpus);
+      // A function wholly before the test's text is the stand-in's, wholly after
+      // is the test's; one spanning both is `module#init`, whose calls are the
+      // top-level statements -- the stand-in declares, the test calls.
+      const place = (c) =>
+        c.bodyFirst === undefined ? "project"
+        : c.line === 0 ? "unplaced"
+        : c.line >= c.bodyFirst - 1 ? "body"
+        : c.end < c.bodyFirst - 1 ? "harness"
+        : "top level";
+      const projectsOf = (list) => new Set(list.map((c) => c.label)).size;
+      console.log(`\n  ${corpus}, every call through a function value: ${sites.length} site(s) in ${projectsOf(sites)} of ${measured.length} measured project(s)`);
+      const byVia = new Map();
+      for (const c of sites) byVia.set(c.via, [...(byVia.get(c.via) ?? []), c]);
+      for (const [via, list] of [...byVia].sort((a, b) => b[1].length - a[1].length)) {
+        const where = new Map();
+        for (const c of list) where.set(place(c), (where.get(place(c)) ?? 0) + 1);
+        console.log(`    ${String(list.length).padStart(6)} site(s) ${String(projectsOf(list)).padStart(5)} project(s)  callee from ${via.padEnd(12)} ${[...where].map(([k, n]) => `${k} ${n}`).join(", ")}`);
+      }
+      const inHarness = sites.filter((c) => place(c) === "harness");
+      if (inHarness.length > 0) {
+        const byFn = new Map();
+        for (const c of inHarness) byFn.set(c.function, [...(byFn.get(c.function) ?? []), c]);
+        console.log(`    in the stand-in, by function: ${[...byFn].sort((a, b) => b[1].length - a[1].length).map(([f, l]) => `${f} ${l.length} (${projectsOf(l)} project(s))`).join(", ")}`);
+      }
+    }
   }
 
   // Where each site's value was erased: a mismatched site calls through a
