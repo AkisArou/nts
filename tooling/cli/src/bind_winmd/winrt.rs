@@ -372,10 +372,10 @@ struct Writer<'a> {
     /// it is being written, which is what its own members naming it find.
     specialized: std::collections::BTreeMap<String, String>,
     /// Each async operation this module declares a `then` for, by its
-    /// specialisation's name, with its result as this module spells it --
-    /// `None` for an action, which completes with nothing: what the values
-    /// module's function for it is written from.
-    thens: std::collections::BTreeMap<String, Option<String>>,
+    /// specialisation's name, with its result -- `None` for an action, which
+    /// completes with nothing: what the values module's function for it is
+    /// written from.
+    thens: std::collections::BTreeMap<String, Option<Then>>,
     refused: Vec<(String, String)>,
     methods: usize,
 }
@@ -2022,27 +2022,62 @@ impl Writer<'_> {
             _ => return None,
         }
         let argument = named.generics.first()?;
-        // A struct result is read into a native local, whose address a
-        // callback cannot be handed: the compiler refuses the escape, so no
-        // `then` is declared that it would refuse, and the refusal says why.
+        // A plain struct's `GetResults` answers its storage in the frame,
+        // which a callback cannot be handed: fulfilled instead with a plain
+        // object of its fields (`Copied<T>`), copied out of it where it is.
+        // One holding a string answers that object already.
         if let Type::ValueName(result) = argument
             && self.find(&result.namespace, &result.name).is_ok_and(|def| def.category() == TypeCategory::Struct)
+            && !is_guid(result)
         {
-            self.refuse(
-                &format!("{alias}.then"),
-                "an operation whose result is a struct, which is read into a native local that a callback cannot be handed",
-            );
-            return None;
+            let record = self.named(&result.namespace, &result.name);
+            self.brands.insert("Copied");
+            let def = self.find(&result.namespace, &result.name).ok()?;
+            let then = if self.holds_string(def, 0) {
+                Then::read(format!("Copied<{record}>"))
+            } else {
+                let Some(fields) = self.copied_literal(def, "result", 0) else {
+                    self.refuse(&format!("{alias}.then"), "an operation whose result is a struct holding a `Guid`, which nothing copies into an object");
+                    return None;
+                };
+                Then {
+                    value: format!("Copied<{record}>"),
+                    fulfil: format!("const result = completed.GetResults();\n        onFulfilled({fields});"),
+                }
+            };
+            return Some(self.then_declaration(alias, Some(then)));
         }
         let result = self.type_argument(argument).ok()?;
-        Some(self.then_declaration(alias, Some(result)))
+        Some(self.then_declaration(alias, Some(Then::read(result))))
+    }
+
+    /// An object literal of a plain struct's fields, each read from `from`,
+    /// the struct's storage, as `Copied<T>` spells them: a nested struct as
+    /// a literal of its own. `None` for a struct holding a `Guid`, whose
+    /// bytes nothing copies into an object.
+    fn copied_literal(&self, def: TypeDef, from: &str, depth: u32) -> Option<String> {
+        let mut fields = Vec::new();
+        for field in def.fields() {
+            let name = nts_core::hir::native::js_name(field.name());
+            let read = format!("{from}.{name}");
+            let value = match field.ty() {
+                Type::ValueName(named) if is_guid(&named) => return None,
+                Type::ValueName(named) => match self.find(&named.namespace, &named.name) {
+                    Ok(inner) if inner.category() == TypeCategory::Struct && depth < 8 => self.copied_literal(inner, &read, depth + 1)?,
+                    _ => read,
+                },
+                _ => read,
+            };
+            fields.push(format!("{name}: {value}"));
+        }
+        Some(format!("{{ {} }}", fields.join(", ")))
     }
 
     /// The `then` declaration itself, recorded for the values module. An
     /// action's callback takes `void`, which is what `await` on it is -- as
     /// on a `Promise<void>`.
-    fn then_declaration(&mut self, alias: &str, result: Option<String>) -> String {
-        let value = result.clone().unwrap_or_else(|| "void".to_owned());
+    fn then_declaration(&mut self, alias: &str, result: Option<Then>) -> String {
+        let value = result.as_ref().map_or_else(|| "void".to_owned(), |then| then.value.clone());
         self.thens.insert(alias.to_owned(), result);
         let mut text = String::new();
         let _ = writeln!(text, "    /**");
@@ -2076,9 +2111,9 @@ impl Writer<'_> {
         let mut functions = String::new();
         for (alias, result) in &self.thens {
             let function = then_function(alias);
-            let value = result.as_deref().unwrap_or("void");
+            let value = result.as_ref().map_or("void", |then| then.value.as_str());
             // An action has no result to read: it completed, and that is all.
-            let fulfilled = if result.is_some() { "completed.GetResults()" } else { "undefined" };
+            let fulfil = result.as_ref().map_or("onFulfilled(undefined);", |then| then.fulfil.as_str());
             let _ = writeln!(functions);
             let _ = writeln!(functions, "export function {function}(");
             let _ = writeln!(functions, "  operation: {alias},");
@@ -2090,7 +2125,7 @@ impl Writer<'_> {
             let _ = writeln!(functions, "    operation.put_Completed((completed, status) => {{");
             let _ = writeln!(functions, "      nts_pending_end();");
             let _ = writeln!(functions, "      if (status === AsyncStatus.Completed) {{");
-            let _ = writeln!(functions, "        onFulfilled({fulfilled});");
+            let _ = writeln!(functions, "        {fulfil}");
             let _ = writeln!(functions, "        return;");
             let _ = writeln!(functions, "      }}");
             let _ = writeln!(functions, "      if (status === AsyncStatus.Canceled) {{");
@@ -2317,6 +2352,20 @@ fn concrete(ty: &Type) -> bool {
 /// `winrt:types` declares it.
 fn is_guid(name: &windows_metadata::TypeName) -> bool {
     name.namespace == "System" && name.name == "Guid"
+}
+
+/// An operation's result as its `then` hands it on: the value's type, and
+/// the statements fulfilling it from the operation that `completed`.
+struct Then {
+    value: String,
+    fulfil: String,
+}
+
+impl Then {
+    /// A result handed on as `GetResults` answers it.
+    fn read(value: String) -> Self {
+        Self { value, fulfil: "onFulfilled(completed.GetResults());".to_owned() }
+    }
 }
 
 /// ``IVectorView`1`` as TypeScript names it: `IVectorView`.

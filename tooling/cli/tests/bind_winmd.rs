@@ -587,6 +587,43 @@ fn an_async_operation_is_awaitable_as_itself() {
     let _ = std::fs::remove_dir_all(&out);
 }
 
+/// An operation whose result is a struct -- `LoadMoreItemsAsync`'s
+/// `LoadMoreItemsResult` -- fulfils with the struct as a plain object
+/// (`Copied<T>`): `GetResults` answers storage in the frame, which a callback
+/// cannot be handed, so the values module copies each field out of it.
+#[test]
+fn a_struct_result_is_fulfilled_as_a_plain_object() {
+    let Some(metadata) = winrt_metadata() else {
+        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        return;
+    };
+    let out = std::env::temp_dir().join(format!("nts-bind-winrt-struct-then-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    let run = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .args(["bind-winmd", "Windows.UI.Xaml.Data", "--out"])
+        .arg(&out)
+        .env("NTS_WINRT_METADATA", &metadata)
+        .output()
+        .unwrap();
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    let data = std::fs::read_to_string(out.join("Windows.UI.Xaml.Data.d.ts")).unwrap();
+    assert!(
+        data.contains(
+            "then(this: IAsyncOperationOfLoadMoreItemsResult, onFulfilled: (value: Copied<LoadMoreItemsResult>) => unknown, onRejected: (reason: unknown) => unknown): void;"
+        ),
+        "{data}"
+    );
+    let values = std::fs::read_to_string(out.join("Windows.UI.Xaml.Data.values.ts")).unwrap();
+    assert!(
+        values.contains("const result = completed.GetResults();\n        onFulfilled({ count: result.count });"),
+        "{values}"
+    );
+    assert!(values.contains("import type { Copied } from \"winrt:types\";"), "{values}");
+    let refused = std::fs::read_to_string(out.join("Windows.UI.Xaml.Data.refused.txt")).unwrap();
+    assert!(!refused.contains(".then"), "{refused}");
+    let _ = std::fs::remove_dir_all(&out);
+}
+
 /// An array the callee allocates and hands back (`ReceiveArray`) is a typed
 /// array of the program's: `CopyToByteArray`'s `[out] byte[]&` answers a
 /// `Uint8Array`, and `IPropertyValue.GetInt32Array` an `Int32Array`. An
