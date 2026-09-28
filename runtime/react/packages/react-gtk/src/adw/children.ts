@@ -27,6 +27,9 @@ import {
   AdwHeaderBar,
   AdwNavigationPage,
   AdwNavigationView,
+  AdwSidebar,
+  AdwSidebarItem,
+  AdwSidebarSection,
   AdwTabView,
   AdwToast,
   AdwToastOverlay,
@@ -959,6 +962,188 @@ export class ToggleNode extends ObjectElementNode {
     }
     this.owner = null;
   }
+}
+
+// ---- Sidebar -------------------------------------------------------------------------
+
+export interface SidebarSectionProps {
+  /** The heading over its items: none, if not given. */
+  title?: string;
+  children?: unknown;
+}
+
+export interface SidebarItemProps {
+  title?: string;
+  subtitle?: string;
+  iconName?: string;
+  tooltip?: string;
+  /** Whether the user can select it: true, if not given. */
+  enabled?: boolean;
+  /** Whether it shows: true, if not given. */
+  visible?: boolean;
+  useUnderline?: boolean;
+}
+
+export interface SidebarChildren {
+  /** `<Sidebar.Section title>`: a section of the sidebar in React's order, holding its `<Sidebar.Item>`s. */
+  readonly Section: HostComponent<"AdwSidebar.Section", SidebarSectionProps>;
+  /** `<Sidebar.Item title iconName>`: an item of the section it is rendered in, in React's order. */
+  readonly Item: HostComponent<"AdwSidebar.Item", SidebarItemProps>;
+}
+
+// The Sidebar's `selected` counts items across its sections, and applied
+// before they existed it selected nothing: whenever React changes the items,
+// the Sidebar selects the one its props name again. A change of items is
+// React's, not the user's selecting.
+function selectAsProps(owner: WidgetNode): void {
+  const sidebar = owner.widget;
+  const selected = owner.prop("selected");
+  if (sidebar instanceof AdwSidebar && typeof selected === "number" && selected !== sidebar.get_selected()) {
+    sidebar.set_selected(selected);
+  }
+}
+
+/**
+ * A section of a Sidebar, holding the items rendered in it. Both the
+ * Sidebar and a section insert by position, so a section or an item React
+ * moves is taken out and inserted at its place in React's order.
+ */
+export class SidebarSectionNode extends ObjectElementNode {
+  private readonly section: AdwSidebarSection = new AdwSidebarSection();
+  private readonly items: SidebarItemNode[] = [];
+  private owner: WidgetNode | null = null;
+
+  applyProps(previous: Props | null, next: Props): void {
+    const children = next["children"];
+    if (typeof children === "string" || typeof children === "number") {
+      throw new Error(`<${this.name()}> holds <Sidebar.Item>s: its text is its \`title\`.`);
+    }
+    if (previous === null || previous["title"] !== next["title"]) {
+      const title = next["title"];
+      this.section.set_title(typeof title === "string" ? title : null);
+    }
+  }
+
+  appendChild(child: HostNode): void {
+    this.insertAt(child, -1);
+  }
+  insertBefore(child: HostNode, before: HostNode): void {
+    this.insertAt(child, before instanceof SidebarItemNode ? this.items.indexOf(before) : -1);
+  }
+  removeChild(child: HostNode): void {
+    const at = child instanceof SidebarItemNode ? this.items.indexOf(child) : -1;
+    if (at < 0) {
+      return;
+    }
+    const item = this.items[at]!.item;
+    this.items.splice(at, 1);
+    writeAsReact(() => this.section.remove(item));
+    this.reselect();
+  }
+
+  // At `at` among its items, or last for -1. Placed again, an item is moving:
+  // out, then in at its place.
+  private insertAt(child: HostNode, at: number): void {
+    if (!(child instanceof SidebarItemNode)) {
+      throw new Error(`<${this.name()}> holds <Sidebar.Item>s, not a <${child.name()}>.`);
+    }
+    const section = this.section;
+    const item = child.item;
+    const was = this.items.indexOf(child);
+    if (was >= 0) {
+      this.items.splice(was, 1);
+      writeAsReact(() => section.remove(item));
+      if (at > was) {
+        at--;
+      }
+    }
+    const position = at < 0 ? this.items.length : at;
+    insertAt(this.items, position, child);
+    writeAsReact(() => section.insert(item, position));
+    this.reselect();
+  }
+
+  private reselect(): void {
+    const owner = this.owner;
+    if (owner !== null) {
+      writeAsReact(() => selectAsProps(owner));
+    }
+  }
+
+  placeIn(parent: WidgetNode, _before: HostNode | null): void {
+    const sidebar = parent.widget instanceof AdwSidebar ? parent.widget : null;
+    if (sidebar === null) {
+      throw new Error(`<${this.name()}> goes directly inside a <Sidebar>, not a <${parent.name()}>.`);
+    }
+    const section = this.section;
+    // WidgetNode has put it at its place in React's order: its position.
+    const position = parent.positionOfKind(this);
+    writeAsReact(() => {
+      if (this.owner === parent) {
+        sidebar.remove(section);
+      }
+      sidebar.insert(section, position);
+      selectAsProps(parent);
+    });
+    this.owner = parent;
+  }
+  takeOutOf(parent: WidgetNode): void {
+    if (this.owner !== parent) {
+      return;
+    }
+    const sidebar = parent.widget instanceof AdwSidebar ? parent.widget : null;
+    if (sidebar !== null) {
+      writeAsReact(() => {
+        sidebar.remove(this.section);
+        selectAsProps(parent);
+      });
+    }
+    this.owner = null;
+  }
+}
+
+/** An item of a Sidebar's section: its section places it (SidebarSectionNode). */
+export class SidebarItemNode extends ObjectElementNode {
+  readonly item: AdwSidebarItem = new AdwSidebarItem();
+
+  // Only what changed is set.
+  applyProps(previous: Props | null, next: Props): void {
+    if (next["children"] !== undefined) {
+      throw new Error(`<${this.name()}> holds no children: its text is its \`title\`.`);
+    }
+    const changed = (key: string): boolean => previous === null || previous[key] !== next[key];
+    const text = (key: string): string | null => {
+      const value = next[key];
+      return typeof value === "string" ? value : null;
+    };
+    const item = this.item;
+    if (changed("title")) {
+      item.set_title(text("title"));
+    }
+    if (changed("subtitle")) {
+      item.set_subtitle(text("subtitle"));
+    }
+    if (changed("iconName")) {
+      item.set_icon_name(text("iconName"));
+    }
+    if (changed("tooltip")) {
+      item.set_tooltip(text("tooltip"));
+    }
+    if (changed("enabled")) {
+      item.set_enabled(next["enabled"] !== false);
+    }
+    if (changed("visible")) {
+      item.set_visible(next["visible"] !== false);
+    }
+    if (changed("useUnderline")) {
+      item.set_use_underline(next["useUnderline"] === true);
+    }
+  }
+
+  placeIn(parent: WidgetNode, _before: HostNode | null): void {
+    throw new Error(`<${this.name()}> goes inside a <Sidebar.Section>, not directly in a <${parent.name()}>.`);
+  }
+  takeOutOf(_parent: WidgetNode): void {}
 }
 
 // ---- ToastOverlay --------------------------------------------------------------------

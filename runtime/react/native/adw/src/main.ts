@@ -60,6 +60,14 @@
 //             activeName, applied before its toggles existed, selects the one
 //             it names; a user's pick goes back when the app keeps its own; a
 //             label updates in place; one taken out goes
+//   sidebar   a Sidebar's Section elements hold its Item elements, each in
+//             React's order: a section inserted before another, an item moved
+//             within its section and a section moved to the end go where React
+//             puts them; its `selected`, applied before its items existed,
+//             selects the item it names, and again after each change of items;
+//             a title updates in place; a user's pick goes back when the app
+//             keeps its own and is heard once; an item and a section taken out
+//             go
 //   dialog    an AlertDialog rendered in a Box is not placed in it: at commit
 //             it is presented within the Box's window; its Response
 //             elements are its buttons in React's order, one inserted between
@@ -103,6 +111,7 @@ import {
   AdwOverlaySplitView,
   AdwPreferencesDialog,
   AdwPreferencesGroup,
+  AdwSidebar,
   AdwSpinRow,
   AdwSwitchRow,
   AdwTabOverview,
@@ -123,6 +132,7 @@ import { setAfterEvent } from "../../../packages/react-gtk/src/HostNode.ts";
 import { adw } from "../../../packages/react-gtk/src/adw/index.ts";
 import {
   ApplicationRoot,
+  appendChild,
   appendChildToContainer,
   appendInitialChild,
   commitMount,
@@ -172,6 +182,18 @@ function settle(ms: number): void {
     return false;
   });
   loop.run();
+}
+
+// A Sidebar.Section element holding `items`, and an Item element.
+function sidebarSection(root: WindowRoot, title: string, items: HostNode[]): HostNode {
+  const section = createInstance("AdwSidebar.Section", { title }, root, 0, {});
+  for (const item of items) {
+    appendInitialChild(section, item);
+  }
+  return section;
+}
+function sidebarItem(root: WindowRoot, title: string): HostNode {
+  return createInstance("AdwSidebar.Item", { title }, root, 0, {});
 }
 
 function main(): void {
@@ -686,6 +708,62 @@ function main(): void {
     toggling += " " + names();
   }
   react_gtk_log("toggles " + toggling);
+
+  let selectedHeard = 0;
+  const sidebarProps: Props = {
+    selected: 2,
+    onNotifySelected: () => {
+      selectedHeard++;
+    },
+  };
+  const sideNode = createInstance("AdwSidebar", sidebarProps, root, 0, {});
+  const itemA = sidebarItem(root, "a");
+  const itemB = sidebarItem(root, "b");
+  const itemC = sidebarItem(root, "c");
+  const sectionOne = sidebarSection(root, "one", [itemA, itemB]);
+  const sectionTwo = sidebarSection(root, "two", [itemC]);
+  const sectionZero = sidebarSection(root, "zero", [sidebarItem(root, "z")]);
+  appendInitialChild(sideNode, sectionOne);
+  appendInitialChild(sideNode, sectionTwo);
+  const sidebarWidget = widget(sideNode);
+  let siding = "not a sidebar";
+  if (sidebarWidget instanceof AdwSidebar) {
+    // Its items across sections, a section ending at "|", and the selected one's title.
+    const items = (): string => {
+      let all = "";
+      let section: unknown = null;
+      for (let i = 0; ; i++) {
+        const item = sidebarWidget.get_item(i);
+        if (item === null) {
+          break;
+        }
+        const itemSection = item.get_section();
+        all += (i === 0 ? "" : itemSection === section ? "," : "|") + String(item.get_title());
+        section = itemSection;
+      }
+      const selected = sidebarWidget.get_selected_item();
+      return all + " sel=" + (selected === null ? "none" : String(selected.get_title()));
+    };
+    siding = items();
+    insertBefore(sideNode, sectionZero, sectionOne);
+    siding += ">" + items();
+    commitUpdate(sideNode, "AdwSidebar", sidebarProps, { ...sidebarProps, selected: 3 }, {});
+    siding += ">" + items();
+    insertBefore(sectionOne, itemB, itemA);
+    siding += ">" + items();
+    appendChild(sideNode, sectionZero);
+    siding += ">" + items();
+    commitUpdate(itemA, "AdwSidebar.Item", { title: "a" }, { title: "A" }, {});
+    // The user picks another: the app keeps its own, so it goes back.
+    sidebarWidget.set_selected(0);
+    idle();
+    siding += " kept>" + items();
+    removeChild(sectionTwo, itemC);
+    siding += ">" + items();
+    removeChild(sideNode, sectionZero);
+    siding += ">" + items() + " heard=" + String(selectedHeard);
+  }
+  react_gtk_log("sidebar " + siding);
 
   // A dialog is presented within a shown libadwaita window, as an app's is
   // (over a plain GtkWindow, libadwaita opens it as a window of its own).

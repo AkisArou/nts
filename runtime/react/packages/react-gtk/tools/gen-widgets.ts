@@ -651,6 +651,7 @@ const controlledProps = new Map([
   ["Adw.BottomSheet", ["open"]],
   ["Adw.TabOverview", ["open"]],
   ["Adw.ToggleGroup", ["active-name"]],
+  ["Adw.Sidebar", ["selected"]],
 ]);
 
 // Widget-typed properties that name another widget rather than place one: an
@@ -719,6 +720,7 @@ const childElements = new Map([
   ["Adw.ApplicationWindow", { members: "ApplicationWindowBreakpoints", elements: [["AdwApplicationWindow.Breakpoint", "BreakpointNode"]] }],
   ["Adw.BreakpointBin", { members: "BreakpointBinBreakpoints", elements: [["AdwBreakpointBin.Breakpoint", "BreakpointNode"]] }],
   ["Adw.ToastOverlay", { members: "ToastOverlayChildren", elements: [["AdwToastOverlay.Toast", "ToastNode"]] }],
+  ["Adw.Sidebar", { members: "SidebarChildren", elements: [["AdwSidebar.Section", "SidebarSectionNode"], ["AdwSidebar.Item", "SidebarItemNode"]], use: "<Sidebar.Section> holding <Sidebar.Item>s" }],
   ["Adw.ToggleGroup", { members: "ToggleGroupChildren", elements: [["AdwToggleGroup.Toggle", "ToggleNode"]], use: "<ToggleGroup.Toggle name label>" }],
   ["Adw.AlertDialog", { members: "AlertDialogChildren", elements: [["AdwAlertDialog.Response", "AlertResponseNode"]] }],
   ["Adw.Dialog", { members: "DialogBreakpoints", elements: [["AdwDialog.Breakpoint", "BreakpointNode"]] }],

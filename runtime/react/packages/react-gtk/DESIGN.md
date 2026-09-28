@@ -458,6 +458,14 @@ node classes carry the namespace (`AdwHeaderBarNode`, for the host type
   once the toggle it names exists, and a user's pick goes back after the
   flush unless the app takes it up. A toggle sets only what changed, since
   a toggle given its own name again is, to its group, a duplicate.
+- A Sidebar's sections are `<Sidebar.Section title>` elements holding
+  `<Sidebar.Item title iconName>` elements, each in React's order: both the
+  sidebar and a section insert by position, so a moved section or item is
+  taken out and inserted at its place. The sidebar's `selected` counts items
+  across sections and is controlled: applied again whenever React changes
+  the items (so a `selected` applied before its item existed selects it),
+  and a user's pick goes back after the flush unless the app takes it up.
+  An item's `suffix` widget is not an element yet.
 - A ToastOverlay shows `<ToastOverlay.Toast title timeout onDismissed>`
   while it is rendered: placed, it is added, and taken out, dismissed. The
   user dismissing it, or its time running out, is heard as `onDismissed`,

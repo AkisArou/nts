@@ -653,6 +653,20 @@ export abstract class WidgetNode extends HostNode {
     return order === null || at < 0 ? [] : order.slice(at + 1);
   }
 
+  /** How many children of `child`'s type come before it in React's order: its position in a container that holds only its kind and inserts by position. */
+  positionOfKind(child: HostNode): number {
+    const order = this.order;
+    let position = 0;
+    if (order !== null) {
+      for (let i = 0; i < order.length && order[i] !== child; i++) {
+        if (order[i]!.type === child.type) {
+          position++;
+        }
+      }
+    }
+    return position;
+  }
+
   /** The first widget among this widget's children from `from` on, in React's order; null if none. */
   private widgetFrom(from: HostNode): WidgetNode | null {
     // A widget is its own answer; only a slot or child element is looked past.

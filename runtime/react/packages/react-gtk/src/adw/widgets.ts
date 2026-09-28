@@ -151,7 +151,7 @@ import {
 import * as Gtk from "../widgets.ts";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 import { type HostNode, insertAt, type SignalSlot, SlotNode, stringsOf, WidgetNode, writeAsReact } from "../HostNode.ts";
-import { type HeaderBarChildren, AdwGroupNode, type ToolbarViewChildren, type ActionRowChildren, type EntryRowChildren, type ExpanderRowChildren, type ViewStackChildren, ViewStackPageNode, type TabViewChildren, TabViewPageNode, type WindowBreakpoints, BreakpointNode, type ApplicationWindowBreakpoints, type BreakpointBinBreakpoints, type ToastOverlayChildren, ToastNode, type ToggleGroupChildren, ToggleNode, type AlertDialogChildren, AlertResponseNode, type DialogBreakpoints, NavigationStack } from "./children.ts";
+import { type HeaderBarChildren, AdwGroupNode, type ToolbarViewChildren, type ActionRowChildren, type EntryRowChildren, type ExpanderRowChildren, type ViewStackChildren, ViewStackPageNode, type TabViewChildren, TabViewPageNode, type WindowBreakpoints, BreakpointNode, type ApplicationWindowBreakpoints, type BreakpointBinBreakpoints, type ToastOverlayChildren, ToastNode, type SidebarChildren, SidebarSectionNode, SidebarItemNode, type ToggleGroupChildren, ToggleNode, type AlertDialogChildren, AlertResponseNode, type DialogBreakpoints, NavigationStack } from "./children.ts";
 
 // ---- props: what JSX checks -------------------------------------------------
 
@@ -1116,7 +1116,7 @@ export declare const ShortcutLabel: HostComponent<"AdwShortcutLabel", ShortcutLa
 export declare const ShortcutsDialog: HostComponent<"AdwShortcutsDialog", ShortcutsDialogProps> & DialogBreakpoints;
 
 /** `<Sidebar>`: an AdwSidebar. */
-export declare const Sidebar: HostComponent<"AdwSidebar", SidebarProps> & SidebarSlots;
+export declare const Sidebar: HostComponent<"AdwSidebar", SidebarProps> & SidebarSlots & SidebarChildren;
 
 /** `<Spinner>`: an AdwSpinner. */
 export declare const Spinner: HostComponent<"AdwSpinner", SpinnerProps & Gtk.NoChildren>;
@@ -5262,6 +5262,16 @@ export class AdwSidebarNode extends WidgetNode {
   fillSlot(slot: string, widget: GtkWidget | null): boolean {
     return sidebarSlot(this.gtk, slot, widget);
   }
+  readControlled(key: string): unknown {
+    switch (key) {
+      case "selected":
+        return this.gtk.get_selected();
+    }
+    return undefined;
+  }
+  protected place(_child: WidgetNode, _moving: boolean): void {
+    throw new Error("<Sidebar> places a child through <Sidebar.Section> holding <Sidebar.Item>s.");
+  }
 }
 
 /** `<Spinner>`: an AdwSpinner. */
@@ -5884,6 +5894,10 @@ export function createNode(type: string): HostNode | null {
       return new BreakpointNode(type);
     case "AdwToastOverlay.Toast":
       return new ToastNode(type);
+    case "AdwSidebar.Section":
+      return new SidebarSectionNode(type);
+    case "AdwSidebar.Item":
+      return new SidebarItemNode(type);
     case "AdwToggleGroup.Toggle":
       return new ToggleNode(type);
     case "AdwAlertDialog.Response":
