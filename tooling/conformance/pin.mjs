@@ -89,7 +89,8 @@ export function frontendFor(binary, root) {
 /** One line for a report: the commit, what was applied, and the frontend. */
 export function describe(record) {
   if (!record) return "provenance unknown: not built by pin.mjs";
-  const applied = record.applied ? ` + ${record.applied.source} ${record.applied.sha256.slice(0, 12)} (${record.applied.files.length} file(s))` : "";
+  const size = (a) => (a.insertions === undefined ? "" : `, +${a.insertions} -${a.deletions}`);
+  const applied = record.applied ? ` + ${record.applied.source} ${record.applied.sha256.slice(0, 12)} (${record.applied.files.length} file(s)${size(record.applied)})` : "";
   return `${record.sha.slice(0, 12)}${applied}`;
 }
 
@@ -170,6 +171,16 @@ function appliedDiff(sha, opts) {
     const untracked = git(["ls-files", "--others", "--exclude-standard"], opts.worktree).split("\n").filter(Boolean)
       .filter((p) => /^(compiler|runtime|tooling\/cli)\//.test(p));
     if (untracked.length > 0) throw new Error(`${opts.worktree} has untracked source the diff would drop: ${untracked.slice(0, 5).join(", ")}; add them with \`git add -N\``);
+    // The diff is against `rev`, so a worktree whose HEAD does not descend from
+    // it carries a revert of everything in between: on 2026-09-29 a worktree two
+    // commits behind pinned 19 files and 517 deletions as a 3-line change, and
+    // the binary built fine. Ahead of `rev` is the worktree's own commits.
+    const head = git(["rev-parse", "HEAD"], opts.worktree).trim();
+    const ancestor = spawnSync("git", ["merge-base", "--is-ancestor", sha, head], { cwd: opts.worktree }).status === 0;
+    if (!ancestor) {
+      const reverted = git(["rev-list", "--count", `${head}..${sha}`], opts.worktree).trim();
+      throw new Error(`${opts.worktree}'s HEAD ${head.slice(0, 12)} does not descend from ${sha.slice(0, 12)}: its diff against it would revert ${reverted} commit(s). Pin ${head.slice(0, 12)} with --worktree, or rebase the worktree onto ${sha.slice(0, 12)}`);
+    }
     const text = git(["diff", "--binary", sha], opts.worktree);
     return text.trim() === "" ? null : { text, source: "worktree" };
   }
@@ -181,7 +192,14 @@ export function pin(rev, opts = {}) {
   const sha = git(["rev-parse", "--verify", `${rev}^{commit}`]).trim();
   const diff = appliedDiff(sha, opts);
   const applied = diff
-    ? { source: diff.source, sha256: sha256(diff.text), files: [...diff.text.matchAll(/^diff --git a\/(\S+)/gm)].map((m) => m[1]) }
+    ? {
+        source: diff.source,
+        sha256: sha256(diff.text),
+        files: [...diff.text.matchAll(/^diff --git a\/(\S+)/gm)].map((m) => m[1]),
+        // Its size, printed: a change is checkable by its shape only if the shape is shown.
+        insertions: diff.text.split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++")).length,
+        deletions: diff.text.split("\n").filter((l) => l.startsWith("-") && !l.startsWith("---")).length,
+      }
     : null;
   const dir = join(PINS, keyOf(sha, applied));
   const binary = join(dir, "nts");
