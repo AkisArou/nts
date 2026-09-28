@@ -454,8 +454,17 @@ function describeThrown(error: unknown): string {
   if (error === undefined) {
     return "Error: undefined";
   }
-  // A symbol, a bigint, or an object that is not an `Error`. Node prints the
-  // value; this says what kind it was, which is as far as a fixed layout can go
+  // What node prints, measured on v24.20.0: `Error: Symbol(foo)` for a
+  // symbol, and `Error: 12n` for a bigint -- with its `n`, as V8 formats the
+  // message. Each has a typed spelling.
+  if (typeof error === "symbol") {
+    return `Error: ${error.toString()}`;
+  }
+  if (typeof error === "bigint") {
+    return `Error: ${error}n`;
+  }
+  // An object that is not an `Error`. Node prints what its `toString` answers;
+  // this says what kind it was, which is as far as a fixed layout can go
   // without a dynamic conversion.
   return "Error: a value that is not an Error";
 }
