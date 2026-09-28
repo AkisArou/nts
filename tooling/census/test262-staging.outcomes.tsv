@@ -1,0 +1,32 @@
+# Test262 test/staging cases that ran, and what each did. Written by
+# tooling/census/conformance262.mjs --record; compared by --check.
+# compiler 62f0f9b5c336539e, harness 3392ef99f75629c0; machine at start: 16.1 GB available, swap 3.4/20 GB, load 14.1/12.8 (1m/5m), 32 cores; 5 worker(s)
+test/staging/sm/ArrayBuffer/bug1777413.js	pass	
+test/staging/sm/Math/cbrt-exact.js	pass	
+test/staging/sm/Math/cosh-exact.js	pass	
+test/staging/sm/Math/exp-exact.js	pass	
+test/staging/sm/Math/expm1-exact.js	pass	
+test/staging/sm/Math/log10-exact.js	pass	
+test/staging/sm/Math/log2-exact.js	pass	
+test/staging/sm/Math/sign.js	pass	
+test/staging/sm/Math/sinh-exact.js	pass	
+test/staging/sm/Math/tanh-exact.js	pass	
+test/staging/sm/Number/tonumber-string-hex.js	pass	
+test/staging/sm/PrivateName/constructor-args.js	fail	nts: uncaught Test262Error: sameValue
+test/staging/sm/PrivateName/parse-utf8-non-ascii-identifier.js	pass	
+test/staging/sm/String/15.5.4.7.js	pass	
+test/staging/sm/String/string-space-trim.js	pass	
+test/staging/sm/String/two-length-nonlatin-indexOf.js	pass	
+test/staging/sm/class/derivedConstructorTDZReturnObject.js	pass	
+test/staging/sm/class/stringConstructor.js	fail	nts: uncaught Test262Error: sameValue
+test/staging/sm/extensions/typedarray-subarray-of-subarray.js	pass	
+test/staging/sm/global/decodeURI-decodes-FFFE-FFFF.js	pass	
+test/staging/sm/global/parseFloat-01.js	pass	
+test/staging/sm/misc/error-undefined-message.js	pass	
+test/staging/sm/misc/redeclare-var-non-writable-property.js	pass	
+test/staging/sm/object/regress-459405.js	pass	
+test/staging/sm/regress/regress-452498-079.js	pass	
+test/staging/sm/regress/regress-561031.js	pass	
+test/staging/sm/statements/if-constant-folding.js	pass	
+test/staging/sm/strict/8.7.2-01.js	pass	
+test/staging/sm/syntax/omitted-catch-binding.js	pass	

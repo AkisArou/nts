@@ -95,6 +95,7 @@ export const ASKS = {
   blockers: ["valid", "does every blocker still refuse with its `// expect:` line"],
   "test262-cases": ["answers", "does every recorded test/language case still do what it did, read from the printed diagnostics"],
   "test262-builtins-cases": ["answers", "the same over test/built-ins"],
+  "test262-rest-cases": ["answers", "the same over test/annexB, test/staging and test/harness"],
   addons: ["valid", "does each runtime module build, load and publish something"],
 };
 
@@ -215,7 +216,7 @@ export const RULES = [
     // nor a table -- nothing in it said who parses the line it changed.
     name: "the printed diagnostics",
     when: (p) => /^(tooling\/cli\/src|compiler\/diagnostics|tooling\/differential\/src)\//.test(p),
-    steps: ["outcomes", "integrity", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases"],
+    steps: ["outcomes", "integrity", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases", "test262-rest-cases"],
     arms: [
       { if: "it changes what a printed diagnostic line says or how it is shaped", kind: "valid", asks: "who parses this line: every reader of it, widened to accept both shapes before the shape changes", run: "git grep -nE 'TS(.d|.0-9)|refused:|not (rendered|emitted):' -- '*.mjs' '*.sh' '*.ts' ':!*.d.ts'   # `.` is the \\ of a JS reader's \\d and the [ of a shell one's [0-9]" },
     ],

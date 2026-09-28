@@ -1,0 +1,10 @@
+# Test262 test/harness cases that ran, and what each did. Written by
+# tooling/census/conformance262.mjs --record; compared by --check.
+# compiler 62f0f9b5c336539e, harness 3392ef99f75629c0; machine at start: 14.6 GB available, swap 3.4/20 GB, load 13.9/13.6 (1m/5m), 32 cores; 5 worker(s)
+test/harness/assert-notsamevalue-notsame.js	pass	
+test/harness/assert-notsamevalue-objects.js	pass	
+test/harness/assert-notsamevalue-zeros.js	pass	
+test/harness/assert-samevalue-nan.js	pass	
+test/harness/assert-samevalue-same.js	pass	
+test/harness/assert-true.js	pass	
+test/harness/compare-array-same-elements-same-order.js	pass	

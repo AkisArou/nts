@@ -1877,6 +1877,31 @@ test262_builtins_cases() {
     "$TEST262_BUILTINS_NEGATIVES_ACCEPTED_CEILING" TEST262_BUILTINS_NEGATIVES_ACCEPTED_CEILING
 }
 
+# The rest of the ECMA-262 strict lane: `test/annexB`, `test/staging` and
+# `test/harness` -- 2,685 files the census had never measured until
+# 2026-09-29, when "done" was defined as every strict-lane file ending as a
+# pass or a named boundary. One step, three records, each held to its own
+# floor and ceiling by `test262_recorded`. annexB is mostly sloppy-mode and so
+# mostly scope-excluded; staging is where proposals wait; harness tests the
+# stand-in's own entries. A few seconds.
+TEST262_ANNEXB_PASS_FLOOR=7
+TEST262_ANNEXB_NEGATIVES_ACCEPTED_CEILING=1
+TEST262_STAGING_PASS_FLOOR=27
+TEST262_STAGING_NEGATIVES_ACCEPTED_CEILING=0
+TEST262_HARNESS_PASS_FLOOR=7
+TEST262_HARNESS_NEGATIVES_ACCEPTED_CEILING=0
+test262_rest_cases() {
+  test262_recorded test/annexB tooling/census/test262-annexb.outcomes.tsv \
+    "$TEST262_ANNEXB_PASS_FLOOR" TEST262_ANNEXB_PASS_FLOOR \
+    "$TEST262_ANNEXB_NEGATIVES_ACCEPTED_CEILING" TEST262_ANNEXB_NEGATIVES_ACCEPTED_CEILING || return 1
+  test262_recorded test/staging tooling/census/test262-staging.outcomes.tsv \
+    "$TEST262_STAGING_PASS_FLOOR" TEST262_STAGING_PASS_FLOOR \
+    "$TEST262_STAGING_NEGATIVES_ACCEPTED_CEILING" TEST262_STAGING_NEGATIVES_ACCEPTED_CEILING || return 1
+  test262_recorded test/harness tooling/census/test262-harness.outcomes.tsv \
+    "$TEST262_HARNESS_PASS_FLOOR" TEST262_HARNESS_PASS_FLOOR \
+    "$TEST262_HARNESS_NEGATIVES_ACCEPTED_CEILING" TEST262_HARNESS_NEGATIVES_ACCEPTED_CEILING
+}
+
 # Defects pinned to what they do: `tooling/conformance/outcomes/`, where a wrong
 # answer, invalid HIR, uncompilable C or a runtime abort lives when it refuses
 # nothing and so has no `blockers/` expect line to write.
@@ -2186,6 +2211,7 @@ step "records" records
 step "test262" test262
 step "test262-cases" test262_cases
 step "test262-builtins-cases" test262_builtins_cases
+step "test262-rest-cases" test262_rest_cases
 step "outcomes" outcomes
 step "integrity" integrity
 step "definitions" definitions
