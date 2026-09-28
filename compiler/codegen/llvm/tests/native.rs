@@ -4264,6 +4264,43 @@ export async function suspended(): Promise<number> {
     );
 }
 
+/// A local made in a loop and read past a branch of the same iteration --
+/// as a COM call's record result is read after the call's `HRESULT` test --
+/// is that iteration's: every read is of the storage the iteration wrote.
+/// Only one carried to the next iteration through a block argument is
+/// refused (`a_local_used_where_it_is_made_...`'s `kept = slot` arm).
+#[test]
+fn a_local_read_past_a_branch_of_its_own_iteration_is_allowed_in_a_loop() {
+    let source = r#"
+import type { CNumber, Ptr } from "c:types";
+import { local } from "c:memory";
+/** @ntsNoEscape out */
+declare function fill(out: Ptr<CNumber<"int">>, value: CNumber<"int">): void;
+export function looped(): number {
+    let sum = 0;
+    for (let i = 1; i <= 4; i++) {
+        const slot = local<CNumber<"int">>();
+        fill(slot, i * 10);
+        if (i % 2 === 0) {
+            sum += slot[0];
+        } else {
+            sum += 1;
+        }
+        sum += slot[0] * 100;
+    }
+    return sum;
+}
+"#;
+    let library = "void fill(int *out, int value) { *out = value; }\n";
+    let caller = counted_caller(r#"printf("%.0f", looped());"#, "looped();");
+    let Some((_, outputs)) = run_on_both_backends("iteration-local", source, hir::Provider::NoGc, library, &caller) else { return; };
+    // 20 + 40 read inside the branch, 1 + 1 beside it, and every
+    // iteration's own 10..40 after the merge: 62 + 100 * 100.
+    for output in outputs {
+        assert_eq!(output, "10062");
+    }
+}
+
 /// A handle C returns as `void *` -- `gtk_list_item_get_item`'s `gpointer`,
 /// which GIR says is an object -- declared `Erased<Thing>`: C's prototype
 /// says `void *`, the program holds a `Thing`, counted like any other. The

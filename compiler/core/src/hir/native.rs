@@ -538,8 +538,9 @@ pub enum Written {
     /// function's record result is in the local it was written into. So
     /// `native_storage::check` refuses it returned, stored or captured (the
     /// escape rule; probed: NTS2006 at the `return` and at the field store),
-    /// and inside a loop, since the slot is used past its own block -- which
-    /// every other result avoids by being read there (`confined`).
+    /// and carried to a loop's next iteration (`native_storage::carried`);
+    /// read after the call's `HRESULT` test in the iteration that made it,
+    /// as `child.desiredSize` is in a panel's measure loop, it is allowed.
     Record,
     /// An array the callee allocated (`ReceiveArray`): the slot holds its
     /// `CoTaskMemAlloc`'d elements and the `Role::ReceivedCount` slot before

@@ -30,7 +30,7 @@ pub(super) fn check(program: &Program) -> Vec<(usize, ValueId, &'static str)> {
                     Some("native local storage exceeds the 65536-byte function budget")
                 } else if suspends(func) && !confined(func, block, value) {
                     Some("native local storage in a suspending function")
-                } else if in_cycle(func, BlockId(u32::try_from(block).unwrap_or(u32::MAX))) && !confined(func, block, value) {
+                } else if in_cycle(func, BlockId(u32::try_from(block).unwrap_or(u32::MAX))) && carried(func, value) {
                     Some("native local storage inside a loop; allocate it outside the loop")
                 } else if !borrowed(func, value, &borrows) {
                     Some("native local address escapes: it may not be returned, stored, captured, freed, or passed to a retaining or unclassified callee")
@@ -47,10 +47,10 @@ pub(super) fn check(program: &Program) -> Vec<(usize, ValueId, &'static str)> {
 /// in that block can suspend, and none is on the block's way out.
 ///
 /// Its storage is one slot per site in both backends, zeroed where the op
-/// runs, so what the loop and suspension refusals guard against is an
-/// *address* outliving the use it was made for: kept past the iteration, or
-/// past an `await`, where a resumed body has a different stack. A local used
-/// only here cannot be either. The compiler's own `GError **` slot for an
+/// runs, so what the suspension refusal guards against is an *address*
+/// outliving the use it was made for: kept past an `await`, where a resumed
+/// body has a different stack. A local used only here cannot be. (A loop's
+/// is [`carried`]'s question, which is narrower.) The compiler's own `GError **` slot for an
 /// `@ntsThrows` call is always one -- written by C, read back at once -- and
 /// refusing it refused every throwing `GLib` call in a loop or an `async`
 /// function: `for (let line = s.read_line_utf8(); …)`.
@@ -86,6 +86,23 @@ fn confined(func: &Func, block: usize, value: ValueId) -> bool {
     !body.ops[at..=last]
         .iter()
         .any(|op| matches!(func.value(*op).kind, OpKind::Await { .. } | OpKind::Yield { .. } | OpKind::Suspend { .. }))
+}
+
+/// Whether a local made in a loop can be read by a later iteration than the
+/// one that made it: whether its address, or one derived from it, is a block
+/// argument, which is how SSA carries a value around a back edge.
+///
+/// The site's storage is one slot, zeroed each time the op runs, so the
+/// hazard is two iterations' addresses held at once -- `prev = s` read after
+/// the next `local<T>()` -- which both name the one slot. A use not carried
+/// through a block argument reads the latest execution of the op, which is
+/// the storage as the current iteration wrote it; a store, capture or return
+/// is an escape `borrowed` refuses on its own. So a record a COM call writes
+/// through its out pointer, read after the call's `HRESULT` branch, is
+/// iteration-local, as `child.desiredSize` in a panel's measure loop is.
+fn carried(func: &Func, value: ValueId) -> bool {
+    let aliases = aliases(func, value);
+    func.blocks.iter().flat_map(|block| &block.params).any(|param| aliases[param.0 as usize])
 }
 
 fn live(func: &Func) -> impl Iterator<Item = ValueId> + '_ {
