@@ -382,6 +382,19 @@ if (wants("exports")) {
     );
     failed = true;
   }
+  // **A reviewed name that is no longer absent is a stale reason**, and nothing
+  // said so: `util.MIMEType` kept its "nothing in the corpus has asked for it"
+  // for thirteen days after `util` published it. Only names of modules this run
+  // measured are judged, so a narrowed run cannot call the rest stale.
+  const absent = new Set(found.map((f) => `${f.module}.${f.key}`));
+  const measured = new Set(modules);
+  const stale = [...reviewed.keys()].filter(
+    (name) => measured.has(name.slice(0, name.indexOf("."))) && !absent.has(name),
+  );
+  for (const name of stale) {
+    console.log(`  ^ no longer absent, remove it from tooling/conformance/missing-exports: ${name}`);
+  }
+  if (stale.length > 0) failed = true;
 }
 
 if (wants("typecheck")) {
