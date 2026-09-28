@@ -1,0 +1,6 @@
+sensitive button_simple
+click button_simple
+sensitive button_simple
+click button_advanced
+action button_advanced win.undo 42
+action button_advanced win.undo 7

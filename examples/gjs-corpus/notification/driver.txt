@@ -1,0 +1,3 @@
+action button_simple app.notification-reply
+action button_simple app.notification-accept
+action button_simple app.notification-decline

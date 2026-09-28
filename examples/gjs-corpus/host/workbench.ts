@@ -38,6 +38,7 @@ import {
   GtkSwitch,
   GtkTextView,
   GtkToggleButton,
+  GtkWindow,
   GtkWidget,
   SpinType,
 } from "c:Gtk-4.0";
@@ -200,6 +201,27 @@ function act(kind: string, id: string, args: string[], object: GObject | null): 
   }
 }
 
+/**
+ * The id of the UI's first object, which Workbench previews: the first
+ * `<object` line of the compiled UI, where new-port.sh names one Blueprint
+ * leaves unnamed.
+ */
+function rootId(path: string): string {
+  const stream = g_data_input_stream_new(g_file_new_for_path(path).read(null));
+  let id = "";
+  for (;;) {
+    const [line] = stream.read_line_utf8(null);
+    if (line === null) break;
+    const at = line.indexOf("<object ");
+    if (at < 0) continue;
+    const start = line.indexOf('id="', at);
+    if (start >= 0) id = line.slice(start + 4, line.indexOf('"', start + 4));
+    break;
+  }
+  stream.close(null);
+  return id;
+}
+
 /** How many children a widget has. */
 function children(widget: GtkWidget): number {
   let count = 0;
@@ -225,6 +247,9 @@ export function run(demo: (workbench: Workbench) => void): void {
     const window = new AdwApplicationWindow({ application });
     const builder = new GtkBuilder({});
     builder.add_from_file(dir + "/main.ui");
+    // Previewed as Workbench previews it: in the window, unless it is one.
+    const root = builder.get_object(rootId(dir + "/main.ui"));
+    if (root instanceof GtkWidget && !(root instanceof GtkWindow)) window.content = root;
     demo({
       application,
       window,

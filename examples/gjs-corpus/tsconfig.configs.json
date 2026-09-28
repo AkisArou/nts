@@ -35,6 +35,7 @@
     "menu-button/nts.config.ts",
     "menu/nts.config.ts",
     "navigation-view/nts.config.ts",
+    "notification/nts.config.ts",
     "overlay-split-view/nts.config.ts",
     "overlay/nts.config.ts",
     "picture/nts.config.ts",
@@ -51,6 +52,7 @@
     "tab-view/nts.config.ts",
     "text-colors/nts.config.ts",
     "text-view/nts.config.ts",
+    "toasts/nts.config.ts",
     "toggle-button/nts.config.ts"
   ]
 }

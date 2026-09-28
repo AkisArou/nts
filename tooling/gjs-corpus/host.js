@@ -76,6 +76,12 @@ application.connect("activate", async () => {
   const window = new Adw.ApplicationWindow({ application });
   const builder = new Gtk.Builder();
   builder.add_from_file(port.get_child("main.ui").get_path());
+  // Previewed as Workbench previews it: in the window, unless it is one.
+  // The UI's first object, which new-port.sh names where Blueprint does not.
+  const ui = decoder.decode(port.get_child("main.ui").load_contents(null)[1]);
+  const [, rootId] = /<object [^>]*id="([^"]*)"/.exec(ui) ?? [];
+  const root = rootId ? builder.get_object(rootId) : null;
+  if (root instanceof Gtk.Widget && !(root instanceof Gtk.Window)) window.content = root;
   globalThis.workbench = {
     window,
     application,
