@@ -1,10 +1,11 @@
-// `emit-c` exits 0 and `cc` rejects the C: `'NtsObj_Iterable_N_' has no member
-// named 'length'`. An unannotated rest pattern `[...x]` gives the parameter the
-// `Iterable` its pattern implies, and passed where an array is declared it is
-// cast to `NtsArray *` -- neither converted nor refused. Reading `x.length`
-// directly refuses honestly (`length`, which `Iterable` does not declare), and
-// the annotated `[...x]: number[]` agrees: a-typed-rest-passed-where-an-array-
-// is-wanted, which differs from this in the annotation only.
+// An unannotated rest pattern `[...x]` gives the parameter the `Iterable` its
+// pattern implies. Until 50f358df5, passed where an array is declared, it was
+// cast to `NtsArray *`: `emit-c` exited 0 and `cc` rejected the C with
+// `'NtsObj_Iterable_N_' has no member named 'length'`. It is refused now -- a
+// length is read only from a type that keeps one -- and this record holds that
+// refusal, so a return to the cast reads as CHANGED. The annotated
+// `[...x]: number[]` agrees: a-typed-rest-passed-where-an-array-is-wanted,
+// which differs from this in the annotation only.
 //
 // Found by test262: 23 files calling `assert.compareArray` on a destructured
 // rest (a non-generic `readonly unknown[]` stand-in), and 14 more reaching the

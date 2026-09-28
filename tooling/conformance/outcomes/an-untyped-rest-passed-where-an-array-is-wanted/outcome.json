@@ -1,8 +1,9 @@
 {
   "run": "build",
-  "category": "uncompilable-c",
-  "nts": "error: 'NtsObj_Iterable_N_' has no member named 'length'",
+  "category": "refused",
+  "nts": "NTS1001 a rest element over a value that is not an array, which needs it collected through its iterator first",
+  "ran": "SIGSEGV",
   "node": "exit 1; nts: uncaught Observed: length=2;",
-  "measured_with": "f62e7f597128ddde",
+  "measured_with": "35057410e523b37e",
   "source": "measured"
 }
