@@ -66,7 +66,7 @@ tsconfig.nts.json
 # (`nts_surfaces::wrapper`).
 tsconfig.gir.json
 tsconfig.objc.json
-tsconfig.winrt.json
+tsconfig.windows.json
 
 # Declaration output from `tsc -b examples/workspace/tsconfig.solution.json`.
 # Composite projects must emit, so the fixture's packages emit declarations into

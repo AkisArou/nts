@@ -86,13 +86,6 @@ pub(crate) fn namespace_of(module: &str, search: &[Utf8PathBuf]) -> Option<Strin
     (plausible && known).then(|| spec.to_owned())
 }
 
-/// Modification time and size: what changes when a file is replaced.
-pub(crate) fn fingerprint(path: &camino::Utf8Path) -> Option<String> {
-    let metadata = std::fs::metadata(path).ok()?;
-    let modified = metadata.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?;
-    Some(format!("{}.{:09}:{}", modified.as_secs(), modified.subsec_nanos(), metadata.len()))
-}
-
 /// Bind `request.root` and its closure into `request.out`.
 pub(crate) fn run(request: &Request) -> Result<()> {
     bind(&request.root, &request.search, &request.out, true).map(|_| ())

@@ -1,14 +1,19 @@
-//! The Windows Runtime's platform packages, as `nts_surfaces` generates and
-//! keeps them: one per namespace a program imports from and each namespace
-//! those name (`@nts/winrt-windows.foundation`, ...), and one naming them all
-//! (`@nts/platform-winrt`).
+//! Windows' platform packages, as `nts_surfaces` generates and keeps them:
+//! the Windows Runtime's -- one per namespace a program imports from and each
+//! namespace those name (`@nts/winrt-windows.foundation`, ...) -- Win32's,
+//! one per namespace imported and each it names
+//! (`@nts/win32-windows.win32.ui.windowsandmessaging`), and one naming them
+//! all (`@nts/platform-windows`).
 //!
-//! Generated from the Windows SDK's and the Windows App SDK's metadata, once
-//! per set of namespaces imported and metadata release, and shared by every
-//! project on the machine: a program that imports `winrt:Windows.Data.Json`
-//! finds the module in the store rather than in a `types/winrt` of its own.
-//! The module names are the metadata's, so the program's imports do not
-//! change.
+//! Generated from the Windows SDK's, the Windows App SDK's and Win32's
+//! metadata -- Win32's checked against the headers -- once per set of
+//! namespaces imported and metadata release, and shared by every project on
+//! the machine: a program that imports `winrt:Windows.Data.Json` or
+//! `c:Windows.Win32.UI.WindowsAndMessaging` finds the module in the store
+//! rather than in a `types/winrt` or `types/winmd` of its own. The module
+//! names are the metadata's, so the program's imports do not change; a Win32
+//! constant is one of its module's declarations (`@ntsConstant`), so no
+//! package needs a file the program imports by path.
 //!
 //! **Keyed by the namespaces imported, not the whole SDK.** A namespace a
 //! program imports is bound whole, and one its declarations name only for
@@ -25,13 +30,13 @@ use camino::{Utf8Path, Utf8PathBuf};
 use nts_frontend_ts::tsgo::generated::{Complaint, Generated};
 use nts_surfaces::{Binder, Package, Surface};
 
-use crate::bind_winmd::winrt;
+use crate::bind_winmd::{self, winrt};
 
 /// The generator's own source, hashed when this compiler is built: the
 /// packages change when it does, and only then. `every_generator_file_is_hashed`
 /// keeps the list whole.
 const GENERATOR: u64 = fnv(&[
-    include_bytes!("winrt_surface.rs"),
+    include_bytes!("windows_surface.rs"),
     include_bytes!("bind_winmd/check.rs"),
     include_bytes!("bind_winmd/ctype.rs"),
     include_bytes!("bind_winmd/emit.rs"),
@@ -60,32 +65,44 @@ const fn fnv(parts: &[&[u8]]) -> u64 {
 }
 
 /// The platform package, which names every namespace's.
-pub(crate) const PLATFORM_PACKAGE: &str = "@nts/platform-winrt";
+pub(crate) const PLATFORM_PACKAGE: &str = "@nts/platform-windows";
 
-/// The Windows Runtime's packages for one set of namespaces imported.
+/// Windows' packages for one set of namespaces imported.
 #[derive(Debug, Clone)]
-pub(crate) struct WinrtPlatform {
-    /// The namespaces a program imports: `Windows.Data.Json`,
+pub(crate) struct WindowsPlatform {
+    /// The Windows Runtime namespaces a program imports: `Windows.Data.Json`,
     /// `Microsoft.UI.Xaml.Controls`.
     pub(crate) roots: BTreeSet<String>,
-    /// The directories of `.winmd`s bound from (`winrt::default_metadata`).
+    /// The Win32 namespaces it imports: `Windows.Win32.UI.WindowsAndMessaging`.
+    pub(crate) win32: BTreeSet<String>,
+    /// The directories of `.winmd`s the Windows Runtime is bound from
+    /// (`winrt::default_metadata`).
     pub(crate) metadata: Vec<Utf8PathBuf>,
+    /// Win32's `.winmd` (`bind_winmd::default_winmd`).
+    pub(crate) winmd: Utf8PathBuf,
 }
 
-impl WinrtPlatform {
-    /// A namespace's package name: `@nts/winrt-windows.data.json`.
-    fn package(namespace: &str) -> String {
-        format!("@nts/winrt-{}", namespace.to_lowercase())
+impl WindowsPlatform {
+    /// The platform for what a program imports, from the metadata the lane
+    /// fetches.
+    pub(crate) fn for_namespaces(roots: BTreeSet<String>, win32: BTreeSet<String>) -> Self {
+        Self { roots, win32, metadata: winrt::default_metadata(), winmd: bind_winmd::default_winmd() }
+    }
+
+    /// A namespace's package name: `@nts/winrt-windows.data.json`,
+    /// `@nts/win32-windows.win32.ui.windowsandmessaging`.
+    fn package(family: &str, namespace: &str) -> String {
+        format!("@nts/{family}-{}", namespace.to_lowercase())
     }
 }
 
-impl Binder for WinrtPlatform {
+impl Binder for WindowsPlatform {
     /// The metadata releases and the roots: every root while they are short,
     /// and past that the first, how many more, and a hash of them all -- the
     /// identity is a directory's name, which a program importing fifteen
     /// namespaces made longer than a file system takes.
     fn identity(&self) -> String {
-        let roots: Vec<&str> = self.roots.iter().map(String::as_str).collect();
+        let roots: Vec<&str> = self.roots.iter().chain(&self.win32).map(String::as_str).collect();
         let joined = roots.join("+");
         let named = if joined.len() <= 120 {
             joined
@@ -93,7 +110,12 @@ impl Binder for WinrtPlatform {
             let bytes: Vec<&[u8]> = roots.iter().map(|root| root.as_bytes()).collect();
             format!("{}+{}-more-{:016x}", roots[0], roots.len() - 1, fnv(&bytes))
         };
-        format!("winrt {} winappsdk {} {named}", winrt::WINRT_METADATA_VERSION, winrt::WINAPPSDK_VERSION)
+        format!(
+            "windows winrt {} winappsdk {} win32 {} {named}",
+            winrt::WINRT_METADATA_VERSION,
+            winrt::WINAPPSDK_VERSION,
+            bind_winmd::WIN32_METADATA_VERSION
+        )
     }
 
     fn version(&self) -> String {
@@ -101,23 +123,40 @@ impl Binder for WinrtPlatform {
     }
 
     fn inputs(&self) -> Vec<Utf8PathBuf> {
-        winrt::metadata_markers(&self.metadata)
+        let mut inputs = winrt::metadata_markers(&self.metadata);
+        if !self.win32.is_empty() {
+            inputs.push(self.winmd.clone());
+        }
+        inputs
     }
 
     fn generate(&self) -> Result<Vec<Package>> {
-        let roots: Vec<String> = self.roots.iter().cloned().collect();
-        let command = format!("nts build (winrt:{})", roots.join(" winrt:"));
         let mut packages = Vec::new();
         let mut references = String::new();
-        for module in winrt::generate(&roots, &self.metadata, &command)? {
-            let name = Self::package(&module.namespace);
-            let _ = writeln!(references, "/// <reference types=\"{name}\" />");
-            packages.push(Package {
-                name,
-                surface: Surface::Winrt,
-                values: module.values.map(|values| (format!("{}.values.ts", module.namespace), values)),
-                declarations: module.text,
-            });
+        if !self.roots.is_empty() {
+            let roots: Vec<String> = self.roots.iter().cloned().collect();
+            let command = format!("nts build (winrt:{})", roots.join(" winrt:"));
+            for module in winrt::generate(&roots, &self.metadata, &command)? {
+                let name = Self::package("winrt", &module.namespace);
+                let _ = writeln!(references, "/// <reference types=\"{name}\" />");
+                packages.push(Package {
+                    name,
+                    surface: Surface::Winrt,
+                    values: module.values.map(|values| (format!("{}.values.ts", module.namespace), values)),
+                    declarations: module.text,
+                });
+            }
+        }
+        if !self.win32.is_empty() {
+            let namespaces: Vec<String> = self.win32.iter().cloned().collect();
+            let command = format!("nts build (c:{})", namespaces.join(" c:"));
+            let (bindings, owners) = bind_winmd::generate(&namespaces, &self.winmd, "x86_64")?;
+            for binding in &bindings {
+                let module = bind_winmd::emit::render(binding, &command, &owners);
+                let name = Self::package("win32", &module.namespace);
+                let _ = writeln!(references, "/// <reference types=\"{name}\" />");
+                packages.push(Package { name, surface: Surface::Win32, declarations: module.declarations, values: None });
+            }
         }
         packages.push(Package { name: PLATFORM_PACKAGE.to_owned(), surface: Surface::Winrt, declarations: references, values: None });
         Ok(packages)
@@ -125,39 +164,41 @@ impl Binder for WinrtPlatform {
 }
 
 /// The generator `nts build` and `nts check` open a Windows project with:
-/// when the checker cannot find a `winrt:` module, the packages of what the
-/// program imports are installed from the store, linked into the project,
-/// and the program is opened with their files added.
+/// when the checker cannot find a `winrt:` or `c:Windows.Win32.*` module, the
+/// packages of what the program imports are installed from the store, linked
+/// into the project, and the program is opened with their files added.
 #[derive(Debug, Default)]
-pub(crate) struct WinrtBindings {
+pub(crate) struct WindowsBindings {
     /// Whether the first round has been answered.
     decided: bool,
 }
 
-impl Generated for WinrtBindings {
+impl Generated for WindowsBindings {
     /// What keys the snapshot cache: the binder's source and the metadata it
     /// binds from, so a build after either changes asks this generator again.
     fn identity(&self) -> String {
-        let metadata = winrt::metadata_markers(&winrt::default_metadata());
-        format!("winrt-bindings/1 {GENERATOR:016x} {}", nts_surfaces::fingerprint(&metadata))
+        let mut metadata = winrt::metadata_markers(&winrt::default_metadata());
+        metadata.push(bind_winmd::default_winmd());
+        format!("windows-bindings/1 {GENERATOR:016x} {}", nts_surfaces::fingerprint(&metadata))
     }
 
     fn config(&mut self, tsconfig: &Utf8Path, _roots: &[String], complaints: &[Complaint]) -> Result<Option<Utf8PathBuf>, String> {
         if std::mem::replace(&mut self.decided, true) {
             return Ok(None);
         }
-        let roots: BTreeSet<String> = complaints.iter().filter_map(missing_namespace).map(str::to_owned).collect();
-        if roots.is_empty() {
+        let missing: Vec<&str> = complaints.iter().filter_map(missing_module).collect();
+        let roots: BTreeSet<String> = missing.iter().filter_map(|module| winrt::namespace_of(module)).collect();
+        let win32: BTreeSet<String> = missing.iter().filter_map(|module| bind_winmd::namespace_of(module)).collect();
+        if roots.is_empty() && win32.is_empty() {
             return Ok(None);
         }
-        let platform = WinrtPlatform { roots, metadata: winrt::default_metadata() };
-        install(tsconfig, &platform).map(Some).map_err(|error| format!("{error:#}"))
+        install(tsconfig, &WindowsPlatform::for_namespaces(roots, win32)).map(Some).map_err(|error| format!("{error:#}"))
     }
 }
 
 /// The platform's packages, from the store and linked into the project, and
 /// the config opening the project with their files.
-fn install(tsconfig: &Utf8Path, platform: &WinrtPlatform) -> Result<Utf8PathBuf> {
+fn install(tsconfig: &Utf8Path, platform: &WindowsPlatform) -> Result<Utf8PathBuf> {
     let project = tsconfig.parent().unwrap_or(Utf8Path::new("."));
     let installed = nts_surfaces::Store::new(nts_surfaces::Store::default_root()).ensure(platform)?;
     let linked = nts_surfaces::link(&installed, project)?;
@@ -168,18 +209,17 @@ fn install(tsconfig: &Utf8Path, platform: &WinrtPlatform) -> Result<Utf8PathBuf>
             "note: linked {PLATFORM_PACKAGE} into {project}/node_modules; for an editor to see it, add \"types\": [\"{PLATFORM_PACKAGE}\"] to tsconfig.json's compilerOptions"
         );
     }
-    nts_surfaces::wrapper(tsconfig, "winrt", &installed.files())
+    nts_surfaces::wrapper(tsconfig, "windows", &installed.files())
 }
 
-/// The namespace of the `winrt:` module a complaint says cannot be found --
-/// TypeScript's `Cannot find module 'winrt:Windows.Data.Json' or its
-/// corresponding type declarations.` (2307) -- or `None` for any other.
-fn missing_namespace(complaint: &Complaint) -> Option<&str> {
+/// The module a complaint says cannot be found -- TypeScript's `Cannot find
+/// module 'winrt:Windows.Data.Json' or its corresponding type declarations.`
+/// (2307) -- as the program names it, or `None` for any other complaint.
+fn missing_module(complaint: &Complaint) -> Option<&str> {
     if complaint.code != 2307 {
         return None;
     }
-    let namespace = complaint.text.split_once("'winrt:")?.1.split('\'').next()?;
-    winrt::is_winrt(namespace).then_some(namespace)
+    complaint.text.split_once("module '")?.1.split('\'').next()
 }
 
 #[cfg(test)]
@@ -188,13 +228,14 @@ mod tests {
     use super::*;
     use nts_frontend_ts::SemanticSource;
 
-    /// **The Windows Runtime's packages typecheck**, whole and together, with
+    /// **Windows' packages typecheck**, the Windows Runtime's and Win32's,
+    /// whole and together, with
     /// their values files: the check a package's `// @ts-nocheck` spares
     /// every program that uses it, made here once, over the namespaces the
     /// lane's examples import. Needs tsgo and the metadata, and says nothing
     /// on a machine without them.
     #[test]
-    fn the_winrt_packages_typecheck() {
+    fn the_windows_packages_typecheck() {
         let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
             eprintln!("skipped: no tsgo");
             return;
@@ -208,10 +249,13 @@ mod tests {
             .iter()
             .map(|root| (*root).to_owned())
             .collect();
-        let platform = WinrtPlatform { roots, metadata };
+        let win32: BTreeSet<String> = ["Windows.Win32.UI.WindowsAndMessaging".to_owned()].into_iter().collect();
+        let platform = WindowsPlatform { roots, win32, metadata, winmd: bind_winmd::default_winmd() };
         let packages = platform.generate().unwrap();
         assert!(packages.iter().any(|package| package.name == "@nts/winrt-windows.data.json"), "no package for a root");
         assert!(packages.iter().any(|package| package.name == "@nts/winrt-windows.foundation"), "no package for a namespace a root names");
+        let messaging = packages.iter().find(|package| package.name == "@nts/win32-windows.win32.ui.windowsandmessaging").expect("no Win32 package");
+        assert!(messaging.declarations.contains("  /** @ntsConstant 275 */\n  export const WM_TIMER: c_uint;\n"), "no Win32 constant among the declarations");
         let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize_utf8().unwrap();
         let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-winrt-packages-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -224,7 +268,7 @@ mod tests {
             // then, and one it skips is one whose errors nothing reports.
             std::fs::write(
                 at.join("package.json"),
-                format!(r#"{{ "name": {:?}, "types": "index.d.ts", "nts": {{ "surface": "winrt" }} }}"#, package.name),
+                format!(r#"{{ "name": {:?}, "types": "index.d.ts", "nts": {{ "surface": {:?} }} }}"#, package.name, package.surface.as_str()),
             )
             .unwrap();
             std::fs::write(at.join("index.d.ts"), &package.declarations).unwrap();
@@ -251,7 +295,7 @@ mod tests {
             .map(|diagnostic| format!("{} {}", diagnostic.code, diagnostic.message))
             .collect();
         let _ = std::fs::remove_dir_all(&dir);
-        assert!(errors.is_empty(), "the Windows Runtime's packages do not typecheck: {errors:#?}");
+        assert!(errors.is_empty(), "Windows' packages do not typecheck: {errors:#?}");
         eprintln!("{} packages, {} sources checked", packages.len(), snapshot.sources.len());
     }
 
@@ -259,7 +303,7 @@ mod tests {
     /// out would keep stale packages when it changes.
     #[test]
     fn every_generator_file_is_hashed() {
-        let this = include_str!("winrt_surface.rs");
+        let this = include_str!("windows_surface.rs");
         let dir = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("src/bind_winmd");
         for entry in std::fs::read_dir(&dir).expect("bind_winmd") {
             let name = entry.expect("entry").file_name().into_string().expect("utf-8");

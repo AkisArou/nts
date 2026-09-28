@@ -49,7 +49,30 @@ fn header_of(documentation: Option<&str>) -> Option<String> {
     Some(format!("{}.h", path.split('/').next()?))
 }
 
+/// One namespace's module as text: its declarations, and what was refused,
+/// a line each.
+pub(crate) struct Rendered {
+    pub(crate) namespace: String,
+    pub(crate) declarations: String,
+    pub(crate) refused: String,
+}
+
+/// [`render`]ed into `out`: `<namespace>.d.ts` and `.refused.txt`.
 pub(crate) fn write(binding: &Binding, out: &Utf8Path, command: &str, owners: &BTreeMap<String, String>) -> Result<()> {
+    let rendered = render(binding, command, owners);
+    let stem = &rendered.namespace;
+    write_file(&out.join(format!("{stem}.d.ts")), &rendered.declarations)?;
+    // The values file an older `nts` wrote beside, which a program would
+    // still find and import by path.
+    let values = out.join(format!("{stem}.values.ts"));
+    if values.is_file() {
+        std::fs::remove_file(&values).with_context(|| format!("removing {values}"))?;
+    }
+    write_file(&out.join(format!("{stem}.refused.txt")), &rendered.refused)
+}
+
+/// One binding's module, as text.
+pub(crate) fn render(binding: &Binding, command: &str, owners: &BTreeMap<String, String>) -> Rendered {
     let stem = &binding.namespace;
     let mut body = String::new();
     for decl in &binding.types {
@@ -109,19 +132,11 @@ pub(crate) fn write(binding: &Binding, out: &Utf8Path, command: &str, owners: &B
     declarations.push('\n');
     declarations.push_str(&body);
     declarations.push_str("}\n");
-    write_file(&out.join(format!("{stem}.d.ts")), &declarations)?;
-    // The values file an older `nts` wrote beside, which a program would
-    // still find and import by path.
-    let values = out.join(format!("{stem}.values.ts"));
-    if values.is_file() {
-        std::fs::remove_file(&values).with_context(|| format!("removing {values}"))?;
-    }
-
     let mut refused = String::new();
     for (name, why) in &binding.refused {
         let _ = writeln!(refused, "{name}\t{why}");
     }
-    write_file(&out.join(format!("{stem}.refused.txt")), &refused)
+    Rendered { namespace: stem.clone(), declarations, refused }
 }
 
 /// A parameter name TypeScript reserves, renamed.

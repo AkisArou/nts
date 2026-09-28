@@ -15,7 +15,7 @@ mod xcframework;
 mod bind_gir;
 mod gir_surface;
 mod bind_winmd;
-mod winrt_surface;
+mod windows_surface;
 
 use std::fmt::Write as _;
 
@@ -1267,14 +1267,15 @@ fn for_project(mut source: TsgoApi, tsconfig: &Utf8Path) -> Result<TsgoApi> {
         .cloned()
         .collect();
     // A program for Windows has the Windows Runtime's packages installed
-    // from the store when it imports a `winrt:` module (`winrt_surface`).
+    // from the store when it imports a `winrt:` or `c:Windows.Win32.*`
+    // module (`windows_surface`).
     // Any other has GTK's when it imports a `c:` module this machine has GIR
     // for (`gir_surface`). One generator per program: a project for two of
     // these platforms at once would need them composed, which nothing asks
     // for yet.
     let windows = resolved.products.values().flat_map(|product| product.targets.iter()).any(|target| target.os == "windows");
     source = if windows {
-        source.with_generated(Box::new(winrt_surface::WinrtBindings::default()))
+        source.with_generated(Box::new(windows_surface::WindowsBindings::default()))
     } else if apple.is_empty() {
         source.with_generated(Box::new(gir_surface::GirBindings::default()))
     } else {
@@ -3571,34 +3572,26 @@ fn generate_bindings(tsconfig: &Utf8Path, targets: &[String]) -> Result<Vec<Utf8
         std::fs::remove_dir_all(&generated_here).with_context(|| format!("removing {generated_here}"))?;
         eprintln!("note: removed {generated_here}, the GIR bindings an older nts generated there; they come from the platform store now");
     }
-    // Likewise a `c:Windows.Win32.*` module, from Windows metadata, into
-    // `types/winmd`.
-    let winmd = project.join("types").join("winmd");
-    let mut winmd_wanted = std::collections::BTreeSet::new();
-    // A `winrt:` module is the Windows Runtime's platform, installed from the
-    // store when the program is opened (`winrt_surface::WinrtBindings`). What
-    // an older `nts` generated into `types/winrt` would shadow it, as
-    // `types/gir` would GTK's, so it goes the same way.
-    let generated_here = project.join("types").join("winrt");
-    if generated_here.join(".nts-stamp").is_file() {
-        std::fs::remove_dir_all(&generated_here).with_context(|| format!("removing {generated_here}"))?;
-        eprintln!("note: removed {generated_here}, the Windows Runtime bindings an older nts generated there; they come from the platform store now");
+    // A `winrt:` or `c:Windows.Win32.*` module is Windows' platform,
+    // installed from the store when the program is opened
+    // (`windows_surface::WindowsBindings`). What an older `nts` generated
+    // into `types/winrt` or `types/winmd` would shadow it, as `types/gir`
+    // would GTK's, so it goes the same way.
+    for (generated, what) in [("winrt", "Windows Runtime"), ("winmd", "Win32")] {
+        let generated_here = project.join("types").join(generated);
+        if generated_here.join(".nts-stamp").is_file() {
+            std::fs::remove_dir_all(&generated_here).with_context(|| format!("removing {generated_here}"))?;
+            eprintln!("note: removed {generated_here}, the {what} bindings an older nts generated there; they come from the platform store now");
+        }
     }
     for (module, file) in wanted {
         if bind_gir::namespace_of(&module, &search).is_some() {
             continue;
         }
-        if let Some(namespace) = bind_winmd::namespace_of(&module) {
-            winmd_wanted.insert(namespace);
-            continue;
-        }
-        if bind_winmd::winrt::namespace_of(&module).is_some() {
+        if bind_winmd::namespace_of(&module).is_some() || bind_winmd::winrt::namespace_of(&module).is_some() {
             continue;
         }
         bind_one(&module, &file, targets, project)?;
-    }
-    if !winmd_wanted.is_empty() || winmd.join(".nts-stamp").exists() {
-        bind_winmd::ensure(&winmd_wanted, &winmd)?;
     }
     Ok(roots)
 }

@@ -5,8 +5,8 @@
 # What each arm asserts:
 #
 # - **The build:** `nts build` exits 0 and refuses nothing. Its Win32
-#   bindings are generated from Windows metadata by the build itself
-#   (`types/winmd`, `nts bind-winmd`), and the witness compares each one the
+#   bindings are Windows' platform packages, which the build installs from
+#   the store (`windows_surface`), and the witness compares each one the
 #   program calls with <windows.h>.
 # - **The PE:** a console PE32+ for x86-64 that imports only Windows' own DLLs.
 # - **On Windows:** the program prints `expected.txt`: a window created and

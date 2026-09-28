@@ -120,22 +120,23 @@ the same vtable calls on the VM measured the behaviour first.
 
 - **Calls:** `@ntsVtable`, `@ntsHresult`, `@ntsFactory`, `Family::Com`,
   HSTRING both ways, and a failed HRESULT thrown with the system's text.
-- **Platform packages:** a program's `winrt:` imports are installed from
-  the platform store (`winrt_surface`, `nts_surfaces`), as GTK's and
-  Apple's are: one package per namespace imported and each namespace those
-  name (`@nts/winrt-windows.foundation`), and `@nts/platform-winrt` naming
-  them, generated once per set of roots, metadata release and generator,
-  and shared by every project on the machine. Not the whole contract: 282
-  namespaces, 26 MB and 4 s to generate once, but every program's check
-  0.11 s and 280 MB where its own closure is 0.03 s and 48 MB. A
-  `types/winrt` an older `nts` generated is removed, once, with a note.
-  Win32's `c:Windows.Win32.*` modules are still bound into the project's
-  `types/winmd`: their constants are a values file the program imports by
-  path (`../types/winmd/…values.ts`), and a store's values file has no
-  path a program can name -- nothing under `node_modules` is lowered, which
-  is why values files sit beside the packages. Moving Win32 needs its
-  constants importable from the module itself; the Windows Runtime's
-  values files are only ever reached by `@ntsCall`, so it moved first.
+- **Platform packages:** a program's `winrt:` and `c:Windows.Win32.*`
+  imports are installed from the platform store (`windows_surface`,
+  `nts_surfaces`), as GTK's and Apple's are: one package per namespace
+  imported and each namespace those name (`@nts/winrt-windows.foundation`,
+  `@nts/win32-windows.win32.ui.windowsandmessaging`), and
+  `@nts/platform-windows` naming them, generated once per set of roots,
+  metadata release and generator, and shared by every project on the
+  machine. Not the whole contract: 282 namespaces, 26 MB and 4 s to
+  generate once, but every program's check 0.11 s and 280 MB where its own
+  closure is 0.03 s and 48 MB. A `types/winrt` or `types/winmd` an older
+  `nts` generated is removed, once, with a note.
+- **Win32 constants** are declarations of their module, with their value
+  in a tag -- `/** @ntsConstant 275 */ export const WM_TIMER: c_uint;` --
+  imported by name like the rest (`import { WM_TIMER } from
+  "c:Windows.Win32.UI.WindowsAndMessaging"`) and folded where they are
+  read; nothing is linked. They were a values file the program imported by
+  path, which is what kept Win32 out of the store.
 - **bind-winmd for WinRT:**
   - interfaces slot for slot;
   - generics, with instantiation IIDs computed by the pinterface SHA-1;

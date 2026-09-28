@@ -18,17 +18,16 @@
 
 mod check;
 mod ctype;
-mod emit;
+pub(crate) mod emit;
 mod facts;
 mod iid;
-mod map;
+pub(crate) mod map;
 mod read;
 pub(crate) mod winrt;
 
-use std::fmt::Write as _;
 
 use anyhow::{Context, Result};
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 
 /// The metadata this binder is written against.
 ///
@@ -79,60 +78,6 @@ pub(crate) fn run(request: &Request) -> Result<()> {
     Ok(())
 }
 
-/// A program's `c:Windows.Win32.*` imports, bound into `out` unless the stamp
-/// there says the same `nts` already bound them from the same metadata.
-pub(crate) fn ensure(namespaces: &std::collections::BTreeSet<String>, out: &Utf8PathBuf) -> Result<()> {
-    let winmd = default_winmd();
-    stamped(namespaces, out, std::slice::from_ref(&winmd), |wanted| {
-        let request = Request { namespaces: wanted.to_vec(), winmd: winmd.clone(), out: out.clone(), arch: "x86_64".into() };
-        bind(&request, &format!("nts build (bind-winmd {})", wanted.join(" ")))
-    })
-}
-
-/// Bind `namespaces` into `out` unless its stamp says the same `nts` already
-/// bound them from the same `inputs`.
-///
-/// The `bind-gir` scheme: every namespace asked for, ever, is kept in the
-/// stamp, so a second program sharing the directory does not drop the first's.
-fn stamped(
-    namespaces: &std::collections::BTreeSet<String>,
-    out: &Utf8PathBuf,
-    inputs: &[Utf8PathBuf],
-    bind: impl FnOnce(&[String]) -> Result<Vec<String>>,
-) -> Result<()> {
-    let stamp_path = out.join(".nts-stamp");
-    let previous = std::fs::read_to_string(&stamp_path).unwrap_or_default();
-    let mut wanted: std::collections::BTreeSet<String> =
-        previous.lines().filter_map(|line| line.strip_prefix("root ")).map(str::to_owned).collect();
-    let before = wanted.len();
-    wanted.extend(namespaces.iter().cloned());
-    let exe = std::env::current_exe().ok().and_then(|p| Utf8PathBuf::from_path_buf(p).ok());
-    let fingerprints: Vec<String> = exe
-        .into_iter()
-        .chain(inputs.iter().cloned())
-        .filter_map(|file| Some(format!("file {file} {}", crate::bind_gir::fingerprint(&file)?)))
-        .collect();
-    let fresh = wanted.len() == before
-        && !previous.is_empty()
-        && fingerprints.iter().all(|line| previous.lines().any(|seen| seen == line));
-    if fresh {
-        return Ok(());
-    }
-    let list: Vec<String> = wanted.iter().cloned().collect();
-    for line in bind(&list)? {
-        println!("  {line}");
-    }
-    let mut stamp = String::new();
-    for namespace in &wanted {
-        let _ = writeln!(stamp, "root {namespace}");
-    }
-    for line in fingerprints {
-        stamp.push_str(&line);
-        stamp.push('\n');
-    }
-    std::fs::write(&stamp_path, stamp).with_context(|| format!("writing {stamp_path}"))
-}
-
 /// The namespace a `c:` module names, when it is a Win32 metadata one.
 pub(crate) fn namespace_of(module: &str) -> Option<String> {
     let namespace = module.strip_prefix("c:")?;
@@ -141,42 +86,44 @@ pub(crate) fn namespace_of(module: &str) -> Option<String> {
 
 /// Bind `request.namespaces` into `request.out`, answering one line per module.
 fn bind(request: &Request, command: &str) -> Result<Vec<String>> {
-    let index = windows_metadata::reader::Index::read(&request.winmd)
-        .with_context(|| {
-            format!(
-                "reading {}: fetch it with tooling/windows/fetch-win32metadata.sh, or pass --winmd",
-                request.winmd
-            )
-        })?
+    let (bindings, owners) = generate(&request.namespaces, &request.winmd, &request.arch)?;
+    std::fs::create_dir_all(&request.out).with_context(|| format!("creating {}", request.out))?;
+    for binding in &bindings {
+        emit::write(binding, &request.out, command, &owners)?;
+    }
+    Ok(bindings.iter().map(summary).collect())
+}
+
+/// One binding's summary line.
+fn summary(binding: &map::Binding) -> String {
+    format!(
+        "{}: {} functions, {} types, {} constants; {} refused (see {}.refused.txt)",
+        binding.module,
+        binding.functions.len(),
+        binding.types.len(),
+        binding.constants.len(),
+        binding.refused.len(),
+        binding.namespace
+    )
+}
+
+/// Win32 `namespaces` bound from `winmd` and checked against the headers for
+/// `arch`, in memory, and which namespace declares each name -- what the
+/// modules import from each other (`emit::render`).
+pub(crate) fn generate(namespaces: &[String], winmd: &Utf8Path, arch: &str) -> Result<(Vec<map::Binding>, std::collections::BTreeMap<String, String>)> {
+    let index = windows_metadata::reader::Index::read(winmd)
+        .with_context(|| format!("reading {winmd}: fetch it with tooling/windows/fetch-win32metadata.sh, or pass --winmd"))?
         .leak();
-    let model = read::read(index, &request.namespaces);
+    let model = read::read(index, namespaces);
     let zig = crate::zig_lib_dir().context("`zig env` did not answer; the Windows headers come from zig")?;
-    let clang_args = crate::windows_compile_flags(&request.arch, &zig);
+    let clang_args = crate::windows_compile_flags(arch, &zig);
     let headers = vec!["windows.h".to_owned()];
     let facts = map::ask(&model, &headers, &clang_args)?;
     let mut bindings = map::bindings(&model, &facts);
     check::against_headers(&mut bindings, &headers, &clang_args)?;
-    std::fs::create_dir_all(&request.out).with_context(|| format!("creating {}", request.out))?;
-    // Which namespace declares each name, for the imports between modules.
-    let owners: std::collections::BTreeMap<String, String> = bindings
+    let owners = bindings
         .iter()
         .flat_map(|binding| binding.types.iter().map(|decl| (decl.name().to_owned(), binding.namespace.clone())))
         .collect();
-    for binding in &bindings {
-        emit::write(binding, &request.out, command, &owners)?;
-    }
-    Ok(bindings
-        .iter()
-        .map(|binding| {
-            format!(
-                "{}: {} functions, {} types, {} constants; {} refused (see {}.refused.txt)",
-                binding.module,
-                binding.functions.len(),
-                binding.types.len(),
-                binding.constants.len(),
-                binding.refused.len(),
-                binding.namespace
-            )
-        })
-        .collect())
+    Ok((bindings, owners))
 }
