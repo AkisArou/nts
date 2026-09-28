@@ -1894,6 +1894,7 @@ one in two ways, both core gaps:
 | 2026-09-27 | 25 | 8 on main; 14 stop at the captured narrowed handle, Scale at `Object.entries` over a table, Stack at a `let` of a handle with no initializer, Context Menu at a record's fields (`new Gdk.Rectangle({ x, y })`, designed with the compiler lane) |
 | 2026-09-28 | 29 | **25 on main**, with the captured-handle fix (bd58854b9). Left: Stack (a `let` of a handle with no initializer), Scale (`Object.entries` over a table), Context Menu (record fields, designed), Boxed Lists (`GObject.TYPE_STRING` and `Gtk.ClosureExpression`, binding gaps) |
 | 2026-09-28 | 34 | **28**. Also left: Text Colors (a spread in call arguments, then an array stringified), Text View (destructuring a handle's property) |
+| 2026-09-29 | 59 | **47**: Network Monitor, once 3cf606cea defined a capturing nested function a closure calls. Box is ported. Its hoisted arm, a function passed before its declaration, was fixed by 64306803c; it now stops at that fix's deliberate bound, a hoisted function whose captures are declared in its own block (Box's are all initialized before the use; reported) |
 | 2026-09-28 | 58 | **46**: List Model, one string list bound to a list box and a flow box by functions, and a filter model over it |
 | 2026-09-28 | 57 | **45**: Preferences Dialog, its `AdwStyleManager` color scheme set from a switch row, a subpage pushed and popped, a toast |
 | 2026-09-28 | 56 | **44**: View Switcher, once a binding's property can be read before it is written (`page.badge_number -= 1`) |

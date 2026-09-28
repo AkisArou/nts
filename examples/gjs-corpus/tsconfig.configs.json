@@ -19,6 +19,7 @@
     "action-bar/nts.config.ts",
     "actions/nts.config.ts",
     "banner/nts.config.ts",
+    "box/nts.config.ts",
     "boxed-lists/nts.config.ts",
     "breakpoints/nts.config.ts",
     "button-row/nts.config.ts",

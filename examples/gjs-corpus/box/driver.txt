@@ -1,0 +1,14 @@
+children interactive_box
+click button_append
+click button_prepend
+children interactive_box
+click button_remove
+click button_remove
+click button_remove
+children interactive_box
+click button_remove
+orientation interactive_box
+toggle toggle_orientation_horizontal
+orientation interactive_box
+toggle highlight
+classes interactive_box
