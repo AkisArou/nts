@@ -33277,7 +33277,7 @@ impl<'a> FuncBuilder<'a> {
             // -- an object copy minus the named keys -- and stays refused
             // above, where the object arm says so.
             if !object && self.kind_of(element) == Some(syntax::SPREAD_ELEMENT) {
-                let tail = self.rest_tail(element, value, position);
+                let tail = self.rest_tail(element, value, position)?;
                 let Some(target) = self.children(element).into_iter().next() else {
                     return Err(self.unsupported(element, "a rest element with no target"));
                 };
@@ -45950,14 +45950,44 @@ impl<'a> FuncBuilder<'a> {
     /// and by the assignment path (`[a, ...rest] = xs`). The two differ only in
     /// where the tail ends up, which is the same split every other element of a
     /// pattern already has.
-    fn rest_tail(&mut self, element: NodeId, value: ValueId, position: usize) -> ValueId {
+    fn rest_tail(
+        &mut self,
+        element: NodeId,
+        value: ValueId,
+        position: usize,
+    ) -> Result<ValueId, Diagnostic> {
         let ty = self.values[value.0 as usize].ty.clone();
+        // **A slice is an array operation, so the source has to be one.** It is
+        // not always: an unannotated `([...x]) => f(x)` gives its parameter the
+        // `Iterable` the pattern implies, and a `[...x]` over a generator gives a
+        // `Generator`. Both used to reach the two pushes below, and then the C
+        // backend's `length_expression` answered `x->length` for a struct that
+        // has no such member -- **C that does not compile, from a program nothing
+        // refused.** 23 of test262's built-ins `compareArray` files and 14 of
+        // `test/language` are that, the conformance lane's
+        // `outcomes/an-untyped-rest-passed-where-an-array-is-wanted` is the
+        // record, and `verify::check_lengths` is the backstop that stops the
+        // category being silent again.
+        //
+        // Refused rather than converted, for now. `[...x]` over something
+        // iterable-but-not-an-array is a real construct and the machinery for it
+        // exists -- it is what `for...of` already does -- so this names the
+        // feature instead of guessing at it. Reading `x.length` directly is
+        // already refused as "`length`, which `Iterable` does not declare", so
+        // the sentences agree about the same program.
+        if !super::carries_a_length(&ty) {
+            return Err(self.unsupported(
+                element,
+                "a rest element over a value that is not an array, which needs it collected \
+                 through its iterator first",
+            ));
+        }
         let origin = self.origin(element);
         #[allow(clippy::cast_precision_loss)]
         let at = position as f64;
         let from = self.push(OpKind::ConstFloat(at), HirType::NUMBER, origin.clone());
         let to = self.push(OpKind::Length(value), HirType::NUMBER, origin.clone());
-        self.push(
+        Ok(self.push(
             OpKind::Call {
                 callee: Callee::External("nts_array_slice".to_owned()),
                 args: vec![value, from, to],
@@ -45965,7 +45995,7 @@ impl<'a> FuncBuilder<'a> {
             },
             ty,
             origin,
-        )
+        ))
     }
 
     fn bind_rest(
@@ -46012,7 +46042,7 @@ impl<'a> FuncBuilder<'a> {
                 None => return Err(self.unsupported(element, "an unresolved binding")),
             }
         };
-        let rest = self.rest_tail(element, value, position);
+        let rest = self.rest_tail(element, value, position)?;
         match symbol {
             Some(symbol) => {
                 self.bindings.insert(symbol.0, rest);

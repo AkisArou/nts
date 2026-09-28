@@ -1422,6 +1422,42 @@ pub enum OpKind {
 /// absence edge in `string | undefined` would hand a float to a pointer
 /// parameter. Whether that was reachable is a separate question; it is not
 /// reachable from here.
+/// Whether a value of this type has a length an [`OpKind::Length`] can read.
+///
+/// Every one of these keeps it in the header a reference carries: an array
+/// because it can grow, a view through its buffer, a map, a table and a set
+/// because each owns arrays besides, a string because a string *is* a header,
+/// and an erased value through its tag. Nothing else has one.
+///
+/// **Written because the C backend's fallback answered `x->length` for anything
+/// it did not name**, which is correct for the six above and, for an ordinary
+/// object type, a member no struct has. `([...x]) => f(x)` with no annotation
+/// gives the parameter the `Iterable` its pattern implies, `rest_tail` pushed a
+/// `Length` and a slice against it, `verify` had no rule about the operand, and
+/// `emit-c` wrote `v1->length` on a struct -- **C that does not compile, from a
+/// program nothing refused.** 23 of test262's built-ins `compareArray` files and
+/// 14 of `test/language` reach it, the second through a generator rather than an
+/// `Iterable`, which is what says the rule belongs on the *type* rather than on
+/// either shape.
+///
+/// Read by `verify::check_lengths`, which makes a violation loud, and by
+/// `rest_tail`, which refuses by name so the common case gets a sentence instead.
+#[must_use]
+pub fn carries_a_length(ty: &HirType) -> bool {
+    matches!(
+        ty,
+        HirType::Erased
+            | HirType::Managed(
+                ManagedType::Array(_)
+                    | ManagedType::View(_)
+                    | ManagedType::Map(_, _)
+                    | ManagedType::Table(_, _)
+                    | ManagedType::Set(_)
+                    | ManagedType::String
+            )
+    )
+}
+
 #[must_use]
 pub fn zero_of(ty: &HirType) -> OpKind {
     match ty {

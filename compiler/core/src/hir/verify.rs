@@ -475,6 +475,7 @@ fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
         check_stores(program, func, problems);
         check_native_memory(func, problems);
         check_erasures(func, problems);
+        check_lengths(func, problems);
         // The ops a block still holds, not every value the lowering ever made.
         //
         // This asks whether a call "reaches the linker as an undefined symbol",
@@ -671,6 +672,36 @@ fn check_erasures(func: &Func, problems: &mut Vec<Invalid>) {
             problems.push(Invalid::OperandType {
                 func: func.name.clone(),
                 op: "an erasure recording an absence a payload that is not a reference cannot hold",
+                found: found.clone(),
+            });
+        }
+    }
+}
+
+/// An [`OpKind::Length`] reads a length only where the type has one.
+///
+/// **Nothing checked this, and the consequence was C that does not compile from a
+/// program nothing refused.** An unannotated `([...x]) => f(x)` gives its
+/// parameter the `Iterable` its pattern implies; `rest_tail` pushed a `Length`
+/// and a slice against it; and the C backend's `length_expression` answers
+/// `x->length` for anything it does not name -- correct for the six types that
+/// keep a length in their header and, for a struct, a member it has not got. The
+/// conformance lane counted 23 of test262's built-ins `compareArray` files and 14
+/// of `test/language`, the second through a *generator* rather than an
+/// `Iterable`: two shapes, one rule, which is why it is asked of the type.
+///
+/// [`super::carries_a_length`] is that rule, and the same function `rest_tail`
+/// asks before refusing by name -- one fact, so a backend and a lowering cannot
+/// disagree about it the way three emitters disagreed about an erasure's absence
+/// (see [`check_erasures`]).
+fn check_lengths(func: &Func, problems: &mut Vec<Invalid>) {
+    for op in func.blocks.iter().flat_map(|b| b.ops.iter().map(|v| func.value(*v))) {
+        let OpKind::Length(of) = &op.kind else { continue };
+        let found = &func.value(*of).ty;
+        if !super::carries_a_length(found) {
+            problems.push(Invalid::OperandType {
+                func: func.name.clone(),
+                op: "a length read from a type that keeps none",
                 found: found.clone(),
             });
         }
