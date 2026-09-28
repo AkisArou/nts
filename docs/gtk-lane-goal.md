@@ -1370,8 +1370,18 @@ captures `this`). It must open with `super(...)`, as Apple's must. An
 instance GTK makes itself (a builder file) runs `instance_init`, so it has
 its fields, but not the constructor, the same rule as a nib's.
 
-Still refused, each by name: `super(props)` passing a props object through,
-which needs a presence-checked setter per property rather than a literal's;
+**A class constructed with its own properties**, GJS's `new Book({ title })`
+for a class that registers `title`: the class declares its constructor in
+the one line TypeScript needs where GJS infers it, `constructor(props:
+Properties<Book, GObjectProps> = {}) { super(props); }` -- `Properties<T, Base>`
+(`c:types`) is the base's props and `T`'s `Property<V>` fields, each
+optional, as one object type. `super(props)`
+passes the object through, each property set where it was given; a
+binding's property through its `@ntsSet`, the class's own through its
+state's field, which notifies. A plain field of the class is not a
+property, and a construction does not set it.
+
+Still refused, each by name:
 a constructor parameter that declares a field; an override of
 `vfunc_finalize` (the registration's gives the fields back); a direct call
 of a `vfunc_` method outside chaining up; and a slot taking a record by

@@ -32,6 +32,11 @@
 //                 its name -- `plain`, a field only, does not -- and
 //                 `bind_property` reads `title` through `get_property`, then
 //                 writes `b` back through `set_property`, which notifies too
+//   books Dune 412 1 tagged L t  classes constructed with their own
+//                 properties (`Properties<T>`, `super(props)`): `Book`'s set
+//                 through their fields, `plain` -- a field, not a property --
+//                 left as initialized; `Tagged`'s `label` through GtkButton's
+//                 setter and its own `tag` through its field
 //   panel from the template true  `Panel` is built from a template (`static
 //                 readonly template`): the label its template makes is the
 //                 widget's first child, and the `declare`d field `title` reads
@@ -87,7 +92,15 @@ import {
   TextDirection,
   type GtkOrientation,
 } from "c:Gtk-4.0";
-import { BindingFlags, GObject, g_object_bind_property, g_type_from_name, g_type_is_a, g_type_name_from_instance } from "c:GObject-2.0";
+import {
+  BindingFlags,
+  GObject,
+  type GObjectProps,
+  g_object_bind_property,
+  g_type_from_name,
+  g_type_is_a,
+  g_type_name_from_instance,
+} from "c:GObject-2.0";
 import {
   type GDatagramBasedImplementation,
   type GDtlsClientConnectionImplementation,
@@ -97,7 +110,7 @@ import {
   g_list_model_get_n_items,
   g_list_model_get_object,
 } from "c:Gio-2.0";
-import type { CEnum, CNumber, Erased, Owned, Property, Ptr, c_size_t, c_uint } from "c:types";
+import type { CEnum, CNumber, Erased, Owned, Properties, Property, Ptr, c_size_t, c_uint } from "c:types";
 import { local } from "c:memory";
 import { Badge } from "./badge.ts";
 
@@ -233,6 +246,35 @@ function notes(): string {
   const synced = label.label ?? "";
   label.set_label("b");
   return "notes" + seen + " " + synced + " " + note.title + " " + String(note.done) + " " + String(note.weight);
+}
+
+// Classes constructed with their own properties, GJS's `new Book({ title })`:
+// the one constructor line TypeScript needs where GJS infers it, and
+// `super(props)` sets each property given -- the class's own through its
+// field, a base binding's (`label`) through its setter. `plain` is a field
+// and not a property, so no construction sets it.
+class Book extends GObject {
+  title: Property<string> = "";
+  pages: Property<number> = 0;
+  plain = 1;
+  constructor(props: Properties<Book, GObjectProps> = {}) {
+    super(props);
+  }
+}
+
+class Tagged extends GtkButton {
+  tag: Property<string> = "";
+  constructor(props: Properties<Tagged, GtkButtonProps> = {}) {
+    super(props);
+  }
+}
+
+function books(): string {
+  const book = new Book({ title: "Dune", pages: 412 });
+  const tagged = new Tagged({ label: "L", tag: "t" });
+  // Nothing given: every property at its initializer, as `new Book()` in GJS.
+  const blank = new Book();
+  return "books " + book.title + " " + String(book.pages) + " " + String(book.plain) + " tagged " + (tagged.label ?? "") + " " + tagged.tag + " blank " + String(blank.pages);
 }
 
 // A class built from a template, GJS's `Template` and `InternalChildren`: the
@@ -502,6 +544,7 @@ function main(): void {
   console.log(framed());
   console.log(tally());
   console.log(notes());
+  console.log(books());
   console.log(panel());
   console.log(wide());
   console.log(tall());

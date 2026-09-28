@@ -301,6 +301,20 @@ declare module "c:types" {
   // see it; each write notifies. A `number` (`G_TYPE_DOUBLE`), a `boolean`,
   // a `string` or a GObject class's handle.
   export type Property<T> = T & { readonly __c_property?: true };
+  // What a class the program writes is constructed with: its base's props
+  // and its own properties, each optional -- the constructor GJS infers,
+  // written in TypeScript's one line, `constructor(props: Properties<Book,
+  // GObjectProps> = {}) { super(props); }` for `new Book({ title })` and `new
+  // Book()`. One object type rather than `Base & {...}`, which a parameter
+  // cannot be, and defaulted rather than optional, which would make it a
+  // union with `undefined`. A field is
+  // a property when its type carries `Property`'s brand as a key -- not when
+  // it is assignable to it, which every type is, the brand being optional --
+  // so a plain field is not one here either.
+  export type Properties<T, Base> = {
+    [K in keyof Base | PropertyKeys<T>]?: K extends keyof Base ? Base[K] : K extends keyof T ? T[K] : never;
+  };
+  type PropertyKeys<T> = { [K in keyof T]: "__c_property" extends keyof T[K] ? K : never }[keyof T];
   // A GLib boxed record -- a C struct GLib copies and frees by its `GType`
   // (`g_boxed_copy`, `g_boxed_free`): `GtkTextIter`, `GdkRGBA`. The program
   // holds one by reference, as JavaScript holds any object, in a box of its

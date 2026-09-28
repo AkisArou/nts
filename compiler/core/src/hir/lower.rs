@@ -13303,6 +13303,14 @@ fn iteration_method(name: &str) -> Option<Walked> {
     })
 }
 
+/// How a construction writes one property (`Lowerer::constructed_setter`).
+enum ConstructedSetter {
+    /// A binding's, through the method its `@ntsSet` names.
+    Method(String),
+    /// A class the program writes, through its state's field.
+    Field(Place),
+}
+
 /// One property a construction sets: its value, where it was written, and --
 /// for one read from a props object passed through -- the test of whether it
 /// was given at all.
@@ -16851,9 +16859,11 @@ impl<'a> FuncBuilder<'a> {
 
     /// `super({ label })` in such a constructor: the instance, made as `new`
     /// without a constructor makes one -- its own `GType`, then a setter per
-    /// property of the literal -- and `this` from here on. The properties are
-    /// a literal's, which is what lets them be set without building an
-    /// object; a `props` passed through is refused by name.
+    /// property -- and `this` from here on. The properties are a literal's,
+    /// set without building an object, or a props object's passed through,
+    /// each set where it was given (`passed_properties`); a class's own
+    /// `Property<T>` among them is written through its state's field
+    /// (`constructed_setter`).
     fn gobject_super(&mut self, id: NodeId, name: &str) -> Result<ValueId, Diagnostic> {
         if self.this.is_some() {
             return Err(self.unsupported(id, "a second `super(...)`"));
@@ -17133,6 +17143,19 @@ impl<'a> FuncBuilder<'a> {
         } else {
             return Ok(None);
         };
+        self.state_place(id, receiver, (index, class_ty, reader), member)
+    }
+
+    /// `member` of the state `reader` lends for `receiver`, as a place: a
+    /// write of it notifies where it is a `GObject` property (`notifying`).
+    /// `None` where `member` is not one of the state's fields.
+    fn state_place(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        (index, class_ty, reader): (usize, TypeId, &'static str),
+        member: &str,
+    ) -> Result<Option<Place>, Diagnostic> {
         let layout = self.objc_state_layout(id, index, class_ty)?;
         let Some(field) = layout.index_of(member) else { return Ok(None) };
         let ty = HirType::Managed(ManagedType::Object(super::objc_state_type(index)));
@@ -17343,7 +17366,14 @@ impl<'a> FuncBuilder<'a> {
     /// receiver.
     fn state_by_type(&self, access: NodeId) -> Option<(usize, TypeId, &'static str)> {
         let receiver = *self.children(access).first()?;
-        let ty = self.class_behind(*self.snapshot.node_types.get(&receiver)?);
+        self.state_of_type(*self.snapshot.node_types.get(&receiver)?)
+    }
+
+    /// [`Self::state_by_type`] for an instance whose type is already known:
+    /// the state of the class the program writes behind `ty`, and the reader
+    /// that lends it.
+    fn state_of_type(&self, ty: TypeId) -> Option<(usize, TypeId, &'static str)> {
+        let ty = self.class_behind(ty);
         let symbol = self.snapshot.types.get(ty.0 as usize)?.symbol?;
         let class = self.snapshot.symbols.get(symbol.0 as usize)?.declarations.iter().copied().find(|d| {
             self.kind_of(*d) == Some(syntax::CLASS_DECLARATION)
@@ -32321,15 +32351,9 @@ impl<'a> FuncBuilder<'a> {
         except: &[&str],
     ) -> Result<(), Diagnostic> {
         for SetProperty { name, value, node, present, unerase } in written.iter().filter(|written| !except.contains(&written.name.as_str())) {
-            let setter = super::native::schema::property(self.snapshot, ty, name)
-                .and_then(|record| record.declaration)
-                .and_then(|declaration| self.node(declaration).native.as_ref())
-                .and_then(|native| native.set.clone())
-                .ok_or_else(|| {
-                    self.unsupported(*node, &format!("a constructed property `{name}` no @ntsSet names a method for"))
-                })?;
+            let setter = self.constructed_setter(*node, handle, ty, name)?;
             let Some(present) = present else {
-                self.lower_accessor_on(id, handle, ty, &setter, Some(*value))?;
+                self.write_constructed(id, handle, ty, &setter, *value)?;
                 continue;
             };
             let (set, after) = (self.new_block(), self.new_block());
@@ -32342,13 +32366,50 @@ impl<'a> FuncBuilder<'a> {
                 }
                 None => *value,
             };
-            self.lower_accessor_on(id, handle, ty, &setter, Some(value))?;
+            self.write_constructed(id, handle, ty, &setter, value)?;
             if !self.is_terminated() {
                 self.terminate(Terminator::Jump { target: after, args: Vec::new() });
             }
             self.switch_to(after);
         }
         Ok(())
+    }
+
+    /// How a construction writes the property `name` of `ty`: a binding's
+    /// property through the method its `@ntsSet` names -- asked first, so a
+    /// property a subclass inherits from its base is written as the base
+    /// declares it -- and a property of a class the program writes (`title:
+    /// Property<string>`) through the field of its state, as `note.title =
+    /// ...` writes it, so it notifies. Anything else is refused by name.
+    fn constructed_setter(&mut self, node: NodeId, handle: ValueId, ty: TypeId, name: &str) -> Result<ConstructedSetter, Diagnostic> {
+        let bound = super::native::schema::property(self.snapshot, ty, name)
+            .and_then(|record| record.declaration)
+            .and_then(|declaration| self.node(declaration).native.as_ref())
+            .and_then(|native| native.set.clone());
+        if let Some(method) = bound {
+            return Ok(ConstructedSetter::Method(method));
+        }
+        // Only a registered property: a plain field of the state (`plain = 1`)
+        // is the program's own, and a construction sets properties, as GJS's
+        // does -- a props object typed wider than `Properties<T>` must not
+        // reach it.
+        if let Some(state) = self.state_of_type(ty)
+            && self.property_notify_thunk(state.1, name).is_some()
+            && let Some(place) = self.state_place(node, handle, state, name)?
+        {
+            return Ok(ConstructedSetter::Field(place));
+        }
+        Err(self.unsupported(
+            node,
+            &format!("a constructed property `{name}` that is neither a binding's (no @ntsSet names a method for it) nor one the class registers (`Property<T>`)"),
+        ))
+    }
+
+    fn write_constructed(&mut self, id: NodeId, handle: ValueId, ty: TypeId, setter: &ConstructedSetter, value: ValueId) -> Result<(), Diagnostic> {
+        match setter {
+            ConstructedSetter::Method(method) => self.lower_accessor_on(id, handle, ty, method, Some(value)).map(|_| ()),
+            ConstructedSetter::Field(place) => self.write_place(id, place, value),
+        }
     }
 
     /// `new Counter({ label })`, where `Counter` is a class the program writes
