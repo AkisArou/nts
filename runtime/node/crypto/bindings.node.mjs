@@ -3,7 +3,8 @@
 // Every computation is OpenSSL either way. Here it is reached through node's
 // own `crypto`, the same library behind the same seam, so a disagreement is
 // about this module's assembly -- validation, encodings, streams, the shape of
-// its errors -- rather than about a digest.
+// its errors -- rather than about a digest. The one exception is the Keccak
+// section, which `crypto` cannot reach; it says why.
 //
 // Errors cross back as `crypto.c` records them: the OpenSSL errors oldest
 // first, with the oldest one's library, reason and code. Node has already
@@ -1314,6 +1315,236 @@ globalThis.nts_crypto_argon2_job = (type, pass, salt, lanes, keylen, memcost, it
       crypto.argon2(ARGON2_TYPES[type], argon2Parameters(pass, salt, lanes, keylen, memcost, iter, secret, ad), callback),
     done,
   );
+
+// -- Keccak -------------------------------------------------------------------
+//
+// cSHAKE, KMAC, TurboSHAKE and KangarooTwelve are the one computation here
+// that is not node's `crypto`: node's are its own C++ (`crypto_turboshake.cc`)
+// or OpenSSL reached below anything `crypto` exposes (the KECCAK-KMAC digests,
+// the KMAC MACs), and its Web Crypto -- which has them -- answers only with
+// promises. So this is the sponge itself, as `keccak.c` has it: Keccak-p[1600]
+// over lanes held as 32-bit halves, 24 rounds for cSHAKE and KMAC and the last
+// 12 for TurboSHAKE.
+
+const KECCAK_ROUND_CONSTANTS = [
+  [0x00000000, 0x00000001], [0x00000000, 0x00008082], [0x80000000, 0x0000808a], [0x80000000, 0x80008000],
+  [0x00000000, 0x0000808b], [0x00000000, 0x80000001], [0x80000000, 0x80008081], [0x80000000, 0x00008009],
+  [0x00000000, 0x0000008a], [0x00000000, 0x00000088], [0x00000000, 0x80008009], [0x00000000, 0x8000000a],
+  [0x00000000, 0x8000808b], [0x80000000, 0x0000008b], [0x80000000, 0x00008089], [0x80000000, 0x00008003],
+  [0x80000000, 0x00008002], [0x80000000, 0x00000080], [0x00000000, 0x0000800a], [0x80000000, 0x8000000a],
+  [0x80000000, 0x80008081], [0x80000000, 0x00008080], [0x00000000, 0x80000001], [0x80000000, 0x80008008],
+];
+
+// Rho's offsets by lane, x + 5y, and pi's destination for each lane.
+const KECCAK_RHO = [0, 1, 62, 28, 27, 36, 44, 6, 55, 20, 3, 10, 43, 25, 39, 41, 45, 15, 21, 8, 18, 2, 61, 56, 14];
+const KECCAK_PI = Array.from({ length: 25 }, (_, i) => {
+  const x = i % 5;
+  const y = (i - x) / 5;
+  return y + 5 * ((2 * x + 3 * y) % 5);
+});
+
+/** Keccak-p[1600, rounds] over `hi` and `lo`, the lanes' halves. */
+function keccakPermute(hi, lo, rounds) {
+  const bh = new Uint32Array(25);
+  const bl = new Uint32Array(25);
+  const ch = new Uint32Array(5);
+  const cl = new Uint32Array(5);
+  for (let round = 24 - rounds; round < 24; round++) {
+    for (let x = 0; x < 5; x++) {
+      ch[x] = hi[x] ^ hi[x + 5] ^ hi[x + 10] ^ hi[x + 15] ^ hi[x + 20];
+      cl[x] = lo[x] ^ lo[x + 5] ^ lo[x + 10] ^ lo[x + 15] ^ lo[x + 20];
+    }
+    for (let x = 0; x < 5; x++) {
+      const nh = ch[(x + 1) % 5];
+      const nl = cl[(x + 1) % 5];
+      const dh = ch[(x + 4) % 5] ^ ((nh << 1) | (nl >>> 31));
+      const dl = cl[(x + 4) % 5] ^ ((nl << 1) | (nh >>> 31));
+      for (let y = 0; y < 25; y += 5) {
+        hi[x + y] ^= dh;
+        lo[x + y] ^= dl;
+      }
+    }
+    for (let i = 0; i < 25; i++) {
+      const r = KECCAK_RHO[i];
+      const h = hi[i];
+      const l = lo[i];
+      const to = KECCAK_PI[i];
+      if (r === 0) {
+        bh[to] = h;
+        bl[to] = l;
+      } else if (r < 32) {
+        bh[to] = (h << r) | (l >>> (32 - r));
+        bl[to] = (l << r) | (h >>> (32 - r));
+      } else if (r === 32) {
+        bh[to] = l;
+        bl[to] = h;
+      } else {
+        bh[to] = (l << (r - 32)) | (h >>> (64 - r));
+        bl[to] = (h << (r - 32)) | (l >>> (64 - r));
+      }
+    }
+    for (let y = 0; y < 25; y += 5) {
+      for (let x = 0; x < 5; x++) {
+        const a = y + ((x + 1) % 5);
+        const b = y + ((x + 2) % 5);
+        hi[y + x] = bh[y + x] ^ (~bh[a] & bh[b]);
+        lo[y + x] = bl[y + x] ^ (~bl[a] & bl[b]);
+      }
+    }
+    hi[0] ^= KECCAK_ROUND_CONSTANTS[round][0];
+    lo[0] ^= KECCAK_ROUND_CONSTANTS[round][1];
+  }
+}
+
+/** A sponge at `rate` bytes: absorb in pieces, then pad with `suffix` and squeeze. */
+class KeccakSponge {
+  constructor(rate, rounds) {
+    this.rate = rate;
+    this.rounds = rounds;
+    this.hi = new Uint32Array(25);
+    this.lo = new Uint32Array(25);
+    this.block = new Uint8Array(rate);
+    this.filled = 0;
+  }
+
+  absorbBlock(bytes, offset) {
+    for (let i = 0; i < this.rate / 8; i++) {
+      const at = offset + i * 8;
+      this.lo[i] ^= bytes[at] | (bytes[at + 1] << 8) | (bytes[at + 2] << 16) | (bytes[at + 3] << 24);
+      this.hi[i] ^= bytes[at + 4] | (bytes[at + 5] << 8) | (bytes[at + 6] << 16) | (bytes[at + 7] << 24);
+    }
+    keccakPermute(this.hi, this.lo, this.rounds);
+  }
+
+  absorb(bytes) {
+    let offset = 0;
+    if (this.filled > 0) {
+      const take = Math.min(this.rate - this.filled, bytes.length);
+      this.block.set(bytes.subarray(0, take), this.filled);
+      this.filled += take;
+      offset = take;
+      if (this.filled < this.rate) return this;
+      this.absorbBlock(this.block, 0);
+      this.filled = 0;
+    }
+    for (; offset + this.rate <= bytes.length; offset += this.rate) this.absorbBlock(bytes, offset);
+    this.block.set(bytes.subarray(offset), 0);
+    this.filled = bytes.length - offset;
+    return this;
+  }
+
+  squeeze(suffix, length) {
+    this.block.fill(0, this.filled);
+    this.block[this.filled] ^= suffix;
+    this.block[this.rate - 1] ^= 0x80;
+    this.absorbBlock(this.block, 0);
+    const out = new Uint8Array(length);
+    for (let offset = 0; ; ) {
+      for (let i = 0; i < this.rate && offset + i < length; i++) {
+        const lane = (i >> 3) % 25;
+        const half = (i & 7) < 4 ? this.lo[lane] : this.hi[lane];
+        out[offset + i] = half >>> (8 * (i & 3));
+      }
+      offset += this.rate;
+      if (offset >= length) return out;
+      keccakPermute(this.hi, this.lo, this.rounds);
+    }
+  }
+}
+
+const keccakRate = (variant) => (variant === 128 ? 168 : 136);
+
+/** NIST SP 800-185's `left_encode` or `right_encode`. */
+function encodeLength(value, left) {
+  const digits = [];
+  do {
+    digits.unshift(value % 256);
+    value = Math.floor(value / 256);
+  } while (value > 0);
+  return Uint8Array.from(left ? [digits.length, ...digits] : [...digits, digits.length]);
+}
+
+/** `bytepad` of encoded strings, each `[bytes, bits]`. */
+function absorbBytepad(sponge, strings) {
+  let written = 0;
+  const absorb = (bytes) => {
+    sponge.absorb(bytes);
+    written += bytes.length;
+  };
+  absorb(encodeLength(sponge.rate, true));
+  for (const [bytes, bits] of strings) {
+    absorb(encodeLength(bits, true));
+    absorb(bytes);
+  }
+  absorb(new Uint8Array((sponge.rate - (written % sponge.rate)) % sponge.rate));
+}
+
+function truncateBits(bytes, bits) {
+  if (bits % 8 !== 0) bytes[bytes.length - 1] &= 0xff << (8 - (bits % 8));
+  return bytes;
+}
+
+/** cSHAKE, with KMAC's key and length encodings when `key` is `[bytes, bits]`. */
+function cshake(variant, data, functionName, customization, bits, key) {
+  if (bits === 0) return new Uint8Array(0);
+  const sponge = new KeccakSponge(keccakRate(variant), 24);
+  absorbBytepad(sponge, [
+    [functionName, functionName.length * 8],
+    [customization, customization.length * 8],
+  ]);
+  if (key !== undefined) absorbBytepad(sponge, [key]);
+  sponge.absorb(data);
+  if (key !== undefined) sponge.absorb(encodeLength(bits, false));
+  return truncateBits(sponge.squeeze(0x04, Math.ceil(bits / 8)), bits);
+}
+
+const KMAC = Uint8Array.of(0x4b, 0x4d, 0x41, 0x43);
+
+function turboshake(variant, domain, length, data) {
+  return new KeccakSponge(keccakRate(variant), 12).absorb(data).squeeze(domain, length);
+}
+
+/** Node's `KangarooTwelve`, over S = message || customization || length_encode(|customization|). */
+function kangarooTwelve(variant, customization, length, data) {
+  const lengthEncode = (value) => (value === 0 ? Uint8Array.of(0) : encodeLength(value, false));
+  const s = new Uint8Array(data.length + customization.length + lengthEncode(customization.length).length);
+  s.set(data, 0);
+  s.set(customization, data.length);
+  s.set(lengthEncode(customization.length), data.length + customization.length);
+  const chunk = 8192;
+  if (s.length <= chunk) return turboshake(variant, 0x07, length, s);
+  const final = new KeccakSponge(keccakRate(variant), 12);
+  final.absorb(s.subarray(0, chunk)).absorb(Uint8Array.of(0x03, 0, 0, 0, 0, 0, 0, 0));
+  let leaves = 0;
+  for (let offset = chunk; offset < s.length; offset += chunk, leaves++) {
+    final.absorb(turboshake(variant, 0x0b, variant === 128 ? 32 : 64, s.subarray(offset, offset + chunk)));
+  }
+  return final.absorb(lengthEncode(leaves)).absorb(Uint8Array.of(0xff, 0xff)).squeeze(0x06, length);
+}
+
+globalThis.nts_crypto_cshake_job = (variant, data, functionName, customization, length, done) =>
+  later(() => (customization.length > 512 ? null : cshake(variant, data, functionName, customization, length)), done);
+
+/** Node's `KmacTraits::DeriveBits`; OpenSSL's KMAC is this same cSHAKE. */
+globalThis.nts_crypto_kmac_job = (variant, key, keyLength, data, customization, length, done) =>
+  later(() => {
+    const keyBytes = Math.ceil(keyLength / 8);
+    if (key.length > 512 || keyBytes > 512 || customization.length > 512 || Math.ceil(length / 8) > 0xffffff / 8) {
+      return null;
+    }
+    if (key.length < keyBytes) return null;
+    // OpenSSL's KMAC takes the key's bytes as its bit length; node's cSHAKE
+    // path, the declared bits.
+    const whole = length % 8 === 0 && keyLength % 8 === 0 && key.length >= 4;
+    const keyString = whole ? [key, key.length * 8] : [key.subarray(0, keyBytes), keyLength];
+    return cshake(variant, data, KMAC, customization, length, keyString);
+  }, done);
+
+globalThis.nts_crypto_turboshake_job = (variant, domain, length, data, done) =>
+  later(() => turboshake(variant, domain, length, data), done);
+
+globalThis.nts_crypto_kangaroo_twelve_job = (variant, customization, length, data, done) =>
+  later(() => kangarooTwelve(variant, customization, length, data), done);
 
 // -- key encapsulation --------------------------------------------------------
 

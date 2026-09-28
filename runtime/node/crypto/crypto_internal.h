@@ -16,6 +16,11 @@ void nts_crypto_record_failure(void);
  * off the loop thread, where a failure leaves its cause on that thread's
  * OpenSSL queue; `deliver` on the loop thread, which calls the program's
  * `done` as its type needs; `dispose` last. */
+struct NtsView;
+
+/* A job's own copy of a view's bytes (`crypto.c`); an absent view is empty. */
+unsigned char *nts_crypto_copy_view(struct NtsView *view, size_t *length);
+
 struct NtsHeader;
 typedef struct {
     bool (*run)(void *state);

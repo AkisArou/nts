@@ -1,6 +1,7 @@
-// Web Crypto's HMAC, from node v24.20.0 `lib/internal/crypto/mac.js`: key
-// generation through node's `SecretKeyGenJob`, import, and signing and
-// verifying through its `HmacJob` -- here `crypto.c`'s HMAC job.
+// Web Crypto's HMAC and KMAC, from node v24.20.0 `lib/internal/crypto/mac.js`:
+// key generation through node's `SecretKeyGenJob`, import, and signing and
+// verifying through its `HmacJob` and `KmacJob` -- here `crypto.c`'s HMAC job
+// and `keccak.c`'s KMAC.
 
 import { domException } from "../../../internal/dom-exception.ts";
 import { digestId } from "../util.ts";
@@ -31,6 +32,7 @@ import {
 import type { KeyObjectHandle } from "../keys.ts";
 
 const kUsages = ["sign", "verify"];
+const noBytes = new Uint8Array(0);
 
 /** An HMAC key's JWK `alg` for its hash: node's `kHashContextJwkHmac`, where one exists. */
 export function hmacJwkAlgorithm(hashName: string): string | undefined {
@@ -68,6 +70,14 @@ function normalizeKeyLength(
   return { handle, length };
 }
 
+/** Node's `kmacGenerateKey`: a key of the variant's strength unless `length` says otherwise. */
+export function kmacGenerateKey(algorithm: NormalizedAlgorithm, extractable: boolean, usages: string[]): Job<CryptoKey> {
+  const name = algorithm.name;
+  const length = algorithm.length ?? (name === "KMAC128" ? 128 : 256);
+  const usageSet = validateUsagesNotEmpty(validateKeyUsages(usages, kUsages, name));
+  return jobPromise(() => secretKeyGen(length, { name, length }, usageSet, extractable));
+}
+
 export function hmacGenerateKey(algorithm: NormalizedAlgorithm, extractable: boolean, usages: string[]): Job<CryptoKey> {
   const hash = algorithm.hash!;
   const name = algorithm.name;
@@ -76,7 +86,7 @@ export function hmacGenerateKey(algorithm: NormalizedAlgorithm, extractable: boo
   return jobPromise(() => secretKeyGen(length, { name, length, hash: { name: hash.name } }, usageSet, extractable));
 }
 
-/** Node's `macImportKey`, for HMAC: raw bytes, a JWK, or a handle a derivation made. */
+/** Node's `macImportKey`: raw bytes (as "raw" for HMAC only), a JWK, or a handle a derivation made. */
 export function macImportKey(
   format: string,
   keyData: KeyData,
@@ -84,6 +94,7 @@ export function macImportKey(
   extractable: boolean,
   usages: string[],
 ): CryptoKey | undefined {
+  const isHmac = algorithm.name === "HMAC";
   const usageSet = validateKeyUsages(usages, kUsages, algorithm.name);
   let handle: KeyObjectHandle;
   switch (format) {
@@ -92,13 +103,14 @@ export function macImportKey(
       break;
     case "raw-secret":
     case "raw":
+      if (format === "raw" && !isHmac) return undefined;
       handle = importSecretKey(keyData as Uint8Array);
       break;
     case "jwk": {
       const jwk = keyData as JsonWebKey;
       validateJwk(jwk, "oct", extractable, usageSet, "sig");
       if (jwk.alg !== undefined) {
-        const expected = hmacJwkAlgorithm(algorithm.hash!.name);
+        const expected = isHmac ? hmacJwkAlgorithm(algorithm.hash!.name) : `K${algorithm.name.substring(4)}`;
         if (expected && jwk.alg !== expected) {
           throw domException('JWK "alg" does not match the requested algorithm', "DataError");
         }
@@ -110,11 +122,9 @@ export function macImportKey(
       return undefined;
   }
   const normalized = normalizeKeyLength(handle, algorithm);
-  const keyAlgorithm: KeyAlgorithm = {
-    name: algorithm.name,
-    length: normalized.length,
-    hash: { name: algorithm.hash!.name },
-  };
+  const keyAlgorithm: KeyAlgorithm = isHmac
+    ? { name: algorithm.name, length: normalized.length, hash: { name: algorithm.hash!.name } }
+    : { name: algorithm.name, length: normalized.length };
   return createCryptoKey("secret", normalized.handle, keyAlgorithm, usageSet, extractable);
 }
 
@@ -137,6 +147,43 @@ export function hmacSignVerify(
       nts_crypto_hmac_job(id, secret, input, (ok, mac) => {
         if (!ok) fail();
         else succeed(mac.byteLength === expected.byteLength && nts_crypto_timing_safe_equal(mac, expected));
+      }),
+    ),
+  );
+}
+
+/** Node's `kmacSignVerify`: `keccak.c`'s KMAC, or whether `signature` is it -- never for an empty MAC. */
+export function kmacSignVerify(
+  key: CryptoKey,
+  data: ArrayBuffer | ArrayBufferView,
+  algorithm: NormalizedAlgorithm,
+  signature?: ArrayBuffer | ArrayBufferView,
+): Job<ArrayBuffer | boolean> {
+  const variant = algorithm.name === "KMAC128" ? 128 : 256;
+  const secret = getCryptoKeyHandle(key).bytes;
+  const keyLength = getCryptoKeyAlgorithm(key).length!;
+  const input = bytesOfSource(data);
+  const customization = algorithm.customization ?? noBytes;
+  const length = algorithm.outputLength!;
+  if (signature === undefined) {
+    return jobPromise(() =>
+      bytesJob("Deriving bits failed", (done) =>
+        nts_crypto_kmac_job(variant, secret, keyLength, input, customization, length, done),
+      ),
+    );
+  }
+  const expected = new Uint8Array(bytesOfSource(signature));
+  return jobPromise(() =>
+    nativeJob<boolean>("Deriving bits failed", (succeed, fail) =>
+      nts_crypto_kmac_job(variant, secret, keyLength, input, customization, length, (ok, mac) => {
+        if (!ok) fail();
+        else {
+          succeed(
+            mac.byteLength > 0 &&
+              mac.byteLength === expected.byteLength &&
+              nts_crypto_timing_safe_equal(mac, expected),
+          );
+        }
       }),
     ),
   );

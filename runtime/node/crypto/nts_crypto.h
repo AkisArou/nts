@@ -215,6 +215,17 @@ bool nts_crypto_prime_candidate_ok(NtsView *candidate);
 double nts_crypto_prime_check(NtsView *candidate, double checks);
 void nts_crypto_prime_check_job(NtsView *candidate, double checks, NtsHeader *done);
 
+/* Web Crypto's Keccak functions (`keccak.c`), each delivered to `done(ok,
+ * bytes)`; a variant is 128 or 256. cSHAKE's and KMAC's lengths are in bits,
+ * TurboSHAKE's and KangarooTwelve's in bytes, as node's jobs take them. */
+void nts_crypto_cshake_job(double variant, NtsView *data, NtsView *function_name, NtsView *customization,
+                           double length, NtsHeader *done);
+void nts_crypto_kmac_job(double variant, NtsView *key, double key_length, NtsView *data, NtsView *customization,
+                         double length, NtsHeader *done);
+void nts_crypto_turboshake_job(double variant, double domain, double length, NtsView *data, NtsHeader *done);
+void nts_crypto_kangaroo_twelve_job(double variant, NtsView *customization, double length, NtsView *data,
+                                    NtsHeader *done);
+
 /* Argon2 (`argon2.c`): types are `ARGON2D`, `ARGON2I`, `ARGON2ID` as 0 to 2. */
 bool nts_crypto_argon2_supported(void);
 NtsView *nts_crypto_argon2(double type, NtsView *pass, NtsView *salt, double lanes, double keylen,

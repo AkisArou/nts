@@ -1,5 +1,5 @@
 /* `crypto.c`, `cipher.c`, `keys.c`, `sig.c`, `rsa.c`, `keygen.c`, `dh.c`, `prime.c`, `argon2.c`, `kem.c`,
- * `spkac.c`, `x509.c` and `aes.c`, called directly.
+ * `spkac.c`, `x509.c`, `aes.c` and `keccak.c`, called directly.
  *
  * The TypeScript over these natives runs on node against node's own crypto,
  * so nothing but this runs the C: the compiled lane refuses every public
@@ -1369,6 +1369,96 @@ static void aes_ciphers(void) {
 }
 
 
+
+enum { kCShake, kKmac, kTurboShake, kKangarooTwelve };
+
+/* keccak.c's vectors, each answered by node's own Web Crypto and copied by
+ * a script: kind, variant, the length of RFC 9861's data pattern, function
+ * name, customization, key, key bits, output bits, TurboSHAKE's domain byte,
+ * output. */
+static const struct {
+    int kind, variant;
+    size_t data_length;
+    const char *name, *custom, *key;
+    int key_bits, length, domain;
+    const char *out;
+} keccak_vectors[] = {
+    {kCShake, 128, 4, "", "456d61696c205369676e6174757265", "", 0, 256, 0, "c1c36925b6409a04f1b504fcbca9d82b4017277cb5ed2b2065fc1d3814d5aaf5"},
+    {kCShake, 128, 200, "4b4d4143", "", "", 0, 512, 0, "98c27ea4580de95b02d51b59fd4fb3a963f43cbca30853aa8be9cc90a15fc3be1ac94992f3dc6fa280c7376a6fd9998887275cb5adb9ed3cee622bc0af2531ee"},
+    {kCShake, 128, 1000, "5475706c6548617368", "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fa000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30", "", 0, 1601, 0, "17e506bdd114a85e3a70e58ca217b76c962febca1f8a13948e7c025c48fb65ddc138d5cc5b3ab3b8b12aead7f7ef9269d461720359a9e9f0b5fdfcd9401501537797ce56ce65a39ffe4b2928f9bc32200c44a91ab9cab1807885ab02c69afef9ea5b23cc178c7925c8c975741dc01054bbebd684dedc743b7f0e2580edb94a01266f1368fd8b19a0f34d93b1f4fd38a71de8de3f47e3911e846f846217a024327bc25a14ffef5101698beddcf80c66dc770098fe82eeed2920797f0caedaa7c2646476c644ecfbd080"},
+    {kKmac, 128, 200, "", "4d7920546167676564204170706c69636174696f6e", "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f", 256, 256, 0, "d93682ef233b6780fa228ba6a124ad41e8ee2d460a808716f8da58f19effe313"},
+    {kKmac, 128, 4, "", "", "0001", 16, 256, 0, "617a81475b79a7031a11f5e5c81321002402186c2d555330fc81ffa50896b691"},
+    {kKmac, 128, 4, "", "", "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e18", 253, 256, 0, "ad1810284b3e220a60d8222e76697fe96cd72fcb65d4e55bbb8980ce78e215ed"},
+    {kKmac, 128, 4, "", "000102030405060708", "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f", 256, 13, 0, "28a8"},
+    {kTurboShake, 128, 0, "", "", "", 0, 256, 31, "1e415f1c5983aff2169217277d17bb538cd945a397ddec541f1ce41af2c1b74c"},
+    {kTurboShake, 128, 289, "", "", "", 0, 1600, 31, "96c77c279e0126f7fc07c9b07f5cdae1e0be60bdbe10620040e75d7223a624d2a7880f91d4d6b5732674fa038bb6a46a8cb87127deb0fc7d346a004ed0a17745cc490bdea2b9cf104293fdaa3a19ad5e1293eba986b87a0ebfb4390397c5a9a93f33d0eea13d4a3092aaf026a80c912a9385eb2c827bac09a1f188fd1eda6400c98c9c4ea157e185c642c37df69b8c41423fca8b454f272867c3a36c1c30acb325c53feca4f30c4f39aef6a1382064f695626e98019f01d8864725e05cb4c4089f3b968c92575ef5"},
+    {kTurboShake, 128, 1000, "", "", "", 0, 512, 7, "6193187f7f309806435beb76f52583a8f750e4c4aa0ff9635d2978690aeaba041f72e13a308b2830aa28c3e91a6c100e54282a1d15decdc83d20a4ce858cbb47"},
+    {kKangarooTwelve, 128, 17, "", "", "", 0, 512, 0, "6bf75fa2239198db4772e36478f8e19b0f371205f6a9a93a273f51df37122888b4b7a3a2b598ed4bd8fcf4cd38e03dd86474e48eed8db6418dfe39a3d07b8567"},
+    {kKangarooTwelve, 128, 8191, "", "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728", "", 0, 512, 0, "bc07e7a3ce4f2f7ce2746be7e223e175ab698b47fc2bdc332a31799ae48ba0be179b79fa05768630186add2382763bbca240f85983950b930789010047ba93c1"},
+    {kKangarooTwelve, 128, 24581, "", "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728", "", 0, 512, 0, "014590b79caa30ff40876b9cc6ad622fdb6922e0968eaefc9f226a5f3f23c2eb5e961d8417349645c25c47e67158212ca15deac6ef8a9be9e3237209d51284a3"},
+    {kCShake, 256, 4, "", "456d61696c205369676e6174757265", "", 0, 256, 0, "d008828e2b80ac9d2218ffee1d070c48b8e4c87bff32c9699d5b6896eee0edd1"},
+    {kCShake, 256, 200, "4b4d4143", "", "", 0, 512, 0, "5f1263983d2957241a396638216c017ba1ab60f36eed2599e7b1edd3f792287ee14783e1001dd22bb82575baec1c3daa235442e0cebf5e443003724d067ddd00"},
+    {kCShake, 256, 1000, "5475706c6548617368", "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fa000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30", "", 0, 1601, 0, "3bada391f9773c912873f845ed585f83dc1f049373145a5474988eaed71f8019a9ae8017cbab3ed3ac0f879195b0d84e40c09b6386a5bf27f475a2e31154043da4cbdeb2a5304abc8aee2791bb6dafb797adcb50b4f5553a73c3cd9882fec108a5f926f1fe059d4ca8f6883c4cd05e56598ba70230da8aae606124413cd6d37e49e4252f155ddc67beef1f93f628c948c4989d240d957242eefc64bebfc72b49e05aa7b2686309406b71ec684557fd176459c6e6c0c6baa7fe9ffce28bb9b17eafcc5edaea52614280"},
+    {kKmac, 256, 200, "", "4d7920546167676564204170706c69636174696f6e", "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f", 256, 256, 0, "0b13fb1c4de635ddbf9b9c6a640f1b98d5f9cf43f3a38478991cd4e231721960"},
+    {kKmac, 256, 4, "", "", "0001", 16, 256, 0, "635b5ac50dc8d6543b817d004c8331f1a4b9122294c7f83993437616b0360503"},
+    {kKmac, 256, 4, "", "", "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e18", 253, 256, 0, "bbd4a36b26ed2bd858cfc052dcdcb5409eff103c910feea10df393fae14ae157"},
+    {kKmac, 256, 4, "", "000102030405060708", "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f", 256, 13, 0, "c580"},
+    {kTurboShake, 256, 0, "", "", "", 0, 256, 31, "367a329dafea871c7802ec67f905ae13c57695dc2c6663c61035f59a18f8e7db"},
+    {kTurboShake, 256, 289, "", "", "", 0, 1600, 31, "66b810db8e90780424c0847372fdc95710882fde31c6df75beb9d4cd9305cfcae35e7b83e8b7e6eb4b78605880116316fe2c078a09b94ad7b8213c0a738b65c0a38fd09ca68ac754524c56e816c1b8d1b44a92abfaa289b38c071e9e42a96cb3b2896dcc446cff185d099198df8c62144cd5097642c3d309e1808cdb2455ad3710b97730cccc5993c5204d9ab52ce05aef1b41ac0ea9f44a1185659f8a5d302b92f9c8e8a70a60fc4a93a5eb09171d111e7b1e8c2d4c1c1f8655b25938156a948d85fce1a2aa070b"},
+    {kTurboShake, 256, 1000, "", "", "", 0, 512, 7, "285457bc4c412bdeca6ec4f553ff0e499519064d014dc1fea1b3156cc2a71608fba0b216695fbbd1ea7148261275406cbe4b587cdb418bf41f6d4fea70e5b817"},
+    {kKangarooTwelve, 256, 17, "", "", "", 0, 512, 0, "1ba3c02b1fc514474f06c8979978a9056c8483f4a1b63d0dccefe3a28a2f323e1cdcca40ebf006ac76ef0397152346837b1277d3e7faa9c9653b19075098527b"},
+    {kKangarooTwelve, 256, 8191, "", "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728", "", 0, 512, 0, "15a292c2e1e94258dc7a4785727fcaa29f9e548399dd4ec5575e4108534e07bd047de9208bc930b1f47e840f41e8a4f8b13f5f0f8fc685a879f58e1d8288d612"},
+    {kKangarooTwelve, 256, 24581, "", "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728", "", 0, 512, 0, "90b38e335f25b4933109d773e2ee035c65b3c25fafd7eead6a99c37fc1646b9ff4595b8cf848a67a7a2607c625a65be60279f3d154374fd50fb8d7cd81d64a96"},
+};
+
+/* RFC 9861's pattern: byte i is i % 251. */
+static NtsView *pattern(size_t length) {
+    unsigned char *data = malloc(length == 0 ? 1 : length);
+    for (size_t i = 0; i < length; i++) data[i] = (unsigned char)(i % 251);
+    NtsView *view = bytes(data, length);
+    free(data);
+    return view;
+}
+
+static const unsigned char pattern_key[513];
+
+static void keccak(void) {
+    bool all = true;
+    for (size_t i = 0; i < sizeof(keccak_vectors) / sizeof(*keccak_vectors); i++) {
+        double variant = keccak_vectors[i].variant;
+        NtsView *data = pattern(keccak_vectors[i].data_length);
+        NtsView *custom = hex(keccak_vectors[i].custom);
+        int length = keccak_vectors[i].length;
+        switch (keccak_vectors[i].kind) {
+        case kCShake:
+            nts_crypto_cshake_job(variant, data, hex(keccak_vectors[i].name), custom, length, &job_callback);
+            break;
+        case kKmac:
+            nts_crypto_kmac_job(variant, hex(keccak_vectors[i].key), keccak_vectors[i].key_bits, data, custom, length,
+                                &job_callback);
+            break;
+        case kTurboShake:
+            nts_crypto_turboshake_job(variant, keccak_vectors[i].domain, length / 8, data, &job_callback);
+            break;
+        default:
+            nts_crypto_kangaroo_twelve_job(variant, custom, length / 8, data, &job_callback);
+            break;
+        }
+        uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+        bool ok = job_ok && strcmp(job_hex, keccak_vectors[i].out) == 0;
+        if (!ok) printf("     vector %zu: ok %d, %.32s...\n", i, job_ok, job_hex);
+        all = all && ok;
+    }
+    expect_true("node's answers for cSHAKE, KMAC, TurboSHAKE and KangarooTwelve, 26 vectors", all);
+    nts_crypto_kmac_job(128, hex("00010203"), 32, pattern(4), hex(""), 0, &job_callback);
+    uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+    bool empty = job_ok && job_hex[0] == '\0';
+    nts_crypto_kmac_job(128, bytes(pattern_key, sizeof(pattern_key)), 8 * sizeof(pattern_key), pattern(4), hex(""), 256,
+                        &job_callback);
+    uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+    expect_true("KMAC: an empty output is no MAC and succeeds; a key past 512 bytes fails", empty && !job_ok);
+}
+
 int main(void) {
     digests();
     derivations();
@@ -1384,6 +1474,7 @@ int main(void) {
     spkac();
     certificates();
     aes_ciphers();
+    keccak();
     printf("%d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;
 }

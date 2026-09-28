@@ -750,8 +750,10 @@ typedef struct {
     NtsHeader *done;
 } Job;
 
-static unsigned char *copy_of(NtsView *view, size_t *length) {
-    *length = (size_t)nts_view_byte_length(view);
+/* A job's own copy of a view's bytes, never NULL for an empty or absent view
+ * unless allocation fails: a job outlives the call that made it. */
+unsigned char *nts_crypto_copy_view(NtsView *view, size_t *length) {
+    *length = view == NULL ? 0 : (size_t)nts_view_byte_length(view);
     unsigned char *copy = malloc(*length == 0 ? 1 : *length);
     if (copy != NULL && *length > 0) memcpy(copy, nts_view_bytes(view), *length);
     return copy;
@@ -861,8 +863,8 @@ void nts_crypto_pbkdf2_job(NtsView *password, NtsView *salt, double iterations, 
     if (job == NULL) return;
     job->md = digest_at(id);
     job->iterations = (int)iterations;
-    job->inputs[0] = copy_of(password, &job->lengths[0]);
-    job->inputs[1] = copy_of(salt, &job->lengths[1]);
+    job->inputs[0] = nts_crypto_copy_view(password, &job->lengths[0]);
+    job->inputs[1] = nts_crypto_copy_view(salt, &job->lengths[1]);
     job_queue(job);
 }
 
@@ -871,9 +873,9 @@ void nts_crypto_hkdf_job(double id, NtsView *key, NtsView *salt, NtsView *info, 
     Job *job = job_new(JOB_HKDF, (size_t)length, done);
     if (job == NULL) return;
     job->md = digest_at(id);
-    job->inputs[0] = copy_of(key, &job->lengths[0]);
-    job->inputs[1] = copy_of(salt, &job->lengths[1]);
-    job->inputs[2] = copy_of(info, &job->lengths[2]);
+    job->inputs[0] = nts_crypto_copy_view(key, &job->lengths[0]);
+    job->inputs[1] = nts_crypto_copy_view(salt, &job->lengths[1]);
+    job->inputs[2] = nts_crypto_copy_view(info, &job->lengths[2]);
     job_queue(job);
 }
 
@@ -885,8 +887,8 @@ void nts_crypto_scrypt_job(NtsView *password, NtsView *salt, double n, double r,
     job->r = (uint64_t)r;
     job->p = (uint64_t)p;
     job->maxmem = (uint64_t)maxmem;
-    job->inputs[0] = copy_of(password, &job->lengths[0]);
-    job->inputs[1] = copy_of(salt, &job->lengths[1]);
+    job->inputs[0] = nts_crypto_copy_view(password, &job->lengths[0]);
+    job->inputs[1] = nts_crypto_copy_view(salt, &job->lengths[1]);
     job_queue(job);
 }
 
@@ -899,7 +901,7 @@ void nts_crypto_digest_job(double id, NtsView *input, double length, NtsHeader *
     Job *job = job_new(JOB_DIGEST, out_length, done);
     if (job == NULL) return;
     job->md = md;
-    job->inputs[0] = copy_of(input, &job->lengths[0]);
+    job->inputs[0] = nts_crypto_copy_view(input, &job->lengths[0]);
     job_queue(job);
 }
 
@@ -910,8 +912,8 @@ void nts_crypto_hmac_job(double id, NtsView *key, NtsView *data, NtsHeader *done
     Job *job = job_new(JOB_HMAC, md == NULL ? 0 : (size_t)EVP_MD_get_size(md), done);
     if (job == NULL) return;
     job->md = md;
-    job->inputs[0] = copy_of(key, &job->lengths[0]);
-    job->inputs[1] = copy_of(data, &job->lengths[1]);
+    job->inputs[0] = nts_crypto_copy_view(key, &job->lengths[0]);
+    job->inputs[1] = nts_crypto_copy_view(data, &job->lengths[1]);
     job_queue(job);
 }
 

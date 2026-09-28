@@ -94,13 +94,6 @@ static void aes_dispose(void *state) {
     free(job);
 }
 
-static unsigned char *copy_view(NtsView *view, size_t *length) {
-    *length = view == NULL ? 0 : (size_t)nts_view_byte_length(view);
-    unsigned char *copy = malloc(*length == 0 ? 1 : *length);
-    if (copy != NULL && *length > 0) memcpy(copy, nts_view_bytes(view), *length);
-    return copy;
-}
-
 /* node's `AES_Cipher`: every mode but CTR. */
 static bool aes_cipher_run(AesJob *job) {
     const EVP_CIPHER *cipher = aes_cipher(job->mode, job->key_length);
@@ -249,10 +242,10 @@ void nts_crypto_aes_job(double mode, bool encrypt, NtsView *key, NtsView *data, 
     job->mode = (int)mode;
     job->encrypt = encrypt;
     job->length = (size_t)length;
-    job->key = copy_view(key, &job->key_length);
-    job->in = copy_view(data, &job->in_length);
-    job->iv = copy_view(iv, &job->iv_length);
-    job->additional = copy_view(additional, &job->additional_length);
+    job->key = nts_crypto_copy_view(key, &job->key_length);
+    job->in = nts_crypto_copy_view(data, &job->in_length);
+    job->iv = nts_crypto_copy_view(iv, &job->iv_length);
+    job->additional = nts_crypto_copy_view(additional, &job->additional_length);
     if (job->key == NULL || job->in == NULL || job->iv == NULL || job->additional == NULL) {
         aes_dispose(job);
         return;

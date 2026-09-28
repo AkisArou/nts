@@ -53,7 +53,7 @@ import {
   getCryptoKeyUsagesMask,
   hasCryptoKeyUsage,
 } from "./key.ts";
-import { hmacGenerateKey, hmacJwkAlgorithm, hmacSignVerify, macImportKey } from "./mac.ts";
+import { hmacGenerateKey, hmacJwkAlgorithm, hmacSignVerify, kmacGenerateKey, kmacSignVerify, macImportKey } from "./mac.ts";
 import {
   bytesOfSource,
   callSubtleCryptoMethod,
@@ -136,6 +136,9 @@ function generateKeyFor(algorithm: NormalizedAlgorithm, extractable: boolean, us
       return pqcGenerateKey(algorithm, extractable, usages);
     case "HMAC":
       return hmacGenerateKey(algorithm, extractable, usages);
+    case "KMAC128":
+    case "KMAC256":
+      return kmacGenerateKey(algorithm, extractable, usages);
     case "AES-CTR":
     case "AES-CBC":
     case "AES-GCM":
@@ -348,6 +351,12 @@ function exportKeyJWK(key: CryptoKey): JsonWebKey | undefined {
     case "HMAC":
       alg = hmacJwkAlgorithm(algorithm.hash!.name);
       break;
+    case "KMAC128":
+      alg = "K128";
+      break;
+    case "KMAC256":
+      alg = "K256";
+      break;
     default:
       return undefined;
   }
@@ -429,6 +438,8 @@ function importKeySync(
       result = cfrgImportKey(aliasKeyFormat(format, "raw-public"), keyData, algorithm, extractable, usages);
       break;
     case "HMAC":
+    case "KMAC128":
+    case "KMAC256":
       result = macImportKey(format, keyData, algorithm, extractable, usages);
       break;
     case "AES-CTR":
@@ -478,6 +489,8 @@ function toCryptoKeySecret(
   let result: CryptoKey | undefined;
   switch (algorithm.name) {
     case "HMAC":
+    case "KMAC128":
+    case "KMAC256":
       result = macImportKey("KeyObjectHandle", keyData, algorithm, extractable, usages);
       break;
     case "AES-CTR":
@@ -594,6 +607,9 @@ function signVerify(
       return mlDsaSignVerify(key, data, normalized, signature);
     case "HMAC":
       return hmacSignVerify(key, data, signature);
+    case "KMAC128":
+    case "KMAC256":
+      return kmacSignVerify(key, data, normalized, signature);
     default:
       throw unreachable();
   }

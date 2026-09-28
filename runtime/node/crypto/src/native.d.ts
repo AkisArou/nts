@@ -424,6 +424,46 @@ declare function nts_crypto_prime_check_job(
   done: (ok: boolean, answer: Uint8Array) => void,
 ): void;
 
+/** cSHAKE128 or cSHAKE256 (`keccak.c`), `length` bits. */
+/** @ntsAbi managed */
+declare function nts_crypto_cshake_job(
+  variant: number,
+  data: Uint8Array,
+  functionName: Uint8Array,
+  customization: Uint8Array,
+  length: number,
+  done: (ok: boolean, bytes: Uint8Array) => void,
+): void;
+/** KMAC128 or KMAC256 under a key of `keyLength` bits, `length` bits. */
+/** @ntsAbi managed */
+declare function nts_crypto_kmac_job(
+  variant: number,
+  key: Uint8Array,
+  keyLength: number,
+  data: Uint8Array,
+  customization: Uint8Array,
+  length: number,
+  done: (ok: boolean, mac: Uint8Array) => void,
+): void;
+/** TurboSHAKE128 or TurboSHAKE256 under a domain byte, `length` bytes. */
+/** @ntsAbi managed */
+declare function nts_crypto_turboshake_job(
+  variant: number,
+  domain: number,
+  length: number,
+  data: Uint8Array,
+  done: (ok: boolean, bytes: Uint8Array) => void,
+): void;
+/** KT128 or KT256 under a customization, `length` bytes. */
+/** @ntsAbi managed */
+declare function nts_crypto_kangaroo_twelve_job(
+  variant: number,
+  customization: Uint8Array,
+  length: number,
+  data: Uint8Array,
+  done: (ok: boolean, bytes: Uint8Array) => void,
+): void;
+
 /** Argon2: types are `Argon2Type`. */
 /** @ntsAbi managed */
 declare function nts_crypto_argon2_supported(): boolean;
