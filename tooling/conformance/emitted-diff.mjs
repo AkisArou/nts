@@ -71,7 +71,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readAxis } from "./compiled-axis-rows.mjs";
-import { armLines, oneChange } from "./pin.mjs";
+import { armLines, oneChange, frontendFor } from "./pin.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -258,7 +258,14 @@ const arms = [["before", beforeBin], ["after", afterBin]].map(([name, source]) =
   chmodSync(nts, 0o755);
   return { name, source, dir, nts };
 });
-const tsgo = process.env.NTS_TSGO ?? join(ROOT, "target/tsgo");
+// The frontend follows the pin (pin.mjs `frontendFor`); none stops the run
+// here, before every project prints nothing and reads as clean.
+const FRONTEND = frontendFor(beforeBin, ROOT);
+if (!FRONTEND.exists) {
+  console.log(`  NOT MEASURED: no frontend at ${FRONTEND.path} -- set NTS_TSGO, or use a pin (it records its frontend)`);
+  process.exit(2);
+}
+const tsgo = FRONTEND.path;
 
 const run = (cmd, args, env) =>
   new Promise((done) => {

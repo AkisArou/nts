@@ -47,12 +47,20 @@ import { spawn } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { frontendFor } from "../conformance/pin.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 const TABLE = join(ROOT, "tooling/gate/definitions");
 const NTS = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
-const env = { ...process.env, NTS_TSGO: process.env.NTS_TSGO ?? join(ROOT, "target/tsgo") };
+// The frontend follows the pin (pin.mjs `frontendFor`); none stops the run
+// here, before every project prints nothing and reads as clean.
+const FRONTEND = frontendFor(NTS, ROOT);
+if (!FRONTEND.exists) {
+  console.log(`  NOT MEASURED: no frontend at ${FRONTEND.path} -- set NTS_TSGO, or use a pin (it records its frontend)`);
+  process.exit(2);
+}
+const env = { ...process.env, NTS_TSGO: FRONTEND.path };
 // Each module is a full lowering -- `http` alone is about 95 s -- and memory,
 // not cores, is what this box runs out of. Four at a time.
 const WORKERS = Number(process.env.NTS_DEFINITIONS_JOBS ?? 4);

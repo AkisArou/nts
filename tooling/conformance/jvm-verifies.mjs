@@ -62,7 +62,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { materialise, outcomeFixtures, OUTCOMES, runMode } from "./outcomes-project.mjs";
-import { describe, provenanceOf } from "./pin.mjs";
+import { describe, provenanceOf, frontendFor } from "./pin.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -85,7 +85,14 @@ for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exi
 const NTS = join(scratch, "nts");
 copyFileSync(SOURCE, NTS);
 chmodSync(NTS, 0o755);
-const env = { ...process.env, NTS_TSGO: process.env.NTS_TSGO ?? join(ROOT, "target/tsgo"), NTS_SNAPSHOT_CACHE: join(scratch, "snapshots") };
+// The frontend follows the pin (pin.mjs `frontendFor`); none stops the run
+// here, before every project prints nothing and reads as clean.
+const FRONTEND = frontendFor(SOURCE, ROOT);
+if (!FRONTEND.exists) {
+  console.log(`  NOT MEASURED: no frontend at ${FRONTEND.path} -- set NTS_TSGO, or use a pin (it records its frontend)`);
+  process.exit(2);
+}
+const env = { ...process.env, NTS_TSGO: FRONTEND.path, NTS_SNAPSHOT_CACHE: join(scratch, "snapshots") };
 delete env.NTS_NO_SNAPSHOT_CACHE;
 
 const named = process.argv.slice(2).filter((a) => !a.startsWith("--"));
