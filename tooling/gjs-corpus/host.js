@@ -22,6 +22,11 @@
 //   attributes <id> print a label's Pango attributes as their string
 //   pages <id>     print a tab view's or carousel's `n_pages`
 //   buffer <id>    print how many characters a text view's buffer holds
+//   n-items <id>   print how many items a column view's model holds
+//   draw <id>      show the window and run the main loop until the widget is
+//                  laid out and two frames have passed: a factory binds then
+//   labels <id>    print the labels below a widget, depth first
+//   sort <id> <n>  sort a column view by its nth column, ascending
 //   close-dialog <id> ask a dialog to close, as its close button does
 //   activate-child <id> <n> activate a flow box's nth child
 //   active <id>    print `active`
@@ -64,6 +69,29 @@ const actions = decoder
   .split("\n")
   .filter((line) => line.trim() !== "")
   .map((line) => line.trim().split(/\s+/));
+
+function draw(window, widget) {
+  window.present();
+  // A timer keeps a blocking iteration from waiting on nothing.
+  const tick = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 5, () => GLib.SOURCE_CONTINUE);
+  const context = GLib.MainContext.default();
+  while (widget.get_width() === 0) context.iteration(true);
+  const clock = widget.get_frame_clock();
+  if (clock !== null) {
+    const start = clock.get_frame_counter();
+    widget.queue_resize();
+    while (clock.get_frame_counter() < start + 2) context.iteration(true);
+  }
+  GLib.source_remove(tick);
+}
+
+function labels(widget, out = []) {
+  for (let child = widget.get_first_child(); child !== null; child = child.get_next_sibling()) {
+    if (child instanceof Gtk.Label) out.push(child.label);
+    labels(child, out);
+  }
+  return out;
+}
 
 function children(widget) {
   let count = 0;
@@ -121,6 +149,10 @@ application.connect("activate", async () => {
     else if (kind === "pages") console.log(`${id}.n_pages ${object.n_pages}`);
     else if (kind === "buffer") console.log(`${id}.buffer ${object.buffer.get_char_count()}`);
     else if (kind === "close-dialog") object.close();
+    else if (kind === "n-items") console.log(`${id}.n_items ${object.model?.get_n_items() ?? 0}`);
+    else if (kind === "draw") draw(window, object);
+    else if (kind === "labels") console.log(`${id}.labels ${labels(object).join(",")}`);
+    else if (kind === "sort") object.sort_by_column(object.columns.get_item(Number(args[0])), Gtk.SortType.ASCENDING);
     else if (kind === "classes") console.log(`${id}.classes ${object.get_css_classes().join(",")}`);
     else throw new Error(`unknown action ${kind}`);
   }

@@ -757,6 +757,19 @@ parent's. TypeScript's structural typing makes a `GtkEntry` assignable to a
 interface's methods and properties into its implementers', as GJS does. 518
 `implements` in Gtk.
 
+An interface requiring another is one too: `GtkSelectionModel` requires
+`GListModel`, so `column_view.model.get_n_items()` and a selection model
+passed where a list model is taken typecheck. The interface's own tag rides
+in a marker's *key*, `__c_interface_GtkSelectionModel?: true`, which the
+schema reads. It was the value of one key, `__c_interface?: Tag`, and two
+interfaces gave that key two literals, so the sub-interface was not
+assignable (TS2684). `__c_implements` is what tells interfaces apart: an
+`Editable` is not taken for a `Cell` that requires it. A callback answering
+the class where C declared the interface (`GtkTreeListModel`'s
+`create_func` making a `GListStore`) answers the same address on both
+backends. LLVM's bridges ask `passes_as_is` for this, the closure's and
+Objective-C's, arguments and answers alike.
+
 What the checker vouches for is the *type's* claim, not the pointer's: a
 handle that came through `as`, or a binding whose `<implements>` GIR got
 wrong, converts all the same. For GObject a wrong one fails loudly -- every
@@ -1423,6 +1436,20 @@ gtk-list's second view is a `GListStore` of `Task` read back through
 `instanceof`, and gtk-subclass asks `instanceof` of three levels, a binding's
 class and `null`.
 
+Two corpus ports check this against GJS on drawn widgets: the driver's
+`draw` presents the window and runs the main loop until the view is laid
+out, and `labels` reads what the factories bound.
+- **Column View** registers `Book` with three properties and sorts its
+  columns by `GtkPropertyExpression.new(Book.$gtype, null, "year")`, a
+  subclass property read through GObject's own property system. `sort` then
+  `labels` reads the rows in year order and in title order. The port sets
+  the sort model's `sorter` after construction, since a props object has
+  no `| null` and the view's sorter is `GtkSorter | null`.
+- **List View with a Tree** keeps plain fields (a title, an array of
+  children) on a `GObject` subclass and handle fields on a `GtkBox`
+  subclass, and its `create_func` makes a `GListStore` of the subclass per
+  expanded row.
+
 **A class over a class the program wrote**: `class C extends B`, `class B
 extends A`, `class A extends GtkButton`.
 - **Registration.** `gobject_parent` answers `nts_gobject_type_B` for `C`, so
@@ -1728,6 +1755,7 @@ one in two ways, both core gaps:
 | 2026-09-27 | 25 | 8 on main; 14 stop at the captured narrowed handle, Scale at `Object.entries` over a table, Stack at a `let` of a handle with no initializer, Context Menu at a record's fields (`new Gdk.Rectangle({ x, y })`, designed with the compiler lane) |
 | 2026-09-28 | 29 | **25 on main**, with the captured-handle fix (bd58854b9). Left: Stack (a `let` of a handle with no initializer), Scale (`Object.entries` over a table), Context Menu (record fields, designed), Boxed Lists (`GObject.TYPE_STRING` and `Gtk.ClosureExpression`, binding gaps) |
 | 2026-09-28 | 34 | **28**. Also left: Text Colors (a spread in call arguments, then an array stringified), Text View (destructuring a handle's property) |
+| 2026-09-28 | 44 | **34**: Column View (an interface requiring another, now assignable to it) and List View with a Tree (a callback answering the class where C declared the interface, on LLVM). Drop Down's third gap (its subclass's own properties) is cleared; its two binding gaps remain |
 | 2026-09-28 | 42 | **32** on main f3f4ac28e. Left, each named: a fundamental GType (Boxed Lists, Drop Down, Accessibility), GIR constants (Accessibility), record fields (Context Menu), a construct-only property no constructor takes (Notification), `Object.entries` over a table (Scale), a `let` of a handle with no initializer (Stack, Carousel), a property written through a union of handles (Carousel), a spread in call arguments (Text Colors), destructuring a handle's property (Text View) |
 
 ### What the corpus found beyond its blockers

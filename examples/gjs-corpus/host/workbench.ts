@@ -24,6 +24,8 @@ import {
   GtkButton,
   GtkCalendar,
   GtkCheckButton,
+  GtkColumnView,
+  GtkColumnViewColumn,
   GtkDropDown,
   GtkEmojiChooser,
   GtkEntry,
@@ -41,11 +43,20 @@ import {
   GtkToggleButton,
   GtkWindow,
   GtkWidget,
+  SortType,
   SpinType,
 } from "c:Gtk-4.0";
 import { ApplicationFlags, g_data_input_stream_new, g_file_new_for_path } from "c:Gio-2.0";
 import { GObject } from "c:GObject-2.0";
-import { g_date_time_new_local, g_getenv, g_path_get_basename, g_timeout_add_full, g_variant_new_string } from "c:GLib-2.0";
+import {
+  g_date_time_new_local,
+  g_getenv,
+  g_main_context_iteration,
+  g_path_get_basename,
+  g_source_remove,
+  g_timeout_add_full,
+  g_variant_new_string,
+} from "c:GLib-2.0";
 
 export interface Workbench {
   readonly application: AdwApplication;
@@ -69,8 +80,23 @@ function actions(path: string): string[][] {
 }
 
 /** One action on the builder's object `id`, as host.js applies it. */
-function act(kind: string, id: string, args: string[], object: GObject | null): boolean {
+function act(kind: string, id: string, args: string[], object: GObject | null, window: GtkWindow): boolean {
   switch (kind) {
+    case "draw":
+      if (!(object instanceof GtkWidget)) return false;
+      draw(window, object);
+      return true;
+    case "labels":
+      if (!(object instanceof GtkWidget)) return false;
+      console.log(`${id}.labels ${labels(object).join(",")}`);
+      return true;
+    case "sort": {
+      if (!(object instanceof GtkColumnView)) return false;
+      const column = object.columns.get_item(Number(args[0]));
+      if (!(column instanceof GtkColumnViewColumn)) return false;
+      object.sort_by_column(column, SortType.ASCENDING);
+      return true;
+    }
     case "click":
       if (!(object instanceof GtkButton)) return false;
       object.emit("clicked");
@@ -194,6 +220,10 @@ function act(kind: string, id: string, args: string[], object: GObject | null): 
       if (!(object instanceof AdwDialog)) return false;
       object.close();
       return true;
+    case "n-items":
+      if (!(object instanceof GtkColumnView)) return false;
+      console.log(`${id}.n_items ${object.model?.get_n_items() ?? 0}`);
+      return true;
     case "classes":
       if (!(object instanceof GtkWidget)) return false;
       console.log(`${id}.classes ${object.get_css_classes().join(",")}`);
@@ -231,10 +261,37 @@ function children(widget: GtkWidget): number {
   return count;
 }
 
-function drive(builder: GtkBuilder, path: string): void {
+/**
+ * Show the window and run the main loop until `widget` is laid out and two
+ * frames have passed since: what a list view's factory binds is drawn only.
+ */
+function draw(window: GtkWindow, widget: GtkWidget): void {
+  window.present();
+  // A timer keeps a blocking iteration from waiting on nothing.
+  const tick = g_timeout_add_full(0, 5, () => true);
+  while (widget.get_width() === 0) g_main_context_iteration(null, true);
+  const clock = widget.get_frame_clock();
+  if (clock !== null) {
+    const start = clock.get_frame_counter();
+    widget.queue_resize();
+    while (clock.get_frame_counter() < start + 2) g_main_context_iteration(null, true);
+  }
+  g_source_remove(tick);
+}
+
+/** The labels below a widget, depth first, onto `out`. */
+function labels(widget: GtkWidget, out: string[] = []): string[] {
+  for (let child = widget.get_first_child(); child !== null; child = child.get_next_sibling()) {
+    if (child instanceof GtkLabel) out.push(child.label);
+    labels(child, out);
+  }
+  return out;
+}
+
+function drive(builder: GtkBuilder, window: GtkWindow, path: string): void {
   for (const words of actions(path)) {
     const [kind, id] = words;
-    if (!act(kind, id, words.slice(2), builder.get_object(id))) console.log("driver: cannot " + kind + " " + id);
+    if (!act(kind, id, words.slice(2), builder.get_object(id), window)) console.log("driver: cannot " + kind + " " + id);
   }
 }
 
@@ -258,7 +315,7 @@ export function run(demo: (workbench: Workbench) => void): void {
       builder,
       resolve: (path) => g_file_new_for_path(upstream).resolve_relative_path(path).get_uri(),
     });
-    drive(builder, dir + "/driver.txt");
+    drive(builder, window, dir + "/driver.txt");
     g_timeout_add_full(0, 0, () => {
       application.quit();
       return false;
