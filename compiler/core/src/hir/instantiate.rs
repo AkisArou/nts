@@ -141,6 +141,32 @@ pub struct Templates<'a> {
     /// The templates -- records with arguments that mention exactly one other
     /// generic's parameters -- by that generic.
     by_owner: FxHashMap<Owner, Vec<TypeId>>,
+    /// Function types mentioning exactly one owner's type parameters, by owner.
+    ///
+    /// **A second list because a function type cannot be a template.**
+    /// `by_owner` holds *instantiations of a generic declaration* -- `Link<T>`,
+    /// `Inner<T>` inside `Outer<T>` -- recognised by having a `symbol` and type
+    /// `arguments`. An anonymous `(seed: U) => T` has neither, so it fails both
+    /// tests and is never collected, and widening what counts as a template
+    /// would change the machinery every class instantiation runs through.
+    ///
+    /// What it costs to leave out: a copy's parameter keeps `U -> T` while the
+    /// call site's argument is typed at the instantiated signature, and only one
+    /// of the two has a layout. `apply<number, string>(1, "s")` with the optional
+    /// `map` omitted gave `NTS2006 an object type with no layout`, because the
+    /// absent argument is pushed straight as `ConstUndefined` at the call's type
+    /// with no `coerce` to reconcile it -- a *written* argument is fixed on the
+    /// way in, which is why the same call with `map` supplied compiles. That is
+    /// the root of React's component chain: every compiled component segfaulted
+    /// through the empty table of a closure whose `#call` this refusal had
+    /// dropped.
+    ///
+    /// These are **not** added to `plan()`, so `materialise` is never asked to
+    /// invent one: the instantiated form already exists, because the checker made
+    /// it when the call wrote its type arguments. Where it genuinely does not,
+    /// `substitute` answers `None`, nothing is recorded, and the behaviour is
+    /// what it was.
+    function_forms: FxHashMap<Owner, Vec<TypeId>>,
     /// Which generic declares each type parameter.
     owners: FxHashMap<TypeId, Owner>,
 }
@@ -170,8 +196,34 @@ impl<'a> Templates<'a> {
             index.entry((symbol, args)).or_insert(ty);
         }
         let mut templates: FxHashMap<Owner, Vec<TypeId>> = FxHashMap::default();
+        let mut function_forms: FxHashMap<Owner, Vec<TypeId>> = FxHashMap::default();
         for (at, record) in snapshot.types.iter().enumerate() {
             let ty = TypeId(u32::try_from(at).unwrap_or(u32::MAX));
+            // In this loop rather than a second pass over the type table: it
+            // already walks every record, and a snapshot holds a hundred
+            // thousand of them. Before the `symbol` gate below, which a function
+            // type -- being anonymous -- never passes. See `function_forms`.
+            // **A generic function's forms only, not a generic class's.** The
+            // broad version was measured and is not landable: over the runtime
+            // corpus it made `Timeout<N>#invoke` a **phantom** in five projects
+            // -- recorded as refused while the program emits it -- and gave
+            // `Timeout#invoke` a refusal row of its own. `Timeout` is a generic
+            // *class* with a callback field mentioning its parameter, so mapping
+            // that form to an instance changed which name its member is recorded
+            // under, which is `8482afb63`'s family: a member emitted as one name
+            // and recorded as another.
+            //
+            // A class already has the whole template mechanism for this --
+            // `by_owner` collects its instantiations and `materialise` makes
+            // them, which is why `Link<T>`'s field reads as `Link<number>` in a
+            // copy. What has no mechanism is a generic **function**'s
+            // function-typed parameter, which is the case this exists for and
+            // the only one with a witness.
+            if matches!(record.kind, TypeKind::Function(_))
+                && let Some(owner @ Owner::Function(_)) = one_owner_of(snapshot, &owners, ty)
+            {
+                function_forms.entry(owner).or_default().push(ty);
+            }
             let Some(symbol) = record.symbol else {
                 continue;
             };
@@ -204,7 +256,7 @@ impl<'a> Templates<'a> {
             }
             templates.entry(owner).or_default().push(ty);
         }
-        for list in templates.values_mut() {
+        for list in templates.values_mut().chain(function_forms.values_mut()) {
             list.sort_by_key(|ty| ty.0);
             list.dedup();
         }
@@ -213,6 +265,7 @@ impl<'a> Templates<'a> {
             index,
             declarations,
             by_owner: templates,
+            function_forms,
             owners,
         }
     }
@@ -276,7 +329,17 @@ impl<'a> Templates<'a> {
     pub fn instances(&self, owner: Owner, sigma: &Sigma) -> FxHashMap<TypeId, TypeId> {
         let mut found = FxHashMap::default();
         let mut lookup = Lookup::new(self);
-        for template in self.by_owner.get(&owner).into_iter().flatten() {
+        // The forms as well as the templates. `substitute` already handles a
+        // `TypeKind::Function` -- it substitutes the signature and interns the
+        // result -- so this needs no new walk, and `representation_of`'s existing
+        // `subst.instance_of(ty)` is what reads the answer.
+        for template in self
+            .by_owner
+            .get(&owner)
+            .into_iter()
+            .flatten()
+            .chain(self.function_forms.get(&owner).into_iter().flatten())
+        {
             if let Some(instance) = substitute(&mut lookup, *template, sigma, 0)
                 && instance != *template
             {
@@ -846,6 +909,47 @@ fn instantiation_arguments(snapshot: &SemanticSnapshot, ty: TypeId, declaration:
     let mut args = arguments(snapshot, ty);
     args.truncate(arguments(snapshot, declaration).len());
     args
+}
+
+/// The single owner whose type parameters a type mentions, where there is one.
+///
+/// `None` in three cases, and the third is a deliberate divergence from the
+/// template loop below rather than a copy of it:
+///
+/// - a type mentioning **no** parameter: it is concrete and needs no
+///   instantiation;
+/// - one mentioning **two** owners at once -- a generic method's parameter
+///   beside its class's -- which the template loop has always left alone for the
+///   same reason: no single sigma answers for it;
+/// - one mentioning a parameter with **no known owner**. The template loop
+///   reaches that case through a `filter_map`, which *skips* the parameter and
+///   decides on the rest; this rejects the type. Both are safe there and only
+///   one is safe here: skipping would record an instance for a form whose other
+///   parameter nothing substitutes, and a *wrong* instance is what
+///   `representation_of` would then hand every reader. Rejecting falls back to
+///   the unsubstituted form, which is the behaviour that existed before
+///   `function_forms`.
+///
+/// Used only by the `function_forms` branch. The template loop keeps its own
+/// inline test, because changing what counts as a template is the change this
+/// was written to avoid.
+fn one_owner_of(
+    snapshot: &SemanticSnapshot,
+    owners: &FxHashMap<TypeId, Owner>,
+    ty: TypeId,
+) -> Option<Owner> {
+    let mut mentioned = Vec::new();
+    parameters_in(snapshot, ty, &mut mentioned, 0);
+    let mut seen: Option<Owner> = None;
+    for parameter in &mentioned {
+        let owner = *owners.get(parameter)?;
+        match seen {
+            None => seen = Some(owner),
+            Some(first) if first == owner => {}
+            Some(_) => return None,
+        }
+    }
+    seen
 }
 
 /// The type parameters a type mentions, through arrays, unions, tuples,
