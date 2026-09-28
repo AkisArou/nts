@@ -1,8 +1,8 @@
 // Which refusal *messages* moved between two compilers, over both corpora.
 //
-//   node tooling/census/messages.mjs <before-nts> <after-nts> [project ...]
-//   node tooling/census/messages.mjs --one-change <before> <after>
-//   node tooling/census/messages.mjs --self-test
+//   node tooling/census/messages.ts <before-nts> <after-nts> [project ...]
+//   node tooling/census/messages.ts --one-change <before> <after>
+//   node tooling/census/messages.ts --self-test
 //
 // # Why a third axis
 //
@@ -138,7 +138,7 @@ if (argv.includes("--self-test")) {
 const positional = argv.filter((a) => !a.startsWith("--"));
 const [beforeBin, afterBin, ...named] = positional;
 if (!beforeBin || !afterBin) {
-  console.log("  usage: messages.mjs <before-nts> <after-nts> [project ...] [--one-change]");
+  console.log("  usage: messages.ts <before-nts> <after-nts> [project ...] [--one-change]");
   process.exit(2);
 }
 for (const bin of [beforeBin, afterBin]) {

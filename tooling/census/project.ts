@@ -1,7 +1,7 @@
 // The scratch project a Test262 file is compiled in, in one place.
 //
-// Two instruments need it — `test262.mjs`, which compiles and records why a
-// file is refused, and `run262.mjs`, which builds and runs one. If each
+// Two instruments need it — `test262.ts`, which compiles and records why a
+// file is refused, and `run262.ts`, which builds and runs one. If each
 // materialised its own project they would be two derivations of one fact, and
 // the first time they disagreed the census and the run would be measuring
 // different programs while reporting the same corpus.

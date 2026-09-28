@@ -23,7 +23,7 @@
     "disappears. The safe direction is the one that stays visible.",
     "",
     "Names are test262's own, from third_party/test262/features.txt at the pin.",
-    "tooling/census/audit.mjs checks that every name here still exists there, which is",
+    "tooling/census/audit.ts checks that every name here still exists there, which is",
     "how an upstream rename is caught rather than silently reclassified."
   ],
   "version": 1,

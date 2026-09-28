@@ -436,7 +436,7 @@ profile() {
     # Both are printed so neither can be read as the other. The ceiling still
     # sits on occurrences, which is what every number in the comments below
     # was measured in; the site count is here to rank work, which occurrences
-    # cannot do. `tooling/census/node-refusals.mjs` is the ranked form.
+    # cannot do. `tooling/census/node-refusals.ts` is the ranked form.
     printf "%s" "$out" | grep -oE "^[^ ]*: NTS1001" > "'"$work"'/$name.sites"
     printf "%s" "$out" | grep -q "panicked at" && echo "$name" > "'"$work"'/$name.crashed"
     # **The second number, which moves differently.** A refusal count cannot
@@ -1753,7 +1753,7 @@ test262() {
   # gate goes red on a change that touched no compiler code. Fifteen were added
   # on 2026-09-18 for exactly this, each probed against node rather than
   # classified from its name.
-  node tooling/census/audit.mjs --under test/language || return 1
+  node tooling/census/audit.ts --under test/language || return 1
 }
 
 # Test262 `test/language` cases that ran, re-run and held to what they did.
@@ -1761,7 +1761,7 @@ test262() {
 # **The `test262` step above measures the harness, not the compiler.** It
 # parses every file's metadata and classifies feature *names*; nothing is
 # compiled and nothing is run, so "34 features supported" was a claim about
-# tokens. This step is the measured half: `tooling/census/conformance262.mjs`
+# tokens. This step is the measured half: `tooling/census/conformance262.ts`
 # over the cases recorded in `tooling/census/test262-language.outcomes.tsv` --
 # every case that compiled, linked and ran on the last full run, with what it
 # did. A pass must still pass; a wrong answer must still be *that* wrong answer,
@@ -1772,7 +1772,7 @@ test262() {
 # refusals turns up as passes only on a full run, which is too slow for every
 # gate (a quarter hour at twelve workers, and killed twice mid-run on this box):
 #
-#   node tooling/census/conformance262.mjs --resume --rows ~/.cache/nts/t262.rows \
+#   node tooling/census/conformance262.ts --resume --rows ~/.cache/nts/t262.rows \
 #     --record tooling/census/test262-language.outcomes.tsv
 #
 # then raise TEST262_LANGUAGE_PASS_FLOOR to the new pass-count. Lower it only
@@ -1818,9 +1818,9 @@ test262_recorded() {
   # Eight at most whatever `jobs` says: memory, not cores, is what a test262
   # run exhausts -- one unicode-identifier case takes the frontend to the
   # per-case 6 GB cap, and twelve workers once took this machine into the OOM
-  # killer. `tooling/census/attempt262.mjs`'s `capped` has the numbers.
+  # killer. `tooling/census/attempt262.ts`'s `capped` has the numbers.
   cap=$(( ${jobs:-8} > 8 ? 8 : ${jobs:-8} ))
-  out=$(NTS_BIN="${NTS_BIN:-target/release/nts}" node tooling/census/conformance262.mjs \
+  out=$(NTS_BIN="${NTS_BIN:-target/release/nts}" node tooling/census/conformance262.ts \
     --under "$under" --recorded "$record" --jobs "$cap" 2>&1)
   status=$?
   printf '%s\n' "$out" | awk '(/^  (outcome|pass|fail|refused|unsupported|no-verdict|sum|recorded cases|pass-count|negatives-accepted|reconciled|NOT RECONCILED|INSTRUMENT FAILURE|self-checks|compiler)/ || /REGRESSED|CHANGED|MISSING|FIXED|NEW (PASS|FAIL)|^              /) && !/ranked by|by what|by family/ && !/\((test262-exclusions|features)\.json\)$/'
@@ -2047,9 +2047,9 @@ jvm_verifies() {
 # "runtime/node/http: 2480 -> 2440, -40". Down fails; up prints a note (raise
 # the row). Counted from `hir --prepared`, reconciled against each module's
 # own summary, and a module that emits nothing fails rather than reading as
-# zero. See tooling/census/definitions.mjs. About 2 min 15 s at four workers.
+# zero. See tooling/census/definitions.ts. About 2 min 15 s at four workers.
 definitions() {
-  out=$(node tooling/census/definitions.mjs 2>&1)
+  out=$(node tooling/census/definitions.ts 2>&1)
   status=$?
   printf '%s\n' "$out" | awk '!/^$/'
   return $status

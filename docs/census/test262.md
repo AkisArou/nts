@@ -24,7 +24,7 @@ files that enumerate the corners of the language on purpose.
 ```sh
 cargo run -q -p nts-suite --no-default-features --bin nts-test262-protocol -- \
   select third_party/test262 test/language/expressions > selection.jsonl
-node tooling/census/test262.mjs --selection selection.jsonl --slice1
+node tooling/census/test262.ts --selection selection.jsonl --slice1
 ```
 
 Suite pinned at `14e8c908e54ae2e770e473bcacf536f8cb654929`. Two runs over one
@@ -210,7 +210,7 @@ every other tuple the wrong arity in silence.
 
 ## The first conformance result — 486 of 2,527
 
-**`tooling/census/run262.mjs` builds, links and runs.** It is the half this
+**`tooling/census/run262.ts` builds, links and runs.** It is the half this
 census deliberately does not do, and it answers the question the census cannot:
 not *why does this not lower* but *does the program do what the specification
 says*.
@@ -752,7 +752,7 @@ gate.
 
 #### A refusal and an unmeasurable run must not look alike
 
-`run262.mjs` linked with a 180-second timeout and `catch {}`. So a row reading
+`run262.ts` linked with a 180-second timeout and `catch {}`. So a row reading
 `link` meant *either* "the toolchain refused this C" *or* "the toolchain did not
 finish while a gate had the machine", with nothing to tell them apart and no
 message kept. Two investigations ended in "does not reproduce", which is the
@@ -820,7 +820,7 @@ number one commit old the moment a fix lands.
 
 #### The redaction that makes a row rankable deletes what it contains
 
-`run262.mjs` replaces quoted identifiers with `X` so that a hundred files naming
+`run262.ts` replaces quoted identifiers with `X` so that a hundred files naming
 a hundred names rank as one shape. Correct for ranking, and it took the content
 out of the largest row: **147 files of ``\`X\`, a builtin this compiler does not
 provide``**, where *which* builtin is the entire row. Recording the names beside
@@ -988,7 +988,7 @@ Top of what is left:
 Printed by the instrument on every run, not left to a reader.
 
 1. **The census executes nothing.** `lowers` is not `correct` — which is what
-   `run262.mjs` above exists to answer, and it is a separate instrument with a
+   `run262.ts` above exists to answer, and it is a separate instrument with a
    separate population.
 2. **Only the first blocking diagnostic per file is ranked**, so this ranks
    reach rather than causes.
@@ -1044,7 +1044,7 @@ rather than a floor**, and it belongs after any change to scoping or
 representation:
 
 ```sh
-node tooling/census/run262.mjs --nts target/release/nts \
+node tooling/census/run262.ts --nts target/release/nts \
   --selection selection.jsonl --slice1 --rows rows-new.jsonl
 # then: old bucket == strict-pass && new bucket != strict-pass
 ```
@@ -1055,12 +1055,12 @@ Advisory. `docs/conformance/test262.md` says larger reports stay advisory until
 coverage is broad enough to set a meaningful gate, and a twenty-minute run is a
 background job rather than a gate step. What *is* gated is cheap and has no
 compiler dependency: the pin being reachable, and
-`tooling/census/audit.mjs`'s three static questions over the feature
+`tooling/census/audit.ts`'s three static questions over the feature
 classifications.
 
 ## The classification check, and what it is worth
 
-`tooling/census/audit.mjs --rows` joins the census against `features.json` and
+`tooling/census/audit.ts --rows` joins the census against `features.json` and
 reports a classification the corpus contradicts. Its first run over the full
 lane flagged three, and **all three were artefacts of its own denominator**: it
 counted files that *declare* a feature rather than files that *reached

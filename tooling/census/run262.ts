@@ -1,9 +1,9 @@
 // Build a Test262 file, run it, and report what happened. A conformance run.
 //
-//   node tooling/census/run262.mjs [--under <prefix>] [--slice1] [--limit N]
+//   node tooling/census/run262.ts [--under <prefix>] [--slice1] [--limit N]
 //                                  [--selection <jsonl>] [--rows <jsonl>] [--json]
 //
-// This is the half `tooling/census/test262.mjs` deliberately does not do. The
+// This is the half `tooling/census/test262.ts` deliberately does not do. The
 // census compiles and records refusals; this compiles, **links, runs**, and
 // reports a verdict.
 //
@@ -52,8 +52,8 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { attempt, selfChecks } from "./attempt262.mjs";
-import { pinCompiler, workspace } from "./project.mjs";
+import { attempt, selfChecks } from "./attempt262.ts";
+import { pinCompiler, workspace } from "./project.ts";
 import { frontendFor } from "../conformance/pin.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -97,7 +97,7 @@ if (!existsSync(SUITE)) cannotMeasure("no test262 checkout; tooling/bootstrap/bo
 const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
 
 // Temporaries and the snapshot cache under the scratch rather than shared;
-// see `conformance262.mjs`, which does the same and says why the cache is
+// see `conformance262.ts`, which does the same and says why the cache is
 // named rather than left to follow `TMPDIR` (each case also runs with it off).
 // The frontend the compiler under test runs with: NTS_TSGO, else the one a
 // pin recorded beside the binary (pin.mjs), else the tree's. Set on this
@@ -146,8 +146,8 @@ if (limit > 0) chosen = chosen.slice(0, limit);
 
 // --- building and running one body ----------------------------------------
 //
-// `attempt` and the self-checks live in `attempt262.mjs`, shared with
-// `conformance262.mjs`: one derivation of what a file did, not two.
+// `attempt` and the self-checks live in `attempt262.ts`, shared with
+// `conformance262.ts`: one derivation of what a file did, not two.
 
 const TOOLS = { nts: PINNED, cc: CC };
 

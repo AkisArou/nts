@@ -31,7 +31,7 @@
 // itself nearly half one cause.
 //
 // All figures are `file:line:column` deduplicated, which is the gate's key and
-// the one a count of *places* should use. `node-refusals.mjs` sums
+// the one a count of *places* should use. `node-refusals.ts` sums
 // (site, cause) pairs instead --- 1,741 against 1,738 --- because a site
 // blocked two ways is two pieces of work; its header lists all three
 // denominators and exactly what separates them.
@@ -39,7 +39,7 @@
 // That ranking only appears once the census is deduplicated. By *occurrence*
 // these are scattered under several messages and the top row is a three-line
 // generic in `runtime/web-platform` repeated 294 times --
-// `tooling/census/node-refusals.mjs` is the ranked form and its header carries
+// `tooling/census/node-refusals.ts` is the ranked form and its header carries
 // why the two orders differ.
 //
 // # It is not the union

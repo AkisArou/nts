@@ -157,7 +157,7 @@ evenly: three lines in `runtime/web-platform/src/streams/fifo.ts` were 882 of
 the 17,106, reported once per generic instantiation across the 14 modules that
 import the file. By occurrence they were the largest item in the census; by
 site they are three. The step now prints both --- `N refusal(s) at N site(s)`
---- and `tooling/census/node-refusals.mjs` is the ranked form.
+--- and `tooling/census/node-refusals.ts` is the ranked form.
 
 Ranking by occurrence hides whole causes as well as inflating one. The
 iteration protocol types were **267 sites**, the largest single cause, and no

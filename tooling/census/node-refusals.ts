@@ -1,6 +1,6 @@
 // What refuses in `runtime/node`, ranked by **cause** rather than by occurrence.
 //
-//   node tooling/census/node-refusals.mjs [--sites N] [--module M]
+//   node tooling/census/node-refusals.ts [--sites N] [--module M]
 //
 // # Why this exists
 //

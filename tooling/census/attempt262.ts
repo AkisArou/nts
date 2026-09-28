@@ -1,18 +1,18 @@
 // Build one Test262 body, run it, and say what happened. Shared by every runner.
 //
-// `run262.mjs` (one process, one file at a time) and `conformance262.mjs` (the
+// `run262.ts` (one process, one file at a time) and `conformance262.ts` (the
 // whole suite, in parallel workers) both call `attempt` from here. It was
-// written inside `run262.mjs`, and a second runner with its own copy would be a
+// written inside `run262.ts`, and a second runner with its own copy would be a
 // second derivation of "what did this file do" -- the first time the two
 // disagreed, two reports would describe different programs under one corpus's
-// name. `project.mjs` exists for the same reason one step earlier.
+// name. `project.ts` exists for the same reason one step earlier.
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 
-import { environment, flagsOf, materialise, placeOf, workspace } from "./project.mjs";
+import { environment, flagsOf, materialise, placeOf, workspace } from "./project.ts";
 
 /** The text of a refusal, after the code: `… NTS1001 <this part>`. */
 const FIRST_REFUSAL = /NTS\d{4}\s+(.*?)(?: is not supported by this lowering yet)?$/m;

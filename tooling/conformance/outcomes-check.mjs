@@ -113,7 +113,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { capped, linkCommand, withCachedObjects } from "../census/attempt262.mjs";
+import { capped, linkCommand, withCachedObjects } from "../census/attempt262.ts";
 import { OUTCOMES as FIXTURES, materialise as materialiseIn, outcomeFixtures, runMode } from "./outcomes-project.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));

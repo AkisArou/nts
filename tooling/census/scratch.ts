@@ -1,9 +1,9 @@
 // Who owns the scratch under ~/.cache, and what deleting each piece would cost.
 // A report, never a deletion.
 //
-//   node tooling/census/scratch.mjs            the table, largest first
-//   node tooling/census/scratch.mjs --json     one JSON row per unit
-//   node tooling/census/scratch.mjs --self-test
+//   node tooling/census/scratch.ts            the table, largest first
+//   node tooling/census/scratch.ts --json     one JSON row per unit
+//   node tooling/census/scratch.ts --self-test
 //
 // # Why
 //

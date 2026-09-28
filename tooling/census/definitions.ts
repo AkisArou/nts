@@ -1,8 +1,8 @@
 // How many functions the compiler emits, per corpus module, held to a table.
 //
-//   node tooling/census/definitions.mjs            check against tooling/gate/definitions
-//   node tooling/census/definitions.mjs --record   write the table from this binary
-//   NTS_BIN=<a pinned copy> node tooling/census/definitions.mjs
+//   node tooling/census/definitions.ts            check against tooling/gate/definitions
+//   node tooling/census/definitions.ts --record   write the table from this binary
+//   NTS_BIN=<a pinned copy> node tooling/census/definitions.ts
 //
 // # Why
 //

@@ -1,5 +1,5 @@
 # Test262 test/annexB cases that ran, and what each did. Written by
-# tooling/census/conformance262.mjs --record; compared by --check.
+# tooling/census/conformance262.ts --record; compared by --check.
 # compiler 62f0f9b5c336539e, harness 3392ef99f75629c0; machine at start: 16 GB available, swap 3.4/20 GB, load 13.8/12.7 (1m/5m), 32 cores; 5 worker(s)
 test/annexB/language/expressions/template-literal/legacy-octal-escape-sequence-strict.js	pass	
 test/annexB/language/statements/for-in/bare-initializer.js	fail	accepted: was refused later (lowering)

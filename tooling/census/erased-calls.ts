@@ -1,15 +1,15 @@
 // Every call of a function value reached through an erased slot, and the
 // signatures they call it at.
 //
-//   node tooling/census/erased-calls.mjs [project ...]   (default: the runtime, runtime/react, examples/, outcomes)
-//   node tooling/census/erased-calls.mjs --test262 <rows> ...   and every test262 file those census rows saw reach lowering
-//   node tooling/census/erased-calls.mjs --origins [project ...]  and where each site's value was erased
-//   node tooling/census/erased-calls.mjs --every [project ...]    and every call through a function value,
+//   node tooling/census/erased-calls.ts [project ...]   (default: the runtime, runtime/react, examples/, outcomes)
+//   node tooling/census/erased-calls.ts --test262 <rows> ...   and every test262 file those census rows saw reach lowering
+//   node tooling/census/erased-calls.ts --origins [project ...]  and where each site's value was erased
+//   node tooling/census/erased-calls.ts --every [project ...]    and every call through a function value,
 //                                                                 by where its callee came from
-//   node tooling/census/erased-calls.mjs --reach [project ...]    and whether each erased site can run, and
+//   node tooling/census/erased-calls.ts --reach [project ...]    and whether each erased site can run, and
 //                                                                 how many closures the program erases
-//   node tooling/census/erased-calls.mjs --self-test
-//   NTS_BIN=<a pin> node tooling/census/erased-calls.mjs
+//   node tooling/census/erased-calls.ts --self-test
+//   NTS_BIN=<a pin> node tooling/census/erased-calls.ts
 //
 // # Why
 //
@@ -34,7 +34,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { materialise, outcomeFixtures, OUTCOMES, runMode } from "../conformance/outcomes-project.mjs";
-import { bodyOf, materialise as materialiseCase, placeOf, workspace } from "./project.mjs";
+import { bodyOf, materialise as materialiseCase, placeOf, workspace } from "./project.ts";
 import { describe, provenanceOf, frontendFor } from "../conformance/pin.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -395,7 +395,7 @@ if (!FRONTEND.exists) {
 
   /**
    * test262's files that reached lowering in a census run, each materialised
-   * the way the census builds a case (project.mjs is the one definition): the
+   * the way the census builds a case (project.ts is the one definition): the
    * `--rows` files name them and their buckets, and a file that never
    * typechecked has no prepared program to read.
    */
@@ -543,7 +543,7 @@ if (!FRONTEND.exists) {
       const measured = projects.filter((p) => p.corpus === corpus && !unmeasured.includes(p.label));
       const sites = every.filter((c) => c.corpus === corpus);
       // The stand-in and the test are two files, so a calling function's file
-      // says whose it is (`project.mjs`'s `placeOf`, the census's own rule).
+      // says whose it is (`project.ts`'s `placeOf`, the census's own rule).
       const place = (c) => (!c.test262 ? "project" : c.file === "" ? "unplaced" : placeOf(c.file, c.line).where);
       const projectsOf = (list) => new Set(list.map((c) => c.label)).size;
       console.log(`\n  ${corpus}, every call through a function value: ${sites.length} site(s) in ${projectsOf(sites)} of ${measured.length} measured project(s)`);

@@ -59,7 +59,7 @@
 // in the census's leading slice -- the census says so rather than substituting
 // a weaker stand-in. Members some tests call and others must not see
 // (`assert.throws`, `assert.compareArray`) are spliced in per test; see
-// `project.mjs`'s `MEMBERS` and `PROVIDED_INCLUDES`.
+// `project.ts`'s `MEMBERS` and `PROVIDED_INCLUDES`.
 
 /**
  * `message` is optional, as `harness/sta.js` has it (`this.message = message

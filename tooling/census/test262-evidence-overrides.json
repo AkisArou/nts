@@ -2,7 +2,7 @@
   "//": [
     "Codes that count as evidence of a SyntaxError although some valid JavaScript draws them,",
     "because every positive that draws them is a known gap in the pinned tsgo's parser rather",
-    "than a sign the code is loose. Read by tooling/census/conformance262.mjs (judgeNegative).",
+    "than a sign the code is loose. Read by tooling/census/conformance262.ts (judgeNegative).",
     "",
     "An entry applies only while all of these hold, and the run fails its audit otherwise:",
     "  - it has a reason and the tsgo pin it was audited against, and that pin is the one the",

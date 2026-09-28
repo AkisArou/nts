@@ -91,7 +91,7 @@
 //                      record at another record's offsets (a wrong answer).
 //                      Both unchecked on C and LLVM, so nothing else refuses.
 //                      Signature layouts (`Fn…`) are not judged: the call slot
-//                      is program-global, and census/erased-calls.mjs asks
+//                      is program-global, and census/erased-calls.ts asks
 //                      their question. Not over the runtime, whose values
 //                      arrive across an addon's boundary built by glue no
 //                      listing shows (erased-calls' "outside") -- nor, for

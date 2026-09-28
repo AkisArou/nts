@@ -1,10 +1,10 @@
 // Did a change *gain* test262 cases? Re-run only the cases whose recorded
 // reason it could have moved, under the binary before and the binary after.
 //
-//   node tooling/census/rerun.mjs --rows <rows> [<rows> ...] <filters> --before <nts> --after <nts>
+//   node tooling/census/rerun.ts --rows <rows> [<rows> ...] <filters> --before <nts> --after <nts>
 //        [--jobs N] [--list N]
 //
-// filters: rows.mjs's own -- --message, --code, --where, --first, --bucket,
+// filters: rows.ts's own -- --message, --code, --where, --first, --bucket,
 // --why, --path, --source -- each a regular expression, all of which must hold.
 //
 // # Why
@@ -40,7 +40,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { armLines } from "../conformance/pin.mjs";
-import { filterFrom, readRows } from "./rows.mjs";
+import { filterFrom, readRows } from "./rows.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -96,7 +96,7 @@ if (argv.includes("--self-test")) {
 
 const { opts, rows: rowFiles } = parse(argv);
 if (rowFiles.length === 0 || !opts.before || !opts.after) {
-  console.log("  usage: rerun.mjs --rows <rows> ... <filters> --before <nts> --after <nts> [--jobs N] [--list N]");
+  console.log("  usage: rerun.ts --rows <rows> ... <filters> --before <nts> --after <nts> [--jobs N] [--list N]");
   process.exit(2);
 }
 for (const bin of [opts.before, opts.after]) {
@@ -132,7 +132,7 @@ function arm(name, bin, dir, paths) {
   writeFileSync(tsv, `${paths.join("\n")}\n`);
   const out = join(scratch, `${name}-${dir.replace(/\//g, "_")}.rows`);
   const run = spawnSync("node", [
-    join(HERE, "conformance262.mjs"), "--under", dir, "--recorded", tsv, "--rows", out,
+    join(HERE, "conformance262.ts"), "--under", dir, "--recorded", tsv, "--rows", out,
     ...(opts.jobs ? ["--jobs", opts.jobs] : []),
   ], {
     cwd: ROOT,

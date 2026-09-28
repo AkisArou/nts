@@ -1,7 +1,7 @@
 // Every Test262 case under a directory, each given one of five outcomes, with
 // every non-pass attributed to a named cause. A conformance run.
 //
-//   node tooling/census/conformance262.mjs [--under test/language] [--jobs N]
+//   node tooling/census/conformance262.ts [--under test/language] [--jobs N]
 //        [--sample N] [--rows <jsonl>] [--sites N] [--json <file>]
 //        [--record <tsv>] [--check <tsv>] [--recorded <tsv>] [--resume]
 //
@@ -17,9 +17,9 @@
 // asks: did anything that ran stop running, or change its answer? A full run
 // re-records, and is what finds new passes.
 //
-// # Why this exists beside `run262.mjs`
+// # Why this exists beside `run262.ts`
 //
-// `run262.mjs` builds and runs one file at a time over the slice it can run --
+// `run262.ts` builds and runs one file at a time over the slice it can run --
 // positive, no `includes:`, strict lane -- and reports buckets over *that
 // slice*. Two things it cannot do are what this file is for:
 //
@@ -30,7 +30,7 @@
 //   2. **Every non-pass has a cause.** Not the bucket -- the cause, ranked three
 //      ways (see "Three rankings").
 //
-// Both runners call `attempt262.mjs`, so they cannot disagree about what one
+// Both runners call `attempt262.ts`, so they cannot disagree about what one
 // file did; they differ only in which files they ask about and what they say.
 //
 // # The five outcomes, all reported, every time
@@ -51,7 +51,7 @@
 // clean, a zero measuring the harness's own blindness, a sweep that ran zero
 // iterations and printed `failed=0`. Hence: five outcomes that must sum to the
 // population, a reconciliation that fails the run when they do not, and the
-// self-checks in `attempt262.mjs` (a control, a sabotage and a refusal arm)
+// self-checks in `attempt262.ts` (a control, a sabotage and a refusal arm)
 // before anything is counted.
 //
 // # Exclusions are a column, never a filter
@@ -100,8 +100,8 @@ import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
-import { selfChecks } from "./attempt262.mjs";
-import { bodyOf, HARNESS_HASH, PROVIDED_INCLUDES, pinCompiler } from "./project.mjs";
+import { selfChecks } from "./attempt262.ts";
+import { bodyOf, HARNESS_HASH, PROVIDED_INCLUDES, pinCompiler } from "./project.ts";
 import { frontendFor } from "../conformance/pin.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -150,7 +150,7 @@ const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
 // workers and everything they spawn inherit it, and removed with the scratch.
 //
 // **No case is served from the snapshot cache.** Each attempt runs with it off
-// (`environment()` in project.mjs sets `NTS_NO_SNAPSHOT_CACHE=1`, because the
+// (`environment()` in project.ts sets `NTS_NO_SNAPSHOT_CACHE=1`, because the
 // cache keys on the tsconfig and every case's tsconfig is the same file), so a
 // case's snapshot is always fresh. Before 90aa37954 a bare `nts frontend` and a
 // build shared a cache key and a build could load a narrower snapshot; this is
@@ -176,10 +176,10 @@ process.env.TMPDIR = join(SCRATCH, "tmp");
 mkdirSync(process.env.TMPDIR, { recursive: true });
 process.env.NTS_SNAPSHOT_CACHE = join(SCRATCH, "snapshots");
 mkdirSync(process.env.NTS_SNAPSHOT_CACHE, { recursive: true });
-// Per-case address-space cap; `attempt262.mjs`'s `capped` carries why it exists
+// Per-case address-space cap; `attempt262.ts`'s `capped` carries why it exists
 // and why 6 GB. `NTS_CENSUS_MEMORY_CAP_KB=0` removes it.
 const MEMORY_CAP_KB = Number(process.env.NTS_CENSUS_MEMORY_CAP_KB ?? 6_000_000);
-// Runtime objects compiled once and kept across runs; `attempt262.mjs`'s
+// Runtime objects compiled once and kept across runs; `attempt262.ts`'s
 // `withCachedObjects` says why this is the same program and how it is keyed.
 const OBJECT_CACHE = process.env.NTS_CENSUS_OBJECT_CACHE ?? join(homedir(), ".cache/nts/c-objects");
 /**
@@ -422,7 +422,7 @@ async function runAll(all) {
     new Promise((resolve, reject) => {
       const child = spawn(
         process.execPath,
-        [join(HERE, "attempt262-worker.mjs"), join(SCRATCH, `w${index}`), PINNED, CC, SUITE, String(MEMORY_CAP_KB), OBJECT_CACHE],
+        [join(HERE, "attempt262-worker.ts"), join(SCRATCH, `w${index}`), PINNED, CC, SUITE, String(MEMORY_CAP_KB), OBJECT_CACHE],
         { stdio: ["pipe", "pipe", "inherit"] },
       );
       const feed = () => {
@@ -766,7 +766,7 @@ if (recordFile) {
   writeFileSync(
     recordFile,
     `# Test262 ${under} cases that ran, and what each did. Written by\n` +
-      `# tooling/census/conformance262.mjs --record; compared by --check.\n` +
+      `# tooling/census/conformance262.ts --record; compared by --check.\n` +
       `# compiler ${FINGERPRINT}, harness ${HARNESS_HASH}; machine at start: ${describeMachine(machineAtStart)}; ${jobs} worker(s)\n` +
       ranRows.map(recordedRow).sort().join("\n") + "\n",
   );
@@ -838,7 +838,7 @@ say(`  paging during the run: ${pagingRate.toFixed(1)} pages/s swapped in or out
 if (pagingRate > 256 || Math.min(machineAtStart.available_gb, machineAtEnd.available_gb, lowestAvailableGb) < 4) {
   say("  DEGRADED MACHINE: over 256 pages/s of swap traffic, or under 4 GB available at one end of the run --");
   say("  do not move a floor or re-derive the evidence set from this run, unless a second run's --rows agree");
-  say("  with its rows case for case: node tooling/census/rows.mjs --diff <first> <second> -- 0 moved");
+  say("  with its rows case for case: node tooling/census/rows.ts --diff <first> <second> -- 0 moved");
 }
 say(`  runtime objects: ${objectTally.hit} cached, ${objectTally.miss} compiled (${OBJECT_CACHE})`);
 say(`  self-checks: control ${checks.control}, sabotage ${checks.sabotage}, refused ${checks.refused}, async ${checks.async}`);

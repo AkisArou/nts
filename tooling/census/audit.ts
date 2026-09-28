@@ -1,6 +1,6 @@
 // Every feature classification, checked against the suite and the ledger.
 //
-//   node tooling/census/audit.mjs [--selection <jsonl>] [--under <prefix>]
+//   node tooling/census/audit.ts [--selection <jsonl>] [--under <prefix>]
 //
 // `tooling/census/features.json` decides how a Test262 feature token is read:
 // a §13 non-goal that will never be fixed, a gap that belongs in a backlog, a
@@ -63,7 +63,7 @@ const flag = (name, fallback) => {
 const under = flag("--under", "test/language/expressions");
 const selectionFile = flag("--selection", null);
 /**
- * Census rows, from `test262.mjs --rows`. Optional, because three of the four
+ * Census rows, from `test262.ts --rows`. Optional, because three of the four
  * questions need no compiler and this one does.
  */
 const rowsFile = flag("--rows", null);

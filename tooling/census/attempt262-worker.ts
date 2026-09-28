@@ -1,11 +1,11 @@
-// One worker of `conformance262.mjs`: reads a Test262 path per stdin line,
+// One worker of `conformance262.ts`: reads a Test262 path per stdin line,
 // writes one JSON outcome per stdout line, in order.
 //
-//   node tooling/census/attempt262-worker.mjs <scratch> <nts> <cc> <suite> [memory-cap-kb] [object-cache]
+//   node tooling/census/attempt262-worker.ts <scratch> <nts> <cc> <suite> [memory-cap-kb] [object-cache]
 //
 // **One workspace per worker, never shared.** `attempt` writes `src/main.js`
 // and then compiles it, so two attempts in one directory race on that file and
-// each reports a bucket for a program the other wrote -- `run262.mjs` records
+// each reports a bucket for a program the other wrote -- `run262.ts` records
 // two runs doing exactly that, an hour apart, with nothing in either report to
 // say so. The orchestrator gives every worker its own `<scratch>`.
 //
@@ -17,8 +17,8 @@ import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 
-import { attempt } from "./attempt262.mjs";
-import { workspace } from "./project.mjs";
+import { attempt } from "./attempt262.ts";
+import { workspace } from "./project.ts";
 
 const [scratch, nts, cc, suite, memoryCapKb, objectCache] = process.argv.slice(2);
 const dir = workspace(scratch);

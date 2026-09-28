@@ -1,4 +1,4 @@
-  // `assert.throws(Ctor, fn)`, spliced into `namespace assert` by `project.mjs` --
+  // `assert.throws(Ctor, fn)`, spliced into `namespace assert` by `project.ts` --
   // **only for a test that calls it**. Pass only if `fn` throws an instance of
   // `Ctor`; transcribed from `harness/assert.js` down to what this stand-in can
   // say (the constructor check is `instanceof`, the messages differ). `expected`

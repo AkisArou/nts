@@ -392,7 +392,7 @@ tests.
 
 A wrapper function is still not equivalent, and units are still not concatenated
 into one: that changes global script semantics, strict-directive reach, parse
-phases and declaration visibility. `tooling/census/project.mjs` prepends the
+phases and declaration visibility. `tooling/census/project.ts` prepends the
 harness as sibling top-level statements in one script, which is none of those.
 
 Reflective global-object behavior remains unsupported until the runtime has a

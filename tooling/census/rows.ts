@@ -1,8 +1,8 @@
 // Ask a census's rows a question: which files, grouped how, and what moved.
 //
-//   node tooling/census/rows.mjs <rows> [<rows> ...] [filters] [--by <key>] [--list N]
-//   node tooling/census/rows.mjs --diff <before-rows> <after-rows> [filters]
-//   node tooling/census/rows.mjs --self-test
+//   node tooling/census/rows.ts <rows> [<rows> ...] [filters] [--by <key>] [--list N]
+//   node tooling/census/rows.ts --diff <before-rows> <after-rows> [filters]
+//   node tooling/census/rows.ts --self-test
 //
 // filters (all must hold; each takes a regular expression):
 //   --bucket <re>     the file's bucket: strict-pass, threw, unsupported, invalid-hir, ...
@@ -35,7 +35,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { bodyOf } from "./project.mjs";
+import { bodyOf } from "./project.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -163,8 +163,8 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     else if (argv[i] !== "--diff") files.push(argv[i]);
   }
   if (files.length === 0 || (opts.by && !KEYS[opts.by])) {
-    console.log(`  usage: rows.mjs <rows> ... [--${FLAGS.slice(0, 8).join(" <re>] [--")} <re>] [--by ${Object.keys(KEYS).join("|")}] [--list N]`);
-    console.log("         rows.mjs --diff <before-rows> <after-rows> [filters]");
+    console.log(`  usage: rows.ts <rows> ... [--${FLAGS.slice(0, 8).join(" <re>] [--")} <re>] [--by ${Object.keys(KEYS).join("|")}] [--list N]`);
+    console.log("         rows.ts --diff <before-rows> <after-rows> [filters]");
     process.exit(2);
   }
   const keep = filterFrom(opts);

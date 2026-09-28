@@ -1,4 +1,4 @@
-// `$DONOTEVALUATE()`, from test262's `harness/sta.js`, spliced in by `project.mjs`
+// `$DONOTEVALUATE()`, from test262's `harness/sta.js`, spliced in by `project.ts`
 // only for a test that names it -- which is every planned negative test (4,122
 // of 4,145 under `test/language`), and no positive one. The real one throws a
 // string; this throws a `Test262Error`, because a thrown non-object prints as

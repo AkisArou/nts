@@ -1,5 +1,5 @@
   // `assert.compareArray(actual, expected)`, spliced into `namespace assert` by
-  // `project.mjs` -- only for a test that calls it, as `throws` is. Transcribed
+  // `project.ts` -- only for a test that calls it, as `throws` is. Transcribed
   // from `harness/assert.js`: equal lengths, and `SameValue` element by element
   // (not `===`: NaN matches NaN, and +0 does not match -0). The messages differ.
   //

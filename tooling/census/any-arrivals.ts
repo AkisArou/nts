@@ -20,7 +20,7 @@
 // # How
 //
 // Each file the census rows name as refused in lowering with an `any` root is
-// laid out as the census lays it out (`project.mjs`) and opened through the
+// laid out as the census lays it out (`project.ts`) and opened through the
 // `typescript` package's API over the repository's own `target/tsgo` -- the
 // frontend nts compiles with, so a type here is the type lowering received.
 // In the test (`src/main.js`, never the stand-in), for every parameter the
@@ -60,8 +60,8 @@ const ROOT = join(HERE, "../..");
 const TYPESCRIPT = dirname(createRequire(join(ROOT, "package.json")).resolve("typescript/package.json"));
 const { API, SignatureKind, TypeFlags } = await import(pathToFileURL(join(TYPESCRIPT, "dist/api/sync/api.js")).href);
 const { SyntaxKind } = await import(pathToFileURL(join(TYPESCRIPT, "dist/ast/index.js")).href);
-const { bodyOf, HARNESS_FILE, materialise, TEST_FILE, workspace } = await import(pathToFileURL(join(HERE, "project.mjs")).href);
-const { readRows } = await import(pathToFileURL(join(HERE, "rows.mjs")).href);
+const { bodyOf, HARNESS_FILE, materialise, TEST_FILE, workspace } = await import(pathToFileURL(join(HERE, "project.ts")).href);
+const { readRows } = await import(pathToFileURL(join(HERE, "rows.ts")).href);
 
 type Arrival = "escapes" | "chained" | "direct" | "uncalled" | "unfollowed";
 type Verdict = { anyParameters: Arrival[]; other: number };

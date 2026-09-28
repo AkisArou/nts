@@ -139,9 +139,9 @@ export const RULES = [
     steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "outcomes", "integrity", "integrity-runtime", "definitions", "example-refusals", "blockers"],
     arms: [
       ...COMPARE,
-      { if: "a type rule", kind: "answers", asks: "a generic class with two live instantiations appears in the corpus, never in a hand-written fixture", run: "the emitted-diff --axis above, and a full census per-case diff (conformance262.mjs --rows, both binaries)" },
+      { if: "a type rule", kind: "answers", asks: "a generic class with two live instantiations appears in the corpus, never in a hand-written fixture", run: "the emitted-diff --axis above, and a full census per-case diff (conformance262.ts --rows, both binaries)" },
       { if: "a representation change", kind: "answers", asks: "only the JVM types references; C and LLVM agree by construction", run: "NTS_BACKEND=jvm node tooling/differential/agree.mjs <before> <after>" },
-      { if: "it records, rewords or removes a refusal", kind: "whether", asks: "which refusal rows moved, and in which tables -- the byte-identical C cannot say", run: "node tooling/census/messages.mjs <before> <after>; the example-refusals, blockers, outcomes and integrity steps above hold the tables" },
+      { if: "it records, rewords or removes a refusal", kind: "whether", asks: "which refusal rows moved, and in which tables -- the byte-identical C cannot say", run: "node tooling/census/messages.ts <before> <after>; the example-refusals, blockers, outcomes and integrity steps above hold the tables" },
       { if: "meant to make programs compile", kind: "answers", asks: "did it buy cases, per file -- --recorded cannot see a gain", run: "a full census for both binaries, per-case diff; check the prediction against the last run's rows first" },
     ],
   },

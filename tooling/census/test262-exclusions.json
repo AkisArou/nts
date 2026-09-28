@@ -1,6 +1,6 @@
 {
   "//": [
-    "Test262 cases excluded from conformance262.mjs's headline, beyond features.json's",
+    "Test262 cases excluded from conformance262.ts's headline, beyond features.json's",
     "`inapplicable` class (which is read directly and must not be copied here).",
     "",
     "Each entry: { kind: \"path\" | \"feature\" | \"include\", match, reason, authority }. A `path`",

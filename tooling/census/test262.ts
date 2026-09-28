@@ -1,6 +1,6 @@
 // Why the compiler refuses each Test262 file. A census, never a verdict.
 //
-//   node tooling/census/test262.mjs [--under <prefix>] [--slice1] [--limit N]
+//   node tooling/census/test262.ts [--under <prefix>] [--slice1] [--limit N]
 //                                   [--selection <jsonl>] [--json]
 //
 // `NTS_CENSUS_EXPLAIN=1` dumps the raw compiler output for any file the
@@ -49,7 +49,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { materialise, pinCompiler, workspace as scratchProject } from "./project.mjs";
+import { materialise, pinCompiler, workspace as scratchProject } from "./project.ts";
 import { frontendFor } from "../conformance/pin.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -102,8 +102,8 @@ function cannotMeasure(why) {
 if (!existsSync(NTS)) cannotMeasure(`no compiler at ${NTS}; set NTS_BIN`);
 if (!existsSync(SUITE)) cannotMeasure("no test262 checkout; tooling/bootstrap/bootstrap.sh clones it");
 
-// The frontend the compiler under test runs with, as `run262.mjs` and
-// `conformance262.mjs` resolve it: a pinned copy in the scratch has no frontend
+// The frontend the compiler under test runs with, as `run262.ts` and
+// `conformance262.ts` resolve it: a pinned copy in the scratch has no frontend
 // beside it, and the control then fails as a "frontend-crash".
 const FRONTEND = frontendFor(NTS, ROOT);
 if (!FRONTEND.exists) cannotMeasure(`no frontend at ${FRONTEND.path} -- set NTS_TSGO, or use a pin (it records its frontend)`);
@@ -178,17 +178,17 @@ const TS_LINE = /^(?:\S+ )?(TS\d{4,5})\s+(.*)$/;
 /** `N function(s), M construct(s) refused` -- the footer this reconciles against. */
 const FOOTER = /^(\d+) function\(s\), (?:(\d+) construct\(s\) refused|nothing refused)$/;
 
-// The project, the harness and the compiler pin all come from `project.mjs`.
+// The project, the harness and the compiler pin all come from `project.ts`.
 // It was written for this -- "two instruments need it ... if each materialised
 // its own project they would be two derivations of one fact" -- and then only
-// `run262.mjs` was converted, so the header claimed a sharing that did not
+// `run262.ts` was converted, so the header claimed a sharing that did not
 // exist while this file kept its own copy of the tsconfig.
 function workspace(worker) {
   return scratchProject(join(SCRATCH, `w${worker}`));
 }
 
 function compile(dir, body) {
-  // `project.mjs` lays the case out -- the stand-in and the test, two scripts --
+  // `project.ts` lays the case out -- the stand-in and the test, two scripts --
   // so this and `conformance262` compile one program for one file.
   materialise(dir, body);
   try {

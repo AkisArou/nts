@@ -1,5 +1,5 @@
 # Functions the compiler emits per corpus module: the number `profile`'s
-# refusal ceiling cannot see. Read by tooling/census/definitions.mjs, which
+# refusal ceiling cannot see. Read by tooling/census/definitions.ts, which
 # counts `nts hir --prepared`'s func lines against each row.
 #
 # A count that went UP is progress: raise the row (or rerun with --record) and
