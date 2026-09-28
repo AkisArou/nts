@@ -260,12 +260,17 @@ const arms = [["before", beforeBin], ["after", afterBin]].map(([name, source]) =
 });
 // The frontend follows the pin (pin.mjs `frontendFor`); none stops the run
 // here, before every project prints nothing and reads as clean.
-const FRONTEND = frontendFor(beforeBin, ROOT);
-if (!FRONTEND.exists) {
-  console.log(`  NOT MEASURED: no frontend at ${FRONTEND.path} -- set NTS_TSGO, or use a pin (it records its frontend)`);
-  process.exit(2);
+// Per arm: two arms are two binaries and may be two pins, and one shared
+// frontend would serve one arm the other's -- what the per-arm snapshot
+// caches exist to prevent. Asked of each *source*, where a pin's provenance
+// sits, not of the scratch copy.
+for (const arm of arms) {
+  arm.frontend = frontendFor(arm.source, ROOT);
+  if (!arm.frontend.exists) {
+    console.log(`  NOT MEASURED: no frontend for the ${arm.name} arm at ${arm.frontend.path} -- set NTS_TSGO, or use a pin (it records its frontend)`);
+    process.exit(2);
+  }
 }
-const tsgo = FRONTEND.path;
 
 const run = (cmd, args, env) =>
   new Promise((done) => {
@@ -281,7 +286,7 @@ const run = (cmd, args, env) =>
 /** One module under one arm, emitted the way build.sh emits an addon. */
 async function emit(arm, project) {
   const out = join(arm.dir, "out", project.replace(/\//g, "_"));
-  const env = { ...process.env, NTS_TSGO: tsgo, NTS_SNAPSHOT_CACHE: join(arm.dir, "snapshots") };
+  const env = { ...process.env, NTS_TSGO: arm.frontend.path, NTS_SNAPSHOT_CACHE: join(arm.dir, "snapshots") };
   delete env.NTS_NO_SNAPSHOT_CACHE;
   const r = await run(arm.nts, ["emit-c", join(project, "tsconfig.json"), "--out", out, "--napi", ...(RC ? ["--rc"] : [])], env);
   const program = join(out, "program.c");
@@ -371,7 +376,7 @@ function axis(arm, modules) {
     cwd: ROOT,
     encoding: "utf8",
     maxBuffer: 1 << 26,
-    env: { ...process.env, NTS_BIN: arm.nts, NTS_TSGO: tsgo, NTS_ADDON_OUT: addons, NTS_SNAPSHOT_CACHE: join(arm.dir, "snapshots"), TMPDIR: tmp, ...(RC ? { NTS_CONFORMANCE_RC: "1" } : {}) },
+    env: { ...process.env, NTS_BIN: arm.nts, NTS_TSGO: arm.frontend.path, NTS_ADDON_OUT: addons, NTS_SNAPSHOT_CACHE: join(arm.dir, "snapshots"), TMPDIR: tmp, ...(RC ? { NTS_CONFORMANCE_RC: "1" } : {}) },
   });
   const text = `${r.stdout ?? ""}${r.stderr ?? ""}`;
   const rows = readAxis(text);

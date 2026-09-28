@@ -193,14 +193,19 @@ if (!beforeBin || !afterBin || !existsSync(beforeBin) || !existsSync(afterBin)) 
   console.log("  usage: refusal-diff.mjs <before-nts> <after-nts> [project ...] [--one-change]  (both binaries must exist)");
   process.exit(2);
 }
-// The frontend follows the pin (pin.mjs `frontendFor`); none stops the run
-// here, before every project prints nothing and reads as no move.
-const FRONTEND = frontendFor(beforeBin, ROOT);
-if (!FRONTEND.exists) {
-  console.log(`  NOT MEASURED: no frontend at ${FRONTEND.path} -- set NTS_TSGO, or use a pin (it records its frontend)`);
-  process.exit(2);
+// The frontend follows the pin (pin.mjs `frontendFor`), per binary: two
+// arms may be two pins, and one shared frontend would serve one the other's.
+// None stops the run here, before every project prints nothing and reads as
+// no move.
+const envFor = new Map();
+for (const [name, bin] of [["before", beforeBin], ["after", afterBin]]) {
+  const frontend = frontendFor(bin, ROOT);
+  if (!frontend.exists) {
+    console.log(`  NOT MEASURED: no frontend for the ${name} arm at ${frontend.path} -- set NTS_TSGO, or use a pin (it records its frontend)`);
+    process.exit(2);
+  }
+  envFor.set(bin, { ...process.env, NTS_TSGO: frontend.path });
 }
-const env = { ...process.env, NTS_TSGO: FRONTEND.path };
 const projects = named.length > 0 ? named : [
   ...readdirSync(join(ROOT, "runtime/node"), { withFileTypes: true })
     .filter((e) => e.isDirectory() && existsSync(join(ROOT, "runtime/node", e.name, "tsconfig.json")))
@@ -217,7 +222,7 @@ if (process.argv.includes("--one-change")) {
 }
 
 const run = (bin, args) => new Promise((done) => {
-  const c = spawn(bin, args, { cwd: ROOT, env });
+  const c = spawn(bin, args, { cwd: ROOT, env: envFor.get(bin) });
   let stdout = "";
   let stderr = "";
   c.stdout.on("data", (d) => (stdout += d));
