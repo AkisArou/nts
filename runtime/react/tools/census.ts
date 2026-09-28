@@ -114,44 +114,96 @@ if (missing === null && diagnostics.length === 0) {
   throw new Error(`${logPath} is not a build that reached lowering:\n${why.join("\n") || logText.slice(-500)}`);
 }
 
+/** `items` with one of each `key`, first kept: a log of several products repeats every line. */
+function unique<T>(items: readonly T[], key: (item: T) => string): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const k = key(item);
+    return seen.has(k) ? false : (seen.add(k), true);
+  });
+}
+
+// The program's own files are the ones outside the lane's packages; its
+// entries have their own section.
+const ownRefused = unique(
+  cascades.filter((c) => !c.at.path.includes("/packages/") && !/^Closure\d+#call$/.test(c.refused) && !(c.refused === entry || c.refused.startsWith(`${entry}@`))),
+  (c) => `${c.refused} ${where(c.at)}`,
+);
+
 console.log(`${logPath}`);
 console.log(`  refused functions ${missing === null ? "?" : missing[1]}, root constructs ${roots.length}, cascades ${cascades.length}`);
 const noise = roots.filter((d) => NOISE.test(d.message));
 console.log(`  of the roots, ${noise.length} are exported generics nothing instantiates (on no path a program runs)`);
 
-// The chain from the entry.
-console.log();
-const start = refusedBy.get(entry);
-// The entry refused by a construct of its own has no cascade line: the only
-// sign is the module-scope call to it being dropped. The constructs are the
-// root refusals in the file that call is in.
-const droppedCall = diagnostics.find((d) =>
-  new RegExp(`dropped because it calls \`${entry}\`, which was refused`).test(d.message),
-);
-if (start === undefined && droppedCall !== undefined) {
-  const own = roots.filter((d) => d.path === droppedCall.path && !NOISE.test(d.message));
-  console.log(`\`${entry}\` is refused (${where(droppedCall)}) by constructs of its own file:`);
-  for (const root of own.slice(0, 5)) {
-    console.log(`  ${where(root)}  ${normalise(root.message).slice(0, 120)}`);
-  }
-  if (own.length > 5) {
-    console.log(`  and ${own.length - 5} more`);
-  }
-} else if (start === undefined) {
-  console.log(`\`${entry}\` is not refused: nothing stands between it and running.`);
-} else {
-  console.log(`\`${entry}\` is refused (${where(start.at)}); it calls, in order:`);
+// The chain from each entry: `main`, or `main@main_tsx` and `main@adw_tsx`
+// where one project has several entry files.
+function isEntry(name: string): boolean {
+  return name === entry || name.startsWith(`${entry}@`);
+}
+
+function printChain(start: Cascade): void {
+  console.log(`\`${start.refused}\` is refused (${where(start.at)}); it calls, in order:`);
   for (const name of start.calls) {
     const own = refusedBy.get(name);
     console.log(`  ${normalise(name)}${own === undefined ? "" : `  ${where(own.at)}`}`);
   }
-  const holders = roots.filter((d) => d.message === start.reason);
+  const holders = unique(
+    roots.filter((d) => d.message === start.reason),
+    where,
+  );
   console.log(`and the last of them stops at: ${start.reason}`);
   for (const holder of holders.slice(0, 3)) {
     console.log(`  ${where(holder)}`);
   }
   if (holders.length > 3) {
     console.log(`  and ${holders.length - 3} more with that sentence`);
+  }
+}
+
+console.log();
+const starts = [...refusedBy.values()].filter((c) => isEntry(c.refused));
+// An entry refused by a construct of its own has no cascade line: the only
+// sign is the module-scope call to it being dropped. The constructs are the
+// root refusals in the file that call is in.
+const droppedCalls = unique(
+  diagnostics.filter((d) => {
+    const called = /dropped because it calls `([^`]+)`, which was refused/.exec(d.message);
+    return called !== null && isEntry(called[1]!) && !refusedBy.has(called[1]!);
+  }),
+  where,
+);
+for (const start of starts) {
+  printChain(start);
+}
+for (const dropped of droppedCalls) {
+  const own = roots.filter((d) => d.path === dropped.path && !NOISE.test(d.message));
+  console.log(`\`${entry}\` is refused (${where(dropped)}) by constructs of its own file:`);
+  for (const root of own.slice(0, 5)) {
+    console.log(`  ${where(root)}  ${normalise(root.message).slice(0, 120)}`);
+  }
+  if (own.length > 5) {
+    console.log(`  and ${own.length - 5} more`);
+  }
+}
+if (starts.length === 0 && droppedCalls.length === 0) {
+  console.log(
+    ownRefused.length === 0
+      ? `\`${entry}\` is not refused: nothing stands between it and running.`
+      : `\`${entry}\` is not refused, but the program's own functions below are: reached as values (a component the reconciler calls), not from \`${entry}\`.`,
+  );
+}
+
+// The program's own functions refused: its components, which nothing calls
+// from the entry (React calls them, through the element that names them), so
+// a clear entry does not mean a program that renders.
+if (ownRefused.length > 0) {
+  console.log();
+  console.log(`the program's own functions refused (${ownRefused.length}):`);
+  for (const c of ownRefused.slice(0, 8)) {
+    console.log(`  ${normalise(c.refused)}  ${where(c.at)}: ${normalise(c.reason).slice(0, 110)}`);
+  }
+  if (ownRefused.length > 8) {
+    console.log(`  and ${ownRefused.length - 8} more`);
   }
 }
 
