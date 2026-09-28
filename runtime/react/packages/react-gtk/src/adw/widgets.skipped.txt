@@ -65,8 +65,6 @@ AdwPreferencesWindow.can-navigate-back	deprecated
 AdwPreferencesWindow.search-enabled	deprecated
 AdwPreferencesWindow.visible-page	deprecated
 AdwPreferencesWindow.visible-page-name	deprecated
-AdwSidebar::drop-enter	its handler returns a CEnum<GdkDragAction, c_uint>: not generated yet
-AdwSidebar::drop-value-loaded	its handler returns a CEnum<GdkDragAction, c_uint>: not generated yet
 AdwSpinRow::input	no connect overload in the bindings
 AdwSqueezer.allow-none	deprecated
 AdwSqueezer.homogeneous	deprecated
@@ -76,9 +74,7 @@ AdwSqueezer.transition-duration	deprecated
 AdwSqueezer.transition-type	deprecated
 AdwSqueezer.xalign	deprecated
 AdwSqueezer.yalign	deprecated
-AdwTabBar::extra-drag-value	its handler returns a CEnum<GdkDragAction, c_uint>: not generated yet
 AdwTabOverview::create-tab	its handler returns a AdwTabPage: not generated yet
-AdwTabOverview::extra-drag-value	its handler returns a CEnum<GdkDragAction, c_uint>: not generated yet
 AdwTabView.default-icon	removing it leaves its value: GIR gives no default
 AdwTabView.selected-page	removing it leaves its value: GIR gives no default
 AdwTabView::create-window	its handler returns a AdwTabView | null: not generated yet

@@ -491,8 +491,11 @@ interface Signal {
   name: string; // clicked
   /** The handler's parameters after the widget, typed for the app: `row: GtkListBoxRow`. */
   params: { name: string; type: string }[];
-  /** Whether the handler answers whether it handled the signal (GTK's `gboolean`). */
-  decides: boolean;
+  /**
+   * What the handler answers: `void`; `boolean`, whether it handled the
+   * signal (GTK's `gboolean`); or an enum, its choice (a drop's GdkDragAction).
+   */
+  returns: string;
   /** For `notify::x`, the getter that reads the property's new value for the handler. */
   getter?: string;
 }
@@ -988,7 +991,7 @@ function model(gir: Gir, bindings: Bindings, target: string): Model {
               jsx: `onNotify${camel(`-${p.name}`)}`,
               name: `notify::${p.name}`,
               params: [{ name: "value", type: readType }],
-              decides: false,
+              returns: "void",
               getter,
             });
           }
@@ -998,11 +1001,19 @@ function model(gir: Gir, bindings: Bindings, target: string): Model {
         const where = `${sourceTs}::${s.name}`;
         const signature = bindings.signals.get(sourceTs)?.get(s.name);
         const params = signature?.params.map((p) => ({ name: p.name, type: handlerType(p.type, handlerTypes, bindings) }));
+        // An answer is a boolean or an enum: an object a handler would make
+        // (a TabOverview's new page) is not one React can give synchronously.
+        const answers =
+          signature === undefined || signature.returns === "void"
+            ? "void"
+            : /^(CBool|CEnum)</.test(signature.returns)
+              ? handlerType(signature.returns, handlerTypes, bindings)
+              : null;
         if (s.deprecated) {
           skip(`${where}\tdeprecated`);
         } else if (signature === undefined || params === undefined) {
           skip(`${where}\tno connect overload in the bindings`);
-        } else if (signature.returns !== "void" && !/^CBool<\w+>$/.test(signature.returns)) {
+        } else if (answers === null) {
           skip(`${where}\tits handler returns a ${signature.returns}: not generated yet`);
         } else if (s.fillsArgument !== undefined) {
           // The bridge hands a handler its own copy of a record, so what it
@@ -1015,7 +1026,7 @@ function model(gir: Gir, bindings: Bindings, target: string): Model {
             jsx: `on${camel(`-${s.name}`)}`,
             name: s.name,
             params: params.map((p) => ({ name: p.name, type: p.type! })),
-            decides: signature.returns !== "void",
+            returns: answers,
           });
         }
       }
@@ -1241,9 +1252,10 @@ function emit(m: Model, target: Target): string {
           line(`      gtk.connect("${s.name}", () => {`);
           line(`        slot.dispatch(() => (slot.handler as ${handlerSignature(s)})(gtk.${s.getter}()));`);
           line("      });");
-        } else if (s.decides) {
+        } else if (s.returns !== "void") {
           const args = s.params.map((p) => `_${p.name}`);
-          line(`      gtk.connect("${s.name}", (${["_self", ...args].join(", ")}) => slot.decide(() => (slot.handler as ${handlerSignature(s)})(${args.join(", ")})));`);
+          const ask = s.returns === "boolean" ? "decide" : "answer";
+          line(`      gtk.connect("${s.name}", (${["_self", ...args].join(", ")}) => slot.${ask}(() => (slot.handler as ${handlerSignature(s)})(${args.join(", ")})));`);
         } else if (s.params.length === 0) {
           line(`      gtk.connect("${s.name}", () => slot.fire());`);
         } else {
@@ -1643,7 +1655,7 @@ function inheritedPropType(t: WidgetType, jsx: string): string | null {
 
 /** The type of a signal prop's handler: `(row: GtkListBoxRow) => void`. */
 function handlerSignature(s: Signal): string {
-  return `(${s.params.map((p) => `${p.name}: ${p.type}`).join(", ")}) => ${s.decides ? "boolean" : "void"}`;
+  return `(${s.params.map((p) => `${p.name}: ${p.type}`).join(", ")}) => ${s.returns}`;
 }
 
 function propType(value: ValueKind): string {

@@ -67,7 +67,8 @@
 //             selects the item it names, and again after each change of items;
 //             a title updates in place; an item's child is its suffix; a
 //             user's pick goes back when the app keeps its own and is heard
-//             once; an item and a section taken out go
+//             once; an item and a section taken out go; a drop's handler
+//             answers with its action, and without one the drop is declined
 //   dialog    an AlertDialog rendered in a Box is not placed in it: at commit
 //             it is presented within the Box's window; its Response
 //             elements are its buttons in React's order, one inserted between
@@ -124,10 +125,11 @@ import {
   AdwViewSwitcher,
   AdwWindow,
 } from "c:Adw-1";
+import { DragAction } from "c:Gdk-4.0";
 import { ApplicationFlags } from "c:Gio-2.0";
 import { g_main_context_iteration, g_main_loop_new, g_timeout_add_full } from "c:GLib-2.0";
 import { GtkAdjustment, GtkButton, GtkLabel, GtkStringList, GtkWindow, type GtkWidget } from "c:Gtk-4.0";
-import { react_gtk_emit, react_gtk_log } from "c:react-gtk-shim";
+import { react_gtk_emit, react_gtk_emit_choice, react_gtk_log } from "c:react-gtk-shim";
 import { setAfterEvent } from "../../../packages/react-gtk/src/HostNode.ts";
 import { adw } from "../../../packages/react-gtk/src/adw/index.ts";
 import {
@@ -771,6 +773,13 @@ function main(): void {
     siding += ">" + items();
     removeChild(sideNode, sectionZero);
     siding += ">" + items() + " heard=" + String(selectedHeard);
+    // A drop's handler answers with the action it takes; without one, none.
+    const selecting: Props = { ...sidebarProps, selected: 3 };
+    const dropping: Props = { ...selecting, onDropEnter: (index: number) => (index === 1 ? DragAction.MOVE : DragAction.COPY) };
+    commitUpdate(sideNode, "AdwSidebar", selecting, dropping, {});
+    siding += " drop=" + String(react_gtk_emit_choice(sidebarWidget, "drop-enter", 1)) + "," + String(react_gtk_emit_choice(sidebarWidget, "drop-enter", 0));
+    commitUpdate(sideNode, "AdwSidebar", dropping, selecting, {});
+    siding += ">" + String(react_gtk_emit_choice(sidebarWidget, "drop-enter", 1));
   }
   react_gtk_log("sidebar " + siding);
 

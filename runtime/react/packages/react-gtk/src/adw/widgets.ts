@@ -669,6 +669,8 @@ export interface SidebarProps extends Gtk.WidgetProps {
   onNotifySelected?: (value: number) => void;
   onActivated?: (index: number) => void;
   onDrop?: (index: number, value: GValue, preferred_action: GdkDragAction) => boolean;
+  onDropEnter?: (index: number) => GdkDragAction;
+  onDropValueLoaded?: (index: number, value: GValue) => GdkDragAction;
   onSetupMenu?: (item: AdwSidebarItem | null) => void;
 }
 
@@ -767,6 +769,7 @@ export interface TabBarProps extends Gtk.WidgetProps {
   onNotifyInverted?: (value: boolean) => void;
   onNotifyView?: (value: AdwTabView | null) => void;
   onExtraDragDrop?: (page: AdwTabPage, value: GValue) => boolean;
+  onExtraDragValue?: (page: AdwTabPage, value: GValue | null) => GdkDragAction;
 }
 
 /** `<TabButton>`'s props: AdwTabButton's own properties and signals. */
@@ -800,6 +803,7 @@ export interface TabOverviewProps extends Gtk.WidgetProps {
   onNotifyShowStartTitleButtons?: (value: boolean) => void;
   onNotifyView?: (value: AdwTabView | null) => void;
   onExtraDragDrop?: (page: AdwTabPage, value: GValue) => boolean;
+  onExtraDragValue?: (page: AdwTabPage, value: GValue | null) => GdkDragAction;
 }
 
 /** `<TabView>`'s props: AdwTabView's own properties and signals. */
@@ -3082,6 +3086,12 @@ export function sidebarSignal(gtk: AdwSidebar, key: string, slot: SignalSlot): b
     case "onDrop":
       gtk.connect("drop", (_self, _index, _value, _preferred_action) => slot.decide(() => (slot.handler as (index: number, value: GValue, preferred_action: GdkDragAction) => boolean)(_index, _value, _preferred_action)));
       return true;
+    case "onDropEnter":
+      gtk.connect("drop-enter", (_self, _index) => slot.answer(() => (slot.handler as (index: number) => GdkDragAction)(_index)));
+      return true;
+    case "onDropValueLoaded":
+      gtk.connect("drop-value-loaded", (_self, _index, _value) => slot.answer(() => (slot.handler as (index: number, value: GValue) => GdkDragAction)(_index, _value)));
+      return true;
     case "onSetupMenu":
       gtk.connect("setup-menu", (_self, _item) => {
         slot.dispatch(() => (slot.handler as (item: AdwSidebarItem | null) => void)(_item));
@@ -3448,6 +3458,9 @@ export function tabBarSignal(gtk: AdwTabBar, key: string, slot: SignalSlot): boo
     case "onExtraDragDrop":
       gtk.connect("extra-drag-drop", (_self, _page, _value) => slot.decide(() => (slot.handler as (page: AdwTabPage, value: GValue) => boolean)(_page, _value)));
       return true;
+    case "onExtraDragValue":
+      gtk.connect("extra-drag-value", (_self, _page, _value) => slot.answer(() => (slot.handler as (page: AdwTabPage, value: GValue | null) => GdkDragAction)(_page, _value)));
+      return true;
   }
   return Gtk.widgetSignal(gtk, key, slot);
 }
@@ -3568,6 +3581,9 @@ export function tabOverviewSignal(gtk: AdwTabOverview, key: string, slot: Signal
       return true;
     case "onExtraDragDrop":
       gtk.connect("extra-drag-drop", (_self, _page, _value) => slot.decide(() => (slot.handler as (page: AdwTabPage, value: GValue) => boolean)(_page, _value)));
+      return true;
+    case "onExtraDragValue":
+      gtk.connect("extra-drag-value", (_self, _page, _value) => slot.answer(() => (slot.handler as (page: AdwTabPage, value: GValue | null) => GdkDragAction)(_page, _value)));
       return true;
   }
   return Gtk.widgetSignal(gtk, key, slot);

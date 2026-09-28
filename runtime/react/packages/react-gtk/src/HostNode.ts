@@ -153,6 +153,22 @@ export class SignalSlot {
   }
 
   /**
+   * A signal whose handler answers with a choice of an enum (a drop's
+   * GdkDragAction): runs `call`, which asks the handler; with no handler, 0,
+   * which such an enum reserves for declining (no action).
+   */
+  answer(call: () => number): number {
+    if (this.handler === null || reactWriting > 0) {
+      return 0;
+    }
+    const previous = getCurrentUpdatePriority();
+    setCurrentUpdatePriority(DiscreteEventPriority);
+    const chosen = call();
+    setCurrentUpdatePriority(previous);
+    return chosen;
+  }
+
+  /**
    * For a controlled prop's `notify::`, set by the node: puts the widget back
    * to what the props say, once the change and what it updated are done.
    */

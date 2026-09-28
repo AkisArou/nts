@@ -45,7 +45,7 @@ pinned P*AB>APB>B*AP>B*PA>PA
 carousel abc>adbc>dbac>cdba>dbac>dac
 navigation AB>ABC>AB>CAB user>CA>CAB app>CA heard=2
 toggles ab active=b acb kept=b Bee ab
-sidebar a,b|c sel=c>z|a,b|c sel=b>z|a,b|c sel=c>z|b,a|c sel=c>b,a|c|z sel=z suffix=true>true kept>b,A|c|z sel=z>b,A|z sel=none>b,A sel=none heard=1
+sidebar a,b|c sel=c>z|a,b|c sel=b>z|a,b|c sel=c>z|b,a|c sel=c>b,a|c|z sel=z suffix=true>true kept>b,A|c|z sel=z>b,A|z sel=none>b,A sel=none heard=1 drop=2,1>0
 dialog true true true true responded=cancel Cancel,OK>Cancel,Delete,OK>Erase false>Cancel,OK
 preferences one removed=true shown=one
 prefspage two>one>one
