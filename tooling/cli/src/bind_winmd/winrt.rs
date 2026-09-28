@@ -727,17 +727,30 @@ impl Writer<'_> {
                 let events = self.named(base.namespace(), &format!("{}EventMap", base.name()));
                 (self.named(base.namespace(), &format!("{}Members", base.name())), events)
             });
-        // A name a base's surface gives already: C# hides the base's member
-        // behind the class's (`new`), and TypeScript's `extends` refuses the
-        // two when their types differ, so the base's stands and the class's
-        // is reached through its interface.
+        // A name a base's surface gives already. Methods on both sides are
+        // overloads, as C#'s are (`menuFlyout.showAt(target, point)` beside
+        // `FlyoutBase`'s `showAt(target)`): the class declares its own and
+        // the bases' again, since TypeScript's `extends` needs the base's
+        // signatures among the class's. Otherwise the base's stands and the
+        // class's is reached through its interface -- C# hides the base's
+        // member behind the class's (`new`), and TypeScript's `extends`
+        // refuses the two when their types differ.
         let inherited = self.inherited_member_names(def);
-        for name in declared.keys() {
-            if inherited.contains(name) {
-                self.refuse(&format!("{class}.{name}"), "an idiomatic name a base class's surface declares already; reached through its interface");
+        let mut rejoined: Vec<(String, String)> = Vec::new();
+        let names: Vec<String> = declared.keys().filter(|name| inherited.contains(*name)).cloned().collect();
+        for name in names {
+            let own_methods = texts.iter().filter(|(given, _)| *given == name).all(|(_, text)| text.contains("@ntsVtable"));
+            if let Some(bases) = self.inherited_methods(def, &name).filter(|_| own_methods) {
+                rejoined.extend(bases.into_iter().map(|text| (name.clone(), text)));
+            } else {
+                self.refuse(&format!("{class}.{name}"), "an idiomatic name a base class's surface declares already, one of them a property; reached through its interface");
+                declared.remove(&name);
             }
         }
-        declared.retain(|name, _| !inherited.contains(name));
+        for (name, _) in &rejoined {
+            *declared.entry(name.clone()).or_default() += 1;
+        }
+        texts.extend(rejoined);
         let inherited = self.inherited_event_names(def);
         for (name, count) in &raised {
             if inherited.contains(name) {
@@ -848,6 +861,45 @@ impl Writer<'_> {
     /// Every idiomatic name the surfaces of `def`'s base classes declare,
     /// from the interfaces' method names alone -- nothing spelled, so nothing
     /// is imported for it.
+    /// Every declaration of the method `name` on the surfaces of `def`'s
+    /// bases, as each base declares it, through its own interface: what a
+    /// class overloading a base's method declares again beside its own.
+    /// `None` where a base gives `name` as a property, which no overload is.
+    fn inherited_methods(&mut self, def: TypeDef, name: &str) -> Option<Vec<String>> {
+        let mut texts = Vec::new();
+        let mut base = def.extends();
+        for _ in 0..32 {
+            let Some(parent) = base.and_then(|parent| self.index.get(parent.namespace(), parent.name()).next()) else { break };
+            if parent.category() != TypeCategory::Class {
+                break;
+            }
+            let public: Vec<(Type, bool)> = parent
+                .interface_impls()
+                .filter(|implemented| !implemented.has_attribute("ProtectedAttribute") && !implemented.has_attribute("OverridableAttribute"))
+                .map(|implemented| (implemented.interface(&[]), implemented.has_attribute("DefaultAttribute")))
+                .collect();
+            for (interface, is_default) in public {
+                let Type::ClassName(named) = &interface else { continue };
+                if !named.generics.is_empty() {
+                    continue;
+                }
+                let Some(interface_def) = self.index.get(&named.namespace, &named.name).next() else { continue };
+                let Some(iid) = iid(interface_def) else { continue };
+                let via = if is_default { format!("{iid} {}_{}", named.namespace.replace('.', "_"), named.name) } else { iid };
+                for (given, text) in self.interface_members(interface_def, &via) {
+                    if given == name {
+                        if !text.contains("@ntsVtable") {
+                            return None;
+                        }
+                        texts.push(text);
+                    }
+                }
+            }
+            base = parent.extends();
+        }
+        Some(texts)
+    }
+
     fn inherited_member_names(&self, def: TypeDef) -> BTreeSet<String> {
         let mut names = BTreeSet::new();
         let mut base = def.extends();

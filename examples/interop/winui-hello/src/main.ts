@@ -58,7 +58,7 @@ import { Application, FocusState, Window } from "winrt:Microsoft.UI.Xaml";
 import type { IFrameworkElementOverrides, ILaunchActivatedEventArgs } from "winrt:Microsoft.UI.Xaml";
 import type { IPointerRoutedEventArgs } from "winrt:Microsoft.UI.Xaml.Input";
 import { AutomationPeer, ButtonAutomationPeer, FrameworkElementAutomationPeer } from "winrt:Microsoft.UI.Xaml.Automation.Peers";
-import { Button, Frame, Page, StackPanel, TextBlock, WebView2, XamlControlsResources } from "winrt:Microsoft.UI.Xaml.Controls";
+import { Button, Frame, MenuFlyout, MenuFlyoutItem, Page, StackPanel, TextBlock, WebView2, XamlControlsResources } from "winrt:Microsoft.UI.Xaml.Controls";
 import { ContentCoordinateConverter, ContentIsland } from "winrt:Microsoft.UI.Content";
 import { ElementCompositionPreview } from "winrt:Microsoft.UI.Xaml.Hosting";
 import { TypeKind } from "winrt:Windows.UI.Xaml.Interop";
@@ -247,10 +247,24 @@ class App extends Application {
     const screen = converter.convertLocalToScreenWithPoints([{ x: 0, y: 0 }, { x: 10, y: 20 }]);
     window.appWindow.titleBar.setDragRectangles([{ x: 0, y: 0, width: 100, height: 32 }]);
     const points = String(screen.length) + ":" + String(screen[1].x - screen[0].x) + "," + String(screen[1].y - screen[0].y);
+    // A context menu shown both ways: `showAt(target)`, `FlyoutBase`'s,
+    // through its interface, and `showAt(target, point)`, `MenuFlyout`'s
+    // own -- one name, overloaded across the class and its base as C#'s is.
+    const menu = new MenuFlyout();
+    const item = new MenuFlyoutItem();
+    item.text = "item";
+    menu.items.Append(item);
+    menu.showAt(button);
+    const openedAtTarget = menu.isOpen;
+    menu.hide();
+    menu.showAt(button, { x: 4, y: 4 });
+    const openedAtPoint = menu.isOpen;
+    menu.hide();
+    const menus = String(openedAtTarget) + ":" + String(openedAtPoint);
     const line =
       "title=" + window.title + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
         " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(button.entered) +
-        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " isButton=" + String(isButton) + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " navigated=" + String(navigated) + " page=" + page.name + ":" + String(page.kind) + " current=" + current.name + " onPage=" + String(onPage) + " back=" + String(back) + " vector=" + vector + " islands=" + String(island) + " replaced=" + replaced + " points=" + points + " rebuilt=" + String(this.rebuilt());
+        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " isButton=" + String(isButton) + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " navigated=" + String(navigated) + " page=" + page.name + ":" + String(page.kind) + " current=" + current.name + " onPage=" + String(onPage) + " back=" + String(back) + " menus=" + menus + " vector=" + vector + " islands=" + String(island) + " replaced=" + replaced + " points=" + points + " rebuilt=" + String(this.rebuilt());
     this.browse(window, line);
   }
 

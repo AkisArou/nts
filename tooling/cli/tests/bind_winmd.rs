@@ -742,6 +742,29 @@ fn a_received_array_is_a_typed_array() {
     let _ = std::fs::remove_dir_all(&out);
 }
 
+/// A name two interfaces give as methods is overloaded, as C# overloads it:
+/// `IFrame.Navigate` and `IFrame2.Navigate`, one argument apart -- and
+/// across a class and its base.
+fn overloads_are_declared(module: &str) {
+    for overload in [
+        "navigate(sourcePageType: Copied<TypeName>, parameter: Inspectable | null): boolean;",
+        "navigate(sourcePageType: Copied<TypeName>, parameter: Inspectable | null, infoOverride: INavigationTransitionInfo | null): boolean;",
+    ] {
+        assert!(module.contains(overload), "no overload {overload}");
+    }
+    // And across a class and its base: `MenuFlyout`'s own `showAt(target,
+    // point)` beside `FlyoutBase`'s two, declared again on `MenuFlyout`,
+    // since `extends` needs a base's signatures among the class's.
+    let menu = &module[module.find("export interface MenuFlyoutMembers").expect("no MenuFlyoutMembers")..];
+    let menu = &menu[..menu.find("\n  }").unwrap()];
+    for overload in [
+        "showAt(targetElement: IUIElement | null, point: ByValue<Point> | Fields<Point>): void;",
+        "showAt(placementTarget: IFrameworkElement | null): void;",
+    ] {
+        assert!(menu.contains(overload), "no overload {overload}:\n{menu}");
+    }
+}
+
 #[test]
 fn composable_classes_are_constructed_as_themselves() {
     let Some(metadata) = winrt_metadata() else {
@@ -758,14 +781,7 @@ fn composable_classes_are_constructed_as_themselves() {
         .unwrap();
     assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
     let module = std::fs::read_to_string(out.join("Windows.UI.Xaml.Controls.d.ts")).unwrap();
-    // A name two interfaces give as methods is overloaded, as C# overloads
-    // it: `IFrame.Navigate` and `IFrame2.Navigate`, one argument apart.
-    for overload in [
-        "navigate(sourcePageType: Copied<TypeName>, parameter: Inspectable | null): boolean;",
-        "navigate(sourcePageType: Copied<TypeName>, parameter: Inspectable | null, infoOverride: INavigationTransitionInfo | null): boolean;",
-    ] {
-        assert!(module.contains(overload), "no overload {overload}");
-    }
+    overloads_are_declared(&module);
     let button = &module[module.find("export namespace Button {").expect("no Button namespace")..];
     let button = &button[..button.find("\n  }").unwrap()];
     assert!(

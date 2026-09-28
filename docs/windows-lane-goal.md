@@ -178,14 +178,14 @@ the same vtable calls on the VM measured the behaviour first.
     between `get_Children` and `get_Size` -- XAML cleared the destroyed
     panel's children and the size read 0.
 - **What is left refused**, measured over winui-hello's bindings (the 85
-  namespaces its imports reach, WebView2's among them), 2026-09-28: 369
+  namespaces its imports reach, WebView2's among them), 2026-09-28: 363
   items, 312 of them a factory interface's composable `CreateInstance`,
-  which is its class's constructor and bound as that. Of the other 57: 25
+  which is its class's constructor and bound as that. Of the other 51: 25
   delegates that return a value, are answered or are generic; 17 arrays --
   of characters, `Guid`s or 64-bit integers, and the generic interfaces'
   own `GetMany` and `ReplaceAll`, which their instantiations declare; 7
-  generic members with no signature; 6 idiomatic names a base class's
-  surface declares already; 2 `in` parameters after an `out` one. Before
+  generic members with no signature; 2 `in` parameters after an `out`
+  one. Before
   `Copied<T>`, struct `[out]` parameters and named delegates, the same
   bindings refused 497, among them every `TypeName` member, 22 struct
   `[out]`s and 60 delegates; before struct fields that are booleans or
@@ -200,7 +200,10 @@ the same vtable calls on the VM measured the behaviour first.
 - **Overloads:** a name two of a class's interfaces give as methods is
   declared once per interface, as C# overloads it (`frame.navigate(type)`,
   `frame.navigate(type, parameter)`); the checker's choice is the slot
-  called. One given as a property anywhere stays refused.
+  called. So is one a class and its base both give, the base's declared
+  again beside the class's (`menuFlyout.showAt(target, point)` beside
+  `FlyoutBase`'s `showAt(target)`). One given as a property anywhere stays
+  refused.
 - **Delegates and events:**
   - A TypeScript function is a COM delegate object whose `Invoke` is a
     per-signature adapter. The closure is lent until the object's count
