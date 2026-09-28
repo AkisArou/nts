@@ -95,6 +95,7 @@ import { fileURLToPath } from "node:url";
 
 import { selfChecks } from "./attempt262.mjs";
 import { bodyOf, FRONTMATTER, HARNESS, HARNESS_DONOTEVALUATE, HARNESS_THROWS, pinCompiler } from "./project.mjs";
+import { frontendFor } from "../conformance/pin.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -154,6 +155,16 @@ const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
 // been the only thing claiming isolation. Anything this process runs outside
 // `environment()` gets a private cache by name, which wins over any value the
 // caller set.
+// The frontend the compiler under test runs with: NTS_TSGO, else the one a
+// pin recorded beside the binary (pin.mjs), else the tree's. Set on this
+// process so every attempt inherits it -- a pinned copy in the scratch has no
+// frontend beside it, and the control program then fails as a "frontend-crash".
+const FRONTEND = frontendFor(NTS, ROOT);
+if (!FRONTEND.exists) {
+  console.log(`  NOT MEASURED: no frontend at ${FRONTEND.path} -- set NTS_TSGO, or use a pin (it records its frontend)`);
+  process.exit(2);
+}
+process.env.NTS_TSGO = FRONTEND.path;
 process.env.TMPDIR = join(SCRATCH, "tmp");
 mkdirSync(process.env.TMPDIR, { recursive: true });
 process.env.NTS_SNAPSHOT_CACHE = join(SCRATCH, "snapshots");

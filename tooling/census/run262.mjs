@@ -54,6 +54,7 @@ import { fileURLToPath } from "node:url";
 
 import { attempt, selfChecks } from "./attempt262.mjs";
 import { pinCompiler, workspace } from "./project.mjs";
+import { frontendFor } from "../conformance/pin.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -98,6 +99,16 @@ const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
 // Temporaries and the snapshot cache under the scratch rather than shared;
 // see `conformance262.mjs`, which does the same and says why the cache is
 // named rather than left to follow `TMPDIR` (each case also runs with it off).
+// The frontend the compiler under test runs with: NTS_TSGO, else the one a
+// pin recorded beside the binary (pin.mjs), else the tree's. Set on this
+// process so every attempt inherits it -- a pinned copy in the scratch has no
+// frontend beside it, and the control program then fails as a "frontend-crash".
+const FRONTEND = frontendFor(NTS, ROOT);
+if (!FRONTEND.exists) {
+  console.log(`  NOT MEASURED: no frontend at ${FRONTEND.path} -- set NTS_TSGO, or use a pin (it records its frontend)`);
+  process.exit(2);
+}
+process.env.NTS_TSGO = FRONTEND.path;
 process.env.TMPDIR = join(SCRATCH, "tmp");
 mkdirSync(process.env.TMPDIR, { recursive: true });
 process.env.NTS_SNAPSHOT_CACHE = join(SCRATCH, "snapshots");

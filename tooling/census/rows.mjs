@@ -34,7 +34,7 @@
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { bodyOf } from "./project.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -141,52 +141,55 @@ function selfTest() {
   return null;
 }
 
-const argv = process.argv.slice(2);
-const broken = selfTest();
-if (broken) {
-  console.log(`  NOT MEASURED: self-test failed -- ${broken}`);
-  process.exit(2);
-}
-if (argv.includes("--self-test")) {
-  console.log("  self-test: rows, constructs, message/where/source filters, grouping and a bucket and a cause move each read");
-  process.exit(0);
-}
-
-const FLAGS = ["bucket", "why", "message", "code", "where", "first", "path", "source", "by", "list"];
-const opts = {};
-const files = [];
-for (let i = 0; i < argv.length; i++) {
-  const name = argv[i].replace(/^--/, "");
-  if (argv[i].startsWith("--") && FLAGS.includes(name)) opts[name] = argv[++i];
-  else if (argv[i] !== "--diff") files.push(argv[i]);
-}
-if (files.length === 0 || (opts.by && !KEYS[opts.by])) {
-  console.log(`  usage: rows.mjs <rows> ... [--${FLAGS.slice(0, 8).join(" <re>] [--")} <re>] [--by ${Object.keys(KEYS).join("|")}] [--list N]`);
-  console.log("         rows.mjs --diff <before-rows> <after-rows> [filters]");
-  process.exit(2);
-}
-const keep = filterFrom(opts);
-
-if (argv.includes("--diff")) {
-  if (files.length !== 2) {
-    console.log("  --diff takes two rows files, before then after");
+// Importable for its functions (readRows, filterFrom, group, diff); runs only as a command.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  const argv = process.argv.slice(2);
+  const broken = selfTest();
+  if (broken) {
+    console.log(`  NOT MEASURED: self-test failed -- ${broken}`);
     process.exit(2);
   }
-  const [before, after] = files.map((f) => readRows(readFileSync(f, "utf8")));
-  const scope = (m) => new Map([...m].filter(([, r]) => keep(r)));
-  const moves = diff(scope(before), scope(after));
-  console.log(`  before ${before.size} file(s), after ${after.size}; ${moves.reduce((a, [, v]) => a + v.length, 0)} moved`);
-  for (const [k, paths] of moves) {
-    console.log(`  ${String(paths.length).padStart(5)}  ${k}`);
-    for (const p of paths.slice(0, Number(opts.list ?? 5))) console.log(`           ${p}`);
+  if (argv.includes("--self-test")) {
+    console.log("  self-test: rows, constructs, message/where/source filters, grouping and a bucket and a cause move each read");
+    process.exit(0);
   }
-  if (moves.length === 0) console.log("  no file moved, and no file's cause changed");
-  process.exit(0);
-}
 
-const rows = files.flatMap((f) => [...readRows(readFileSync(f, "utf8")).values()]);
-const matched = rows.filter(keep);
-console.log(`  ${matched.length} of ${rows.length} file(s) match`);
-for (const [k, g] of group(matched, opts.by ?? "bucket").slice(0, Number(opts.list ?? 20))) {
-  console.log(`  ${String(g.n).padStart(6)}  ${String(k).slice(0, 110)}   e.g. ${g.example}`);
+  const FLAGS = ["bucket", "why", "message", "code", "where", "first", "path", "source", "by", "list"];
+  const opts = {};
+  const files = [];
+  for (let i = 0; i < argv.length; i++) {
+    const name = argv[i].replace(/^--/, "");
+    if (argv[i].startsWith("--") && FLAGS.includes(name)) opts[name] = argv[++i];
+    else if (argv[i] !== "--diff") files.push(argv[i]);
+  }
+  if (files.length === 0 || (opts.by && !KEYS[opts.by])) {
+    console.log(`  usage: rows.mjs <rows> ... [--${FLAGS.slice(0, 8).join(" <re>] [--")} <re>] [--by ${Object.keys(KEYS).join("|")}] [--list N]`);
+    console.log("         rows.mjs --diff <before-rows> <after-rows> [filters]");
+    process.exit(2);
+  }
+  const keep = filterFrom(opts);
+
+  if (argv.includes("--diff")) {
+    if (files.length !== 2) {
+      console.log("  --diff takes two rows files, before then after");
+      process.exit(2);
+    }
+    const [before, after] = files.map((f) => readRows(readFileSync(f, "utf8")));
+    const scope = (m) => new Map([...m].filter(([, r]) => keep(r)));
+    const moves = diff(scope(before), scope(after));
+    console.log(`  before ${before.size} file(s), after ${after.size}; ${moves.reduce((a, [, v]) => a + v.length, 0)} moved`);
+    for (const [k, paths] of moves) {
+      console.log(`  ${String(paths.length).padStart(5)}  ${k}`);
+      for (const p of paths.slice(0, Number(opts.list ?? 5))) console.log(`           ${p}`);
+    }
+    if (moves.length === 0) console.log("  no file moved, and no file's cause changed");
+    process.exit(0);
+  }
+
+  const rows = files.flatMap((f) => [...readRows(readFileSync(f, "utf8")).values()]);
+  const matched = rows.filter(keep);
+  console.log(`  ${matched.length} of ${rows.length} file(s) match`);
+  for (const [k, g] of group(matched, opts.by ?? "bucket").slice(0, Number(opts.list ?? 20))) {
+    console.log(`  ${String(g.n).padStart(6)}  ${String(k).slice(0, 110)}   e.g. ${g.example}`);
+  }
 }
