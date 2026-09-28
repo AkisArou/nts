@@ -2,9 +2,9 @@
 // `lib/internal/crypto/webcrypto_util.js`: usage checks, JWK checks, and
 // importing key material into handles.
 
-import { Buffer } from "../../../buffer/src/main.ts";
 import { domException, domExceptionWithCause } from "../../../internal/dom-exception.ts";
-import { KeyObjectHandle } from "../keys.ts";
+import { asymmetricHandle, importJwk, KeyObjectHandle, type KeyObjectType, parseDerKey } from "../keys.ts";
+import { bytesOfBase64 } from "../util.ts";
 import { createCryptoKey, type CryptoKey, type KeyAlgorithm } from "./key.ts";
 import { type Job, nativeJob, numBitsToBytes, truncateToBitLength, validateKeyOps } from "./util.ts";
 
@@ -31,6 +31,19 @@ export interface JsonWebKey {
   pub?: string;
   priv?: string;
 }
+
+/**
+ * Node's `KeyObjectHandle` import format: key material already held, as
+ * `KeyObject#toCryptoKey` and `getPublicKey` hand it over, with the type node's
+ * handle carries in itself.
+ */
+export interface TypedHandle {
+  handle: KeyObjectHandle;
+  type: KeyObjectType;
+}
+
+/** What a family's import takes: bytes, a JWK, or a held key. */
+export type KeyData = Uint8Array | JsonWebKey | TypedHandle;
 
 /** Node's `verifyAcceptableKeyUse`. */
 export function verifyAcceptableKeyUse(subject: string, usages: Set<string>, allowed: readonly string[]): void {
@@ -114,7 +127,7 @@ export function validateJwk(
 
 /** Node's `importSecretKey`: a secret handle over a copy of the bytes. */
 export function importSecretKey(keyData: Uint8Array): KeyObjectHandle {
-  return new KeyObjectHandle(keyData.slice(), 0);
+  return new KeyObjectHandle(new Uint8Array(keyData), 0);
 }
 
 /**
@@ -125,8 +138,7 @@ export function importJwkSecretKey(keyData: JsonWebKey): KeyObjectHandle {
   if (typeof keyData.k !== "string") {
     throw domExceptionWithCause("Invalid keyData", "DataError", new TypeError("Invalid JWK secret key format"));
   }
-  const bytes = Buffer.from(keyData.k, "base64");
-  return new KeyObjectHandle(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength), 0);
+  return new KeyObjectHandle(bytesOfBase64(keyData.k), 0);
 }
 
 
@@ -161,7 +173,7 @@ export function secretKeyGen(
 export function importGenericSecretKey(
   algorithm: { name: string },
   format: string,
-  keyData: Uint8Array,
+  keyData: KeyData,
   extractable: boolean,
   usages: readonly string[],
 ): CryptoKey | undefined {
@@ -173,6 +185,89 @@ export function importGenericSecretKey(
       throw domException(`Unsupported key usage for a ${name} key`, "SyntaxError");
     }
   }
-  if (format !== "raw-secret" && format !== "raw") return undefined;
-  return createCryptoKey("secret", importSecretKey(keyData), { name }, usageSet, false);
+  let handle: KeyObjectHandle;
+  switch (format) {
+    case "KeyObjectHandle":
+      handle = (keyData as TypedHandle).handle;
+      break;
+    case "raw-secret":
+    case "raw":
+      handle = importSecretKey(keyData as Uint8Array);
+      break;
+    default:
+      return undefined;
+  }
+  return createCryptoKey("secret", handle, { name }, usageSet, false);
+}
+
+/** The usages a key pair's family allows: its public key's, its private key's, and both, for generation. */
+export interface KeyUsageLists {
+  public: readonly string[];
+  private: readonly string[];
+  keygen: readonly string[];
+}
+
+/** Node's `createKeyUsages`. */
+export function createKeyUsages(publicUsages: readonly string[], privateUsages: readonly string[]): KeyUsageLists {
+  return { public: publicUsages, private: privateUsages, keygen: [...publicUsages, ...privateUsages] };
+}
+
+/** Node's `getKeyPairUsages`: the usages asked for, split between the pair in their allowed order. */
+export function getKeyPairUsages(usages: Set<string>, allowed: KeyUsageLists): { public: Set<string>; private: Set<string> } {
+  const union = (list: readonly string[]): Set<string> => {
+    const set = new Set<string>();
+    for (const usage of list) if (usages.has(usage)) set.add(usage);
+    return set;
+  };
+  return { public: union(allowed.public), private: union(allowed.private) };
+}
+
+/** Node's `importDerKey`: SPKI or PKCS#8, a parse failure a `DataError` caused by it. */
+export function importDerKey(keyData: Uint8Array, isPublic: boolean): number {
+  try {
+    return parseDerKey(keyData, isPublic);
+  } catch (error) {
+    throw domExceptionWithCause("Invalid keyData", "DataError", error);
+  }
+}
+
+/** Node's `importJwkKey`. */
+export function importJwkKey(keyData: JsonWebKey): number {
+  try {
+    return importJwk(keyData).native;
+  } catch (error) {
+    throw domExceptionWithCause("Invalid keyData", "DataError", error);
+  }
+}
+
+/** A generated pair, as node's key pair jobs deliver it. */
+export interface CryptoKeyPair {
+  publicKey: CryptoKey;
+  privateKey: CryptoKey;
+}
+
+/**
+ * Node's key pair jobs in their Web Crypto mode (`EncodeWebCryptoKey`): one
+ * key behind two handles, the public one always extractable. `job` is a
+ * `keygen.c` job, configured; the queue takes it.
+ */
+export function keyPairJob(
+  job: number,
+  algorithm: KeyAlgorithm,
+  publicUsages: Set<string>,
+  privateUsages: Set<string>,
+  extractable: boolean,
+): Job<CryptoKeyPair> {
+  return nativeJob<CryptoKeyPair>("Key generation job failed", (succeed, fail) =>
+    nts_crypto_keygen_queue(job, (ok, key) => {
+      if (!ok) {
+        fail();
+        return;
+      }
+      succeed({
+        publicKey: createCryptoKey("public", asymmetricHandle(key), algorithm, publicUsages, true),
+        privateKey: createCryptoKey("private", asymmetricHandle(key), algorithm, privateUsages, extractable),
+      });
+    }),
+  );
 }

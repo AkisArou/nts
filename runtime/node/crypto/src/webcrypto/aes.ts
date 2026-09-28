@@ -16,7 +16,9 @@ import {
   importJwkSecretKey,
   importSecretKey,
   type JsonWebKey,
+  type KeyData,
   secretKeyGen,
+  type TypedHandle,
   validateJwk,
   validateKeyUsages,
   validateUsagesNotEmpty,
@@ -155,7 +157,7 @@ export function aesGenerateKey(algorithm: NormalizedAlgorithm, extractable: bool
 export function aesImportKey(
   algorithm: NormalizedAlgorithm,
   format: string,
-  keyData: Uint8Array | JsonWebKey,
+  keyData: KeyData,
   extractable: boolean,
   usages: string[],
 ): CryptoKey | undefined {
@@ -164,6 +166,11 @@ export function aesImportKey(
   let handle: KeyObjectHandle;
   let length: number;
   switch (format) {
+    case "KeyObjectHandle":
+      handle = (keyData as TypedHandle).handle;
+      length = handle.bytes.byteLength * 8;
+      validateKeyLength(length);
+      break;
     case "raw-secret":
     case "raw": {
       if (format === "raw" && name === "AES-OCB") return undefined;

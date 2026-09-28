@@ -106,3 +106,87 @@ NtsView *nts_crypto_public_key_cipher(double operation, double key, NtsView *dat
     if (result == NULL) nts_crypto_record_failure();
     return result;
 }
+
+/* ---------------------------------------------------------- Web Crypto's OAEP */
+
+/* A Web Crypto RSA-OAEP job's key, digest, label and input, and its output. */
+typedef struct {
+    EVP_PKEY *pkey;
+    bool encrypt;
+    const EVP_MD *md;
+    unsigned char *label;
+    size_t label_length;
+    unsigned char *in;
+    size_t in_length;
+    unsigned char *out;
+    size_t out_length;
+} OaepJob;
+
+static void oaep_dispose(void *state) {
+    OaepJob *job = state;
+    EVP_PKEY_free(job->pkey);
+    free(job->label);
+    free(job->in);
+    OPENSSL_clear_free(job->out, job->out_length);
+    free(job);
+}
+
+/* ncrypto's `RSA_Cipher` as node's `RSACipherJob` runs it: OAEP, the key's
+ * digest for both the label hash and MGF1, and the label if there is one. */
+static bool oaep_run(void *state) {
+    OaepJob *job = state;
+    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(job->pkey, NULL);
+    bool ok = ctx != NULL &&
+              (job->encrypt ? EVP_PKEY_encrypt_init(ctx) : EVP_PKEY_decrypt_init(ctx)) > 0 &&
+              EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_PKCS1_OAEP_PADDING) > 0 &&
+              EVP_PKEY_CTX_set_rsa_oaep_md(ctx, job->md) > 0 && EVP_PKEY_CTX_set_rsa_mgf1_md(ctx, job->md) > 0;
+    if (ok && job->label_length > 0) {
+        unsigned char *copy = OPENSSL_memdup(job->label, job->label_length);
+        ok = copy != NULL && EVP_PKEY_CTX_set0_rsa_oaep_label(ctx, copy, (int)job->label_length) > 0;
+        if (!ok) OPENSSL_free(copy);
+    }
+    size_t length = 0;
+    ok = ok && (job->encrypt ? EVP_PKEY_encrypt(ctx, NULL, &length, job->in, job->in_length)
+                             : EVP_PKEY_decrypt(ctx, NULL, &length, job->in, job->in_length)) > 0;
+    job->out = ok ? malloc(length == 0 ? 1 : length) : NULL;
+    ok = ok && job->out != NULL &&
+         (job->encrypt ? EVP_PKEY_encrypt(ctx, job->out, &length, job->in, job->in_length)
+                       : EVP_PKEY_decrypt(ctx, job->out, &length, job->in, job->in_length)) > 0;
+    job->out_length = ok ? length : 0;
+    EVP_PKEY_CTX_free(ctx);
+    return ok;
+}
+
+static void oaep_deliver(void *state, bool ok, NtsHeader *done) {
+    OaepJob *job = state;
+    nts_crypto_deliver_bytes(done, ok, job->out, job->out_length);
+}
+
+static const NtsCryptoWork oaep_work = {oaep_run, oaep_deliver, oaep_dispose};
+
+static unsigned char *copy_bytes(NtsView *view, size_t *length) {
+    *length = (size_t)nts_view_byte_length(view);
+    unsigned char *copy = malloc(*length == 0 ? 1 : *length);
+    if (copy != NULL && *length > 0) memcpy(copy, nts_view_bytes(view), *length);
+    return copy;
+}
+
+/* Web Crypto's RSA-OAEP `encrypt` or `decrypt` on the thread pool, delivered
+ * to `done(ok, bytes)`. */
+void nts_crypto_rsa_oaep_job(bool encrypt, double key, double digest, NtsView *label, NtsView *data, NtsHeader *done) {
+    EVP_PKEY *pkey = nts_crypto_key_at(key);
+    const EVP_MD *md = nts_crypto_digest_at(digest);
+    OaepJob *job = pkey == NULL || md == NULL ? NULL : calloc(1, sizeof(OaepJob));
+    if (job == NULL) return;
+    EVP_PKEY_up_ref(pkey);
+    job->pkey = pkey;
+    job->encrypt = encrypt;
+    job->md = md;
+    job->label = copy_bytes(label, &job->label_length);
+    job->in = copy_bytes(data, &job->in_length);
+    if (job->label == NULL || job->in == NULL) {
+        oaep_dispose(job);
+        return;
+    }
+    nts_crypto_queue_work(&oaep_work, job, done);
+}

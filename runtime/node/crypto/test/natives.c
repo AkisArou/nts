@@ -1317,6 +1317,27 @@ static void aes_ciphers(void) {
     uv_run(uv_default_loop(), UV_RUN_DEFAULT);
     expect_true("  and input needing more blocks than the counter has fails, with nothing queued",
                 !job_ok && nts_crypto_take_errors()->header.length == 3);
+    /* Web Crypto's RSA-OAEP job: SHA-256 for both the label hash and MGF1,
+     * checked by the synchronous path node:crypto uses, which sets the same. */
+    NtsView *none = bytes("", 0);
+    double rsa_private = nts_crypto_key_parse_private(1, -1, file(KEYS "rsa_private.pem"), none, false);
+    double rsa_public = nts_crypto_key_parse_public(1, -1, file(KEYS "rsa_public.pem"), none, false);
+    double sha256 = nts_crypto_digest_id(text("sha256"));
+    nts_crypto_rsa_oaep_job(true, rsa_public, sha256, utf8("label"), utf8("attack at dawn"), &job_callback);
+    uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+    NtsView *ciphertext = hex(job_hex);
+    NtsView *plain = nts_crypto_public_key_cipher(1, rsa_private, ciphertext, 4, sha256, utf8("label"));
+    expect_true("an RSA-OAEP job encrypts what OAEP-SHA-256 decrypts",
+                job_ok && plain != NULL && nts_view_byte_length(plain) == 14 &&
+                    memcmp(nts_view_bytes(plain), "attack at dawn", 14) == 0);
+    nts_crypto_rsa_oaep_job(false, rsa_private, sha256, utf8("label"), ciphertext, &job_callback);
+    uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+    expect_true("  and decrypts it", job_ok && strcmp(job_hex, "61747461636b206174206461776e") == 0);
+    nts_crypto_rsa_oaep_job(false, rsa_private, sha256, utf8("other"), ciphertext, &job_callback);
+    uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+    expect_true("  but not under another label", !job_ok);
+    nts_crypto_take_errors();
+
     expect_true("AES's configuration refusals: a short GCM IV, a CTR length of 0, a 16-byte OCB IV, a 20-byte key",
                 nts_crypto_aes_config(2, 16, 8, 16) == -2 && nts_crypto_aes_config(1, 16, 16, 0) == -3 &&
                     nts_crypto_aes_config(4, 16, 16, 16) == -2 && nts_crypto_aes_config(0, 20, 16, 0) == -1 &&

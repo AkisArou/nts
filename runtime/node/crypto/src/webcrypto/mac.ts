@@ -21,7 +21,9 @@ import {
   importJwkSecretKey,
   importSecretKey,
   type JsonWebKey,
+  type KeyData,
   secretKeyGen,
+  type TypedHandle,
   validateJwk,
   validateKeyUsages,
   validateUsagesNotEmpty,
@@ -77,7 +79,7 @@ export function hmacGenerateKey(algorithm: NormalizedAlgorithm, extractable: boo
 /** Node's `macImportKey`, for HMAC: raw bytes, a JWK, or a handle a derivation made. */
 export function macImportKey(
   format: string,
-  keyData: Uint8Array | JsonWebKey,
+  keyData: KeyData,
   algorithm: NormalizedAlgorithm,
   extractable: boolean,
   usages: string[],
@@ -85,6 +87,9 @@ export function macImportKey(
   const usageSet = validateKeyUsages(usages, kUsages, algorithm.name);
   let handle: KeyObjectHandle;
   switch (format) {
+    case "KeyObjectHandle":
+      handle = (keyData as TypedHandle).handle;
+      break;
     case "raw-secret":
     case "raw":
       handle = importSecretKey(keyData as Uint8Array);
@@ -126,7 +131,7 @@ export function hmacSignVerify(
     return jobPromise(() => bytesJob("Deriving bits failed", (done) => nts_crypto_hmac_job(id, secret, input, done)));
   }
   // The job holds its own copy of what it verifies, as node's does.
-  const expected = bytesOfSource(signature).slice();
+  const expected = new Uint8Array(bytesOfSource(signature));
   return jobPromise(() =>
     nativeJob<boolean>("Deriving bits failed", (succeed, fail) =>
       nts_crypto_hmac_job(id, secret, input, (ok, mac) => {

@@ -12,17 +12,19 @@
 // functions; that descriptor, like the classes' `toStringTag`s, is metadata
 // `shape.mjs` applies.
 
-import { TextDecoder } from "../../../../web-platform/src/core/encoding.ts";
-import { Buffer } from "../../../buffer/src/main.ts";
+import { isUtf8 } from "../../../buffer/src/main.ts";
 import { domException, domExceptionWithCause } from "../../../internal/dom-exception.ts";
-import { ERR_ILLEGAL_CONSTRUCTOR, ERR_INVALID_THIS } from "../../../internal/errors.ts";
+import { ERR_ENCODING_INVALID_ENCODED_DATA, ERR_ILLEGAL_CONSTRUCTOR, ERR_INVALID_THIS } from "../../../internal/errors.ts";
+import { utf8Decode, utf8Length, utf8Write } from "../../../internal/utf8.ts";
 import { emitExperimentalWarning } from "../../../internal/process-warning.ts";
 import { convertBoolean, convertDOMString, convertUnsignedLong, type ConversionOptions } from "../../../internal/webidl.ts";
 import { getRandomValues as fillRandomValues, randomUUID as newRandomUUID } from "../random.ts";
-import { asBuffer } from "../util.ts";
+import { asymmetricHandle, exportJwkOf, type KeyObjectHandle, type KeyObjectType, webCryptoHooks } from "../keys.ts";
+import { base64urlOf } from "../util.ts";
 import { aesCipher, aesGenerateKey, aesImportKey, getAlgorithmName } from "./aes.ts";
 import { asyncDigest } from "./digest.ts";
 import { hkdfDeriveBits, pbkdf2DeriveBits, validateDeriveBitsLength } from "./kdf.ts";
+import { rsaExportKey, rsaImportKey, rsaJwkAlgorithm, rsaKeyGenerate, rsaOaepCipher, rsaSignVerify } from "./rsa.ts";
 import {
   type CryptoKey,
   getCryptoKeyAlgorithm,
@@ -35,6 +37,7 @@ import {
 } from "./key.ts";
 import { hmacGenerateKey, hmacJwkAlgorithm, hmacSignVerify, macImportKey } from "./mac.ts";
 import {
+  bytesOfSource,
   callSubtleCryptoMethod,
   getBlockSize,
   type Job,
@@ -46,7 +49,7 @@ import {
   resolvedJob,
   validateMaxBufferLength,
 } from "./util.ts";
-import { importGenericSecretKey, type JsonWebKey } from "./webcrypto-util.ts";
+import { importGenericSecretKey, type JsonWebKey, type KeyData } from "./webcrypto-util.ts";
 import {
   convertAlgorithmIdentifier,
   convertBufferSource,
@@ -92,6 +95,10 @@ function unreachable(): Error {
 
 function generateKeyFor(algorithm: NormalizedAlgorithm, extractable: boolean, usages: string[]): Job<unknown> {
   switch (algorithm.name) {
+    case "RSASSA-PKCS1-v1_5":
+    case "RSA-PSS":
+    case "RSA-OAEP":
+      return rsaKeyGenerate(algorithm, extractable, usages);
     case "HMAC":
       return hmacGenerateKey(algorithm, extractable, usages);
     case "AES-CTR":
@@ -149,6 +156,28 @@ function getKeyLength(algorithm: NormalizedAlgorithm): number | null | undefined
   }
 }
 
+function exportKeySpki(key: CryptoKey): ArrayBuffer | undefined {
+  switch (getCryptoKeyAlgorithm(key).name) {
+    case "RSASSA-PKCS1-v1_5":
+    case "RSA-PSS":
+    case "RSA-OAEP":
+      return rsaExportKey(key, "spki");
+    default:
+      return undefined;
+  }
+}
+
+function exportKeyPkcs8(key: CryptoKey): ArrayBuffer | undefined {
+  switch (getCryptoKeyAlgorithm(key).name) {
+    case "RSASSA-PKCS1-v1_5":
+    case "RSA-PSS":
+    case "RSA-OAEP":
+      return rsaExportKey(key, "pkcs8");
+    default:
+      return undefined;
+  }
+}
+
 function exportKeyRawSecret(key: CryptoKey, format: string): ArrayBuffer | undefined {
   switch (getCryptoKeyAlgorithm(key).name) {
     case "AES-CTR":
@@ -169,13 +198,18 @@ function exportKeyRawSecret(key: CryptoKey, format: string): ArrayBuffer | undef
 
 /**
  * Node's `exportKeyJWK`: `key_ops`, `ext` and `alg`, then the key's own
- * members, all in one literal -- so no inherited setter sees the object, as
- * node's native export defines its members.
+ * members, all defined rather than assigned -- so no inherited setter sees
+ * the object, as node's native export defines its members.
  */
 function exportKeyJWK(key: CryptoKey): JsonWebKey | undefined {
   const algorithm = getCryptoKeyAlgorithm(key);
   let alg: string | undefined;
   switch (algorithm.name) {
+    case "RSASSA-PKCS1-v1_5":
+    case "RSA-PSS":
+    case "RSA-OAEP":
+      alg = rsaJwkAlgorithm(algorithm.name, algorithm.hash!.name);
+      break;
     case "AES-CTR":
     case "AES-CBC":
     case "AES-GCM":
@@ -189,13 +223,11 @@ function exportKeyJWK(key: CryptoKey): JsonWebKey | undefined {
     default:
       return undefined;
   }
-  const jwk: JsonWebKey = {
-    key_ops: getCryptoKeyUsages(key).slice(),
-    ext: getCryptoKeyExtractable(key),
-    alg,
-    kty: "oct",
-    k: asBuffer(getCryptoKeyHandle(key).bytes).toString("base64url"),
-  };
+  const type = getCryptoKeyType(key);
+  const handle = getCryptoKeyHandle(key);
+  const material: JsonWebKey =
+    type === "secret" ? { kty: "oct", k: base64urlOf(handle.bytes) } : exportJwkOf(handle.native, type === "private");
+  const jwk: JsonWebKey = { key_ops: getCryptoKeyUsages(key).slice(), ext: getCryptoKeyExtractable(key), alg, ...material };
   if (alg === undefined) delete jwk.alg;
   return jwk;
 }
@@ -212,6 +244,12 @@ function exportKeySync(format: string, key: CryptoKey): ArrayBuffer | JsonWebKey
   const type = getCryptoKeyType(key);
   let result: ArrayBuffer | JsonWebKey | undefined;
   switch (format) {
+    case "spki":
+      if (type === "public") result = exportKeySpki(key);
+      break;
+    case "pkcs8":
+      if (type === "private") result = exportKeyPkcs8(key);
+      break;
     case "jwk":
       result = exportKeyJWK(key);
       break;
@@ -229,13 +267,18 @@ function exportKeySync(format: string, key: CryptoKey): ArrayBuffer | JsonWebKey
 /** Node's `importKeySync`: the family's import, then the check that a secret or private key has usages. */
 function importKeySync(
   format: string,
-  keyData: Uint8Array | JsonWebKey,
+  keyData: KeyData,
   algorithm: NormalizedAlgorithm,
   extractable: boolean,
   usages: string[],
 ): CryptoKey {
   let result: CryptoKey | undefined;
   switch (algorithm.name) {
+    case "RSASSA-PKCS1-v1_5":
+    case "RSA-PSS":
+    case "RSA-OAEP":
+      result = rsaImportKey(format, keyData, algorithm, extractable, usages);
+      break;
     case "HMAC":
       result = macImportKey(format, keyData, algorithm, extractable, usages);
       break;
@@ -248,7 +291,7 @@ function importKeySync(
       break;
     case "HKDF":
     case "PBKDF2":
-      result = importGenericSecretKey(algorithm, aliasKeyFormat(format, "raw-secret"), keyData as Uint8Array, extractable, usages);
+      result = importGenericSecretKey(algorithm, aliasKeyFormat(format, "raw-secret"), keyData, extractable, usages);
       break;
   }
   if (!result) throw domException(`Unable to import ${algorithm.name} using ${format} format`, "NotSupportedError");
@@ -258,6 +301,84 @@ function importKeySync(
   }
   return result;
 }
+
+/** Node's `toCryptoKeySecret`: a secret key object's material, imported by its family. */
+function toCryptoKeySecret(
+  handle: KeyObjectHandle,
+  algorithm: NormalizedAlgorithm,
+  extractable: boolean,
+  usages: string[],
+): CryptoKey {
+  const keyData = { handle, type: "secret" as KeyObjectType };
+  let result: CryptoKey | undefined;
+  switch (algorithm.name) {
+    case "HMAC":
+      result = macImportKey("KeyObjectHandle", keyData, algorithm, extractable, usages);
+      break;
+    case "AES-CTR":
+    case "AES-CBC":
+    case "AES-GCM":
+    case "AES-KW":
+    case "AES-OCB":
+      result = aesImportKey(algorithm, "KeyObjectHandle", keyData, extractable, usages);
+      break;
+    case "HKDF":
+    case "PBKDF2":
+      result = importGenericSecretKey(algorithm, "KeyObjectHandle", keyData, extractable, usages);
+      break;
+    default:
+      throw domException("Unrecognized algorithm name", "NotSupportedError");
+  }
+  if (getCryptoKeyUsagesMask(result!) === 0) {
+    throw domException(`Usages cannot be empty when importing a ${getCryptoKeyType(result!)} key.`, "SyntaxError");
+  }
+  return result!;
+}
+
+/** Node's `toCryptoKey`: an asymmetric key's material, imported by its family with its checks. */
+function toCryptoKey(
+  handle: KeyObjectHandle,
+  type: KeyObjectType,
+  algorithm: NormalizedAlgorithm,
+  extractable: boolean,
+  usages: string[],
+): CryptoKey {
+  const keyData = { handle, type };
+  let result: CryptoKey | undefined;
+  switch (algorithm.name) {
+    case "RSASSA-PKCS1-v1_5":
+    case "RSA-PSS":
+    case "RSA-OAEP":
+      result = rsaImportKey("KeyObjectHandle", keyData, algorithm, extractable, usages);
+      break;
+    default:
+      throw domException("Unrecognized algorithm name", "NotSupportedError");
+  }
+  if (getCryptoKeyType(result!) === "private" && getCryptoKeyUsagesMask(result!) === 0) {
+    throw domException("Usages cannot be empty when importing a private key.", "SyntaxError");
+  }
+  return result!;
+}
+
+/**
+ * Node's `toPublicCryptoKey`: a private key's public half, extractable, under
+ * the same algorithm. Its handle holds the same key, as node's public handle
+ * made from a private one does.
+ */
+function toPublicCryptoKey(key: CryptoKey, usages: string[]): CryptoKey {
+  const handle = asymmetricHandle(getCryptoKeyHandle(key).native);
+  return toCryptoKey(handle, "public", getCryptoKeyAlgorithm(key) as NormalizedAlgorithm, true, usages);
+}
+
+// `KeyObject#toCryptoKey`, which `keys.ts` reaches through this hook.
+webCryptoHooks.toCryptoKey = (type, handle, algorithm, extractable, keyUsages) => {
+  const normalized = normalizeAlgorithm(convertAlgorithmIdentifier(algorithm), "importKey");
+  const isExtractable = convertBoolean(extractable);
+  const usages = convertKeyUsages(keyUsages);
+  return type === "secret"
+    ? toCryptoKeySecret(handle, normalized, isExtractable, usages)
+    : toCryptoKey(handle, type, normalized, isExtractable, usages);
+};
 
 function signVerify(
   algorithm: AlgorithmIdentifier,
@@ -270,6 +391,9 @@ function signVerify(
   if (normalized.name !== getCryptoKeyAlgorithm(key).name) throw domException("Key algorithm mismatch", "InvalidAccessError");
   if (!hasCryptoKeyUsage(key, operation)) throw domException(`Unable to use this key to ${operation}`, "InvalidAccessError");
   switch (normalized.name) {
+    case "RSA-PSS":
+    case "RSASSA-PKCS1-v1_5":
+      return rsaSignVerify(key, data, normalized, signature);
     case "HMAC":
       return hmacSignVerify(key, data, signature);
     default:
@@ -284,6 +408,8 @@ function signVerify(
 function cipherOrWrap(mode: "encrypt" | "decrypt", algorithm: NormalizedAlgorithm, key: CryptoKey, data: BufferSource): Job<ArrayBuffer> {
   validateMaxBufferLength(data, "data");
   switch (algorithm.name) {
+    case "RSA-OAEP":
+      return rsaOaepCipher(mode, key, data, algorithm);
     case "AES-CTR":
     case "AES-CBC":
     case "AES-GCM":
@@ -326,11 +452,28 @@ function detachFromUserPrototypes(value: unknown): void {
   for (const key of Object.keys(value)) detachFromUserPrototypes((value as Record<string, unknown>)[key]);
 }
 
+/**
+ * Node's `encodeUtf8String`: a string's UTF-8 through the runtime's own
+ * codec, which no program can replace -- `TextEncoder` and `Buffer` it can.
+ */
+function encodeUtf8(text: string): Uint8Array {
+  const bytes = new Uint8Array(utf8Length(text));
+  utf8Write(bytes, text, 0, bytes.byteLength);
+  return bytes;
+}
+
+/** Node's `decodeUTF8(data, false, true)`: fatal on invalid input, a leading BOM dropped. */
+function decodeUtf8(bytes: Uint8Array): string {
+  if (!isUtf8(bytes)) throw new ERR_ENCODING_INVALID_ENCODED_DATA("The encoded data was not valid for encoding utf-8");
+  const start = bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? 3 : 0;
+  return utf8Decode(bytes, start, bytes.length);
+}
+
 /** Node's `parseJwk`: a wrapped JWK's UTF-8, parsed and converted as Web Crypto's "parse a JWK" says. */
 function parseJwk(data: ArrayBuffer): JsonWebKey {
   let key: JsonWebKey;
   try {
-    const json = new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(data));
+    const json = decodeUtf8(new Uint8Array(data));
     const result: unknown = JSON.parse(json);
     detachFromUserPrototypes(result);
     key = convertJsonWebKey(result) as JsonWebKey;
@@ -352,8 +495,7 @@ function normalizeEither(identifier: AlgorithmIdentifier, first: Operation, fall
 
 /** A key's bytes, as a family's import takes them. */
 function bytesOf(source: BufferSource): Uint8Array {
-  if (ArrayBuffer.isView(source)) return new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
-  return new Uint8Array(source);
+  return bytesOfSource(source);
 }
 
 /** The checks every encapsulation method makes of its algorithm and key. */
@@ -725,7 +867,7 @@ export class SubtleCrypto {
         const json = JSON.stringify(exported);
         // Step 13's note: a JWK wrapped with AES-KW is padded to a multiple of 8 bytes.
         const padded = normalized.name === "AES-KW" && json.length % 8 !== 0 ? json + " ".repeat(8 - (json.length % 8)) : json;
-        bytes = Buffer.from(padded, "utf8");
+        bytes = encodeUtf8(padded);
       } else {
         bytes = exported as ArrayBuffer;
       }
@@ -773,12 +915,12 @@ export class SubtleCrypto {
       emitExperimentalWarning("The getPublicKey Web Crypto API method");
       const prefix = prepareSubtleMethod(this, "getPublicKey", count, 2);
       const cryptoKey = convertCryptoKey(key, argument(prefix, 0));
-      convertKeyUsages(keyUsages, argument(prefix, 1));
+      const usages = convertKeyUsages(keyUsages, argument(prefix, 1));
       const type = getCryptoKeyType(cryptoKey);
       if (type !== "private") {
         throw domException("key must be a private key", type === "secret" ? "NotSupportedError" : "InvalidAccessError");
       }
-      throw unreachable();
+      return resolvedJob(toPublicCryptoKey(cryptoKey, usages));
     });
   }
 

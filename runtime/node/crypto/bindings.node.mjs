@@ -16,6 +16,9 @@ import "../stream/bindings.node.mjs";
 import crypto from "node:crypto";
 
 const empty = () => ["", "", ""];
+
+/** Taken at load, as C's decoding is out of a program's reach: tests replace the global. */
+const bufferFrom = Buffer.from.bind(Buffer);
 let record = empty();
 
 function fromOpenSSL(error) {
@@ -555,7 +558,7 @@ globalThis.nts_crypto_key_parse_public = (format, type, data, passphrase, hasPas
   }
 };
 
-const b64 = (bytes) => Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("base64url");
+const b64 = (bytes) => bufferFrom(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("base64url");
 
 function jwkKey(jwk, privateKey) {
   try {
@@ -637,7 +640,7 @@ globalThis.nts_crypto_key_public_exponent = (handle) => {
   if (exponent === undefined) return new Uint8Array(0);
   let hex = exponent.toString(16);
   if (hex.length % 2 !== 0) hex = `0${hex}`;
-  return new Uint8Array(Buffer.from(hex, "hex"));
+  return new Uint8Array(bufferFrom(hex, "hex"));
 };
 
 /** `EVP_PKEY_eq` compares public halves, so this does. */
@@ -651,7 +654,7 @@ globalThis.nts_crypto_key_export_private = (handle, format, type, cipherId, pass
     options.passphrase = passphrase;
   }
   try {
-    return view(Buffer.from(keyAt(handle).export(options)));
+    return view(bufferFrom(keyAt(handle).export(options)));
   } catch (error) {
     failed(error);
     return null;
@@ -660,7 +663,7 @@ globalThis.nts_crypto_key_export_private = (handle, format, type, cipherId, pass
 
 globalThis.nts_crypto_key_export_public = (handle, format, type) => {
   try {
-    return view(Buffer.from(publicHalf(keyAt(handle)).export({ format: FORMATS[format], type: ENCODINGS[type] })));
+    return view(bufferFrom(publicHalf(keyAt(handle)).export({ format: FORMATS[format], type: ENCODINGS[type] })));
   } catch (error) {
     failed(error);
     return null;
@@ -674,7 +677,9 @@ globalThis.nts_crypto_key_export_jwk = (handle, privateKey) => {
   try {
     const jwk = (privateKey ? key : publicHalf(key)).export({ format: "jwk" });
     keyStatus = 1;
-    return JWK_ORDER[jwk.kty].filter((name) => jwk[name] !== undefined).map((name) => new Uint8Array(Buffer.from(jwk[name], "base64url")));
+    // Own members only, decoded through a `Buffer.from` taken at load: this
+    // stands in for C, which no program's prototype or global reaches.
+    return JWK_ORDER[jwk.kty].filter((name) => Object.hasOwn(jwk, name)).map((name) => new Uint8Array(bufferFrom(jwk[name], "base64url")));
   } catch (error) {
     keyStatus = error?.code === "ERR_CRYPTO_JWK_UNSUPPORTED_CURVE" ? -4 : -3;
     return [];
@@ -967,7 +972,7 @@ globalThis.nts_crypto_keygen_dh_group = (group) =>
   DH_GROUPS.has(group.toLowerCase()) ? keygenJob("dh", { group }) : 0;
 
 globalThis.nts_crypto_keygen_dh_prime = (prime, generator) =>
-  keygenJob("dh", { prime: Buffer.from(prime), generator });
+  keygenJob("dh", { prime: bufferFrom(prime), generator });
 
 globalThis.nts_crypto_keygen_dh_size = (bits, generator) => keygenJob("dh", { primeLength: bits, generator });
 
@@ -1024,9 +1029,9 @@ function dhConstructed(make, bits) {
 globalThis.nts_crypto_dh_new_size = (bits, generator) =>
   dhConstructed(() => crypto.createDiffieHellman(bits, generator), bits);
 globalThis.nts_crypto_dh_new_prime = (prime, generator) =>
-  dhConstructed(() => crypto.createDiffieHellman(Buffer.from(prime), generator));
+  dhConstructed(() => crypto.createDiffieHellman(bufferFrom(prime), generator));
 globalThis.nts_crypto_dh_new_prime_generator = (prime, generator) =>
-  dhConstructed(() => crypto.createDiffieHellman(Buffer.from(prime), Buffer.from(generator)));
+  dhConstructed(() => crypto.createDiffieHellman(bufferFrom(prime), bufferFrom(generator)));
 
 globalThis.nts_crypto_dh_group = (name) => {
   try {
@@ -1195,7 +1200,7 @@ globalThis.nts_crypto_dh_stateless_job = (privateKey, publicKey, done) => {
 
 // -- primes -------------------------------------------------------------------
 
-const toBigInt = (bytes) => (bytes.length === 0 ? 0n : BigInt(`0x${Buffer.from(bytes).toString("hex")}`));
+const toBigInt = (bytes) => (bytes.length === 0 ? 0n : BigInt(`0x${bufferFrom(bytes).toString("hex")}`));
 
 globalThis.nts_crypto_prime_options = (bits, add, hasAdd, rem, hasRem) => {
   if (!hasAdd) return 0;
@@ -1207,8 +1212,8 @@ globalThis.nts_crypto_prime_options = (bits, add, hasAdd, rem, hasRem) => {
 
 function primeOptions(safe, add, hasAdd, rem, hasRem) {
   const options = { safe };
-  if (hasAdd) options.add = Buffer.from(add);
-  if (hasRem) options.rem = Buffer.from(rem);
+  if (hasAdd) options.add = bufferFrom(add);
+  if (hasRem) options.rem = bufferFrom(rem);
   return options;
 }
 
@@ -1445,35 +1450,77 @@ globalThis.nts_crypto_aes_config = (mode, keyBytes, ivBytes, length) => {
   return ivLength < AES_IV_LENGTHS[mode] ? -2 : 0;
 };
 
-/** The same work through node's own Web Crypto, or its key wrap cipher for KW, which has no `encrypt`. */
-async function aesCipher(mode, encrypt, key, data, iv, length, additional) {
+/** `aes.c`'s work through node's ciphers: CBC, CTR, GCM, OCB, and KW under its default IV. */
+function aesCipher(mode, encrypt, key, data, iv, length, additional) {
+  const bits = key.byteLength * 8;
+  const run = (name, cipherIv, options) =>
+    encrypt ? crypto.createCipheriv(name, key, cipherIv, options) : crypto.createDecipheriv(name, key, cipherIv, options);
   if (mode === 3) {
-    const name = `id-aes${key.byteLength * 8}-wrap`;
-    const wrapIv = Buffer.alloc(8, 0xa6);
-    const cipher = encrypt ? crypto.createCipheriv(name, key, wrapIv) : crypto.createDecipheriv(name, key, wrapIv);
+    const cipher = run(`id-aes${bits}-wrap`, Buffer.alloc(8, 0xa6));
     return Buffer.concat([cipher.update(data), cipher.final()]);
   }
-  const { subtle } = crypto.webcrypto;
-  const name = AES_NAMES[mode];
-  const cryptoKey = await subtle.importKey(mode === 4 ? "raw-secret" : "raw", key, name, false, ["encrypt", "decrypt"]);
-  const algorithm =
-    mode === 0
-      ? { name, iv }
-      : mode === 1
-        ? { name, counter: iv, length }
-        : { name, iv, tagLength: length * 8, ...(additional.byteLength > 0 ? { additionalData: additional } : {}) };
-  return encrypt ? subtle.encrypt(algorithm, cryptoKey, data) : subtle.decrypt(algorithm, cryptoKey, data);
+  if (mode === 0) {
+    const cipher = run(`aes-${bits}-cbc`, iv);
+    return Buffer.concat([cipher.update(data), cipher.final()]);
+  }
+  if (mode === 1) return aesCtr(bits, encrypt, key, data, iv, length);
+  // An AEAD: the tag follows the ciphertext.
+  const name = `aes-${bits}-${mode === 2 ? "gcm" : "ocb"}`;
+  const cipher = run(name, iv, { authTagLength: length });
+  if (additional.byteLength > 0) cipher.setAAD(additional);
+  if (encrypt) return Buffer.concat([cipher.update(data), cipher.final(), cipher.getAuthTag()]);
+  if (data.byteLength < length) throw new Error("Cipher job failed");
+  cipher.setAuthTag(data.subarray(data.byteLength - length));
+  return Buffer.concat([cipher.update(data.subarray(0, data.byteLength - length)), cipher.final()]);
 }
 
-/** Awaited rather than chained: a test may have replaced `Promise.prototype.then`. */
-globalThis.nts_crypto_aes_job = async (mode, encrypt, key, data, iv, length, additional, done) => {
-  let bytes;
+/** `aes.c`'s CTR: the counter is the block's low `length` bits, wrapping to zero within them. */
+function aesCtr(bits, encrypt, key, data, counter, length) {
+  const name = `aes-${bits}-ctr`;
+  const blocks = BigInt(Math.ceil(data.byteLength / 16));
+  const counters = 1n << BigInt(length);
+  if (blocks > counters) throw new Error("Cipher job failed");
+  const current = BigInt(`0x${bufferFrom(counter).toString("hex")}`) & (counters - 1n);
+  const runFrom = (block, input) => {
+    const cipher = encrypt ? crypto.createCipheriv(name, key, block) : crypto.createDecipheriv(name, key, block);
+    return Buffer.concat([cipher.update(input), cipher.final()]);
+  };
+  const untilReset = counters - current;
+  if (untilReset >= blocks) return runFrom(counter, data);
+  const first = Number(untilReset) * 16;
+  const zeroed = bufferFrom(counter);
+  const lengthBytes = Math.floor(length / 8);
+  zeroed.fill(0, 16 - lengthBytes);
+  if (length % 8 !== 0) zeroed[16 - lengthBytes - 1] &= 0xff << length % 8;
+  return Buffer.concat([runFrom(counter, data.subarray(0, first)), runFrom(zeroed, data.subarray(first))]);
+}
+
+/**
+ * Computed at once, as `aes.c` copies its inputs when called, and delivered
+ * on a later turn of the loop. No promise: a test may have replaced
+ * `Promise.prototype.then` and poisoned `constructor`, and node's own
+ * implementation of this never touches either.
+ */
+globalThis.nts_crypto_aes_job = (mode, encrypt, key, data, iv, length, additional, done) => {
+  let bytes = null;
   try {
-    bytes = await aesCipher(mode, encrypt, key, data, iv, length, additional);
+    bytes = view(aesCipher(mode, encrypt, key, data, iv, length, additional));
   } catch (error) {
-    failed(error?.cause ?? error);
-    done(false, noBytes);
-    return;
+    failed(error);
   }
-  done(true, view(bytes));
+  setImmediate(() => done(bytes !== null, bytes ?? noBytes));
+};
+
+// -- Web Crypto's RSA-OAEP ------------------------------------------------------
+
+globalThis.nts_crypto_rsa_oaep_job = (encrypt, handle, digest, label, data, done) => {
+  let bytes = null;
+  try {
+    const options = { key: keyAt(handle), padding: crypto.constants.RSA_PKCS1_OAEP_PADDING, oaepHash: names[digest] };
+    if (label.byteLength > 0) options.oaepLabel = label;
+    bytes = view(encrypt ? crypto.publicEncrypt(options, data) : crypto.privateDecrypt(options, data));
+  } catch (error) {
+    failed(error);
+  }
+  setImmediate(() => done(bytes !== null, bytes ?? noBytes));
 };

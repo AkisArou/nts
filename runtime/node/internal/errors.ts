@@ -2261,6 +2261,18 @@ export class ERR_CRYPTO_INVALID_IV extends NativeTypeError {
   }
 }
 
+/** Undecodable input, in the words of node's C++ `decodeUTF8`. */
+export class ERR_ENCODING_INVALID_ENCODED_DATA extends NativeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_ENCODING_INVALID_ENCODED_DATA";
+
+  constructor(message: string) {
+    super(message);
+  }
+}
+
 /** `Invalid counter`: an AES-CTR counter block or length node's C++ refuses. */
 export class ERR_CRYPTO_INVALID_COUNTER extends NativeTypeError {
   override get ["constructor"](): unknown {

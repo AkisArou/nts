@@ -18,6 +18,16 @@ import { emitWarning } from "./process-warning.ts";
 const warnedCodes = new Set<string>();
 
 /**
+ * Node's `getDeprecationWarningEmitter` for a coded warning: the warning once
+ * per process, however many places emit it -- the set `deprecate` shares.
+ */
+export function emitDeprecationOnce(message: string, code: string): void {
+  if (warnedCodes.has(code)) return;
+  warnedCodes.add(code);
+  emitWarning(message, "DeprecationWarning", code);
+}
+
+/**
  * Wrap `fn` so that calling it warns once.
  *
  * Once, not every call: a deprecation that prints on every invocation of a

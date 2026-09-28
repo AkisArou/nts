@@ -29,10 +29,13 @@ import {
   ERR_MISSING_PASSPHRASE,
 } from "../../internal/errors.ts";
 import { registerKeyObjectBrand } from "../../internal/brands.ts";
+import { emitDeprecationOnce } from "../../internal/deprecate.ts";
 import { validateObject, validateOneOf, validateString } from "../../internal/validators.ts";
 import { isAnyArrayBuffer, isArrayBufferView } from "../../util/src/types.ts";
 import {
+  base64urlOf,
   bytesOf,
+  bytesOfBase64,
   cipherId,
   getArrayBufferOrView,
   markedCryptoError,
@@ -40,6 +43,7 @@ import {
   unsignedBigInt,
 } from "./util.ts";
 import type { ByteSource } from "./util.ts";
+import { type CryptoKey, getCryptoKeyExtractable, getCryptoKeyHandle, getCryptoKeyType, isCryptoKey } from "./webcrypto/key.ts";
 
 export type KeyObjectType = "secret" | "public" | "private";
 
@@ -149,6 +153,19 @@ export function typeOf(key: unknown): KeyObjectType {
   return slots.type!(branded(key));
 }
 
+/**
+ * Web Crypto's half of `toCryptoKey`, installed as Web Crypto loads: its
+ * families import this module, so this module reaches them through a hook
+ * rather than an import of its own -- as `internal/brands.ts` does for util.
+ */
+class WebCryptoHooks {
+  toCryptoKey:
+    | ((type: KeyObjectType, handle: KeyObjectHandle, algorithm: unknown, extractable: unknown, keyUsages: unknown) => CryptoKey)
+    | null = null;
+}
+
+export const webCryptoHooks = new WebCryptoHooks();
+
 export class KeyObject {
   static {
     slots.brand = (value: object): boolean => #handle in value;
@@ -175,13 +192,30 @@ export class KeyObject {
     return typeOf(this);
   }
 
-  /**
-   * `KeyObject.from(cryptoKey)`. This profile has no `CryptoKey` yet -- that is
-   * Web Crypto's `subtle` -- so nothing a program holds can be one, and every
-   * argument is refused as node refuses a value that is not.
-   */
+  /** `KeyObject.from(cryptoKey)`: the same key material, as a key object of its type. */
   static from(key: unknown): KeyObject {
-    throw new ERR_INVALID_ARG_TYPE("key", "CryptoKey", key);
+    if (!isCryptoKey(key)) throw new ERR_INVALID_ARG_TYPE("key", "CryptoKey", key);
+    if (!getCryptoKeyExtractable(key)) {
+      emitDeprecationOnce("Passing a non-extractable CryptoKey to KeyObject.from() is deprecated.", "DEP0204");
+    }
+    const handle = getCryptoKeyHandle(key);
+    switch (getCryptoKeyType(key)) {
+      case "secret":
+        return new SecretKeyObject(handle);
+      case "public":
+        return new PublicKeyObject(handle);
+      default:
+        return new PrivateKeyObject(handle);
+    }
+  }
+
+  /**
+   * `keyObject.toCryptoKey(algorithm, extractable, keyUsages)`: the same key
+   * material imported as `subtle.importKey` would import it, through the hook
+   * Web Crypto installs (`webCryptoHooks`).
+   */
+  toCryptoKey(algorithm: unknown, extractable: unknown, keyUsages: unknown): CryptoKey {
+    return webCryptoHooks.toCryptoKey!(typeOf(this), handleOf(this), algorithm, extractable, keyUsages);
   }
 
   equals(otherKeyObject: unknown): boolean {
@@ -263,6 +297,17 @@ function detailsOf(native: number, keyType: string | undefined): AsymmetricKeyDe
   return details;
 }
 
+/** A handle's key type name, as `asymmetricKeyType` reports it: undefined for none node names. */
+export function asymmetricKeyTypeOfNative(native: number): string | undefined {
+  const name = nts_crypto_key_type(native);
+  return name === "" ? undefined : name;
+}
+
+/** A handle's details, as `asymmetricKeyDetails` reports them. */
+export function keyDetailsOf(native: number): AsymmetricKeyDetails {
+  return detailsOf(native, asymmetricKeyTypeOfNative(native));
+}
+
 /** An asymmetric key's handle, or `ERR_INVALID_THIS` for anything else. */
 function asymmetricHandleOf(key: unknown): KeyObjectHandle {
   if (typeOf(key) === "secret") throw new ERR_INVALID_THIS("AsymmetricKeyObject");
@@ -271,8 +316,7 @@ function asymmetricHandleOf(key: unknown): KeyObjectHandle {
 
 /** A key's type name, read through its handle and not the replaceable getter. */
 function asymmetricKeyTypeOf(handle: KeyObjectHandle): string | undefined {
-  const name = nts_crypto_key_type(handle.native);
-  return name === "" ? undefined : name;
+  return asymmetricKeyTypeOfNative(handle.native);
 }
 
 /** Node's `getKeyObjectAsymmetricKeyType`: read from the slot, not the replaceable getter. */
@@ -313,8 +357,6 @@ export interface JsonWebKey {
   qi?: string;
 }
 
-const base64url = (bytes: Uint8Array): string =>
-  new Buffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength).toString("base64url");
 
 function okpCurveName(keyType: string | undefined): string {
   switch (keyType) {
@@ -349,8 +391,12 @@ function jwkCurveName(namedCurve: string | undefined): string | undefined {
  * RSA-PSS has no JWK form here, as `KeyObject#export` has none in node.
  */
 function exportJwk(key: AsymmetricKeyObject, privateKey: boolean): JsonWebKey {
-  const native = handleOf(key).native;
-  const keyType = key.asymmetricKeyType ?? "";
+  return exportJwkOf(handleOf(key).native, privateKey);
+}
+
+/** The same, for the key behind a handle -- a `KeyObject`'s or a `CryptoKey`'s. */
+export function exportJwkOf(native: number, privateKey: boolean): JsonWebKey {
+  const keyType = nts_crypto_key_type(native);
   if (isPostQuantumName(keyType)) return exportAkpJwk(native, keyType, privateKey);
   const parts = nts_crypto_key_export_jwk(native, privateKey);
   if (parts.length === 0) {
@@ -361,29 +407,23 @@ function exportJwk(key: AsymmetricKeyObject, privateKey: boolean): JsonWebKey {
     }
     throw new ERR_CRYPTO_JWK_UNSUPPORTED_KEY_TYPE();
   }
+  // Each member defined in a literal, never assigned: a JWK a program is
+  // handed has no member an inherited setter saw, as node's native export
+  // defines its members.
+  const b64 = (index: number): string => base64urlOf(parts[index]!);
   if (keyType === "rsa") {
-    const jwk: JsonWebKey = { kty: "RSA", n: base64url(parts[0]!), e: base64url(parts[1]!) };
-    if (privateKey) {
-      jwk.d = base64url(parts[2]!);
-      jwk.p = base64url(parts[3]!);
-      jwk.q = base64url(parts[4]!);
-      jwk.dp = base64url(parts[5]!);
-      jwk.dq = base64url(parts[6]!);
-      jwk.qi = base64url(parts[7]!);
-    }
-    return jwk;
+    if (!privateKey) return { kty: "RSA", n: b64(0), e: b64(1) };
+    return { kty: "RSA", n: b64(0), e: b64(1), d: b64(2), p: b64(3), q: b64(4), dp: b64(5), dq: b64(6), qi: b64(7) };
   }
   if (keyType === "ec") {
-    const jwk: JsonWebKey = { kty: "EC", x: base64url(parts[0]!), y: base64url(parts[1]!) };
-    jwk.crv = jwkCurveName(key.asymmetricKeyDetails.namedCurve);
-    if (privateKey) jwk.d = base64url(parts[2]!);
-    return jwk;
+    const curve = nts_crypto_key_detail_names(native)[0];
+    const crv = jwkCurveName(curve === "" ? undefined : curve);
+    if (!privateKey) return { kty: "EC", x: b64(0), y: b64(1), crv };
+    return { kty: "EC", x: b64(0), y: b64(1), crv, d: b64(2) };
   }
-  const jwk: JsonWebKey = { crv: okpCurveName(keyType) };
-  if (privateKey) jwk.d = base64url(parts[1]!);
-  jwk.x = base64url(parts[0]!);
-  jwk.kty = "OKP";
-  return jwk;
+  const crv = okpCurveName(keyType);
+  if (!privateKey) return { crv, x: b64(0), kty: "OKP" };
+  return { crv, d: b64(1), x: b64(0), kty: "OKP" };
 }
 
 /**
@@ -392,21 +432,19 @@ function exportJwk(key: AsymmetricKeyObject, privateKey: boolean): JsonWebKey {
  * key -- as `priv`, first.
  */
 function exportAkpJwk(native: number, keyType: string, privateKey: boolean): JsonWebKey {
-  const jwk: JsonWebKey = {};
+  let priv: string | undefined;
   if (privateKey) {
     const seeded = hasSeed(keyType);
     const secret = seeded ? nts_crypto_key_export_seed(native) : nts_crypto_key_export_raw(native, true, false);
     if (secret === null) {
       throw new ERR_CRYPTO_OPERATION_FAILED(seeded ? "key does not have an available seed" : "Failed to get raw private key");
     }
-    jwk.priv = base64url(secret);
+    priv = base64urlOf(secret);
   }
-  jwk.kty = "AKP";
-  jwk.alg = postQuantumAlgOf(keyType);
+  const alg = postQuantumAlgOf(keyType);
   const pub = nts_crypto_key_export_raw(native, false, false);
   if (pub === null) throw new ERR_CRYPTO_OPERATION_FAILED("Failed to get raw public key");
-  jwk.pub = base64url(pub);
-  return jwk;
+  return priv === undefined ? { kty: "AKP", alg, pub: base64urlOf(pub) } : { priv, kty: "AKP", alg, pub: base64urlOf(pub) };
 }
 
 /**
@@ -455,6 +493,15 @@ function writePrivateKey(
   );
   if (bytes === null) throw markedCryptoError("Failed to encode private key");
   return encoded(bytes, format);
+}
+
+/** A key as DER: SPKI for the public half, unencrypted PKCS#8 for a private key. */
+export function writeDerKey(native: number, isPublic: boolean): Uint8Array {
+  const bytes = isPublic
+    ? nts_crypto_key_export_public(native, KeyFormat.DER, KeyEncoding.SPKI)
+    : nts_crypto_key_export_private(native, KeyFormat.DER, KeyEncoding.PKCS8, -1, noBytes);
+  if (bytes === null) throw markedCryptoError(isPublic ? "Failed to encode public key" : "Failed to encode private key");
+  return bytes;
 }
 
 /**
@@ -844,6 +891,13 @@ function parsed(native: number, message: string): number {
   throw peekedCryptoError(message);
 }
 
+/** Node's `KeyObjectHandle::Init` over DER: SPKI for a public key, PKCS#8 for a private one. */
+export function parseDerKey(data: Uint8Array, isPublic: boolean): number {
+  return isPublic
+    ? parsed(nts_crypto_key_parse_public(KeyFormat.DER, KeyEncoding.SPKI, data, noBytes, false), "Failed to read asymmetric key")
+    : parsed(nts_crypto_key_parse_private(KeyFormat.DER, KeyEncoding.PKCS8, data, noBytes, false), "Failed to read private key");
+}
+
 function jwkString(value: unknown, message: string): string {
   if (typeof value !== "string") throw new ERR_CRYPTO_INVALID_JWK(message);
   return value;
@@ -851,17 +905,17 @@ function jwkString(value: unknown, message: string): string {
 
 /** Base64 of either alphabet, as `ByteSource::FromEncodedString` reads a JWK member. */
 function jwkBytes(value: string): Uint8Array {
-  return Buffer.from(value, "base64");
+  return bytesOfBase64(value);
 }
 
 /** A handle from a JWK or raw import, and whether it holds private material. */
-interface Imported {
+export interface Imported {
   native: number;
   privateKey: boolean;
 }
 
 /** Node's `ImportJWKFromArgs`. */
-function importJwk(jwk: JsonWebKey): Imported {
+export function importJwk(jwk: JsonWebKey): Imported {
   const kty = jwk.kty;
   if (typeof kty !== "string") throw new ERR_CRYPTO_INVALID_JWK("Invalid JWK format");
   if (kty === "RSA") {

@@ -232,6 +232,10 @@ bool nts_crypto_spkac_verify(NtsView *input);
 NtsView *nts_crypto_spkac_public_key(NtsView *input);
 NtsView *nts_crypto_spkac_challenge(NtsView *input);
 
+/* Web Crypto's RSA-OAEP (`rsa.c`): `encrypt` or `decrypt` under the key's
+ * digest, delivered to `done(ok, bytes)`. */
+void nts_crypto_rsa_oaep_job(bool encrypt, double key, double digest, NtsView *label, NtsView *data, NtsHeader *done);
+
 /* Web Crypto's AES (`aes.c`): `mode` is `AesMode`; `length` is CTR's counter
  * bits or an AEAD's tag bytes. `config` answers node's synchronous refusals,
  * the job delivers `done(ok, bytes)`. */

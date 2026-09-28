@@ -551,3 +551,14 @@ declare function nts_crypto_aes_job(
   additional: Uint8Array,
   done: (ok: boolean, bytes: Uint8Array) => void,
 ): void;
+
+/** Web Crypto's RSA-OAEP on the thread pool. */
+/** @ntsAbi managed */
+declare function nts_crypto_rsa_oaep_job(
+  encrypt: boolean,
+  key: number,
+  digest: number,
+  label: Uint8Array,
+  data: Uint8Array,
+  done: (ok: boolean, bytes: Uint8Array) => void,
+): void;

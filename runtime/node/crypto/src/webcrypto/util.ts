@@ -98,6 +98,27 @@ const kAlgorithmDefinitions: Definitions = {
     deriveBits: "Pbkdf2Params",
     "get key length": null,
   },
+  "RSA-OAEP": {
+    generateKey: "RsaHashedKeyGenParams",
+    exportKey: null,
+    importKey: "RsaHashedImportParams",
+    encrypt: "RsaOaepParams",
+    decrypt: "RsaOaepParams",
+  },
+  "RSA-PSS": {
+    generateKey: "RsaHashedKeyGenParams",
+    exportKey: null,
+    importKey: "RsaHashedImportParams",
+    sign: "RsaPssParams",
+    verify: "RsaPssParams",
+  },
+  "RSASSA-PKCS1-v1_5": {
+    generateKey: "RsaHashedKeyGenParams",
+    exportKey: null,
+    importKey: "RsaHashedImportParams",
+    sign: null,
+    verify: null,
+  },
   "SHA-1": { digest: null },
   "SHA-256": { digest: null },
   "SHA-384": { digest: null },
@@ -412,15 +433,19 @@ export function validateKeyOps(keyOps: unknown, usages?: Iterable<string>): void
   }
 }
 
-/** A buffer source's bytes as a view, without copying. */
+/**
+ * A buffer source's bytes as a view, without copying. A view on a detached
+ * buffer is empty, as node's `ArrayBufferViewContents` reads one.
+ */
 export function bytesOfSource(source: ArrayBuffer | ArrayBufferView): Uint8Array {
-  if (source instanceof Uint8Array) return source;
   if (ArrayBuffer.isView(source) || isDataView(source)) {
-    return new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
+    const buffer = source.buffer as ArrayBuffer;
+    if (buffer.detached) return new Uint8Array(0);
+    return source instanceof Uint8Array ? source : new Uint8Array(buffer, source.byteOffset, source.byteLength);
   }
+  if (source.detached) return new Uint8Array(0);
   return new Uint8Array(source);
 }
-
 
 // -- jobs ---------------------------------------------------------------------------
 //

@@ -2,6 +2,7 @@
 // encodings, and OpenSSL's errors. From node v24.20.0
 // `lib/internal/crypto/util.js`, and the C++ each piece stands in for.
 
+import { byteLengthIn, decodeIn, writeIn } from "../../buffer/src/encodings.ts";
 import { Buffer } from "../../buffer/src/main.ts";
 import { normalizeEncodingName } from "../../buffer/src/encodings.ts";
 import type { Encoding } from "../../buffer/src/encodings.ts";
@@ -272,4 +273,20 @@ let curveNames: string[] | undefined;
 export function getCurves(): string[] {
   curveNames ??= filterDuplicateStrings(nts_crypto_curve_names());
   return curveNames.slice();
+}
+
+/**
+ * A JWK member's bytes: base64 of either alphabet, as node's C++
+ * `ByteSource::FromEncodedString` decodes it -- through the codec itself,
+ * not a `Buffer` method a program can replace.
+ */
+export function bytesOfBase64(text: string): Uint8Array {
+  const bytes = new Uint8Array(byteLengthIn(text, "base64"));
+  const written = writeIn(bytes, text, 0, bytes.byteLength, "base64");
+  return written === bytes.byteLength ? bytes : bytes.subarray(0, written);
+}
+
+/** Bytes as base64url, as node's C++ writes a JWK member. */
+export function base64urlOf(bytes: Uint8Array): string {
+  return decodeIn(bytes, 0, bytes.byteLength, "base64url");
 }
