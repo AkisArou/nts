@@ -11,6 +11,7 @@ mod bind_objc;
 mod objc_bindings;
 mod objc_imports;
 mod swift;
+mod xcframework;
 mod bind_gir;
 mod gir_surface;
 mod bind_winmd;
@@ -363,7 +364,8 @@ fn bind_objc_project(
             let header = std::path::PathBuf::from(header);
             let mut search: Vec<std::path::PathBuf> = header.parent().map(std::path::Path::to_path_buf).into_iter().collect();
             search.extend(repeated("--include").into_iter().map(std::path::PathBuf::from));
-            Ok(Some(bind_objc::Project { header, search, symbols: std::path::PathBuf::from(symbols), runtime_names: std::collections::BTreeMap::new() }))
+            let frameworks = repeated("--framework-search").into_iter().map(std::path::PathBuf::from).collect();
+            Ok(Some(bind_objc::Project { header, search, frameworks, symbols: std::path::PathBuf::from(symbols), runtime_names: std::collections::BTreeMap::new() }))
         }
         _ => anyhow::bail!("`--header` binds a project's header and needs `--project-symbols`, the directory its graph was extracted into, and the other way about"),
     }
@@ -1265,7 +1267,7 @@ fn for_project(mut source: TsgoApi, tsconfig: &Utf8Path) -> Result<TsgoApi> {
     } else {
         let package = config.parent().unwrap_or_else(|| Utf8Path::new("."));
         let native = resolved.native.iter().map(|entry| package.join(&entry.dir)).collect();
-        source.with_generated(Box::new(objc_bindings::ObjcBindings::new(apple, native)))
+        source.with_generated(Box::new(objc_bindings::ObjcBindings::new(apple, native, package.to_path_buf(), resolved.dependencies.clone())))
     };
     let Some(react) = resolved.react else {
         return Ok(source);
@@ -3329,7 +3331,7 @@ fn build(rest: &[String]) -> Result<()> {
             // A number in a comment is a claim with a date on it; this one had
             // no date and outlived the code it described by one commit.
             let config_roots = generate_bindings(&tsconfig, std::slice::from_ref(&target.id))?;
-            let native = native_sources(&config_roots, target)?;
+            let mut native = native_sources(&config_roots, target)?;
             // **At configuration time, naming the package**, which is the whole
             // point of a package declaring what it supports: the alternative is
             // a link error about a symbol, in a file the reader did not write,
@@ -3351,6 +3353,9 @@ fn build(rest: &[String]) -> Result<()> {
             // unsatisfiable claim is a configuration error and printing
             // `building ...` first says a build started that never could.
             let needs = dependencies_for(&config_roots, target)?;
+            // What a resolver checked out as source -- a pod -- compiles
+            // beside the package's own.
+            native.extend(module_sources(&needs.native, target)?);
             let out = root.join(name).join(target_directory(target));
             println!("building `{name}` for {} into {out}", target.id);
             // A claim that contributes nothing to link against still says so,
@@ -3682,7 +3687,7 @@ fn bind_one(module: &str, file: &Utf8Path, targets: &[String], into: &Utf8Path) 
 fn native_sources(
     roots: &[Utf8PathBuf],
     target: &nts_build::config::Target,
-) -> Result<Vec<(Utf8PathBuf, Utf8PathBuf)>> {
+) -> Result<Vec<NativeSource>> {
     let mut found = Vec::new();
     for config_path in roots {
         let package = config_path.parent().unwrap_or_else(|| Utf8Path::new("."));
@@ -3692,26 +3697,73 @@ fn native_sources(
                 continue;
             }
             let directory = package.join(&entry.dir);
+            let module = directory.file_name().unwrap_or("native").to_owned();
             let Ok(listing) = std::fs::read_dir(&directory) else { continue };
             for item in listing.flatten() {
                 let path = Utf8PathBuf::from_path_buf(item.path())
                     .map_err(|bad| anyhow!("{} is not UTF-8", bad.display()))?;
-                match path.extension() {
-                    Some("c") => found.push((directory.clone(), path)),
-                    // Objective-C and Swift, which the Swift toolchain here
-                    // builds for Apple's platforms only: refused by name
-                    // elsewhere rather than left out, which would leave their
-                    // symbols to a link error.
-                    Some("m" | "swift") if matches!(target.os.as_str(), "macos" | "ios") => found.push((directory.clone(), path)),
-                    Some(language @ ("m" | "swift")) => bail!(
-                        "{path} is {}, which builds for macOS and iOS here, and `{}` is compiled for {}: \
-                         name the targets the directory is for with `targets` in its `sources` entry",
-                        if language == "m" { "Objective-C" } else { "Swift" },
-                        entry.dir,
-                        target.id
-                    ),
-                    _ => {}
+                if compiled_here(&path, target, &entry.dir)? {
+                    let object = Utf8PathBuf::from(format!("{}.o", path.file_name().unwrap_or("native")));
+                    found.push(NativeSource { directory: directory.clone(), path, module: module.clone(), include: Vec::new(), object });
                 }
+            }
+        }
+    }
+    found.sort();
+    Ok(found)
+}
+
+/// One native translation unit, and what compiles it.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct NativeSource {
+    /// The directory it belongs to: a package's `native:` directory, or a
+    /// checked-out library's root. On the include path of everything that
+    /// compiles against it.
+    directory: Utf8PathBuf,
+    path: Utf8PathBuf,
+    /// The Swift module a `.swift` among them is compiled into: the
+    /// directory's name, or the library's.
+    module: String,
+    /// Where else its `#import`s are found: a pod's header maps.
+    include: Vec<Utf8PathBuf>,
+    /// Its object, relative to the product's directory: a package's own
+    /// source's is its file's name, and a library's is under the library's
+    /// name, at its path in the library, so two pods' `Utils.m` are two
+    /// objects.
+    object: Utf8PathBuf,
+}
+
+/// Whether `path` is a source this build compiles for `target`: C anywhere,
+/// and Objective-C and Swift, which the Swift toolchain here builds for
+/// Apple's platforms only -- refused by name elsewhere rather than left out,
+/// which would leave their symbols to a link error.
+fn compiled_here(path: &Utf8Path, target: &nts_build::config::Target, owner: &str) -> Result<bool> {
+    match path.extension() {
+        Some("c") => Ok(true),
+        Some("m" | "swift") if matches!(target.os.as_str(), "macos" | "ios") => Ok(true),
+        Some(language @ ("m" | "swift")) => bail!(
+            "{path} is {}, which builds for macOS and iOS here, and `{owner}` is compiled for {}: \
+             name the targets the directory is for with `targets` in its `sources` entry",
+            if language == "m" { "Objective-C" } else { "Swift" },
+            target.id
+        ),
+        _ => Ok(false),
+    }
+}
+
+/// The sources of the libraries a resolver checked out -- every one beneath
+/// each library's root, since a pod keeps them in directories of its own --
+/// compiled against the library's header maps, each library's Swift one
+/// module of its name.
+fn module_sources(modules: &[nts_build::dependencies::NativeModule], target: &nts_build::config::Target) -> Result<Vec<NativeSource>> {
+    let mut found = Vec::new();
+    for module in modules {
+        for path in module.source_files() {
+            if compiled_here(&path, target, &module.name)? {
+                let relative = path.strip_prefix(&module.sources).unwrap_or(&path);
+                let object = Utf8PathBuf::from(&module.name).join(format!("{relative}.o"));
+                let include = module.include.clone();
+                found.push(NativeSource { directory: module.sources.clone(), path, module: module.name.clone(), include, object });
             }
         }
     }
@@ -3837,7 +3889,7 @@ fn build_c(
     target: &nts_build::config::Target,
     tsconfig: &Utf8Path,
     emission: Emission<'_>,
-    native: &[(Utf8PathBuf, Utf8PathBuf)],
+    native: &[NativeSource],
     cache_dir: Option<&Utf8Path>,
     needs: &nts_build::dependencies::Resolution,
 ) -> Result<usize> {
@@ -3856,11 +3908,12 @@ fn build_c(
     let wrote = emit_c(tsconfig, Some(out), Emission { host, abi: native_abi(&target.os), ..emission })?;
     let artifact = link_c(name, product, out, &wrote, native, cache_dir, target, needs)?;
     println!("  {artifact}");
+    let shipped: Vec<Utf8PathBuf> = vendored_frameworks(needs, target)?.into_iter().filter(|framework| framework.dynamic).map(|framework| framework.slice).collect();
     if is_macos_application(product, target) {
-        println!("  {}", package_macos_app(name, product, &artifact, target)?);
+        println!("  {}", package_macos_app(name, product, &artifact, target, &shipped)?);
     }
     if is_ios_application(product, target) {
-        println!("  {}", package_ios_app(name, product, &artifact, target)?);
+        println!("  {}", package_ios_app(name, product, &artifact, target, &shipped)?);
     }
     // Named here as well as on stderr, because a build whose last line is
     // `1 artifact(s)` has told the reader the opposite of what happened.
@@ -3896,7 +3949,7 @@ fn refuse_without_libuv(
     out: &Utf8Path,
     tools: &Toolchain,
     target: &nts_build::config::Target,
-    native: &[(Utf8PathBuf, Utf8PathBuf)],
+    native: &[NativeSource],
     napi: Option<&Utf8Path>,
     cflags: &[String],
 ) -> Result<()> {
@@ -3965,14 +4018,14 @@ fn refuse_without_libuv(
 /// `#include "point.h"`.
 fn program_includes(
     out: &Utf8Path,
-    native: &[(Utf8PathBuf, Utf8PathBuf)],
+    native: &[NativeSource],
     napi: Option<&Utf8Path>,
     cflags: &[String],
 ) -> Vec<String> {
     let mut flags = vec!["-I".to_owned(), out.to_string()];
-    for (directory, _) in native {
+    for source in native {
         flags.push("-I".to_owned());
-        flags.push(directory.to_string());
+        flags.push(source.directory.to_string());
     }
     if let Some(napi) = napi {
         flags.push("-I".to_owned());
@@ -4006,7 +4059,7 @@ fn compile_program(
     name: &str,
     out: &Utf8Path,
     sources: &[String],
-    native: &[(Utf8PathBuf, Utf8PathBuf)],
+    native: &[NativeSource],
     pic: bool,
     napi: Option<&Utf8Path>,
     with: &Compiling<'_>,
@@ -4264,6 +4317,7 @@ fn package_macos_app(
     product: &nts_build::config::Product,
     executable: &Utf8Path,
     target: &nts_build::config::Target,
+    frameworks: &[Utf8PathBuf],
 ) -> Result<Utf8PathBuf> {
     let id = product.application_id.as_deref().context("checked by `refuse_unidentified_bundle`")?;
     let bundle = executable.parent().unwrap_or_else(|| Utf8Path::new(".")).join(format!("{name}.app"));
@@ -4273,6 +4327,10 @@ fn package_macos_app(
     let binaries = bundle.join("Contents/MacOS");
     std::fs::create_dir_all(&binaries).with_context(|| format!("creating {binaries}"))?;
     std::fs::copy(executable, binaries.join(name)).with_context(|| format!("copying {executable} into {bundle}"))?;
+    // The dynamic frameworks it loads, where an application keeps them.
+    for framework in frameworks {
+        copy_bundle(framework, &bundle.join("Contents/Frameworks").join(framework.file_name().unwrap_or("vendored.framework")))?;
+    }
     let escaped = |text: &str| text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
     let mut keys = vec![
         ("CFBundleExecutable", format!("<string>{}</string>", escaped(name))),
@@ -4312,6 +4370,7 @@ fn package_ios_app(
     product: &nts_build::config::Product,
     executable: &Utf8Path,
     target: &nts_build::config::Target,
+    frameworks: &[Utf8PathBuf],
 ) -> Result<Utf8PathBuf> {
     let id = product.application_id.as_deref().context("checked by `refuse_unidentified_bundle`")?;
     let bundle = executable.parent().unwrap_or_else(|| Utf8Path::new(".")).join(format!("{name}.app"));
@@ -4320,6 +4379,9 @@ fn package_ios_app(
     }
     std::fs::create_dir_all(&bundle).with_context(|| format!("creating {bundle}"))?;
     std::fs::copy(executable, bundle.join(name)).with_context(|| format!("copying {executable} into {bundle}"))?;
+    for framework in frameworks {
+        copy_bundle(framework, &bundle.join("Frameworks").join(framework.file_name().unwrap_or("vendored.framework")))?;
+    }
     let escaped = |text: &str| text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
     let mut keys = vec![
         ("CFBundleExecutable", format!("<string>{}</string>", escaped(name))),
@@ -4350,6 +4412,89 @@ fn package_ios_app(
     let info = bundle.join("Info.plist");
     std::fs::write(&info, plist).with_context(|| format!("writing {info}"))?;
     Ok(bundle)
+}
+
+/// A binary framework a library ships, as one target links it.
+struct Vendored {
+    /// The `.framework` the target's slice is.
+    slice: Utf8PathBuf,
+    /// Whether the program loads it at run time -- a dynamic library inside
+    /// -- and so ships it; a static one is linked in and is not needed after.
+    dynamic: bool,
+}
+
+/// The binary frameworks the program's libraries ship, each as `target`
+/// links it: the slice of an `.xcframework` that fits its platform and
+/// architecture (`xcframework::framework_for`).
+fn vendored_frameworks(needs: &nts_build::dependencies::Resolution, target: &nts_build::config::Target) -> Result<Vec<Vendored>> {
+    let arch = target.arch.as_deref().unwrap_or(host_arch());
+    let slice = xcframework::Slice { platform: &target.os, simulator: target.os == "ios", arch: if arch == "aarch64" { "arm64" } else { arch } };
+    let mut vendored = Vec::new();
+    for framework in needs.native.iter().flat_map(|library| &library.frameworks) {
+        let chosen = xcframework::framework_for(framework, slice)?;
+        let dynamic = framework_is_dynamic(&chosen)?;
+        vendored.push(Vendored { slice: chosen, dynamic });
+    }
+    Ok(vendored)
+}
+
+/// A library's binary frameworks, as the link names them: each slice's
+/// directory searched, so the `-framework` its pods' link line names is
+/// found, and the places a dynamic one is loaded from -- beside a bare
+/// program, and inside a macOS or an iOS application.
+fn vendored_link_flags(vendored: &[Vendored]) -> Vec<String> {
+    let mut flags: Vec<String> = vendored.iter().filter_map(|framework| framework.slice.parent()).map(|dir| format!("-F{dir}")).collect();
+    if vendored.iter().any(|framework| framework.dynamic) {
+        flags.extend(["@executable_path", "@executable_path/../Frameworks", "@executable_path/Frameworks"].map(|rpath| format!("-Wl,-rpath,{rpath}")));
+    }
+    flags
+}
+
+/// A dynamic framework a library ships, copied beside the program, which
+/// loads it from there (`@executable_path`); an application's packaging
+/// copies it into the bundle.
+fn ship_vendored(vendored: &[Vendored], out: &Utf8Path) -> Result<()> {
+    for framework in vendored.iter().filter(|framework| framework.dynamic) {
+        copy_bundle(&framework.slice, &out.join(framework.slice.file_name().unwrap_or("vendored.framework")))?;
+    }
+    Ok(())
+}
+
+/// Whether a `.framework`'s binary is a dynamic library: a Mach-O file, where
+/// a static framework's is an `ar` archive (`!<arch>`). The binary is the
+/// framework's name, at its top or, in a macOS framework's versioned layout,
+/// linked from there.
+fn framework_is_dynamic(framework: &Utf8Path) -> Result<bool> {
+    let name = framework.file_stem().context("a framework with no name")?;
+    let binary = framework.join(name);
+    let mut magic = [0u8; 8];
+    let mut file = std::fs::File::open(&binary).with_context(|| format!("reading {binary}, the framework's binary"))?;
+    std::io::Read::read_exact(&mut file, &mut magic).with_context(|| format!("reading {binary}"))?;
+    Ok(&magic != b"!<arch>\n")
+}
+
+/// `from` copied to `to` as it is, links as links: a macOS framework's
+/// versioned layout is made of them (`Beep -> Versions/Current/Beep`).
+fn copy_bundle(from: &Utf8Path, to: &Utf8Path) -> Result<()> {
+    if to.exists() {
+        std::fs::remove_dir_all(to).with_context(|| format!("removing the old {to}"))?;
+    }
+    std::fs::create_dir_all(to).with_context(|| format!("creating {to}"))?;
+    for entry in std::fs::read_dir(from).with_context(|| format!("reading {from}"))? {
+        let entry = entry?;
+        let source = Utf8PathBuf::from_path_buf(entry.path()).map_err(|bad| anyhow!("{} is not UTF-8", bad.display()))?;
+        let destination = to.join(source.file_name().unwrap_or_default());
+        let kind = entry.file_type()?;
+        if kind.is_symlink() {
+            #[cfg(unix)]
+            std::os::unix::fs::symlink(std::fs::read_link(&source)?, &destination).with_context(|| format!("linking {destination}"))?;
+        } else if kind.is_dir() {
+            copy_bundle(&source, &destination)?;
+        } else {
+            std::fs::copy(&source, &destination).with_context(|| format!("copying {source}"))?;
+        }
+    }
+    Ok(())
 }
 
 /// Stop at a product kind whose packaging is not built, rather than near it.
@@ -5628,7 +5773,7 @@ fn run(mut command: std::process::Command, what: &str) -> Result<()> {
 fn check_witness(
     name: &str,
     out: &Utf8Path,
-    native: &[(Utf8PathBuf, Utf8PathBuf)],
+    native: &[NativeSource],
     tools: &Toolchain,
     cflags: &[String],
 ) -> Result<()> {
@@ -5651,10 +5796,10 @@ fn check_witness(
     // is beside `point.c`. Only the generated headers were on the path, so the
     // check failed to compile for a reason that was not what it checks.
     let mut seen: Vec<&Utf8Path> = Vec::new();
-    for (directory, _) in native {
-        if !seen.contains(&directory.as_path()) {
-            command.arg("-I").arg(directory.as_str());
-            seen.push(directory.as_path());
+    for source in native {
+        if !seen.contains(&source.directory.as_path()) {
+            command.arg("-I").arg(source.directory.as_str());
+            seen.push(source.directory.as_path());
         }
     }
     // **And a dependency's `--cflags`**, which the program and the package's C
@@ -5688,7 +5833,7 @@ fn link_c(
     product: &nts_build::config::Product,
     out: &Utf8Path,
     wrote: &Wrote,
-    native: &[(Utf8PathBuf, Utf8PathBuf)],
+    native: &[NativeSource],
     cache_dir: Option<&Utf8Path>,
     target: &nts_build::config::Target,
     needs: &nts_build::dependencies::Resolution,
@@ -5839,11 +5984,12 @@ fn link_c(
             // Swift's runtime, which the Swift objects name through their
             // autolink entries: its stubs in the SDK, and the OS's copy at
             // run time, where every macOS and iOS these targets reach has it.
-            if native.iter().any(|(_, source)| source.extension() == Some("swift"))
+            if native.iter().any(|source| source.path.extension() == Some("swift"))
                 && let Some((sdk, _)) = tools.apple_target()
             {
                 command.arg(format!("-L{sdk}/usr/lib/swift")).arg("-Wl,-rpath,/usr/lib/swift");
             }
+            command.args(vendored_link_flags(&vendored_frameworks(needs, target)?));
             // **`--no-undefined` where it can be used**, which is the earliest
             // an unresolved symbol can be caught and the cheapest place to say
             // so. Not for an addon: a `.node` resolves `napi_*` out of the host
@@ -5861,6 +6007,7 @@ fn link_c(
             }
         }
     }
+    ship_vendored(&vendored_frameworks(needs, target)?, out)?;
     // The Windows App SDK's bootstrapper, which the runtime loads from beside
     // the program to find the SDK installed on the machine (`nts_winrt.c`).
     if wrote.winappsdk {
@@ -6330,31 +6477,33 @@ fn append_library_initialiser(out: &Utf8Path, sources: &[String]) -> Result<()> 
 fn compile_native(
     name: &str,
     out: &Utf8Path,
-    native: &[(Utf8PathBuf, Utf8PathBuf)],
+    native: &[NativeSource],
     pic: bool,
     objects: &mut Vec<Utf8PathBuf>,
     with: &Compiling<'_>,
 ) -> Result<()> {
 
-    // A directory of Swift is one module, compiled whole into one object, as
-    // a SwiftPM target is.
-    let mut swift: std::collections::BTreeMap<&Utf8PathBuf, Vec<std::path::PathBuf>> = std::collections::BTreeMap::new();
-    for (directory, source) in native.iter().filter(|(_, source)| source.extension() == Some("swift")) {
-        swift.entry(directory).or_default().push(source.clone().into_std_path_buf());
+    // A module's Swift is compiled whole into one object, as a SwiftPM
+    // target is: a directory of it, or a library's.
+    let mut swift: std::collections::BTreeMap<&str, Vec<std::path::PathBuf>> = std::collections::BTreeMap::new();
+    for source in native.iter().filter(|source| source.path.extension() == Some("swift")) {
+        swift.entry(source.module.as_str()).or_default().push(source.path.clone().into_std_path_buf());
     }
     if !swift.is_empty() {
         let (sdk, triple) = with.tools.apple_target().ok_or_else(|| anyhow!("`{name}` has Swift to compile and no Apple target to compile it for"))?;
         let toolchain = crate::swift::toolchain()?;
-        for (directory, sources) in &swift {
-            let module = directory.file_name().unwrap_or("Swift");
+        for (module, sources) in &swift {
             let object = out.join(format!("{module}.swift.o"));
             let target = crate::swift::Target { sdk: std::path::Path::new(&sdk), triple: &triple };
             toolchain.compile(&crate::swift::Module { name: module, sources }, target, object.as_std_path())?;
             objects.push(object);
         }
     }
-    for (directory, source) in native.iter().filter(|(_, source)| source.extension() != Some("swift")) {
-        let object = out.join(format!("{}.o", source.file_name().unwrap_or("native")));
+    for NativeSource { directory, path: source, include, object, .. } in native.iter().filter(|source| source.path.extension() != Some("swift")) {
+        let object = out.join(object);
+        if let Some(parent) = object.parent() {
+            std::fs::create_dir_all(parent).with_context(|| format!("creating {parent}"))?;
+        }
         // Objective-C under ARC with blocks, as Xcode compiles a `.m`: the
         // project's classes count their objects as the program's do.
         let language: &[&str] =
@@ -6366,6 +6515,10 @@ fn compile_native(
             .collect();
         arguments.push("-I".to_owned());
         arguments.push(directory.to_string());
+        for directory in include {
+            arguments.push("-I".to_owned());
+            arguments.push(directory.to_string());
+        }
         arguments.push("-I".to_owned());
         arguments.push(out.to_string());
         if pic {

@@ -1,0 +1,12 @@
+# A pod the program uses, checked out by `pod install` (tooling/apple/vm.md
+# says where CocoaPods is). `nts build` reads what it left -- Podfile.lock and
+# Pods/ -- and never runs it. Integration into an Xcode project is off: there
+# is none, and nts compiles the pod itself.
+platform :osx, '13.0'
+install! 'cocoapods', :integrate_targets => false
+
+target 'PodsHost' do
+  pod 'Chirp', :path => 'Chirp'
+  pod 'Hum', :path => 'Hum'
+  pod 'Beep', :path => 'Beep'
+end

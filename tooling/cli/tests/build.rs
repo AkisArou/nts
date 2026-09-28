@@ -2782,14 +2782,14 @@ fn an_unresolvable_package_refuses_by_name_before_the_build_starts() {
     );
 }
 
-const SWIFTPM_DEPENDENCY: &str = r#"
+const UNREADABLE_DEPENDENCY: &str = r#"
 import { defineConfig, library, target } from "@nts/config";
 export default defineConfig({
   products: {
     acme: library.native({ targets: [target.linux({ backend: "c" })], entry: "./src/main.ts" }),
   },
   dependencies: {
-    "linux-gnu": { from: "swiftpm", lockfile: "./deps/apple.resolved" },
+    "linux-gnu": { from: "vcpkg", lockfile: "./deps/vcpkg.json" },
   },
 });
 "#;
@@ -2805,12 +2805,12 @@ fn a_resolver_this_build_cannot_read_refuses_and_names_it() {
         skip("node, the tsgo frontend and clang");
         return;
     }
-    let project = fixture("build-swiftpm", SWIFTPM_DEPENDENCY);
+    let project = fixture("build-unreadable-resolver", UNREADABLE_DEPENDENCY);
     let run = build(&project, &[]);
     assert!(!run.ok, "an unread resolver built anyway:\n{}", run.stdout);
-    assert!(run.stderr.contains("SwiftPM"), "does not name the resolver:\n{}", run.stderr);
+    assert!(run.stderr.contains("vcpkg"), "does not name the resolver:\n{}", run.stderr);
     assert!(
-        run.stderr.contains("./deps/apple.resolved"),
+        run.stderr.contains("./deps/vcpkg.json"),
         "does not name the file it would read:\n{}",
         run.stderr
     );
@@ -3201,7 +3201,7 @@ export default defineConfig({
     sdk: library.native({ targets: [target.ios({ minimumVersion: "17.0" })], entry: "./src/main.ts" }),
   },
   dependencies: {
-    "ios-17": { from: "cocoapods", lockfile: "./deps/Podfile.lock" },
+    "ios-17": { from: "vcpkg", lockfile: "./deps/vcpkg.json" },
   },
 });
 "#;
@@ -3209,7 +3209,7 @@ export default defineConfig({
 /// When two things are wrong, the one you can act on is reported.
 ///
 /// **A refusal that stops hides the cause behind it.** `apps/ios` reported that
-/// a package declares a `CocoaPods` claim this build cannot read -- true, and not
+/// a package declares a claim this build cannot read (`vcpkg`) -- true, and not
 /// the reason the build was never going to work on Linux, which is that there
 /// is no Apple SDK here. Reading the dependency first put the smaller fact in
 /// front of the larger one, and the larger one is the only one with a fix the
@@ -3229,7 +3229,7 @@ fn a_missing_toolchain_is_reported_before_a_dependency_it_would_never_reach() {
         run.stderr
     );
     assert!(
-        !run.stderr.contains("CocoaPods"),
+        !run.stderr.contains("vcpkg"),
         "the dependency refusal is still standing in front of it:\n{}",
         run.stderr
     );

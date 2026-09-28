@@ -1,0 +1,21 @@
+{
+  "name": "Hum",
+  "version": "0.1.0",
+  "summary": "A Swift pod for examples/interop/macos-pods.",
+  "homepage": "https://example.invalid/hum",
+  "license": {
+    "type": "MIT",
+    "text": "MIT"
+  },
+  "authors": "nts",
+  "source": {
+    "git": "https://example.invalid/hum.git",
+    "tag": "0.1.0"
+  },
+  "platforms": {
+    "osx": "13.0"
+  },
+  "swift_versions": "5.0",
+  "source_files": "Sources/**/*.swift",
+  "swift_version": "5.0"
+}

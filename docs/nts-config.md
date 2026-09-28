@@ -1176,7 +1176,11 @@ is the header's name, `objc:Greeter` for `native/Greeter.h`. Its Swift names
 come from a symbol graph extracted on this machine (`swift.rs`), and a
 `.m` in the directory compiles under ARC beside the program. A directory of
 `.swift` is a module named for the directory, as a SwiftPM target is: compiled
-here, and bound from the Objective-C header Swift writes for it.
+here, and bound from the Objective-C header Swift writes for it. A pod a
+`cocoapods` dependency pins is a module of its own too, read from the lockfile
+and the `Pods/` beside it, compiled and bound the same way; so is each library
+target of a `swiftpm` dependency, read from its manifest by SwiftPM's own
+`dump-package` and from the checkouts `Package.resolved` pins.
 
 A package that declares native code and needs no binding still gets it compiled.
 A callback implementation is called from C and imported by nobody, so the roots

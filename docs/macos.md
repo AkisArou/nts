@@ -209,6 +209,79 @@ import { Greeter } from "objc:Greeter";
 `examples/interop/macos-swift` is the fixture, against the same program in
 Swift.
 
+## A pod
+
+A library CocoaPods checked out is imported as the pod's module:
+
+```ts
+// nts.config.ts
+dependencies: {
+  "macos-13": { from: "cocoapods", lockfile: "./Podfile.lock" },
+},
+
+// src/main.ts
+import { Chirp } from "objc:Chirp";
+```
+
+- **Read, never run.** `nts build` reads what `pod install` left: the
+  lockfile for which pods, and `Pods/` beside it for their sources and
+  headers. `Pods/Manifest.lock` must be the same lockfile, which is CocoaPods'
+  own check that `Pods/` is what it pins; otherwise the build says to run
+  `pod install`.
+- **Compiled here**, every source of the pod, against the header maps
+  CocoaPods made (`Pods/Headers`), and **bound from its public headers**, as
+  your own Objective-C is. A Swift pod is compiled and bound as your own
+  Swift is.
+- **Linked as CocoaPods says**: the frameworks and libraries the podspecs
+  name, from the Podfile target's xcconfig (`OTHER_LDFLAGS`) -- Reachability's
+  `SystemConfiguration`.
+- **A pod that ships a binary** (`vendored_frameworks`): the `.xcframework`
+  slice that fits each target is linked, a dynamic one shipped beside the
+  program (and into an application's `Frameworks`), and the module is bound
+  from the framework's headers.
+- A development pod's files are its podspec's (`Pods/Local Podspecs`), not
+  everything in its directory, which CocoaPods does not clean.
+- Not read yet: a pod whose API is both Objective-C headers and Swift, which
+  is refused by name.
+
+## A Swift package
+
+A package SwiftPM checked out is imported by its library targets' names:
+
+```ts
+// nts.config.ts
+dependencies: {
+  "macos-13": { from: "swiftpm", lockfile: "./Package.resolved" },
+},
+
+// src/main.ts
+import { Tally } from "objc:Tally";
+```
+
+- **Read, never resolved.** The `Package.swift` beside the lockfile, and each
+  package it depends on, is read by SwiftPM's own `swift-package
+  dump-package` (a manifest is a Swift program, and this is the one reading
+  of it Xcode agrees with). A remote package's checkout under
+  `.build/checkouts` must be the revision `Package.resolved` pins, which
+  `.build/workspace-state.json` records; otherwise the build says to run
+  `swift package resolve`. A local package (`.package(path:)`) is read where
+  it is.
+- **Each library target is a module**: an Objective-C or C one compiled and
+  bound from its `include/`, a Swift one compiled and bound from the header
+  Swift writes, a binary target by `path:` the `.xcframework` it is. Its
+  linker settings are linked.
+- `swift-package` is the Swift toolchain's; swift.org's Linux build links its
+  distribution's libraries (on Arch, `libxml2.so.2` is `libxml2-legacy`).
+- Not read yet: a Swift target that imports a C target of its package, a
+  registry dependency, and a binary target by `url:`.
+
+`examples/interop/macos-spm` is the fixture: an Objective-C package and a
+Swift one, against the same program in Objective-C.
+
+`examples/interop/macos-pods` is the fixture: three development pods -- one
+Objective-C with a private class in a directory of its own, one Swift, one an
+`.xcframework` Xcode made -- against the same program in Objective-C.
+
 ## An application
 
 An application delegate is a class like any other, and a menu item's action

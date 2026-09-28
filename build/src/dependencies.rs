@@ -23,6 +23,9 @@
 use std::collections::BTreeMap;
 use std::process::Command;
 
+mod cocoapods;
+mod swiftpm;
+
 use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
@@ -81,6 +84,9 @@ pub struct Resolution {
     pub cflags: Vec<String>,
     pub libs: Vec<String>,
     pub classpath: Vec<Utf8PathBuf>,
+    /// Libraries a resolver checked out as source, which the build compiles
+    /// and binds as it does a package's own `native:` code: a pod.
+    pub native: Vec<NativeModule>,
     /// What a claim resolved to when it contributes nothing to link against.
     ///
     /// **So that reading a claim is observable.** A resolver whose output this
@@ -96,6 +102,7 @@ impl Resolution {
         self.cflags.extend(other.cflags);
         self.libs.extend(other.libs);
         self.classpath.extend(other.classpath);
+        self.native.extend(other.native);
         self.notes.extend(other.notes);
     }
 
@@ -105,8 +112,81 @@ impl Resolution {
         self.cflags.is_empty()
             && self.libs.is_empty()
             && self.classpath.is_empty()
+            && self.native.is_empty()
             && self.notes.is_empty()
     }
+}
+
+/// A library checked out as source: compiled into the program, and the module
+/// a program imports it as (`objc:<name>`) bound from its public headers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NativeModule {
+    /// The module's name: the pod's, which is what its headers and Swift call
+    /// it.
+    pub name: String,
+    /// Where its sources are: every `.m`, `.c` and `.swift` beneath it,
+    /// unless `files` says which.
+    pub sources: Utf8PathBuf,
+    /// Its source files, where the checkout holds more than them -- a
+    /// development pod's directory, which `CocoaPods` does not clean, as it
+    /// does a pod it downloads -- read from its podspec's `source_files`.
+    pub files: Option<Vec<Utf8PathBuf>>,
+    /// Its public headers, in a stable order: what its binding is read from.
+    pub headers: Vec<Utf8PathBuf>,
+    /// Where its sources' and headers' own `#import`s are found.
+    pub include: Vec<Utf8PathBuf>,
+    /// The binary frameworks it ships instead of sources, or beside them --
+    /// a pod's `vendored_frameworks` -- as the `.framework` or `.xcframework`
+    /// bundles they are: a target links the slice that fits it.
+    pub frameworks: Vec<Utf8PathBuf>,
+}
+
+impl NativeModule {
+    /// Its source files: those `files` names, else every file beneath
+    /// `sources` that is not inside a binary framework.
+    #[must_use]
+    pub fn source_files(&self) -> Vec<Utf8PathBuf> {
+        if let Some(files) = &self.files {
+            return files.clone();
+        }
+        let mut found = Vec::new();
+        let mut pending = vec![self.sources.clone()];
+        while let Some(at) = pending.pop() {
+            for entry in std::fs::read_dir(&at).into_iter().flatten().flatten() {
+                let Ok(path) = Utf8PathBuf::from_path_buf(entry.path()) else { continue };
+                if matches!(path.extension(), Some("framework" | "xcframework")) {
+                    continue;
+                }
+                if path.is_dir() {
+                    pending.push(path);
+                } else {
+                    found.push(path);
+                }
+            }
+        }
+        found.sort();
+        found
+    }
+}
+
+/// Link flags each once, in their order: `-framework X` and
+/// `-weak_framework X` are two words, and a framework once however many
+/// libraries name it.
+fn dedup_link_flags(flags: Vec<String>) -> Vec<String> {
+    let mut deduped: Vec<String> = Vec::new();
+    let mut words = flags.into_iter();
+    while let Some(flag) = words.next() {
+        if matches!(flag.as_str(), "-framework" | "-weak_framework") {
+            let Some(name) = words.next() else { break };
+            if !deduped.windows(2).any(|pair| pair[0] == flag && pair[1] == name) {
+                deduped.push(flag);
+                deduped.push(name);
+            }
+        } else if !deduped.contains(&flag) {
+            deduped.push(flag);
+        }
+    }
+    deduped
 }
 
 /// Resolve every claim that covers `target`, in a stable order.
@@ -138,16 +218,18 @@ fn one(dir: &Utf8Path, id: &str, claim: &Dependencies) -> Result<Resolution> {
         Resolver::PkgConfig => pkg_config(id, claim),
         Resolver::Maven | Resolver::Gradle => jars(dir, id, claim),
         Resolver::Npm => npm(dir, id, claim),
+        Resolver::Cocoapods => cocoapods::resolve(dir, id, claim),
+        Resolver::Swiftpm => swiftpm::resolve(dir, id, claim),
         // **Named, with the file it would read.** The alternative is a build
         // that quietly produces an artifact missing everything the claim
         // promised, which is the half-emit this command must not do.
-        other => bail!(
+        other @ Resolver::Vcpkg => bail!(
             "`dependencies.{id}` resolves with {}, which `nts build` cannot read yet, and \
              what it names would go into the artifact -- so building without it would \
              produce one missing what the claim promised.{} \
              Build a target this claim does not cover, or vendor what it names and \
              declare it with a resolver this build reads (`pkg-config` for C libraries, \
-             `maven` or `gradle` for jars).",
+             `maven` or `gradle` for jars, `cocoapods` for pods, `swiftpm` for Swift packages).",
             other.name(),
             claim
                 .lockfile
@@ -630,18 +712,18 @@ mod tests {
     fn a_resolver_this_cannot_read_refuses_by_name() {
         let mut declared = BTreeMap::new();
         declared.insert(
-            "ios-17".to_owned(),
+            "windows-msvc".to_owned(),
             Dependencies {
-                from: Resolver::Swiftpm,
-                lockfile: Some("./deps/apple.resolved".to_owned()),
+                from: Resolver::Vcpkg,
+                lockfile: Some("./deps/vcpkg.json".to_owned()),
                 packages: None,
             },
         );
-        let said = resolve(Utf8Path::new("."), &declared, "ios-17", None)
-            .expect_err("SwiftPM is not read")
+        let said = resolve(Utf8Path::new("."), &declared, "windows-msvc", None)
+            .expect_err("vcpkg is not read")
             .to_string();
-        assert!(said.contains("SwiftPM"), "does not name the resolver:\n{said}");
-        assert!(said.contains("./deps/apple.resolved"), "does not name the file:\n{said}");
+        assert!(said.contains("vcpkg"), "does not name the resolver:\n{said}");
+        assert!(said.contains("./deps/vcpkg.json"), "does not name the file:\n{said}");
     }
 
     fn a_pin() -> Pin {

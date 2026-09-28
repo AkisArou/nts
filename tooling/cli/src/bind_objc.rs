@@ -124,6 +124,9 @@ pub(crate) struct Project {
     pub(crate) header: std::path::PathBuf,
     /// Where its own `#import "..."`s are found, its directory first.
     pub(crate) search: Vec<std::path::PathBuf>,
+    /// Where the frameworks its `#import <Name/Name.h>`s name are: a binary
+    /// framework a library ships, whose headers are its API.
+    pub(crate) frameworks: Vec<std::path::PathBuf>,
     /// The directory holding `<Module>.symbols.json`.
     pub(crate) symbols: std::path::PathBuf,
     /// The names the Objective-C runtime has the header's classes and
@@ -456,6 +459,7 @@ fn dump(request: &Request, unit: &tempfile_path::TempFile, wanted: &Wanted<'_>) 
         .args(["-target", &request.target, "-isysroot", &request.sdk, "-x", "objective-c", "-fsyntax-only"])
         .args(["-Xclang", "-ast-dump=json"])
         .args(request.project.iter().flat_map(|project| &project.search).flat_map(|directory| [std::ffi::OsStr::new("-I"), directory.as_os_str()]))
+        .args(request.project.iter().flat_map(|project| &project.frameworks).flat_map(|directory| [std::ffi::OsStr::new("-F"), directory.as_os_str()]))
         .arg(unit.path())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

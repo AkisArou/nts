@@ -39,18 +39,9 @@ pub(crate) struct Toolchain {
     modules: PathBuf,
 }
 
-/// The toolchain `NTS_SWIFT_TOOLCHAIN` names -- the directory holding `usr/` --
-/// else the newest under `~/.cache/nts/swift`.
+/// The toolchain `nts_build::swift` finds, set up for an Apple target.
 pub(crate) fn toolchain() -> Result<Toolchain> {
-    let root = match std::env::var_os("NTS_SWIFT_TOOLCHAIN") {
-        Some(named) => PathBuf::from(named),
-        None => newest_cached().context(
-            "a project's own Objective-C header or Swift needs a Swift toolchain, which reads it for \
-             Swift's names and compiles it: unpack swift.org's Linux release matching the SDK's Swift \
-             (its `usr/lib/swift/Swift.swiftmodule/*.swiftinterface` says which) under \
-             ~/.cache/nts/swift, or name one with NTS_SWIFT_TOOLCHAIN",
-        )?,
-    };
+    let root = nts_build::swift::toolchain_root()?;
     let bin = root.join("usr").join("bin");
     let (frontend, extract) = (bin.join("swift-frontend"), bin.join("swift-symbolgraph-extract"));
     if !frontend.is_file() || !extract.is_file() {
@@ -59,19 +50,6 @@ pub(crate) fn toolchain() -> Result<Toolchain> {
     let cache = kept(&root)?;
     let resource = apple_resource(&cache.join("resource"), &root.join("usr").join("lib").join("swift"))?;
     Ok(Toolchain { frontend, extract, resource, modules: cache.join("modules") })
-}
-
-fn newest_cached() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME")?;
-    let cache = Path::new(&home).join(".cache").join("nts").join("swift");
-    let mut found: Vec<PathBuf> = std::fs::read_dir(&cache)
-        .ok()?
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| path.join("usr").join("bin").join("swift-frontend").is_file())
-        .collect();
-    found.sort();
-    found.pop()
 }
 
 /// What is kept for one toolchain, under `~/.cache/nts/swift-kept`, since the
@@ -114,6 +92,8 @@ pub(crate) struct Header<'a> {
     pub(crate) path: &'a Path,
     /// Where its own imports are found.
     pub(crate) search: &'a [PathBuf],
+    /// Where the frameworks it imports are.
+    pub(crate) frameworks: &'a [PathBuf],
 }
 
 /// A project's Swift: every `.swift` in one directory, one module, as a
@@ -146,6 +126,9 @@ impl Toolchain {
         command.arg("-I").arg(&map);
         for directory in header.search {
             command.arg("-I").arg(directory);
+        }
+        for directory in header.frameworks {
+            command.arg("-F").arg(directory);
         }
         command.arg("-output-dir").arg(out).args(["-minimum-access-level", "private"]);
         let graph = out.join(format!("{}.symbols.json", header.module));

@@ -6,7 +6,8 @@
 #
 # An artifact that is an application bundle (`name.app`) is copied whole and
 # run as its own executable, `name.app/Contents/MacOS/name`, which is how it
-# finds its `Info.plist`.
+# finds its `Info.plist`. A bare program is copied with the frameworks beside
+# it, which it loads from there.
 #   tooling/apple/run.sh --reachable        # exit 0 if a Mac answers, else 77
 #   tooling/apple/run.sh --gui              # exit 0 if a user is logged in to
 #                                           # its desktop, else 77
@@ -59,6 +60,17 @@ reachable || { echo "no Mac reachable at $dest" >&2; exit 77; }
 remote=$(ssh "${ssh_opts[@]}" "$dest" 'mktemp -d /tmp/nts-run.XXXXXX') || exit 77
 trap 'ssh "${ssh_opts[@]}" "$dest" "rm -rf $remote" >/dev/null 2>&1' EXIT
 scp -q -r "${ssh_opts[@]}" "$artifact" "$dest:$remote/" || { echo "copying $artifact failed" >&2; exit 2; }
+# The dynamic frameworks a bare program loads from beside it
+# (`@executable_path`), where `nts build` ships a library's: copied with it,
+# by tar, so a framework's `Versions` links arrive as links.
+if [[ -f "$artifact" ]]; then
+  beside=$(dirname "$artifact")
+  frameworks=("$beside"/*.framework)
+  if [[ -d "${frameworks[0]}" ]]; then
+    (cd "$beside" && tar cf - -- *.framework) | ssh "${ssh_opts[@]}" "$dest" "cd $remote && tar xf -" ||
+      { echo "copying the frameworks beside $artifact failed" >&2; exit 2; }
+  fi
+fi
 name=$(basename "$artifact")
 if [[ -d "$artifact" ]]; then
   name="$name/Contents/MacOS/$(basename "$artifact" .app)"

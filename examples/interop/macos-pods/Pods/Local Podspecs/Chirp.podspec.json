@@ -1,0 +1,21 @@
+{
+  "name": "Chirp",
+  "version": "0.1.0",
+  "summary": "A pod for examples/interop/macos-pods.",
+  "homepage": "https://example.invalid/chirp",
+  "license": {
+    "type": "MIT",
+    "text": "MIT"
+  },
+  "authors": "nts",
+  "source": {
+    "git": "https://example.invalid/chirp.git",
+    "tag": "0.1.0"
+  },
+  "platforms": {
+    "osx": "13.0"
+  },
+  "source_files": "Classes/**/*.{h,m}",
+  "public_header_files": "Classes/Chirp.h",
+  "frameworks": "Foundation"
+}

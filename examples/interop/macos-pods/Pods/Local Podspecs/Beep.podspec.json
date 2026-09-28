@@ -1,0 +1,19 @@
+{
+  "name": "Beep",
+  "version": "0.1.0",
+  "summary": "A binary framework for examples/interop/macos-pods.",
+  "homepage": "https://example.invalid/beep",
+  "license": {
+    "type": "MIT",
+    "text": "MIT"
+  },
+  "authors": "nts",
+  "source": {
+    "git": "https://example.invalid/beep.git",
+    "tag": "0.1.0"
+  },
+  "platforms": {
+    "osx": "13.0"
+  },
+  "vendored_frameworks": "Beep.xcframework"
+}
