@@ -15201,14 +15201,23 @@ impl<'a> FuncBuilder<'a> {
                  work whatever it returns"
             ));
         }
-        // `Object.create(null)` is a **dictionary**, which this compiler has a
-        // representation for and builds for an index signature. Grouped with
-        // the reflection above it would read as impossible, and it is one of
-        // the two spellings of a thing that already works.
+        // `Object.create(null)` **is built now**, by `decide_object_create`, and
+        // this text used to promise it: "is a dictionary and is a different,
+        // buildable thing". A promise in a diagnostic is a claim with an expiry
+        // date, and leaving it here after building it would send a reader to
+        // add a feature that exists.
+        //
+        // So what is left for this to say is the case the dispatch does *not*
+        // take: a prototype argument that is not `null`, and the two-argument
+        // form with a descriptor map. Prototype reflection is a boundary rather
+        // than a gap -- `runtime/web-platform`'s `idlIteratorPrototype` is
+        // `Object.create(ITERATOR_PROTOTYPE)`, and 30 of the corpus's top-level
+        // cuts rest on it -- so this says boundary rather than "not yet".
         if member == "create" {
             return Some(format!(
-                "`{global}.create`, whose prototype argument a fixed layout has nowhere to put -- \
-                 `Object.create(null)` is a dictionary and is a different, buildable thing"
+                "`{global}.create` of a prototype object -- a fixed layout has no prototype slot \
+                 to put one in, which is a representation boundary rather than a missing feature. \
+                 `Object.create(null)` is a dictionary and does lower"
             ));
         }
         None
@@ -24125,6 +24134,13 @@ impl<'a> FuncBuilder<'a> {
             ("Object", "entries", [argument]) => {
                 Some(self.decide_object_columns(id, *argument, true))
             }
+            // `Object.create(null)` is a **dictionary**, and the refusal beside
+            // this has said so all along: "a fixed layout has nowhere to put"
+            // the prototype argument, and "`Object.create(null)` is a dictionary
+            // and is a different, buildable thing". This builds it. Only the
+            // `null` form: any other prototype is a real prototype and keeps
+            // that refusal.
+            ("Object", "create", [prototype]) => Some(self.decide_object_create(id, *prototype)),
             ("Object", "is", [left, right]) => Some(self.decide_object_is(id, *left, *right)),
             ("Object", "hasOwn", [argument, key]) => Some(self.decide_has_own(id, *argument, *key)),
             // `Object.assign(target, ...sources)` between dictionaries. React's
@@ -25412,6 +25428,69 @@ impl<'a> FuncBuilder<'a> {
     /// fixed, so that case is a sequence of `FieldSet`s and not this loop -- a
     /// different piece of work, and one whose refusal should not be borrowed by
     /// this one.
+    /// `Object.create(null)`: an empty dictionary.
+    ///
+    /// **Only the `null` prototype.** Any other argument is a real prototype
+    /// object, which a fixed layout has nowhere to put, and that keeps the
+    /// refusal `refusal_for_a_global_member` already writes -- whose own text
+    /// promised this one ("is a dictionary and is a different, buildable
+    /// thing"). A promise in a diagnostic is a claim with an expiry date like
+    /// any other; this is it being kept rather than removed.
+    ///
+    /// **The type comes from the context, and it has to.** `Object.create` is
+    /// declared to return `any`, so the call's own type is erased and an empty
+    /// table built at it would refuse on the first `r.x = "1"`. What a reader
+    /// writes is `Object.create(null) as Record<string, string>` or
+    /// `const r: Record<string, string[]> = Object.create(null)`, and
+    /// `contextual_type` already answers for both -- it walks an
+    /// `AS_EXPRESSION` and a `VARIABLE_DECLARATION`. Where there is no such
+    /// context there is no dictionary type to build at, and the refusal stands.
+    ///
+    /// Node publishes null-prototype objects (`X509Certificate`'s
+    /// `toLegacyObject`, `translatePeerCertificate`), and the node-port lane
+    /// reports that a plain `{}` fails `deepStrictEqual` against them -- so
+    /// before this there was no spelling correct on both lanes.
+    fn decide_object_create(&mut self, id: NodeId, prototype: NodeId) -> Result<ValueId, Diagnostic> {
+        if self.kind_of(prototype) != Some(syntax::NULL_KEYWORD) {
+            return Err(self.unsupported(
+                id,
+                "`Object.create` of a prototype object, which a fixed layout has nowhere to put -- \
+                 only `Object.create(null)`, a dictionary, is buildable here",
+            ));
+        }
+        // The call's own type first, for a declaration that gives it one
+        // directly, then the context. Both, because neither alone covers the
+        // two spellings the corpus writes.
+        let wanted = self
+            .type_of(id)
+            .filter(|ty| matches!(ty, HirType::Managed(ManagedType::Table(_, _))))
+            .or_else(|| self.contextual_type(id, 0));
+        let Some(ty @ HirType::Managed(ManagedType::Table(_, _))) = wanted else {
+            return Err(self.unsupported(
+                id,
+                "`Object.create(null)` where nothing says what dictionary it is -- \
+                 `Object.create` answers `any`, so the type has to come from an annotation \
+                 or a cast, as in `Object.create(null) as Record<string, string>`",
+            ));
+        };
+        let HirType::Managed(ManagedType::Table(key, _)) = &ty else { unreachable!() };
+        let origin = self.origin(id);
+        let kind = self.push(
+            OpKind::ConstFloat(f64::from(key_kind_of(key))),
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        Ok(self.push(
+            OpKind::Call {
+                callee: Callee::External("nts_map_new".to_owned()),
+                args: vec![kind],
+                frame: None,
+            },
+            ty.clone(),
+            origin,
+        ))
+    }
+
     fn decide_object_assign(
         &mut self,
         id: NodeId,
@@ -32664,6 +32743,31 @@ impl<'a> FuncBuilder<'a> {
             }
             if matches!(self.values[object.0 as usize].ty, HirType::NativePointer(_)) {
                 return self.native_member_place(target, object);
+            }
+            // **A dictionary's entry, written by name.** `r.x = "1"` and
+            // `r["x"] = "1"` are the same operation on a table, and three of the
+            // four spellings already worked: both reads go through
+            // `member_access`, and the bracket write reaches `Place::Entry`.
+            // Only the dot write fell to the refusal below, which says
+            // "assigning to this property" about a property a table has no
+            // trouble holding.
+            //
+            // The same shape as `cde420c16`, where `console["error"]` reached
+            // none of three questions asked of the dot form only: one spelling
+            // of one operation missing while its siblings work, and the reader
+            // gets a sentence about the wrong thing.
+            if let HirType::Managed(ManagedType::Table(_, _)) =
+                self.values[object.0 as usize].ty.clone()
+                && let Some(name) = self.literal_name(*member)
+            {
+                let origin = self.origin(target);
+                let key = self.push(
+                    OpKind::ConstString(name),
+                    HirType::Managed(ManagedType::String),
+                    origin.clone(),
+                );
+                let key = self.erased_for_table(key, &origin);
+                return Ok(Place::Entry { table: object, key });
             }
             let HirType::Managed(ManagedType::Object(type_id)) =
                 self.values[object.0 as usize].ty.clone()
