@@ -35,6 +35,28 @@ pub struct Lowered {
     /// Collected rather than returned as an error so one run reports every
     /// unsupported construct instead of the first.
     pub diagnostics: Vec<Diagnostic>,
+    /// The declarations a refusal was **recorded** for, by node.
+    ///
+    /// `Program::uncompiled` holds the same refusals keyed by the name a caller
+    /// writes, which is what a cascade needs and what the conservation law
+    /// cannot ask with: [`super::unaccounted`] works in `NodeId`s. So the two
+    /// were one fact in two collections, and only the top-level function loop
+    /// kept the second -- a refused *member* was written into `uncompiled` and
+    /// never into the set, so the law reported it as never walked.
+    ///
+    /// It has a second escape, and the case that gets past both is the one this
+    /// exists for: `unaccounted` also accepts a declaration some diagnostic's
+    /// span *covers*, which saves every member whose offending construct is in
+    /// its own body. `Performance#constructor` refuses for a `WeakRef` property
+    /// declared in **another file** -- `web-platform`'s listener record -- so no
+    /// span covered it, and one run said both `an anonymous declaration outside
+    /// every walk` at `performance.ts:123` and, forty lines down, `this
+    /// module-scope statement was dropped because it calls
+    /// `Performance#constructor`, which was refused above`. Two messages about
+    /// one function, and one of them false. It cost the node lane hours on a
+    /// mechanism that did not exist, because the message said the function had
+    /// no cause.
+    pub refused_at: rustc_hash::FxHashSet<NodeId>,
 }
 
 impl Lowered {
@@ -5521,6 +5543,59 @@ fn an_uninstantiated_generic(
     true
 }
 
+/// The conservation law, enforced rather than merely measured: every function the
+/// checker knows about is either lowered or refused, and never neither.
+/// [`super::unaccounted`] explains why that is worth asking; this is what happens
+/// when the answer is no.
+///
+/// A construct marked "not done" has to be *refused*. Several were silently absent
+/// instead -- a method of a class expression is the clearest, since nothing walks a
+/// class expression at all -- and a function that vanishes takes its callers'
+/// correctness with it while the compiler reports success.
+///
+/// **It asks both halves of "was this refused", and for one commit it asked one.**
+/// The top-level loop fills `refused` as it goes; a refused *member* is recorded by
+/// [`note_member`], which is nowhere near that set, so the law was asking a question
+/// only half the refusals could answer. `unaccounted` has a second escape that hides
+/// it -- a declaration some diagnostic's span *covers* -- which saves every member
+/// whose offending construct is in its own body.
+///
+/// The case that gets past both is what this cost: `Performance#constructor` refuses
+/// for a `WeakRef` property declared in **another file**, so no span covered it, and
+/// one run of `perf_hooks` printed `an anonymous declaration outside every walk` at
+/// `performance.ts:123` *and* `this module-scope statement was dropped because it
+/// calls `Performance#constructor`, which was refused above` at line 259. Two
+/// messages about one function, one of them false -- and the false one says the
+/// function has no cause, which is what sent the node lane after a mechanism that
+/// does not exist.
+///
+/// Extracted when `lower_with` reached 101 lines, and the concept is worth the name:
+/// this is the only place that turns "nothing accounted for this" into a diagnostic.
+fn report_unaccounted(
+    snapshot: &SemanticSnapshot,
+    lowered: &mut Lowered,
+    generics: &super::generics::GenericFunctions,
+    refused: &mut rustc_hash::FxHashSet<NodeId>,
+) {
+    refused.extend(lowered.refused_at.iter().copied());
+    for (location, name) in super::unaccounted(
+        snapshot,
+        &lowered.program,
+        &lowered.diagnostics,
+        generics,
+        refused,
+    ) {
+        lowered.diagnostics.push(Diagnostic::error(
+            "NTS1001",
+            match &name {
+                Some(name) => format!("`{name}`, a declaration outside every walk"),
+                None => "an anonymous declaration outside every walk".to_owned(),
+            },
+            location,
+        ));
+    }
+}
+
 /// Report a refusal of a whole function declaration **and record it**.
 ///
 /// Two sites reach here and one of them recorded nothing at all. `refused_by_name`
@@ -6166,9 +6241,15 @@ fn qualified_name(
 /// A free function taking the builder so each of the five sites stays one line.
 /// The snapshot comes from the builder rather than beside it, because two ways to
 /// reach one snapshot is how a caller ends up passing a different one.
+///
+/// **And the node, beside the name.** Taking `Lowered` rather than `Program` is
+/// the whole of that: the name is what a cascade finds the entry by, and the
+/// node is what the conservation law asks with, and writing one without the
+/// other is how `unaccounted` came to report a function whose cause the same
+/// run printed. See [`Lowered::refused_at`].
 fn note_member(
     builder: &mut FuncBuilder<'_>,
-    program: &mut super::Program,
+    lowered: &mut Lowered,
     owner: NodeId,
     member: NodeId,
     instance: Option<TypeId>,
@@ -6179,7 +6260,8 @@ fn note_member(
         .emitted_member_name(owner, member, instance)
         .ok()
         .map(|(_, emitted)| emitted);
-    note_uncompiled(snapshot, program, member, emitted.as_deref(), diagnostic);
+    note_uncompiled(snapshot, &mut lowered.program, member, emitted.as_deref(), diagnostic);
+    lowered.refused_at.insert(member);
 }
 
 fn note_uncompiled(
@@ -6605,12 +6687,12 @@ fn lower_object_literal_members(
                         func.name,
                     ),
                 );
-                note_member(&mut builder, &mut lowered.program, literal, member, Some(instance), &diagnostic);
+                note_member(&mut builder, lowered, literal, member, Some(instance), &diagnostic);
                 lowered.diagnostics.push(diagnostic);
             }
             Ok(func) => lowered.program.funcs.push(func),
             Err(diagnostic) => {
-                note_member(&mut builder, &mut lowered.program, literal, member, Some(instance), &diagnostic);
+                note_member(&mut builder, lowered, literal, member, Some(instance), &diagnostic);
                 lowered.diagnostics.push(diagnostic);
             },
         }
@@ -6804,7 +6886,7 @@ fn lower_class(
                 match builder.lower_objc_constructor(class, member, instance) {
                     Ok(func) => lowered.program.funcs.push(func),
                     Err(diagnostic) => {
-                        note_member(&mut builder, &mut lowered.program, class, member, instance, &diagnostic);
+                        note_member(&mut builder, lowered, class, member, instance, &diagnostic);
                         lowered.diagnostics.push(diagnostic);
                     }
                 }
@@ -6822,7 +6904,7 @@ fn lower_class(
                         objc_methods.extend(method);
                     }
                     Err(diagnostic) => {
-                        note_member(&mut builder, &mut lowered.program, class, member, instance, &diagnostic);
+                        note_member(&mut builder, lowered, class, member, instance, &diagnostic);
                         lowered.diagnostics.push(diagnostic);
                     }
                 }
@@ -6850,7 +6932,7 @@ fn lower_class(
                 // declare a constructor, and `Readable` is the single
                 // most-named export in that module's failing tests.
                 Err(diagnostic) => {
-                    note_member(&mut builder, &mut lowered.program, class, member, instance, &diagnostic);
+                    note_member(&mut builder, lowered, class, member, instance, &diagnostic);
                     lowered.diagnostics.push(diagnostic);
                 }
             }
@@ -9668,32 +9750,7 @@ pub fn lower_with(
     collect_declared_facts(&mut lowered.program, snapshot);
     canonicalize_objects(&mut lowered.program);
     prune_class_tests(&mut lowered.program);
-    // The conservation law, enforced rather than merely measured: every
-    // function the checker knows about is either lowered or refused, and never
-    // neither. `super::unaccounted` explains why that is worth asking; this is
-    // what happens when the answer is no.
-    //
-    // A construct marked "not done" has to be *refused*. Several were silently
-    // absent instead — a method of a class expression is the clearest, since
-    // nothing walks a class expression at all — and a function that vanishes
-    // takes its callers' correctness with it while the compiler reports
-    // success.
-    for (location, name) in super::unaccounted(
-        snapshot,
-        &lowered.program,
-        &lowered.diagnostics,
-        &shared.generics,
-        &refused_functions,
-    ) {
-        lowered.diagnostics.push(Diagnostic::error(
-            "NTS1001",
-            match &name {
-                Some(name) => format!("`{name}`, a declaration outside every walk"),
-                None => "an anonymous declaration outside every walk".to_owned(),
-            },
-            location,
-        ));
-    }
+    report_unaccounted(snapshot, &mut lowered, &shared.generics, &mut refused_functions);
 
     // Before the sweep, which then drops any attribution for a nested function
     // that turned out to be emitted after all.
