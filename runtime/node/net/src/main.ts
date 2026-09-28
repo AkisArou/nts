@@ -68,6 +68,7 @@ import {
 } from "../../perf_hooks/src/observe.ts";
 import type { Timeout } from "../../timers/src/main.ts";
 import { AsyncContextFrame } from "../../internal/async-context.ts";
+import { AsyncRequest } from "../../internal/async-request.ts";
 import type { AbortSignalLike } from "../../internal/abort.ts";
 import {
   defaultTriggerAsyncIdScope,
@@ -389,43 +390,9 @@ function validateLookupHints(hints: number | undefined): void {
 
 type SocketProvider = "TCPWRAP" | "PIPEWRAP";
 type ServerProvider = "TCPSERVERWRAP" | "PIPESERVERWRAP";
-type RequestProvider =
-  | "GETADDRINFOREQWRAP"
-  | "TCPCONNECTWRAP"
-  | "PIPECONNECTWRAP"
-  | "WRITEWRAP"
-  | "SHUTDOWNWRAP";
 
 /** Server accounting attached only to sockets created by an accept. */
 const acceptedSocketClosing = new WeakMap<Socket, () => void>();
-
-/** One native request made by a socket, with one completion callback. */
-class SocketRequest {
-  #asyncId: number;
-  #triggerAsyncId: number;
-  #contextFrame: AsyncContextFrame | undefined;
-
-  constructor(type: RequestProvider, triggerAsyncId: number) {
-    this.#asyncId = newAsyncId();
-    this.#triggerAsyncId = triggerAsyncId;
-    this.#contextFrame = AsyncContextFrame.current();
-    if (initHooksExist()) {
-      emitInit(this.#asyncId, type, triggerAsyncId, this);
-    }
-  }
-
-  complete<Result>(callback: () => Result): Result {
-    const prior = AsyncContextFrame.exchange(this.#contextFrame);
-    emitBefore(this.#asyncId, this.#triggerAsyncId, this);
-    try {
-      return callback();
-    } finally {
-      emitAfter(this.#asyncId);
-      emitDestroy(this.#asyncId);
-      AsyncContextFrame.setCurrent(prior);
-    }
-  }
-}
 
 class MultipleConnectContext {
   readonly addresses: LookupAddress[];
@@ -1119,7 +1086,7 @@ export class Socket extends Duplex {
       options.family !== 4 &&
       options.family !== 6 &&
       options.localAddress === undefined;
-    const request = new SocketRequest("GETADDRINFOREQWRAP", this.#asyncId);
+    const request = new AsyncRequest("GETADDRINFOREQWRAP", this.#asyncId);
     const complete = (
       error: Error | null,
       address: string | LookupAddress[] | undefined,
@@ -1239,7 +1206,7 @@ export class Socket extends Duplex {
     }
     this.emit("connectionAttempt", destination.address, context.port, destination.family);
 
-    const request = new SocketRequest("TCPCONNECTWRAP", this.#asyncId);
+    const request = new AsyncRequest("TCPCONNECTWRAP", this.#asyncId);
     let handle = -1;
     const onConnected = (errno: number): void =>
       request.complete(() => {
@@ -1344,7 +1311,7 @@ export class Socket extends Duplex {
     options: ConnectOptions,
     isPipe: boolean,
   ): void {
-    const request = new SocketRequest(isPipe ? "PIPECONNECTWRAP" : "TCPCONNECTWRAP", this.#asyncId);
+    const request = new AsyncRequest(isPipe ? "PIPECONNECTWRAP" : "TCPCONNECTWRAP", this.#asyncId);
 
     if (!isPipe && options.blockList?.check(host, isIPv6(host) ? "ipv6" : "ipv4")) {
       nextTick(() => this.destroy(new ERR_IP_BLOCKED(host)));
@@ -1641,7 +1608,7 @@ export class Socket extends Duplex {
     // completion callback runs. Failures remain asynchronous.
     this.#dispatchedBytes += buffer.length;
 
-    let request: SocketRequest | undefined;
+    let request: AsyncRequest | undefined;
     const onWritten = (errno: number): void => {
       const finish = (): void => {
         if (errno < 0) {
@@ -1655,7 +1622,7 @@ export class Socket extends Duplex {
     };
     const queued = nts_net_write(this._handle!.identifier, buffer, onWritten);
     if (queued > 0) {
-      request = new SocketRequest("WRITEWRAP", this.#asyncId);
+      request = new AsyncRequest("WRITEWRAP", this.#asyncId);
     }
   }
 
@@ -1711,7 +1678,7 @@ export class Socket extends Duplex {
     }
     // A shutdown rather than a close: the read side stays open, which is what
     // makes a half-open connection possible at all.
-    const request = new SocketRequest("SHUTDOWNWRAP", this.#asyncId);
+    const request = new AsyncRequest("SHUTDOWNWRAP", this.#asyncId);
     nts_net_shutdown(this._handle!.identifier, (errno) =>
       request.complete(() => {
         callback(errno < 0 ? uvException(errno, "shutdown") : undefined);

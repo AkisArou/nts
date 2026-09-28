@@ -23,6 +23,7 @@ import "../internal/bindings.node.mjs";
 // deliver on a timer check and read perf_hooks' clock.
 import "../perf_hooks/bindings.node.mjs";
 import { lookup, lookupService, Resolver } from "node:dns";
+import hostProcess from "node:process";
 import { getSystemErrorName } from "node:util";
 
 const errnoOf = (error) => {
@@ -110,7 +111,10 @@ globalThis.nts_dns_channel_set_local_address = (id, ipv4, ipv6) => {
   else resolver.setLocalAddress(ipv4 !== "" ? ipv4 : ipv6);
 };
 
-const caresWrap = process.binding("cares_wrap");
+// The host's `process`, imported rather than read from the global: a lane that
+// substitutes `process` with this profile's replaces the global, and ours has
+// no `binding`.
+const caresWrap = hostProcess.binding("cares_wrap");
 globalThis.nts_dns_strerror = (status) => caresWrap.strerror(status);
 
 // The query kinds, as `src/resolver.ts` numbers them.

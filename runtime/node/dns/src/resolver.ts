@@ -36,6 +36,8 @@ import {
 import { isIP } from "../../net/src/address.ts";
 import { idnaToASCII } from "../../url/src/idna.ts";
 import { hasObserver, startPerf, stopPerf } from "../../perf_hooks/src/observe.ts";
+import { AsyncRequest } from "../../internal/async-request.ts";
+import { getDefaultTriggerAsyncId } from "../../internal/async-hooks.ts";
 
 /**
  * A c-ares channel with node's options: `timeout` in milliseconds (-1 for
@@ -614,15 +616,18 @@ function query(
   const name = kind === kQueryReverse ? hostname : queryName(hostname);
   // Node's `startPerf` for a query: named for its binding, timed from the send.
   const perf = hasObserver("dns") ? startPerf("dns", bindingName, { host: hostname, ttl }) : undefined;
-  const errno = nts_dns_channel_query(resolver._handle.id, kind, name, (code, texts, numbers) => {
-    if (code !== "") {
-      settle(new DNSException(code, bindingName, hostname), null);
-      return;
-    }
-    const result = recordsOf(kind, texts, numbers, ttl);
-    settle(null, result);
-    if (perf !== undefined && hasObserver("dns")) stopPerf(perf, { result });
-  });
+  const request = new AsyncRequest("QUERYWRAP", getDefaultTriggerAsyncId());
+  const errno = nts_dns_channel_query(resolver._handle.id, kind, name, (code, texts, numbers) =>
+    request.complete(() => {
+      if (code !== "") {
+        settle(new DNSException(code, bindingName, hostname), null);
+        return;
+      }
+      const result = recordsOf(kind, texts, numbers, ttl);
+      settle(null, result);
+      if (perf !== undefined && hasObserver("dns")) stopPerf(perf, { result });
+    }),
+  );
   if (errno !== 0) throw new DNSException(nts_dns_errname(errno), bindingName, hostname, errno);
 }
 

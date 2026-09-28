@@ -31,6 +31,8 @@ import {
 } from "../../internal/errors.ts";
 import { isIP } from "../../net/src/address.ts";
 import { resolverPromises } from "./resolver.ts";
+import { AsyncRequest } from "../../internal/async-request.ts";
+import { getDefaultTriggerAsyncId } from "../../internal/async-hooks.ts";
 import {
   hasObserver,
   startPerf,
@@ -368,36 +370,42 @@ export function lookup(
   const order = orderOf(dnsOrder);
   const perf = lookupPerf(hostname, family, hints, order, dnsOrder);
   if (all) {
-    nts_dns_getaddrinfo_all(hostname, family, hints, order, (errno, addresses, families) => {
+    const request = new AsyncRequest("GETADDRINFOREQWRAP", getDefaultTriggerAsyncId());
+    nts_dns_getaddrinfo_all(hostname, family, hints, order, (errno, addresses, families) =>
+      request.complete(() => {
+        if (errno !== 0) {
+          answer(dnsException(errno, "getaddrinfo", hostname), null);
+          return;
+        }
+        // The two arrays are the same length by the binding's contract, and
+        // `noUncheckedIndexedAccess` does not know that. Read once and guard,
+        // rather than assert: an assertion here would be the profile's own rule
+        // about unchecked casts, broken for a convenience.
+        const out: LookupAddress[] = [];
+        for (let index = 0; index < addresses.length; index++) {
+          const address = addresses[index];
+          const family = families[index];
+          if (address === undefined || family === undefined) continue;
+          out.push({ address, family });
+        }
+        answer(null, out);
+        finishPerf(perf, { addresses: out });
+      }),
+    );
+    return;
+  }
+
+  const request = new AsyncRequest("GETADDRINFOREQWRAP", getDefaultTriggerAsyncId());
+  nts_dns_getaddrinfo(hostname, family, hints, order, (errno, address, resolved) =>
+    request.complete(() => {
       if (errno !== 0) {
         answer(dnsException(errno, "getaddrinfo", hostname), null);
         return;
       }
-      // The two arrays are the same length by the binding's contract, and
-      // `noUncheckedIndexedAccess` does not know that. Read once and guard,
-      // rather than assert: an assertion here would be the profile's own rule
-      // about unchecked casts, broken for a convenience.
-      const out: LookupAddress[] = [];
-      for (let index = 0; index < addresses.length; index++) {
-        const address = addresses[index];
-        const family = families[index];
-        if (address === undefined || family === undefined) continue;
-        out.push({ address, family });
-      }
-      answer(null, out);
-      finishPerf(perf, { addresses: out });
-    });
-    return;
-  }
-
-  nts_dns_getaddrinfo(hostname, family, hints, order, (errno, address, resolved) => {
-    if (errno !== 0) {
-      answer(dnsException(errno, "getaddrinfo", hostname), null);
-      return;
-    }
-    answer(null, address, resolved);
-    finishPerf(perf, { addresses: [address] });
-  });
+      answer(null, address, resolved);
+      finishPerf(perf, { addresses: [address] });
+    }),
+  );
 }
 
 /**
@@ -423,14 +431,17 @@ export function lookupService(
   const resolvedPort = +port + 0;
 
   const perf = lookupServicePerf(address, resolvedPort);
-  nts_dns_getnameinfo(address, resolvedPort, (errno, hostname, service) => {
-    if (errno !== 0) {
-      callback(dnsException(errno, "getnameinfo", address), null, null);
-      return;
-    }
-    callback(null, hostname, service);
-    finishPerf(perf, { hostname, service });
-  });
+  const request = new AsyncRequest("GETNAMEINFOREQWRAP", getDefaultTriggerAsyncId());
+  nts_dns_getnameinfo(address, resolvedPort, (errno, hostname, service) =>
+    request.complete(() => {
+      if (errno !== 0) {
+        callback(dnsException(errno, "getnameinfo", address), null, null);
+        return;
+      }
+      callback(null, hostname, service);
+      finishPerf(perf, { hostname, service });
+    }),
+  );
 }
 
 // The c-ares error codes, which node publishes on the module object and the
@@ -564,30 +575,36 @@ function promiseLookup(
     const order = orderOf(dnsOrder);
     const perf = lookupPerf(hostname, family, hints, order, dnsOrder);
     if (all) {
-      nts_dns_getaddrinfo_all(hostname, family, hints, order, (errno, addresses, families) => {
-        if (errno !== 0) {
-          reject(dnsException(errno, "getaddrinfo", hostname));
-          return;
-        }
-        const out: LookupAddress[] = [];
-        for (let index = 0; index < addresses.length; index++) {
-          const address = addresses[index];
-          const each = families[index];
-          if (address === undefined || each === undefined) continue;
-          out.push({ address, family: each });
-        }
-        resolve(out);
-        finishPerf(perf, { addresses: out });
-      });
+      const request = new AsyncRequest("GETADDRINFOREQWRAP", getDefaultTriggerAsyncId());
+      nts_dns_getaddrinfo_all(hostname, family, hints, order, (errno, addresses, families) =>
+        request.complete(() => {
+          if (errno !== 0) {
+            reject(dnsException(errno, "getaddrinfo", hostname));
+            return;
+          }
+          const out: LookupAddress[] = [];
+          for (let index = 0; index < addresses.length; index++) {
+            const address = addresses[index];
+            const each = families[index];
+            if (address === undefined || each === undefined) continue;
+            out.push({ address, family: each });
+          }
+          resolve(out);
+          finishPerf(perf, { addresses: out });
+        }),
+      );
     } else {
-      nts_dns_getaddrinfo(hostname, family, hints, order, (errno, address, resolvedFamily) => {
-        if (errno !== 0) {
-          reject(dnsException(errno, "getaddrinfo", hostname));
-          return;
-        }
-        resolve({ address, family: resolvedFamily });
-        finishPerf(perf, { addresses: [address] });
-      });
+      const request = new AsyncRequest("GETADDRINFOREQWRAP", getDefaultTriggerAsyncId());
+      nts_dns_getaddrinfo(hostname, family, hints, order, (errno, address, resolvedFamily) =>
+        request.complete(() => {
+          if (errno !== 0) {
+            reject(dnsException(errno, "getaddrinfo", hostname));
+            return;
+          }
+          resolve({ address, family: resolvedFamily });
+          finishPerf(perf, { addresses: [address] });
+        }),
+      );
     }
   });
 }
@@ -606,14 +623,17 @@ function promiseLookupService(...args: [address?: unknown, port?: unknown]): Pro
   const port = validatePort(args[1]);
   return new Promise<LookupServiceResult>((resolve, reject) => {
     const perf = lookupServicePerf(address, port);
-    nts_dns_getnameinfo(address, port, (errno, hostname, service) => {
-      if (errno !== 0) {
-        reject(dnsException(errno, "getnameinfo", address));
-        return;
-      }
-      resolve({ hostname, service });
-      finishPerf(perf, { hostname, service });
-    });
+    const request = new AsyncRequest("GETNAMEINFOREQWRAP", getDefaultTriggerAsyncId());
+    nts_dns_getnameinfo(address, port, (errno, hostname, service) =>
+      request.complete(() => {
+        if (errno !== 0) {
+          reject(dnsException(errno, "getnameinfo", address));
+          return;
+        }
+        resolve({ hostname, service });
+        finishPerf(perf, { hostname, service });
+      }),
+    );
   });
 }
 
