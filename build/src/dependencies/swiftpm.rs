@@ -13,8 +13,10 @@
 //!
 //! Each library target is a module: a C or Objective-C one compiled from its
 //! sources and bound from its public headers (`include/`), a Swift one
-//! compiled and bound from the header Swift writes, a binary one
-//! (`.binaryTarget(path:)`) the `.xcframework` it is.
+//! compiled and bound from the header Swift writes, a binary one the
+//! `.xcframework` it is -- where `path:` says, or, by `url:`, where `SwiftPM`
+//! extracted the download it checked against the manifest's checksum
+//! (`.build/artifacts`, recorded in `.build/workspace-state.json`).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::process::Command;
@@ -33,25 +35,25 @@ pub(super) fn resolve(dir: &Utf8Path, id: &str, claim: &Dependencies) -> Result<
     };
     let lockfile = dir.join(named.trim_start_matches("./"));
     let root = lockfile.parent().unwrap_or(dir).to_path_buf();
-    let checkouts = Checkouts::read(&root, &lockfile)?;
+    let workspace = Workspace::read(&root, &lockfile)?;
     if !root.join("Package.swift").is_file() {
         // A lockfile that pins nothing, copied in on its own, as an empty
         // `Podfile.lock` pins nothing: there is nothing to build.
-        if checkouts.by_identity.is_empty() && lockfile.is_file() {
+        if workspace.by_identity.is_empty() && lockfile.is_file() {
             return Ok(Resolution::default());
         }
         bail!("{root} has no Package.swift, whose dependencies {lockfile} would pin")
     }
     let mut seen = BTreeSet::new();
-    let mut pending = dependencies(&root, &checkouts)?;
+    let mut pending = dependencies(&root, &workspace)?;
     let mut resolution = Resolution::default();
     while let Some(package) = pending.pop() {
         if !seen.insert(package.clone()) {
             continue;
         }
         let manifest = dump(&package)?;
-        pending.extend(dependencies_of(&manifest, &package, &checkouts)?);
-        let (modules, libs) = modules_of(&manifest, &package)?;
+        pending.extend(dependencies_of(&manifest, &package, &workspace)?);
+        let (modules, libs) = modules_of(&manifest, &package, &workspace)?;
         resolution.native.extend(modules);
         resolution.libs.extend(libs);
     }
@@ -59,14 +61,29 @@ pub(super) fn resolve(dir: &Utf8Path, id: &str, claim: &Dependencies) -> Result<
     Ok(resolution)
 }
 
-/// Where each remote package is checked out, as `SwiftPM` recorded it,
-/// checked against the revision `Package.resolved` pins.
-struct Checkouts {
+/// What `swift package resolve` left, as `SwiftPM` recorded it in
+/// `.build/workspace-state.json`: where each remote package is checked out,
+/// checked against the revision `Package.resolved` pins, and each binary
+/// target it downloaded.
+struct Workspace {
     /// By package identity, the checkout's directory.
     by_identity: BTreeMap<String, Utf8PathBuf>,
+    /// Each downloaded binary target, by the URL it came from.
+    artifacts: BTreeMap<String, Artifact>,
+    /// The state file, which a message names.
+    state: Utf8PathBuf,
 }
 
-impl Checkouts {
+/// A binary target `SwiftPM` downloaded and extracted.
+struct Artifact {
+    /// What it checked the download against: the manifest's, when it did.
+    checksum: String,
+    /// The extracted `.xcframework`, under this root's `.build/artifacts`
+    /// wherever the record says the root was.
+    path: Utf8PathBuf,
+}
+
+impl Workspace {
     fn read(root: &Utf8Path, lockfile: &Utf8Path) -> Result<Self> {
         let pins: BTreeMap<String, String> = match std::fs::read_to_string(lockfile) {
             Ok(text) => {
@@ -83,11 +100,23 @@ impl Checkouts {
             Err(_) => BTreeMap::new(),
         };
         let state = root.join(".build").join("workspace-state.json");
-        let recorded: Vec<Value> = std::fs::read_to_string(&state)
-            .ok()
-            .and_then(|text| serde_json::from_str::<Value>(&text).ok())
-            .and_then(|json| json.pointer("/object/dependencies").and_then(Value::as_array).cloned())
-            .unwrap_or_default();
+        let json: Value = std::fs::read_to_string(&state).ok().and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_default();
+        let recorded: Vec<Value> = json.pointer("/object/dependencies").and_then(Value::as_array).cloned().unwrap_or_default();
+        // A record's path is absolute, where the root was when it resolved;
+        // what is under `.build/artifacts` is where it is now.
+        let artifacts = json
+            .pointer("/object/artifacts")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|artifact| {
+                let url = artifact.pointer("/source/url")?.as_str()?.to_owned();
+                let checksum = artifact.pointer("/source/checksum")?.as_str()?.to_owned();
+                let recorded = artifact.get("path")?.as_str()?;
+                let (_, under) = recorded.split_once("/.build/artifacts/")?;
+                Some((url, Artifact { checksum, path: root.join(".build").join("artifacts").join(under) }))
+            })
+            .collect();
         let mut by_identity = BTreeMap::new();
         for (identity, revision) in &pins {
             let checkout = recorded.iter().find(|dependency| dependency.pointer("/packageRef/identity").and_then(Value::as_str) == Some(identity));
@@ -103,24 +132,49 @@ impl Checkouts {
                 ),
             }
         }
-        Ok(Self { by_identity })
+        Ok(Self { by_identity, artifacts, state })
+    }
+}
+
+impl Workspace {
+    /// The `.xcframework` `SwiftPM` extracted for the binary target `name`
+    /// from `url` -- refused, naming `swift package resolve`, where it has
+    /// not downloaded it, or downloaded it against another checksum than the
+    /// manifest's now, which is a download the manifest no longer describes.
+    fn artifact(&self, package: &Utf8Path, name: &str, url: &str, checksum: Option<&str>) -> Result<Utf8PathBuf> {
+        let state = &self.state;
+        let Some(artifact) = self.artifacts.get(url) else {
+            bail!("{package}'s binary target `{name}` is downloaded from {url}, and {state} records no such download: run `swift package resolve`")
+        };
+        if checksum.is_some_and(|checksum| checksum != artifact.checksum) {
+            bail!(
+                "{package}'s binary target `{name}` wants {url} at checksum {}, and {state} records one downloaded at {}: \
+                 run `swift package resolve`",
+                checksum.unwrap_or_default(),
+                artifact.checksum
+            )
+        }
+        if !artifact.path.is_dir() {
+            bail!("{state} records `{name}` extracted to {}, which is not there: run `swift package resolve`", artifact.path)
+        }
+        Ok(artifact.path.clone())
     }
 }
 
 /// The packages the root manifest depends on.
-fn dependencies(root: &Utf8Path, checkouts: &Checkouts) -> Result<Vec<Utf8PathBuf>> {
-    dependencies_of(&dump(root)?, root, checkouts)
+fn dependencies(root: &Utf8Path, workspace: &Workspace) -> Result<Vec<Utf8PathBuf>> {
+    dependencies_of(&dump(root)?, root, workspace)
 }
 
 /// The packages `manifest` depends on: a local one's path, a remote one's
 /// checkout.
-fn dependencies_of(manifest: &Value, package: &Utf8Path, checkouts: &Checkouts) -> Result<Vec<Utf8PathBuf>> {
+fn dependencies_of(manifest: &Value, package: &Utf8Path, workspace: &Workspace) -> Result<Vec<Utf8PathBuf>> {
     let mut found = Vec::new();
     for dependency in manifest.get("dependencies").and_then(Value::as_array).into_iter().flatten() {
         if let Some(local) = dependency.pointer("/fileSystem/0/path").and_then(Value::as_str) {
             found.push(Utf8PathBuf::from(local));
         } else if let Some(identity) = dependency.pointer("/sourceControl/0/identity").and_then(Value::as_str) {
-            let checkout = checkouts.by_identity.get(identity).with_context(|| {
+            let checkout = workspace.by_identity.get(identity).with_context(|| {
                 format!("{package}'s manifest depends on `{identity}`, which Package.resolved does not pin: run `swift package resolve`")
             })?;
             found.push(checkout.clone());
@@ -159,7 +213,7 @@ fn dump(package: &Utf8Path) -> Result<Value> {
 /// The targets of `manifest`'s library products, and those they depend on in
 /// the package, each as a module; and what they link, from their linker
 /// settings.
-fn modules_of(manifest: &Value, package: &Utf8Path) -> Result<(Vec<NativeModule>, Vec<String>)> {
+fn modules_of(manifest: &Value, package: &Utf8Path, workspace: &Workspace) -> Result<(Vec<NativeModule>, Vec<String>)> {
     let targets: BTreeMap<&str, &Value> = manifest
         .get("targets")
         .and_then(Value::as_array)
@@ -216,16 +270,18 @@ fn modules_of(manifest: &Value, package: &Utf8Path) -> Result<(Vec<NativeModule>
                 modules.push(NativeModule { name: name.to_owned(), sources: root, files: Some(files), headers, include, frameworks: Vec::new(), depends });
             }
             "binary" => {
-                let Some(path) = path else {
-                    bail!("{package}'s binary target `{name}` is downloaded (`url:`), which is not read yet: a binary target by `path:` is")
+                let framework = match (path, target.get("url").and_then(Value::as_str)) {
+                    (Some(path), _) => package.join(path),
+                    (None, Some(url)) => workspace.artifact(package, name, url, target.get("checksum").and_then(Value::as_str))?,
+                    (None, None) => bail!("{package}'s binary target `{name}` names neither a `path:` nor a `url:`"),
                 };
                 modules.push(NativeModule {
                     name: name.to_owned(),
-                    sources: package.join(path),
+                    sources: framework.clone(),
                     files: Some(Vec::new()),
                     headers: Vec::new(),
                     include: Vec::new(),
-                    frameworks: vec![package.join(path)],
+                    frameworks: vec![framework],
                     depends: Vec::new(),
                 });
             }
@@ -350,6 +406,43 @@ mod tests {
         std::fs::write(dir.join("Package.swift"), "// swift-tools-version:5.9\n").unwrap();
         let error = resolve(&dir, "macos-13", &claim()).unwrap_err().to_string();
         assert!(error.contains("run `swift package resolve`"), "{error}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A binary target by `url:` is the `.xcframework` `SwiftPM` extracted,
+    /// found under this root wherever the record says the root was -- a tree
+    /// moved or committed after resolving -- and refused, naming `swift
+    /// package resolve`, where the download is not recorded, is not there, or
+    /// was checked against another checksum than the manifest's now. The
+    /// state is the shape `swift package resolve` wrote for
+    /// `GoogleAppMeasurement`'s binary target.
+    #[test]
+    fn a_downloaded_binary_target_is_where_swiftpm_extracted_it() {
+        let dir = scratch("artifact");
+        let url = "https://dl.google.com/firebase/ios/swiftpm/13.0.0/GoogleAppMeasurement.zip";
+        std::fs::create_dir_all(dir.join(".build")).unwrap();
+        std::fs::write(
+            dir.join(".build/workspace-state.json"),
+            format!(
+                r#"{{ "object": {{ "artifacts": [ {{ "kind": {{ "xcframework": {{}} }},
+                    "packageRef": {{ "identity": "probe", "kind": "root", "location": "/elsewhere/probe", "name": "probe" }},
+                    "path": "/elsewhere/probe/.build/artifacts/probe/GoogleAppMeasurement/GoogleAppMeasurement.xcframework",
+                    "source": {{ "checksum": "be3f", "type": "remote", "url": "{url}" }},
+                    "targetName": "GoogleAppMeasurement" }} ], "dependencies": [], "prebuilts": [] }}, "version": 7 }}"#
+            ),
+        )
+        .unwrap();
+        let workspace = Workspace::read(&dir, &dir.join("Package.resolved")).unwrap();
+        let package = Utf8Path::new("/elsewhere/probe");
+        let missing = workspace.artifact(package, "GoogleAppMeasurement", url, Some("be3f")).unwrap_err().to_string();
+        assert!(missing.contains("which is not there") && missing.contains("run `swift package resolve`"), "{missing}");
+        let extracted = dir.join(".build/artifacts/probe/GoogleAppMeasurement/GoogleAppMeasurement.xcframework");
+        std::fs::create_dir_all(&extracted).unwrap();
+        assert_eq!(workspace.artifact(package, "GoogleAppMeasurement", url, Some("be3f")).unwrap(), extracted);
+        let changed = workspace.artifact(package, "GoogleAppMeasurement", url, Some("0000")).unwrap_err().to_string();
+        assert!(changed.contains("at checksum 0000") && changed.contains("downloaded at be3f"), "{changed}");
+        let unknown = workspace.artifact(package, "Other", "https://example.invalid/Other.zip", None).unwrap_err().to_string();
+        assert!(unknown.contains("records no such download"), "{unknown}");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

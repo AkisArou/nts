@@ -2,6 +2,7 @@
 // sources: Tally's, and Blink's Swift, through the header Swift writes for it.
 #import "Tally.h"
 #import "Blink-Swift.h"
+#import <Buzz/Buzz.h>
 #include <stdio.h>
 
 int main(void) {
@@ -13,6 +14,7 @@ int main(void) {
     Blink *blink = [[Blink alloc] initWithTimes:3];
     printf("blink %s\n", blink.pattern.UTF8String);
     printf("blink rate %ld\n", (long)[blink rate]);
+    printf("buzz %s\n", [Buzz buzzTimes:3].UTF8String);
   }
   return 0;
 }

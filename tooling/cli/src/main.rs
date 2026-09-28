@@ -4462,11 +4462,19 @@ fn vendored_frameworks(needs: &nts_build::dependencies::Resolution, target: &nts
 }
 
 /// A library's binary frameworks, as the link names them: each slice's
-/// directory searched, so the `-framework` its pods' link line names is
-/// found, and the places a dynamic one is loaded from -- beside a bare
-/// program, and inside a macOS or an iOS application.
+/// directory searched and the framework linked -- whichever resolver found
+/// it: a pod's xcconfig names it too, and a `SwiftPM` binary target is named
+/// by nothing else, so a program that shipped `Buzz.framework` beside itself
+/// without linking it failed at launch, "class 'Buzz' not found" -- and the
+/// places a dynamic one is loaded from: beside a bare program, and inside a
+/// macOS or an iOS application.
 fn vendored_link_flags(vendored: &[Vendored]) -> Vec<String> {
-    let mut flags: Vec<String> = vendored.iter().filter_map(|framework| framework.slice.parent()).map(|dir| format!("-F{dir}")).collect();
+    let mut flags: Vec<String> = Vec::new();
+    for framework in vendored {
+        if let (Some(dir), Some(name)) = (framework.slice.parent(), framework.slice.file_stem()) {
+            flags.extend([format!("-F{dir}"), "-framework".to_owned(), name.to_owned()]);
+        }
+    }
     if vendored.iter().any(|framework| framework.dynamic) {
         flags.extend(["@executable_path", "@executable_path/../Frameworks", "@executable_path/Frameworks"].map(|rpath| format!("-Wl,-rpath,{rpath}")));
     }

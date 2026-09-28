@@ -13,7 +13,10 @@
 #   from the header Swift writes for it, over its package's C targets --
 #   `CBlink`, which it imports, and `CBlinkCore`, whose header `CBlink`'s
 #   includes -- each compiled with its dependencies' `include/` searched, as
-#   SwiftPM does. Nothing resolves. The build log must say nothing was refused.
+#   SwiftPM does; `Buzz`, a binary target by `url:`, as the `.xcframework`
+#   SwiftPM extracted and recorded in `.build/workspace-state.json`, checked
+#   against the manifest's checksum, shipped beside the program. Nothing
+#   resolves. The build log must say nothing was refused.
 # - **Oracle:** `reference/main.m`, compiled with the packages' sources by the
 #   same toolchain, and run on the same Mac.
 # - **Main (C) and LLVM:** the program prints exactly what the oracle prints.
@@ -72,6 +75,8 @@ for arch in x86_64 aarch64; do
     [ -f "$out/spm/macos-13-$arch/$object" ] ||
       { echo "macos-spm: the package's $object was not compiled for $arch" >&2; exit 1; }
   done
+  [ -L "$out/spm/macos-13-$arch/Buzz.framework/Buzz" ] ||
+    { echo "macos-spm: Buzz.framework was not shipped beside the $arch program, links as links" >&2; exit 1; }
 done
 llvm_arm64="$out/spmLlvm/macos-13-aarch64/spmLlvm"
 file -b "$llvm_arm64" | grep -q "Mach-O.*arm64" && [ -f "$out/spmLlvm/macos-13-aarch64/program.ll.o" ] ||
@@ -113,6 +118,24 @@ grep -q "run \`swift package resolve\`" "$out/control-build.log" ||
   { cat "$out/control-build.log" >&2; echo "macos-spm: the missing checkout was refused, but not by name" >&2; exit 1; }
 echo "control: a pin nothing checked out is refused, naming \`swift package resolve\`"
 
+# The second: a binary target whose manifest now names another checksum than
+# the one its download was checked against -- a new release not resolved yet.
+stale="$out/control-checksum"
+rm -rf "$stale"
+mkdir -p "$stale"
+cp -R "$source/." "$stale/"
+sed 's/checksum: "0/checksum: "f/' "$source/Packages/Buzz/Package.swift" >"$stale/Packages/Buzz/Package.swift"
+cp "$control/tsconfig.json" "$stale/tsconfig.json"
+mkdir -p "$stale/node_modules/@nts"
+ln -sfn "$root/tooling/config" "$stale/node_modules/@nts/config"
+if build "$stale" "$out/control-checksum-build"; then
+  echo "macos-spm: a download checked against another checksum was built from" >&2
+  exit 1
+fi
+grep -q "at checksum f" "$out/control-checksum-build.log" && grep -q "run \`swift package resolve\`" "$out/control-checksum-build.log" ||
+  { cat "$out/control-checksum-build.log" >&2; echo "macos-spm: the changed checksum was refused, but not by name" >&2; exit 1; }
+echo "control: a binary target whose checksum changed since its download is refused, naming \`swift package resolve\`"
+
 # The oracle's Blink, compiled by the same toolchain as the program's: a
 # resource directory of its `shims` and `clang` only, as swift.rs makes one,
 # and a module cache kept between runs.
@@ -121,6 +144,7 @@ mkdir -p "$resource"
 for part in shims clang; do
   [ -e "$resource/$part" ] || ln -s "$swift/usr/lib/swift/$part" "$resource/$part"
 done
+buzz="$source/.build/artifacts/buzz/Buzz/Buzz.xcframework/macos-arm64_x86_64"
 # Blink's C targets as SwiftPM makes them modules when a target has no
 # umbrella header of its name: an umbrella directory, its `include/`.
 sources="$source/Packages/Blink/Sources"
@@ -140,8 +164,10 @@ clang -target x86_64-apple-macos13 -isysroot "$sdk" -Wall -Werror -I "$sources/C
 clang -target x86_64-apple-macos13 -isysroot "$sdk" -fuse-ld=lld -x objective-c -fobjc-arc -fmodules -Wall -Werror \
   -I "$source/Packages/Tally/Sources/Tally/include" -I "$out" "$source/reference/main.m" \
   "$source/Packages/Tally/Sources/Tally/Tally.m" -x none "$out/Blink.o" "$out/cblink.o" "$out/cblink_core.o" \
-  -framework Foundation -framework CoreFoundation \
+  -framework Foundation -framework CoreFoundation -F "$buzz" -framework Buzz -Wl,-rpath,@executable_path \
   -L"$sdk/usr/lib/swift" -Wl,-rpath,/usr/lib/swift -o "$out/oracle"
+rm -rf "$out/Buzz.framework"
+cp -R "$buzz/Buzz.framework" "$out/"
 
 if ! "$root/tooling/apple/run.sh" --reachable; then
   echo "SKIP macos-spm: not run -- no Mac reachable (tooling/apple/vm.md)"
@@ -157,8 +183,8 @@ run_quietly() {
   fi
 }
 run_quietly "$out/oracle" "$out/expected"
-[ "$(wc -l <"$out/expected.txt")" -eq 3 ] ||
-  { echo "macos-spm: the oracle printed $(wc -l <"$out/expected.txt") lines, not 3" >&2; exit 1; }
+[ "$(wc -l <"$out/expected.txt")" -eq 4 ] ||
+  { echo "macos-spm: the oracle printed $(wc -l <"$out/expected.txt") lines, not 4" >&2; exit 1; }
 
 run_quietly "$out/spm/macos-13-x86_64/spm" "$out/actual"
 diff -u "$out/expected.txt" "$out/actual.txt"

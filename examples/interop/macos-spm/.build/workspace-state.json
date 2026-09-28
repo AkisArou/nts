@@ -1,0 +1,33 @@
+{
+  "object" : {
+    "artifacts" : [
+      {
+        "kind" : {
+          "xcframework" : {
+
+          }
+        },
+        "packageRef" : {
+          "identity" : "buzz",
+          "kind" : "fileSystem",
+          "location" : "/workspace/macos-spm/Packages/Buzz",
+          "name" : "Buzz"
+        },
+        "path" : "/workspace/macos-spm/.build/artifacts/buzz/Buzz/Buzz.xcframework",
+        "source" : {
+          "checksum" : "0340b3cc1c8698bbad44c4e31c9c7dd6da9fded109a19c09a5c1a32d1a90bf45",
+          "type" : "remote",
+          "url" : "https://example.invalid/Buzz.xcframework.zip"
+        },
+        "targetName" : "Buzz"
+      }
+    ],
+    "dependencies" : [
+
+    ],
+    "prebuilts" : [
+
+    ]
+  },
+  "version" : 7
+}

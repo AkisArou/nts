@@ -1,0 +1,3 @@
+# SwiftPM locks .build while it reads a manifest; what resolve left there is
+# committed (Packages/Buzz/make.sh), its lock is not.
+/.build/.lock
