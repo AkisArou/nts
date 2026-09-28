@@ -124,6 +124,7 @@ config's comments.
 | `native/compiled/` | the probe's scenarios in TSX, which `tools/probe-agree.ts` runs plain, as written, and as the React stage rewrote them |
 | `native/gtk/` | react-gtk's host config and GLib scheduler host driven on real GTK widgets, as the reconciler will drive them (`build.sh`) |
 | `native/adw/` | the same for react-gtk/adw, libadwaita's widgets (`build.sh`) |
+| `native/journal/` | DESIGN.md's Journal app and its libadwaita twin, with the React stage: the programs the native render must run (it builds today with `main` refused) |
 | `conformance/` | the harness that runs upstream's tests, and the per-test ledgers |
 | `compiler/` | the upstream Rust React Compiler as our memoizer: the audit (`AUDIT.md`), and how its output stays typed TypeScript (`TYPED-OUTPUT.md`, with its fixtures and study) |
 | `spikes/` | representation experiments the design rests on |
