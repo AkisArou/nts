@@ -34,6 +34,7 @@ import {
   GtkFlowBox,
   GtkImage,
   GtkLabel,
+  GtkLevelBar,
   GtkLinkButton,
   GtkMenuButton,
   GtkPasswordEntry,
@@ -231,6 +232,10 @@ function act(kind: string, id: string, args: string[], object: GObject | null, w
     case "search-changed":
       if (!(object instanceof GtkSearchEntry)) return false;
       object.emit("search-changed");
+      return true;
+    case "level":
+      if (!(object instanceof GtkLevelBar)) return false;
+      console.log(`${id}.value ${object.value}`);
       return true;
     case "visit":
       if (!(object instanceof GtkLinkButton)) return false;

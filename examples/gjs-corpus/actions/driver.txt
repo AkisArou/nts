@@ -1,0 +1,4 @@
+click button
+action demo demo.open-bookmarks home
+action demo demo.toggle
+action demo demo.scale 150%
