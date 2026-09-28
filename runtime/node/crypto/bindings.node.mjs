@@ -1467,13 +1467,14 @@ globalThis.nts_crypto_x509_legacy_curve = (handle, nist) => {
 // -- Web Crypto's AES -----------------------------------------------------------
 
 /** `aes.c`'s modes, as node's Web Crypto names them. */
-const AES_NAMES = ["AES-CBC", "AES-CTR", "AES-GCM", "AES-KW", "AES-OCB"];
+const AES_NAMES = ["AES-CBC", "AES-CTR", "AES-GCM", "AES-KW", "AES-OCB", "ChaCha20-Poly1305"];
 /** Each mode's IV length, as `EVP_CIPHER_get_iv_length` answers; KW's is its default IV's. */
-const AES_IV_LENGTHS = [16, 16, 12, 8, 12];
+const AES_IV_LENGTHS = [16, 16, 12, 8, 12, 12];
 
 /** `aes.c`'s `nts_crypto_aes_config`, whose answer is fixed by its arguments. */
 globalThis.nts_crypto_aes_config = (mode, keyBytes, ivBytes, length) => {
   if (![16, 24, 32].includes(keyBytes) || AES_NAMES[mode] === undefined) return -1;
+  if (mode === 5) return keyBytes !== 32 ? -1 : ivBytes !== 12 ? -2 : 0;
   const ivLength = mode === 3 ? 8 : ivBytes;
   if (mode === 1 && (ivLength !== 16 || length === 0 || length > 128)) return -3;
   if ((mode === 2 || mode === 4) && length > 128) return -4;
@@ -1496,7 +1497,7 @@ function aesCipher(mode, encrypt, key, data, iv, length, additional) {
   }
   if (mode === 1) return aesCtr(bits, encrypt, key, data, iv, length);
   // An AEAD: the tag follows the ciphertext.
-  const name = `aes-${bits}-${mode === 2 ? "gcm" : "ocb"}`;
+  const name = mode === 5 ? "chacha20-poly1305" : `aes-${bits}-${mode === 2 ? "gcm" : "ocb"}`;
   const cipher = run(name, iv, { authTagLength: length });
   if (additional.byteLength > 0) cipher.setAAD(additional);
   if (encrypt) return Buffer.concat([cipher.update(data), cipher.final(), cipher.getAuthTag()]);

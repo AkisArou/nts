@@ -22,10 +22,26 @@ import { getRandomValues as fillRandomValues, randomUUID as newRandomUUID } from
 import { asymmetricHandle, exportJwkOf, type KeyObjectHandle, type KeyObjectType, webCryptoHooks } from "../keys.ts";
 import { base64urlOf } from "../util.ts";
 import { aesCipher, aesGenerateKey, aesImportKey, getAlgorithmName } from "./aes.ts";
+import { c20pCipher, c20pGenerateKey, c20pImportKey } from "./chacha20-poly1305.ts";
 import { cfrgExportKey, cfrgGenerateKey, cfrgImportKey, ecdhDeriveBits, eddsaSignVerify } from "./cfrg.ts";
 import { asyncDigest } from "./digest.ts";
 import { ecdsaSignVerify, ecExportKey, ecGenerateKey, ecImportKey } from "./ec.ts";
-import { hkdfDeriveBits, pbkdf2DeriveBits, validateDeriveBitsLength } from "./kdf.ts";
+import {
+  argon2DeriveBits,
+  hkdfDeriveBits,
+  pbkdf2DeriveBits,
+  validateArgon2DeriveBitsLength,
+  validateDeriveBitsLength,
+} from "./kdf.ts";
+import {
+  type EncapsulatedBits,
+  mlDsaSignVerify,
+  mlKemDecapsulate,
+  mlKemEncapsulate,
+  pqcExportKey,
+  pqcGenerateKey,
+  pqcImportKey,
+} from "./pqc.ts";
 import { rsaExportKey, rsaImportKey, rsaJwkAlgorithm, rsaKeyGenerate, rsaOaepCipher, rsaSignVerify } from "./rsa.ts";
 import {
   type CryptoKey,
@@ -109,6 +125,15 @@ function generateKeyFor(algorithm: NormalizedAlgorithm, extractable: boolean, us
     case "ECDSA":
     case "ECDH":
       return ecGenerateKey(algorithm, extractable, usages);
+    case "ChaCha20-Poly1305":
+      return c20pGenerateKey(algorithm, extractable, usages);
+    case "ML-DSA-44":
+    case "ML-DSA-65":
+    case "ML-DSA-87":
+    case "ML-KEM-512":
+    case "ML-KEM-768":
+    case "ML-KEM-1024":
+      return pqcGenerateKey(algorithm, extractable, usages);
     case "HMAC":
       return hmacGenerateKey(algorithm, extractable, usages);
     case "AES-CTR":
@@ -133,6 +158,10 @@ function deriveBitsFor(algorithm: NormalizedAlgorithm, key: CryptoKey, length: n
       return hkdfDeriveBits(algorithm, key, length);
     case "PBKDF2":
       return pbkdf2DeriveBits(algorithm, key, length);
+    case "Argon2d":
+    case "Argon2i":
+    case "Argon2id":
+      return argon2DeriveBits(algorithm, key, length);
     default:
       throw unreachable();
   }
@@ -184,6 +213,13 @@ function exportKeySpki(key: CryptoKey): ArrayBuffer | undefined {
     case "X25519":
     case "X448":
       return cfrgExportKey(key, "spki");
+    case "ML-DSA-44":
+    case "ML-DSA-65":
+    case "ML-DSA-87":
+    case "ML-KEM-512":
+    case "ML-KEM-768":
+    case "ML-KEM-1024":
+      return pqcExportKey(key, "spki");
     default:
       return undefined;
   }
@@ -203,13 +239,28 @@ function exportKeyPkcs8(key: CryptoKey): ArrayBuffer | undefined {
     case "X25519":
     case "X448":
       return cfrgExportKey(key, "pkcs8");
+    case "ML-DSA-44":
+    case "ML-DSA-65":
+    case "ML-DSA-87":
+    case "ML-KEM-512":
+    case "ML-KEM-768":
+    case "ML-KEM-1024":
+      return pqcExportKey(key, "pkcs8");
     default:
       return undefined;
   }
 }
 
-function exportKeyRawPublic(key: CryptoKey): ArrayBuffer | undefined {
+function exportKeyRawPublic(key: CryptoKey, format: string): ArrayBuffer | undefined {
   switch (getCryptoKeyAlgorithm(key).name) {
+    case "ML-DSA-44":
+    case "ML-DSA-65":
+    case "ML-DSA-87":
+    case "ML-KEM-512":
+    case "ML-KEM-768":
+    case "ML-KEM-1024":
+      // ML-DSA and ML-KEM keys do not recognize "raw".
+      return format === "raw-public" ? pqcExportKey(key, "raw") : undefined;
     case "ECDSA":
     case "ECDH":
       return ecExportKey(key, "raw");
@@ -218,6 +269,20 @@ function exportKeyRawPublic(key: CryptoKey): ArrayBuffer | undefined {
     case "X25519":
     case "X448":
       return cfrgExportKey(key, "raw");
+    default:
+      return undefined;
+  }
+}
+
+function exportKeyRawSeed(key: CryptoKey): ArrayBuffer | undefined {
+  switch (getCryptoKeyAlgorithm(key).name) {
+    case "ML-DSA-44":
+    case "ML-DSA-65":
+    case "ML-DSA-87":
+    case "ML-KEM-512":
+    case "ML-KEM-768":
+    case "ML-KEM-1024":
+      return pqcExportKey(key, "raw");
     default:
       return undefined;
   }
@@ -259,6 +324,15 @@ function exportKeyJWK(key: CryptoKey): JsonWebKey | undefined {
     case "ECDH":
     case "X25519":
     case "X448":
+    case "ML-DSA-44":
+    case "ML-DSA-65":
+    case "ML-DSA-87":
+    case "ML-KEM-512":
+    case "ML-KEM-768":
+    case "ML-KEM-1024":
+      break;
+    case "ChaCha20-Poly1305":
+      alg = "C20P";
       break;
     case "Ed25519":
     case "Ed448":
@@ -281,9 +355,11 @@ function exportKeyJWK(key: CryptoKey): JsonWebKey | undefined {
   const handle = getCryptoKeyHandle(key);
   const material: JsonWebKey =
     type === "secret" ? { kty: "oct", k: base64urlOf(handle.bytes) } : exportJwkOf(handle.native, type === "private");
-  const jwk: JsonWebKey = { key_ops: getCryptoKeyUsages(key).slice(), ext: getCryptoKeyExtractable(key), alg, ...material };
-  if (alg === undefined) delete jwk.alg;
-  return jwk;
+  const keyOps = getCryptoKeyUsages(key).slice();
+  const ext = getCryptoKeyExtractable(key);
+  // Without an `alg` of its own the key's members follow `ext` directly: an
+  // AKP key's `alg` is one of them, and comes after its `priv` and `kty`.
+  return alg === undefined ? { key_ops: keyOps, ext, ...material } : { key_ops: keyOps, ext, alg, ...material };
 }
 
 /** Node's `exportKeySync`. */
@@ -311,11 +387,14 @@ function exportKeySync(format: string, key: CryptoKey): ArrayBuffer | JsonWebKey
       if (type === "secret") result = exportKeyRawSecret(key, format);
       break;
     case "raw-public":
-      if (type === "public") result = exportKeyRawPublic(key);
+      if (type === "public") result = exportKeyRawPublic(key, format);
+      break;
+    case "raw-seed":
+      if (type === "private") result = exportKeyRawSeed(key);
       break;
     case "raw":
       if (type === "secret") result = exportKeyRawSecret(key, format);
-      else if (type === "public") result = exportKeyRawPublic(key);
+      else if (type === "public") result = exportKeyRawPublic(key, format);
       break;
   }
   if (!result) {
@@ -359,9 +438,25 @@ function importKeySync(
     case "AES-OCB":
       result = aesImportKey(algorithm, format, keyData, extractable, usages);
       break;
+    case "ChaCha20-Poly1305":
+      result = c20pImportKey(algorithm, format, keyData, extractable, usages);
+      break;
     case "HKDF":
     case "PBKDF2":
       result = importGenericSecretKey(algorithm, aliasKeyFormat(format, "raw-secret"), keyData, extractable, usages);
+      break;
+    case "Argon2d":
+    case "Argon2i":
+    case "Argon2id":
+      if (format === "raw-secret") result = importGenericSecretKey(algorithm, format, keyData, extractable, usages);
+      break;
+    case "ML-DSA-44":
+    case "ML-DSA-65":
+    case "ML-DSA-87":
+    case "ML-KEM-512":
+    case "ML-KEM-768":
+    case "ML-KEM-1024":
+      result = pqcImportKey(format, keyData, algorithm, extractable, usages);
       break;
   }
   if (!result) throw domException(`Unable to import ${algorithm.name} using ${format} format`, "NotSupportedError");
@@ -392,8 +487,14 @@ function toCryptoKeySecret(
     case "AES-OCB":
       result = aesImportKey(algorithm, "KeyObjectHandle", keyData, extractable, usages);
       break;
+    case "ChaCha20-Poly1305":
+      result = c20pImportKey(algorithm, "KeyObjectHandle", keyData, extractable, usages);
+      break;
     case "HKDF":
     case "PBKDF2":
+    case "Argon2d":
+    case "Argon2i":
+    case "Argon2id":
       result = importGenericSecretKey(algorithm, "KeyObjectHandle", keyData, extractable, usages);
       break;
     default:
@@ -430,6 +531,14 @@ function toCryptoKey(
     case "X25519":
     case "X448":
       result = cfrgImportKey("KeyObjectHandle", keyData, algorithm, extractable, usages);
+      break;
+    case "ML-DSA-44":
+    case "ML-DSA-65":
+    case "ML-DSA-87":
+    case "ML-KEM-512":
+    case "ML-KEM-768":
+    case "ML-KEM-1024":
+      result = pqcImportKey("KeyObjectHandle", keyData, algorithm, extractable, usages);
       break;
     default:
       throw domException("Unrecognized algorithm name", "NotSupportedError");
@@ -479,6 +588,10 @@ function signVerify(
     case "Ed25519":
     case "Ed448":
       return eddsaSignVerify(key, data, normalized, signature);
+    case "ML-DSA-44":
+    case "ML-DSA-65":
+    case "ML-DSA-87":
+      return mlDsaSignVerify(key, data, normalized, signature);
     case "HMAC":
       return hmacSignVerify(key, data, signature);
     default:
@@ -501,6 +614,8 @@ function cipherOrWrap(mode: "encrypt" | "decrypt", algorithm: NormalizedAlgorith
     case "AES-OCB":
     case "AES-KW":
       return aesCipher(mode, key, data, algorithm);
+    case "ChaCha20-Poly1305":
+      return c20pCipher(mode, key, data, algorithm);
     default:
       throw unreachable();
   }
@@ -584,16 +699,32 @@ function bytesOf(source: BufferSource): Uint8Array {
 }
 
 /** The checks every encapsulation method makes of its algorithm and key. */
-function checkEncapsulationKey(
-  identifier: AlgorithmIdentifier,
-  key: CryptoKey,
-  operation: "encapsulate" | "decapsulate",
-  usage: string,
-  subject: string,
-): void {
-  const normalized = normalizeAlgorithm(identifier, operation);
+function checkEncapsulationKey(normalized: NormalizedAlgorithm, key: CryptoKey, usage: string, subject: string): void {
   if (normalized.name !== getCryptoKeyAlgorithm(key).name) throw domException("key algorithm mismatch", "InvalidAccessError");
   if (!hasCryptoKeyUsage(key, usage)) throw domException(`${subject} does not have ${usage} usage`, "InvalidAccessError");
+}
+
+/** The encapsulation dispatch the four KEM methods share. */
+function encapsulateFor(key: CryptoKey): Job<EncapsulatedBits> {
+  switch (getCryptoKeyAlgorithm(key).name) {
+    case "ML-KEM-512":
+    case "ML-KEM-768":
+    case "ML-KEM-1024":
+      return mlKemEncapsulate(key);
+    default:
+      throw unreachable();
+  }
+}
+
+function decapsulateFor(key: CryptoKey, ciphertext: BufferSource): Job<ArrayBuffer> {
+  switch (getCryptoKeyAlgorithm(key).name) {
+    case "ML-KEM-512":
+    case "ML-KEM-768":
+    case "ML-KEM-1024":
+      return mlKemDecapsulate(key, ciphertext);
+    default:
+      throw unreachable();
+  }
 }
 
 /** `encrypt` and `decrypt`, which differ only in their mode. */
@@ -661,6 +792,7 @@ function check(operation: string, algorithm: unknown, length?: number | null): b
       return true;
     case "deriveBits": {
       if (normalized.name === "HKDF" || normalized.name === "PBKDF2") validateDeriveBitsLength(length);
+      if (normalized.name.startsWith("Argon2")) validateArgon2DeriveBitsLength(length);
       const bits = length ?? 0;
       if (normalized.name === "X25519" && bits > 256) return false;
       if (normalized.name === "X448" && bits > 448) return false;
@@ -1016,8 +1148,8 @@ export class SubtleCrypto {
       const prefix = prepareSubtleMethod(this, "encapsulateBits", count, 2);
       const identifier = convertAlgorithmIdentifier(encapsulationAlgorithm, argument(prefix, 0));
       const key = convertCryptoKey(encapsulationKey, argument(prefix, 1));
-      checkEncapsulationKey(identifier, key, "encapsulate", "encapsulateBits", "encapsulationKey");
-      throw unreachable();
+      checkEncapsulationKey(normalizeAlgorithm(identifier, "encapsulate"), key, "encapsulateBits", "encapsulationKey");
+      return encapsulateFor(key);
     });
   }
 
@@ -1035,12 +1167,15 @@ export class SubtleCrypto {
       const identifier = convertAlgorithmIdentifier(encapsulationAlgorithm, argument(prefix, 0));
       const key = convertCryptoKey(encapsulationKey, argument(prefix, 1));
       const shared = convertAlgorithmIdentifier(sharedKeyAlgorithm, argument(prefix, 2));
-      convertBoolean(extractable);
-      convertKeyUsages(keyUsages, argument(prefix, 4));
-      normalizeAlgorithm(identifier, "encapsulate");
-      normalizeAlgorithm(shared, "importKey");
-      checkEncapsulationKey(identifier, key, "encapsulate", "encapsulateKey", "encapsulationKey");
-      throw unreachable();
+      const isExtractable = convertBoolean(extractable);
+      const usages = convertKeyUsages(keyUsages, argument(prefix, 4));
+      const normalized = normalizeAlgorithm(identifier, "encapsulate");
+      const sharedImport = normalizeAlgorithm(shared, "importKey");
+      checkEncapsulationKey(normalized, key, "encapsulateKey", "encapsulationKey");
+      return mapJob(encapsulateFor(key), (bits) => ({
+        ciphertext: bits.ciphertext,
+        sharedKey: importKeySync("raw-secret", new Uint8Array(bits.sharedKey), sharedImport, isExtractable, usages),
+      }));
     });
   }
 
@@ -1051,9 +1186,9 @@ export class SubtleCrypto {
       const prefix = prepareSubtleMethod(this, "decapsulateBits", count, 3);
       const identifier = convertAlgorithmIdentifier(decapsulationAlgorithm, argument(prefix, 0));
       const key = convertCryptoKey(decapsulationKey, argument(prefix, 1));
-      convertBufferSource(ciphertext, argument(prefix, 2));
-      checkEncapsulationKey(identifier, key, "decapsulate", "decapsulateBits", "decapsulationKey");
-      throw unreachable();
+      const bytes = convertBufferSource(ciphertext, argument(prefix, 2));
+      checkEncapsulationKey(normalizeAlgorithm(identifier, "decapsulate"), key, "decapsulateBits", "decapsulationKey");
+      return decapsulateFor(key, bytes);
     });
   }
 
@@ -1071,14 +1206,16 @@ export class SubtleCrypto {
       const prefix = prepareSubtleMethod(this, "decapsulateKey", count, 6);
       const identifier = convertAlgorithmIdentifier(decapsulationAlgorithm, argument(prefix, 0));
       const key = convertCryptoKey(decapsulationKey, argument(prefix, 1));
-      convertBufferSource(ciphertext, argument(prefix, 2));
+      const bytes = convertBufferSource(ciphertext, argument(prefix, 2));
       const shared = convertAlgorithmIdentifier(sharedKeyAlgorithm, argument(prefix, 3));
-      convertBoolean(extractable);
-      convertKeyUsages(keyUsages, argument(prefix, 5));
-      normalizeAlgorithm(identifier, "decapsulate");
-      normalizeAlgorithm(shared, "importKey");
-      checkEncapsulationKey(identifier, key, "decapsulate", "decapsulateKey", "decapsulationKey");
-      throw unreachable();
+      const isExtractable = convertBoolean(extractable);
+      const usages = convertKeyUsages(keyUsages, argument(prefix, 5));
+      const normalized = normalizeAlgorithm(identifier, "decapsulate");
+      const sharedImport = normalizeAlgorithm(shared, "importKey");
+      checkEncapsulationKey(normalized, key, "decapsulateKey", "decapsulationKey");
+      return mapJob(decapsulateFor(key, bytes), (bits) =>
+        importKeySync("raw-secret", new Uint8Array(bits), sharedImport, isExtractable, usages),
+      );
     });
   }
 }

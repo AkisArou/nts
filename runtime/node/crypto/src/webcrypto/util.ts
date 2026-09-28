@@ -80,6 +80,17 @@ const kAlgorithmDefinitions: Definitions = {
     decrypt: "AeadParams",
     "get key length": "AesDerivedKeyParams",
   },
+  Argon2d: { deriveBits: "Argon2Params", "get key length": null, importKey: null },
+  Argon2i: { deriveBits: "Argon2Params", "get key length": null, importKey: null },
+  Argon2id: { deriveBits: "Argon2Params", "get key length": null, importKey: null },
+  "ChaCha20-Poly1305": {
+    generateKey: null,
+    exportKey: null,
+    importKey: null,
+    encrypt: "AeadParams",
+    decrypt: "AeadParams",
+    "get key length": null,
+  },
   ECDH: {
     generateKey: "EcKeyGenParams",
     exportKey: null,
@@ -119,6 +130,48 @@ const kAlgorithmDefinitions: Definitions = {
     sign: null,
     verify: null,
     "get key length": "HmacImportParams",
+  },
+  "ML-DSA-44": {
+    generateKey: null,
+    exportKey: null,
+    importKey: null,
+    sign: "ContextParams",
+    verify: "ContextParams",
+  },
+  "ML-DSA-65": {
+    generateKey: null,
+    exportKey: null,
+    importKey: null,
+    sign: "ContextParams",
+    verify: "ContextParams",
+  },
+  "ML-DSA-87": {
+    generateKey: null,
+    exportKey: null,
+    importKey: null,
+    sign: "ContextParams",
+    verify: "ContextParams",
+  },
+  "ML-KEM-512": {
+    generateKey: null,
+    exportKey: null,
+    importKey: null,
+    encapsulate: null,
+    decapsulate: null,
+  },
+  "ML-KEM-768": {
+    generateKey: null,
+    exportKey: null,
+    importKey: null,
+    encapsulate: null,
+    decapsulate: null,
+  },
+  "ML-KEM-1024": {
+    generateKey: null,
+    exportKey: null,
+    importKey: null,
+    encapsulate: null,
+    decapsulate: null,
   },
   PBKDF2: {
     importKey: null,
@@ -209,8 +262,21 @@ function registeredDictionary(name: string, operation: Operation): string | null
  * algorithm this OpenSSL lacks is left out, as node leaves it out.
  */
 function isSupported(name: string): boolean {
-  if (name === "AES-OCB") return cipherId("aes-128-ocb") >= 0;
-  return true;
+  switch (name) {
+    case "AES-OCB":
+      return cipherId("aes-128-ocb") >= 0;
+    case "ChaCha20-Poly1305":
+      return cipherId("chacha20-poly1305") >= 0;
+    case "Argon2d":
+    case "Argon2i":
+    case "Argon2id":
+      return nts_crypto_argon2_supported();
+    default:
+      // ML-DSA and ML-KEM are this build's by construction: `keygen.c` and
+      // `keys.c` need OpenSSL 3.5's headers to compile, as node tests them
+      // at its own build.
+      return true;
+  }
 }
 
 /** The registry's names by their upper case, made on first use. */

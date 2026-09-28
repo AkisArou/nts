@@ -296,6 +296,9 @@ export function internals(exports) {
       converters: exports.webCryptoConverters?.(),
       requiredArguments: exports.webCryptoRequiredArguments,
     },
+    "internal/crypto/keys": {
+      getCryptoKeyHandle: exports.getCryptoKeyHandle,
+    },
     "internal/crypto/util": {
       bigIntArrayToUnsignedBigInt: exports.bigIntArrayToUnsignedBigInt,
       bigIntArrayToUnsignedInt: exports.bigIntArrayToUnsignedInt,

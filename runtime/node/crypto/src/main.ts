@@ -67,6 +67,7 @@ export { Crypto, crypto as webcrypto, SubtleCrypto } from "./webcrypto/subtle.ts
 export { CryptoKey } from "./webcrypto/key.ts";
 // Node's internals, for its tests (`shape.mjs`'s `internals`); the shape
 // publishes none of these names.
+export { getCryptoKeyHandle } from "./webcrypto/key.ts";
 export { requiredArguments as webCryptoRequiredArguments, webCryptoConverters } from "./webcrypto/webidl.ts";
 export {
   bigIntArrayToUnsignedBigInt,

@@ -82,6 +82,11 @@ export class KeyObjectHandle {
     return this.#native;
   }
 
+  /** `KeyObjectHandle::Export` for a secret key: a copy of its bytes. */
+  export(): Buffer {
+    return Buffer.from(this.#bytes);
+  }
+
   /** `KeyObjectHandle::Equals`: a secret's bytes in constant time, or `EVP_PKEY_eq`. */
   equals(other: KeyObjectHandle): boolean {
     if (this.#native !== 0 || other.#native !== 0) {
@@ -237,16 +242,16 @@ export class SecretKeyObject extends KeyObject {
   }
 
   export(options?: unknown): Buffer | { kty: string; k: string } {
-    const bytes = handleOf(this).bytes;
+    const handle = handleOf(this);
     if (options !== undefined) {
       validateObject(options, "options");
       const format = (options as { format?: unknown }).format;
       validateOneOf(format, "options.format", [undefined, "buffer", "jwk"]);
       if (format === "jwk") {
-        return { kty: "oct", k: Buffer.from(bytes).toString("base64url") };
+        return { kty: "oct", k: Buffer.from(handle.bytes).toString("base64url") };
       }
     }
-    return Buffer.from(bytes);
+    return handle.export();
   }
 }
 
@@ -1067,6 +1072,11 @@ function importRaw(prepared: PreparedKey): Imported {
  */
 export function importRawPublicKey(keyType: string, namedCurve: string | undefined, data: Uint8Array): number {
   return importRaw({ format: KeyFormat.RawPublic, data, asymmetricKeyType: keyType, namedCurve }).native;
+}
+
+/** The same over a post-quantum key's seed: `KeyObjectHandle::Init` with `raw-seed`. */
+export function importRawSeedKey(keyType: string, data: Uint8Array): number {
+  return importRaw({ format: KeyFormat.RawSeed, data, asymmetricKeyType: keyType }).native;
 }
 
 /** An asymmetric key's handle, as node's `KeyObjectHandle::Init` makes it. */

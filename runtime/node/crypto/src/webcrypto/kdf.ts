@@ -41,3 +41,37 @@ export function pbkdf2DeriveBits(algorithm: NormalizedAlgorithm, baseKey: Crypto
     ),
   );
 }
+
+/** Node's `validateArgon2DeriveBitsLength`: whole bytes, at least four of them. */
+export function validateArgon2DeriveBitsLength(length: number | null | undefined): asserts length is number {
+  validateDeriveBitsLength(length);
+  if (length < 32) throw domException("length must be >= 32", "OperationError");
+}
+
+/** `argon2.c`'s types, which `kdf.ts`'s `ARGON2_ALGORITHMS` orders the same way. */
+function argon2Type(name: string): number {
+  return name === "Argon2d" ? 0 : name === "Argon2i" ? 1 : 2;
+}
+
+/** Node's `argon2DeriveBits`: the base key is the password, the nonce the salt. */
+export function argon2DeriveBits(algorithm: NormalizedAlgorithm, baseKey: CryptoKey, length: number | null | undefined): Job<ArrayBuffer> {
+  validateArgon2DeriveBitsLength(length);
+  const password = getCryptoKeyHandle(baseKey).bytes;
+  const noBytes = new Uint8Array(0);
+  return jobPromise(() =>
+    bytesJob("Deriving bits failed", (done) =>
+      nts_crypto_argon2_job(
+        argon2Type(algorithm.name),
+        password,
+        algorithm.nonce!,
+        algorithm.parallelism!,
+        length / 8,
+        algorithm.memory!,
+        algorithm.passes!,
+        algorithm.secretValue ?? noBytes,
+        algorithm.associatedData ?? noBytes,
+        done,
+      ),
+    ),
+  );
+}

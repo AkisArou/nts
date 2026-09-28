@@ -1,6 +1,9 @@
-/* Web Crypto's AES: node's `AESCipherJob` (`src/crypto/crypto_aes.cc`) --
- * CBC, CTR, GCM, KW and OCB, each over OpenSSL's EVP cipher of the key's
- * length, on the thread pool.
+/* Web Crypto's secret-key ciphers: node's `AESCipherJob`
+ * (`src/crypto/crypto_aes.cc`) -- CBC, CTR, GCM, KW and OCB, each over
+ * OpenSSL's EVP cipher of the key's length -- and its
+ * `ChaCha20Poly1305CipherJob` (`crypto_chacha20_poly1305.cc`), which is the
+ * same AEAD routine with a 12-byte nonce and a 16-byte tag, on the thread
+ * pool.
  *
  * `AES_Cipher` is the one path for every mode but CTR: an AEAD's tag follows
  * the ciphertext it authenticates, and decryption splits it off first. CTR is
@@ -19,7 +22,7 @@
 #include "shared.h"
 
 /* Mirrored as `AesMode` in `src/webcrypto/aes.ts`. */
-enum { kAesCbc = 0, kAesCtr = 1, kAesGcm = 2, kAesKw = 3, kAesOcb = 4 };
+enum { kAesCbc = 0, kAesCtr = 1, kAesGcm = 2, kAesKw = 3, kAesOcb = 4, kChaCha20Poly1305 = 5 };
 
 /* Mirrored as `AesConfig` in `src/webcrypto/aes.ts`: what node's
  * `AESCipherTraits::AdditionalConfig` throws before any job runs. */
@@ -36,11 +39,15 @@ static const EVP_CIPHER *aes_cipher(int mode, size_t key_bytes) {
     case kAesGcm: return key_bytes == 16 ? EVP_aes_128_gcm() : key_bytes == 24 ? EVP_aes_192_gcm() : key_bytes == 32 ? EVP_aes_256_gcm() : NULL;
     case kAesKw: return key_bytes == 16 ? EVP_aes_128_wrap() : key_bytes == 24 ? EVP_aes_192_wrap() : key_bytes == 32 ? EVP_aes_256_wrap() : NULL;
     case kAesOcb: return key_bytes == 16 ? EVP_aes_128_ocb() : key_bytes == 24 ? EVP_aes_192_ocb() : key_bytes == 32 ? EVP_aes_256_ocb() : NULL;
+    case kChaCha20Poly1305: return key_bytes == 32 ? EVP_chacha20_poly1305() : NULL;
     default: return NULL;
     }
 }
 
-static bool is_aead(int mode) { return mode == kAesGcm || mode == kAesOcb; }
+static bool is_aead(int mode) { return mode == kAesGcm || mode == kAesOcb || mode == kChaCha20Poly1305; }
+
+/* ChaCha20-Poly1305's fixed sizes. */
+enum { kChaCha20Poly1305IvSize = 12, kChaCha20Poly1305TagSize = 16 };
 
 /* `AESCipherTraits::AdditionalConfig`'s refusals. `length` is CTR's counter
  * bits, or an AEAD's tag bytes. */
@@ -50,7 +57,9 @@ double nts_crypto_aes_config(double mode, double key_bytes, double iv_bytes, dou
     size_t iv_length = mode == kAesKw ? sizeof(default_wrap_iv) : (size_t)iv_bytes;
     if (mode == kAesCtr && (iv_length != 16 || length == 0 || length > 128)) return kAesInvalidCounter;
     if (is_aead((int)mode) && length > 128) return kAesInvalidTagLength;
-    if (mode == kAesOcb) {
+    if (mode == kChaCha20Poly1305) {
+        if (iv_length != kChaCha20Poly1305IvSize) return kAesInvalidIv;
+    } else if (mode == kAesOcb) {
         if (iv_length == 0 || iv_length > 15) return kAesInvalidIv;
     } else if (iv_length < (size_t)EVP_CIPHER_get_iv_length(cipher)) {
         return kAesInvalidIv;
@@ -100,12 +109,14 @@ static bool aes_cipher_run(AesJob *job) {
     bool aead = is_aead(job->mode);
     const unsigned char *iv = job->mode == kAesKw ? default_wrap_iv : job->iv;
     size_t iv_length = job->mode == kAesKw ? sizeof(default_wrap_iv) : job->iv_length;
-    size_t tag_length = aead ? job->length : 0;
+    size_t tag_length = job->mode == kChaCha20Poly1305 ? kChaCha20Poly1305TagSize : aead ? job->length : 0;
     size_t data_length = job->in_length;
     bool ok = true;
     if (job->mode == kAesKw) EVP_CIPHER_CTX_set_flags(ctx, EVP_CIPHER_CTX_FLAG_WRAP_ALLOW);
     ok = EVP_CipherInit_ex(ctx, cipher, NULL, NULL, NULL, job->encrypt) == 1;
-    if (ok && aead) ok = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN, (int)iv_length, NULL) == 1;
+    if (ok && (job->mode == kAesGcm || job->mode == kAesOcb)) {
+        ok = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN, (int)iv_length, NULL) == 1;
+    }
     ok = ok && EVP_CIPHER_CTX_set_key_length(ctx, (int)job->key_length) == 1 &&
          EVP_CipherInit_ex(ctx, NULL, NULL, job->key, iv, job->encrypt) == 1;
     if (ok && aead) {
@@ -135,8 +146,9 @@ static bool aes_cipher_run(AesJob *job) {
     job->out = ok ? malloc(capacity == 0 ? 1 : capacity) : NULL;
     ok = ok && job->out != NULL;
     size_t total = 0;
-    /* An empty update is skipped, as node skips it for older OpenSSLs. */
-    if (ok && data_length > 0) {
+    /* An empty update is skipped, as node's AES path skips it for older
+     * OpenSSLs; its ChaCha20-Poly1305 path makes it. */
+    if (ok && (data_length > 0 || job->mode == kChaCha20Poly1305)) {
         ok = EVP_CipherUpdate(ctx, job->out, &written, job->in, (int)data_length) == 1;
         total += (size_t)written;
     }
