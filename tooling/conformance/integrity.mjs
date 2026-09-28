@@ -151,6 +151,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { OUTCOMES, materialise, outcomeFixtures, runMode } from "./outcomes-project.mjs";
+import { frontendFor } from "./pin.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -158,7 +159,8 @@ const KNOWN = join(HERE, "integrity.known");
 /** The projects built as addons: their exported surface is called from outside. */
 const ADDON = /^runtime\/(node|web-platform)(\/|$)/;
 const NTS = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
-const env = { ...process.env, NTS_TSGO: process.env.NTS_TSGO ?? join(ROOT, "target/tsgo") };
+const FRONTEND = frontendFor(NTS, ROOT);
+const env = { ...process.env, NTS_TSGO: FRONTEND.path };
 // Four listings per project; `http` alone lowers for about 95 s. Memory, not
 // cores, is what this box runs out of.
 const WORKERS = Number(process.env.NTS_INTEGRITY_JOBS ?? 4);
@@ -721,6 +723,11 @@ if (!existsSync(NTS)) {
   console.log(`  NOT MEASURED: no compiler at ${NTS}; set NTS_BIN`);
   process.exit(2);
 }
+// No frontend, and every project prints nothing: which reads as "0 violations".
+if (!FRONTEND.exists) {
+  console.log(`  NOT MEASURED: no frontend at ${FRONTEND.path} -- in a worktree, set NTS_TSGO to the main tree's, or use a pin (it records its frontend)`);
+  process.exit(2);
+}
 
 const under = (base) =>
   readdirSync(join(ROOT, base), { withFileTypes: true })
@@ -915,5 +922,7 @@ for (const k of expired) console.log(`  ^ no longer occurs, remove it from tooli
 for (const u of unmeasured.sort()) console.log(`  NOT MEASURED       ${u}`);
 for (const s of skipped.sort()) console.log(`  skipped            ${s}`);
 const ok = fresh.length === 0 && unmeasured.length === 0 && measured > 0;
-console.log(ok ? `  whole: no violation beyond the ${held.length} known` : `  ${fresh.length} violation(s), ${unmeasured.length} project(s) not measured`);
+console.log(ok ? `  whole: no violation beyond the ${held.length} known`
+  : measured === 0 ? `  NOT MEASURED: none of ${projects.length} project(s) was measured, so no violation count means anything`
+  : `  ${fresh.length} violation(s), ${unmeasured.length} project(s) not measured`);
 process.exit(ok ? 0 : 1);

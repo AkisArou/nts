@@ -74,6 +74,18 @@ export function provenanceOf(binary) {
   }
 }
 
+/**
+ * The frontend a tool should run `binary` with: `NTS_TSGO` when set, else the
+ * one a pin recorded beside the binary, else `root`'s `target/tsgo`. And
+ * whether it exists -- a tool run from a worktree resolves `target/tsgo`
+ * against the worktree, which has none, and every project then prints nothing
+ * and reads as "0 violations". A pin names its frontend so that cannot happen.
+ */
+export function frontendFor(binary, root) {
+  const path = process.env.NTS_TSGO ?? provenanceOf(binary)?.tsgo?.path ?? join(root, "target/tsgo");
+  return { path, exists: existsSync(path) };
+}
+
 /** One line for a report: the commit, what was applied, and the frontend. */
 export function describe(record) {
   if (!record) return "provenance unknown: not built by pin.mjs";
