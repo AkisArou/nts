@@ -2284,12 +2284,35 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     let want_passes = std::env::args().any(|arg| arg == "--prepared" || arg == "--rc");
     let (program, diagnostics) = if want_passes {
         let entry = selected_roots(Shape::from_flags());
+        // **The foreign table, which this did not pass and every emitter does.**
+        // `prepare_unverified` copies `options.foreign` into `program.foreign`,
+        // so without it a GIR, Objective-C or COM program printed here is not
+        // the program a backend receives -- the listing this command exists to
+        // show. `entry_files` is the same omission one field over: it decides
+        // whose exports the surface is computed from.
+        //
+        // **Roots are deliberately still the flags', and that is a known gap
+        // rather than an oversight.** `emit` takes them from the config through
+        // `configured_surface`, so a project with an `nts.config.ts` is rooted
+        // at `EntrySurface` there and at `EveryExport` here -- the Assistant
+        // lane measured the cost on React's apps, 3,831 functions against
+        // 2,088, an over-report of 18% and 32%, and the GTK lane read a bare
+        // `nts hir` as "what the build keeps" and spent an hour on a pruning
+        // mechanism that was not there.
+        //
+        // Sharing `emit_options` outright was tried and is worse: `Shape::from_flags`
+        // cannot know a config's product is an executable, so `configured_surface`
+        // reaches `configured_product` and bails with `this config declares
+        // ["host", "host-llvm"]; name one with --product` -- and `--product` is
+        // not plumbed into this path, so there is no way to answer it. Closing
+        // the roots half means resolving the config's product here the way
+        // `nts build` does, and deriving the shape from it. Until then
+        // `hir --prepared --main` gives an app's real roots.
+        let foreign = foreign_tables(&snapshot);
         let options = hir::Options {
-            provider: if std::env::args().any(|arg| arg == "--rc") {
-                hir::Provider::ReferenceCounting
-            } else {
-                hir::Provider::NoGc
-            },
+            provider: selected_provider(),
+            foreign: &foreign,
+            entry_files: &nts_frontend_ts::entry_uris(tsconfig, &snapshot),
             // Through `selected_roots`, so this prints the program a backend
             // receives rather than a neighbouring one. It did not: the old
             // parser here never appended module initialization, so
