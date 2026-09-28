@@ -1745,6 +1745,14 @@ named:
   (`new Gio.ThemedIcon({ name })`, Notification) needs construction through
   `g_object_new_with_properties`, binding and lowering together -- one demo
   so far.
+- Open, a representation: GLib's refcounted records (`GDateTime`, `GBytes`,
+  `GRegex`, `GKeyFile`, `GMainLoop`...) bind as opaque handles a program
+  unrefs by hand, since their `get_type` is declared by GObject's headers
+  rather than GLib's; the shape they want is a counted foreign family, as
+  `GObject` is. And a boxed record's own free (`rgba.free()`) is offered,
+  which frees what the program's box frees again -- GIR marks free
+  functions on six records in all of GLib, so refusing them needs a source
+  of truth rather than a name.
 
 ## Completeness: the binding census
 
