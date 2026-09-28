@@ -55,6 +55,7 @@ interface true true true
 grid ab- a-b --b
 stack b B Bee
 switched b b
+stackmove c,a,b shown=b heard=0 > b,c,a shown=b heard=0
 notebook 0,1,2 two moved=1,0,2>0,2,1 current=true 2 late=2/4
 bar b1>b2 e1>e2 b0>b1 b1>-
 overlay true true true>false mot>mto>mot true

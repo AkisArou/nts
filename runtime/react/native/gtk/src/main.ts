@@ -66,6 +66,10 @@
 //             (as a StackSwitcher does) it goes back to the page its props
 //             name when the app keeps its state; a Stack without the prop
 //             keeps what the user chose
+//   stackmove Stack.Pages React moves take React's order although GtkStack
+//             only appends (c before a, then the shown page b before c); the
+//             shown page stays shown and no move is heard as the user
+//             switching pages
 //   notebook  Notebook.Page elements add pages with tab text, one inserted
 //             before another takes its place in the order; moved back and to
 //             the end, pages keep the current one; one removed goes; one
@@ -614,6 +618,45 @@ function main(): void {
   }
   idle();
   react_gtk_log("switched " + visibleIn(stack) + " " + visibleIn(free));
+
+  let switchesHeard = 0;
+  const moving = createInstance(
+    "GtkStack",
+    {
+      onNotifyVisibleChildName: () => {
+        switchesHeard++;
+      },
+    },
+    container,
+    0,
+    {},
+  );
+  const movingPages: HostNode[] = [];
+  for (const pageName of ["a", "b", "c"]) {
+    const page = createInstance("GtkStack.Page", { name: pageName }, container, 0, {});
+    appendInitialChild(page, createInstance("GtkLabel", { label: pageName }, container, 0, {}));
+    appendInitialChild(moving, page);
+    movingPages.push(page);
+  }
+  const stackOrder = (): string => {
+    if (!(moving instanceof StackNode)) {
+      return "not a stack";
+    }
+    let names = "";
+    for (let child = moving.gtk.get_first_child(); child !== null; child = child.get_next_sibling()) {
+      names += (names === "" ? "" : ",") + String(moving.gtk.get_page(child).get_name());
+    }
+    return names;
+  };
+  if (moving instanceof StackNode) {
+    moving.gtk.set_visible_child_name("b");
+  }
+  switchesHeard = 0;
+  insertBefore(moving, movingPages[2]!, movingPages[0]!);
+  let stackMoves = stackOrder() + " shown=" + visibleIn(moving) + " heard=" + String(switchesHeard);
+  insertBefore(moving, movingPages[1]!, movingPages[2]!);
+  stackMoves += " > " + stackOrder() + " shown=" + visibleIn(moving) + " heard=" + String(switchesHeard);
+  react_gtk_log("stackmove " + stackMoves);
 
   const notebook = createInstance("GtkNotebook", {}, container, 0, {});
   const tabs: HostNode[] = [];

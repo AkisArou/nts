@@ -335,9 +335,11 @@ and creates them. A widget placed in such a container directly is an error
 that names the element to use. A container's prop that selects a child
 (a Stack's `visibleChildName`, a Notebook's `page`) is applied before the
 container has children, since React sets a node's props before placing
-its children. So the page it names selects itself when it is attached. A
-Stack keeps its pages in the order they were added: GtkStack cannot move
-one, so a page React moves goes last.
+its children. So the page it names selects itself when it is attached.
+GtkStack only appends a page, so a page React places before another goes
+last and the pages after it in React's order are added again after it: a
+switcher lists them in React's order, the page shown stays shown, and none
+of it is heard as the user switching pages (the driver's `stackmove` line).
 
 A HeaderBar's or ActionBar's start and end are groups, which hold any
 number of widgets:

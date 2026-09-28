@@ -20,7 +20,7 @@
 import { GtkActionBar, GtkFixed, GtkGrid, GtkHeaderBar, GtkNotebook, GtkOverlay, GtkStack, type GtkStackPage, type GtkWidget } from "c:Gtk-4.0";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 
-import { HostNode, insertAt, PlacedNode, type Props, textOf, type WidgetNode } from "./HostNode.ts";
+import { HostNode, insertAt, PlacedNode, type Props, textOf, type WidgetNode, writeAsReact } from "./HostNode.ts";
 
 function numberProp(props: Props, key: string, fallback: number): number {
   const value = props[key];
@@ -90,10 +90,37 @@ export interface StackChildren {
 }
 
 /**
- * A page keeps the order it was added in: GtkStack has no way to move one, so
- * a page React moves goes last (a switcher then lists it last).
+ * GtkStack only appends a page. A page React places before another goes
+ * last, and the pages after it in React's order are added again after it, so
+ * a switcher lists them in React's order. The page shown stays shown, and
+ * none of it is heard as the user switching pages.
  */
 export class StackPageNode extends PlacedNode {
+  placeIn(parent: WidgetNode, before: HostNode | null): void {
+    const stack = parent.widget instanceof GtkStack ? parent.widget : null;
+    if (stack === null || before === null) {
+      super.placeIn(parent, before);
+      return;
+    }
+    writeAsReact(() => this.placeBefore(stack, parent, before));
+  }
+
+  private placeBefore(stack: GtkStack, parent: WidgetNode, before: HostNode): void {
+    const shown = stack.get_visible_child();
+    super.placeIn(parent, before);
+    // Placed again with no `before`, a follower does not recur.
+    const after = parent.childrenAfter(this);
+    for (let i = 0; i < after.length; i++) {
+      const follower = after[i]!;
+      if (follower instanceof StackPageNode) {
+        follower.placeIn(parent, null);
+      }
+    }
+    if (shown !== null && shown.get_parent() === stack) {
+      stack.set_visible_child(shown);
+    }
+  }
+
   protected attach(owner: WidgetNode, widget: GtkWidget): void {
     const stack = owner.widget;
     if (!(stack instanceof GtkStack)) {
