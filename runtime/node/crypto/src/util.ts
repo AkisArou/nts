@@ -227,6 +227,22 @@ export function peekedCryptoError(fallback: string): OpenSSLError {
 }
 
 /**
+ * What `ThrowCryptoError` throws for an error ncrypto peeked inside a mark it
+ * then popped -- a key's encoding: the oldest error as the message and the
+ * decoration, and no `opensslErrorStack`, because nothing is left on the
+ * queue to capture.
+ */
+export function markedCryptoError(fallback: string): OpenSSLError {
+  const record = nts_crypto_take_errors();
+  if (record.length === 3) return new OpenSSLError(fallback);
+  const error = new OpenSSLError(record[3]!);
+  if (record[0] !== "") error.library = record[0];
+  if (record[1] !== "") error.reason = record[1];
+  if (record[2] !== "") error.code = record[2];
+  return error;
+}
+
+/**
  * Node's `filterDuplicateStrings`: one entry per name regardless of case, the
  * last spelling of each kept in the place of the first, sorted.
  */

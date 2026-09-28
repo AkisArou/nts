@@ -5,22 +5,24 @@
  * Parsing calls what ncrypto calls -- `PEM_read_bio_PrivateKey` with node's
  * password callback, `d2i_PUBKEY`, `d2i_PKCS8PrivateKey_bio`, the three PEM
  * labels a public key may carry -- because the error a program sees for a bad
- * key is whatever those calls queue, and node's tests read it. Encoding uses
- * the writers that produce the same bytes without OpenSSL's deprecated
- * per-algorithm types: `PEM_write_bio_PrivateKey_traditional` for PKCS#1 and
- * SEC1, `i2d_PublicKey` for a PKCS#1 public key.
+ * key is whatever those calls queue, and node's tests read it. Encoding is
+ * ncrypto's OpenSSL 3 form: the encoder for PKCS#1 and SEC1, the PKCS#8 and
+ * SPKI writers for the rest.
  *
  * JWK components cross as bytes in a fixed order per key family; the
  * base64url, the property names and their order are the TypeScript's. */
 #include <openssl/bio.h>
+#include <openssl/buffer.h>
 #include <openssl/core_names.h>
 #include <openssl/ec.h>
+#include <openssl/encoder.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/objects.h>
 #include <openssl/param_build.h>
 #include <openssl/pem.h>
 #include <openssl/x509.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -131,51 +133,54 @@ static bool is_rsa_private_key(const unsigned char *data, size_t size) {
     return length >= 3 && data[offset] == 2 && data[offset + 1] == 1 && !(data[offset + 2] & 0xfe);
 }
 
-/* ncrypto's `keyOrError`: a missing key is a failure, unless OpenSSL's oldest
- * error says a password was needed and none was given. */
+/* ncrypto's `keyOrError`: anything OpenSSL queued makes the parse a failure,
+ * a key in hand or not -- unless its oldest error says a password was needed
+ * and none was given. */
 static double key_or_error(EVP_PKEY *pkey, const Passphrase *passphrase) {
-    if (pkey != NULL) return key_claim(pkey);
     unsigned long error = ERR_peek_error();
-    if (ERR_GET_LIB(error) == ERR_LIB_PEM && ERR_GET_REASON(error) == PEM_R_BAD_PASSWORD_READ &&
-        !passphrase->given) {
-        ERR_clear_error();
-        return kKeyNeedPassphrase;
+    if (error != 0) {
+        EVP_PKEY_free(pkey);
+        if (ERR_GET_LIB(error) == ERR_LIB_PEM && ERR_GET_REASON(error) == PEM_R_BAD_PASSWORD_READ &&
+            !passphrase->given) {
+            ERR_clear_error();
+            return kKeyNeedPassphrase;
+        }
+        nts_crypto_record_failure();
+        return kKeyFailed;
     }
-    nts_crypto_record_failure();
-    return kKeyFailed;
+    if (pkey == NULL) {
+        nts_crypto_record_failure();
+        return kKeyFailed;
+    }
+    return key_claim(pkey);
 }
 
-/* ncrypto's `TryParsePrivateKey`. */
+/* ncrypto's `TryParsePrivateKey`. PKCS#1 and SEC1 DER are whatever
+ * `d2i_PrivateKey_bio` recognises: the encoding type names the structure
+ * the program expects, not a check ncrypto makes. */
 static double parse_private(int format, int type, const unsigned char *data, size_t size,
                             const Passphrase *passphrase) {
+    BIO *bio = BIO_new_mem_buf(data, (int)size);
+    if (bio == NULL) return key_or_error(NULL, passphrase);
+    EVP_PKEY *pkey = NULL;
     if (format == kFormatPem) {
-        BIO *bio = BIO_new_mem_buf(data, (int)size);
-        if (bio == NULL) return key_or_error(NULL, passphrase);
-        EVP_PKEY *pkey = PEM_read_bio_PrivateKey(bio, NULL, password_callback, (void *)passphrase);
-        BIO_free(bio);
-        return key_or_error(pkey, passphrase);
-    }
-    const unsigned char *p = data;
-    if (type == kEncodingPkcs1) {
-        return key_or_error(d2i_PrivateKey(EVP_PKEY_RSA, NULL, &p, (long)size), passphrase);
-    }
-    if (type == kEncodingPkcs8) {
-        BIO *bio = BIO_new_mem_buf(data, (int)size);
-        if (bio == NULL) return key_or_error(NULL, passphrase);
-        EVP_PKEY *pkey = NULL;
-        if (is_encrypted_private_key_info(data, size)) {
-            pkey = d2i_PKCS8PrivateKey_bio(bio, NULL, password_callback, (void *)passphrase);
-        } else {
-            PKCS8_PRIV_KEY_INFO *info = d2i_PKCS8_PRIV_KEY_INFO_bio(bio, NULL);
-            if (info != NULL) {
-                pkey = EVP_PKCS82PKEY(info);
-                PKCS8_PRIV_KEY_INFO_free(info);
-            }
+        pkey = PEM_read_bio_PrivateKey(bio, NULL, password_callback, (void *)passphrase);
+    } else if (type == kEncodingPkcs8 && is_encrypted_private_key_info(data, size)) {
+        pkey = d2i_PKCS8PrivateKey_bio(bio, NULL, password_callback, (void *)passphrase);
+    } else if (type == kEncodingPkcs8) {
+        PKCS8_PRIV_KEY_INFO *info = d2i_PKCS8_PRIV_KEY_INFO_bio(bio, NULL);
+        if (info == NULL) {
+            BIO_free(bio);
+            nts_crypto_record_failure();
+            return kKeyFailed;
         }
-        BIO_free(bio);
-        return key_or_error(pkey, passphrase);
+        pkey = EVP_PKCS82PKEY(info);
+        PKCS8_PRIV_KEY_INFO_free(info);
+    } else {
+        pkey = d2i_PrivateKey_bio(bio, NULL);
     }
-    return key_or_error(d2i_PrivateKey(EVP_PKEY_EC, NULL, &p, (long)size), passphrase);
+    BIO_free(bio);
+    return key_or_error(pkey, passphrase);
 }
 
 typedef EVP_PKEY *(*DerParser)(const unsigned char **p, long length);
@@ -713,9 +718,66 @@ static NtsView *bio_contents(BIO *bio) {
     return nts_view_from_bytes(data, length < 0 ? 0 : (double)length);
 }
 
-/* ncrypto's `writePrivateKey`: PKCS#1 and SEC1 are the traditional form, and
- * only PEM may be encrypted there; PKCS#8 may be encrypted in either. NULL
- * is a failure on the error record ("Failed to encode private key"). */
+/* ncrypto's `WriteEncodedPKey`: OpenSSL 3's encoder for a structure, with a
+ * cipher and passphrase when there is one. */
+static bool write_encoded(BIO *bio, EVP_PKEY *pkey, int selection, bool pem, const char *structure,
+                          const EVP_CIPHER *cipher, const unsigned char *pass, size_t pass_length) {
+    OSSL_ENCODER_CTX *ctx = OSSL_ENCODER_CTX_new_for_pkey(pkey, selection, pem ? "PEM" : "DER", structure, NULL);
+    bool ok = ctx != NULL && OSSL_ENCODER_CTX_get_num_encoders(ctx) > 0 &&
+              (cipher == NULL || (OSSL_ENCODER_CTX_set_cipher(ctx, EVP_CIPHER_get0_name(cipher), NULL) == 1 &&
+                                  OSSL_ENCODER_CTX_set_passphrase(ctx, pass, pass_length) == 1)) &&
+              OSSL_ENCODER_to_bio(ctx, bio) == 1;
+    OSSL_ENCODER_CTX_free(ctx);
+    return ok;
+}
+
+static int write_der_view(const void *x, unsigned char **out) {
+    const BUF_MEM *der = x;
+    if (der == NULL || der->data == NULL || der->length > INT_MAX) return -1;
+    if (out != NULL) {
+        memcpy(*out, der->data, der->length);
+        *out += der->length;
+    }
+    return (int)der->length;
+}
+
+/* ncrypto's `WriteEncryptedTraditionalPEM`: an RSA key's PKCS#1 DER under
+ * a legacy PEM encryption with an empty passphrase, which the encoder will not
+ * write. */
+static bool write_encrypted_traditional(BIO *bio, EVP_PKEY *pkey, const EVP_CIPHER *cipher,
+                                        const unsigned char *pass, size_t pass_length) {
+    OSSL_ENCODER_CTX *ctx = OSSL_ENCODER_CTX_new_for_pkey(pkey, OSSL_KEYMGMT_SELECT_KEYPAIR, "DER", "pkcs1", NULL);
+    unsigned char *der = NULL;
+    size_t der_length = 0;
+    bool ok = ctx != NULL && OSSL_ENCODER_to_data(ctx, &der, &der_length) == 1;
+    OSSL_ENCODER_CTX_free(ctx);
+    if (ok) {
+        BUF_MEM view = {.length = der_length, .data = (char *)der};
+        ok = PEM_ASN1_write_bio(write_der_view, PEM_STRING_RSA, bio, &view, cipher, pass, (int)pass_length,
+                                NULL, NULL) == 1;
+    }
+    OPENSSL_free(der);
+    return ok;
+}
+
+/* ncrypto's `ECKeyHasMissingOid`: a named curve OpenSSL knows by name but
+ * has no OID to write for. */
+static bool ec_key_has_missing_oid(EVP_PKEY *pkey) {
+    if (EVP_PKEY_get_base_id(pkey) != EVP_PKEY_EC) return false;
+    char group[80];
+    if (EVP_PKEY_get_utf8_string_param(pkey, OSSL_PKEY_PARAM_GROUP_NAME, group, sizeof(group), NULL) != 1) {
+        return false;
+    }
+    int nid = nts_crypto_curve_nid(group);
+    if (nid == NID_undef) return false;
+    const ASN1_OBJECT *oid = OBJ_nid2obj(nid);
+    return oid == NULL || OBJ_length(oid) == 0;
+}
+
+/* ncrypto's `writePrivateKey`, in its OpenSSL 3 form. PKCS#1 is only for an
+ * RSA key and SEC1 only for an EC key, and only PEM carries their cipher;
+ * PKCS#8 may be encrypted in either. NULL is a failure on the error record
+ * ("Failed to encode private key"). */
 NtsView *nts_crypto_key_export_private(double handle, double format, double type, double cipher_id,
                                        NtsView *passphrase) {
     ERR_clear_error();
@@ -727,19 +789,33 @@ NtsView *nts_crypto_key_export_private(double handle, double format, double type
         return NULL;
     }
     const EVP_CIPHER *cipher = cipher_id < 0 ? NULL : nts_crypto_cipher_at(cipher_id);
-    unsigned char *pass = cipher == NULL ? NULL : nts_view_bytes(passphrase);
-    int pass_length = cipher == NULL ? 0 : (int)nts_view_byte_length(passphrase);
+    /* Never NULL: OpenSSL reads a NULL passphrase as "ask", and would prompt
+     * on the terminal for an empty one. */
+    static const unsigned char no_passphrase[1] = {0};
+    size_t pass_length = (size_t)nts_view_byte_length(passphrase);
+    const unsigned char *pass = pass_length == 0 ? no_passphrase : nts_view_bytes(passphrase);
     bool pem = (int)format == kFormatPem;
-    int ok = 0;
-    if ((int)type == kEncodingPkcs8) {
-        ok = pem ? PEM_write_bio_PKCS8PrivateKey(bio, pkey, cipher, (char *)pass, pass_length, NULL, NULL)
-                 : i2d_PKCS8PrivateKey_bio(bio, pkey, cipher, (char *)pass, pass_length, NULL, NULL);
-    } else {
-        ok = pem ? PEM_write_bio_PrivateKey_traditional(bio, pkey, cipher, pass, pass_length, NULL, NULL)
-                 : i2d_PrivateKey_bio(bio, pkey);
+    const EVP_CIPHER *pem_cipher = pem ? cipher : NULL;
+    bool ok = false;
+    switch ((int)type) {
+    case kEncodingPkcs1:
+        if (EVP_PKEY_get_base_id(pkey) != EVP_PKEY_RSA) break;
+        ok = pem_cipher != NULL && pass_length == 0
+                 ? write_encrypted_traditional(bio, pkey, pem_cipher, pass, pass_length)
+                 : write_encoded(bio, pkey, OSSL_KEYMGMT_SELECT_ALL, pem, "pkcs1", pem_cipher, pass, pass_length);
+        break;
+    case kEncodingPkcs8:
+        ok = (pem ? PEM_write_bio_PKCS8PrivateKey(bio, pkey, cipher, (const char *)pass, (int)pass_length, NULL, NULL)
+                  : i2d_PKCS8PrivateKey_bio(bio, pkey, cipher, (const char *)pass, (int)pass_length, NULL, NULL)) == 1;
+        break;
+    case kEncodingSec1:
+        if (EVP_PKEY_get_base_id(pkey) != EVP_PKEY_EC) break;
+        ok = write_encoded(bio, pkey, OSSL_KEYMGMT_SELECT_ALL, pem, "type-specific", pem_cipher, pass, pass_length);
+        break;
+    default: break;
     }
     NtsView *result = NULL;
-    if (ok == 1) {
+    if (ok) {
         result = bio_contents(bio);
     } else {
         nts_crypto_record_failure();
@@ -748,7 +824,8 @@ NtsView *nts_crypto_key_export_private(double handle, double format, double type
     return result;
 }
 
-/* ncrypto's `writePublicKey`: SPKI, or PKCS#1 for RSA. */
+/* ncrypto's `writePublicKey`, in its OpenSSL 3 form: PKCS#1 for an RSA key
+ * through the encoder, or SPKI -- refused for an EC key with no OID. */
 NtsView *nts_crypto_key_export_public(double handle, double format, double type) {
     ERR_clear_error();
     EVP_PKEY *pkey = nts_crypto_key_at(handle);
@@ -758,20 +835,17 @@ NtsView *nts_crypto_key_export_public(double handle, double format, double type)
         return NULL;
     }
     bool pem = (int)format == kFormatPem;
-    int ok = 0;
+    bool ok = false;
     if ((int)type == kEncodingPkcs1) {
-        unsigned char *der = NULL;
-        int der_length = i2d_PublicKey(pkey, &der);
-        if (der_length > 0) {
-            ok = pem ? PEM_write_bio(bio, "RSA PUBLIC KEY", "", der, der_length) > 0
-                     : BIO_write(bio, der, der_length) == der_length;
-        }
-        OPENSSL_free(der);
+        ok = EVP_PKEY_get_base_id(pkey) == EVP_PKEY_RSA &&
+             write_encoded(bio, pkey, OSSL_KEYMGMT_SELECT_PUBLIC_KEY, pem, "pkcs1", NULL, NULL, 0);
+    } else if (ec_key_has_missing_oid(pkey)) {
+        ERR_raise(ERR_LIB_EC, EC_R_MISSING_OID);
     } else {
-        ok = pem ? PEM_write_bio_PUBKEY(bio, pkey) : i2d_PUBKEY_bio(bio, pkey);
+        ok = (pem ? PEM_write_bio_PUBKEY(bio, pkey) : i2d_PUBKEY_bio(bio, pkey)) == 1;
     }
     NtsView *result = NULL;
-    if (ok == 1) {
+    if (ok) {
         result = bio_contents(bio);
     } else {
         nts_crypto_record_failure();

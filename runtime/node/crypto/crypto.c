@@ -11,10 +11,12 @@
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
+#include <openssl/hmac.h>
 #include <openssl/kdf.h>
 #include <openssl/core_names.h>
 #include <openssl/params.h>
 #include <openssl/rand.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <uv.h>
@@ -561,9 +563,20 @@ NtsView *nts_crypto_digest_utf8(double id, NtsString *input, double length) {
 /* ------------------------------------------------------------ derivations */
 
 /* ncrypto's `CSPRNG`: retry after a reseed for as long as the reseed works. */
+/* ncrypto's `CSPRNG`: retried after reseeding, except where OpenSSL 3 cannot
+ * instantiate a DRBG at all -- a misconfigured installation can report
+ * itself seeded and still fail every draw, and reseeding would loop forever. */
 static bool csprng(unsigned char *out, size_t size) {
     do {
         if (RAND_status() == 1 && RAND_bytes_ex(NULL, out, size, 0) == 1) return true;
+        unsigned long code = ERR_peek_last_error();
+        if (ERR_GET_LIB(code) == ERR_LIB_RAND) {
+            int reason = ERR_GET_REASON(code);
+            if (reason == RAND_R_ERROR_INSTANTIATING_DRBG || reason == RAND_R_UNABLE_TO_FETCH_DRBG ||
+                reason == RAND_R_UNABLE_TO_CREATE_DRBG) {
+                return false;
+            }
+        }
     } while (RAND_poll() == 1);
     return false;
 }
@@ -580,34 +593,31 @@ static bool pbkdf2(const unsigned char *password, size_t password_length,
                              (int)salt_length, iterations, md, (int)length, out) == 1;
 }
 
-/* ncrypto's `hkdf`: extract-and-expand, with the RFC 5869 salt of `HashLen`
- * zeros when the caller gave none. */
+/* ncrypto's `hkdf`: the extract step by hand -- an HMAC of the key under the
+ * salt, or under the RFC 5869 salt of `HashLen` zeros when there is none --
+ * and OpenSSL's HKDF only to expand, because its own extract refuses the
+ * zero-length key Web Crypto needs. */
 static bool hkdf(const EVP_MD *md, const unsigned char *key, size_t key_length,
                  const unsigned char *salt, size_t salt_length, const unsigned char *info,
                  size_t info_length, unsigned char *out, size_t length) {
     /* As `pbkdf2`: zero is a failure with nothing queued. */
-    if (length == 0) return false;
+    if (length == 0 || info_length > INT_MAX || salt_length > INT_MAX) return false;
     static const unsigned char zeros[EVP_MAX_MD_SIZE] = {0};
     if (salt_length == 0) {
         salt = zeros;
         salt_length = (size_t)EVP_MD_get_size(md);
     }
-    EVP_KDF *kdf = EVP_KDF_fetch(NULL, "HKDF", NULL);
-    EVP_KDF_CTX *ctx = kdf == NULL ? NULL : EVP_KDF_CTX_new(kdf);
-    EVP_KDF_free(kdf);
-    if (ctx == NULL) return false;
-    static const unsigned char empty[1] = {0};
-    OSSL_PARAM params[] = {
-        OSSL_PARAM_construct_utf8_string(OSSL_KDF_PARAM_DIGEST, (char *)EVP_MD_get0_name(md), 0),
-        OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_KEY,
-                                          (void *)(key_length == 0 ? empty : key), key_length),
-        OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_SALT, (void *)salt, salt_length),
-        OSSL_PARAM_construct_octet_string(OSSL_KDF_PARAM_INFO,
-                                          (void *)(info_length == 0 ? empty : info), info_length),
-        OSSL_PARAM_construct_end(),
-    };
-    bool ok = EVP_KDF_derive(ctx, out, length, params) == 1;
-    EVP_KDF_CTX_free(ctx);
+    unsigned char prk[EVP_MAX_MD_SIZE];
+    unsigned int prk_length = sizeof(prk);
+    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_HKDF, NULL);
+    bool ok = ctx != NULL && EVP_PKEY_derive_init(ctx) > 0 && EVP_PKEY_CTX_set_hkdf_md(ctx, md) > 0 &&
+              EVP_PKEY_CTX_add1_hkdf_info(ctx, info, (int)info_length) > 0 &&
+              HMAC(md, salt, (int)salt_length, key, key_length, prk, &prk_length) != NULL &&
+              EVP_PKEY_CTX_set_hkdf_mode(ctx, EVP_PKEY_HKDEF_MODE_EXPAND_ONLY) > 0 &&
+              EVP_PKEY_CTX_set1_hkdf_key(ctx, prk, (int)prk_length) > 0 &&
+              EVP_PKEY_derive(ctx, out, &length) > 0;
+    OPENSSL_cleanse(prk, sizeof(prk));
+    EVP_PKEY_CTX_free(ctx);
     return ok;
 }
 

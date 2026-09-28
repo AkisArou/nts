@@ -31,7 +31,14 @@ import {
 import { registerKeyObjectBrand } from "../../internal/brands.ts";
 import { validateObject, validateOneOf, validateString } from "../../internal/validators.ts";
 import { isAnyArrayBuffer, isArrayBufferView } from "../../util/src/types.ts";
-import { bytesOf, cipherId, getArrayBufferOrView, peekedCryptoError, unsignedBigInt } from "./util.ts";
+import {
+  bytesOf,
+  cipherId,
+  getArrayBufferOrView,
+  markedCryptoError,
+  peekedCryptoError,
+  unsignedBigInt,
+} from "./util.ts";
 import type { ByteSource } from "./util.ts";
 
 export type KeyObjectType = "secret" | "public" | "private";
@@ -427,7 +434,7 @@ function encoded(bytes: Uint8Array, format: number): Buffer | string {
 /** Node's `WritePublicKey`: PEM or DER, or OpenSSL's reason it could not be. */
 function writePublicKey(native: number, format: number, type: number | undefined): Buffer | string {
   const bytes = nts_crypto_key_export_public(native, format, type ?? -1);
-  if (bytes === null) throw peekedCryptoError("Failed to encode public key");
+  if (bytes === null) throw markedCryptoError("Failed to encode public key");
   return encoded(bytes, format);
 }
 
@@ -446,7 +453,7 @@ function writePrivateKey(
     cipher,
     passphrase === undefined ? noBytes : bytesOf(passphrase),
   );
-  if (bytes === null) throw peekedCryptoError("Failed to encode private key");
+  if (bytes === null) throw markedCryptoError("Failed to encode private key");
   return encoded(bytes, format);
 }
 

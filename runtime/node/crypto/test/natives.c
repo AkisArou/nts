@@ -186,6 +186,9 @@ static void derivations(void) {
                                        bytes("", 0), 42),
                        "8da4e775a563c18f715f802a063c5a31b8a11f5c5ee1879ec3454e5f3c738d2d9d201395faa4b61a96c8"));
     expect_true("HKDF of length 0 fails", nts_crypto_hkdf(sha256, utf8("k"), utf8("s"), utf8("i"), 0) == NULL);
+    expect_true("HKDF of an empty key is node's answer, which is why the extract step is by hand",
+                is_hex(nts_crypto_hkdf(sha256, bytes("", 0), utf8("salt"), utf8("info"), 32),
+                       "7aac7b8120501c2c8e1ee50e6cde135361e99ceb9d8d406ac528b9e9175614c0"));
 
     expect_true("scrypt parameters N=16 r=1 p=1 are valid", nts_crypto_scrypt_valid(16, 1, 1, 32 << 20));
     expect_true("N=3 is not", !nts_crypto_scrypt_valid(3, 1, 1, 32 << 20));
@@ -381,6 +384,23 @@ static void keys(void) {
     free(mgf1);
     expect_true("  and has no JWK", nts_crypto_key_export_jwk(pss, false)->header.length == 0 &&
                                         nts_crypto_key_status() == -3);
+
+    /* ncrypto's provider forms, which node's answers show. */
+    NtsView *traditional = nts_crypto_key_export_private(rsa, 1, 0, aes, none);
+    expect_true("PKCS#1 PEM under a cipher and an empty passphrase is legacy PEM encryption, and no prompt",
+                traditional != NULL && memmem(nts_view_bytes(traditional), (size_t)nts_view_byte_length(traditional),
+                                              "Proc-Type: 4,ENCRYPTED", 22) != NULL);
+    expect_true("  and opens with the empty passphrase",
+                nts_crypto_key_equals(nts_crypto_key_parse_private(1, -1, traditional, none, true), rsa));
+    NtsView *empty_pkcs8 = nts_crypto_key_export_private(rsa, 1, 1, aes, none);
+    expect_true("PKCS#8 under an empty passphrase round trips too",
+                nts_crypto_key_equals(nts_crypto_key_parse_private(1, -1, empty_pkcs8, none, true), rsa));
+    NtsView *sec1 = nts_crypto_key_export_private(ec, 0, 3, -1, none);
+    double sec1_as_pkcs1 = nts_crypto_key_parse_private(0, 0, sec1, none, false);
+    expect_true("SEC1 DER named as PKCS#1 is still read, as an EC key -- the type is not a check ncrypto makes",
+                sec1_as_pkcs1 > 0 && nts_crypto_key_equals(sec1_as_pkcs1, ec));
+    expect_true("an EC key has no PKCS#1 form", nts_crypto_key_export_private(ec, 0, 0, -1, none) == NULL);
+    nts_crypto_take_errors();
 
     expect_true("garbage is not a key", nts_crypto_key_parse_private(1, -1, utf8("garbage"), none, false) == 0);
     expect_true("  and OpenSSL says so", errors_mention("DECODER routines::unsupported"));
