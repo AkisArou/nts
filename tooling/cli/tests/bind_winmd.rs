@@ -624,6 +624,34 @@ fn a_struct_result_is_fulfilled_as_a_plain_object() {
     let _ = std::fs::remove_dir_all(&out);
 }
 
+/// An array of an enum is an array of its 32-bit underlying integer, as any
+/// array of numbers is: `GetPreferredInteractionMode` takes an `Int32Array`
+/// of `UserInteractionMode` members, and an array one answers is one too.
+#[test]
+fn an_enum_array_is_its_integer_typed_array() {
+    let Some(metadata) = winrt_metadata() else {
+        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        return;
+    };
+    let out = std::env::temp_dir().join(format!("nts-bind-winrt-enum-array-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    let run = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .args(["bind-winmd", "Windows.UI.ViewManagement", "Windows.Media.Devices", "--out"])
+        .arg(&out)
+        .env("NTS_WINRT_METADATA", &metadata)
+        .output()
+        .unwrap();
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    let view = std::fs::read_to_string(out.join("Windows.UI.ViewManagement.d.ts")).unwrap();
+    assert!(
+        view.contains("getPreferredInteractionMode(supportedModes: Counted<CElements<Int32Array, \"const int32_t\">, CNumber<\"uint32\">, \"before\">): CEnum<UserInteractionMode, c_int32>;"),
+        "{view}"
+    );
+    let devices = std::fs::read_to_string(out.join("Windows.Media.Devices.d.ts")).unwrap();
+    assert!(devices.contains("get_SupportedModes(this: IDigitalWindowControl): Int32Array;"), "{devices}");
+    let _ = std::fs::remove_dir_all(&out);
+}
+
 /// An array the callee allocates and hands back (`ReceiveArray`) is a typed
 /// array of the program's: `CopyToByteArray`'s `[out] byte[]&` answers a
 /// `Uint8Array`, and `IPropertyValue.GetInt32Array` an `Int32Array`. An

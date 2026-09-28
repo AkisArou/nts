@@ -1364,8 +1364,9 @@ impl Writer<'_> {
                 let written = match ty {
                     Type::RefMut(written) => written,
                     // `GetMany`'s buffer, which the caller allocates and the
-                    // callee fills.
-                    Type::Array(_) => return Err("an array".to_owned()),
+                    // callee fills: lent in place above where it holds bytes
+                    // or numbers.
+                    Type::Array(element) => return Err(format!("an array the callee fills, of {}", element_name(element))),
                     _ => return Err("an `out` parameter not written through a pointer".to_owned()),
                 };
                 if name == "returnValue" {
@@ -1556,7 +1557,9 @@ impl Writer<'_> {
                     Ok("IInspectable".to_owned())
                 }
             }
-            Type::Array(_) => Err("an array".to_owned()),
+            // Lent in place by `method_named` where it is one `lent_array`
+            // builds; any other is refused here.
+            Type::Array(element) => Err(format!("an array passed in, of {}", element_name(element))),
             Type::RefMut(_) => Err("an `out` parameter".to_owned()),
             other => Err(format!("{other:?}, a type WinRT does not use here")),
         }
@@ -1689,7 +1692,7 @@ impl Writer<'_> {
     /// a class, an interface, any object -- as an array of the program's
     /// owning each, `null` where the Windows Runtime wrote none.
     fn received(&mut self, element: &Type) -> Result<String, String> {
-        if let Ok(typed) = typed_array(element) {
+        if let Ok(typed) = typed_array(&self.enum_as_integer(element)) {
             return Ok(typed);
         }
         // Strings, each copied into a `string` and deleted.
@@ -1720,7 +1723,8 @@ impl Writer<'_> {
     /// program's buffer.
     ///
     /// - Bytes: a `Uint8Array`'s, read (`const`) or filled.
-    /// - Numbers: a typed array's elements, read or filled as bytes are.
+    /// - Numbers: a typed array's elements, read or filled as bytes are; an
+    ///   enum's as its 32-bit underlying integer.
     /// - Objects: an array of the program's, whose block of handles is lent
     ///   in place where each is the interface C takes, and asked for it
     ///   element by element otherwise. `[in]` only: a buffer the callee fills
@@ -1730,7 +1734,7 @@ impl Writer<'_> {
             self.brands.insert("CBytes");
             let pointee = if written { "uint8_t" } else { "const uint8_t" };
             format!("CBytes<\"{pointee}\">")
-        } else if let Some((array, spelled)) = elements_of(element) {
+        } else if let Some((array, spelled)) = elements_of(&self.enum_as_integer(element)) {
             self.brands.insert("CElements");
             let spelled = if written { spelled.to_owned() } else { format!("const {spelled}") };
             format!("CElements<{array}, \"{spelled}\">")
@@ -1749,6 +1753,19 @@ impl Writer<'_> {
         self.brands.insert("Counted");
         self.brands.insert("CNumber");
         Ok(Some(lent_as))
+    }
+
+    /// An enum as the integer an array of it holds -- its 32-bit underlying
+    /// type, so `SetSupportedModes` takes an `Int32Array` of the members, as
+    /// any array of numbers is taken -- and anything else as itself.
+    fn enum_as_integer(&self, element: &Type) -> Type {
+        if let Type::ValueName(named) = element
+            && let Some(def) = self.index.get(&named.namespace, &named.name).next()
+            && def.category() == TypeCategory::Enum
+        {
+            return if matches!(def.underlying_type(), Some(Type::U32)) { Type::U32 } else { Type::I32 };
+        }
+        element.clone()
     }
 
     /// A struct an array holds, by name, where each element crosses by copy:
