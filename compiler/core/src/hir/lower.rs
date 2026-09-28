@@ -32378,6 +32378,10 @@ impl<'a> FuncBuilder<'a> {
         if head.is_empty() {
             return Err(self.unsupported(id, "@ntsConstruct naming no function"));
         }
+        // `… with name names`: the construct-only properties a construction
+        // by its `GType` can be given (`construct_with`).
+        let (rest, with) = rest.split_once(" with ").unwrap_or((rest, ""));
+        let with: Vec<&str> = with.split_whitespace().collect();
         let names = rest.split_whitespace();
         // `g_list_store_new(item_type)`: a class with construct-only
         // properties is made by the constructor that takes them, each the
@@ -32398,6 +32402,10 @@ impl<'a> FuncBuilder<'a> {
         // literal is known here, so no object is built -- then the
         // constructor, then a setter for each value it did not take.
         let written = self.constructed_properties(id)?;
+        if written.iter().any(|property| with.contains(&property.name.as_str())) {
+            let get_type = rest.split_whitespace().next().ok_or_else(|| self.unsupported(id, "@ntsConstruct `with` and no `GType` function"))?;
+            return self.construct_with(id, (function, get_type), &with, &written, ty);
+        }
         let mut arguments =
             names.map(|name| self.call_foreign_named(id, name, Vec::new()).map(Some)).collect::<Result<Vec<_>, _>>()?;
         // `parameter_type?`: a nullable parameter, NULL where the literal
@@ -32413,6 +32421,42 @@ impl<'a> FuncBuilder<'a> {
         let from: Vec<&str> = from.iter().map(|name| name.trim_end_matches('?')).collect();
         let handle = self.call_foreign_named_absent(id, function, arguments)?;
         self.set_constructed(id, handle, ty, &written, &from)?;
+        Ok(handle)
+    }
+
+    /// GJS's `new Gio.ThemedIcon({ name })`: a construct-only property has
+    /// no setter, so the object is built with it -- `{C}_builder(type)`,
+    /// `{C}_with_{name}(builder, value)` for each the literal writes of
+    /// those the tag lists (`with`), then `{C}_build`, owned as the class's
+    /// `{C}_construct` view is -- and the literal's other properties are set
+    /// as for any construction. `view` is that view's name (`GThemedIcon_construct`)
+    /// and the class's `GType` function.
+    fn construct_with(
+        &mut self,
+        id: NodeId,
+        (view, get_type): (&str, &str),
+        with: &[&str],
+        written: &[SetProperty],
+        ty: TypeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let class = view.strip_suffix("_construct").ok_or_else(|| self.unsupported(id, "@ntsConstruct `with` on a constructor that is not a view"))?;
+        let object_type = self.call_foreign_named(id, get_type, Vec::new())?;
+        let builder = self.call_foreign_named(id, &format!("{class}_builder"), vec![object_type])?;
+        let mut given = Vec::new();
+        for property in written.iter().filter(|property| with.contains(&property.name.as_str())) {
+            // A props object passed through gives it only where present,
+            // which a build given it unconditionally would not be.
+            if property.present.is_some() {
+                return Err(self.unsupported(
+                    id,
+                    &format!("a construct-only property `{}` given through a props object rather than a literal", property.name),
+                ));
+            }
+            self.call_foreign_named(id, &format!("{class}_with_{}", property.name), vec![builder, property.value])?;
+            given.push(property.name.as_str());
+        }
+        let handle = self.call_foreign_named(id, &format!("{class}_build"), vec![builder])?;
+        self.set_constructed(id, handle, ty, written, &given)?;
         Ok(handle)
     }
 
@@ -50850,13 +50894,11 @@ impl<'a> FuncBuilder<'a> {
         // it, so a program carries the headers it reaches rather than every one
         // in the snapshot.
         native.declared_at = declaration.and_then(|decl| self.declaring_module(decl));
-        // A property with no setter method is written through a thunk the
-        // backend defines (`nts_gobject_prop_{kind}__{name}`, as
-        // `g_object_set`; one with no getter read through
-        // `nts_gobject_propget_`, as `g_object_get`): no header declares it, and its object is the
-        // `void *` it is to C whichever class a binding names it on, so every
-        // call of one prints one prototype.
-        if native.name.starts_with("nts_gobject_prop_") || native.name.starts_with("nts_gobject_propget_") {
+        // A by-name thunk the backend defines (`is_by_name_thunk`): no
+        // header declares it, and its object is the `void *` it is to C
+        // whichever class a binding names it on, so every call of one prints
+        // one prototype.
+        if super::native::is_by_name_thunk(&native.name) {
             native.declared_at = None;
             if let Some(object) = native.parameters.first_mut() {
                 *object = super::native::Type::Pointer(super::native::Pointee::Void);

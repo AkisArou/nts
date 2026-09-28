@@ -43,6 +43,10 @@ pub(crate) const EMIT: &str = "nts_gobject_emit";
 /// backend defines per property, `nts_gobject_prop_{kind}__{name}`, as
 /// `g_object_set`.
 pub(crate) const SET_BY_NAME: &str = "nts_gobject_prop_";
+/// The prefix of a construction's calls (`construct_with`): the support
+/// file's `builder_new` and `builder_build`, and each property's thunk,
+/// `{kind}__{name}`, which the backend defines.
+pub(crate) const CONSTRUCT_WITH: &str = "nts_gobject_with_";
 /// And one with no getter method read through `g_object_get`, which the thunk
 /// reads into a local of the property's own type: a string or an object comes
 /// back owned (see `get_by_name`).
@@ -85,6 +89,19 @@ pub(crate) struct Binding {
     /// What `new GtkButton({ … })` calls before its setters, by the class's
     /// C type.
     pub(crate) constructors: BTreeMap<String, Constructor>,
+    /// By class C type, for a class made by its `GType`: the construct-only
+    /// properties a construction of it can give (`construct_with`).
+    pub(crate) constructed: BTreeMap<String, Constructed>,
+}
+
+/// A class's construct-only properties, GJS's `new Gio.ThemedIcon({ name })`.
+#[derive(Debug)]
+pub(crate) struct Constructed {
+    /// Its own, as `(name, TypeScript type)`, which `…Props` offers.
+    pub(crate) own: Vec<(String, String)>,
+    /// Every one a construction of it can give, its ancestors' in its
+    /// namespace included, which the tag lists (`@ntsConstruct … with name`).
+    pub(crate) names: Vec<String>,
 }
 
 /// How a class is constructed with every property at its default: its own
@@ -636,6 +653,29 @@ fn set_by_name<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
     }
 }
 
+/// A function the binding declares itself, calling what `symbol` names with
+/// `parameters` as they are.
+fn plain_function(name: String, symbol: String, parameters: Vec<(String, Mapped)>, result: Mapped) -> Function {
+    Function {
+        name,
+        symbol,
+        c_parameters: parameters.iter().map(|(_, mapped)| mapped.c.clone()).collect(),
+        parameters,
+        result,
+        deprecated: false,
+        free: None,
+        no_escape: Vec::new(),
+        returns: None,
+        method: None,
+        throws: None,
+        finish: None,
+        omissible: BTreeMap::new(),
+        method_only: false,
+        statics: None,
+        vfunc: None,
+    }
+}
+
 /// A property's `utf8` spelled as the thunk passes it -- `const gchar*` in,
 /// `gchar*` back -- so that it maps as a parameter's or a result's string
 /// does. GIR writes a property's with no C type, or as `gchar*`, which a
@@ -949,6 +989,7 @@ impl<'a> Mapper<'a> {
                         Ok(view) => {
                             let constructor = Constructor { function: view.name.clone(), get_type: Some(get_type.clone()), from: Vec::new(), alternatives: Vec::new() };
                             self.binding.constructors.insert(c_type.clone(), constructor);
+                            self.construct_with(class, c_type, &view.result);
                             self.binding.functions.push(view);
                         }
                         Err(reason) => self.binding.refused.push((format!("{c_type}_construct"), reason)),
@@ -1090,6 +1131,85 @@ impl<'a> Mapper<'a> {
             found.push((local, tag));
         }
         found
+    }
+
+    /// GJS's `new Gio.ThemedIcon({ name })`, for a class made by its
+    /// `GType` (`made` is its result): a construct-only property has no
+    /// setter, so it is given to `g_object_new` or never. Declared for the
+    /// lowering to call in turn: `{C}_builder(type)` begins one
+    /// (`nts_gobject_with_builder_new`), `{C}_with_{name}(builder, value)`
+    /// gives each property the literal writes -- a thunk the backend
+    /// defines, as it does a by-name setter, which hands the value on as C's
+    /// varargs promote it (`nts_gobject_with_{kind}__{name}`) -- and
+    /// `{C}_build` makes the object, owned or floating as the view's is. The
+    /// class's own construct-only properties and its ancestors' in its
+    /// namespace; one in another namespace would be mapped against this
+    /// one's names, and is left out. Each whose type has no mapping is left
+    /// out, and counted.
+    fn construct_with(&mut self, class: &'a Class, c_type: &str, made: &Mapped) {
+        let mut chain = vec![class];
+        let mut at = self.parent_class(self.namespace, class);
+        // Bounded, so a cycle in malformed GIR ends.
+        for _ in 0..64 {
+            let Some((namespace, ancestor)) = at else { break };
+            if !std::ptr::eq(namespace, self.namespace) {
+                break;
+            }
+            chain.push(ancestor);
+            at = self.parent_class(namespace, ancestor);
+        }
+        let builder = Mapped { shape: Shape::Other, ts: "Ptr<unknown>".to_owned(), c: Type::Pointer(Pointee::Void) };
+        let mut own = Vec::new();
+        let mut names = Vec::new();
+        let mut withs = Vec::new();
+        for (depth, declarer) in chain.iter().enumerate() {
+            for property in &declarer.properties {
+                let Some(param) = &property.constructed else { continue };
+                let label = format!("{c_type}:{} (construct-only)", property.name);
+                let param = self.with_c_type(&spelled_string(param, "const gchar*"));
+                let value = match if is_string(&param) { self.value(&param) } else { self.typed(&param) } {
+                    Ok(value) => self.truth(&param, value),
+                    Err(reason) => {
+                        self.binding.refused.push((label, reason));
+                        continue;
+                    }
+                };
+                let Some(kind) = value_kind(&value.c) else {
+                    self.binding.refused.push((label, Reason::Unknown(format!("a property value of C type {:?}", value.c))));
+                    continue;
+                };
+                let ident = member(&property.name);
+                if depth == 0 {
+                    own.push((ident.clone(), value.ts.strip_suffix(" | null").unwrap_or(&value.ts).to_owned()));
+                }
+                withs.push(plain_function(
+                    format!("{c_type}_with_{ident}"),
+                    format!("{CONSTRUCT_WITH}{kind}__{}", property.name.replace('-', "_")),
+                    vec![("builder".to_owned(), builder.clone()), ("value".to_owned(), value)],
+                    Mapped { shape: Shape::Other, ts: "void".to_owned(), c: Type::Void },
+                ));
+                names.push(ident);
+            }
+        }
+        if names.is_empty() {
+            return;
+        }
+        self.binding.brands.extend(["Ptr", "c_size_t"]);
+        let object_type = Mapped { shape: Shape::Other, ts: "c_size_t".to_owned(), c: Type::Scalar(Scalar::Size) };
+        self.binding.functions.push(plain_function(
+            format!("{c_type}_builder"),
+            format!("{CONSTRUCT_WITH}builder_new"),
+            vec![("object_type".to_owned(), object_type)],
+            builder.clone(),
+        ));
+        self.binding.functions.extend(withs);
+        self.binding.functions.push(plain_function(
+            format!("{c_type}_build"),
+            format!("{CONSTRUCT_WITH}builder_build"),
+            vec![("builder".to_owned(), builder)],
+            made.clone(),
+        ));
+        self.binding.constructed.insert(c_type.to_owned(), Constructed { own, names });
     }
 
     /// The class's parent: GIR's `parent`, or for a root its first field when

@@ -260,6 +260,8 @@ fn properties(class: Node<'_, '_>) -> Vec<Property> {
                 .then(|| param(property, false)),
                 get_by_name: (attribute(property, "readable") != Some("0") && getter.is_none())
                     .then(|| param(property, false)),
+                constructed: (attribute(property, "construct-only") == Some("1") && attribute(property, "writable") == Some("1"))
+                    .then(|| param(property, false)),
                 getter,
                 setter,
             })

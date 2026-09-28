@@ -139,8 +139,13 @@ fn probe_text(binding: &Binding) -> (String, BTreeMap<usize, (String, String)>) 
         let result = function.result.c.c_type_expanded();
         let symbol = &function.symbol;
         // A signal's `emit` names a thunk the compiler defines, which no
-        // header declares.
-        if symbol == super::map::EMIT || symbol.starts_with(super::map::SET_BY_NAME) || symbol.starts_with(super::map::GET_BY_NAME) {
+        // header declares; so does a construction's (`CONSTRUCT_WITH`),
+        // whose builder is the support file's.
+        if symbol == super::map::EMIT
+            || symbol.starts_with(super::map::SET_BY_NAME)
+            || symbol.starts_with(super::map::GET_BY_NAME)
+            || symbol.starts_with(super::map::CONSTRUCT_WITH)
+        {
             continue;
         }
         // A virtual function is its class struct's member, whose type is the

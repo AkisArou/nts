@@ -83,6 +83,9 @@ pub(crate) struct Property {
     /// `construct-only="1"` and writable: set when the object is made and
     /// never after, so no setter writes it -- `GListStore`'s `item-type`.
     pub(crate) construct_only: bool,
+    /// A construct-only property's type, as a parameter's: what
+    /// `g_object_new` is given it as (`GThemedIcon`'s `name`).
+    pub(crate) constructed: Option<Param>,
     /// Writable after construction with no setter method: `GtkWidget`'s
     /// `width-request`, which `g_object_set` writes. Its type, as a
     /// parameter's.

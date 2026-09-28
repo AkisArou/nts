@@ -2,6 +2,7 @@
 
 #include "nts_runtime.h"
 
+#include <gobject/gvaluecollector.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -709,5 +710,60 @@ void *nts_gobject_new(size_t type) {
   if (g_object_is_floating(made)) {
     g_object_ref_sink(made);
   }
+  return made;
+}
+
+typedef struct {
+  GType type;
+  GObjectClass *klass;
+  /* The properties' names, interned by their specs, and their values. */
+  GPtrArray *names;
+  GArray *values;
+} NtsGObjectBuilder;
+
+void *nts_gobject_with_builder_new(size_t type) {
+  NtsGObjectBuilder *builder = g_new0(NtsGObjectBuilder, 1);
+  builder->type = (GType)type;
+  builder->klass = g_type_class_ref(builder->type);
+  builder->names = g_ptr_array_new();
+  builder->values = g_array_new(FALSE, TRUE, sizeof(GValue));
+  g_array_set_clear_func(builder->values, (GDestroyNotify)g_value_unset);
+  return builder;
+}
+
+void nts_gobject_with_builder_add(void *builder, const char *name, ...) {
+  NtsGObjectBuilder *self = builder;
+  GParamSpec *spec = g_object_class_find_property(self->klass, name);
+  if (spec == NULL) {
+    g_critical("%s has no property %s", g_type_name(self->type), name);
+    return;
+  }
+  g_array_set_size(self->values, self->values->len + 1);
+  GValue *value = &g_array_index(self->values, GValue, self->values->len - 1);
+  char *error = NULL;
+  va_list args;
+  va_start(args, name);
+  /* Copied, not borrowed: a string the program lent is given back when the
+   * thunk returns, and an object is referenced until the build. */
+  G_VALUE_COLLECT_INIT(value, G_PARAM_SPEC_VALUE_TYPE(spec), args, 0, &error);
+  va_end(args);
+  if (error != NULL) {
+    g_critical("%s:%s: %s", g_type_name(self->type), name, error);
+    g_free(error);
+    g_array_set_size(self->values, self->values->len - 1);
+    return;
+  }
+  g_ptr_array_add(self->names, (gpointer)spec->name);
+}
+
+GObject *nts_gobject_with_builder_build(void *builder) {
+  NtsGObjectBuilder *self = builder;
+  GObject *made = g_object_new_with_properties(
+      self->type, self->names->len, (const char **)self->names->pdata,
+      (const GValue *)(void *)self->values->data);
+  g_array_unref(self->values);
+  g_ptr_array_unref(self->names);
+  g_type_class_unref(self->klass);
+  g_free(self);
   return made;
 }

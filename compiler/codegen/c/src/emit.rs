@@ -577,8 +577,11 @@ impl Emitted {
         // never-free, keeps a `GObject` a call handed it (`nts_gobject_made`,
         // `hir::floating`): a program that makes a widget and connects nothing
         // failed to link without this.
-        // A template's class registers through `nts_gobject.c` too.
+        // A template's class registers through `nts_gobject.c` too, and a
+        // construction given construct-only properties builds through it
+        // (`nts_gobject_with_builder_new`).
         let connects = text.contains("nts_gtk_")
+            || text.contains("nts_gobject_with_builder_")
             || text.contains("nts_gobject_connect(")
             || text.contains("nts_gobject_register(")
             || text.contains("nts_gobject_boxed")

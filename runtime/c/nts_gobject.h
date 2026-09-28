@@ -66,6 +66,17 @@ unsigned nts_gobject_add_signal(size_t type, const char *name,
 void nts_gobject_set_properties(size_t type, const void *properties,
                                 size_t count);
 
+/* A construction given construct-only properties, GJS's
+ * `new Gio.ThemedIcon({ name })`: begun for `type`, given each property by
+ * name -- one value after it, collected as the property's own type as
+ * `g_object_set` collects one -- and built with them by
+ * `g_object_new_with_properties`, whose result it answers as it is: the
+ * caller's reference, or a floating one for a `GInitiallyUnowned`. Each
+ * property's thunk (`nts_gobject_with_{kind}__{name}`) is the program's. */
+void *nts_gobject_with_builder_new(size_t type);
+void nts_gobject_with_builder_add(void *builder, const char *name, ...);
+GObject *nts_gobject_with_builder_build(void *builder);
+
 /* The `GParamSpec` of the property at `index` among those `type` declares,
  * which a write of its field notifies by. */
 void *nts_gobject_property_spec(size_t type, unsigned index);

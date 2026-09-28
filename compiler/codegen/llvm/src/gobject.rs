@@ -45,8 +45,7 @@ pub(super) fn defined_here(name: &str) -> bool {
         || name.starts_with("nts_gobject_emit_")
         || name.starts_with("nts_gobject_notify_")
         || name.starts_with("nts_gobject_child_")
-        || name.starts_with("nts_gobject_prop_")
-        || name.starts_with("nts_gobject_propget_")
+        || nts_core::hir::native::is_by_name_thunk(name)
 }
 
 pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared: bool) -> Result<String, Diagnostic> {
@@ -551,32 +550,37 @@ fn promoted(body: &mut String, at: usize, ty: &str, native: &Type) -> String {
 /// promote it.
 fn set_by_name(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
     let mut out = String::new();
-    let mut done = std::collections::BTreeSet::new();
-    for (func, target) in program.funcs.iter().flat_map(|func| func.values.iter().map(move |op| (func, op))).filter_map(|(func, op)| match &op.kind {
-        OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with("nts_gobject_prop_") => Some((func, target)),
-        _ => None,
-    }) {
-        if !done.insert(target.name.clone()) {
-            continue;
+    // A write of a property with no setter method, to `g_object_set`; a
+    // construct-only property a construction gives, to the support file's
+    // builder. Each thunk is `{prefix}{kind}__{name}`.
+    for (prefix, callee) in [("nts_gobject_prop_", "g_object_set"), ("nts_gobject_with_", "nts_gobject_with_builder_add")] {
+        let mut done = std::collections::BTreeSet::new();
+        for (func, target) in program.funcs.iter().flat_map(|func| func.values.iter().map(move |op| (func, op))).filter_map(|(func, op)| match &op.kind {
+            OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with(prefix) && defined_here(&target.name) => Some((func, target)),
+            _ => None,
+        }) {
+            if !done.insert(target.name.clone()) {
+                continue;
+            }
+            let Some((_, property)) = target.name.trim_start_matches(prefix).split_once("__") else {
+                return Err(refuse(func, "a property thunk whose name does not say its property"));
+            };
+            if target.parameters.len() != 2 {
+                return Err(refuse(func, "a property thunk that does not take an object and a value"));
+            }
+            if done.len() == 1 {
+                let _ = writeln!(out, "declare void @{callee}(ptr, ptr, ...)");
+            }
+            let thunk = &target.name;
+            bytes_constant(&mut out, &format!("{thunk}.name"), &property.replace('_', "-"));
+            let value = ty_of(&target.parameters[1].abi(platform.abi), func)?.to_owned();
+            let mut body = String::new();
+            let passed = promoted(&mut body, 1, &value, &target.parameters[1]);
+            let _ = writeln!(
+                out,
+                "define void @{thunk}(ptr %a0, {value} %a1) nounwind {{\nentry:\n{body}\x20 call void (ptr, ptr, ...) @{callee}(ptr %a0, ptr @{thunk}.name, {passed}, ptr null)\n  ret void\n}}"
+            );
         }
-        let Some((_, property)) = target.name.trim_start_matches("nts_gobject_prop_").split_once("__") else {
-            return Err(refuse(func, "a property thunk whose name does not say its property"));
-        };
-        if target.parameters.len() != 2 {
-            return Err(refuse(func, "a property thunk that does not take an object and a value"));
-        }
-        if done.len() == 1 {
-            out.push_str("declare void @g_object_set(ptr, ptr, ...)\n");
-        }
-        let thunk = &target.name;
-        bytes_constant(&mut out, &format!("{thunk}.name"), &property.replace('_', "-"));
-        let value = ty_of(&target.parameters[1].abi(platform.abi), func)?.to_owned();
-        let mut body = String::new();
-        let passed = promoted(&mut body, 1, &value, &target.parameters[1]);
-        let _ = writeln!(
-            out,
-            "define void @{thunk}(ptr %a0, {value} %a1) nounwind {{\nentry:\n{body}\x20 call void (ptr, ptr, ...) @g_object_set(ptr %a0, ptr @{thunk}.name, {passed}, ptr null)\n  ret void\n}}"
-        );
     }
     Ok(out)
 }

@@ -296,13 +296,27 @@ fn construction(
         };
         let _ = writeln!(out, "    {}?: {ts};", property.name);
     }
+    // A class made by its `GType` is given its construct-only properties
+    // there (the tag's `with`), each optional: GJS's
+    // `new Gio.ThemedIcon({ name })`, where no setter could write it after.
+    let by_type = binding.constructors.get(name).is_some_and(|constructor| constructor.get_type.is_some());
+    let constructed = binding.constructed.get(name).filter(|_| by_type);
+    for (property, ts) in constructed.map(|constructed| constructed.own.as_slice()).unwrap_or_default() {
+        if !from.contains(property) {
+            let _ = writeln!(out, "    {property}?: {ts};");
+        }
+    }
     out.push_str("  }\n");
+    let with = constructed
+        .filter(|constructed| !constructed.names.is_empty())
+        .map(|constructed| format!(" with {}", constructed.names.join(" ")))
+        .unwrap_or_default();
     let kept = |function: &str| binding.functions.iter().find(|f| f.name == function && f.throws.is_none());
     let construct = binding.constructors.get(name).and_then(|constructor| {
         let tag = match (kept(&constructor.function), &constructor.get_type) {
             (Some(_), None) if !constructor.from.is_empty() => constructor_tag(binding, constructor)?,
             (Some(new), None) if new.parameters.is_empty() => constructor.function.clone(),
-            (Some(_), Some(get_type)) if kept(get_type).is_some() => format!("{} {get_type}", constructor.function),
+            (Some(_), Some(get_type)) if kept(get_type).is_some() => format!("{} {get_type}{with}", constructor.function),
             _ => return None,
         };
         // Optional where nothing in it is required.

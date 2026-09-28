@@ -189,38 +189,51 @@ fn implementations(writer: &mut CodeWriter, origin: &Origin, class: &ForeignClas
     Ok(format!(" nts_gobject_add_interfaces(type, nts_gobject_interfaces_{name}, {}u);", rows.len()))
 }
 
-/// Each `nts_gobject_prop_{kind}__{name}` the program calls -- a write of a
-/// property with no setter method, `widget.width_request = 80` -- defined as
-/// its prototype declares it: `g_object_set` by the property's name, read
-/// back with `-` for `_`, which C's varargs promote as `g_object_set` reads.
+/// The by-name thunks, each `{prefix}{kind}__{name}` the program calls,
+/// and the varargs function each hands its value to by the property's name,
+/// read back with `-` for `_`: a write of a property with no setter method,
+/// `widget.width_request = 80`, to `g_object_set`; and a construct-only
+/// property a construction gives, `new GThemedIcon({ name })`, to the
+/// support file's builder.
+const BY_NAME: [(&str, &str, &str); 2] = [
+    ("nts_gobject_prop_", "g_object_set", "void g_object_set(void *object, const char *first_property_name, ...);"),
+    ("nts_gobject_with_", "nts_gobject_with_builder_add", "void nts_gobject_with_builder_add(void *builder, const char *name, ...);"),
+];
+
+/// Each by-name thunk the program calls (`BY_NAME`), defined as its
+/// prototype declares it: the value is C's varargs promote it, as the
+/// function it calls reads it.
 fn set_by_name(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote: bool) -> bool {
-    let mut done = std::collections::BTreeSet::new();
-    for target in program.funcs.iter().flat_map(|func| &func.values).filter_map(|op| match &op.kind {
-        OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with("nts_gobject_prop_") => Some(target),
-        _ => None,
-    }) {
-        if !done.insert(target.name.clone()) {
-            continue;
+    for (prefix, callee, declaration) in BY_NAME {
+        let mut done = std::collections::BTreeSet::new();
+        for target in program.funcs.iter().flat_map(|func| &func.values).filter_map(|op| match &op.kind {
+            OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with(prefix) => Some(target),
+            _ => None,
+        }) {
+            // The builder's own functions have no `__`: the support file's.
+            let Some((_, property)) = target.name.trim_start_matches(prefix).split_once("__") else { continue };
+            if !done.insert(target.name.clone()) {
+                continue;
+            }
+            let [object, value] = target.parameters.as_slice() else { continue };
+            if !wrote {
+                writer.line(origin, "/* GObject classes the program declares: see `emit/gobject.rs`. */");
+                wrote = true;
+            }
+            if done.len() == 1 {
+                writer.line(origin, declaration);
+            }
+            writer.line(
+                origin,
+                format!(
+                    "void {}({} a0, {} a1) {{ {callee}(a0, {}, a1, (void *)0); }}",
+                    target.name,
+                    object.c_type(),
+                    value.c_type(),
+                    c_string(&property.replace('_', "-"))
+                ),
+            );
         }
-        let Some((_, property)) = target.name.trim_start_matches("nts_gobject_prop_").split_once("__") else { continue };
-        let [object, value] = target.parameters.as_slice() else { continue };
-        if !wrote {
-            writer.line(origin, "/* GObject classes the program declares: see `emit/gobject.rs`. */");
-            wrote = true;
-        }
-        if done.len() == 1 {
-            writer.line(origin, "void g_object_set(void *object, const char *first_property_name, ...);");
-        }
-        writer.line(
-            origin,
-            format!(
-                "void {}({} a0, {} a1) {{ g_object_set(a0, {}, a1, (void *)0); }}",
-                target.name,
-                object.c_type(),
-                value.c_type(),
-                c_string(&property.replace('_', "-"))
-            ),
-        );
     }
     wrote
 }

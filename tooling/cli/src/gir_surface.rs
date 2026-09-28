@@ -291,6 +291,21 @@ mod tests {
             gtk.declarations.contains("    delete(this: GtkTextBuffer, start: GtkTextIter, end: GtkTextIter): void;"),
             "GtkTextBuffer's delete is not named delete"
         );
+        // A construct-only property no constructor takes is offered by the
+        // props and given to `g_object_new` (`with`), GJS's
+        // `new Gio.ThemedIcon({ name })`, by the calls the lowering makes.
+        let gio = packages.iter().find(|p| p.name == "@nts/gir-gio-2.0").unwrap();
+        for present in [
+            "@ntsConstruct GThemedIcon_construct g_themed_icon_get_type with name use_default_fallbacks\n",
+            "export function GThemedIcon_builder(object_type: c_size_t): Ptr<unknown>;",
+            "export function GThemedIcon_with_name(builder: Ptr<unknown>, value: string): void;",
+            "export function GThemedIcon_with_use_default_fallbacks(builder: Ptr<unknown>, value: CBool<c_int>): void;",
+            "export function GThemedIcon_build(builder: Ptr<unknown>): Owned<Declared<GThemedIcon, GObject>>;",
+        ] {
+            assert!(gio.declarations.contains(present), "missing: {present}");
+        }
+        let themed = gio.declarations.split("export interface GThemedIconProps").nth(1).and_then(|rest| rest.split("  }").next()).unwrap();
+        assert!(themed.contains("    name?: string;"), "GThemedIconProps does not offer name: {themed}");
         let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize_utf8().unwrap();
         let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-gir-packages-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();

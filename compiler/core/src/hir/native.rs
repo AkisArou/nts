@@ -4296,7 +4296,7 @@ fn branded_members(
 }
 
 pub(crate) mod schema;
-pub use schema::{PROGRAM_GTYPE, is_layout, pointer, storage};
+pub use schema::{PROGRAM_GTYPE, is_by_name_thunk, is_layout, pointer, storage};
 pub(crate) use schema::{
     composable_base, extends_com, extends_objc, gobject_parent, gtype_function, implemented, is_com_class, is_objc_class, objc_meta, objc_name,
     registered_by_a_runtime, superclass,

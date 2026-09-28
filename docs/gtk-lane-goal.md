@@ -686,6 +686,37 @@ cast and another enum's member is TS2345. The enums are `const enum`s in the
 `c:` module, folded to their constants at the use, each also named by its C
 type, which is what signatures spell.
 
+**Construct-only properties.** `new GThemedIcon({ name })`, as GJS writes
+it: a construct-only property has no setter, so it is given when the object
+is made or never. A class made by its `GType` offers its own in its
+`…Props`, and its `@ntsConstruct` tag lists every one a construction of it
+can give, its ancestors' in its namespace included
+(`GThemedIcon_construct g_themed_icon_get_type with name
+use_default_fallbacks`). Where a literal writes one, the lowering builds
+the object with them through three functions the binding declares for the
+class:
+
+- `GThemedIcon_builder(type)` begins one, `nts_gobject_with_builder_new` in
+  `nts_gobject.c`;
+- `GThemedIcon_with_name(builder, value)` gives each property the literal
+  writes of those, through a thunk each backend defines as it defines a
+  by-name setter (`nts_gobject_with_{kind}__{name}`, C's varargs promoted),
+  and the builder collects the value as the property's own type, as
+  `g_object_set` collects one (`G_VALUE_COLLECT_INIT`, copied);
+- `GThemedIcon_build(builder)` makes it with `g_object_new_with_properties`,
+  owned or floating as the class's `…_construct` view is.
+
+The literal's other properties are then set as for any construction. A
+props object passed through (`super(props)`) that could give one is refused
+by name: it gives only what is present, and a build gives unconditionally.
+Which callees are by-name thunks is one predicate, `is_by_name_thunk`, that
+the lowering and LLVM both ask. Left out, and counted: a property whose type
+has no mapping as a value (`GThemedIcon`'s `names`, a `GStrv`), and an
+ancestor's in another namespace, which would be mapped against this one's
+names. Witness: gtk-gir's `themed 6 document-open-recent`, the name and its
+five fallbacks on all four arms, as GJS makes it. The corpus's Notification
+passes; the store test pins the tag and the three functions.
+
 **Constructors return their class.** `gtk_box_new(…)` is a `GtkBox`: GIR
 declares a constructor inside its class and gives it C's return type, and the
 binding writes `Declared<GtkBox, GtkWidget>` (244 constructors) -- the program
@@ -1822,6 +1853,7 @@ one in two ways, both core gaps:
 | 2026-09-27 | 25 | 8 on main; 14 stop at the captured narrowed handle, Scale at `Object.entries` over a table, Stack at a `let` of a handle with no initializer, Context Menu at a record's fields (`new Gdk.Rectangle({ x, y })`, designed with the compiler lane) |
 | 2026-09-28 | 29 | **25 on main**, with the captured-handle fix (bd58854b9). Left: Stack (a `let` of a handle with no initializer), Scale (`Object.entries` over a table), Context Menu (record fields, designed), Boxed Lists (`GObject.TYPE_STRING` and `Gtk.ClosureExpression`, binding gaps) |
 | 2026-09-28 | 34 | **28**. Also left: Text Colors (a spread in call arguments, then an array stringified), Text View (destructuring a handle's property) |
+| 2026-09-28 | 47 | **38**: About Dialog (GJS's `gettext` module, its import unchanged) and Notification (construct-only properties, `new Gio.ThemedIcon({ name })`) |
 | 2026-09-28 | 46 | **36**: List View with Sections, a `GtkStringList` subclass implementing `GtkSectionModel`. Its override writes C's out parameters through pointers where GJS returns `[start, end]`: an idiom gap, named below |
 | 2026-09-28 | 45 | **35**: Custom Widget, a class whose `Template` is `workbench.template` and whose `GTypeName` its template names, a handler GTK finds by name |
 | 2026-09-28 | 44 | **34**: Column View (an interface requiring another, now assignable to it) and List View with a Tree (a callback answering the class where C declared the interface, on LLVM). Drop Down's third gap (its subclass's own properties) is cleared; its two binding gaps remain |
@@ -1855,13 +1887,7 @@ named:
   constants (`GLib.PRIORITY_DEFAULT`, branch `gtk-constants`; floating ones
   left out, since GIR writes them to six digits).
 - Open: a fundamental `GType` (`GObject.TYPE_STRING`) needs a typed
-  constant, since a GType is a branded `bigint`; `gettext`, which GJS
-  provides as a module of its own, has its functions bound
-  (`g_dgettext(null, msgid)` is GJS's `gettext(msgid)`) and no module yet;
-  and a construct-only property no constructor takes by name
-  (`new Gio.ThemedIcon({ name })`, Notification) needs construction through
-  `g_object_new_with_properties`, binding and lowering together -- one demo
-  so far.
+  constant, since a GType is a branded `bigint`.
 - Open, a representation: GLib's refcounted records (`GDateTime`, `GBytes`,
   `GRegex`, `GKeyFile`, `GMainLoop`...) bind as opaque handles a program
   unrefs by hand, since their `get_type` is declared by GObject's headers

@@ -308,6 +308,20 @@ pub(crate) fn registered_by_a_runtime(snapshot: &SemanticSnapshot, declaration: 
 /// class the program writes: `nts_gobject_type_Counter`.
 pub const PROGRAM_GTYPE: &str = "nts_gobject_type_";
 
+/// Whether a binding's callee is a by-name thunk each backend defines for
+/// the program, with no header declaring it and a `void *` object: a write
+/// of a property with no setter method (`nts_gobject_prop_{kind}__{name}`,
+/// to `g_object_set`), a read of one with no getter (`nts_gobject_propget_`,
+/// from `g_object_get`), and a construct-only property a construction gives
+/// (`nts_gobject_with_{kind}__{name}`, to the support file's builder, whose
+/// own functions have no `__`).
+#[must_use]
+pub fn is_by_name_thunk(name: &str) -> bool {
+    name.starts_with("nts_gobject_prop_")
+        || name.starts_with("nts_gobject_propget_")
+        || (name.starts_with("nts_gobject_with_") && name.contains("__"))
+}
+
 /// For a class the program writes over a `GObject` class -- `class Counter
 /// extends GtkButton` -- the function answering that class's `GType`, which
 /// the subclass registers under: the `@ntsGType` on the `__c_gtype` member of

@@ -33,6 +33,9 @@
 //   made press false  `new GtkButton({ label: "press", has_frame: false })`:
 //                 `gtk_button_new`, then each setter the literal writes -- a
 //                 frame is on by default, so `false` is the setter's doing
+//   themed 6 document-open-recent  `new GThemedIcon({ name, use_default_fallbacks })`:
+//                 construct-only properties, given to `g_object_new` since no
+//                 setter writes them -- the name, and its five fallbacks
 //   entry typed! 0  `GtkEditable`'s `set_text`, `get_text` and `text` on a
 //                 `GtkEntry`, and `GtkOrientable`'s orientation on a `GtkBox`:
 //                 an interface's methods on the classes implementing it
@@ -87,6 +90,7 @@ import {
   g_application_quit,
   g_application_run,
   g_file_new_for_path,
+  GThemedIcon,
 } from "c:Gio-2.0";
 import {
   g_compute_checksum_for_data,
@@ -315,6 +319,12 @@ function main(): void {
     // property the literal writes, in its order.
     const button = new GtkButton({ label: "press", has_frame: false });
     console.log("made " + String(button.label) + " " + String(button.has_frame));
+    // Construct-only properties, which no setter writes, given to
+    // `g_object_new`: GJS's `new Gio.ThemedIcon({ name })`, with a boolean
+    // one beside it that adds the name's fallbacks.
+    const icon = new GThemedIcon({ name: "document-open-recent", use_default_fallbacks: true });
+    const names = icon.get_names();
+    console.log("themed " + String(names.length) + " " + names[0]);
     // A `gpointer` result the caller owns that is a GObject
     // (`Owned<Erased<GObject>>`): adopted rather than referenced again, and
     // released once -- `fatal-criticals` under `--rc` would abort on a count
