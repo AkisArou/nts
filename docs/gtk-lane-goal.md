@@ -1897,10 +1897,26 @@ writes `vfunc_get_section(position) { return [start, end]; }`, and a port
 writes `out_start[0] = start` through the `Ptr<CNumber<"uint">>` the binding
 declares (List View with Sections; `Square`'s `vfunc_measure` in
 gtk-subclass). A call already answers GJS's way, a tuple for its out
-parameters. An override could too: the binder declares the tuple result,
-and the entry point writes each element through its pointer where the
-pointer is not NULL. Not built yet; it changes `Square`'s working override,
-so it lands with that arm rewritten.
+parameters. An override could too. The design, not built yet because it
+changes every override with out parameters and wants the user's word:
+
+- The binder declares such a virtual function as GJS has it,
+  `vfunc_measure?(orientation, for_size): [minimum, natural, min_baseline,
+  nat_baseline]` (a single one bare, as `_values` answers), where its out
+  parameters trail its in parameters, which is every one in the closure
+  measured so far; any other shape keeps its pointers. A tag names the out
+  parameters' positions so the slot's C signature is still known.
+- The lowering synthesizes the slot's entry: the C-shaped function GTK
+  calls, which calls the program's method and writes each element through
+  its pointer where the pointer is not NULL (GTK passes NULL for an output
+  it does not want). These are the ops `out[0] = v` lowers to today, so
+  neither backend changes.
+- Chaining up, `super.vfunc_measure(o, s)`, answers the tuple too: locals
+  for the out slots (`local<T>()`), the chain-up thunk given their
+  addresses, the tuple read from them.
+- Witnesses: List View with Sections and gtk-subclass's `Square` rewritten
+  in GJS's form, and Workbench's Snapshot, whose `vfunc_measure` returns
+  `[board_size, board_size, -1, -1]`.
 
 Ports that pass still surfaced binding and harness gaps, each fixed or
 named:
