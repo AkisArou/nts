@@ -4,6 +4,7 @@
 //   node tooling/conformance/emitted-diff.mjs <before> <after> [project ...]
 //                                        (default: runtime/node/*, runtime/web-platform)
 //   node tooling/conformance/emitted-diff.mjs <before> <after> --axis
+//   node tooling/conformance/emitted-diff.mjs <before> <after> --rc     under reference counting
 //   node tooling/conformance/emitted-diff.mjs --self-test
 //
 // # Why
@@ -44,6 +45,15 @@
 // **"Emitted C differs" is still not "behaviour differs"**: a changed body can
 // be equivalent. That is what `--axis` is for, and why a differing module is
 // a selection and not a verdict.
+//
+// # The provider is part of the question
+//
+// `--rc` (or `NTS_RC=1`, as agree.mjs reads it) emits under reference
+// counting, and `--axis` then builds its addons counted too (build.sh's
+// `NTS_CONFORMANCE_RC`). Without it the provider is `NoGc`, `rc.rs` never
+// runs, and a change to where releases go reads "29 of 29 byte-identical" --
+// true and vacuous, and nearly quoted as evidence on 2026-09-28. So every
+// result names its provider, and a change to counting owes a run with `--rc`.
 //
 // # What it cannot see
 //
@@ -201,6 +211,9 @@ if (argv.includes("--self-test")) {
   process.exit(0);
 }
 
+/** Reference counting: the flag, or `NTS_RC` as the differential reads it. */
+const RC = argv.includes("--rc") || (process.env.NTS_RC ?? "0") !== "0";
+const PROVIDER = RC ? "reference counting (--rc)" : "no-gc (the default; rc.rs does not run)";
 const positional = argv.filter((a) => !a.startsWith("--"));
 const [beforeBin, afterBin, ...named] = positional;
 if (!beforeBin || !afterBin) {
@@ -263,7 +276,7 @@ async function emit(arm, project) {
   const out = join(arm.dir, "out", project.replace(/\//g, "_"));
   const env = { ...process.env, NTS_TSGO: tsgo, NTS_SNAPSHOT_CACHE: join(arm.dir, "snapshots") };
   delete env.NTS_NO_SNAPSHOT_CACHE;
-  const r = await run(arm.nts, ["emit-c", join(project, "tsconfig.json"), "--out", out, "--napi"], env);
+  const r = await run(arm.nts, ["emit-c", join(project, "tsconfig.json"), "--out", out, "--napi", ...(RC ? ["--rc"] : [])], env);
   const program = join(out, "program.c");
   // "Wrote nothing" is also what a run that never happened looks like, so a
   // missing program is not measured rather than an empty module.
@@ -289,6 +302,7 @@ await Promise.all(Array.from({ length: Math.min(WORKERS, projects.length) }, asy
 
 console.log(`  before ${beforeBin}, after ${afterBin} (both pinned), ${projects.length} project(s) in ${Math.round((Date.now() - started) / 1000)} s`);
 for (const line of armLines(beforeBin, afterBin)) console.log(`  ${line}`);
+console.log(`  provider: ${PROVIDER}`);
 const unmeasured = [];
 const differing = [];
 const renumberedOnly = [];
@@ -324,7 +338,7 @@ for (const { project, d } of renumberedOnly) {
 }
 for (const u of unmeasured) console.log(`  NOT MEASURED  ${u}`);
 const measuredCount = projects.length - unmeasured.length;
-console.log(`\n  of ${measuredCount} measured project(s): ${differing.length} emit a different program, ${renumberedOnly.length} the same program renumbered, ${measuredCount - differing.length - renumberedOnly.length} byte-identical`);
+console.log(`\n  of ${measuredCount} measured project(s), under ${RC ? "reference counting" : "no-gc"}: ${differing.length} emit a different program, ${renumberedOnly.length} the same program renumbered, ${measuredCount - differing.length - renumberedOnly.length} byte-identical`);
 
 const axisModules = differing.filter((p) => p.startsWith("runtime/node/")).map((p) => p.slice("runtime/node/".length));
 if (!argv.includes("--axis")) {
@@ -350,7 +364,7 @@ function axis(arm, modules) {
     cwd: ROOT,
     encoding: "utf8",
     maxBuffer: 1 << 26,
-    env: { ...process.env, NTS_BIN: arm.nts, NTS_TSGO: tsgo, NTS_ADDON_OUT: addons, NTS_SNAPSHOT_CACHE: join(arm.dir, "snapshots"), TMPDIR: tmp },
+    env: { ...process.env, NTS_BIN: arm.nts, NTS_TSGO: tsgo, NTS_ADDON_OUT: addons, NTS_SNAPSHOT_CACHE: join(arm.dir, "snapshots"), TMPDIR: tmp, ...(RC ? { NTS_CONFORMANCE_RC: "1" } : {}) },
   });
   const text = `${r.stdout ?? ""}${r.stderr ?? ""}`;
   const rows = readAxis(text);

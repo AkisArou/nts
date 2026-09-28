@@ -90,6 +90,7 @@ export const ASKS = {
   "snapshot-cache": ["valid", "is a cached snapshot the same program as a fresh one"],
   types: ["valid", "is the snapshot's type table consistent"],
   "bench-agree": ["answers", "does every backend build and agree on the benchmarks"],
+  memory: ["answers", "does counting leak or free twice, measured by live objects"],
   addons: ["valid", "does each runtime module build, load and publish something"],
 };
 
@@ -133,6 +134,15 @@ export const RULES = [
       { if: "a type rule", kind: "answers", asks: "a generic class with two live instantiations appears in the corpus, never in a hand-written fixture", run: "the emitted-diff --axis above, and a full census per-case diff (conformance262.mjs --rows, both binaries)" },
       { if: "a representation change", kind: "answers", asks: "only the JVM types references; C and LLVM agree by construction", run: "NTS_BACKEND=jvm node tooling/differential/agree.mjs <before> <after>" },
       { if: "meant to make programs compile", kind: "answers", asks: "did it buy cases, per file -- --recorded cannot see a gain", run: "a full census for both binaries, per-case diff; check the prediction against the last run's rows first" },
+    ],
+  },
+  {
+    name: "reference counting",
+    when: (p) => /^compiler\/core\/src\/hir\/(rc|own)\.rs$/.test(p),
+    steps: ["rc", "llvm-rc", "memory"],
+    arms: [
+      { kind: "answers", asks: "where releases go: the default provider is no-gc, rc.rs never runs, and a diff without --rc reads byte-identical whatever this changed", run: "node tooling/conformance/emitted-diff.mjs <before> <after> --rc --axis" },
+      { kind: "answers", asks: "does every example still answer under counting", run: "NTS_RC=1 node tooling/differential/agree.mjs <before> <after>" },
     ],
   },
   {
