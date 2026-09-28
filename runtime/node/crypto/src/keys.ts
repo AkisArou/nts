@@ -457,7 +457,7 @@ function exportAkpJwk(native: number, keyType: string, privateKey: boolean): Jso
  * bytes, or node's refusal for a type that has none.
  */
 function exportRaw(key: AsymmetricKeyObject, privateKey: boolean, compressed: boolean): Buffer {
-  const type = key.asymmetricKeyType ?? "";
+  const type = asymmetricKeyTypeOfKey(key) ?? "";
   const supported = privateKey ? hasRawPrivateKey(type) : hasRawPublicKey(type);
   if (!supported) throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS_BINDING();
   const bytes = nts_crypto_key_export_raw(handleOf(key).native, privateKey, compressed);
@@ -540,7 +540,7 @@ function hasSeed(type: string): boolean {
 
 /** Node's `RawSeed`: the seed, or node's refusal for a key without one. */
 function exportSeed(key: AsymmetricKeyObject): Buffer {
-  if (!hasSeed(key.asymmetricKeyType ?? "")) throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS_BINDING();
+  if (!hasSeed(asymmetricKeyTypeOfKey(key) ?? "")) throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS_BINDING();
   const bytes = nts_crypto_key_export_seed(handleOf(key).native);
   if (bytes === null) throw new ERR_CRYPTO_OPERATION_FAILED("Failed to get raw seed");
   return new Buffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength);
@@ -579,13 +579,13 @@ export class PublicKeyObject extends AsymmetricKeyObject {
         return exportJwk(this, false);
       case "raw-public": {
         const type = options.type ?? "uncompressed";
-        if (this.asymmetricKeyType === "ec") {
+        if (asymmetricKeyTypeOfKey(this) === "ec") {
           validateOneOf(type, "options.type", ["compressed", "uncompressed"]);
         }
         return exportRaw(this, false, type === "compressed");
       }
       default: {
-        const { format, type } = parsePublicKeyEncoding(options, this.asymmetricKeyType, undefined);
+        const { format, type } = parsePublicKeyEncoding(options, asymmetricKeyTypeOfKey(this), undefined);
         return writePublicKey(handleOf(this).native, format, type);
       }
     }
@@ -611,7 +611,7 @@ export class PrivateKeyObject extends AsymmetricKeyObject {
       default: {
         const { format, type, cipher, passphrase } = parsePrivateKeyEncoding(
           options,
-          this.asymmetricKeyType,
+          asymmetricKeyTypeOfKey(this),
           undefined,
         );
         return writePrivateKey(handleOf(this).native, format, type, encodingCipher(cipher), passphrase);
