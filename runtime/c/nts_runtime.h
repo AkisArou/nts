@@ -2052,6 +2052,15 @@ NtsArray *nts_winrt_received_strings(void *block, uint32_t count);
  * filled. */
 void *nts_winrt_array_items(const NtsArray *array);
 
+/* An `IReference<T>` -- C#'s `T?` -- of the instantiation `iid`, holding the
+ * `size` bytes of `T` at `value`, made for a call that takes one: through
+ * `PropertyValue` where it boxes `type` (a `PropertyType`), a box that
+ * answers `IPropertyValue` too, as the Windows Runtime's own do, and
+ * otherwise (`OtherType`, 20: an enum, `Color`, a vector) an object of the
+ * runtime's answering `IReference<T>`. A reference the caller owns. */
+void *nts_winrt_reference(const void *value, double size, int32_t type,
+                          uint64_t iid_low, uint64_t iid_high);
+
 /* A zeroed block of `bytes` from COM's task allocator, for an array of
  * structs a Windows Runtime call is passed or one it fills; ends the process
  * when there is none. And

@@ -307,4 +307,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 /// 129 for `nts_winrt_array_items`, an array's own elements lent to a
 /// Windows Runtime call -- objects it fills, booleans it reads or fills:
 /// Windows again.
-const REFUSED_FLOOR: usize = 129;
+///
+/// 130 for `nts_winrt_reference`, an `IReference<T>` made for a Windows
+/// Runtime call that takes a `T | null`: Windows again.
+const REFUSED_FLOOR: usize = 130;

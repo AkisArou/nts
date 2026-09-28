@@ -49,7 +49,7 @@ use crate::origin::Origin;
 /// where a rewritten file's text came from. 36: a type alias carries its
 /// `native` tags, a Windows Runtime interface's `@ntsQuery` IID. 37:
 /// `runtime_class`, a sealed Windows Runtime class a binding declares.
-pub const SCHEMA_VERSION: u32 = 37;
+pub const SCHEMA_VERSION: u32 = 38;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -703,7 +703,7 @@ pub struct NodeRecord {
 }
 
 /// Explicit native contracts from leading declaration documentation.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NativeAttributes {
     /// Unknown and duplicate ABI tags survive for lowering to diagnose.
     pub abi: Option<String>,
@@ -858,6 +858,12 @@ pub struct NativeAttributes {
     /// class may override, answered at `slot` of the interface `IID` names.
     #[serde(default)]
     pub overridable: Option<String>,
+    /// `@ntsReference <parameter> <IID> ...`: each named parameter, typed
+    /// `T | null`, crosses as an `IReference<T>` -- C#'s `T?` -- of the
+    /// instantiation `IID` names, made for the call; a property's setter
+    /// parameter is `value`.
+    #[serde(default)]
+    pub reference: Option<String>,
 }
 
 /// Why a snapshot was rejected.

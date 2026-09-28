@@ -594,6 +594,184 @@ void *nts_winrt_box(NtsValue value) {
   return boxed;
 }
 
+/* An `IReference<T>` of the runtime's own, for a `T` `PropertyValue` makes no
+ * box of -- an enum, `Color`, a vector: `IReference<T>` of the instantiation
+ * it was made for, `IInspectable`, and agile, holding `size` bytes of `T`
+ * that `get_Value` copies out. */
+typedef struct NtsReference {
+  const void *const *table;
+  volatile LONG count;
+  IID iid;
+  uint32_t size;
+  _Alignas(8) unsigned char value[];
+} NtsReference;
+
+static HRESULT STDMETHODCALLTYPE nts_reference_query(void *self,
+                                                     const IID *wanted,
+                                                     void **out) {
+  /* `IUnknown`, `IInspectable` and `IAgileObject`, beside its own. */
+  static const IID unknown = {
+      0x00000000, 0x0000, 0x0000, {0xC0, 0, 0, 0, 0, 0, 0, 0x46}};
+  static const IID inspectable = {
+      0xAF86E2E0,
+      0xB12D,
+      0x4C6A,
+      {0x9C, 0x5A, 0xD7, 0xAA, 0x65, 0x10, 0x1E, 0x90}};
+  static const IID agile = {0x94EA2B94,
+                            0xE9CC,
+                            0x49E0,
+                            {0xC0, 0xFF, 0xEE, 0x64, 0xCA, 0x8F, 0x5B, 0x90}};
+  NtsReference *reference = self;
+  if (IsEqualIID(wanted, &unknown) || IsEqualIID(wanted, &inspectable) ||
+      IsEqualIID(wanted, &agile) || IsEqualIID(wanted, &reference->iid)) {
+    InterlockedIncrement(&reference->count);
+    *out = self;
+    return S_OK;
+  }
+  *out = 0;
+  return E_NOINTERFACE;
+}
+
+static ULONG STDMETHODCALLTYPE nts_reference_add_ref(void *self) {
+  return (ULONG)InterlockedIncrement(&((NtsReference *)self)->count);
+}
+
+static ULONG STDMETHODCALLTYPE nts_reference_release(void *self) {
+  LONG left = InterlockedDecrement(&((NtsReference *)self)->count);
+  if (left == 0) {
+    free(self);
+  }
+  return (ULONG)left;
+}
+
+static HRESULT STDMETHODCALLTYPE nts_reference_iids(void *self, ULONG *count,
+                                                    IID **iids) {
+  IID *one = CoTaskMemAlloc(sizeof(IID));
+  if (one == 0) {
+    return E_OUTOFMEMORY;
+  }
+  *one = ((NtsReference *)self)->iid;
+  *count = 1;
+  *iids = one;
+  return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE nts_reference_class_name(void *self,
+                                                          void **name) {
+  (void)self;
+  *name = 0;
+  return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE nts_reference_trust(void *self,
+                                                     int32_t *level) {
+  (void)self;
+  *level = 0; /* BaseTrust */
+  return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE nts_reference_value(void *self, void *out) {
+  const NtsReference *reference = self;
+  memcpy(out, reference->value, reference->size);
+  return S_OK;
+}
+
+static const void *const nts_reference_table[] = {
+    (const void *)nts_reference_query,      (const void *)nts_reference_add_ref,
+    (const void *)nts_reference_release,    (const void *)nts_reference_iids,
+    (const void *)nts_reference_class_name, (const void *)nts_reference_trust,
+    (const void *)nts_reference_value};
+
+void *nts_winrt_reference(const void *value, double size, int32_t type,
+                          uint64_t iid_low, uint64_t iid_high) {
+  IID iid = nts_iid(iid_low, iid_high);
+  void *statics = nts_property_value_statics();
+  void *boxed = 0;
+  HRESULT hr = S_OK;
+  /* A `PropertyType` `PropertyValue` makes a box of, whose `Create…` is
+   * slot 6 + type for `UInt8` (1) to `String` (12), then `Guid` (16) at 20
+   * and `DateTime` (14) to `Rect` (19) at 21 to 25. */
+  typedef struct {
+    float a, b;
+  } Pair;
+  typedef struct {
+    float x, y, width, height;
+  } Rectangle;
+  switch (type) {
+  case 1:
+  case 11:
+    hr = ((HRESULT(STDMETHODCALLTYPE *)(void *, uint8_t, void **))(*(
+        void ***)statics)[6 + type])(statics, *(const uint8_t *)value, &boxed);
+    break;
+  case 2:
+  case 3:
+  case 10:
+    hr = ((HRESULT(STDMETHODCALLTYPE *)(void *, uint16_t, void **))(*(
+        void ***)statics)[6 + type])(statics, *(const uint16_t *)value, &boxed);
+    break;
+  case 4:
+  case 5:
+    hr = ((HRESULT(STDMETHODCALLTYPE *)(void *, uint32_t, void **))(*(
+        void ***)statics)[6 + type])(statics, *(const uint32_t *)value, &boxed);
+    break;
+  case 6:
+  case 7:
+    hr = ((HRESULT(STDMETHODCALLTYPE *)(void *, uint64_t, void **))(*(
+        void ***)statics)[6 + type])(statics, *(const uint64_t *)value, &boxed);
+    break;
+  case 8:
+    hr = ((HRESULT(STDMETHODCALLTYPE *)(void *, float, void **))(
+        *(void ***)statics)[14])(statics, *(const float *)value, &boxed);
+    break;
+  case 9:
+    hr = ((HRESULT(STDMETHODCALLTYPE *)(void *, double, void **))(
+        *(void ***)statics)[15])(statics, *(const double *)value, &boxed);
+    break;
+  case 14:
+  case 15:
+    hr = ((HRESULT(STDMETHODCALLTYPE *)(void *, int64_t, void **))(*(
+        void ***)statics)[7 + type])(statics, *(const int64_t *)value, &boxed);
+    break;
+  case 17:
+  case 18:
+    hr = ((HRESULT(STDMETHODCALLTYPE *)(void *, Pair, void **))(
+        *(void ***)statics)[6 + type])(statics, *(const Pair *)value, &boxed);
+    break;
+  case 19:
+    hr = ((HRESULT(STDMETHODCALLTYPE *)(void *, Rectangle, void **))(
+        *(void ***)statics)[25])(statics, *(const Rectangle *)value, &boxed);
+    break;
+  default: {
+    size_t bytes = size > 0 ? (size_t)size : 0;
+    NtsReference *reference = malloc(sizeof(NtsReference) + bytes);
+    if (reference == 0) {
+      fprintf(stderr, "nts: out of memory\n");
+      abort();
+    }
+    reference->table = nts_reference_table;
+    reference->count = 1;
+    reference->iid = iid;
+    reference->size = (uint32_t)bytes;
+    memcpy(reference->value, value, bytes);
+    return reference;
+  }
+  }
+  void *wanted = 0;
+  if (SUCCEEDED(hr)) {
+    hr = (*(const NtsUnknownTable **)boxed)
+             ->query_interface(boxed, &iid, &wanted);
+    nts_unknown_release(boxed);
+  }
+  if (FAILED(hr)) {
+    fprintf(stderr,
+            "nts: making an IReference for the Windows Runtime failed "
+            "(0x%08lx)\n",
+            (unsigned long)hr);
+    abort();
+  }
+  return wanted;
+}
+
 /* {4BD682DD-7554-40E9-9A9B-82654EDE7E62}: `IPropertyValue`, which a boxed
  * primitive answers. Its slots from 6: `get_Type`, `get_IsNumericScalar`,
  * then one getter per `PropertyType`, `GetUInt8` at 8 through `GetString` at

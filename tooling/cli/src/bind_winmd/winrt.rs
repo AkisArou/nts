@@ -974,11 +974,20 @@ impl Writer<'_> {
             return None;
         }
         let answered = self.answered(&read.return_type).ok()?;
+        // A reference is set as it is read, `T | null`, the setter making the
+        // `IReference<T>` for the call (`@ntsReference value`).
+        let mut reference = None;
         let taken = match setter {
             Some((_, put)) => {
                 let written = put.signature(&arguments);
                 let [ty] = written.types.as_slice() else { return None };
-                Some(self.spell(ty, true).ok()?)
+                match self.reference_parameter(ty).ok()? {
+                    Some((value, iid, kind)) => {
+                        reference = Some(format!("@ntsReference value {iid} {kind}"));
+                        Some(format!("{value} | null"))
+                    }
+                    None => Some(self.spell(ty, true).ok()?),
+                }
             }
             None => None,
         };
@@ -997,14 +1006,21 @@ impl Writer<'_> {
             text
         };
         let get_tag = format!("@ntsGet {get_slot} get_{property}");
+        let set_tags = |set_slot: usize| {
+            let mut lines = vec![format!("@ntsSet {set_slot} put_{property}")];
+            lines.extend(reference.clone());
+            lines
+        };
         Some(match (setter, taken) {
             (Some((set_slot, _)), Some(taken)) if taken == answered => {
-                format!("{}    {name}: {answered};\n", tags(&[get_tag, format!("@ntsSet {set_slot} put_{property}")]))
+                let mut lines = vec![get_tag];
+                lines.extend(set_tags(set_slot));
+                format!("{}    {name}: {answered};\n", tags(&lines))
             }
             (Some((set_slot, _)), Some(taken)) => format!(
                 "{}    get {name}(): {answered};\n{}    set {name}(value: {taken});\n",
                 tags(&[get_tag]),
-                tags(&[format!("@ntsSet {set_slot} put_{property}")])
+                tags(&set_tags(set_slot))
             ),
             _ => format!("{}    readonly {name}: {answered};\n", tags(&[get_tag])),
         })
@@ -1433,6 +1449,8 @@ impl Writer<'_> {
         // Runtime's ABI forbids the callee to keep: it copies what it needs
         // before it returns.
         let mut lent: Vec<String> = Vec::new();
+        // `@ntsReference`'s triples: each `IReference<T>` taken as `T | null`.
+        let mut references: Vec<String> = Vec::new();
         for (at, ty) in signature.types.iter().enumerate().take(declared) {
             let row = named.params().get(at).copied().flatten();
             let name = row.map_or_else(|| format!("param{at}"), |row| safe(row.name()));
@@ -1477,6 +1495,13 @@ impl Writer<'_> {
                 });
             } else if !outs.is_empty() {
                 return Err("an `in` parameter after an `out` one".to_owned());
+            } else if !matches!(receiver, Receiver::Override { .. })
+                && let Some((value, iid, kind)) = self.reference_parameter(ty)?
+            {
+                // A reference passed as it is read, `T | null`, made for the
+                // call. Not an override's: Windows hands that one over.
+                parameters.push(format!("{name}: {value} | null"));
+                references.push(format!("{name} {iid} {kind}"));
             } else {
                 parameters.push(format!("{name}: {}", self.parameter(ty, &receiver)?));
                 // `ref const T` is a pointer to the caller's storage, lent
@@ -1513,6 +1538,9 @@ impl Writer<'_> {
         receiver_tags(&mut text, receiver, !outs.is_empty());
         if let Some(iid) = via {
             let _ = writeln!(text, "     * @ntsVia {iid}");
+        }
+        if !references.is_empty() {
+            let _ = writeln!(text, "     * @ntsReference {}", references.join(" "));
         }
         let _ = writeln!(text, "     */");
         if matches!(receiver, Receiver::Constructor { .. }) {
@@ -1775,6 +1803,44 @@ impl Writer<'_> {
             }
             _ => return Ok(None),
         }))
+    }
+
+    /// An `IReference<T>` a method or a setter takes, as the program passes
+    /// it: its value as [`Self::referenced`] spells it (`| null` beside),
+    /// the instantiation's IID, and the `PropertyType` `PropertyValue` boxes
+    /// it as -- 20, `OtherType`, for an enum or a struct it has no `Create…`
+    /// for, which the runtime makes a reference of itself. `None` where it
+    /// stays the reference: a string, and whatever `referenced` leaves.
+    fn reference_parameter(&mut self, ty: &Type) -> Result<Option<(String, String, u8)>, String> {
+        let Type::ClassName(named) = ty else { return Ok(None) };
+        let [value] = named.generics.as_slice() else { return Ok(None) };
+        if matches!(value, Type::String) {
+            return Ok(None);
+        }
+        let Some(spelled) = self.referenced(ty)? else { return Ok(None) };
+        let kind = match value {
+            Type::U8 => 1,
+            Type::I16 => 2,
+            Type::U16 => 3,
+            Type::I32 => 4,
+            Type::U32 => 5,
+            Type::I64 => 6,
+            Type::U64 => 7,
+            Type::F32 => 8,
+            Type::F64 => 9,
+            Type::Char => 10,
+            Type::Bool => 11,
+            Type::ValueName(name) if name.namespace == "Windows.Foundation" => match name.name.as_str() {
+                "DateTime" => 14,
+                "TimeSpan" => 15,
+                "Point" => 17,
+                "Size" => 18,
+                "Rect" => 19,
+                _ => 20,
+            },
+            _ => 20,
+        };
+        Ok(Some((spelled, self.interface_iid(ty)?, kind)))
     }
 
     /// A delegate where a method takes one: `Delegate<(sender: S, args: A) =>

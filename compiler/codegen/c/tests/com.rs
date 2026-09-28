@@ -823,6 +823,54 @@ export function run(): number {
     windows_syntax(&dir, &emitted);
 }
 
+/// A `T | null` passed where the Windows Runtime takes an `IReference<T>`
+/// (`@ntsReference`): NULL for `null`, and otherwise the value written into
+/// a local and made into a reference of the instantiation's IID for the call
+/// (`nts_winrt_reference`), given back after it.
+#[test]
+fn a_value_or_null_is_passed_as_a_reference_made_for_the_call() {
+    let binding = r#"declare module "winrt:Windows.Data.Json" {
+  import type { ComClass, HString } from "winrt:types";
+  export interface IJsonValueMethods {
+    /**
+     * @ntsVtable 10 put_Checked
+     * @ntsHresult
+     * @ntsReference value 3C00FD60-2950-5939-A21A-2D12C5A01B8A 11
+     */
+    put_Checked(this: IJsonValue, value: boolean | null): void;
+  }
+  export type IJsonValue = ComClass<"IJsonValue"> & IJsonValueMethods;
+  /**
+   * @ntsVtable 6 Parse
+   * @ntsHresult
+   * @ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C
+   */
+  export function Parse(input: HString): IJsonValue;
+}
+"#;
+    let source = r#"import { Parse } from "winrt:Windows.Data.Json";
+export function run(flag: boolean | null): void {
+  Parse("[]").put_Checked(flag);
+}
+"#;
+    let Some((dir, prepared)) = prepare("reference-arguments", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    let run = &text[text.find("run(").expect("no run")..];
+    assert_eq!(run.matches("nts_winrt_reference(").count(), 1, "no reference made for the call:\n{run}");
+    let made = run.find("nts_winrt_reference(").unwrap_or(0);
+    let called = run.find("[10])(").unwrap_or_else(|| panic!("no call through slot 10:\n{run}"));
+    assert!(made < called, "the reference is made after the call:\n{run}");
+    assert!(run[called..].contains("nts_com_release("), "the reference is not given back after the call:\n{run}");
+
+    windows_syntax(&dir, &emitted);
+}
+
 /// A sealed runtime class (`@ntsRuntimeClass`), declared as a TypeScript
 /// class of its constructors: `new Uri()` activates it (`@ntsActivate`), and
 /// `new Uri(text)` calls the activation factory's method the checker chose,

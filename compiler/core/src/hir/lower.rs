@@ -47882,8 +47882,10 @@ impl<'a> FuncBuilder<'a> {
                 let ty = typed.cloned().or_else(|| self.type_of(id)).ok_or_else(|| self.unrepresentable(id, "a copied struct"))?;
                 self.object_from_copied(id, slot, &ty)?
             }
+            // A read the checker narrowed to `null` -- right after `x = null`
+            // -- has no representation of its own; the erased value is it.
             super::native::Written::Reference(referenced) => {
-                let ty = typed.cloned().or_else(|| self.type_of(id)).ok_or_else(|| self.unrepresentable(id, "a referenced value"))?;
+                let ty = typed.cloned().or_else(|| self.type_of(id)).unwrap_or(HirType::Erased);
                 self.read_reference(id, slot, referenced, &ty)?
             }
             super::native::Written::Bool => {
@@ -49257,6 +49259,17 @@ impl<'a> FuncBuilder<'a> {
 
     /// What a declaration's `@ntsHresult` says, if it has one: plain,
     /// `composable`, or `out`.
+    /// `@ntsReference`: the parameters crossing as an `IReference<T>`.
+    fn reference_tags(&self, call: NodeId, declaration: Option<NodeId>) -> Result<Vec<super::native::Reference>, Diagnostic> {
+        Ok(declaration
+            .and_then(|decl| self.node(decl).native.as_ref())
+            .and_then(|native| native.reference.as_deref())
+            .map(super::native::parse_references)
+            .transpose()
+            .map_err(|why| self.unsupported(call, &why))?
+            .unwrap_or_default())
+    }
+
     fn hresult_shape(&self, call: NodeId, declaration: Option<NodeId>) -> Result<Option<super::native::Hresult>, Diagnostic> {
         // An overridable method answers an HRESULT as every slot does, and
         // its binding says so only by being `@ntsOverride`.
@@ -49736,6 +49749,11 @@ impl<'a> FuncBuilder<'a> {
                     let ty = target.parameters[at].representation();
                     c_args.push(self.error_slot(argument.filter(|_| written), ty, converter, &mut lent, &origin));
                 }
+                // A value or `null`, as an `IReference<T>` made for the call.
+                Role::Reference { iid, value, property_type } => {
+                    let want = target.parameters[at].representation();
+                    c_args.extend(argument.map(|given| self.reference_argument(id, given, (&iid, value, property_type), want, &mut lent)).transpose()?);
+                }
                 Role::Strings | Role::HStrings | Role::Records(_) | Role::Booleans | Role::FilledHandles | Role::FilledStrings | Role::FilledRecords(_) => c_args.extend(
                     argument.map(|array| self.lend_array(id, &role, array, target.parameters[at].representation(), &mut lent)).transpose()?,
                 ),
@@ -50024,6 +50042,7 @@ impl<'a> FuncBuilder<'a> {
         let selector = selector.or(declared);
         let (throws, hidden) = split_hidden_throws(throws, selector.is_some(), signature);
         let hresult = self.hresult_shape(call, declaration)?;
+        let references = self.reference_tags(call, declaration)?;
         let mut native = super::native::Function::from_signature(
             self.snapshot,
             name,
@@ -50031,7 +50050,7 @@ impl<'a> FuncBuilder<'a> {
             abi,
             throws.as_ref().map(|(slot, converter)| (slot.as_str(), converter.as_str())),
             &defaults,
-            hresult,
+            (hresult, &references),
         )
         .map_err(|why| self.unsupported(call, &why))?;
         if let Some(converter) = hidden {

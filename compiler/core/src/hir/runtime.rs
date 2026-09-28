@@ -304,6 +304,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_winrt_received", &[None, Some(HirType::Int { bits: 32, signed: false }), Some(HirType::Float { bits: 64 })], None),
     ("nts_winrt_received_handles", &[None, None, Some(HirType::Int { bits: 32, signed: false })], None),
     ("nts_winrt_received_strings", &[None, Some(HirType::Int { bits: 32, signed: false })], None),
+    ("nts_winrt_reference", &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Int { bits: 32, signed: true }), Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
     ("nts_winrt_unbox", &[None], None),
     ("nts_winrt_unlisten", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 32, signed: false }), Some(HirType::Int { bits: 32, signed: false }), None], Some(HirType::Int { bits: 32, signed: true })),
 ];
@@ -515,7 +516,9 @@ pub fn keeps(name: &str) -> Option<&'static [usize]> {
         // its anchor.
         // And `nts_gobject_made`, which sinks a floating GObject for a
         // never-free program and does nothing under counting: read, not held.
-        "nts_com_take" | "nts_com_query" | "nts_com_query_array" | "nts_com_release_array" | "nts_com_unlend" | "nts_winrt_listen" | "nts_winrt_unlisten" | "nts_winrt_box" | "nts_winrt_is" | "nts_gobject_made" => Some(&[]),
+        // `nts_winrt_reference` copies the value it is handed into the
+        // reference it makes, and keeps nothing of the caller's storage.
+        "nts_com_take" | "nts_com_query" | "nts_com_query_array" | "nts_com_release_array" | "nts_com_unlend" | "nts_winrt_listen" | "nts_winrt_unlisten" | "nts_winrt_box" | "nts_winrt_is" | "nts_winrt_reference" | "nts_gobject_made" => Some(&[]),
         _ => None,
     }
 }

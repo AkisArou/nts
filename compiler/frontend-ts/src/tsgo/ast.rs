@@ -484,40 +484,8 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
     let composable = leading_tag(source, "@ntsComposable");
     let runtime_class = leading_tag(source, "@ntsRuntimeClass");
     let overridable = leading_tag(source, "@ntsOverride");
-    if abi.is_none()
-        && no_escape.is_none()
-        && headers.is_none()
-        && defines.is_none()
-        && free.is_none()
-        && symbol.is_none()
-        && throws.is_none()
-        && call.is_none()
-        && defaults.is_none()
-        && get.is_none()
-        && set.is_none()
-        && construct.is_none()
-        && selector.is_none()
-        && class.is_none()
-        && protocol.is_none()
-        && frameworks.is_none()
-        && libraries.is_none()
-        && vtable.is_none()
-        && hresult.is_none()
-        && factory.is_none()
-        && query.is_none()
-        && activate.is_none()
-        && via.is_none()
-        && listener.is_none()
-        && iterate.is_none()
-        && vfunc.is_none()
-        && gtype.is_none()
-        && composable.is_none()
-        && runtime_class.is_none()
-        && overridable.is_none()
-    {
-        return None;
-    }
-    Some(Box::new(nts_semantic_schema::NativeAttributes {
+    let reference = leading_tag(source, "@ntsReference");
+    let attributes = nts_semantic_schema::NativeAttributes {
         abi,
         no_escape,
         headers,
@@ -548,7 +516,10 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         composable,
         runtime_class,
         overridable,
-    }))
+        reference,
+    };
+    // No tag at all is no attributes, rather than an empty set of them.
+    (attributes != nts_semantic_schema::NativeAttributes::default()).then(|| Box::new(attributes))
 }
 
 fn native_abi(source: &str) -> Option<String> { leading_tag(source, "@ntsAbi") }

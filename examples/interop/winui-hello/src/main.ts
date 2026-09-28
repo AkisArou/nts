@@ -52,7 +52,7 @@
 //   DLLs from beside the program, which the build ships there; without
 //   them `ensureCoreWebView2Async` rejects with 0x8007007E.
 // - `after` is printed once `Start` returns, so the line shows the loop ended.
-import type { ByValue } from "c:types";
+import type { ByValue, c_int64 } from "c:types";
 import type { Size } from "winrt:Windows.Foundation";
 import { Application, FocusState, Window } from "winrt:Microsoft.UI.Xaml";
 import type { IFrameworkElementOverrides, ILaunchActivatedEventArgs } from "winrt:Microsoft.UI.Xaml";
@@ -270,9 +270,25 @@ class App extends Application {
     // `IReference<T>` read as `T | null`, its `get_Value` called where the
     // reference is there -- a toggle starts unchecked -- and `null` where it
     // is not: a date picker starts with no date.
-    const checked = new ToggleButton().isChecked;
-    const date = new CalendarDatePicker().date;
-    const nullable = String(checked) + ":" + (date === null ? "none" : String(date.universalTime));
+    const toggle = new ToggleButton();
+    const checked = toggle.isChecked;
+    const picker = new CalendarDatePicker();
+    const date = picker.date;
+    // And set as they are read: a value made into an `IReference<T>` for
+    // the call -- `PropertyValue`'s box of a boolean and of a `DateTime`, and
+    // the runtime's own reference to a `Color`, which `PropertyValue` has
+    // no box for -- and `null` as none.
+    toggle.isChecked = true;
+    const set = toggle.isChecked;
+    toggle.isChecked = null;
+    const cleared = toggle.isChecked;
+    picker.date = { universalTime: 133000000000000000n as c_int64 };
+    const dated = picker.date;
+    const bar = window.appWindow.titleBar;
+    bar.backgroundColor = { a: 255, r: 1, g: 2, b: 3 };
+    const colored = bar.backgroundColor;
+    const nullable = String(checked) + ":" + (date === null ? "none" : String(date.universalTime)) + ":" + String(set) + ":" + String(cleared) + ":" +
+      (dated === null ? "none" : String(dated.universalTime)) + ":" + (colored === null ? "none" : String(colored.r) + String(colored.g) + String(colored.b));
     const line =
       "title=" + window.title + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
         " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(button.entered) +

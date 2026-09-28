@@ -786,8 +786,14 @@ fn composable_classes_are_constructed_as_themselves() {
     overloads_are_declared(&module);
     // An `IReference<T>` -- C#'s `T?` -- is read as `T | null`, a struct as
     // a plain object; one is still passed as the reference.
-    assert!(module.contains("get date(): Copied<DateTime> | null;"), "no nullable date");
-    assert!(module.contains("set date(value: IReference<ByValue<DateTime>> | null);"), "no reference set");
+    // Set as it is read: one property, the reference made for the call.
+    assert!(
+        module.contains(
+            "     * @ntsGet 6 get_Date\n     * @ntsSet 7 put_Date\n     * @ntsReference value 5541D8A7-497C-5AA4-86FC-7713ADBF2A2C 14\n"
+        ),
+        "no reference tag on date"
+    );
+    assert!(module.contains("    date: Copied<DateTime> | null;"), "no nullable date");
     let button = &module[module.find("export namespace Button {").expect("no Button namespace")..];
     let button = &button[..button.find("\n  }").unwrap()];
     assert!(

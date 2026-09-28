@@ -202,9 +202,14 @@ the same vtable calls on the VM measured the behaviour first.
   projection read one: a boolean, a number, an enum, a string, or a struct
   as a plain object (`Copied<T>`). The compiler calls the reference's
   `get_Value` itself (slot 6 of every `IReference<T>`) and gives it back;
-  `null` where there is none. Passed, one is still the reference
-  (`set date(value: IReference<...> | null)`): making one needs an object
-  implementing `IReference<T>` for the instantiation's IID, not built yet.
+  `null` where there is none. It is set as it is read -- `toggle.isChecked
+  = true`, one property -- the binder naming the instantiation's IID and
+  `PropertyType` (`@ntsReference value <IID> <type>`), since only it can
+  compute them: the value is made into a reference for the call
+  (`nts_winrt_reference`) through `PropertyValue` where it boxes that type,
+  so the reference answers `IPropertyValue` as Windows' own do, and as an
+  object of the runtime's answering `IReference<T>` otherwise -- an enum,
+  `Color`, a vector. A string is still passed as the reference.
 - **Overloads:** a name two of a class's interfaces give as methods is
   declared once per interface, as C# overloads it (`frame.navigate(type)`,
   `frame.navigate(type, parameter)`); the checker's choice is the slot

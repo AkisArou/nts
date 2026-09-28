@@ -411,6 +411,12 @@ pub enum Role {
     /// parameter of its own: the array's own elements, which are those bytes
     /// already, lent in place for the call to read or to fill.
     Booleans,
+    /// A `T | null` where the Windows Runtime takes an `IReference<T>` --
+    /// C#'s `T?` -- of the instantiation `iid` (`@ntsReference`): `null` as
+    /// NULL, and a value as a reference made for the call
+    /// (`nts_winrt_reference`), of `PropertyValue`'s `property_type` where it
+    /// boxes that type, and given back after the call.
+    Reference { iid: std::sync::Arc<str>, value: Referenced, property_type: u8 },
     /// An array of objects the callee fills (`FilledHandles<H>` in
     /// `winrt:types`), its count a parameter of its own: the array's own
     /// block of handles lent in place, emptied first, so each reference the
@@ -568,6 +574,34 @@ pub enum Written {
     /// `get_Value` (slot 6) is read into a local of the call's as `T` is
     /// read, and the reference given back.
     Reference(Referenced),
+}
+
+/// One parameter `@ntsReference` names: a `T | null` crossing as the
+/// `IReference<T>` of `iid`, made through `PropertyValue` for
+/// `property_type` where it boxes one (1 to 19), and by the runtime otherwise
+/// (20, `OtherType`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reference {
+    pub parameter: String,
+    pub iid: std::sync::Arc<str>,
+    pub property_type: u8,
+}
+
+/// `@ntsReference <parameter> <IID> <PropertyType> ...`, as triples.
+pub fn parse_references(text: &str) -> Result<Vec<Reference>, String> {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    if words.is_empty() || !words.len().is_multiple_of(3) {
+        return Err(format!("@ntsReference `{text}` that is not `<parameter> <IID> <PropertyType>` triples"));
+    }
+    words
+        .chunks(3)
+        .map(|triple| {
+            let property_type = triple[2].parse::<u8>().ok().filter(|kind| (1..=20).contains(kind)).ok_or_else(|| {
+                format!("@ntsReference `{text}` whose PropertyType `{}` is not 1 to 20", triple[2])
+            })?;
+            Ok(Reference { parameter: triple[0].to_owned(), iid: triple[1].into(), property_type })
+        })
+        .collect()
 }
 
 /// What an `IReference<T>` holds, as [`Written::Reference`] reads it: a
@@ -773,6 +807,7 @@ impl Function {
                 | Role::HStrings
                 | Role::Records(_)
                 | Role::Booleans
+                | Role::Reference { .. }
                 | Role::FilledHandles
                 | Role::FilledStrings
                 | Role::FilledRecords(_)
@@ -2070,7 +2105,9 @@ impl Function {
 
     /// `throws` is `@ntsThrows`: the parameter that is the error slot, and the
     /// function that turns an error into its message. `defaults` is
-    /// `@ntsDefault`, read by [`parse_defaults`].
+    /// `@ntsDefault`, read by [`parse_defaults`]. The Windows Runtime's two:
+    /// `@ntsHresult`'s shape, and `@ntsReference`'s parameters, read by
+    /// [`parse_references`].
     pub fn from_signature(
         snapshot: &SemanticSnapshot,
         name: String,
@@ -2078,7 +2115,7 @@ impl Function {
         abi: Option<&str>,
         throws: Option<(&str, &str)>,
         defaults: &[(String, ParameterDefault)],
-        hresult: Option<Hresult>,
+        (hresult, references): (Option<Hresult>, &[Reference]),
     ) -> Result<Self, String> {
         let abi_type = |ty| {
             if abi == Some("managed") { managed_abi_type(snapshot, ty) } else { abi_type(snapshot, ty) }
@@ -2139,7 +2176,7 @@ impl Function {
                 continue;
             }
             if abi.is_none()
-                && let Some(slots) = c_parameter(snapshot, &name, parameter, parameters.len())?
+                && let Some(slots) = c_parameter(snapshot, &name, parameter, (parameters.len(), references))?
             {
                 for (ty, role) in slots {
                     parameters.push(ty);
@@ -2464,7 +2501,7 @@ pub(crate) fn vfunc_signature(
     signature: &nts_semantic_schema::SignatureRecord,
     defaults: &[(String, ParameterDefault)],
 ) -> Result<FnPointer, String> {
-    let slot = Function::from_signature(snapshot, "the virtual function".to_owned(), signature, None, None, defaults, None)?;
+    let slot = Function::from_signature(snapshot, "the virtual function".to_owned(), signature, None, None, defaults, (None, &[]))?;
     let parameters = std::iter::once(Type::Pointer(receiver)).chain(slot.parameters).collect();
     Ok(FnPointer::spell(parameters, slot.result))
 }
@@ -3459,12 +3496,23 @@ fn error_slot(
 ///   or a byte pointer, and its length
 ///   beside it when C takes one. `at` is the C index the first slot lands
 ///   in, which a length slot names its array by.
+/// - A parameter `references` names (`@ntsReference`): a `T | null` as the
+///   `IReference<T>` made for the call.
 fn c_parameter(
     snapshot: &SemanticSnapshot,
     name: &str,
     parameter: &nts_semantic_schema::ParameterRecord,
-    at: usize,
+    (at, references): (usize, &[Reference]),
 ) -> Result<Option<Vec<(Type, Role)>>, String> {
+    // A value or `null` a Windows Runtime call takes as an `IReference<T>`
+    // (`@ntsReference`).
+    if let Some(reference) = references.iter().find(|reference| reference.parameter == parameter.name) {
+        let value = referenced(snapshot, parameter.ty).ok_or_else(|| {
+            format!("foreign function `{name}` @ntsReference parameter `{}` whose type is not a value or `null`", parameter.name)
+        })?;
+        let role = Role::Reference { iid: reference.iid.clone(), value, property_type: reference.property_type };
+        return Ok(Some(vec![(Type::Pointer(Pointee::Void), role)]));
+    }
     // A struct the program holds as a plain object (`Copied<T>`), before the
     // labels an object type literal would otherwise be read as.
     if let Some(record) = schema::copied(snapshot, parameter.ty) {

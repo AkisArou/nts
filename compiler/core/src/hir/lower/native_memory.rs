@@ -343,8 +343,15 @@ impl FuncBuilder<'_> {
         let none = self.push(OpKind::ConstNull, HirType::NativePointer(Pointee::Void), origin.clone());
         let missing = self.push(OpKind::Binary { op: super::BinOp::Eq, lhs: reference, rhs: none }, HirType::Bool, origin.clone());
         let (read, merge) = (self.new_block(), self.new_block());
-        let result = self.push_block_param(merge, ty.clone(), origin.clone());
-        let absent = self.absent_at(OpKind::ConstNull, Some(ty.clone()), id)?;
+        // The value is `T | null` whatever the checker narrowed the read to --
+        // `toggle.isChecked` right after `toggle.isChecked = true` is `true`
+        // to it -- so where the narrowed type has no room for `null` the two
+        // paths meet as an erased value, which the narrowed type is read from.
+        let (carrier, absent) = match self.absent_at(OpKind::ConstNull, Some(ty.clone()), id) {
+            Ok(absent) => (ty.clone(), absent),
+            Err(_) => (HirType::Erased, self.absent_at(OpKind::ConstNull, Some(HirType::Erased), id)?),
+        };
+        let result = self.push_block_param(merge, carrier.clone(), origin.clone());
         self.terminate(super::Terminator::Branch { cond: missing, then_target: merge, then_args: vec![absent], else_target: read, else_args: Vec::new() });
         self.switch_to(read);
         let (held, written, as_read) = match referenced {
@@ -375,10 +382,80 @@ impl FuncBuilder<'_> {
         self.throw_on_failure(id, status, Vec::new(), &origin)?;
         let value = self.read_written(id, (local, None), written, as_read.as_ref(), &origin)?;
         self.runtime_call("nts_com_release", vec![reference], HirType::Void, origin.clone());
-        let value = self.coerce(value, ty, id)?;
+        let value = self.coerce(value, &carrier, id)?;
         self.terminate(super::Terminator::Jump { target: merge, args: vec![value] });
         self.switch_to(merge);
-        Ok(result)
+        if carrier == *ty {
+            return Ok(result);
+        }
+        // Read back as what the checker narrowed the read to, as any erased
+        // value it narrowed is.
+        let read = self.narrowed(id, result)?;
+        self.coerce(read, ty, id)
+    }
+
+    /// A `T | null` where the Windows Runtime takes an `IReference<T>`
+    /// (`Role::Reference`): NULL for `null`, and otherwise the value written
+    /// into a local of the call's as `T` and made into a reference of the
+    /// instantiation `iid` (`nts_winrt_reference`), given back after the
+    /// call -- a NULL given back is nothing.
+    pub(super) fn reference_argument(
+        &mut self,
+        id: NodeId,
+        given: ValueId,
+        (iid, referenced, property_type): (&str, Referenced, u8),
+        want: HirType,
+        lent: &mut Vec<Lent>,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let (make, merge) = (self.new_block(), self.new_block());
+        let reference = self.push_block_param(merge, want.clone(), origin.clone());
+        match self.absence_of(id, given) {
+            Some(missing) => {
+                let none = self.push(OpKind::ConstNull, want.clone(), origin.clone());
+                self.terminate(super::Terminator::Branch { cond: missing, then_target: merge, then_args: vec![none], else_target: make, else_args: Vec::new() });
+            }
+            None => self.terminate(super::Terminator::Jump { target: make, args: Vec::new() }),
+        }
+        self.switch_to(make);
+        let (held, present) = match referenced {
+            Referenced::Bool => (Pointee::Scalar(Scalar::Bool8), HirType::Bool),
+            Referenced::Scalar(scalar) => (Pointee::Scalar(scalar), Type::Scalar(scalar).representation()),
+            Referenced::Copied => {
+                let HirType::Managed(ManagedType::Object(object)) = self.values[given.0 as usize].ty else {
+                    return Err(self.unsupported(id, "a struct for a reference that is not a plain object"));
+                };
+                let Some(record) = crate::hir::native::schema::copied(self.snapshot, object) else {
+                    return Err(self.unsupported(id, "a struct for a reference whose object type names no struct"));
+                };
+                (Pointee::Record(record), self.values[given.0 as usize].ty.clone())
+            }
+            Referenced::HString => return Err(self.unsupported(id, "a string made into an `IReference<String>`, which is not built")),
+        };
+        // Present on this path: an erased `T | null` read as its `T` -- a
+        // number through the number every erased one is.
+        let value = if self.values[given.0 as usize].ty == HirType::Erased {
+            let read = if present == HirType::Bool { HirType::Bool } else { HirType::NUMBER };
+            let read = self.push(OpKind::Unerase { value: given }, read, origin.clone());
+            self.coerce(read, &present, id)?
+        } else {
+            self.coerce(given, &present, id)?
+        };
+        let local = self.push(OpKind::NativeLocal { count: 1 }, HirType::NativePointer(held.clone()), origin.clone());
+        if matches!(held, Pointee::Record(_)) {
+            self.copy_into_native_record(id, value, local, None)?;
+        } else {
+            let first = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+            self.write_place(id, &Place::NativeElement { pointer: local, index: first }, value)?;
+        }
+        let size = self.push(OpKind::NativeSizeOf(held), HirType::NUMBER, origin.clone());
+        let kind = self.push(OpKind::ConstInt(i128::from(property_type)), HirType::Int { bits: 32, signed: true }, origin.clone());
+        let [low, high] = self.iid_arguments(iid, &origin);
+        let created = self.runtime_call("nts_winrt_reference", vec![local, size, kind, low, high], want, origin.clone());
+        self.terminate(super::Terminator::Jump { target: merge, args: vec![created] });
+        self.switch_to(merge);
+        lent.push(Lent::Box { object: reference });
+        Ok(reference)
     }
 
     /// A struct a Windows Runtime call wrote (`Written::Copied`), as a new
