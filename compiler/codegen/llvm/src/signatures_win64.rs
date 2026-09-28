@@ -453,6 +453,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
     Signature { name: "nts_winrt_alloc", returns: "ptr", params: &["double"], attributes: &[] },
     Signature { name: "nts_winrt_box", returns: "ptr", params: &["ptr dead_on_return"], attributes: &[] },
     Signature { name: "nts_winrt_factory", returns: "ptr", params: &["ptr", "i64", "i64"], attributes: &[] },
+    Signature { name: "nts_winrt_filled_handles", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_winrt_free", returns: "void", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_winrt_is", returns: "zeroext i1", params: &["ptr dead_on_return", "i64", "i64"], attributes: &[] },
     Signature { name: "nts_winrt_listen", returns: "i32", params: &["ptr", "i64", "i64", "i32", "ptr"], attributes: &[] },

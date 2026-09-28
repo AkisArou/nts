@@ -33,17 +33,24 @@
 // - `outs`: `[out]` parameters, as fields of the result (see `outs`).
 // - `bytes`: byte arrays both ways, and one handed back; `elements`, arrays
 //   of numbers both ways, boxed and unboxed (see `bytes` and `elements`).
+// - `filled`: arrays the callee fills -- objects, strings, structs.
 // - `map`: a class whose default interface is an instantiation (see `map`).
 // - `guids`: `Guid` by value and by reference (see `guids`).
 // - `global`: a handle held at module scope, read from a function (`held`).
-// - `released`, reported after `run` returns: 5 without a counting provider --
+// - `released`, reported after `run` returns: 9 without a counting provider --
 //   the program's reference to each delegate, given back after the `add_`
-//   call that was handed it (2 before `elements`), and the three `elements`
-//   owes whatever the provider: the `IPropertyValue` of the ints and the one
-//   of the doubles, each released once unboxed into its typed array, and the
-//   box made for the doubles, given back after the call it was handed to --
-//   and 55 under `--rc` (`expected-rc.txt`), those five and one for each
-//   object handed over, among them: the nine of the `pairs` walk -- the
+//   call that was handed it (2 before `elements`); the six `elements` owes
+//   whatever the provider: the four `IPropertyValue`s it unboxes -- the ints,
+//   the doubles, the strings and the boxed strings -- each released once
+//   copied out, and the two boxes it makes, for the doubles and the strings,
+//   each given back after the call it was handed to (8 before `filled`); and
+//   the reference `distortPoints` is called through, `ICameraIntrinsics2`
+//   asked of the camera for the call and given back after it -- and 72
+//   under `--rc` (`expected-rc.txt`), those and one for each
+//   object handed over, among them: the eleven of `filled` -- the parsed
+//   array, its `IVector`, the 9 emptied out of `items`, the two `GetMany`
+//   wrote, the query options, their filter, the camera, and the two items
+//   the loop reads, each held for its read (61 before `filled`) -- the nine of the `pairs` walk -- the
 //   parsed object, its `IIterable`, the iterator, and each pair and the value
 //   read from it (46 before the walk) -- the one the
 //   `erased` arm's `get` is narrowed back through -- a COM value read out of
@@ -83,6 +90,9 @@ import {
 } from "c:report";
 // Bound by `nts build` from the Windows Runtime's metadata into `types/winrt`.
 import { JsonArray, JsonObject, JsonValue } from "winrt:Windows.Data.Json";
+import type { IJsonValue } from "winrt:Windows.Data.Json";
+import { CameraIntrinsics } from "winrt:Windows.Media.Devices.Core";
+import { QueryOptions } from "winrt:Windows.Storage.Search";
 import { local } from "c:memory";
 import type { c_int64, c_uint, c_uint32 } from "c:types";
 import { GuidHelper, MemoryBuffer, PropertyValue, Uri } from "winrt:Windows.Foundation";
@@ -180,6 +190,37 @@ function elements(): string {
     (doubles instanceof Float64Array ? doubles.join(":") : "not a Float64Array") + "/" +
     (Array.isArray(texts) ? texts.join("|") + ":" + String(texts.length) : "not an array") + "/" +
     (Array.isArray(boxed) ? boxed.join("|") : "not an array");
+}
+
+// Arrays the callee fills: the program passes one, whose length is how many
+// the call may write, and the call writes into it, as `ReadBytes` fills a
+// `Uint8Array`. Objects (`GetMany` of an `IVector<IJsonValue>`, from index 1
+// of three into three slots): the array's own block lent in place, two
+// written. The third held an object; it is emptied before the call and the
+// object given back, which only the release count shows (a control without
+// the emptying read 71 under rc), since this vector's `GetMany` writes NULL
+// into a slot it leaves as well. Strings (`GetMany` of an `IVector<HString>`):
+// written into a block of the call's and copied in, replacing what the
+// array held. Structs (`DistortPoints`, which with no distortion answers its
+// inputs): a block of `Point`s, each copied into a new object.
+function filled(): string {
+  const vector = JsonArray.Parse("[1, 2, 3]").as_IVector();
+  const items: (IJsonValue | null)[] = [null, null, JsonValue.CreateNumberValue(9)];
+  const got = vector.GetMany(1, items);
+  let objects = String(got);
+  for (const item of items) {
+    objects += ":" + (item === null ? "null" : String(item.GetNumber()));
+  }
+  const filter = new QueryOptions().fileTypeFilter;
+  filter.append(".txt");
+  filter.append(".md");
+  const texts = ["old", "old", "old"];
+  const written = filter.GetMany(0, texts);
+  const camera = new CameraIntrinsics({ x: 1, y: 1 }, { x: 0, y: 0 }, { x: 0, y: 0, z: 0 }, { x: 0, y: 0 }, 640, 480);
+  const results = [{ x: 0, y: 0 }, { x: 0, y: 0 }];
+  camera.distortPoints([{ x: 10, y: 20 }, { x: 0.5, y: -3 }], results);
+  return objects + "/" + String(written) + ":" + texts.join("|") + "/" +
+    String(results[0].x) + "," + String(results[0].y) + ":" + String(results[1].x) + "," + String(results[1].y);
 }
 
 // A runtime class whose default interface is an instantiation: `StringMap`
@@ -322,7 +363,7 @@ function run(): string {
   }
   return "number=" + String(number) + " text=" + text + " list=" + list.Stringify() + " activations=" +
     String(activations()) + " bools=" + bools + " languages=" + tags + " vector=" + items + " built=" + shown + " threw=" + threw +
-    " closed=" + events() + " structs=" + structs() + " outs=" + outs() + " bytes=" + bytes() + " map=" + map() + " erased=" + erased() + " guids=" + guids() + " global=" + String(held.GetNumber());
+    " closed=" + events() + " structs=" + structs() + " outs=" + outs() + " bytes=" + bytes() + " filled=" + filled() + " map=" + map() + " erased=" + erased() + " guids=" + guids() + " global=" + String(held.GetNumber());
 }
 
 if (asked("throw")) {

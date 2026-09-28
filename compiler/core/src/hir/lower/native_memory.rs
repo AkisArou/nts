@@ -212,6 +212,80 @@ impl FuncBuilder<'_> {
         Ok(block)
     }
 
+    /// An array of objects a call fills (`Role::FilledHandles`): the array's
+    /// own block of handles, lent in place, which the callee writes one
+    /// reference per element into -- each then the array's, as a received
+    /// array's are. Emptied first, so an element it held is given back
+    /// rather than overwritten. Its elements must be the interface C writes:
+    /// another's pointer would be read through the wrong table.
+    pub(super) fn filled_handles(&mut self, id: NodeId, array: ValueId, want: HirType, lent: &mut Vec<Lent>) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let HirType::Managed(ManagedType::Array(element)) = self.values[array.0 as usize].ty.clone() else {
+            return Err(self.unsupported(id, "a filled array of objects that is not an array"));
+        };
+        let HirType::NativePointer(Pointee::Opaque(held)) = &*element else {
+            return Err(self.unsupported(id, "a filled array whose elements are not objects"));
+        };
+        if let HirType::NativePointer(Pointee::Pointer(written)) = &want
+            && let Pointee::Opaque(written) = &**written
+            && written.tag != held.tag
+        {
+            return Err(self.unsupported(id, &format!("an array of `{}` the callee fills with `{}`", held.tag, written.tag)));
+        }
+        let length = self.push(OpKind::Length(array), HirType::NUMBER, origin.clone());
+        self.count_up(length, &origin, |this, at| {
+            let none = this.push(OpKind::ConstNull, (*element).clone(), origin.clone());
+            this.push(OpKind::ArraySet { array, index: at, value: none, checked: false }, HirType::Void, origin.clone());
+            Ok(())
+        })?;
+        let block = self.runtime_call("nts_winrt_filled_handles", vec![array], want, origin);
+        lent.push(Lent::Array { array });
+        Ok(block)
+    }
+
+    /// A zeroed block of `array`'s length of what a call fills in
+    /// (`Role::FilledStrings`, `Role::FilledRecords`), from COM's task
+    /// allocator: an element the callee leaves unwritten reads as nothing --
+    /// a NULL `HSTRING`, which is `""`, or a zeroed struct.
+    pub(super) fn filled_block(&mut self, id: NodeId, array: ValueId, element: Pointee, want: HirType, lent: &mut Vec<Lent>) -> ValueId {
+        let origin = self.origin(id);
+        let length = self.push(OpKind::Length(array), HirType::NUMBER, origin.clone());
+        let size = self.push(OpKind::NativeSizeOf(element), HirType::NUMBER, origin.clone());
+        let bytes = self.push(OpKind::Binary { op: super::BinOp::Mul, lhs: length, rhs: size }, HirType::NUMBER, origin.clone());
+        let raw = self.runtime_call("nts_winrt_alloc", vec![bytes], HirType::NativePointer(Pointee::Void), origin.clone());
+        let block = self.push(OpKind::Convert(raw), want, origin);
+        lent.push(Lent::Filled { array, block });
+        block
+    }
+
+    /// What a call wrote into the block of `Lent::Filled`, copied into
+    /// `array`, element by element, and the block freed: an `HSTRING` into a
+    /// `string`, deleting it, and a struct into a new object, as a
+    /// `Copied<T>` result is.
+    pub(super) fn copy_filled(&mut self, id: NodeId, array: ValueId, block: ValueId) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let HirType::Managed(ManagedType::Array(element)) = self.values[array.0 as usize].ty.clone() else {
+            return Err(self.unsupported(id, "a filled array that is not an array"));
+        };
+        let length = self.push(OpKind::Length(array), HirType::NUMBER, origin.clone());
+        let records = matches!(self.values[block.0 as usize].ty, HirType::NativePointer(Pointee::Record(_)));
+        self.count_up(length, &origin, |this, at| {
+            let value = if records {
+                let from = this.native_index_address(id, block, at)?;
+                this.object_from_copied(id, from, &element)?
+            } else {
+                let read = this.push(OpKind::NativeLoad { pointer: block, index: at }, HirType::NativePointer(Pointee::Void), origin.clone());
+                let handle = this.push(OpKind::Convert(read), Encoding::HString.c_type().representation(), origin.clone());
+                this.runtime_call("nts_string_from_hstring", vec![handle], HirType::Managed(ManagedType::String), origin.clone())
+            };
+            this.push(OpKind::ArraySet { array, index: at, value, checked: false }, HirType::Void, origin.clone());
+            Ok(())
+        })?;
+        let freed = self.push(OpKind::Convert(block), HirType::NativePointer(Pointee::Void), origin.clone());
+        self.runtime_call("nts_winrt_free", vec![freed], HirType::Void, origin);
+        Ok(())
+    }
+
     /// An array of structs a call handed back (`Written::ReceivedRecords`):
     /// each struct of the callee's block copied into a new object of the
     /// program's, as a `Copied<T>` result is, and the block freed.

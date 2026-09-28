@@ -406,6 +406,19 @@ pub enum Role {
     /// each object copied into the block for the call, which is freed after
     /// it.
     Records(std::sync::Arc<Record>),
+    /// An array of objects the callee fills (`FilledHandles<H>` in
+    /// `winrt:types`), its count a parameter of its own: the array's own
+    /// block of handles lent in place, emptied first, so each reference the
+    /// callee writes is the array's element. `GetMany`'s `items`.
+    FilledHandles,
+    /// A `string[]` the callee fills with `HSTRING`s (`FilledStrings`): a
+    /// zeroed block of the call's, each `HSTRING` copied into the array's
+    /// element after the call and deleted, and the block freed.
+    FilledStrings,
+    /// An array of plain objects the callee fills with the struct `record`
+    /// (`FilledArray<T>`): a zeroed block of the call's, each struct copied
+    /// into a new object of the array's after the call, and the block freed.
+    FilledRecords(std::sync::Arc<Record>),
     /// A typed array's storage, borrowed in place for the call -- a
     /// `Uint8Array`'s bytes (`CBytes<Q>`) or any typed array's elements
     /// (`CElements<A, Q>`): `nts_view_bytes`, no copy. The view is the
@@ -674,6 +687,9 @@ impl Function {
                 | Role::Strings
                 | Role::HStrings
                 | Role::Records(_)
+                | Role::FilledHandles
+                | Role::FilledStrings
+                | Role::FilledRecords(_)
                 | Role::Bytes
                 | Role::Handles
                 | Role::Copied
@@ -2567,6 +2583,7 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
     let mut elements = None;
     let mut handles = None;
     let mut records = None;
+    let mut filled = false;
     let mut value = None;
     let mut count = None;
     let mut after = true;
@@ -2591,6 +2608,7 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
                 "___c_elements" => elements = Some(text(property.ty)?),
                 "___c_handles" => handles = Some(text(property.ty)?),
                 "___c_records" => records = Some(defined(property.ty)?),
+                "___c_filled" => filled = true,
                 "___c_count" => count = Some(defined(property.ty)?),
                 "___c_count_at" => after = text(property.ty)? == "after",
                 _ => return None,
@@ -2598,6 +2616,16 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
         }
     }
     let value = value?;
+    if filled {
+        return filled_array(snapshot, value, (strings, handles, records)).map(|(role, managed, c)| NativeArray {
+            role,
+            managed,
+            c,
+            nullable,
+            count: count.map(|ty| (ty, after)),
+            value,
+        });
+    }
     let char = Pointee::Scalar(Scalar::Char);
     let (role, managed, c) = match (strings, bytes, elements, handles) {
         (None, None, None, None) if records.is_some() => records_array(snapshot, value, records?)?,
@@ -2694,6 +2722,34 @@ fn records_array(snapshot: &SemanticSnapshot, value: TypeId, record: TypeId) -> 
         return None;
     }
     Some((Role::Records(record.clone()), managed, Type::Pointer(Pointee::Record(record))))
+}
+
+/// An array the callee fills (`FilledHandles`, `FilledStrings`,
+/// `FilledArray` in `winrt:types`): the one marker beside `___c_filled`
+/// says of what. C's parameter is what the unfilled marker's is -- a block
+/// of handles, of `HSTRING`s, of the struct -- written instead of read.
+fn filled_array(
+    snapshot: &SemanticSnapshot,
+    value: TypeId,
+    (strings, handles, records): (Option<String>, Option<String>, Option<TypeId>),
+) -> Option<(Role, HirType, Type)> {
+    match (strings.as_deref(), handles.as_deref(), records) {
+        (Some("hstring"), None, None) => hstrings_array(snapshot, value).map(|(_, managed, c)| (Role::FilledStrings, managed, c)),
+        (None, Some("element"), None) => handles_array(snapshot, value, "element").map(|(_, managed, c)| (Role::FilledHandles, managed, c)),
+        (None, None, Some(record)) => {
+            let managed = super::lower::representation(snapshot, value)?;
+            let HirType::Managed(ManagedType::Array(element)) = &managed else { return None };
+            if !matches!(**element, HirType::Managed(ManagedType::Object(_))) {
+                return None;
+            }
+            // Strings and all: a struct the callee wrote is copied out as a
+            // `Copied<T>` result is, each `HSTRING` into a `string`.
+            let record = schema::copied_struct(snapshot, record)?;
+            let c = Type::Pointer(Pointee::Record(record.clone()));
+            Some((Role::FilledRecords(record), managed, c))
+        }
+        _ => None,
+    }
 }
 
 /// `HStrings`: a `string[]` as the Windows Runtime's block of `HSTRING`s,

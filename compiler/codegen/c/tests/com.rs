@@ -592,6 +592,71 @@ export function run(): number {
     windows_syntax(&dir, &emitted);
 }
 
+/// Arrays the callee fills, which the program passes and the call writes
+/// into: objects in the array's own block (`FilledHandles`, lent in place
+/// once emptied), and strings and structs (`FilledStrings`, `FilledArray`)
+/// in a zeroed block of the call's, copied into the array on both of the
+/// call's paths and freed.
+#[test]
+fn arrays_the_callee_fills_are_written_into_the_programs() {
+    let binding = r#"declare module "winrt:Windows.Data.Json" {
+  import type { c_float, CNumber, Counted, Struct } from "c:types";
+  import type { ComClass, FilledArray, FilledHandles, FilledStrings, HString } from "winrt:types";
+  export type Point = Struct<{ x: c_float; y: c_float }, "Windows_Foundation_Point">;
+  export interface IJsonValueMethods {
+    /**
+     * @ntsVtable 10 GetMany
+     * @ntsHresult
+     */
+    GetMany(this: IJsonValue, items: Counted<FilledHandles<IJsonValue>, CNumber<"uint32">, "before">): CNumber<"uint32">;
+    /**
+     * @ntsVtable 11 GetStrings
+     * @ntsHresult
+     */
+    GetStrings(this: IJsonValue, items: Counted<FilledStrings, CNumber<"uint32">, "before">): CNumber<"uint32">;
+    /**
+     * @ntsVtable 12 GetPoints
+     * @ntsHresult
+     */
+    GetPoints(this: IJsonValue, items: Counted<FilledArray<Point>, CNumber<"uint32">, "before">): void;
+  }
+  export type IJsonValue = ComClass<"IJsonValue"> & IJsonValueMethods;
+  /**
+   * @ntsVtable 6 Parse
+   * @ntsHresult
+   * @ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C
+   */
+  export function Parse(input: HString): IJsonValue;
+}
+"#;
+    let source = r#"import { Parse } from "winrt:Windows.Data.Json";
+import type { IJsonValue } from "winrt:Windows.Data.Json";
+export function run(): number {
+  const value = Parse("[]");
+  const items: (IJsonValue | null)[] = [null, null];
+  const texts = ["", ""];
+  const points = [{ x: 0, y: 0 }];
+  value.GetPoints(points);
+  return value.GetMany(items) + value.GetStrings(texts) + texts[0].length + points[0].x;
+}
+"#;
+    let Some((dir, prepared)) = prepare("filled", binding, source) else {
+        eprintln!("skipped: no tsgo");
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    assert_eq!(text.matches("nts_winrt_filled_handles(").count(), 1, "the objects' own block is not lent:\n{text}");
+    assert_eq!(text.matches("nts_array_handles(").count(), 0, "a filled array is lent as one C reads, which refuses its NULLs:\n{text}");
+    assert_eq!(text.matches("nts_winrt_alloc(").count(), 2, "the strings and the structs are not each given a block:\n{text}");
+    assert_eq!(text.matches("nts_winrt_free(").count(), 4, "each block is not freed on both of its call's paths:\n{text}");
+    assert_eq!(text.matches("nts_string_from_hstring(").count(), 2, "the strings are not copied in on both paths:\n{text}");
+
+    windows_syntax(&dir, &emitted);
+}
+
 /// A sealed runtime class (`@ntsRuntimeClass`), declared as a TypeScript
 /// class of its constructors: `new Uri()` activates it (`@ntsActivate`), and
 /// `new Uri(text)` calls the activation factory's method the checker chose,

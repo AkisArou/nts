@@ -92,6 +92,23 @@ declare module "winrt:types" {
   // takes one. A struct holding a string is refused here: each would lend an
   // `HSTRING`, one per element, for the call.
   export type CopiedArray<T extends Struct<object, string>> = readonly Copied<T>[] & { readonly __c_records?: T };
+  // An array the callee fills where a call takes one it fills (`GetMany`'s
+  // `items`, `Counted<Filled..., ...>`): the program passes the array, whose
+  // length is how many the callee may write, and the call writes them into
+  // it -- as `CElements` fills a typed array, and as the Windows Runtime's
+  // JavaScript projection filled an array. What was in it is replaced, and
+  // an element the callee left unwritten is `null`, `""` or a zeroed struct.
+  //
+  // Objects are filled in place, the array's own block lent to the callee,
+  // which writes its references into it. Strings and structs are written
+  // into a block of the call's and copied into the array after it, as a
+  // received array's are.
+  export type FilledHandles<H> = (H | null)[] & { readonly __c_handles?: "element"; readonly __c_filled?: true };
+  export type FilledStrings = string[] & { readonly __c_strings?: "hstring"; readonly __c_filled?: true };
+  export type FilledArray<T extends Struct<object, string>> = Copied<T>[] & {
+    readonly __c_records?: T;
+    readonly __c_filled?: true;
+  };
   // A number field is a `number` whatever C's width is, as `Fields<T>` writes
   // one -- except an enum, which keeps its members. The enum's own marker
   // decides, since a C scalar's brand matches the `CEnum` pattern too.

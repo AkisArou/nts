@@ -303,4 +303,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 ///
 /// 128 for `nts_winrt_alloc` and `nts_winrt_free`, the block of an array of
 /// structs a Windows Runtime call is passed or hands back: Windows again.
-const REFUSED_FLOOR: usize = 128;
+///
+/// 129 for `nts_winrt_filled_handles`, the block of an array of objects a
+/// Windows Runtime call fills: Windows again.
+const REFUSED_FLOOR: usize = 129;

@@ -2044,8 +2044,15 @@ void nts_winrt_received_handles(NtsArray *into, void *block, uint32_t count);
  * the callee's block copied into a `string` of an array of the program's and
  * deleted, and the block freed. */
 NtsArray *nts_winrt_received_strings(void *block, uint32_t count);
-/* A block of `bytes` from COM's task allocator, for an array of structs a
- * Windows Runtime call is passed; ends the process when there is none. And
+/* An array's block of handles, lent to a Windows Runtime call that fills it
+ * (`GetMany`): each element the callee writes is a reference the array
+ * then holds. Emptied by the caller first, so every element is NULL -- which
+ * `nts_array_handles`, for an array C reads, refuses. */
+void *nts_winrt_filled_handles(const NtsArray *array);
+
+/* A zeroed block of `bytes` from COM's task allocator, for an array of
+ * structs a Windows Runtime call is passed or one it fills; ends the process
+ * when there is none. And
  * a block from it freed: that one, or one a call allocated and the program
  * has copied out of, which the ABI makes the caller's to free. */
 void *nts_winrt_alloc(double bytes);

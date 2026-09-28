@@ -13605,6 +13605,9 @@ enum Lent {
     /// A block of structs copied from an array of objects for the call
     /// (`Role::Records`), from COM's task allocator: freed after it.
     Block { block: ValueId },
+    /// A block of the call's that it fills for `array` (`Role::FilledStrings`,
+    /// `Role::FilledRecords`): copied into the array after it, and freed.
+    Filled { array: ValueId, block: ValueId },
     /// A `Uint8Array` whose bytes C reads in place: nothing to free, and the
     /// view must outlive the call.
     View { view: ValueId },
@@ -47674,7 +47677,7 @@ impl<'a> FuncBuilder<'a> {
             (None, None) => call,
         };
         let value = destination.unwrap_or(value);
-        self.give_back(id, lent);
+        self.give_back(id, lent)?;
         Ok(value)
     }
 
@@ -47694,12 +47697,12 @@ impl<'a> FuncBuilder<'a> {
             else_args: Vec::new(),
         });
         self.switch_to(raise);
-        self.give_back(id, lent.clone());
+        self.give_back(id, lent.clone())?;
         let char_pointer = super::native::Type::Pointer(super::native::Pointee::Scalar(super::native::Scalar::Char));
         let message = self.runtime_call("nts_hresult_message", vec![status], char_pointer.representation(), origin.clone());
         self.throw_c_message(id, message, origin)?;
         self.switch_to(after);
-        self.give_back(id, lent);
+        self.give_back(id, lent)?;
         Ok(())
     }
 
@@ -48023,7 +48026,7 @@ impl<'a> FuncBuilder<'a> {
         });
         self.switch_to(raise);
         // Everything lent to the call, given back before the throw leaves.
-        self.give_back(id, lent.to_vec());
+        self.give_back(id, lent.to_vec())?;
         let convert = std::sync::Arc::new(super::native::Function {
             name: converter.to_owned(),
             convention: super::native::Convention::C,
@@ -49113,7 +49116,7 @@ impl<'a> FuncBuilder<'a> {
     /// but an argument expression that raises after an earlier one was lent
     /// would leak it. A leak, not a crash; whoever fixes it for one kind fixes
     /// it for the other.
-    fn give_back(&mut self, id: NodeId, lent: Vec<Lent>) {
+    fn give_back(&mut self, id: NodeId, lent: Vec<Lent>) -> Result<(), Diagnostic> {
         let origin = self.origin(id);
         for lent in lent {
             match lent {
@@ -49129,6 +49132,7 @@ impl<'a> FuncBuilder<'a> {
                 Lent::HStrings { array, block } => {
                     self.runtime_call("nts_hstrings_release", vec![array, block], HirType::Void, origin.clone());
                 }
+                Lent::Filled { array, block } => self.copy_filled(id, array, block)?,
                 Lent::Block { block } => {
                     let freed = self.push(OpKind::Convert(block), HirType::NativePointer(super::native::Pointee::Void), origin.clone());
                     self.runtime_call("nts_winrt_free", vec![freed], HirType::Void, origin.clone());
@@ -49159,6 +49163,7 @@ impl<'a> FuncBuilder<'a> {
                 Lent::Error { .. } | Lent::Result { .. } | Lent::Count { .. } => {}
             }
         }
+        Ok(())
     }
 
     /// A closure as the C function pointer C calls it through: a bridge with
@@ -49374,6 +49379,26 @@ impl<'a> FuncBuilder<'a> {
         });
         lent.push(Lent::HStrings { array, block });
         block
+    }
+
+    /// An array lent to a call as a block its role makes: a `string[]` as
+    /// a `char **` or as `HSTRING`s, NULL for a `null` array, an array of
+    /// plain objects as a block of structs -- each converted for the call and
+    /// given back after it -- or an array the callee fills: objects in the
+    /// array's own block, strings and structs in one of the call's, copied
+    /// into the array after it.
+    fn lend_array(&mut self, id: NodeId, role: &super::native::Role, array: ValueId, want: HirType, lent: &mut Vec<Lent>) -> Result<ValueId, Diagnostic> {
+        use super::native::{Pointee, Role};
+        let origin = self.origin(id);
+        Ok(match role {
+            Role::Strings => self.lend_strings(array, want, lent, &origin),
+            Role::HStrings => self.lend_hstrings(array, want, lent, &origin),
+            Role::Records(record) => self.records_argument(id, array, record, &want, lent)?,
+            Role::FilledHandles => self.filled_handles(id, array, want, lent)?,
+            Role::FilledStrings => self.filled_block(id, array, Pointee::Pointer(Box::new(Pointee::Void)), want, lent),
+            Role::FilledRecords(record) => self.filled_block(id, array, Pointee::Record(record.clone()), want, lent),
+            _ => return Err(self.unsupported(id, "an array crossing as something no array is")),
+        })
     }
 
     /// A `string[]` as C's NULL-terminated `char **`, converted for the call
@@ -49706,13 +49731,8 @@ impl<'a> FuncBuilder<'a> {
                     let ty = target.parameters[at].representation();
                     c_args.push(self.error_slot(argument.filter(|_| written), ty, converter, &mut lent, &origin));
                 }
-                // A `string[]` converted for the call, and freed after it.
-                Role::Strings => c_args.extend(argument.map(|array| self.lend_strings(array, target.parameters[at].representation(), &mut lent, &origin))),
-                // Each string an `HSTRING` lent for the call, NULL for a
-                // `null` array, and all given back after it.
-                Role::HStrings => c_args.extend(argument.map(|array| self.lend_hstrings(array, target.parameters[at].representation(), &mut lent, &origin))),
-                Role::Records(record) => c_args.extend(
-                    argument.map(|array| self.records_argument(id, array, &record, &target.parameters[at].representation(), &mut lent)).transpose()?,
+                Role::Strings | Role::HStrings | Role::Records(_) | Role::FilledHandles | Role::FilledStrings | Role::FilledRecords(_) => c_args.extend(
+                    argument.map(|array| self.lend_array(id, &role, array, target.parameters[at].representation(), &mut lent)).transpose()?,
                 ),
                 // A `Uint8Array` in place: its bytes, for the call, and the
                 // view given back after it. The give-back does nothing at run

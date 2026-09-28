@@ -356,7 +356,7 @@ fn winrt_structs_cross_by_value() {
         "no writable static property"
     );
     assert!(
-        globalization.contains("     * @ntsGet 8 get_Languages\n     * @ntsFactory Windows.Globalization.ApplicationLanguages 75B40847-0A4C-4A92-9565-FD63C95F7AED\n     */\n    const languages: IVectorView<HString>;"),
+        globalization.contains("     * @ntsGet 8 get_Languages\n     * @ntsFactory Windows.Globalization.ApplicationLanguages 75B40847-0A4C-4A92-9565-FD63C95F7AED\n     */\n    const languages: IVectorViewOfString;"),
         "no read-only static property"
     );
     // A class whose default interface is an instantiation is bound as it,
@@ -649,6 +649,43 @@ fn an_enum_array_is_its_integer_typed_array() {
     );
     let devices = std::fs::read_to_string(out.join("Windows.Media.Devices.d.ts")).unwrap();
     assert!(devices.contains("get_SupportedModes(this: IDigitalWindowControl): Int32Array;"), "{devices}");
+    let _ = std::fs::remove_dir_all(&out);
+}
+
+/// An array the callee fills (`FillArray`) is the program's, passed in and
+/// written into: objects (`GetMany` of an `IVector<IJsonValue>`) as
+/// `FilledHandles`, strings as `FilledStrings`, structs (`DistortPoints`'s
+/// `results`) as `FilledArray`.
+#[test]
+fn an_array_the_callee_fills_is_the_programs() {
+    let Some(metadata) = winrt_metadata() else {
+        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        return;
+    };
+    let out = std::env::temp_dir().join(format!("nts-bind-winrt-filled-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    let run = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .args(["bind-winmd", "Windows.Data.Json", "Windows.Media.Devices.Core", "Windows.Globalization", "--out"])
+        .arg(&out)
+        .env("NTS_WINRT_METADATA", &metadata)
+        .output()
+        .unwrap();
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    let json = std::fs::read_to_string(out.join("Windows.Data.Json.d.ts")).unwrap();
+    assert!(
+        json.contains("GetMany(this: IVectorOfIJsonValue, startIndex: CNumber<\"uint32\">, items: Counted<FilledHandles<IJsonValue>, CNumber<\"uint32\">, \"before\">): CNumber<\"uint32\">;"),
+        "{json}"
+    );
+    let core = std::fs::read_to_string(out.join("Windows.Media.Devices.Core.d.ts")).unwrap();
+    assert!(
+        core.contains("distortPoints(inputs: Counted<CopiedArray<Point>, CNumber<\"uint32\">, \"before\">, results: Counted<FilledArray<Point>, CNumber<\"uint32\">, \"before\">): void;"),
+        "{core}"
+    );
+    let system = std::fs::read_to_string(out.join("Windows.System.d.ts")).unwrap();
+    assert!(
+        system.contains("GetMany(this: IVectorViewOfString, startIndex: CNumber<\"uint32\">, items: Counted<FilledStrings, CNumber<\"uint32\">, \"before\">): CNumber<\"uint32\">;"),
+        "{system}"
+    );
     let _ = std::fs::remove_dir_all(&out);
 }
 

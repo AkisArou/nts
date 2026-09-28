@@ -1492,12 +1492,19 @@ void nts_winrt_received_handles(NtsArray *into, void *block, uint32_t count) {
   CoTaskMemFree(block);
 }
 
+void *nts_winrt_filled_handles(const NtsArray *array) {
+  return NTS_ITEMS(array, void *);
+}
+
 void *nts_winrt_alloc(double bytes) {
   void *block = CoTaskMemAlloc(bytes > 0 ? (SIZE_T)bytes : 1);
   if (block == 0) {
     fprintf(stderr, "nts: out of memory\n");
     abort();
   }
+  /* Zeroed: an element a call fills and leaves unwritten reads as nothing,
+   * and a NULL `HSTRING` is "". */
+  memset(block, 0, bytes > 0 ? (size_t)bytes : 1);
   return block;
 }
 

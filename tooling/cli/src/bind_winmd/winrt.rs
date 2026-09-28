@@ -204,7 +204,7 @@ pub(crate) fn write(namespaces: &[String], metadata: &[Utf8PathBuf], out: &Utf8P
 /// The brands `c:types` declares, beside its `c_` scalars.
 const C_BRANDS: &[&str] = &["CBool", "CEnum", "CNumber", "Struct", "ByValue", "Fields", "Counted", "CBytes", "CElements", "CHandles", "ConstPtr"];
 /// The brands `winrt:types` declares.
-const WINRT_BRANDS: &[&str] = &["ComClass", "HString", "HStrings", "Copied", "CopiedArray", "IInspectable", "Inspectable", "Delegate", "Event", "EventRegistrationToken", "Guid"];
+const WINRT_BRANDS: &[&str] = &["ComClass", "HString", "HStrings", "Copied", "CopiedArray", "FilledHandles", "FilledStrings", "FilledArray", "IInspectable", "Inspectable", "Delegate", "Event", "EventRegistrationToken", "Guid"];
 
 /// The namespace a `winrt:` module names.
 pub(crate) fn namespace_of(module: &str) -> Option<String> {
@@ -1727,8 +1727,10 @@ impl Writer<'_> {
     ///   enum's as its 32-bit underlying integer.
     /// - Objects: an array of the program's, whose block of handles is lent
     ///   in place where each is the interface C takes, and asked for it
-    ///   element by element otherwise. `[in]` only: a buffer the callee fills
-    ///   (`GetMany`) is not built.
+    ///   element by element otherwise. One the callee fills (`GetMany`) is
+    ///   lent in place, and written with references of the interface C names.
+    /// - Strings and structs: copied into a block for the call, or -- where
+    ///   the callee fills it -- out of one after it.
     fn lent_array(&mut self, element: &Type, written: bool) -> Result<Option<String>, String> {
         let lent_as = if matches!(element, Type::U8) {
             self.brands.insert("CBytes");
@@ -1738,15 +1740,20 @@ impl Writer<'_> {
             self.brands.insert("CElements");
             let spelled = if written { spelled.to_owned() } else { format!("const {spelled}") };
             format!("CElements<{array}, \"{spelled}\">")
-        } else if !written && matches!(element, Type::String) {
-            self.brands.insert("HStrings");
-            "HStrings".to_owned()
+        } else if matches!(element, Type::String) {
+            let brand = if written { "FilledStrings" } else { "HStrings" };
+            self.brands.insert(brand);
+            brand.to_owned()
+        } else if written && let Some(record) = self.filled_struct(element)? {
+            self.brands.insert("FilledArray");
+            format!("FilledArray<{record}>")
         } else if !written && let Some(record) = self.plain_struct(element)? {
             self.brands.insert("CopiedArray");
             format!("CopiedArray<{record}>")
-        } else if !written && let Some(handle) = self.handle_element(element)? {
-            self.brands.insert("CHandles");
-            format!("CHandles<{handle}>")
+        } else if let Some(handle) = self.handle_element(element)? {
+            let brand = if written { "FilledHandles" } else { "CHandles" };
+            self.brands.insert(brand);
+            format!("{brand}<{handle}>")
         } else {
             return Ok(None);
         };
@@ -1785,6 +1792,23 @@ impl Writer<'_> {
         }
         if self.holds_string(def, 0) {
             return Err(format!("an array of `{}`, a struct holding a string", value.name));
+        }
+        Ok(Some(self.named(&value.namespace, &value.name)))
+    }
+
+    /// A struct an array the callee fills holds, by name: any but a `Guid`,
+    /// strings and all, since each is copied out as a `Copied<T>` result is.
+    /// `None` for anything that is not a struct; a struct refused, with why.
+    fn filled_struct(&mut self, element: &Type) -> Result<Option<String>, String> {
+        let Type::ValueName(value) = element else { return Ok(None) };
+        if is_guid(value) {
+            return Ok(None);
+        }
+        let Some(def) = self.index.get(&value.namespace, &value.name).next().filter(|def| def.category() == TypeCategory::Struct) else {
+            return Ok(None);
+        };
+        if let Some(why) = self.struct_refusal(def, 0) {
+            return Err(format!("`{}`, {why}", value.name));
         }
         Ok(Some(self.named(&value.namespace, &value.name)))
     }
