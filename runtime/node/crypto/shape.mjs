@@ -46,6 +46,28 @@ function applyDescriptors(exports) {
   arity(exports.scryptSync, 3);
   arity(exports.scrypt, 4);
   arity(exports.timingSafeEqual, 0);
+  // Node's `customPromisifyArgs` on `generateKeyPair`: `util.promisify`
+  // resolves `{ publicKey, privateKey }` rather than the first result alone.
+  // The symbol is internal to node, so the link is made the public way, as
+  // `child_process` makes `exec`'s.
+  if (typeof exports.generateKeyPair === "function") {
+    const generateKeyPair = exports.generateKeyPair;
+    const promisified = function (...args) {
+      return new Promise((resolve, reject) => {
+        generateKeyPair(...args, (error, publicKey, privateKey) => {
+          if (error) reject(error);
+          else resolve({ publicKey, privateKey });
+        });
+      });
+    };
+    Object.defineProperty(promisified, "name", { value: "generateKeyPair", configurable: true });
+    Object.defineProperty(generateKeyPair, Symbol.for("nodejs.util.promisify.custom"), {
+      enumerable: false,
+      writable: false,
+      configurable: true,
+      value: promisified,
+    });
+  }
   Object.defineProperty(exports.KeyObject.prototype, Symbol.toStringTag, {
     configurable: true,
     enumerable: false,
@@ -73,6 +95,10 @@ const ORDER = [
   "hkdfSync",
   "pbkdf2",
   "pbkdf2Sync",
+  "generateKeyPair",
+  "generateKeyPairSync",
+  "generateKey",
+  "generateKeySync",
   "privateDecrypt",
   "privateEncrypt",
   "publicDecrypt",

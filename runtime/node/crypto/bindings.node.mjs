@@ -581,6 +581,16 @@ globalThis.nts_crypto_key_from_okp = (curve, raw, privateKey) => {
   return rawKey({ key: raw, format, asymmetricKeyType: curve.toLowerCase() }, privateKey);
 };
 
+globalThis.nts_crypto_key_from_post_quantum = (type, raw, form) => {
+  const format = ["raw-public", "raw-private", "raw-seed"][form];
+  try {
+    const options = { key: raw, format, asymmetricKeyType: type };
+    return holdKey(form === 0 ? crypto.createPublicKey(options) : crypto.createPrivateKey(options));
+  } catch {
+    return 0;
+  }
+};
+
 globalThis.nts_crypto_key_from_raw_ec = (curve, raw, privateKey) => {
   const format = privateKey ? "raw-private" : "raw-public";
   return rawKey({ key: raw, format, asymmetricKeyType: "ec", namedCurve: curve }, privateKey);
@@ -655,6 +665,14 @@ globalThis.nts_crypto_key_export_raw = (handle, privateKey, compressed) => {
     const options = privateKey ? { format: "raw-private" } : { format: "raw-public" };
     if (compressed) options.type = "compressed";
     return view((privateKey ? key : publicHalf(key)).export(options));
+  } catch {
+    return null;
+  }
+};
+
+globalThis.nts_crypto_key_export_seed = (handle) => {
+  try {
+    return view(keyAt(handle).export({ format: "raw-seed" }));
   } catch {
     return null;
   }
@@ -882,4 +900,79 @@ globalThis.nts_crypto_public_key_cipher = (operation, handle, data, padding, dig
     failed(error);
     return null;
   }
+};
+
+// -- key-pair generation ------------------------------------------------------
+
+/** Configured jobs, as node's own `generateKeyPair` arguments. */
+const keygenJobs = new Map();
+let nextKeygenJob = 1;
+
+function keygenJob(type, options) {
+  const handle = nextKeygenJob++;
+  keygenJobs.set(handle, { type, options });
+  return handle;
+}
+
+globalThis.nts_crypto_keygen_rsa = (pss, bits, exponent, digest, mgf1Digest, saltLength) => {
+  const options = { modulusLength: bits, publicExponent: exponent };
+  if (pss) {
+    if (digest >= 0) options.hashAlgorithm = names[digest];
+    if (mgf1Digest >= 0) options.mgf1HashAlgorithm = names[mgf1Digest];
+    if (saltLength >= 0) options.saltLength = saltLength;
+  }
+  return keygenJob(pss ? "rsa-pss" : "rsa", options);
+};
+
+globalThis.nts_crypto_keygen_dsa = (bits, divisorBits) =>
+  keygenJob("dsa", divisorBits >= 0 ? { modulusLength: bits, divisorLength: divisorBits } : { modulusLength: bits });
+
+globalThis.nts_crypto_keygen_ec = (curve, explicitParameters) =>
+  keygenJob("ec", { namedCurve: curve, paramEncoding: explicitParameters ? "explicit" : "named" });
+
+const NID_TYPES = new Set([
+  "ed25519", "ed448", "x25519", "x448", "ml-dsa-44", "ml-dsa-65", "ml-dsa-87", "ml-kem-512", "ml-kem-768",
+  "ml-kem-1024", "slh-dsa-sha2-128f", "slh-dsa-sha2-128s", "slh-dsa-sha2-192f", "slh-dsa-sha2-192s",
+  "slh-dsa-sha2-256f", "slh-dsa-sha2-256s", "slh-dsa-shake-128f", "slh-dsa-shake-128s", "slh-dsa-shake-192f",
+  "slh-dsa-shake-192s", "slh-dsa-shake-256f", "slh-dsa-shake-256s",
+]);
+
+globalThis.nts_crypto_keygen_nid = (type) => (NID_TYPES.has(type) ? keygenJob(type, undefined) : 0);
+
+const DH_GROUPS = new Set(["modp1", "modp2", "modp5", "modp14", "modp15", "modp16", "modp17", "modp18"]);
+
+globalThis.nts_crypto_keygen_dh_group = (group) =>
+  DH_GROUPS.has(group.toLowerCase()) ? keygenJob("dh", { group }) : 0;
+
+globalThis.nts_crypto_keygen_dh_prime = (prime, generator) =>
+  keygenJob("dh", { prime: Buffer.from(prime), generator });
+
+globalThis.nts_crypto_keygen_dh_size = (bits, generator) => keygenJob("dh", { primeLength: bits, generator });
+
+globalThis.nts_crypto_keygen_release = (job) => {
+  keygenJobs.delete(job);
+};
+
+globalThis.nts_crypto_keygen_run = (job) => {
+  const { type, options } = keygenJobs.get(job);
+  keygenJobs.delete(job);
+  try {
+    return holdKey(crypto.generateKeyPairSync(type, options).privateKey);
+  } catch (error) {
+    failed(error);
+    return 0;
+  }
+};
+
+globalThis.nts_crypto_keygen_queue = (job, done) => {
+  const { type, options } = keygenJobs.get(job);
+  keygenJobs.delete(job);
+  crypto.generateKeyPair(type, options, (error, publicKey, privateKey) => {
+    if (error) {
+      failed(error);
+      done(false, 0);
+    } else {
+      done(true, holdKey(privateKey));
+    }
+  });
 };

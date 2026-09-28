@@ -31,7 +31,9 @@ export type RequestProvider =
   | "PBKDF2REQUEST"
   | "DERIVEBITSREQUEST"
   | "SCRYPTREQUEST"
-  | "SIGNREQUEST";
+  | "SIGNREQUEST"
+  | "KEYPAIRGENREQUEST"
+  | "KEYGENREQUEST";
 
 export class AsyncRequest {
   #asyncId: number;

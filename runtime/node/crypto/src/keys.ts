@@ -20,12 +20,15 @@ import {
   ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE,
   ERR_CRYPTO_JWK_UNSUPPORTED_CURVE,
   ERR_CRYPTO_JWK_UNSUPPORTED_KEY_TYPE,
+  ERR_CRYPTO_OPERATION_FAILED,
   ERR_CRYPTO_UNKNOWN_CIPHER,
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_ARG_VALUE,
   ERR_INVALID_ARG_VALUE_BINDING,
+  ERR_INVALID_THIS,
   ERR_MISSING_PASSPHRASE,
 } from "../../internal/errors.ts";
+import { registerKeyObjectBrand } from "../../internal/brands.ts";
 import { validateObject, validateOneOf, validateString } from "../../internal/validators.ts";
 import { isAnyArrayBuffer, isArrayBufferView } from "../../util/src/types.ts";
 import { bytesOf, cipherId, getArrayBufferOrView, peekedCryptoError } from "./util.ts";
@@ -81,11 +84,16 @@ export class KeyObjectHandle {
 
 const noBytes = new Uint8Array(0);
 
+/** A secret key object over bytes the caller gives up. */
+export function secretKeyObjectOf(bytes: Uint8Array): SecretKeyObject {
+  return new SecretKeyObject(secretHandle(bytes));
+}
+
 function secretHandle(bytes: Uint8Array): KeyObjectHandle {
   return new KeyObjectHandle(bytes, 0);
 }
 
-function asymmetricHandle(native: number): KeyObjectHandle {
+export function asymmetricHandle(native: number): KeyObjectHandle {
   return new KeyObjectHandle(noBytes, native);
 }
 
@@ -102,26 +110,44 @@ function asymmetricHandle(native: number): KeyObjectHandle {
  * can store a closure in a field and cannot in a module-scope name.
  */
 class KeyObjectSlots {
+  brand: ((value: object) => boolean) | null = null;
   handle: ((key: KeyObject) => KeyObjectHandle) | null = null;
   type: ((key: KeyObject) => KeyObjectType) | null = null;
 }
 
 const slots = new KeyObjectSlots();
 
+/**
+ * Node's `isKeyObject`: the brand, a private field only the constructor can
+ * put there -- not the prototype chain, and not `Symbol.hasInstance`, both of
+ * which a program can forge (`test-crypto-keyobject-brand-check`).
+ */
+export function isKeyObject(value: unknown): value is KeyObject {
+  return typeof value === "object" && value !== null && slots.brand!(value);
+}
+
+/** Node's `getKeyObjectSlots`: a key's, or `ERR_INVALID_THIS` for anything else. */
+function branded(key: unknown): KeyObject {
+  if (!isKeyObject(key)) throw new ERR_INVALID_THIS("KeyObject");
+  return key;
+}
+
 /** A key's handle, read from its slot. */
-export function handleOf(key: KeyObject): KeyObjectHandle {
-  return slots.handle!(key);
+export function handleOf(key: unknown): KeyObjectHandle {
+  return slots.handle!(branded(key));
 }
 
 /** A key's type, read from its slot rather than through the replaceable getter. */
-export function typeOf(key: KeyObject): KeyObjectType {
-  return slots.type!(key);
+export function typeOf(key: unknown): KeyObjectType {
+  return slots.type!(branded(key));
 }
 
 export class KeyObject {
   static {
+    slots.brand = (value: object): boolean => #handle in value;
     slots.handle = (key: KeyObject): KeyObjectHandle => key.#handle;
     slots.type = (key: KeyObject): KeyObjectType => key.#type;
+    registerKeyObjectBrand(slots.brand);
   }
 
   readonly #type: KeyObjectType;
@@ -139,7 +165,7 @@ export class KeyObject {
   }
 
   get type(): KeyObjectType {
-    return this.#type;
+    return typeOf(this);
   }
 
   /**
@@ -152,10 +178,10 @@ export class KeyObject {
   }
 
   equals(otherKeyObject: unknown): boolean {
-    if (!(otherKeyObject instanceof KeyObject)) {
+    if (!isKeyObject(otherKeyObject)) {
       throw new ERR_INVALID_ARG_TYPE("otherKeyObject", "KeyObject", otherKeyObject);
     }
-    return this.#type === otherKeyObject.#type && this.#handle.equals(otherKeyObject.#handle);
+    return typeOf(this) === typeOf(otherKeyObject) && handleOf(this).equals(handleOf(otherKeyObject));
   }
 }
 
@@ -165,6 +191,7 @@ export class SecretKeyObject extends KeyObject {
   }
 
   get symmetricKeySize(): number {
+    if (typeOf(this) !== "secret") throw new ERR_INVALID_THIS("SecretKeyObject");
     return handleOf(this).bytes.byteLength;
   }
 
@@ -235,17 +262,29 @@ function detailsOf(native: number, keyType: string | undefined): AsymmetricKeyDe
   return details;
 }
 
+/** An asymmetric key's handle, or `ERR_INVALID_THIS` for anything else. */
+function asymmetricHandleOf(key: unknown): KeyObjectHandle {
+  if (typeOf(key) === "secret") throw new ERR_INVALID_THIS("AsymmetricKeyObject");
+  return handleOf(key);
+}
+
+/** A key's type name, read through its handle and not the replaceable getter. */
+function asymmetricKeyTypeOf(handle: KeyObjectHandle): string | undefined {
+  const name = nts_crypto_key_type(handle.native);
+  return name === "" ? undefined : name;
+}
+
 export class AsymmetricKeyObject extends KeyObject {
   #details: AsymmetricKeyDetails | undefined;
 
   get asymmetricKeyType(): string | undefined {
-    const name = nts_crypto_key_type(handleOf(this).native);
-    return name === "" ? undefined : name;
+    return asymmetricKeyTypeOf(asymmetricHandleOf(this));
   }
 
   /** A copy each time, as node's getter spreads its cached details. */
   get asymmetricKeyDetails(): AsymmetricKeyDetails {
-    this.#details ??= detailsOf(handleOf(this).native, this.asymmetricKeyType);
+    const handle = asymmetricHandleOf(this);
+    this.#details ??= detailsOf(handle.native, asymmetricKeyTypeOf(handle));
     return { ...this.#details };
   }
 }
@@ -337,11 +376,18 @@ function exportJwk(key: AsymmetricKeyObject, privateKey: boolean): JsonWebKey {
   return jwk;
 }
 
-/** A key's raw form, or node's refusal for one it has none of. */
+/**
+ * Node's `RawPublicKey`, `RawPrivateKey` and their EC forms: a key's raw
+ * bytes, or node's refusal for a type that has none.
+ */
 function exportRaw(key: AsymmetricKeyObject, privateKey: boolean, compressed: boolean): Buffer {
+  const type = key.asymmetricKeyType ?? "";
+  const supported = privateKey ? hasRawPrivateKey(type) : hasRawPublicKey(type);
+  if (!supported) throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS_BINDING();
   const bytes = nts_crypto_key_export_raw(handleOf(key).native, privateKey, compressed);
   if (bytes === null) {
-    throw new ERR_INVALID_ARG_VALUE_BINDING(privateKey ? "Failed to get raw private key" : "Failed to get raw public key");
+    if (type === "ec" && privateKey) throw new ERR_CRYPTO_OPERATION_FAILED("Failed to export EC private key");
+    throw new ERR_CRYPTO_OPERATION_FAILED(privateKey ? "Failed to get raw private key" : "Failed to get raw public key");
   }
   return new Buffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength);
 }
@@ -350,6 +396,91 @@ function exportRaw(key: AsymmetricKeyObject, privateKey: boolean, compressed: bo
 function encoded(bytes: Uint8Array, format: number): Buffer | string {
   const buffer = new Buffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength);
   return format === KeyFormat.PEM ? buffer.toString("utf8") : buffer;
+}
+
+/** Node's `WritePublicKey`: PEM or DER, or OpenSSL's reason it could not be. */
+function writePublicKey(native: number, format: number, type: number | undefined): Buffer | string {
+  const bytes = nts_crypto_key_export_public(native, format, type ?? -1);
+  if (bytes === null) throw peekedCryptoError("Failed to encode public key");
+  return encoded(bytes, format);
+}
+
+/** Node's `WritePrivateKey`, encrypted under the cipher id if one is given (-1 is none). */
+function writePrivateKey(
+  native: number,
+  format: number,
+  type: number | undefined,
+  cipher: number,
+  passphrase: ByteSource | undefined,
+): Buffer | string {
+  const bytes = nts_crypto_key_export_private(
+    native,
+    format,
+    type ?? -1,
+    cipher,
+    passphrase === undefined ? noBytes : bytesOf(passphrase),
+  );
+  if (bytes === null) throw peekedCryptoError("Failed to encode private key");
+  return encoded(bytes, format);
+}
+
+/**
+ * The cipher a private key encoding names, resolved as node's C++ resolves it
+ * before anything is written: -1 for none, and an unknown name refused.
+ */
+export function encodingCipher(cipher: unknown): number {
+  if (cipher === undefined || cipher === null) return -1;
+  const id = cipherId(cipher as string);
+  if (id < 0) throw new ERR_CRYPTO_UNKNOWN_CIPHER();
+  return id;
+}
+
+/** The key types with a raw form besides EC's point and scalar. */
+const rawKeyTypes = ["ed25519", "ed448", "x25519", "x448"];
+
+/** Every post-quantum family's public key is raw bytes. */
+function hasRawPublicKey(type: string): boolean {
+  return type === "ec" || rawKeyTypes.includes(type) || isPostQuantumName(type);
+}
+
+/** Node's `IsPqcRawPrivateKeyId`: SLH-DSA's private key is raw bytes. */
+function hasRawPrivateKey(type: string): boolean {
+  return type === "ec" || rawKeyTypes.includes(type) || type.startsWith("slh-dsa-");
+}
+
+/** Node's `IsPqcSeedKeyId`: ML-DSA's and ML-KEM's private key is kept as a seed. */
+function hasSeed(type: string): boolean {
+  return type.startsWith("ml-dsa-") || type.startsWith("ml-kem-");
+}
+
+/** Node's `RawSeed`: the seed, or node's refusal for a key without one. */
+function exportSeed(key: AsymmetricKeyObject): Buffer {
+  if (!hasSeed(key.asymmetricKeyType ?? "")) throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS_BINDING();
+  const bytes = nts_crypto_key_export_seed(handleOf(key).native);
+  if (bytes === null) throw new ERR_CRYPTO_OPERATION_FAILED("Failed to get raw seed");
+  return new Buffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength);
+}
+
+/**
+ * Node's `ToEncodedPublicKey`, for a generated key: its JWK, its raw form, or
+ * PEM or DER.
+ */
+export function encodePublicKey(key: PublicKeyObject, encoding: KeyEncoding): Buffer | string | JsonWebKey {
+  if (encoding.format === KeyFormat.JWK) return exportJwk(key, false);
+  if (encoding.format === KeyFormat.RawPublic) return exportRaw(key, false, encoding.compressed === true);
+  return writePublicKey(handleOf(key).native, encoding.format, encoding.type);
+}
+
+/** Node's `ToEncodedPrivateKey`, for a generated key, with its cipher already resolved. */
+export function encodePrivateKey(
+  key: PrivateKeyObject,
+  encoding: KeyEncoding,
+  cipher: number,
+): Buffer | string | JsonWebKey {
+  if (encoding.format === KeyFormat.JWK) return exportJwk(key, true);
+  if (encoding.format === KeyFormat.RawSeed) return exportSeed(key);
+  if (encoding.format === KeyFormat.RawPrivate) return exportRaw(key, true, false);
+  return writePrivateKey(handleOf(key).native, encoding.format, encoding.type, cipher, encoding.passphrase);
 }
 
 export class PublicKeyObject extends AsymmetricKeyObject {
@@ -370,9 +501,7 @@ export class PublicKeyObject extends AsymmetricKeyObject {
       }
       default: {
         const { format, type } = parsePublicKeyEncoding(options, this.asymmetricKeyType, undefined);
-        const bytes = nts_crypto_key_export_public(handleOf(this).native, format, type ?? -1);
-        if (bytes === null) throw peekedCryptoError("Failed to encode public key");
-        return encoded(bytes, format);
+        return writePublicKey(handleOf(this).native, format, type);
       }
     }
   }
@@ -392,26 +521,15 @@ export class PrivateKeyObject extends AsymmetricKeyObject {
         return exportJwk(this, true);
       case "raw-private":
         return exportRaw(this, true, false);
+      case "raw-seed":
+        return exportSeed(this);
       default: {
         const { format, type, cipher, passphrase } = parsePrivateKeyEncoding(
           options,
           this.asymmetricKeyType,
           undefined,
         );
-        let id = -1;
-        if (cipher !== undefined && cipher !== null) {
-          id = cipherId(cipher as string);
-          if (id < 0) throw new ERR_CRYPTO_UNKNOWN_CIPHER();
-        }
-        const bytes = nts_crypto_key_export_private(
-          handleOf(this).native,
-          format,
-          type ?? -1,
-          id,
-          passphrase === undefined ? noBytes : bytesOf(passphrase),
-        );
-        if (bytes === null) throw peekedCryptoError("Failed to encode private key");
-        return encoded(bytes, format);
+        return writePrivateKey(handleOf(this).native, format, type, encodingCipher(cipher), passphrase);
       }
     }
   }
@@ -427,9 +545,12 @@ export interface KeyExportOptions {
   encoding?: string;
 }
 
-interface KeyEncoding {
+/** A parsed key encoding: a format, and for PEM and DER an encoding type. */
+export interface KeyEncoding {
   format: number;
   type: number | undefined;
+  /** A raw public EC point, compressed. */
+  compressed?: boolean;
   cipher?: unknown;
   passphrase?: ByteSource;
 }
@@ -499,7 +620,7 @@ function parseKeyFormatAndType(
     if (typeStr !== undefined && typeStr !== "uncompressed" && typeStr !== "compressed") {
       throw new ERR_INVALID_ARG_VALUE(option("type", objName), typeStr);
     }
-    return { format, type: undefined };
+    return { format, type: undefined, compressed: typeStr === "compressed" };
   }
   if (format === KeyFormat.RawPrivate || format === KeyFormat.RawSeed) {
     if (isPublic === true) {
@@ -530,7 +651,7 @@ function parseKeyEncoding(
   validateObject(enc, "options");
   const options = enc as KeyExportOptions;
   const isInput = keyType === undefined;
-  const { format, type } = parseKeyFormatAndType(options, keyType, isPublic, objName);
+  const { format, type, compressed } = parseKeyFormatAndType(options, keyType, isPublic, objName);
 
   let cipher: unknown;
   let passphrase: unknown;
@@ -571,14 +692,14 @@ function parseKeyEncoding(
   }
 
   const bytes = passphrase === undefined ? undefined : getArrayBufferOrView(passphrase, "key.passphrase", encoding);
-  return { format, type, cipher, passphrase: bytes };
+  return { format, type, compressed, cipher, passphrase: bytes };
 }
 
-function parsePublicKeyEncoding(enc: unknown, keyType: string | undefined, objName: string | undefined): KeyEncoding {
+export function parsePublicKeyEncoding(enc: unknown, keyType: string | undefined, objName: string | undefined): KeyEncoding {
   return parseKeyEncoding(enc, keyType, keyType ? true : undefined, objName);
 }
 
-function parsePrivateKeyEncoding(enc: unknown, keyType: string | undefined, objName: string | undefined): KeyEncoding {
+export function parsePrivateKeyEncoding(enc: unknown, keyType: string | undefined, objName: string | undefined): KeyEncoding {
   return parseKeyEncoding(enc, keyType, false, objName);
 }
 
@@ -626,7 +747,7 @@ interface KeyInput {
 
 /** Node's `prepareAsymmetricKey`: every way a program may name an asymmetric key. */
 export function prepareAsymmetricKey(key: unknown, context: number, name = "key"): PreparedKey {
-  if (key instanceof KeyObject) {
+  if (isKeyObject(key)) {
     validateAsymmetricKeyType(typeOf(key), context, key);
     return { handle: handleOf(key) };
   }
@@ -639,7 +760,7 @@ export function prepareAsymmetricKey(key: unknown, context: number, name = "key"
     const data = given.key;
     const format = given.format;
     // `key` may be a KeyObject, to carry options such as padding beside it.
-    if (data instanceof KeyObject) {
+    if (isKeyObject(data)) {
       validateAsymmetricKeyType(typeOf(data), context, data);
       return { handle: handleOf(data) };
     }
@@ -774,31 +895,58 @@ function okpName(name: string): string | undefined {
   }
 }
 
-/** A post-quantum key type node knows by name, which this module does not implement yet. */
+/** The post-quantum families node knows by name. */
+const postQuantumNames = [
+  "ml-dsa-44",
+  "ml-dsa-65",
+  "ml-dsa-87",
+  "ml-kem-512",
+  "ml-kem-768",
+  "ml-kem-1024",
+  "slh-dsa-sha2-128f",
+  "slh-dsa-sha2-128s",
+  "slh-dsa-sha2-192f",
+  "slh-dsa-sha2-192s",
+  "slh-dsa-sha2-256f",
+  "slh-dsa-sha2-256s",
+  "slh-dsa-shake-128f",
+  "slh-dsa-shake-128s",
+  "slh-dsa-shake-192f",
+  "slh-dsa-shake-192s",
+  "slh-dsa-shake-256f",
+  "slh-dsa-shake-256s",
+];
+
 function isPostQuantumName(keyType: string): boolean {
-  return keyType.startsWith("ml-dsa-") || keyType.startsWith("ml-kem-") || keyType.startsWith("slh-dsa-");
+  return postQuantumNames.includes(keyType);
 }
 
-/** Node's `ImportRawKey`: an EC or OKP key from its raw public or private form. */
+/**
+ * Node's `ValidateRawKeyImportFormat` and `ImportRawKey`: an EC, OKP or
+ * post-quantum key from a raw form its family has -- a public key, and a
+ * private key or a seed as the family keeps it.
+ */
 function importRaw(prepared: PreparedKey): Imported {
   const keyType = prepared.asymmetricKeyType!;
   const format = prepared.format!;
   const privateKey = format !== KeyFormat.RawPublic;
   const okp = okpName(keyType);
-  if (keyType === "ec" || okp !== undefined) {
-    if (format === KeyFormat.RawSeed) throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS_BINDING();
+  let privateForm: number;
+  if (keyType === "ec" || okp !== undefined || keyType.startsWith("slh-dsa-")) {
+    privateForm = KeyFormat.RawPrivate;
+  } else if (hasSeed(keyType)) {
+    privateForm = KeyFormat.RawSeed;
   } else if (keyType === "rsa" || keyType === "rsa-pss" || keyType === "dsa" || keyType === "dh") {
     throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS_BINDING();
-  } else if (isPostQuantumName(keyType)) {
-    throw new ERR_INVALID_ARG_VALUE_BINDING("Unsupported key type");
   } else {
     throw new ERR_INVALID_ARG_VALUE_BINDING(`Invalid asymmetricKeyType: ${keyType}`);
   }
+  if (privateKey && format !== privateForm) throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS_BINDING();
   const raw = bytesOf(prepared.data as ByteSource);
-  const native =
-    keyType === "ec"
-      ? nts_crypto_key_from_raw_ec(prepared.namedCurve ?? "", raw, privateKey)
-      : nts_crypto_key_from_okp(okp!, raw, privateKey);
+  let native: number;
+  if (keyType === "ec") native = nts_crypto_key_from_raw_ec(prepared.namedCurve ?? "", raw, privateKey);
+  else if (okp !== undefined) native = nts_crypto_key_from_okp(okp, raw, privateKey);
+  else native = nts_crypto_key_from_post_quantum(keyType, raw, !privateKey ? 0 : format === KeyFormat.RawSeed ? 2 : 1);
   if (native === KeyStatus.InvalidCurve) throw new ERR_CRYPTO_INVALID_CURVE();
   if (native <= 0) throw new ERR_INVALID_ARG_VALUE_BINDING("Invalid key data");
   return { native, privateKey };
@@ -877,7 +1025,7 @@ const noKeyOptions: KeyOperationOptions = {};
 /** The options beside a key argument; null and undefined are read, as node reads them, and throw. */
 export function keyOptionsOf(key: unknown): KeyOperationOptions {
   if (typeof key !== "object" && key !== undefined) return noKeyOptions;
-  if (key instanceof KeyObject || isArrayBufferView(key) || isAnyArrayBuffer(key)) return noKeyOptions;
+  if (isKeyObject(key) || isArrayBufferView(key) || isAnyArrayBuffer(key)) return noKeyOptions;
   return key as KeyOperationOptions;
 }
 
@@ -899,7 +1047,7 @@ export function publicOrPrivateKeyOf(prepared: PreparedKey): KeyObjectHandle {
  * refused by name.
  */
 export function prepareSecretKey(key: unknown, encoding: string | undefined, bufferOnly = false): Uint8Array {
-  if (!bufferOnly && key instanceof KeyObject) {
+  if (!bufferOnly && isKeyObject(key)) {
     const type = typeOf(key);
     if (type !== "secret") throw new ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE(type, "secret");
     return handleOf(key).bytes;

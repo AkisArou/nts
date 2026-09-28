@@ -22,6 +22,7 @@ import { getDefaultTriggerAsyncId } from "../../internal/async-hooks.ts";
 import { AsyncRequest } from "../../internal/async-request.ts";
 import {
   ERR_CRYPTO_INVALID_DIGEST,
+  ERR_CRYPTO_INVALID_DIGEST_BINDING,
   ERR_CRYPTO_INVALID_STATE_BINDING,
   ERR_CRYPTO_OPERATION_FAILED,
   ERR_CRYPTO_SIGN_KEY_REQUIRED,
@@ -117,7 +118,7 @@ function checkThrow(step: string): Error {
 /** `SignBase::Init`: a hash context for the stream's digest. */
 function signInit(algorithm: string): number {
   const id = digestId(algorithm);
-  if (id < 0) throw new ERR_CRYPTO_INVALID_DIGEST();
+  if (id < 0) throw new ERR_CRYPTO_INVALID_DIGEST_BINDING();
   const handle = nts_crypto_sign_init(id);
   if (handle === 0) throw checkThrow("EVP_SignInit_ex failed");
   return handle;

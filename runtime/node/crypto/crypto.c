@@ -696,12 +696,12 @@ typedef enum { JOB_RANDOM, JOB_PBKDF2, JOB_HKDF, JOB_SCRYPT, JOB_WORK } JobKind;
 
 /* One unit of pool work. Inputs are private copies; `target` is the one
  * program object held, retained, and only touched on the loop thread. A
- * `JOB_WORK` is another translation unit's, which owns `state`. */
+ * `JOB_WORK` is another translation unit's: `work` says how to run and
+ * deliver it, and `state` is its own. */
 typedef struct {
     uv_work_t request;
     JobKind kind;
-    NtsCryptoWork work;
-    void (*dispose)(void *state);
+    const NtsCryptoWork *work;
     void *state;
     const EVP_MD *md;
     unsigned char *inputs[3];
@@ -744,14 +744,14 @@ static void job_run(uv_work_t *request) {
                          job->r, job->p, job->maxmem, job->out, job->length);
         break;
     case JOB_WORK:
-        job->ok = job->work(job->state, &job->out, &job->length);
+        job->ok = job->work->run(job->state);
         break;
     }
     if (!job->ok) record_capture(&job->error);
 }
 
 static void job_free(Job *job) {
-    if (job->dispose != NULL) job->dispose(job->state);
+    if (job->work != NULL) job->work->dispose(job->state);
     for (size_t i = 0; i < 3; i++) free(job->inputs[i]);
     free(job->out);
     record_clear(&job->error);
@@ -771,13 +771,10 @@ static void job_after(uv_work_t *request, int status) {
         }
         ((void (*)(NtsHeader *, bool))job->done->descriptor->methods[nts_closure_call_slot])(
             job->done, job->ok);
+    } else if (job->kind == JOB_WORK) {
+        job->work->deliver(job->state, job->ok, job->done);
     } else {
-        NtsView *bytes = nts_view_from_bytes(job->ok ? job->out : NULL,
-                                             job->ok ? (double)job->length : 0);
-        ((void (*)(NtsHeader *, bool, NtsView *))job->done->descriptor
-             ->methods[nts_closure_call_slot])(job->done, job->ok, bytes);
-        /* A closure borrows its arguments; this was ours. */
-        nts_release((NtsHeader *)bytes);
+        nts_crypto_deliver_bytes(job->done, job->ok, job->out, job->length);
     }
     job_free(job);
     /* The completion is the owner-thread boundary at which the program's
@@ -853,20 +850,34 @@ void nts_crypto_scrypt_job(NtsView *password, NtsView *salt, double n, double r,
     job_queue(job);
 }
 
-/* Another translation unit's job, delivered as the derivations are: `done(ok,
- * bytes)` on the loop thread, with the error record set from the pool thread's
- * queue when `work` fails. `state` is disposed of after delivery, or at once
- * if the job cannot be made. */
-void nts_crypto_queue_work(NtsCryptoWork work, void (*dispose)(void *state), void *state,
-                           NtsHeader *done) {
+/* `done(ok, bytes)`: how the derivations deliver, and a `JOB_WORK` may. The
+ * bytes are copied into a view the call borrows. */
+void nts_crypto_deliver_bytes(NtsHeader *done, bool ok, const unsigned char *bytes, size_t length) {
+    NtsView *view = nts_view_from_bytes(ok ? bytes : NULL, ok ? (double)length : 0);
+    ((void (*)(NtsHeader *, bool, NtsView *))done->descriptor->methods[nts_closure_call_slot])(
+        done, ok, view);
+    /* A closure borrows its arguments; this was ours. */
+    nts_release((NtsHeader *)view);
+}
+
+/* `done(ok, value)`, for a job whose answer is a number -- a key's handle. */
+void nts_crypto_deliver_number(NtsHeader *done, bool ok, double value) {
+    ((void (*)(NtsHeader *, bool, double))done->descriptor->methods[nts_closure_call_slot])(
+        done, ok, value);
+}
+
+/* Another translation unit's job: `work->run` on a pool thread, the error
+ * record set from that thread's queue when it fails, then `work->deliver` on
+ * the loop thread and `work->dispose`. A job that cannot be made is disposed
+ * of at once. */
+void nts_crypto_queue_work(const NtsCryptoWork *work, void *state, NtsHeader *done) {
     Job *job = calloc(1, sizeof(Job));
     if (job == NULL) {
-        dispose(state);
+        work->dispose(state);
         return;
     }
     job->kind = JOB_WORK;
     job->work = work;
-    job->dispose = dispose;
     job->state = state;
     nts_retain(done);
     job->done = done;

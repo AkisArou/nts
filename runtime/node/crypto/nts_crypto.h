@@ -118,6 +118,7 @@ NtsArray *nts_crypto_curve_names(void);
 double nts_crypto_key_from_jwk_ec(NtsString *curve, NtsView *x, NtsView *y, NtsView *d, bool private_key);
 double nts_crypto_key_from_okp(NtsString *curve, NtsView *raw, bool private_key);
 double nts_crypto_key_from_raw_ec(NtsString *curve, NtsView *raw, bool private_key);
+double nts_crypto_key_from_post_quantum(NtsString *type, NtsView *raw, double form);
 double nts_crypto_key_status(void);
 NtsString *nts_crypto_key_type(double handle);
 NtsArray *nts_crypto_key_details(double handle);
@@ -129,6 +130,7 @@ NtsView *nts_crypto_key_export_private(double handle, double format, double type
 NtsView *nts_crypto_key_export_public(double handle, double format, double type);
 NtsArray *nts_crypto_key_export_jwk(double handle, bool private_key);
 NtsView *nts_crypto_key_export_raw(double handle, bool private_key, bool compressed);
+NtsView *nts_crypto_key_export_seed(double handle);
 
 /* Signatures (`sig.c`). The stream forms finish a hash context from
  * `nts_crypto_hash_new`; the one-shot forms are node's `SignJob`, whose
@@ -156,6 +158,21 @@ void nts_crypto_sign_job(bool verify, double key, NtsView *data, double digest,
 double nts_crypto_rsa_implicit_rejection(double key);
 NtsView *nts_crypto_public_key_cipher(double operation, double key, NtsView *data, double padding,
                                       double digest, NtsView *label);
+
+/* Key-pair generation (`keygen.c`): a job configured, then generated inline
+ * or on the thread pool. 0 is a job that could not be configured; a digest id
+ * of -1 is none, and a salt or divisor length of -1 is not given. */
+double nts_crypto_keygen_rsa(bool pss, double bits, double exponent, double digest,
+                             double mgf1_digest, double salt_length);
+double nts_crypto_keygen_dsa(double bits, double divisor_bits);
+double nts_crypto_keygen_ec(NtsString *curve, bool explicit_parameters);
+double nts_crypto_keygen_nid(NtsString *type);
+double nts_crypto_keygen_dh_group(NtsString *group);
+double nts_crypto_keygen_dh_prime(NtsView *prime, double generator);
+double nts_crypto_keygen_dh_size(double bits, double generator);
+double nts_crypto_keygen_run(double job);
+void nts_crypto_keygen_release(double job);
+void nts_crypto_keygen_queue(double job, NtsHeader *done);
 
 /* FIPS mode: whether OpenSSL's default properties ask for FIPS, and setting
  * them. False from `set` is a failure whose cause is on the error record. */

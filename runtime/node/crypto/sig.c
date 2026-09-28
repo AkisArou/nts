@@ -50,7 +50,7 @@ static bool is_rsa_variant(EVP_PKEY *pkey) {
 /* ncrypto's `isOneShotVariant`: a key that signs the message, not a digest of
  * it, and so cannot finish a stream. */
 static bool is_one_shot_variant(EVP_PKEY *pkey) {
-    switch (EVP_PKEY_get_base_id(pkey)) {
+    switch (nts_crypto_key_id(pkey)) {
     case EVP_PKEY_ED25519:
     case EVP_PKEY_ED448:
     case EVP_PKEY_ML_DSA_44:
@@ -315,7 +315,7 @@ static bool has_small_order_point(EVP_PKEY *pkey, const unsigned char *signature
 
 /* Node's `SupportsContextString`: Ed25519, Ed448 and ML-DSA take one. */
 static bool supports_context_string(EVP_PKEY *pkey) {
-    switch (EVP_PKEY_get_base_id(pkey)) {
+    switch (nts_crypto_key_id(pkey)) {
     case EVP_PKEY_ED25519:
     case EVP_PKEY_ED448:
     case EVP_PKEY_ML_DSA_44:
@@ -340,6 +340,8 @@ typedef struct {
     int padding;
     double salt_length;
     int failure;
+    unsigned char *out;
+    size_t out_length;
 } SignJob;
 
 static unsigned char *copy_bytes(NtsView *view, size_t *length) {
@@ -354,13 +356,14 @@ static void sign_job_dispose(void *state) {
     free(job->data);
     free(job->signature);
     free(job->context);
+    free(job->out);
     free(job);
 }
 
 /* `EVP_DigestSign` and `EVP_DigestVerify` do the update and the final in one,
  * which is ncrypto's `signOneShot` and `verify`; its `sign` for the other keys
  * takes two steps to the same bytes. */
-static bool sign_job_sign(EVP_MD_CTX *ctx, SignJob *job, unsigned char **out, size_t *length) {
+static bool sign_job_sign(EVP_MD_CTX *ctx, SignJob *job) {
     size_t size = 0;
     if (EVP_DigestSign(ctx, NULL, &size, job->data, job->data_length) != 1) return false;
     unsigned char *sig = malloc(size == 0 ? 1 : size);
@@ -369,15 +372,15 @@ static bool sign_job_sign(EVP_MD_CTX *ctx, SignJob *job, unsigned char **out, si
         free(sig);
         return false;
     }
-    *out = sig;
-    *length = size;
+    job->out = sig;
+    job->out_length = size;
     return true;
 }
 
 /* Node's `SignTraits::DeriveBits`. A verification's answer is a byte, as
  * node's is, so that both modes deliver through the one job. `failure` says
  * which of node's errors a synchronous caller throws. */
-static bool sign_job_run(void *state, unsigned char **out, size_t *length) {
+static bool sign_job_run(void *state) {
     SignJob *job = state;
     bool has_context = job->context_length > 0;
     if (has_context && !supports_context_string(job->pkey)) {
@@ -419,15 +422,15 @@ static bool sign_job_run(void *state, unsigned char **out, size_t *length) {
             *answer = EVP_DigestVerify(ctx, job->signature, job->signature_length, job->data,
                                        job->data_length) == 1 &&
                       !has_small_order_point(job->pkey, job->signature, job->signature_length);
-            *out = answer;
-            *length = 1;
+            job->out = answer;
+            job->out_length = 1;
             ok = true;
             /* `ClearErrorOnReturn`: a signature that does not verify is an
              * answer, not a failure with a cause. */
             ERR_clear_error();
         }
     } else {
-        ok = sign_job_sign(ctx, job, out, length);
+        ok = sign_job_sign(ctx, job);
         if (!ok) job->failure = kSignPrivateKey;
     }
     EVP_MD_CTX_free(ctx);
@@ -473,19 +476,23 @@ NtsView *nts_crypto_sign_job_sync(bool verify, double key, NtsView *data, double
         last_status = kSignInit;
         return NULL;
     }
-    unsigned char *out = NULL;
-    size_t length = 0;
     NtsView *result = NULL;
-    if (sign_job_run(job, &out, &length)) {
-        result = nts_view_from_bytes(out, (double)length);
+    if (sign_job_run(job)) {
+        result = nts_view_from_bytes(job->out, (double)job->out_length);
     } else {
         last_status = job->failure;
         nts_crypto_record_failure();
     }
-    free(out);
     sign_job_dispose(job);
     return result;
 }
+
+static void sign_job_deliver(void *state, bool ok, NtsHeader *done) {
+    SignJob *job = state;
+    nts_crypto_deliver_bytes(done, ok, job->out, job->out_length);
+}
+
+static const NtsCryptoWork sign_work = {sign_job_run, sign_job_deliver, sign_job_dispose};
 
 /* The same in `kCryptoJobAsync` mode, delivered to `done(ok, bytes)`. */
 void nts_crypto_sign_job(bool verify, double key, NtsView *data, double digest,
@@ -494,5 +501,5 @@ void nts_crypto_sign_job(bool verify, double key, NtsView *data, double digest,
     SignJob *job =
         sign_job_new(verify, key, data, digest, salt_length, padding, context, signature);
     if (job == NULL) return;
-    nts_crypto_queue_work(sign_job_run, sign_job_dispose, job, done);
+    nts_crypto_queue_work(&sign_work, job, done);
 }

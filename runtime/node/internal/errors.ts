@@ -2081,19 +2081,30 @@ export class ERR_CRYPTO_HASH_UPDATE_FAILED extends NodeError {
   }
 }
 
-/**
- * `Invalid digest: md55`, from the KDFs, `Hmac` and the one-shot signatures,
- * all of which node checks in C++; `Sign` and `Verify` say only `Invalid
- * digest`.
- */
+/** `Invalid digest: md55`, from the KDFs, `Hmac` and the one-shot signatures, all of which node checks in C++. */
 export class ERR_CRYPTO_INVALID_DIGEST extends NodeTypeError {
   override get ["constructor"](): unknown {
     return TypeError;
   }
   override readonly code = "ERR_CRYPTO_INVALID_DIGEST";
 
-  constructor(digest?: string) {
-    super(digest === undefined ? "Invalid digest" : `Invalid digest: ${digest}`);
+  constructor(digest: string) {
+    super(`Invalid digest: ${digest}`);
+  }
+}
+
+/**
+ * `ERR_CRYPTO_INVALID_DIGEST` in C++'s other words: `Sign` and `Verify` say only
+ * `Invalid digest`, and RSA-PSS key generation `Invalid MGF1 digest: sha0`.
+ */
+export class ERR_CRYPTO_INVALID_DIGEST_BINDING extends NodeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_CRYPTO_INVALID_DIGEST";
+
+  constructor(message = "Invalid digest") {
+    super(message);
   }
 }
 
@@ -2234,6 +2245,27 @@ export class ERR_OSSL_EVP_INVALID_DIGEST extends NodeError {
 
   constructor() {
     super("Invalid digest used");
+  }
+}
+
+/** `Unknown DH group`: a group name OpenSSL has no prime for. */
+export class ERR_CRYPTO_UNKNOWN_DH_GROUP extends NodeError {
+  override readonly code = "ERR_CRYPTO_UNKNOWN_DH_GROUP";
+
+  constructor() {
+    super("Unknown DH group");
+  }
+}
+
+/** `At least one of the group, prime, or primeLength options is required`. */
+export class ERR_MISSING_OPTION extends NodeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_MISSING_OPTION";
+
+  constructor(option: string) {
+    super(`${option} is required`);
   }
 }
 

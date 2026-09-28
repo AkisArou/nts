@@ -199,6 +199,9 @@ declare function nts_crypto_key_from_jwk_ec(
 declare function nts_crypto_key_from_okp(curve: string, raw: Uint8Array, privateKey: boolean): number;
 /** @ntsAbi managed */
 declare function nts_crypto_key_from_raw_ec(curve: string, raw: Uint8Array, privateKey: boolean): number;
+/** A post-quantum key from its raw form: 0 public, 1 private, 2 seed. */
+/** @ntsAbi managed */
+declare function nts_crypto_key_from_post_quantum(type: string, raw: Uint8Array, form: number): number;
 /** @ntsAbi managed */
 declare function nts_crypto_key_status(): number;
 /** @ntsAbi managed */
@@ -225,6 +228,8 @@ declare function nts_crypto_key_export_public(handle: number, format: number, ty
 declare function nts_crypto_key_export_jwk(handle: number, privateKey: boolean): Uint8Array[];
 /** @ntsAbi managed */
 declare function nts_crypto_key_export_raw(handle: number, privateKey: boolean, compressed: boolean): Uint8Array | null;
+/** @ntsAbi managed */
+declare function nts_crypto_key_export_seed(handle: number): Uint8Array | null;
 
 /** Signatures: a NaN padding or salt length is "not given"; a digest id of -1 is none. */
 /** @ntsAbi managed */
@@ -285,3 +290,32 @@ declare function nts_crypto_public_key_cipher(
   digest: number,
   label: Uint8Array,
 ): Uint8Array | null;
+
+/** Key-pair generation: a job's handle (0: not configured), then its key's handle. */
+/** @ntsAbi managed */
+declare function nts_crypto_keygen_rsa(
+  pss: boolean,
+  bits: number,
+  exponent: number,
+  digest: number,
+  mgf1Digest: number,
+  saltLength: number,
+): number;
+/** @ntsAbi managed */
+declare function nts_crypto_keygen_dsa(bits: number, divisorBits: number): number;
+/** @ntsAbi managed */
+declare function nts_crypto_keygen_ec(curve: string, explicitParameters: boolean): number;
+/** @ntsAbi managed */
+declare function nts_crypto_keygen_nid(type: string): number;
+/** @ntsAbi managed */
+declare function nts_crypto_keygen_dh_group(group: string): number;
+/** @ntsAbi managed */
+declare function nts_crypto_keygen_dh_prime(prime: Uint8Array, generator: number): number;
+/** @ntsAbi managed */
+declare function nts_crypto_keygen_dh_size(bits: number, generator: number): number;
+/** @ntsAbi managed */
+declare function nts_crypto_keygen_run(job: number): number;
+/** @ntsAbi managed */
+declare function nts_crypto_keygen_release(job: number): void;
+/** @ntsAbi managed */
+declare function nts_crypto_keygen_queue(job: number, done: (ok: boolean, key: number) => void): void;

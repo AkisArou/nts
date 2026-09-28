@@ -28,7 +28,7 @@ import {
   validateUint32,
 } from "../../internal/validators.ts";
 import { isAnyArrayBuffer, isArrayBufferView } from "../../util/src/types.ts";
-import { KeyObject, prepareSecretKey } from "./keys.ts";
+import { isKeyObject, prepareSecretKey } from "./keys.ts";
 import { asBuffer, bytesOf, digestId, getArrayBufferOrView, jobError, toBuf, validateByteSource } from "./util.ts";
 import type { ByteSource } from "./util.ts";
 
@@ -163,7 +163,7 @@ interface HkdfParameters {
 
 /** Node's `prepareKey`, which names the argument `ikm` in its error. */
 function prepareKey(key: unknown): ByteSource {
-  if (key instanceof KeyObject) return prepareSecretKey(key, undefined);
+  if (isKeyObject(key)) return prepareSecretKey(key, undefined);
   if (isAnyArrayBuffer(key)) return key;
   const bytes = toBuf(key);
   if (!isArrayBufferView(bytes)) {

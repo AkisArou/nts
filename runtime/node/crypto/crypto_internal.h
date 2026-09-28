@@ -12,16 +12,25 @@
  * draining it. Called on the loop thread. */
 void nts_crypto_record_failure(void);
 
-/* Work for the thread pool: runs off the loop thread, and on success leaves
- * `*out` (malloc'd, owned by the job from then on) and `*length`. A failure
- * leaves its cause on the calling thread's OpenSSL queue. */
-typedef bool (*NtsCryptoWork)(void *state, unsigned char **out, size_t *length);
-
-/* `crypto.c`'s job queue, for the other translation units' jobs. `done` is a
- * program closure `(ok: boolean, bytes: Uint8Array) => void`. */
+/* Work for the thread pool, as another translation unit defines it: `run`
+ * off the loop thread, where a failure leaves its cause on that thread's
+ * OpenSSL queue; `deliver` on the loop thread, which calls the program's
+ * `done` as its type needs; `dispose` last. */
 struct NtsHeader;
-void nts_crypto_queue_work(NtsCryptoWork work, void (*dispose)(void *state), void *state,
-                           struct NtsHeader *done);
+typedef struct {
+    bool (*run)(void *state);
+    void (*deliver)(void *state, bool ok, struct NtsHeader *done);
+    void (*dispose)(void *state);
+} NtsCryptoWork;
+
+/* `crypto.c`'s job queue, for the other translation units' jobs. */
+void nts_crypto_queue_work(const NtsCryptoWork *work, void *state, struct NtsHeader *done);
+
+/* The two shapes of `done` the jobs use: `(ok, bytes)`, the bytes copied into
+ * a view the call borrows, and `(ok, value)`. */
+void nts_crypto_deliver_bytes(struct NtsHeader *done, bool ok, const unsigned char *bytes,
+                              size_t length);
+void nts_crypto_deliver_number(struct NtsHeader *done, bool ok, double value);
 
 /* OpenSSL's objects by the ids the TypeScript holds. Declared through their
  * struct tags rather than OpenSSL's headers: `build.sh` includes every header
@@ -41,7 +50,18 @@ const struct evp_md_st *nts_crypto_digest_at(double id);
  * failure left on the OpenSSL queue) and the digest that made them. */
 unsigned char *nts_crypto_hash_take(double handle, size_t *length, const struct evp_md_st **md);
 
-/* `keys.c`'s handles: the key a handle names, or NULL. */
+/* `keys.c`'s handles: the key a handle names, or NULL; and a new handle for a
+ * key, which the table then owns (0 when it cannot, and the key is freed).
+ * Loop thread only. */
 struct evp_pkey_st *nts_crypto_key_at(double handle);
+double nts_crypto_key_claim(struct evp_pkey_st *pkey);
+
+/* A key's family as node's `EVPKeyPointer::id` reads it: the base id, or for
+ * a post-quantum key, which has none, its family's NID. */
+int nts_crypto_key_id(const struct evp_pkey_st *pkey);
+
+/* Node's `Ec::GetCurveIdFromName`: a NIST name, else a short name; `NID_undef`
+ * for neither. */
+int nts_crypto_curve_nid(const char *name);
 
 #endif

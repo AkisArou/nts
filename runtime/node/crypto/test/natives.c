@@ -1,4 +1,4 @@
-/* `crypto.c`, `cipher.c`, `keys.c`, `sig.c` and `rsa.c`, called directly.
+/* `crypto.c`, `cipher.c`, `keys.c`, `sig.c`, `rsa.c` and `keygen.c`, called directly.
  *
  * The TypeScript over these natives runs on node against node's own crypto,
  * so nothing but this runs the C: the compiled lane refuses every public
@@ -521,6 +521,104 @@ static void rsa_encryption(void) {
     nts_crypto_take_errors();
 }
 
+/* ------------------------------------------------------ key generation */
+
+static int keygen_calls;
+static bool keygen_ok;
+static double keygen_key;
+
+static void on_keygen(NtsHeader *self, bool ok, double key) {
+    (void)self;
+    keygen_calls++;
+    keygen_ok = ok;
+    keygen_key = key;
+}
+
+static void *const keygen_methods[] = {(void *)(void (*)(NtsHeader *, bool, double))on_keygen};
+static const NtsDescriptor keygen_desc = {
+    NTS_KIND_OBJECT, (uint32_t)sizeof(NtsHeader), 0u, 0u, NULL, keygen_methods, "OnKeygen", 0u, NULL,
+};
+static NtsHeader keygen_callback = {&keygen_desc, NTS_IMMORTAL, 0u, 0u};
+
+static bool key_type_is(double key, const char *expected) {
+    char *type = string_of(nts_crypto_key_type(key));
+    bool same = strcmp(type, expected) == 0;
+    free(type);
+    return same;
+}
+
+/* A generated key signs, and its public half verifies: the pair is a pair. */
+static bool signs_and_verifies(double key) {
+    NtsView *none = bytes("", 0);
+    double sha256 = nts_crypto_digest_id(text("sha256"));
+    bool one_shot = nts_crypto_key_is_one_shot(key);
+    double digest = one_shot ? -1 : sha256;
+    NtsView *signature = nts_crypto_sign_job_sync(false, key, utf8("pair"), digest, NAN, NAN, none, none);
+    double public_half = nts_crypto_key_parse_public(0, 2, nts_crypto_key_export_public(key, 0, 2), none, false);
+    return signature != NULL &&
+           is_hex(nts_crypto_sign_job_sync(true, public_half, utf8("pair"), digest, NAN, NAN, none, signature), "01");
+}
+
+static void key_generation(void) {
+    double sha256 = nts_crypto_digest_id(text("sha256"));
+
+    double rsa = nts_crypto_keygen_run(nts_crypto_keygen_rsa(false, 1024, 3, -1, -1, -1));
+    double *rsa_details = NTS_ITEMS(nts_crypto_key_details(rsa), double);
+    expect_true("an RSA key of 1024 bits is generated", rsa > 0 && key_type_is(rsa, "rsa") && rsa_details[0] == 1024);
+    expect_true("  with the exponent asked for", is_hex(nts_crypto_key_public_exponent(rsa), "03"));
+    expect_true("  and is a pair", signs_and_verifies(rsa));
+
+    double pss = nts_crypto_keygen_run(nts_crypto_keygen_rsa(true, 1024, 65537, sha256, -1, -1));
+    NtsArray *pss_names = nts_crypto_key_detail_names(pss);
+    char *mgf1 = string_of(NTS_ITEMS(pss_names, NtsString *)[2]);
+    double *pss_details = NTS_ITEMS(nts_crypto_key_details(pss), double);
+    expect_true("an RSA-PSS key restricted to SHA-256 takes it for MGF1 and a 32-byte salt, as node sets them",
+                key_type_is(pss, "rsa-pss") && strcmp(mgf1, "sha256") == 0 && pss_details[2] == 32);
+    free(mgf1);
+
+    double ec = nts_crypto_keygen_run(nts_crypto_keygen_ec(text("P-384"), false));
+    char *curve = string_of(NTS_ITEMS(nts_crypto_key_detail_names(ec), NtsString *)[0]);
+    expect_true("an EC key on P-384 is on secp384r1", ec > 0 && strcmp(curve, "secp384r1") == 0);
+    free(curve);
+    expect_true("  and is a pair", signs_and_verifies(ec));
+    expect_true("an unknown curve configures nothing", nts_crypto_keygen_ec(text("nope"), false) == 0);
+
+    double ed = nts_crypto_keygen_run(nts_crypto_keygen_nid(text("ed448")));
+    expect_true("an Ed448 key is generated, and is a pair", key_type_is(ed, "ed448") && signs_and_verifies(ed));
+    double ml_dsa = nts_crypto_keygen_run(nts_crypto_keygen_nid(text("ml-dsa-44")));
+    expect_true("an ML-DSA-44 key is generated, and named as node names it", key_type_is(ml_dsa, "ml-dsa-44"));
+    expect_true("  signs the message itself, and is a pair",
+                nts_crypto_key_is_one_shot(ml_dsa) && signs_and_verifies(ml_dsa));
+    NtsView *seed = nts_crypto_key_export_seed(ml_dsa);
+    expect_true("  keeps a 32-byte seed", seed != NULL && nts_view_byte_length(seed) == 32);
+    expect_true("  from which the same key is made again",
+                nts_crypto_key_equals(nts_crypto_key_from_post_quantum(text("ml-dsa-44"), seed, 2), ml_dsa));
+    NtsView *ml_public = nts_crypto_key_export_raw(ml_dsa, false, false);
+    expect_true("  and whose raw public key, 1312 bytes, imports as its public half",
+                ml_public != NULL && nts_view_byte_length(ml_public) == 1312 &&
+                    nts_crypto_key_equals(nts_crypto_key_from_post_quantum(text("ml-dsa-44"), ml_public, 0), ml_dsa));
+    expect_true("an unknown type configures nothing", nts_crypto_keygen_nid(text("rsa")) == 0);
+
+    double dsa = nts_crypto_keygen_run(nts_crypto_keygen_dsa(1024, 160));
+    double *dsa_details = NTS_ITEMS(nts_crypto_key_details(dsa), double);
+    expect_true("a DSA key's parameters are generated to the sizes asked",
+                key_type_is(dsa, "dsa") && dsa_details[0] == 1024 && dsa_details[1] == 160);
+    expect_true("  and is a pair", signs_and_verifies(dsa));
+
+    double dh = nts_crypto_keygen_run(nts_crypto_keygen_dh_group(text("MODP14")));
+    expect_true("a DH key in a named group, in any case", key_type_is(dh, "dh"));
+    expect_true("an unknown group configures nothing", nts_crypto_keygen_dh_group(text("modp3")) == 0);
+
+    double bad = nts_crypto_keygen_run(nts_crypto_keygen_rsa(false, 1024, 1, -1, -1, -1));
+    expect_true("an exponent of 1 fails to generate", bad == 0);
+    expect_true("  and OpenSSL says why", errors_mention("pub exponent out of range"));
+
+    nts_crypto_keygen_queue(nts_crypto_keygen_ec(text("prime256v1"), false), &keygen_callback);
+    uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+    expect_true("a generation job calls back once, with its key",
+                keygen_calls == 1 && keygen_ok && key_type_is(keygen_key, "ec"));
+}
+
 int main(void) {
     digests();
     derivations();
@@ -528,6 +626,7 @@ int main(void) {
     keys();
     signatures();
     rsa_encryption();
+    key_generation();
     printf("%d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;
 }

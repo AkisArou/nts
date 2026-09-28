@@ -23,6 +23,7 @@
 #include <openssl/x509.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include "crypto_internal.h"
 #include "nts_crypto.h"
 #include "shared.h"
@@ -69,6 +70,8 @@ static double key_claim(EVP_PKEY *pkey) {
     keys[key_count] = pkey;
     return (double)++key_count;
 }
+
+double nts_crypto_key_claim(EVP_PKEY *pkey) { return key_claim(pkey); }
 
 EVP_PKEY *nts_crypto_key_at(double handle) {
     if (handle < 1 || handle > (double)key_count) return NULL;
@@ -319,7 +322,7 @@ double nts_crypto_key_from_jwk_rsa(NtsArray *components, bool private_key) {
 }
 
 /* ncrypto's `Ec::GetCurveIdFromName`: a NIST name, then OpenSSL's own. */
-static int curve_nid_of(const char *name) {
+int nts_crypto_curve_nid(const char *name) {
     int nid = EC_curve_nist2nid(name);
     return nid != NID_undef ? nid : OBJ_sn2nid(name);
 }
@@ -328,7 +331,7 @@ static int curve_nid_of(const char *name) {
 bool nts_crypto_key_curve_known(NtsString *curve) {
     size_t length = 0;
     char *name = nts_node_to_utf8_alloc(curve, &length);
-    int nid = name == NULL ? NID_undef : curve_nid_of(name);
+    int nid = name == NULL ? NID_undef : nts_crypto_curve_nid(name);
     free(name);
     return nid != NID_undef;
 }
@@ -378,7 +381,7 @@ double nts_crypto_key_from_jwk_ec(NtsString *curve, NtsView *x, NtsView *y, NtsV
     ERR_clear_error();
     size_t length = 0;
     char *name = nts_node_to_utf8_alloc(curve, &length);
-    int nid = name == NULL ? NID_undef : curve_nid_of(name);
+    int nid = name == NULL ? NID_undef : nts_crypto_curve_nid(name);
     free(name);
     if (nid == NID_undef) return kKeyInvalidCurve;
     EC_GROUP *group = EC_GROUP_new_by_curve_name(nid);
@@ -440,7 +443,7 @@ double nts_crypto_key_from_raw_ec(NtsString *curve, NtsView *raw, bool private_k
     ERR_clear_error();
     size_t length = 0;
     char *name = nts_node_to_utf8_alloc(curve, &length);
-    int nid = name == NULL ? NID_undef : curve_nid_of(name);
+    int nid = name == NULL ? NID_undef : nts_crypto_curve_nid(name);
     free(name);
     if (nid == NID_undef) return kKeyInvalidCurve;
     EVP_PKEY *pkey = NULL;
@@ -479,10 +482,96 @@ NtsArray *nts_crypto_curve_names(void) {
 
 /* Node's `GetAsymmetricKeyType`: the names a program sees, and "" for a key
  * none of them describes. */
+/* The post-quantum families, which OpenSSL holds only in providers: such a
+ * key's base id is 0, and its id depends on how it was made, so it is known
+ * by name. */
+static const struct {
+    int nid;
+    const char *name;
+} post_quantum[] = {
+    {NID_ML_DSA_44, "ML-DSA-44"},
+    {NID_ML_DSA_65, "ML-DSA-65"},
+    {NID_ML_DSA_87, "ML-DSA-87"},
+    {NID_ML_KEM_512, "ML-KEM-512"},
+    {NID_ML_KEM_768, "ML-KEM-768"},
+    {NID_ML_KEM_1024, "ML-KEM-1024"},
+    {NID_SLH_DSA_SHA2_128s, "SLH-DSA-SHA2-128s"},
+    {NID_SLH_DSA_SHA2_128f, "SLH-DSA-SHA2-128f"},
+    {NID_SLH_DSA_SHA2_192s, "SLH-DSA-SHA2-192s"},
+    {NID_SLH_DSA_SHA2_192f, "SLH-DSA-SHA2-192f"},
+    {NID_SLH_DSA_SHA2_256s, "SLH-DSA-SHA2-256s"},
+    {NID_SLH_DSA_SHA2_256f, "SLH-DSA-SHA2-256f"},
+    {NID_SLH_DSA_SHAKE_128s, "SLH-DSA-SHAKE-128s"},
+    {NID_SLH_DSA_SHAKE_128f, "SLH-DSA-SHAKE-128f"},
+    {NID_SLH_DSA_SHAKE_192s, "SLH-DSA-SHAKE-192s"},
+    {NID_SLH_DSA_SHAKE_192f, "SLH-DSA-SHAKE-192f"},
+    {NID_SLH_DSA_SHAKE_256s, "SLH-DSA-SHAKE-256s"},
+    {NID_SLH_DSA_SHAKE_256f, "SLH-DSA-SHAKE-256f"},
+};
+
+static int post_quantum_index(const EVP_PKEY *pkey) {
+    for (size_t i = 0; i < sizeof(post_quantum) / sizeof(post_quantum[0]); i++) {
+        if (EVP_PKEY_is_a(pkey, post_quantum[i].name)) return (int)i;
+    }
+    return -1;
+}
+
+/* A post-quantum key from its raw public key, its raw private key (SLH-DSA)
+ * or its seed (ML-DSA, ML-KEM): ncrypto's `NewRawPublic`, `NewRawPrivate`
+ * and `NewRawSeed`, by node's lower-case name for the family. */
+double nts_crypto_key_from_post_quantum(NtsString *type, NtsView *raw, double form) {
+    size_t name_length = 0;
+    char *name = nts_node_to_utf8_alloc(type, &name_length);
+    const char *algorithm = NULL;
+    for (size_t i = 0; name != NULL && i < sizeof(post_quantum) / sizeof(post_quantum[0]); i++) {
+        if (strcasecmp(name, post_quantum[i].name) == 0) algorithm = post_quantum[i].name;
+    }
+    free(name);
+    if (algorithm == NULL) return kKeyFailed;
+    const unsigned char *bytes = nts_view_bytes(raw);
+    size_t length = (size_t)nts_view_byte_length(raw);
+    ERR_set_mark();
+    EVP_PKEY *pkey = NULL;
+    if (form == 0) {
+        pkey = EVP_PKEY_new_raw_public_key_ex(NULL, algorithm, NULL, bytes, length);
+    } else if (form == 1) {
+        pkey = EVP_PKEY_new_raw_private_key_ex(NULL, algorithm, NULL, bytes, length);
+    } else {
+        OSSL_PARAM params[] = {
+            OSSL_PARAM_construct_octet_string(OSSL_PKEY_PARAM_ML_DSA_SEED, (void *)bytes, length),
+            OSSL_PARAM_construct_end(),
+        };
+        EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_from_name(NULL, algorithm, NULL);
+        if (ctx != NULL && EVP_PKEY_fromdata_init(ctx) == 1) {
+            EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_KEYPAIR, params);
+        }
+        EVP_PKEY_CTX_free(ctx);
+    }
+    ERR_pop_to_mark();
+    return key_claim(pkey);
+}
+
+int nts_crypto_key_id(const EVP_PKEY *pkey) {
+    int index = post_quantum_index(pkey);
+    return index >= 0 ? post_quantum[index].nid : EVP_PKEY_get_base_id(pkey);
+}
+
 NtsString *nts_crypto_key_type(double handle) {
     EVP_PKEY *pkey = nts_crypto_key_at(handle);
     const char *name = "";
-    if (pkey != NULL) {
+    /* The post-quantum families' names are OpenSSL's, in lower case. */
+    char lowered[32];
+    int index = pkey == NULL ? -1 : post_quantum_index(pkey);
+    if (index >= 0) {
+        const char *short_name = post_quantum[index].name;
+        size_t i = 0;
+        for (; short_name[i] != '\0' && i + 1 < sizeof(lowered); i++) {
+            char c = short_name[i];
+            lowered[i] = c >= 'A' && c <= 'Z' ? (char)(c + 32) : c;
+        }
+        lowered[i] = '\0';
+        name = lowered;
+    } else if (pkey != NULL) {
         switch (EVP_PKEY_get_base_id(pkey)) {
         case EVP_PKEY_RSA: name = "rsa"; break;
         case EVP_PKEY_RSA_PSS: name = "rsa-pss"; break;
@@ -820,13 +909,36 @@ NtsView *nts_crypto_key_export_raw(double handle, bool private_key, bool compres
             OPENSSL_free(point);
         }
     } else {
-        unsigned char raw[64];
-        size_t length = sizeof(raw);
-        int ok = private_key ? EVP_PKEY_get_raw_private_key(pkey, raw, &length)
+        /* Sized by asking: a post-quantum key's is kilobytes. */
+        size_t length = 0;
+        int ok = private_key ? EVP_PKEY_get_raw_private_key(pkey, NULL, &length)
+                             : EVP_PKEY_get_raw_public_key(pkey, NULL, &length);
+        unsigned char *raw = ok == 1 ? malloc(length == 0 ? 1 : length) : NULL;
+        if (raw != NULL) {
+            ok = private_key ? EVP_PKEY_get_raw_private_key(pkey, raw, &length)
                              : EVP_PKEY_get_raw_public_key(pkey, raw, &length);
-        if (ok == 1) result = nts_view_from_bytes(raw, (double)length);
-        OPENSSL_cleanse(raw, sizeof(raw));
+            if (ok == 1) result = nts_view_from_bytes(raw, (double)length);
+            OPENSSL_cleanse(raw, length);
+            free(raw);
+        }
     }
+    ERR_pop_to_mark();
+    return result;
+}
+
+/* An ML-DSA or ML-KEM private key's seed, from which OpenSSL can make the
+ * whole key again; NULL for a key that does not keep one. */
+NtsView *nts_crypto_key_export_seed(double handle) {
+    EVP_PKEY *pkey = nts_crypto_key_at(handle);
+    if (pkey == NULL) return NULL;
+    ERR_set_mark();
+    unsigned char seed[64];
+    size_t length = 0;
+    NtsView *result = NULL;
+    if (EVP_PKEY_get_octet_string_param(pkey, OSSL_PKEY_PARAM_ML_DSA_SEED, seed, sizeof(seed), &length) == 1) {
+        result = nts_view_from_bytes(seed, (double)length);
+    }
+    OPENSSL_cleanse(seed, sizeof(seed));
     ERR_pop_to_mark();
     return result;
 }

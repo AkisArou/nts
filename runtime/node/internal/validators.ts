@@ -173,6 +173,13 @@ export function validateInt32(
   validateInteger(value, name, min, max);
 }
 
+/** Node's `validateBuffer`: any view onto bytes. */
+export function validateBuffer(value: unknown, name = "buffer"): asserts value is ArrayBufferView {
+  if (!ArrayBuffer.isView(value)) {
+    throw new ERR_INVALID_ARG_TYPE(name, ["Buffer", "TypedArray", "DataView"], value);
+  }
+}
+
 /** Membership by `===`, with the allowed values named in the message. */
 export function validateOneOf<const Choices extends readonly unknown[]>(
   value: unknown,

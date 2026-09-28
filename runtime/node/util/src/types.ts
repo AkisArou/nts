@@ -5,6 +5,8 @@
 // matching operation. Cross-realm and forged-prototype recognition belongs to
 // the engine metaobject model and is intentionally not approximated here.
 
+import { hasKeyObjectBrand } from "../../internal/brands.ts";
+
 export function isDate(value: unknown): value is Date {
   return value instanceof Date;
 }
@@ -176,6 +178,7 @@ export function isCryptoKey(_value: unknown): boolean {
   return false;
 }
 
-export function isKeyObject(_value: unknown): boolean {
-  return false;
+/** Node's native brand check, which `node:crypto` registers (`internal/brands.ts`). */
+export function isKeyObject(value: unknown): boolean {
+  return hasKeyObjectBrand(value);
 }

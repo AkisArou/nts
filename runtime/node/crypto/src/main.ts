@@ -8,7 +8,10 @@
 // `createSign`, `createVerify`, `sign` and `verify`, `publicEncrypt` and its
 // three relatives.
 //
-// Not yet: key generation, Diffie-Hellman and ECDH, primes,
+// Key generation: `generateKeyPair` for every family node has, and
+// `generateKey` for secret keys.
+//
+// Not yet: Diffie-Hellman and ECDH, primes,
 // X.509, and Web Crypto's `subtle`. Each is its own part of OpenSSL, and
 // `tooling/conformance/missing-exports` lists the names.
 
@@ -37,6 +40,7 @@ export {
 } from "./cipher.ts";
 export { createPrivateKey, createPublicKey, createSecretKey, KeyObject } from "./keys.ts";
 export { createSign, createVerify, Sign, sign, Verify, verify } from "./sig.ts";
+export { generateKey, generateKeyPair, generateKeyPairSync, generateKeySync } from "./keygen.ts";
 export { hkdf, hkdfSync, pbkdf2, pbkdf2Sync, scrypt, scryptSync } from "./kdf.ts";
 export {
   getRandomValues,
