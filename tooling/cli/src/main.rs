@@ -6009,13 +6009,13 @@ fn link_c(
     }
     ship_vendored(&vendored_frameworks(needs, target)?, out)?;
     // The Windows App SDK's bootstrapper, which the runtime loads from beside
-    // the program to find the SDK installed on the machine (`nts_winrt.c`).
+    // the program to find the SDK installed on the machine (`nts_winrt.c`),
+    // and what else the SDK loads from there (`winrt::shipped`).
     if wrote.winappsdk {
-        let bootstrapper = bind_winmd::winrt::bootstrapper();
-        let beside = out.join(bind_winmd::winrt::BOOTSTRAPPER);
-        std::fs::copy(&bootstrapper, &beside).with_context(|| {
-            format!("copying {bootstrapper} beside `{name}`: fetch it with tooling/windows/fetch-winappsdk.sh")
-        })?;
+        for file in bind_winmd::winrt::shipped()? {
+            let beside = out.join(file.file_name().unwrap_or_default());
+            std::fs::copy(&file, &beside).with_context(|| format!("copying {file} beside `{name}`"))?;
+        }
     }
     Ok(artifact)
 }

@@ -45,6 +45,12 @@
 //   `IInvokeProvider.Invoke` -- so no person is needed, and `clicks` shows the
 //   listener ran once: added twice, it is added once, and a second listener,
 //   removed, adds nothing.
+// - `web`: a browser as the window's content -- WinUI's `WebView2`, its
+//   `CoreWebView2` made and a page navigated to from a string -- answering
+//   whether the navigation succeeded, heard as `navigationcompleted`. Its
+//   types are `Microsoft.Web.WebView2.Core`'s, and it loads WebView2's two
+//   DLLs from beside the program, which the build ships there; without
+//   them `ensureCoreWebView2Async` rejects with 0x8007007E.
 // - `after` is printed once `Start` returns, so the line shows the loop ended.
 import type { ByValue } from "c:types";
 import type { Size } from "winrt:Windows.Foundation";
@@ -52,7 +58,7 @@ import { Application, FocusState, Window } from "winrt:Microsoft.UI.Xaml";
 import type { IFrameworkElementOverrides, ILaunchActivatedEventArgs } from "winrt:Microsoft.UI.Xaml";
 import type { IPointerRoutedEventArgs } from "winrt:Microsoft.UI.Xaml.Input";
 import { AutomationPeer, ButtonAutomationPeer, FrameworkElementAutomationPeer } from "winrt:Microsoft.UI.Xaml.Automation.Peers";
-import { Button, Frame, Page, StackPanel, TextBlock, XamlControlsResources } from "winrt:Microsoft.UI.Xaml.Controls";
+import { Button, Frame, Page, StackPanel, TextBlock, WebView2, XamlControlsResources } from "winrt:Microsoft.UI.Xaml.Controls";
 import { ContentCoordinateConverter, ContentIsland } from "winrt:Microsoft.UI.Content";
 import { ElementCompositionPreview } from "winrt:Microsoft.UI.Xaml.Hosting";
 import { TypeKind } from "winrt:Windows.UI.Xaml.Interop";
@@ -236,11 +242,27 @@ class App extends Application {
     const screen = converter.convertLocalToScreenWithPoints([{ x: 0, y: 0 }, { x: 10, y: 20 }]);
     window.appWindow.titleBar.setDragRectangles([{ x: 0, y: 0, width: 100, height: 32 }]);
     const points = String(screen.length) + ":" + String(screen[1].x - screen[0].x) + "," + String(screen[1].y - screen[0].y);
-    console.log(
+    const line =
       "title=" + window.title + " launched=" + String(this.launched) + " clicks=" + String(this.clicks) +
         " styled=" + String(styled) + " focused=" + String(focused) + " entered=" + String(button.entered) +
-        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " isButton=" + String(isButton) + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " navigated=" + String(navigated) + " page=" + page.name + ":" + String(page.kind) + " current=" + current.name + " onPage=" + String(onPage) + " vector=" + vector + " islands=" + String(island) + " replaced=" + replaced + " points=" + points + " rebuilt=" + String(this.rebuilt()),
-    );
+        " templated=" + String(button.templated) + " measured=" + String(button.measured > 0) + " states=" + button.states + " label=" + button.label + " content=" + content + " isButton=" + String(isButton) + " peer=" + peer + " peers=" + String(button.peers) + " desired=" + String(desired) + " navigated=" + String(navigated) + " page=" + page.name + ":" + String(page.kind) + " current=" + current.name + " onPage=" + String(onPage) + " vector=" + vector + " islands=" + String(island) + " replaced=" + replaced + " points=" + points + " rebuilt=" + String(this.rebuilt());
+    this.browse(window, line);
+  }
+
+  // A browser, `WebView2`, as the window's content: its `CoreWebView2`
+  // made (`ensureCoreWebView2Async`, an action awaited), a page navigated
+  // to from a string, and the navigation's completion heard as an event of
+  // `Microsoft.Web.WebView2.Core` -- whose metadata ships beside WinUI's.
+  async browse(window: Window, line: string): Promise<void> {
+    const web = new WebView2();
+    window.content = web;
+    await web.ensureCoreWebView2Async();
+    const core = web.coreWebView2;
+    const succeeded = await new Promise<boolean>((resolve) => {
+      core.addEventListener("navigationcompleted", (_sender, args) => resolve(args.isSuccess));
+      core.navigateToString("<p>nts</p>");
+    });
+    console.log(line + " web=" + String(succeeded));
     this.exit();
   }
 }
