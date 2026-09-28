@@ -53,6 +53,7 @@ pub mod lower;
 pub mod monomorphize;
 pub mod narrow;
 pub mod native;
+mod dispatch;
 mod native_callback;
 mod native_storage;
 /// Who owns what, and for how long: one answer per value, which the counting
@@ -4283,6 +4284,30 @@ fn settle(lowered: &mut lower::Lowered) {
         refused.insert(func.name.clone());
     }
     lowered.program.funcs.retain(|f| !refused.contains(&f.name));
+    // A third rule of the same shape, with its own loop only because its
+    // sentence names the two representations and so cannot be a `&'static str`.
+    // See `dispatch::check`: what a dispatch slot's implementations must agree
+    // about, which the JVM has refused as `NTS4009` since it was written while
+    // C and LLVM read the pointer and trust it.
+    let mut unreachable_calls = rustc_hash::FxHashSet::default();
+    for (at, value, why) in dispatch::check(&lowered.program) {
+        let func = &lowered.program.funcs[at];
+        lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
+            "NTS1001",
+            why.clone(),
+            func.value(value).origin.location,
+        ));
+        // Recorded as well as reported, for the reason the loop above gives:
+        // a wrapper asked later why a function is missing reads `uncompiled`,
+        // and a name absent from it gets "was not compiled" with the cause
+        // left unsaid.
+        lowered.program.uncompiled.push((func.name.clone(), why));
+        unreachable_calls.insert(func.name.clone());
+    }
+    lowered
+        .program
+        .funcs
+        .retain(|f| !unreachable_calls.contains(&f.name));
     // Before `put_bases_first`, which reads bases to decide field order. A
     // token layout is empty, so the base this gives it moves no field -- but
     // the ordering is stated rather than left to look arbitrary, because a

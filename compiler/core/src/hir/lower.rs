@@ -9865,7 +9865,7 @@ fn signature_name(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
 /// By prefix and shape rather than by a flag on the layout: `Layout` is what
 /// three backends read, and a field that exists to tell two of its own names
 /// apart is a field they would all have to ignore.
-fn is_signature_name(name: &str) -> bool {
+pub(super) fn is_signature_name(name: &str) -> bool {
     name.starts_with("Fn") && name.contains("__")
 }
 
