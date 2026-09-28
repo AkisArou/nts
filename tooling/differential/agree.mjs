@@ -114,7 +114,9 @@ const WRONG = new Set([
   Outcome.NO_TYPECHECK,
 ]);
 /** A refusal *caused by* another -- "because it calls", "this statement is skipped". */
-const CASCADE = /^ {2}refused: NTS100[35] /;
+// The optional token after `refused: ` is the diagnostic's place, which
+// `nts check` prints since the locator moved into `nts-diagnostics`.
+const CASCADE = /^ {2}refused: (?:\S+ )?NTS100[35] /;
 /** Outcomes that compared something and found no difference. */
 const AGREEING = new Set([Outcome.AGREES, Outcome.PARTIAL]);
 
@@ -291,6 +293,18 @@ function selfTest() {
     "  refused: NTS1003 `awaitedThenRejected` cannot be compiled because it calls `runner`, and ...\n" +
     "checked 87 cases across 3 function(s)\nagreed on every case\n");
   if (cascaded.refused !== 3 || cascaded.refusedRoots !== 1) return `one root and two cascades read as ${cascaded.refusedRoots} of ${cascaded.refused}`;
+  // **And the same example's text today**, which carries the place `nts check`
+  // prints since the locator moved into `nts-diagnostics`. Both shapes are kept:
+  // the pair above is what a log saved before that change holds, and a reader
+  // that took only one of them would either break on today's output or stop
+  // reading yesterday's. The cascade test is what the optional token guards --
+  // `refused` counts the prefix and would not have noticed.
+  const located = classify(0,
+    "  refused: examples/a-slot-typed-exactly-undefined/src/main.ts:98:14: NTS1001 a call inside a `try` whose `throw` would not reach this handler: through a function value, which has no raising copy to call is not supported by this lowering yet\n" +
+    "  refused: examples/a-slot-typed-exactly-undefined/src/main.ts:96:10: NTS1003 `runner` cannot be compiled because it calls `Closure0#call`, and a call inside a `try` ...\n" +
+    "  refused: examples/a-slot-typed-exactly-undefined/src/main.ts:107:14: NTS1003 `awaitedThenRejected` cannot be compiled because it calls `runner`, and ...\n" +
+    "checked 87 cases across 3 function(s)\nagreed on every case\n");
+  if (located.refused !== 3 || located.refusedRoots !== 1) return `a located root and two cascades read as ${located.refusedRoots} of ${located.refused}`;
   if (every.outcome !== Outcome.ALL_DECLINED) return `every case declined read as ${every.outcome}`;
   // Exit 0 without the verdict line is a run that stopped early, not agreement.
   if (classify(0, "checked 3 cases across 1 function(s)\n").outcome !== Outcome.NOT_MEASURED) return "a run with no verdict line read as measured";

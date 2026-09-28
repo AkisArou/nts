@@ -380,7 +380,7 @@ pub fn check(
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, &stamp)?;
     if snapshot.has_errors() {
         for diagnostic in &snapshot.diagnostics {
-            eprintln!("{} {}", diagnostic.code, diagnostic.message);
+            eprintln!("{}", nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic));
         }
         bail!("the program does not typecheck");
     }
@@ -404,7 +404,7 @@ pub fn check(
         Err(problems) => bail!("invalid HIR: {problems:?}"),
     };
     for diagnostic in &prepared.diagnostics {
-        eprintln!("  refused: {} {}", diagnostic.code, diagnostic.message);
+        eprintln!("  refused: {}", nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic));
     }
 
     let entry = entry_module(&snapshot)?;
@@ -471,9 +471,9 @@ pub fn check(
     // `java` -- a different artifact *and* a different runner, where C and
     // LLVM differ only in what they hand the same linker.
     let native = if Backend::from_environment()? == Backend::Jvm {
-        run_jvm(dir, &prepared.program, &testable, &mut refused, &mut aborts, &mut timeouts)?
+        run_jvm(dir, &prepared.program, &snapshot.sources, &testable, &mut refused, &mut aborts, &mut timeouts)?
     } else {
-        run_native(dir, &prepared.program, &testable, &mut refused, &mut aborts, &mut timeouts)?
+        run_native(dir, &prepared.program, &snapshot.sources, &testable, &mut refused, &mut aborts, &mut timeouts)?
     };
     let engine = run_node(dir, &entry, &testable)?;
     let approximate = nts_core::hir::builtin::approximating(&prepared.program);
@@ -1429,6 +1429,7 @@ fn render(
     program: &hir::Program,
     backend: Backend,
     emitted: &nts_codegen_c::Emitted,
+    sources: &[nts_diagnostics::SourceFile],
 ) -> Result<Utf8PathBuf> {
     if backend == Backend::Jvm {
         // Not a native object and not linked with clang: a JVM program is a
@@ -1440,7 +1441,7 @@ fn render(
         let rendered = nts_codegen_llvm::emit(program, nts_codegen_llvm::Platform::SYSV_X86_64);
         if !rendered.diagnostics.is_empty() {
             for diagnostic in rendered.diagnostics.iter().take(3) {
-                eprintln!("  not rendered: {} {}", diagnostic.code, diagnostic.message);
+                eprintln!("  not rendered: {}", nts_diagnostics::diagnostic_line(sources, diagnostic));
             }
             bail!(
                 "the LLVM backend declined {} function(s)",
@@ -1480,6 +1481,7 @@ fn render(
 fn run_native(
     dir: &Utf8Path,
     program: &hir::Program,
+    sources: &[nts_diagnostics::SourceFile],
     testable: &[Testable],
     refused: &mut Vec<usize>,
     aborts: &mut Vec<String>,
@@ -1511,7 +1513,7 @@ fn run_native(
     // undefined reference and no hint of which construct was behind it. The
     // lowering's refusals were printed all along; these were not.
     for diagnostic in &emitted.diagnostics {
-        eprintln!("  not emitted: {} {}", diagnostic.code, diagnostic.message);
+        eprintln!("  not emitted: {}", nts_diagnostics::diagnostic_line(sources, diagnostic));
     }
     if !emitted.diagnostics.is_empty() {
         // Stop here rather than at the linker. The driver calls every function
@@ -1525,7 +1527,7 @@ fn run_native(
             emitted.diagnostics.len()
         );
     }
-    let generated = render(dir, program, backend, &emitted)?;
+    let generated = render(dir, program, backend, &emitted, sources)?;
     // The runtime, plus the Unicode tables when this program converts case.
     // Every `.c` among them goes on the command line below, so a helper that
     // arrives with a new translation unit needs no change here.
@@ -1747,6 +1749,7 @@ fn collect_restarting(
 fn run_jvm(
     dir: &Utf8Path,
     program: &hir::Program,
+    sources: &[nts_diagnostics::SourceFile],
     testable: &[Testable],
     refused: &mut Vec<usize>,
     aborts: &mut Vec<String>,
@@ -1754,7 +1757,7 @@ fn run_jvm(
 ) -> Result<Run> {
     let emitted = nts_codegen_jvm::emit(program);
     for diagnostic in &emitted.diagnostics {
-        eprintln!("  not emitted: {} {}", diagnostic.code, diagnostic.message);
+        eprintln!("  not emitted: {}", nts_diagnostics::diagnostic_line(sources, diagnostic));
     }
     if !emitted.diagnostics.is_empty() {
         // The same rule the C arm keeps: stop here rather than at the point of

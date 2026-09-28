@@ -38,6 +38,11 @@ bin=${NTS_BIN:-./target-jvm/release/nts}
     # also reports how many hostile-pool cases the compiled program declined at
     # run time -- an index a `!` promised was in range and was not -- and those
     # are the harness working, on every example, all the time.
-    hit=$(printf "%s" "$out" | grep -m1 "not emitted: NTS\|declined: NTS")
+    # A `not emitted:` line carries the place before the code and a `declined:`
+    # line does not, so the token between them is optional here. NOTE: this
+    # block is inside a single-quoted `sh -c`, so a comment in it may not
+    # contain an apostrophe -- one closed the string and the step reported
+    # `declined:: command not found`.
+    hit=$(printf "%s" "$out" | grep -m1 -E "not emitted: ([^[:space:]]+ )?NTS|declined: NTS")
     [ -n "$hit" ] && printf "%-26s %s\n" "$n" "$(printf "%s" "$hit" | sed "s/^ *//")"
   ' _

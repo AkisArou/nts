@@ -14,6 +14,7 @@ nts-codegen-common.workspace = true
 nts-codegen-jvm.workspace = true
 nts-codegen-llvm.workspace = true
 nts-core.workspace = true
+nts-diagnostics.workspace = true
 nts-frontend-ts.workspace = true
 nts-semantic-schema.workspace = true
 xxhash-rust.workspace = true

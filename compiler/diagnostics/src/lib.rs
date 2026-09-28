@@ -3,12 +3,18 @@
 //! This crate is the root of the dependency graph: everything else may depend
 //! on it, and it depends on nothing of ours. It exists so that a source
 //! location means one thing across the frontend, the IR, analysis, codegen,
-//! and the debug map.
+//! and the debug map -- and, in [`place`], so that *rendering* one means one
+//! thing too: `path:line:column`, resolved through a source transform's map,
+//! for every tool that prints a diagnostic.
 //!
 //! RFC §20.4 requires that a source file be identified by a normalized
 //! workspace URI and a content digest rather than by an absolute machine path,
 //! so that builds are reproducible and release artifacts never carry a
 //! developer's home directory.
+
+pub mod place;
+
+pub use place::{diagnostic_line, where_it_is, where_it_spans};
 
 use camino::Utf8PathBuf;
 use serde::{Deserialize, Serialize};

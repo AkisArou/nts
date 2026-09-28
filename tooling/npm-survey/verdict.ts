@@ -94,7 +94,7 @@ for (const v of vendored) {
   }
 
   const tsErrors = [...new Set([...out.matchAll(/^(?:\S+ )?(TS\d+)/gm)].map((m) => m[1]!))];
-  const refusals = [...out.matchAll(/refused: NTS\d+ (.*)$/gm)].map((m) =>
+  const refusals = [...out.matchAll(/refused: (?:\S+ )?NTS\d+ (.*)$/gm)].map((m) =>
     m[1]!.replace(/ is not supported by this lowering yet$/, ""),
   );
   const outcome: Outcome = tsErrors.length
