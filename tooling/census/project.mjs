@@ -16,27 +16,44 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 /** The lowerable stand-in for the harness entries every non-raw test receives. */
 export const HARNESS = readFileSync(join(HERE, "harness.ts"), "utf8");
 
-/** `assert.throws`, spliced in only for a test that calls it; the file says why. */
-export const HARNESS_THROWS = readFileSync(join(HERE, "harness-throws.ts"), "utf8");
-
 /** `$DONOTEVALUATE`, spliced in only for a test that names it; the file says why. */
 export const HARNESS_DONOTEVALUATE = readFileSync(join(HERE, "harness-donotevaluate.ts"), "utf8");
 
 /**
- * The stand-in one test receives: `HARNESS`, plus `throws` if the test calls it,
- * plus `$DONOTEVALUATE` if it names it. Per test, as test262 includes harness
- * files per test -- a member that refuses must not reach a test that does not
- * use it (`harness-throws.ts` records what that cost).
+ * Members of `namespace assert` spliced in only for a test that calls them,
+ * as test262 includes harness files per test: a member that refuses must not
+ * reach a test that does not use it (`harness-throws.ts` records what that
+ * cost). Each file says why it is one.
  */
+const MEMBERS = [
+  { calls: /\bassert\.throws\s*\(/, source: readFileSync(join(HERE, "harness-throws.ts"), "utf8") },
+  { calls: /\bassert\.compareArray\s*\(/, source: readFileSync(join(HERE, "harness-compare-array.ts"), "utf8") },
+];
+
+/**
+ * The `includes:` files this stand-in provides. Any other include makes a case
+ * `unsupported` before it is compiled. `compareArray.js` is empty upstream --
+ * its entry moved into `assert.js` -- so it asks for nothing `MEMBERS` lacks.
+ */
+export const PROVIDED_INCLUDES = new Set(["compareArray.js"]);
+
+/**
+ * Every source a case's stand-in can be made of, hashed: a row records it, so
+ * rows from two stand-ins are two runs even under one compiler. Derived here,
+ * beside the list, so a member added is a member hashed.
+ */
+export const HARNESS_HASH = [HARNESS, HARNESS_DONOTEVALUATE, ...MEMBERS.map((m) => m.source)]
+  .reduce((hash, source) => hash.update(source), createHash("sha256"))
+  .digest("hex")
+  .slice(0, 16);
+
+/** The stand-in one test receives: `HARNESS`, the members it calls, and `$DONOTEVALUATE` if it names it. */
 export function harnessFor(body) {
-  let harness = HARNESS;
-  if (/\bassert\.throws\s*\(/.test(body)) {
-    const opening = "namespace assert {\n";
-    if (!harness.includes(opening)) throw new Error("harness.ts has no `namespace assert {` line to splice throws into");
-    harness = harness.replace(opening, opening + HARNESS_THROWS);
-  }
-  if (/\$DONOTEVALUATE\b/.test(body)) harness = harness + HARNESS_DONOTEVALUATE;
-  return harness;
+  const opening = "namespace assert {\n";
+  if (!HARNESS.includes(opening)) throw new Error("harness.ts has no `namespace assert {` line to splice members into");
+  const members = MEMBERS.filter((m) => m.calls.test(body)).map((m) => m.source).join("");
+  const harness = HARNESS.replace(opening, opening + members);
+  return /\$DONOTEVALUATE\b/.test(body) ? harness + HARNESS_DONOTEVALUATE : harness;
 }
 
 /** A test262 file's front matter, which the body a case compiles leaves out. */

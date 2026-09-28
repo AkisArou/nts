@@ -95,14 +95,13 @@
 
 import { execFileSync, spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createHash } from "node:crypto";
 import { availableParallelism, homedir, loadavg } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import { selfChecks } from "./attempt262.mjs";
-import { bodyOf, FRONTMATTER, HARNESS, HARNESS_DONOTEVALUATE, HARNESS_THROWS, pinCompiler } from "./project.mjs";
+import { bodyOf, FRONTMATTER, HARNESS_HASH, PROVIDED_INCLUDES, pinCompiler } from "./project.mjs";
 import { frontendFor } from "../conformance/pin.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -244,7 +243,6 @@ let lowestAvailableGb = machineAtStart.available_gb;
 const describeMachine = (m) =>
   `${m.available_gb} GB available, swap ${m.swap_used_gb}/${m.swap_total_gb} GB, load ${m.load[0]}/${m.load[1]} (1m/5m), ${m.cores} cores`;
 
-const HARNESS_HASH = createHash("sha256").update(HARNESS).update(HARNESS_THROWS).update(HARNESS_DONOTEVALUATE).digest("hex").slice(0, 16);
 const TOOLS = { nts: PINNED, cc: CC, memoryCapKb: MEMORY_CAP_KB, objectCache: OBJECT_CACHE };
 
 // --- the population --------------------------------------------------------
@@ -356,7 +354,8 @@ function harnessGap(record, source) {
   // Parse and runtime negatives are judged (see `judgeNegative`); resolution is
   // module loading, and modules are out of this lane.
   if (record.negative?.phase === "resolution") return "negative:resolution (module loading is not in this lane)";
-  if (record.includes.length > 0) return `include:${[...record.includes].sort().join("+")}`;
+  const missing = record.includes.filter((include) => !PROVIDED_INCLUDES.has(include));
+  if (missing.length > 0) return `include:${missing.sort().join("+")}`;
   const meta = FRONTMATTER.exec(source)?.[1] ?? "";
   const flags = /^\s*flags:\s*\[([^\]]*)\]/m.exec(meta)?.[1] ?? "";
   if (/\basync\b/.test(flags)) return "harness:async ($DONE)";

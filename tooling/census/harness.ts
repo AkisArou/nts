@@ -53,11 +53,12 @@
 //
 // # What it is not
 //
-// Not the harness. `assert.throws` needs a callback invoked and its exception
-// caught, `propertyHelper.js` needs property descriptors, and `compareArray`
-// needs iteration -- none of which lower. A test whose `includes:` names one of
-// those is not in the census's leading slice, and the census says so rather
-// than substituting a weaker stand-in.
+// Not the harness. `propertyHelper.js` needs property descriptors, which do not
+// lower, and a test whose `includes:` names a file this does not provide is not
+// in the census's leading slice -- the census says so rather than substituting
+// a weaker stand-in. Members some tests call and others must not see
+// (`assert.throws`, `assert.compareArray`) are spliced in per test; see
+// `project.mjs`'s `MEMBERS` and `PROVIDED_INCLUDES`.
 
 /**
  * `message` is optional, as `harness/sta.js` has it (`this.message = message
