@@ -26,11 +26,13 @@ typedef struct {
 /* `crypto.c`'s job queue, for the other translation units' jobs. */
 void nts_crypto_queue_work(const NtsCryptoWork *work, void *state, struct NtsHeader *done);
 
-/* The two shapes of `done` the jobs use: `(ok, bytes)`, the bytes copied into
- * a view the call borrows, and `(ok, value)`. */
+/* The shapes of `done` the jobs use: `(ok, bytes)`, the bytes copied into a
+ * view the call borrows, `(ok, value)`, and `(ok, first, second)`. */
 void nts_crypto_deliver_bytes(struct NtsHeader *done, bool ok, const unsigned char *bytes,
                               size_t length);
 void nts_crypto_deliver_number(struct NtsHeader *done, bool ok, double value);
+void nts_crypto_deliver_pair(struct NtsHeader *done, bool ok, const unsigned char *first,
+                             size_t first_length, const unsigned char *second, size_t second_length);
 
 /* OpenSSL's objects by the ids the TypeScript holds. Declared through their
  * struct tags rather than OpenSSL's headers: `build.sh` includes every header

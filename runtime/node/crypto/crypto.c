@@ -860,6 +860,18 @@ void nts_crypto_deliver_bytes(NtsHeader *done, bool ok, const unsigned char *byt
     nts_release((NtsHeader *)view);
 }
 
+/* `done(ok, first, second)`, for a job with two answers -- a KEM's shared key
+ * and ciphertext. Both are copied into views the call borrows. */
+void nts_crypto_deliver_pair(NtsHeader *done, bool ok, const unsigned char *first, size_t first_length,
+                             const unsigned char *second, size_t second_length) {
+    NtsView *a = nts_view_from_bytes(ok ? first : NULL, ok ? (double)first_length : 0);
+    NtsView *b = nts_view_from_bytes(ok ? second : NULL, ok ? (double)second_length : 0);
+    ((void (*)(NtsHeader *, bool, NtsView *, NtsView *))done->descriptor->methods[nts_closure_call_slot])(
+        done, ok, a, b);
+    nts_release((NtsHeader *)a);
+    nts_release((NtsHeader *)b);
+}
+
 /* `done(ok, value)`, for a job whose answer is a number -- a key's handle. */
 void nts_crypto_deliver_number(NtsHeader *done, bool ok, double value) {
     ((void (*)(NtsHeader *, bool, double))done->descriptor->methods[nts_closure_call_slot])(

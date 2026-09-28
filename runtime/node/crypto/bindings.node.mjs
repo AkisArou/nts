@@ -1256,3 +1256,30 @@ globalThis.nts_crypto_argon2_job = (type, pass, salt, lanes, keylen, memcost, it
       crypto.argon2(ARGON2_TYPES[type], argon2Parameters(pass, salt, lanes, keylen, memcost, iter, secret, ad), callback),
     done,
   );
+
+// -- key encapsulation --------------------------------------------------------
+
+globalThis.nts_crypto_kem_encapsulate = (handle) => {
+  try {
+    const { sharedKey, ciphertext } = crypto.encapsulate(keyAt(handle));
+    return [view(sharedKey), view(ciphertext)];
+  } catch {
+    return [];
+  }
+};
+
+globalThis.nts_crypto_kem_decapsulate = (handle, ciphertext) => bytesOrNull(() => crypto.decapsulate(keyAt(handle), ciphertext));
+
+globalThis.nts_crypto_kem_encapsulate_job = (handle, done) => {
+  crypto.encapsulate(keyAt(handle), (error, result) => {
+    if (error) done(false, noBytes, noBytes);
+    else done(true, view(result.sharedKey), view(result.ciphertext));
+  });
+};
+
+globalThis.nts_crypto_kem_decapsulate_job = (handle, ciphertext, done) => {
+  crypto.decapsulate(keyAt(handle), ciphertext, (error, sharedKey) => {
+    if (error) done(false, noBytes);
+    else done(true, view(sharedKey));
+  });
+};

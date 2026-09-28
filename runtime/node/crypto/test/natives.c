@@ -1,5 +1,5 @@
-/* `crypto.c`, `cipher.c`, `keys.c`, `sig.c`, `rsa.c`, `keygen.c`, `dh.c`, `prime.c` and `argon2.c`, called
- * directly.
+/* `crypto.c`, `cipher.c`, `keys.c`, `sig.c`, `rsa.c`, `keygen.c`, `dh.c`, `prime.c`, `argon2.c` and `kem.c`,
+ * called directly.
  *
  * The TypeScript over these natives runs on node against node's own crypto,
  * so nothing but this runs the C: the compiled lane refuses every public
@@ -756,6 +756,58 @@ static void argon2(void) {
     expect_true("an Argon2 job derives the same tag", jobs_done == before + 1 && job_ok && strcmp(job_hex, expected[2]) == 0);
 }
 
+/* ---------------------------------------------------- key encapsulation */
+
+static int pair_calls;
+static bool pair_ok;
+static size_t pair_lengths[2];
+
+static void on_pair(NtsHeader *self, bool ok, NtsView *first, NtsView *second) {
+    (void)self;
+    pair_calls++;
+    pair_ok = ok;
+    pair_lengths[0] = (size_t)nts_view_byte_length(first);
+    pair_lengths[1] = (size_t)nts_view_byte_length(second);
+}
+
+static void *const pair_methods[] = {(void *)(void (*)(NtsHeader *, bool, NtsView *, NtsView *))on_pair};
+static const NtsDescriptor pair_desc = {
+    NTS_KIND_OBJECT, (uint32_t)sizeof(NtsHeader), 0u, 0u, NULL, pair_methods, "OnPair", 0u, NULL,
+};
+static NtsHeader pair_callback = {&pair_desc, NTS_IMMORTAL, 0u, 0u};
+
+static void key_encapsulation(void) {
+    double ml_kem = nts_crypto_keygen_run(nts_crypto_keygen_nid(text("ml-kem-768")));
+    NtsArray *sealed = nts_crypto_kem_encapsulate(ml_kem);
+    NtsView **parts = NTS_ITEMS(sealed, NtsView *);
+    expect_true("ML-KEM-768 encapsulates a 32-byte key in 1088 bytes",
+                sealed->header.length == 2 && nts_view_byte_length(parts[0]) == 32 &&
+                    nts_view_byte_length(parts[1]) == 1088);
+    expect_true("  which its private key recovers", same_bytes(nts_crypto_kem_decapsulate(ml_kem, parts[1]), parts[0]));
+
+    double x = nts_crypto_keygen_run(nts_crypto_keygen_nid(text("x25519")));
+    NtsArray *dhkem = nts_crypto_kem_encapsulate(x);
+    NtsView **x_parts = NTS_ITEMS(dhkem, NtsView *);
+    expect_true("X25519 is a KEM through DHKEM, and round trips",
+                dhkem->header.length == 2 && same_bytes(nts_crypto_kem_decapsulate(x, x_parts[1]), x_parts[0]));
+
+    double rsa = nts_crypto_key_parse_private(1, -1, file(KEYS "rsa_private.pem"), bytes("", 0), false);
+    NtsArray *rsasve = nts_crypto_kem_encapsulate(rsa);
+    expect_true("RSA is a KEM through RSASVE", rsasve->header.length == 2 &&
+                                                   nts_view_byte_length(NTS_ITEMS(rsasve, NtsView *)[1]) == 256);
+    expect_true("  and a ciphertext of the wrong size is no answer",
+                nts_crypto_kem_decapsulate(rsa, utf8("short")) == NULL);
+    double ed = nts_crypto_key_parse_private(1, -1, file(KEYS "ed25519_private.pem"), bytes("", 0), false);
+    expect_true("an Ed25519 key is no KEM", nts_crypto_kem_encapsulate(ed)->header.length == 0);
+    NtsArray *record = nts_crypto_take_errors();
+    expect_true("  and leaves OpenSSL's queue empty, as ncrypto does", record->header.length == 3);
+
+    nts_crypto_kem_encapsulate_job(ml_kem, &pair_callback);
+    uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+    expect_true("an encapsulation job delivers both, once",
+                pair_calls == 1 && pair_ok && pair_lengths[0] == 32 && pair_lengths[1] == 1088);
+}
+
 int main(void) {
     digests();
     derivations();
@@ -767,6 +819,7 @@ int main(void) {
     key_agreement();
     primes();
     argon2();
+    key_encapsulation();
     printf("%d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;
 }

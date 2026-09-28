@@ -215,6 +215,13 @@ NtsView *nts_crypto_argon2(double type, NtsView *pass, NtsView *salt, double lan
 void nts_crypto_argon2_job(double type, NtsView *pass, NtsView *salt, double lanes, double keylen,
                            double memcost, double iter, NtsView *secret, NtsView *ad, NtsHeader *done);
 
+/* Key encapsulation (`kem.c`). A failure is empty or NULL, with nothing on the
+ * error record: node reports its own words for it. */
+NtsArray *nts_crypto_kem_encapsulate(double key);
+NtsView *nts_crypto_kem_decapsulate(double key, NtsView *ciphertext);
+void nts_crypto_kem_encapsulate_job(double key, NtsHeader *done);
+void nts_crypto_kem_decapsulate_job(double key, NtsView *ciphertext, NtsHeader *done);
+
 /* FIPS mode: whether OpenSSL's default properties ask for FIPS, and setting
  * them. False from `set` is a failure whose cause is on the error record. */
 bool nts_crypto_fips_enabled(void);

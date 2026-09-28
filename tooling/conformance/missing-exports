@@ -31,8 +31,6 @@ url.URLPattern: a WHATWG global owned by runtime/web-platform; node re-exports i
 # node:crypto is its digests, MACs, symmetric ciphers, key derivations,
 # random numbers and key objects so far.
 # Each group below is its own part of OpenSSL, and none is refused.
-crypto.encapsulate: key encapsulation, post-quantum ML-KEM, which this module does not have yet
-crypto.decapsulate: as crypto.encapsulate
 crypto.X509Certificate: certificate parsing, OpenSSL's X509
 crypto.Certificate: SPKAC, OpenSSL's NETSCAPE_SPKI
 crypto.setEngine: OpenSSL engines, deprecated in OpenSSL 3; node throws when its OpenSSL has none

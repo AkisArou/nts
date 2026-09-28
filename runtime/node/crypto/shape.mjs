@@ -135,6 +135,8 @@ const ORDER = [
   "setFips",
   "verify",
   "hash",
+  "encapsulate",
+  "decapsulate",
   "Cipheriv",
   "Decipheriv",
   "DiffieHellman",

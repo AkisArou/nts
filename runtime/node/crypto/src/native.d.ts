@@ -433,3 +433,20 @@ declare function nts_crypto_argon2_job(
   ad: Uint8Array,
   done: (ok: boolean, tag: Uint8Array) => void,
 ): void;
+
+/** Key encapsulation: `[sharedKey, ciphertext]`, empty for a failure. */
+/** @ntsAbi managed */
+declare function nts_crypto_kem_encapsulate(key: number): Uint8Array[];
+/** @ntsAbi managed */
+declare function nts_crypto_kem_decapsulate(key: number, ciphertext: Uint8Array): Uint8Array | null;
+/** @ntsAbi managed */
+declare function nts_crypto_kem_encapsulate_job(
+  key: number,
+  done: (ok: boolean, sharedKey: Uint8Array, ciphertext: Uint8Array) => void,
+): void;
+/** @ntsAbi managed */
+declare function nts_crypto_kem_decapsulate_job(
+  key: number,
+  ciphertext: Uint8Array,
+  done: (ok: boolean, sharedKey: Uint8Array) => void,
+): void;
