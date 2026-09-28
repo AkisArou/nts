@@ -19,13 +19,17 @@ printf '%s\n' "$upstream" > "$port/upstream"
 [ -f "$port/tsconfig.json" ] || cp "$root/examples/gjs-corpus/button/tsconfig.json" "$port/tsconfig.json"
 python3 "$BLUEPRINT" compile "$NTS_WORKBENCH_DEMOS/$upstream/main.blp" > "$port/main.ui"
 # The UI's first object is what Workbench previews, inside its window; the
-# hosts find it by id, so one Blueprint leaves unnamed is named here.
+# hosts find it by id, so one Blueprint leaves unnamed is named here. A UI
+# that is a template has none: the demo previews what it makes of it.
 python3 - "$port/main.ui" <<'PY'
 import re, sys
 path = sys.argv[1]
 with open(path) as f:
     ui = f.read()
+template = ui.find("<template ")
 root = re.search(r"<object [^>]*>", ui)
+if template >= 0 and (root is None or template < root.start()):
+    root = None
 if root and " id=" not in root.group(0):
     tag = root.group(0)
     ui = ui.replace(tag, tag[:-1] + ' id="workbench_root">', 1)

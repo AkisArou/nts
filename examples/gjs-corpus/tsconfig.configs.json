@@ -26,6 +26,7 @@
     "clamp/nts.config.ts",
     "column-view/nts.config.ts",
     "context-menu/nts.config.ts",
+    "custom-widget/nts.config.ts",
     "dialog/nts.config.ts",
     "drop-down/nts.config.ts",
     "emoji-chooser/nts.config.ts",

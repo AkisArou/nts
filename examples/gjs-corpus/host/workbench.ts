@@ -63,6 +63,39 @@ export interface Workbench {
   readonly window: AdwApplicationWindow;
   readonly builder: GtkBuilder;
   resolve(path: string): string;
+  /** Show what the demo makes, and name it `preview` to the driver. */
+  preview(widget: GtkWidget): void;
+}
+
+/** The lines of a text file, joined. */
+function text(path: string): string {
+  const stream = g_data_input_stream_new(g_file_new_for_path(path).read(null));
+  const lines: string[] = [];
+  for (;;) {
+    const [line] = stream.read_line_utf8(null);
+    if (line === null) break;
+    lines.push(line);
+  }
+  stream.close(null);
+  return lines.join("\n");
+}
+
+const ui = text((g_getenv("NTS_CORPUS_DEMO") ?? ".") + "/main.ui");
+
+/**
+ * The demo's UI when it is a template, as Workbench hands it over
+ * (`workbench.template`), and `null` otherwise. Read when this module is, so
+ * a class can take it as its `static template`, where GJS's `registerClass`
+ * reads `workbench.template` as the module runs. A template is the UI's
+ * first element, before any object: a list item factory's bytes hold a
+ * `<template>` of their own, nested in an object.
+ */
+export const template: string | null = isTemplate(ui) ? ui : null;
+
+function isTemplate(text: string): boolean {
+  const at = text.indexOf("<template ");
+  const object = text.indexOf("<object ");
+  return at >= 0 && (object < 0 || at < object);
 }
 
 /** The driver's actions, one a line; tooling/gjs-corpus/host.js lists them. */
@@ -183,6 +216,12 @@ function act(kind: string, id: string, args: string[], object: GObject | null, w
       if (!(object instanceof GtkWidget)) return false;
       object.activate_action(args[0], args.length > 1 ? g_variant_new_string(args[1]) : null);
       return true;
+    case "click-child": {
+      const child = object instanceof GtkFlowBox ? object.get_child_at_index(Number(args[0]))?.child : null;
+      if (!(child instanceof GtkButton)) return false;
+      child.emit("clicked");
+      return true;
+    }
     case "activate-child": {
       const child = object instanceof GtkFlowBox ? object.get_child_at_index(Number(args[0])) : null;
       if (child === null) return false;
@@ -305,15 +344,23 @@ export function run(demo: (workbench: Workbench) => void): void {
   application.connect("activate", () => {
     const window = new AdwApplicationWindow({ application });
     const builder = new GtkBuilder({});
-    builder.add_from_file(dir + "/main.ui");
-    // Previewed as Workbench previews it: in the window, unless it is one.
-    const root = builder.get_object(rootId(dir + "/main.ui"));
-    if (root instanceof GtkWidget && !(root instanceof GtkWindow)) window.content = root;
+    // A UI that is a template is the demo's to register, and builds nothing
+    // here, as in Workbench.
+    if (template === null) {
+      builder.add_from_file(dir + "/main.ui");
+      // Previewed as Workbench previews it: in the window, unless it is one.
+      const root = builder.get_object(rootId(dir + "/main.ui"));
+      if (root instanceof GtkWidget && !(root instanceof GtkWindow)) window.content = root;
+    }
     demo({
       application,
       window,
       builder,
       resolve: (path) => g_file_new_for_path(upstream).resolve_relative_path(path).get_uri(),
+      preview: (widget) => {
+        window.content = widget;
+        builder.expose_object("preview", widget);
+      },
     });
     drive(builder, window, dir + "/driver.txt");
     g_timeout_add_full(0, 0, () => {

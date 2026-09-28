@@ -40,6 +40,7 @@
 //   select <id> <n> set a combo row's `selected`
 //   revealed <id>  print an action bar's or banner's `revealed`
 //   children <id>  print how many children a widget has
+//   click-child <id> <n> emit `clicked` on a flow box's nth child's widget
 //   orientation <id> print a box's `orientation`
 //
 // The demo's own `console.log` lines are the log, on stdout and whole: GJS
@@ -103,22 +104,34 @@ const application = new Adw.Application({ application_id: "dev.nts.Corpus", flag
 application.connect("activate", async () => {
   const window = new Adw.ApplicationWindow({ application });
   const builder = new Gtk.Builder();
-  builder.add_from_file(port.get_child("main.ui").get_path());
+  const ui = decoder.decode(port.get_child("main.ui").load_contents(null)[1]);
+  // A UI that is a template is the demo's to register, as `workbench.template`,
+  // and builds nothing here, as in Workbench. A template is the UI's first
+  // element, before any object: a list item factory's bytes hold a
+  // `<template>` of their own, nested in an object.
+  const at = ui.indexOf("<template ");
+  const object = ui.indexOf("<object ");
+  const template = at >= 0 && (object < 0 || at < object) ? ui : null;
+  if (template === null) builder.add_from_file(port.get_child("main.ui").get_path());
   // Previewed as Workbench previews it: in the window, unless it is one.
   // The UI's first object, which new-port.sh names where Blueprint does not.
-  const ui = decoder.decode(port.get_child("main.ui").load_contents(null)[1]);
-  const [, rootId] = /<object [^>]*id="([^"]*)"/.exec(ui) ?? [];
+  const [, rootId] = (template === null && /<object [^>]*id="([^"]*)"/.exec(ui)) || [];
   const root = rootId ? builder.get_object(rootId) : null;
   if (root instanceof Gtk.Widget && !(root instanceof Gtk.Window)) window.content = root;
   globalThis.workbench = {
     window,
     application,
     builder,
-    template: null,
+    template,
     resolve(path) {
       return Gio.File.new_for_path(main).get_parent().resolve_relative_path(path).get_uri();
     },
-    preview() {},
+    // What the demo makes, shown in the window and named `preview` to the
+    // driver.
+    preview(widget) {
+      window.content = widget;
+      builder.expose_object("preview", widget);
+    },
   };
   await import(`file://${main}`);
   for (const [kind, id, ...args] of actions) {
@@ -141,6 +154,7 @@ application.connect("activate", async () => {
     else if (kind === "pick") object.emit("emoji-picked", args[0]);
     else if (kind === "day") object.select_day(GLib.DateTime.new_local(Number(args[0]), Number(args[1]), Number(args[2]), 0, 0, 0));
     else if (kind === "action") object.activate_action(args[0], args.length > 1 ? GLib.Variant.new_string(args[1]) : null);
+    else if (kind === "click-child") object.get_child_at_index(Number(args[0])).child.emit("clicked");
     else if (kind === "activate-child") object.get_child_at_index(Number(args[0])).activate();
     else if (kind === "file") console.log(`${id}.file ${object instanceof Gtk.Picture ? object.file?.get_basename() : GLib.path_get_basename(object.file ?? "")}`);
     else if (kind === "sidebar-position") console.log(`${id}.sidebar_position ${object.sidebar_position}`);
