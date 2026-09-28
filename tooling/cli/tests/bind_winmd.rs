@@ -736,9 +736,11 @@ fn a_received_array_is_a_typed_array() {
         "{foundation}"
     );
     let refused = std::fs::read_to_string(out.join("Windows.Foundation.refused.txt")).unwrap();
-    // Booleans are copied into a `boolean[]`; characters are not held yet.
+    // Booleans are copied into a `boolean[]`; characters, UTF-16 code units
+    // as a single one crosses, into a `Uint16Array`. A `Guid` is refused.
     assert!(foundation.contains("GetBooleanArray(this: IPropertyValue): { value: boolean[] };"), "{foundation}");
-    assert!(refused.contains("IPropertyValue.GetChar16Array\tan array of characters, which no typed array holds"), "{refused}");
+    assert!(foundation.contains("GetChar16Array(this: IPropertyValue): { value: Uint16Array };"), "{foundation}");
+    assert!(refused.contains("IPropertyValue.GetGuidArray\tan array of `System.Guid`, which no typed array holds"), "{refused}");
     let _ = std::fs::remove_dir_all(&out);
 }
 

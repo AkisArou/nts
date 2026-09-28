@@ -2348,7 +2348,8 @@ fn typed_array(element: &Type) -> Result<String, String> {
     Ok(match element {
         Type::U8 => "Uint8Array",
         Type::I16 => "Int16Array",
-        Type::U16 => "Uint16Array",
+        // A character is its UTF-16 code unit, as a single one crosses.
+        Type::U16 | Type::Char => "Uint16Array",
         Type::I32 => "Int32Array",
         Type::U32 => "Uint32Array",
         Type::F32 => "Float32Array",
@@ -2363,7 +2364,7 @@ fn typed_array(element: &Type) -> Result<String, String> {
 fn elements_of(element: &Type) -> Option<(&'static str, &'static str)> {
     Some(match element {
         Type::I16 => ("Int16Array", "int16_t"),
-        Type::U16 => ("Uint16Array", "uint16_t"),
+        Type::U16 | Type::Char => ("Uint16Array", "uint16_t"),
         Type::I32 => ("Int32Array", "int32_t"),
         Type::U32 => ("Uint32Array", "uint32_t"),
         Type::F32 => ("Float32Array", "float"),

@@ -178,18 +178,17 @@ the same vtable calls on the VM measured the behaviour first.
     between `get_Children` and `get_Size` -- XAML cleared the destroyed
     panel's children and the size read 0.
 - **What is left refused**, measured over winui-hello's bindings (the 85
-  namespaces its imports reach, WebView2's among them), 2026-09-28: 363
-  items, 312 of them a factory interface's composable `CreateInstance`,
-  which is its class's constructor and bound as that. Of the other 51: 25
-  delegates that return a value, are answered or are generic; 17 arrays --
-  of characters, `Guid`s or 64-bit integers, and the generic interfaces'
-  own `GetMany` and `ReplaceAll`, which their instantiations declare; 7
-  generic members with no signature; 2 `in` parameters after an `out`
-  one. Before
-  `Copied<T>`, struct `[out]` parameters and named delegates, the same
-  bindings refused 497, among them every `TypeName` member, 22 struct
-  `[out]`s and 60 delegates; before struct fields that are booleans or
-  objects, 402; before arrays the callee fills, 386.
+  namespaces its imports reach, WebView2's among them), 2026-09-28: 360 items,
+  312 of them a factory interface's composable `CreateInstance`, which is its
+  class's constructor and bound as that. Of the other 48: 25 delegates that
+  return a value, are answered or are generic; 14 arrays -- of `Guid`s or
+  64-bit integers, and the generic interfaces' own `GetMany` and `ReplaceAll`,
+  which their instantiations declare; 7 generic members with no signature; 2
+  `in` parameters after an `out` one. Before `Copied<T>`, struct `[out]`
+  parameters and named delegates, the same bindings refused 497, among them
+  every `TypeName` member, 22 struct `[out]`s and 60 delegates; before struct
+  fields that are booleans or objects, 402; before arrays the callee fills,
+  386.
 - **WebView2:** `Microsoft.Web.WebView2.Core` is bound from
   `Microsoft.Web.WebView2` (`WEBVIEW2_PACKAGE`, the version WinUI's
   package depends on), 823 methods. A program using the Windows App SDK
@@ -299,13 +298,14 @@ the same vtable calls on the VM measured the behaviour first.
   A second `await` of one operation rejects with the operation's own refusal
   of a second `Completed` (0x80000018).
 - **Not yet:**
-  - Arrays of characters, `Guid`s and 64-bit integers (`bigint` is not
-    lowered), in any direction; and an `IPropertyValue` of booleans is not
+  - Arrays of `Guid`s and 64-bit integers (`bigint` is not lowered), in
+    any direction; and an `IPropertyValue` of booleans is not
     unboxed, since `boolean[]` beside `string[]` in `Inspectable` would
     narrow an unboxed answer to a union no program could use. Every other
     array crosses every way the ABI has -- passed in, filled by the callee,
     handed back:
-    - Numbers, and enums as their 32-bit integer, as a typed array's
+    - Numbers -- enums as their 32-bit integer, characters as their UTF-16
+      code unit, as a single one crosses -- as a typed array's
       elements, borrowed in place (`CElements<Int32Array, "const int32_t">`,
       `CBytes` for bytes); handed back as a typed array of the program's
       (`CopyToByteArray(buffer).value`), copied, the block freed; and as an
