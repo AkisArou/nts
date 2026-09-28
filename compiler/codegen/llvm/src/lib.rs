@@ -1301,7 +1301,7 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
                 let _ = writeln!(out, "{enter}");
                 let _ = writeln!(out, "  %r = {call}");
                 let _ = writeln!(out, "{leave}");
-                if have == want {
+                if passes_as_is(&have, &want) {
                     let _ = writeln!(out, "  ret {want_ty} %r\n}}");
                 } else {
                     let instruction = conversion(&have, &want, compiled)?;
@@ -1388,8 +1388,7 @@ fn bridge_argument(
         let _ = writeln!(releases, "  call void @nts_release(ptr %s{at})");
         return Ok(format!("ptr %s{at}"));
     }
-    // One pointer as another is the same address, as C's cast says.
-    if from == to || matches!((&from, &to), (HirType::NativePointer(_), HirType::NativePointer(_))) {
+    if passes_as_is(&from, &to) {
         return Ok(format!("{to_ty} %a{at}"));
     }
     if to == HirType::Bool {
@@ -1568,7 +1567,7 @@ fn imp(out: &mut String, (platform, program_counts): (Platform, bool), class: &s
             let _ = writeln!(copies, "  %s{slot} = call ptr @nts_string_of_nsstring(ptr %a{slot})");
             let _ = writeln!(releases, "  call void @nts_release(ptr %s{slot})");
             arguments.push(format!("ptr %s{slot}"));
-        } else if from == to {
+        } else if passes_as_is(&from, &to) {
             arguments.push(format!("{to_ty} %a{slot}"));
         } else if to == HirType::Bool {
             let _ = writeln!(body, "  {}", is_not_zero(&format!("%p{slot}"), &from, from_ty, &format!("%a{slot}")));
@@ -1650,9 +1649,9 @@ fn answer(
     (reply, program_counts): (&str, bool),
 ) -> Result<(), Diagnostic> {
     let object = objc::returns_object(&method.signature.result);
-    if program_counts && object && (reply == "%made" || have == want) {
+    if program_counts && object && (reply == "%made" || passes_as_is(have, want)) {
         let _ = writeln!(out, "  %given = call ptr @objc_autoreleaseReturnValue(ptr {reply})\n  ret {want_ty} %given\n}}");
-    } else if reply == "%made" || have == want {
+    } else if reply == "%made" || passes_as_is(have, want) {
         let _ = writeln!(out, "  ret {want_ty} {reply}\n}}");
     } else {
         let instruction = conversion(have, want, compiled)?;
@@ -4452,6 +4451,21 @@ fn converted(
 /// Named per direction rather than derived, because getting one of these
 /// backwards is a wrong answer that compiles: `sitofp` where `uitofp` belongs
 /// reads 4294967295 as -1.
+/// Whether a value crosses a bridge between C and a compiled function as it
+/// is: the same type, or one pointer as another -- the same address, as C's
+/// cast says (a `GListStore *` a callback makes, where C declared the
+/// `GListModel *` it implements). Every bridge asks this one question, in
+/// both directions, so an argument and an answer cannot disagree on it.
+///
+/// It answers for *native* pointers only, whose pointee C has no opinion
+/// on. A managed value is not one address under two names -- an
+/// `NtsString *` where the other side declares an `NtsValue` is a pointer
+/// against a tagged pair -- so a managed arm here would pass one as the
+/// other, and so would asking this anywhere but at a bridge.
+fn passes_as_is(from: &HirType, to: &HirType) -> bool {
+    from == to || matches!((from, to), (HirType::NativePointer(_), HirType::NativePointer(_)))
+}
+
 /// A conversion **to** `bool`, which is a comparison rather than a cast.
 ///
 /// Every other conversion is one instruction with a `to` clause, so this one

@@ -4160,11 +4160,13 @@ size_t doubled(size_t n) { return 2 * n + 1; }
 /// `GObjectClass<…, Implements>` names the tag converts to it. `Label` does
 /// not implement it, and passing one is the checker's error. An interface
 /// requiring another (`Cell`, as `GtkSelectionModel` requires `GListModel`)
-/// converts to it, and not the other way.
+/// converts to it, and not the other way. A callback answering the class
+/// where C declared the interface (`GtkTreeListModel`'s `create_func` making
+/// a `GListStore`) answers the same address.
 #[test]
 fn an_interface_takes_the_classes_implementing_it_on_both_backends() {
     let source = r#"
-import type { GObjectClass, GObjectInterface, c_int } from "c:types";
+import type { GObjectClass, GObjectInterface, ScopedClosure, c_int } from "c:types";
 type GObject = GObjectClass<"_GObject">;
 type Widget = GObjectClass<"_Widget", GObject>;
 type Editable = GObjectInterface<"_Editable", Widget>;
@@ -4175,12 +4177,14 @@ declare function entry_new(): Entry;
 declare function editable_value(editable: Editable): c_int;
 declare function widget_value(widget: Widget): c_int;
 declare function cell_value(cell: Cell): c_int;
+declare function made_value(make: ScopedClosure<() => Editable>): c_int;
 export function run(): number {
     const entry = entry_new();
     const editable: Editable = entry;
     const cell: Cell = entry;
     return (editable_value(entry) as number) * 10000 + (widget_value(editable) as number) * 1000 +
-        (editable_value(editable) as number) * 100 + (editable_value(cell) as number) * 10 + (cell_value(cell) as number);
+        (editable_value(editable) as number) * 100 + (editable_value(cell) as number) * 10 + (cell_value(cell) as number) +
+        (made_value(() => entry_new()) as number) / 10;
 }
 "#;
     let library = r"
@@ -4193,6 +4197,7 @@ struct _Entry *entry_new(void) { static struct _Entry e = { { 7 } }; return &e; 
 int editable_value(struct _Editable *e) { return ((struct _Widget *)e)->value - 5; }
 int widget_value(struct _Widget *w) { return w->value; }
 int cell_value(struct _Cell *c) { return ((struct _Widget *)c)->value - 4; }
+int made_value(struct _Editable *(*make)(void *), void *data) { return editable_value(make(data)); }
 void *g_object_ref_sink(void *o) { return o; }
 void g_object_unref(void *o) { (void)o; }
 /* The GObject support file's, which a never-free program calls after a call
@@ -4200,12 +4205,12 @@ void g_object_unref(void *o) { (void)o; }
 void nts_gobject_made(void *o) { (void)o; }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let caller = counted_caller(r#"printf("%.1f", run());"#, "run();");
         let Some((text, outputs)) = run_on_both_backends("interface", source, provider, library, &caller) else { return; };
         assert!(text.contains("editable_value(struct _Editable *)"), "an interface parameter is not its own tag in C");
         assert!(text.contains("cell_value(struct _Cell *)"), "a sub-interface parameter is not its own tag in C");
         for output in outputs {
-            assert_eq!(output, expect("27223", provider), "{provider:?}");
+            assert_eq!(output, expect("27223.2", provider), "{provider:?}");
         }
     }
     let wrong = source.replace("const editable: Editable = entry;", "const editable: Editable = entry;\n    const label = null as unknown as Label;\n    editable_value(label);");
