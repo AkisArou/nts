@@ -283,6 +283,28 @@ the same vtable calls on the VM measured the behaviour first.
   An HSTRING result's remainder is the copy into a string the program owns,
   which the floor never makes.
 
+  **Against C# (CsWinRT, .NET 8, `net8.0-windows10.0.19041.0`),**
+  2026-09-28, the same rows as idiomatic C# (`winrt-csharp/Program.cs` in
+  the benches directory), medians of five, ns per operation -- C floor / nts
+  under `--rc`, C and LLVM backends / C#:
+
+  | row | C | nts C | nts LLVM | C# |
+  |---|---|---|---|---|
+  | a vtable call answering a scalar | 11.1 | 18.7 | 11.8 | 17.8 |
+  | query, call, release | 22.0 | 22.1 | 21.7 | 18.0 |
+  | an HSTRING result | 10.7 | 19.2 | 19.1 | 28.9 |
+  | a `string` argument | 19.2 | 21.8 | 23.5 | 334.9 |
+  | a static on its factory, making an object | 125.5 | 139.3 | 135.8 | 1090 |
+  | `GetAt`, per element of a thousand | 34.3 | 32.7 | 27.6 | 113.9 |
+  | `GetMany`, per element | 21.5 | 21.8 | 21.5 | 114.9 |
+
+  nts is ahead of C# on every row but the query, which CsWinRT answers
+  from a cache of the object's interfaces rather than asking again -- a
+  different operation. nts C's `call` row is bimodal (12.2 to 19.9 across
+  runs), and the `GetAt` rows jump between about 21 and 35 in every
+  column, the C floor's included; a build of mine may have overlapped
+  them.
+
   A million elements of a `JsonArray` of a thousand, per element, medians
   of five (`getat`, `getmany`): one `GetAt` each is 20.6 ns in C and
   20.4-24 ns from nts under `--rc`; a thousand at a time through
@@ -290,8 +312,8 @@ the same vtable calls on the VM measured the behaviour first.
   nts. At the floor both ways -- and `GetMany` buys this collection
   nothing per element, in C either: it is the same cost as `GetAt`. Without
   a counting provider nts is 16-17 ns on both, since it gives nothing back. The benchmark and its oracle are in
-  `~/.cache/nts/windows/benches/winrt-crossings`; C# (CsWinRT) is not
-  measured yet: the VM has no .NET SDK.
+  `~/.cache/nts/windows/benches/winrt-crossings`, C#'s beside it in
+  `winrt-csharp`, run with the .NET 8 SDK in the VM user's `.dotnet`.
 - **Awaitable operations and actions:** `await StorageFolder.
   GetFolderFromPathAsync(p)` is the folder, and the operation stays an
   operation -- it answers `as_IAsyncInfo()` afterwards, as C#'s `await` keeps
