@@ -1,6 +1,6 @@
 # Test262 test/built-ins cases that ran, and what each did. Written by
 # tooling/census/conformance262.mjs --record; compared by --check.
-# compiler 7c81431aeb74f915, harness 662f0576d379ce63; machine at start: 15.4 GB available, swap 12.2/20 GB, load 15.9/20.9 (1m/5m), 32 cores; 8 worker(s)
+# compiler b9b01d5eaee61d7a, harness ff3c3cc1129b5d2b; machine at start: 19.7 GB available, swap 4.1/20 GB, load 28.6/30.9 (1m/5m), 32 cores; 4 worker(s)
 test/built-ins/Array/from/from-string.js	pass	
 test/built-ins/Array/isArray/15.4.3.2-0-4.js	pass	
 test/built-ins/Array/isArray/15.4.3.2-0-7.js	pass	
@@ -36,6 +36,7 @@ test/built-ins/Array/prototype/sort/stability-5-elements.js	pass
 test/built-ins/Array/prototype/sort/stability-513-elements.js	pass	
 test/built-ins/Array/prototype/splice/15.4.4.12-9-a-1.js	pass	
 test/built-ins/Array/prototype/splice/called_with_one_argument.js	pass	
+test/built-ins/Array/prototype/toReversed/immutable.js	pass	
 test/built-ins/ArrayBuffer/init-zero.js	pass	
 test/built-ins/ArrayBuffer/isView/arg-is-arraybuffer.js	pass	
 test/built-ins/ArrayBuffer/isView/arg-is-dataview-buffer.js	pass	

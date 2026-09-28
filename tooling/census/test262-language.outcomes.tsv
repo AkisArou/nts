@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.mjs --record; compared by --check.
-# compiler 7c81431aeb74f915, harness 662f0576d379ce63; machine at start: 15.1 GB available, swap 12.4/20 GB, load 12.9/12.2 (1m/5m), 32 cores; 8 worker(s)
+# compiler b9b01d5eaee61d7a, harness ff3c3cc1129b5d2b; machine at start: 12.3 GB available, swap 3.5/20 GB, load 13.1/12.7 (1m/5m), 32 cores; 4 worker(s)
 test/language/arguments-object/10.5-1gs.js	pass	
 test/language/asi/S7.9.2_A1_T1.js	pass	
 test/language/asi/S7.9.2_A1_T2.js	pass	
@@ -202,6 +202,7 @@ test/language/computed-property-names/class/method/constructor-duplicate-1.js	pa
 test/language/computed-property-names/class/method/constructor-duplicate-2.js	pass	
 test/language/computed-property-names/class/static/generator-constructor.js	pass	
 test/language/computed-property-names/class/static/method-constructor.js	pass	
+test/language/computed-property-names/object/method/generator.js	pass	
 test/language/destructuring/binding/syntax/array-pattern-with-no-elements.js	pass	
 test/language/destructuring/binding/syntax/object-pattern-with-no-property-list.js	pass	
 test/language/expressions/addition/S11.6.1_A2.4_T1.js	pass	
@@ -244,6 +245,7 @@ test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-obj-id-init.js	
 test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-ary-rest.js	pass	
+test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-id-direct.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-id-elision.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-id.js	pass	
@@ -1031,6 +1033,7 @@ test/language/expressions/class/dstr/gen-meth-dflt-ary-ptrn-elem-obj-id-init.js	
 test/language/expressions/class/dstr/gen-meth-dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/class/dstr/gen-meth-dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/expressions/class/dstr/gen-meth-dflt-ary-ptrn-rest-ary-rest.js	pass	
+test/language/expressions/class/dstr/gen-meth-dflt-ary-ptrn-rest-id-direct.js	pass	
 test/language/expressions/class/dstr/gen-meth-dflt-ary-ptrn-rest-id-elision.js	pass	
 test/language/expressions/class/dstr/gen-meth-dflt-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/gen-meth-dflt-ary-ptrn-rest-id.js	pass	
@@ -1069,6 +1072,7 @@ test/language/expressions/class/dstr/gen-meth-static-dflt-ary-ptrn-elem-obj-id-i
 test/language/expressions/class/dstr/gen-meth-static-dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-dflt-ary-ptrn-rest-ary-rest.js	pass	
+test/language/expressions/class/dstr/gen-meth-static-dflt-ary-ptrn-rest-id-direct.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-dflt-ary-ptrn-rest-id-elision.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-dflt-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-dflt-ary-ptrn-rest-id.js	pass	
@@ -1107,6 +1111,7 @@ test/language/expressions/class/dstr/meth-dflt-ary-ptrn-elem-obj-id-init.js	pass
 test/language/expressions/class/dstr/meth-dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/class/dstr/meth-dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/expressions/class/dstr/meth-dflt-ary-ptrn-rest-ary-rest.js	pass	
+test/language/expressions/class/dstr/meth-dflt-ary-ptrn-rest-id-direct.js	pass	
 test/language/expressions/class/dstr/meth-dflt-ary-ptrn-rest-id-elision.js	pass	
 test/language/expressions/class/dstr/meth-dflt-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/meth-dflt-ary-ptrn-rest-id.js	pass	
@@ -1145,6 +1150,7 @@ test/language/expressions/class/dstr/meth-static-dflt-ary-ptrn-elem-obj-id-init.
 test/language/expressions/class/dstr/meth-static-dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/class/dstr/meth-static-dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/expressions/class/dstr/meth-static-dflt-ary-ptrn-rest-ary-rest.js	pass	
+test/language/expressions/class/dstr/meth-static-dflt-ary-ptrn-rest-id-direct.js	pass	
 test/language/expressions/class/dstr/meth-static-dflt-ary-ptrn-rest-id-elision.js	pass	
 test/language/expressions/class/dstr/meth-static-dflt-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/meth-static-dflt-ary-ptrn-rest-id.js	pass	
@@ -1183,6 +1189,7 @@ test/language/expressions/class/dstr/private-gen-meth-dflt-ary-ptrn-elem-obj-id-
 test/language/expressions/class/dstr/private-gen-meth-dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-dflt-ary-ptrn-rest-ary-rest.js	pass	
+test/language/expressions/class/dstr/private-gen-meth-dflt-ary-ptrn-rest-id-direct.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-dflt-ary-ptrn-rest-id-elision.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-dflt-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-dflt-ary-ptrn-rest-id.js	pass	
@@ -1221,6 +1228,7 @@ test/language/expressions/class/dstr/private-gen-meth-static-dflt-ary-ptrn-elem-
 test/language/expressions/class/dstr/private-gen-meth-static-dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-static-dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-static-dflt-ary-ptrn-rest-ary-rest.js	pass	
+test/language/expressions/class/dstr/private-gen-meth-static-dflt-ary-ptrn-rest-id-direct.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-static-dflt-ary-ptrn-rest-id-elision.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-static-dflt-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-static-dflt-ary-ptrn-rest-id.js	pass	
@@ -1259,6 +1267,7 @@ test/language/expressions/class/dstr/private-meth-dflt-ary-ptrn-elem-obj-id-init
 test/language/expressions/class/dstr/private-meth-dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/class/dstr/private-meth-dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/expressions/class/dstr/private-meth-dflt-ary-ptrn-rest-ary-rest.js	pass	
+test/language/expressions/class/dstr/private-meth-dflt-ary-ptrn-rest-id-direct.js	pass	
 test/language/expressions/class/dstr/private-meth-dflt-ary-ptrn-rest-id-elision.js	pass	
 test/language/expressions/class/dstr/private-meth-dflt-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/private-meth-dflt-ary-ptrn-rest-id.js	pass	
@@ -1297,6 +1306,7 @@ test/language/expressions/class/dstr/private-meth-static-dflt-ary-ptrn-elem-obj-
 test/language/expressions/class/dstr/private-meth-static-dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/class/dstr/private-meth-static-dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/expressions/class/dstr/private-meth-static-dflt-ary-ptrn-rest-ary-rest.js	pass	
+test/language/expressions/class/dstr/private-meth-static-dflt-ary-ptrn-rest-id-direct.js	pass	
 test/language/expressions/class/dstr/private-meth-static-dflt-ary-ptrn-rest-id-elision.js	pass	
 test/language/expressions/class/dstr/private-meth-static-dflt-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/private-meth-static-dflt-ary-ptrn-rest-id.js	pass	
@@ -2129,6 +2139,7 @@ test/language/expressions/function/dstr/dflt-ary-ptrn-elem-obj-id-init.js	pass
 test/language/expressions/function/dstr/dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/function/dstr/dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/expressions/function/dstr/dflt-ary-ptrn-rest-ary-rest.js	pass	
+test/language/expressions/function/dstr/dflt-ary-ptrn-rest-id-direct.js	pass	
 test/language/expressions/function/dstr/dflt-ary-ptrn-rest-id-elision.js	pass	
 test/language/expressions/function/dstr/dflt-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/function/dstr/dflt-ary-ptrn-rest-id.js	pass	
@@ -2286,6 +2297,7 @@ test/language/expressions/less-than/bigint-and-bigint.js	pass
 test/language/expressions/less-than/bigint-and-non-finite.js	pass	
 test/language/expressions/less-than/bigint-and-number.js	pass	
 test/language/expressions/logical-and/S11.11.1_A2.4_T1.js	pass	
+test/language/expressions/logical-and/S11.11.1_A3_T1.js	pass	
 test/language/expressions/logical-and/S11.11.1_A4_T4.js	pass	
 test/language/expressions/logical-assignment/left-hand-side-private-reference-data-property-and.js	pass	
 test/language/expressions/logical-assignment/left-hand-side-private-reference-data-property-or.js	pass	
@@ -2306,6 +2318,7 @@ test/language/expressions/logical-not/S9.2_A4_T2.js	pass
 test/language/expressions/logical-not/symbol-logical-not-evaluation.js	pass	
 test/language/expressions/logical-or/S11.11.2_A2.4_T1.js	pass	
 test/language/expressions/logical-or/S11.11.2_A3_T4.js	pass	
+test/language/expressions/logical-or/S11.11.2_A4_T4.js	pass	
 test/language/expressions/modulus/S11.5.3_A2.4_T1.js	pass	
 test/language/expressions/modulus/S11.5.3_A4_T1.1.js	pass	
 test/language/expressions/modulus/S11.5.3_A4_T1.2.js	pass	
@@ -2433,6 +2446,7 @@ test/language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-elem-obj-id-init.js
 test/language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-rest-ary-rest.js	pass	
+test/language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-rest-id-direct.js	pass	
 test/language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-rest-id-elision.js	pass	
 test/language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-rest-id.js	pass	
@@ -2471,6 +2485,7 @@ test/language/expressions/object/dstr/meth-dflt-ary-ptrn-elem-obj-id-init.js	pas
 test/language/expressions/object/dstr/meth-dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/object/dstr/meth-dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/expressions/object/dstr/meth-dflt-ary-ptrn-rest-ary-rest.js	pass	
+test/language/expressions/object/dstr/meth-dflt-ary-ptrn-rest-id-direct.js	pass	
 test/language/expressions/object/dstr/meth-dflt-ary-ptrn-rest-id-elision.js	pass	
 test/language/expressions/object/dstr/meth-dflt-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/object/dstr/meth-dflt-ary-ptrn-rest-id.js	pass	
@@ -3107,6 +3122,13 @@ test/language/line-terminators/between-tokens-lf.js	pass
 test/language/line-terminators/between-tokens-ls.js	pass	
 test/language/line-terminators/between-tokens-ps.js	pass	
 test/language/line-terminators/comment-multi-cr.js	pass	
+test/language/line-terminators/comment-multi-lf.js	pass	
+test/language/line-terminators/comment-multi-ls.js	pass	
+test/language/line-terminators/comment-multi-ps.js	pass	
+test/language/line-terminators/comment-single-cr.js	pass	
+test/language/line-terminators/comment-single-lf.js	pass	
+test/language/line-terminators/comment-single-ls.js	pass	
+test/language/line-terminators/comment-single-ps.js	pass	
 test/language/line-terminators/invalid-comment-single-cr.js	pass	
 test/language/line-terminators/invalid-comment-single-ls.js	pass	
 test/language/line-terminators/invalid-comment-single-ps.js	pass	
@@ -3876,6 +3898,7 @@ test/language/statements/class/dstr/gen-meth-dflt-ary-ptrn-elem-obj-id-init.js	p
 test/language/statements/class/dstr/gen-meth-dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/class/dstr/gen-meth-dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/statements/class/dstr/gen-meth-dflt-ary-ptrn-rest-ary-rest.js	pass	
+test/language/statements/class/dstr/gen-meth-dflt-ary-ptrn-rest-id-direct.js	pass	
 test/language/statements/class/dstr/gen-meth-dflt-ary-ptrn-rest-id-elision.js	pass	
 test/language/statements/class/dstr/gen-meth-dflt-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/gen-meth-dflt-ary-ptrn-rest-id.js	pass	
@@ -3914,6 +3937,7 @@ test/language/statements/class/dstr/gen-meth-static-dflt-ary-ptrn-elem-obj-id-in
 test/language/statements/class/dstr/gen-meth-static-dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/class/dstr/gen-meth-static-dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/statements/class/dstr/gen-meth-static-dflt-ary-ptrn-rest-ary-rest.js	pass	
+test/language/statements/class/dstr/gen-meth-static-dflt-ary-ptrn-rest-id-direct.js	pass	
 test/language/statements/class/dstr/gen-meth-static-dflt-ary-ptrn-rest-id-elision.js	pass	
 test/language/statements/class/dstr/gen-meth-static-dflt-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/gen-meth-static-dflt-ary-ptrn-rest-id.js	pass	
@@ -3952,6 +3976,7 @@ test/language/statements/class/dstr/meth-dflt-ary-ptrn-elem-obj-id-init.js	pass
 test/language/statements/class/dstr/meth-dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/class/dstr/meth-dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/statements/class/dstr/meth-dflt-ary-ptrn-rest-ary-rest.js	pass	
+test/language/statements/class/dstr/meth-dflt-ary-ptrn-rest-id-direct.js	pass	
 test/language/statements/class/dstr/meth-dflt-ary-ptrn-rest-id-elision.js	pass	
 test/language/statements/class/dstr/meth-dflt-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/meth-dflt-ary-ptrn-rest-id.js	pass	
@@ -3990,6 +4015,7 @@ test/language/statements/class/dstr/meth-static-dflt-ary-ptrn-elem-obj-id-init.j
 test/language/statements/class/dstr/meth-static-dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/class/dstr/meth-static-dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/statements/class/dstr/meth-static-dflt-ary-ptrn-rest-ary-rest.js	pass	
+test/language/statements/class/dstr/meth-static-dflt-ary-ptrn-rest-id-direct.js	pass	
 test/language/statements/class/dstr/meth-static-dflt-ary-ptrn-rest-id-elision.js	pass	
 test/language/statements/class/dstr/meth-static-dflt-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/meth-static-dflt-ary-ptrn-rest-id.js	pass	
@@ -4028,6 +4054,7 @@ test/language/statements/class/dstr/private-gen-meth-dflt-ary-ptrn-elem-obj-id-i
 test/language/statements/class/dstr/private-gen-meth-dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/class/dstr/private-gen-meth-dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/statements/class/dstr/private-gen-meth-dflt-ary-ptrn-rest-ary-rest.js	pass	
+test/language/statements/class/dstr/private-gen-meth-dflt-ary-ptrn-rest-id-direct.js	pass	
 test/language/statements/class/dstr/private-gen-meth-dflt-ary-ptrn-rest-id-elision.js	pass	
 test/language/statements/class/dstr/private-gen-meth-dflt-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/private-gen-meth-dflt-ary-ptrn-rest-id.js	pass	
@@ -4066,6 +4093,7 @@ test/language/statements/class/dstr/private-gen-meth-static-dflt-ary-ptrn-elem-o
 test/language/statements/class/dstr/private-gen-meth-static-dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/class/dstr/private-gen-meth-static-dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/statements/class/dstr/private-gen-meth-static-dflt-ary-ptrn-rest-ary-rest.js	pass	
+test/language/statements/class/dstr/private-gen-meth-static-dflt-ary-ptrn-rest-id-direct.js	pass	
 test/language/statements/class/dstr/private-gen-meth-static-dflt-ary-ptrn-rest-id-elision.js	pass	
 test/language/statements/class/dstr/private-gen-meth-static-dflt-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/private-gen-meth-static-dflt-ary-ptrn-rest-id.js	pass	
@@ -4104,6 +4132,7 @@ test/language/statements/class/dstr/private-meth-dflt-ary-ptrn-elem-obj-id-init.
 test/language/statements/class/dstr/private-meth-dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/class/dstr/private-meth-dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/statements/class/dstr/private-meth-dflt-ary-ptrn-rest-ary-rest.js	pass	
+test/language/statements/class/dstr/private-meth-dflt-ary-ptrn-rest-id-direct.js	pass	
 test/language/statements/class/dstr/private-meth-dflt-ary-ptrn-rest-id-elision.js	pass	
 test/language/statements/class/dstr/private-meth-dflt-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/private-meth-dflt-ary-ptrn-rest-id.js	pass	
@@ -4142,6 +4171,7 @@ test/language/statements/class/dstr/private-meth-static-dflt-ary-ptrn-elem-obj-i
 test/language/statements/class/dstr/private-meth-static-dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/class/dstr/private-meth-static-dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/statements/class/dstr/private-meth-static-dflt-ary-ptrn-rest-ary-rest.js	pass	
+test/language/statements/class/dstr/private-meth-static-dflt-ary-ptrn-rest-id-direct.js	pass	
 test/language/statements/class/dstr/private-meth-static-dflt-ary-ptrn-rest-id-elision.js	pass	
 test/language/statements/class/dstr/private-meth-static-dflt-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/private-meth-static-dflt-ary-ptrn-rest-id.js	pass	
@@ -4526,8 +4556,8 @@ test/language/statements/class/private-non-static-setter-static-getter-early-err
 test/language/statements/class/private-static-getter-non-static-setter-early-error.js	pass	
 test/language/statements/class/private-static-setter-non-static-getter-early-error.js	pass	
 test/language/statements/class/static-gen-method-param-dflt-yield.js	pass	
+test/language/statements/class/static-init-abrupt.js	fail	nts: uncaught Test262Error: sameValue
 test/language/statements/class/static-init-await-binding-valid.js	pass	
-test/language/statements/class/static-init-invalid-arguments.js	pass	
 test/language/statements/class/static-init-invalid-await.js	pass	
 test/language/statements/class/static-init-invalid-label-dup.js	pass	
 test/language/statements/class/static-init-invalid-lex-var.js	pass	
@@ -4589,6 +4619,7 @@ test/language/statements/const/dstr/ary-ptrn-elem-obj-id-init.js	pass
 test/language/statements/const/dstr/ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/const/dstr/ary-ptrn-rest-ary-elem.js	pass	
 test/language/statements/const/dstr/ary-ptrn-rest-ary-rest.js	pass	
+test/language/statements/const/dstr/ary-ptrn-rest-id-direct.js	pass	
 test/language/statements/const/dstr/ary-ptrn-rest-id-elision.js	pass	
 test/language/statements/const/dstr/ary-ptrn-rest-id.js	pass	
 test/language/statements/const/dstr/ary-ptrn-rest-init-ary.js	pass	
@@ -4858,6 +4889,7 @@ test/language/statements/for-of/dstr/const-ary-ptrn-elem-obj-id.js	pass
 test/language/statements/for-of/dstr/const-ary-ptrn-init-err.js	pass	
 test/language/statements/for-of/dstr/const-ary-ptrn-rest-ary-elem.js	pass	
 test/language/statements/for-of/dstr/const-ary-ptrn-rest-ary-rest.js	pass	
+test/language/statements/for-of/dstr/const-ary-ptrn-rest-id-direct.js	pass	
 test/language/statements/for-of/dstr/const-ary-ptrn-rest-id-elision.js	pass	
 test/language/statements/for-of/dstr/const-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/for-of/dstr/const-ary-ptrn-rest-id.js	pass	
@@ -4881,6 +4913,7 @@ test/language/statements/for-of/dstr/let-ary-ptrn-elem-obj-id.js	pass
 test/language/statements/for-of/dstr/let-ary-ptrn-init-err.js	pass	
 test/language/statements/for-of/dstr/let-ary-ptrn-rest-ary-elem.js	pass	
 test/language/statements/for-of/dstr/let-ary-ptrn-rest-ary-rest.js	pass	
+test/language/statements/for-of/dstr/let-ary-ptrn-rest-id-direct.js	pass	
 test/language/statements/for-of/dstr/let-ary-ptrn-rest-id-elision.js	pass	
 test/language/statements/for-of/dstr/let-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/for-of/dstr/let-ary-ptrn-rest-id.js	pass	
@@ -4929,6 +4962,7 @@ test/language/statements/for-of/dstr/var-ary-ptrn-elem-obj-id.js	pass
 test/language/statements/for-of/dstr/var-ary-ptrn-init-err.js	pass	
 test/language/statements/for-of/dstr/var-ary-ptrn-rest-ary-elem.js	pass	
 test/language/statements/for-of/dstr/var-ary-ptrn-rest-ary-rest.js	pass	
+test/language/statements/for-of/dstr/var-ary-ptrn-rest-id-direct.js	pass	
 test/language/statements/for-of/dstr/var-ary-ptrn-rest-id-elision.js	pass	
 test/language/statements/for-of/dstr/var-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/for-of/dstr/var-ary-ptrn-rest-id.js	pass	
@@ -5024,6 +5058,7 @@ test/language/statements/for/dstr/const-ary-ptrn-elem-obj-id-init.js	pass
 test/language/statements/for/dstr/const-ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/for/dstr/const-ary-ptrn-rest-ary-elem.js	pass	
 test/language/statements/for/dstr/const-ary-ptrn-rest-ary-rest.js	pass	
+test/language/statements/for/dstr/const-ary-ptrn-rest-id-direct.js	pass	
 test/language/statements/for/dstr/const-ary-ptrn-rest-id-elision.js	pass	
 test/language/statements/for/dstr/const-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/for/dstr/const-ary-ptrn-rest-id.js	pass	
@@ -5048,6 +5083,7 @@ test/language/statements/for/dstr/let-ary-ptrn-elem-obj-id-init.js	pass
 test/language/statements/for/dstr/let-ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/for/dstr/let-ary-ptrn-rest-ary-elem.js	pass	
 test/language/statements/for/dstr/let-ary-ptrn-rest-ary-rest.js	pass	
+test/language/statements/for/dstr/let-ary-ptrn-rest-id-direct.js	pass	
 test/language/statements/for/dstr/let-ary-ptrn-rest-id-elision.js	pass	
 test/language/statements/for/dstr/let-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/for/dstr/let-ary-ptrn-rest-id.js	pass	
@@ -5072,6 +5108,7 @@ test/language/statements/for/dstr/var-ary-ptrn-elem-obj-id-init.js	pass
 test/language/statements/for/dstr/var-ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/for/dstr/var-ary-ptrn-rest-ary-elem.js	pass	
 test/language/statements/for/dstr/var-ary-ptrn-rest-ary-rest.js	pass	
+test/language/statements/for/dstr/var-ary-ptrn-rest-id-direct.js	pass	
 test/language/statements/for/dstr/var-ary-ptrn-rest-id-elision.js	pass	
 test/language/statements/for/dstr/var-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/for/dstr/var-ary-ptrn-rest-id.js	pass	
@@ -5130,6 +5167,7 @@ test/language/statements/function/dstr/dflt-ary-ptrn-elem-obj-id-init.js	pass
 test/language/statements/function/dstr/dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/function/dstr/dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/statements/function/dstr/dflt-ary-ptrn-rest-ary-rest.js	pass	
+test/language/statements/function/dstr/dflt-ary-ptrn-rest-id-direct.js	pass	
 test/language/statements/function/dstr/dflt-ary-ptrn-rest-id-elision.js	pass	
 test/language/statements/function/dstr/dflt-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/function/dstr/dflt-ary-ptrn-rest-id.js	pass	
@@ -5194,6 +5232,7 @@ test/language/statements/generators/dstr/dflt-ary-ptrn-elem-obj-id-init.js	pass
 test/language/statements/generators/dstr/dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/generators/dstr/dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/statements/generators/dstr/dflt-ary-ptrn-rest-ary-rest.js	pass	
+test/language/statements/generators/dstr/dflt-ary-ptrn-rest-id-direct.js	pass	
 test/language/statements/generators/dstr/dflt-ary-ptrn-rest-id-elision.js	pass	
 test/language/statements/generators/dstr/dflt-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/generators/dstr/dflt-ary-ptrn-rest-id.js	pass	
@@ -5276,6 +5315,7 @@ test/language/statements/let/dstr/ary-ptrn-elem-obj-id-init.js	pass
 test/language/statements/let/dstr/ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/let/dstr/ary-ptrn-rest-ary-elem.js	pass	
 test/language/statements/let/dstr/ary-ptrn-rest-ary-rest.js	pass	
+test/language/statements/let/dstr/ary-ptrn-rest-id-direct.js	pass	
 test/language/statements/let/dstr/ary-ptrn-rest-id-elision.js	pass	
 test/language/statements/let/dstr/ary-ptrn-rest-id.js	pass	
 test/language/statements/let/dstr/ary-ptrn-rest-init-ary.js	pass	
@@ -5326,6 +5366,7 @@ test/language/statements/return/S12.9_A1_T6.js	pass
 test/language/statements/return/S12.9_A1_T7.js	pass	
 test/language/statements/return/S12.9_A1_T8.js	pass	
 test/language/statements/return/S12.9_A1_T9.js	pass	
+test/language/statements/return/S12.9_A5.js	pass	
 test/language/statements/switch/S12.11_A2_T1.js	pass	
 test/language/statements/switch/S12.11_A3_T1.js	pass	
 test/language/statements/switch/S12.11_A3_T2.js	pass	
@@ -5459,6 +5500,7 @@ test/language/statements/variable/dstr/ary-ptrn-elem-obj-id-init.js	pass
 test/language/statements/variable/dstr/ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/variable/dstr/ary-ptrn-rest-ary-elem.js	pass	
 test/language/statements/variable/dstr/ary-ptrn-rest-ary-rest.js	pass	
+test/language/statements/variable/dstr/ary-ptrn-rest-id-direct.js	pass	
 test/language/statements/variable/dstr/ary-ptrn-rest-id-elision.js	pass	
 test/language/statements/variable/dstr/ary-ptrn-rest-id.js	pass	
 test/language/statements/variable/dstr/ary-ptrn-rest-init-ary.js	pass	
