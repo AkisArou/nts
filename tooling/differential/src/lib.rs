@@ -319,11 +319,30 @@ fn c_type(ty: &HirType) -> String {
 
 /// Compile a program, run it, run the same source on node, and compare.
 ///
+/// `configure` is how the *project's* frontend is asked for: this crate locates
+/// `tsgo` and stamps it, and the caller adds whatever the project compiles with.
+/// The CLI passes `for_project`, which installs a platform's generated bindings
+/// and React's transform.
+///
+/// **It is a parameter because this made its own frontend and therefore compiled
+/// a different program.** `nts check examples/interop/macos-spm` answered
+/// `Cannot find module 'objc:Blink'` and then "the program does not typecheck",
+/// for a project `nts build` builds green: the bindings are *generated*, so a
+/// frontend with no generator cannot see them. Every `objc:` and `c:` project
+/// was unusable with the one command the fixtures are driven by, and the failure
+/// reads as the program's rather than the instrument's. The same defect was
+/// fixed for `nts frontend` in `c974b9851`, and `for_project`'s own doc says
+/// every command that reads a project goes through it -- which was true of the
+/// build and `nts frontend` and never of this.
+///
 /// # Errors
 ///
 /// If the program does not typecheck, does not lower, does not compile, or the
 /// two sides disagree.
-pub fn check(tsconfig: &Utf8Path) -> Result<Report> {
+pub fn check(
+    tsconfig: &Utf8Path,
+    configure: impl FnOnce(TsgoApi) -> Result<TsgoApi>,
+) -> Result<Report> {
     // `NTS_TSGO`, then the frontend this repository builds, and only then the
     // bare name through `PATH`.
     //
@@ -357,7 +376,7 @@ pub fn check(tsconfig: &Utf8Path) -> Result<Report> {
             )
         },
     );
-    let mut source = TsgoApi::for_compilation(tsgo);
+    let mut source = configure(TsgoApi::for_compilation(tsgo))?;
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, &stamp)?;
     if snapshot.has_errors() {
         for diagnostic in &snapshot.diagnostics {

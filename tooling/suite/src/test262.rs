@@ -114,7 +114,13 @@ pub(crate) fn run(root: &Utf8Path, corpus: &Utf8Path) -> Result<Findings> {
         }
         std::fs::write(src.join("main.ts"), &program)?;
 
-        match nts_differential::check(&work.join("tsconfig.json")) {
+        // Nothing to configure: a chunk is a `main.ts` this function just wrote
+        // into a scratch directory, with no `nts.config.ts` beside it, so there
+        // are no generated bindings and no React stage to install. The CLI
+        // passes `for_project` here; identity is the same answer for a project
+        // that has no config, and saying so beats depending on `nts-build` to
+        // compute it.
+        match nts_differential::check(&work.join("tsconfig.json"), Ok) {
             Ok(report) => {
                 findings.checked += report.checked;
                 findings.refused += group.len().saturating_sub(report.functions);

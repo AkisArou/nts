@@ -246,7 +246,7 @@ fn named_project(rest: &[String]) -> Result<Utf8PathBuf> {
 /// `nts check`: run a compiled program and node side by side.
 fn check(rest: &[String]) -> Result<()> {
     let tsconfig = project(rest)?;
-    let report = nts_differential::check(&tsconfig)?;
+    let report = nts_differential::check(&tsconfig, |source| for_project(source, &tsconfig))?;
     if report.functions == 0 {
         println!(
             "nothing to check: no exported function has scalar arguments \
@@ -546,7 +546,7 @@ current directory.
 
 BUILDING
   build        build every product `nts.config.ts` declares, for every target
-  check        typecheck and lower, writing nothing
+  check        compile, run, and compare against node
 
 EMITTING ONE BACKEND
   emit-c       render the program as C, to --out or stdout
@@ -1245,6 +1245,13 @@ fn frontend_for(tsconfig: &Utf8Path, tsgo_binary: String) -> Result<TsgoApi> {
 /// build and `nts frontend` alike, so an instrument describes the program a
 /// build compiles -- `nts frontend` on a GTK project once reported 3 files
 /// and `Cannot find module 'c:Gtk-4.0'`, having made its own frontend.
+///
+/// **And that sentence was false for a fortnight of `nts check`**, which lives in
+/// another crate and so could not call this: it built `TsgoApi::for_compilation`
+/// itself and answered `Cannot find module 'objc:Blink'` for a project `nts build`
+/// builds. It is passed in now (`nts_differential::check`'s `configure`), which is
+/// why this function rather than `frontend_for` is the one to keep reaching --
+/// locating `tsgo` is a convenience and *this* is the invariant.
 fn for_project(mut source: TsgoApi, tsconfig: &Utf8Path) -> Result<TsgoApi> {
     let Some(config) = nts_build::config::beside(tsconfig) else {
         return Ok(source);
