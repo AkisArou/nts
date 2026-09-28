@@ -1166,7 +1166,31 @@ fn check_operands(func: &Func, problems: &mut Vec<Invalid>) {
                 right,
             });
         }
-        if matches!(bin, BinOp::Eq | BinOp::Ne | BinOp::Concat) {
+        // **`Concat` takes strings**, which the table above has said since it was
+        // written and nothing checked. `unerase::narrow_parameters` turned an
+        // unerase on a statically dead arm into the identity and handed a
+        // `double` to `nts_concat`; `emit-c` exited 0 and `cc` said
+        // *"passing 'double' to parameter of incompatible type 'const NtsString
+        // *'"*, from `function describe(value: unknown)` called once with a
+        // number. Pinned as
+        // `outcomes/an-unknown-narrowed-by-typeof-called-with-one-type`.
+        //
+        // `Eq` and `Ne` keep their exemption for the reason given above: they
+        // read a tag on purpose, so an erased operand is the point.
+        if matches!(bin, BinOp::Concat) {
+            for operand in [lhs, rhs] {
+                let found = &func.values[operand.0 as usize].ty;
+                if *found != HirType::Managed(super::ManagedType::String) {
+                    problems.push(Invalid::OperandType {
+                        func: func.name.clone(),
+                        op: "a concatenation of something that is not a string",
+                        found: found.clone(),
+                    });
+                }
+            }
+            continue;
+        }
+        if matches!(bin, BinOp::Eq | BinOp::Ne) {
             continue;
         }
         for operand in [lhs, rhs] {

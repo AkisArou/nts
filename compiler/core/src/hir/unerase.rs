@@ -317,7 +317,8 @@ pub fn narrow_parameters(program: &mut Program) -> usize {
             continue;
         }
         for position in 0..program.funcs[at].params.len() {
-            if agreed.contains_key(&(at, position)) && !only_unwrapped(&program.funcs[at], position)
+            if let Some(representation) = agreed.get(&(at, position))
+                && !only_unwrapped(&program.funcs[at], position, representation)
             {
                 sunk.insert(at);
             }
@@ -422,8 +423,12 @@ pub fn narrow_returns(program: &mut Program) -> usize {
             let Some(&at) = by_name.get(name.as_str()) else {
                 continue;
             };
-            if agreed.contains_key(&at)
-                && !only_unwrapped_value(caller, ValueId(u32::try_from(index).unwrap_or(0)))
+            if let Some(representation) = agreed.get(&at)
+                && !only_unwrapped_value(
+                    caller,
+                    ValueId(u32::try_from(index).unwrap_or(0)),
+                    representation,
+                )
             {
                 sunk.insert(at);
             }
@@ -580,7 +585,7 @@ fn survey_callers(
 }
 
 /// Whether a parameter is only ever unerased or asked for its tag.
-fn only_unwrapped(func: &Func, position: usize) -> bool {
+fn only_unwrapped(func: &Func, position: usize, representation: &HirType) -> bool {
     let Some(parameter) = func
         .values
         .iter()
@@ -588,7 +593,7 @@ fn only_unwrapped(func: &Func, position: usize) -> bool {
     else {
         return false;
     };
-    only_unwrapped_value(func, ValueId(u32::try_from(parameter).unwrap_or(0)))
+    only_unwrapped_value(func, ValueId(u32::try_from(parameter).unwrap_or(0)), representation)
 }
 
 /// Whether every use of one value would unwrap it anyway.
@@ -599,10 +604,36 @@ fn only_unwrapped(func: &Func, position: usize) -> bool {
 /// anything here want the general representation -- and having it in one place
 /// is what makes the return pass the parameter pass read backwards rather than
 /// a second implementation of it.
-fn only_unwrapped_value(func: &Func, value: ValueId) -> bool {
+fn only_unwrapped_value(func: &Func, value: ValueId, representation: &HirType) -> bool {
     for op in &func.values {
         match &op.kind {
-            OpKind::Unerase { value: used } | OpKind::TagOf { value: used } if *used == value => {}
+            // **And the unerase has to want what the callers agreed on.** A
+            // `typeof` chain unerases the same value once per arm -- to `f64` in
+            // one and to `managed<str>` in the next -- and only the arm matching
+            // the chosen representation is reachable. `unwrap_uses` makes *every*
+            // unerase of a narrowed value the identity, so the other arm's became
+            // the `f64` itself, and `concat` was handed a double:
+            //
+            //     error: passing 'double' to parameter of incompatible type
+            //            'const NtsString *'
+            //
+            // from `function describe(value: unknown)` called once with a number,
+            // which is the commonest `unknown` shape there is. `verify` had no
+            // rule about `Concat`'s operands, so the program reached `cc`.
+            //
+            // The arm is statically dead -- `TagOf` becomes a constant here and
+            // the test beside it is a comparison of two constants -- but nothing
+            // folds that comparison, so the block survives to be emitted. **A
+            // pass may not rest on a later one it does not run**, so this
+            // declines instead. Folding an `eq` of two integer constants would
+            // let the arm be pruned and this population narrow again, which is a
+            // capability change and not this guard's business.
+            OpKind::Unerase { value: used } if *used == value => {
+                if &op.ty != representation {
+                    return false;
+                }
+            }
+            OpKind::TagOf { value: used } if *used == value => {}
             other => {
                 if super::verify::operands(other).contains(&value) {
                     return false;
