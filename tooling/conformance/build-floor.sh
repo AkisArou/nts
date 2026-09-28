@@ -277,7 +277,14 @@ unpinned_of() {
 # somebody does.
 #
 # `cluster` is absent because it is in `BLOCKED` and never reaches this check.
-PUBLISHES_NOTHING="assert child_process console events timers"
+#
+# `crypto` joined 2026-09-28: raw 8 (`getHashes`, `getCiphers`, `getCurves`,
+# `KeyObject`, `constants` and three small functions), shaped 0, because its shape
+# publishes nothing until `createHash` exists and the compiled lane refuses it. The
+# refusals are compiler gaps reported with reductions (an overloaded function
+# lowered at its first overload's return type, `instanceof SharedArrayBuffer`, a
+# call through a function value inside `try`), not the port's.
+PUBLISHES_NOTHING="assert child_process console crypto events timers"
 
 # What `shape.mjs` publishes for an addon: the names a test can reach.
 #
