@@ -4345,16 +4345,18 @@ fn a_gir_import_is_bound_by_the_build_and_rebound_when_its_gir_changes() {
     // A store of the test's own, so that what is found there is this
     // test's doing.
     let store = project.join("store");
-    let build_with = |nts: &Path| {
-        let output = output_of(
-            Command::new(nts)
-                .arg("build")
-                .arg(project.join("tsconfig.json"))
-                .env("PKG_CONFIG_PATH", project.join("pc"))
-                .env("GI_GIR_PATH", project.join("gir"))
-                .env("NTS_TYPES_ROOT", &store),
-        )
-        .expect("running nts build");
+    // `nts <command>` on the project, with its GIR, pkg-config and store.
+    let nts = |binary: &Path, command: &str| {
+        let mut nts = Command::new(binary);
+        nts.arg(command)
+            .arg(project.join("tsconfig.json"))
+            .env("PKG_CONFIG_PATH", project.join("pc"))
+            .env("GI_GIR_PATH", project.join("gir"))
+            .env("NTS_TYPES_ROOT", &store);
+        nts
+    };
+    let build_with = |binary: &Path| {
+        let output = output_of(&mut nts(binary, "build")).expect("running nts build");
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
         assert!(output.status.success(), "{stdout}{}", String::from_utf8_lossy(&output.stderr));
         stdout
@@ -4391,6 +4393,11 @@ fn a_gir_import_is_bound_by_the_build_and_rebound_when_its_gir_changes() {
     assert_eq!(first.len(), 1, "the first build did not bind from GIR into one store entry: {first:?}");
     let run = Command::new(project.join(".nts/build/tool/linux-gnu-x86_64/tool")).output().expect("running the program");
     assert!(run.status.success(), "the program failed");
+    // `nts frontend` reads the program the build compiled, the generated
+    // binding included, and not one without it.
+    let frontend = output_of(&mut nts(Path::new(env!("CARGO_BIN_EXE_nts")), "frontend")).expect("running nts frontend");
+    let said = format!("{}{}", String::from_utf8_lossy(&frontend.stdout), String::from_utf8_lossy(&frontend.stderr));
+    assert!(!said.contains("Cannot find module"), "nts frontend read a program without its generated binding:\n{said}");
     build();
     assert_eq!(entries(), first, "an unchanged GIR was bound again");
     // A different GIR -- not merely a newer one -- so that a key comparing

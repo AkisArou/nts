@@ -1233,7 +1233,16 @@ fn print_public_api(program: &hir::Program) {
 /// it: with the React stage installed when its `nts.config.ts` has a `react`
 /// section, so that every command reads the program nts builds.
 fn frontend_for(tsconfig: &Utf8Path, tsgo_binary: String) -> Result<TsgoApi> {
-    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    for_project(TsgoApi::for_compilation(tsgo_binary), tsconfig)
+}
+
+/// `source` given what the project beside `tsconfig` compiles with: its
+/// platform's generated bindings, and React's transform where its config
+/// asks for one. Every command that reads a project goes through this, the
+/// build and `nts frontend` alike, so an instrument describes the program a
+/// build compiles -- `nts frontend` on a GTK project once reported 3 files
+/// and `Cannot find module 'c:Gtk-4.0'`, having made its own frontend.
+fn for_project(mut source: TsgoApi, tsconfig: &Utf8Path) -> Result<TsgoApi> {
     let Some(config) = nts_build::config::beside(tsconfig) else {
         return Ok(source);
     };
@@ -1502,7 +1511,7 @@ fn render_bound(value: f64) -> String {
 /// not a gate.
 fn frontend(tsconfig: &Utf8Path, decompose: bool, calls: bool, constants: bool) -> Result<()> {
     let tsgo_binary = frontend_binary();
-    let mut source = TsgoApi::new(tsgo_binary);
+    let mut source = for_project(TsgoApi::new(tsgo_binary), tsconfig)?;
     if decompose {
         source = source.with_decomposition(Budget::DEFAULT);
     }
