@@ -460,7 +460,29 @@ fn release_at_last_use(
             moved_into.entry(*value).or_default().push(*container);
         }
     }
-    let mut leaning = Leaning { func, map, arriving: block.arriving, moved_into, memo: rustc_hash::FxHashMap::default() };
+    // The inverse edge, for frame containers only. Built from the same ops as
+    // `moved_into` and without its `block.moved` condition: an uncounted store
+    // is exactly the case that needs it. See `Leaning::holds`.
+    let mut holds: rustc_hash::FxHashMap<ValueId, Vec<ValueId>> = rustc_hash::FxHashMap::default();
+    for op in ops.iter() {
+        if let OpKind::FieldSet { object: container, value, .. }
+        | OpKind::ArraySet { array: container, value, .. } = &func.values[op.0 as usize].kind
+            && matches!(
+                func.values[container.0 as usize].kind,
+                OpKind::ObjectNew { frame: true }
+            )
+        {
+            holds.entry(*container).or_default().push(*value);
+        }
+    }
+    let mut leaning = Leaning {
+        func,
+        map,
+        arriving: block.arriving,
+        moved_into,
+        holds,
+        memo: rustc_hash::FxHashMap::default(),
+    };
     // Still needed when the block ends: what the terminator reads and what
     // leaves live, with everything either leans on.
     let mut needed: Vec<ValueId> = super::operands_of_terminator(block.terminator);
@@ -531,6 +553,33 @@ struct Leaning<'a, 'f> {
     /// Values a store in this block moved into a container, with the
     /// containers.
     moved_into: rustc_hash::FxHashMap<ValueId, Vec<ValueId>>,
+    /// The other direction, for a **frame** container only: what a store put
+    /// into it, by container.
+    ///
+    /// `moved_into` answers "the content is needed later, so do not release the
+    /// container", which is the case its comment describes -- a cell moved into
+    /// a closure and read *directly* after the call. This answers the reverse,
+    /// and nothing did: **the container is read later, so do not release what is
+    /// in it.**
+    ///
+    /// ```ts
+    /// const root = new Root();               // frame-local
+    /// const one = (tag: string) => make(root, tag);
+    /// const two = (tag: string) => make(root, tag);
+    /// console.log(one("a"));                 // reads root.names
+    /// ```
+    ///
+    /// `root`'s last op*erand* use is the store into the second closure, so it
+    /// was judged dead there and `release_value` gave up its fields -- freeing
+    /// `root.names` before either closure ran. The React lane reduced it: node
+    /// prints `a2 b21 c2` and the compiled program printed `a2 b11 c1`.
+    ///
+    /// **A frame container only**, because that is where the hole is: a store
+    /// into a heap object took a count, so the content cannot reach zero while
+    /// the container holds it. A frame object has no count to take -- that is
+    /// what `release_value`'s own doc says it exists for -- so the store
+    /// transfers nothing and the liveness has to say what the count would have.
+    holds: rustc_hash::FxHashMap<ValueId, Vec<ValueId>>,
     memo: rustc_hash::FxHashMap<ValueId, std::rc::Rc<[ValueId]>>,
 }
 
@@ -558,6 +607,12 @@ impl Leaning<'_, '_> {
             }
             if let Some(containers) = self.moved_into.get(&next) {
                 stack.extend(containers.iter().copied());
+            }
+            // And what a frame container holds: reading the container is a use
+            // of everything in it, because the fields are given up when *it*
+            // dies. See `holds`.
+            if let Some(contents) = self.holds.get(&next) {
+                stack.extend(contents.iter().copied());
             }
             if self.holds_nothing(next) {
                 stack.extend(self.sources(next));
