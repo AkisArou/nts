@@ -1718,6 +1718,7 @@ one in two ways, both core gaps:
 | 2026-09-27 | 25 | 8 on main; 14 stop at the captured narrowed handle, Scale at `Object.entries` over a table, Stack at a `let` of a handle with no initializer, Context Menu at a record's fields (`new Gdk.Rectangle({ x, y })`, designed with the compiler lane) |
 | 2026-09-28 | 29 | **25 on main**, with the captured-handle fix (bd58854b9). Left: Stack (a `let` of a handle with no initializer), Scale (`Object.entries` over a table), Context Menu (record fields, designed), Boxed Lists (`GObject.TYPE_STRING` and `Gtk.ClosureExpression`, binding gaps) |
 | 2026-09-28 | 34 | **28**. Also left: Text Colors (a spread in call arguments, then an array stringified), Text View (destructuring a handle's property) |
+| 2026-09-28 | 42 | **32** on main f3f4ac28e. Left, each named: a fundamental GType (Boxed Lists, Drop Down, Accessibility), GIR constants (Accessibility), record fields (Context Menu), a construct-only property no constructor takes (Notification), `Object.entries` over a table (Scale), a `let` of a handle with no initializer (Stack, Carousel), a property written through a union of handles (Carousel), a spread in call arguments (Text Colors), destructuring a handle's property (Text View) |
 
 ### What the corpus found beyond its blockers
 
