@@ -291,6 +291,9 @@ export class AsymmetricKeyObject extends KeyObject {
 
 export interface JsonWebKey {
   kty?: string;
+  alg?: string;
+  pub?: string;
+  priv?: string;
   crv?: string;
   x?: string;
   y?: string;
@@ -341,6 +344,8 @@ function jwkCurveName(namedCurve: string | undefined): string | undefined {
  */
 function exportJwk(key: AsymmetricKeyObject, privateKey: boolean): JsonWebKey {
   const native = handleOf(key).native;
+  const keyType = key.asymmetricKeyType ?? "";
+  if (isPostQuantumName(keyType)) return exportAkpJwk(native, keyType, privateKey);
   const parts = nts_crypto_key_export_jwk(native, privateKey);
   if (parts.length === 0) {
     if (nts_crypto_key_status() === KeyStatus.UnsupportedCurve) {
@@ -350,7 +355,6 @@ function exportJwk(key: AsymmetricKeyObject, privateKey: boolean): JsonWebKey {
     }
     throw new ERR_CRYPTO_JWK_UNSUPPORTED_KEY_TYPE();
   }
-  const keyType = key.asymmetricKeyType;
   if (keyType === "rsa") {
     const jwk: JsonWebKey = { kty: "RSA", n: base64url(parts[0]!), e: base64url(parts[1]!) };
     if (privateKey) {
@@ -373,6 +377,29 @@ function exportJwk(key: AsymmetricKeyObject, privateKey: boolean): JsonWebKey {
   if (privateKey) jwk.d = base64url(parts[1]!);
   jwk.x = base64url(parts[0]!);
   jwk.kty = "OKP";
+  return jwk;
+}
+
+/**
+ * Node's `ExportJwkPqcKey`: `AKP`, with OpenSSL's name as `alg`, the raw public
+ * key as `pub`, and for a private key its seed -- or SLH-DSA's raw private
+ * key -- as `priv`, first.
+ */
+function exportAkpJwk(native: number, keyType: string, privateKey: boolean): JsonWebKey {
+  const jwk: JsonWebKey = {};
+  if (privateKey) {
+    const seeded = hasSeed(keyType);
+    const secret = seeded ? nts_crypto_key_export_seed(native) : nts_crypto_key_export_raw(native, true, false);
+    if (secret === null) {
+      throw new ERR_CRYPTO_OPERATION_FAILED(seeded ? "key does not have an available seed" : "Failed to get raw private key");
+    }
+    jwk.priv = base64url(secret);
+  }
+  jwk.kty = "AKP";
+  jwk.alg = postQuantumAlgOf(keyType);
+  const pub = nts_crypto_key_export_raw(native, false, false);
+  if (pub === null) throw new ERR_CRYPTO_OPERATION_FAILED("Failed to get raw public key");
+  jwk.pub = base64url(pub);
   return jwk;
 }
 
@@ -875,7 +902,20 @@ function importJwk(jwk: JsonWebKey): Imported {
     if (native <= 0) throw new ERR_CRYPTO_INVALID_JWK(message);
     return { native, privateKey };
   }
-  if (kty === "AKP") throw new ERR_INVALID_ARG_VALUE_BINDING("Unsupported key type");
+  if (kty === "AKP") {
+    const keyType = postQuantumTypeOf(typeof jwk.alg === "string" ? jwk.alg : "");
+    if (keyType === undefined) throw new ERR_CRYPTO_INVALID_JWK('Unsupported JWK AKP "alg"');
+    const message = "Invalid JWK AKP key";
+    if (typeof jwk.pub !== "string" || (jwk.priv !== undefined && typeof jwk.priv !== "string")) {
+      throw new ERR_CRYPTO_INVALID_JWK(message);
+    }
+    // A private key is made from `priv` alone, as node makes it.
+    const privateKey = typeof jwk.priv === "string";
+    const form = !privateKey ? 0 : hasSeed(keyType) ? 2 : 1;
+    const native = nts_crypto_key_from_post_quantum(keyType, jwkBytes(privateKey ? jwk.priv! : jwk.pub), form);
+    if (native <= 0) throw new ERR_CRYPTO_INVALID_JWK(message);
+    return { native, privateKey };
+  }
   throw new ERR_CRYPTO_INVALID_JWK(`${kty} is not a supported JWK key type`);
 }
 
@@ -895,30 +935,39 @@ function okpName(name: string): string | undefined {
   }
 }
 
-/** The post-quantum families node knows by name. */
-const postQuantumNames = [
-  "ml-dsa-44",
-  "ml-dsa-65",
-  "ml-dsa-87",
-  "ml-kem-512",
-  "ml-kem-768",
-  "ml-kem-1024",
-  "slh-dsa-sha2-128f",
-  "slh-dsa-sha2-128s",
-  "slh-dsa-sha2-192f",
-  "slh-dsa-sha2-192s",
-  "slh-dsa-sha2-256f",
-  "slh-dsa-sha2-256s",
-  "slh-dsa-shake-128f",
-  "slh-dsa-shake-128s",
-  "slh-dsa-shake-192f",
-  "slh-dsa-shake-192s",
-  "slh-dsa-shake-256f",
-  "slh-dsa-shake-256s",
+/** The post-quantum families: node's name for each, and its JWK `alg`, which is OpenSSL's. */
+const postQuantumFamilies: readonly (readonly [string, string])[] = [
+  ["ml-dsa-44", "ML-DSA-44"],
+  ["ml-dsa-65", "ML-DSA-65"],
+  ["ml-dsa-87", "ML-DSA-87"],
+  ["ml-kem-512", "ML-KEM-512"],
+  ["ml-kem-768", "ML-KEM-768"],
+  ["ml-kem-1024", "ML-KEM-1024"],
+  ["slh-dsa-sha2-128f", "SLH-DSA-SHA2-128f"],
+  ["slh-dsa-sha2-128s", "SLH-DSA-SHA2-128s"],
+  ["slh-dsa-sha2-192f", "SLH-DSA-SHA2-192f"],
+  ["slh-dsa-sha2-192s", "SLH-DSA-SHA2-192s"],
+  ["slh-dsa-sha2-256f", "SLH-DSA-SHA2-256f"],
+  ["slh-dsa-sha2-256s", "SLH-DSA-SHA2-256s"],
+  ["slh-dsa-shake-128f", "SLH-DSA-SHAKE-128f"],
+  ["slh-dsa-shake-128s", "SLH-DSA-SHAKE-128s"],
+  ["slh-dsa-shake-192f", "SLH-DSA-SHAKE-192f"],
+  ["slh-dsa-shake-192s", "SLH-DSA-SHAKE-192s"],
+  ["slh-dsa-shake-256f", "SLH-DSA-SHAKE-256f"],
+  ["slh-dsa-shake-256s", "SLH-DSA-SHAKE-256s"],
 ];
 
 function isPostQuantumName(keyType: string): boolean {
-  return postQuantumNames.includes(keyType);
+  return postQuantumFamilies.some((family) => family[0] === keyType);
+}
+
+/** Node's `FindPqcAlgorithmByName`: a JWK `alg`, exactly as OpenSSL spells it. */
+function postQuantumTypeOf(alg: string): string | undefined {
+  return postQuantumFamilies.find((family) => family[1] === alg)?.[0];
+}
+
+function postQuantumAlgOf(keyType: string): string {
+  return postQuantumFamilies.find((family) => family[0] === keyType)![1];
 }
 
 /**
