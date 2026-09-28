@@ -52,6 +52,7 @@
     "radio-buttons/nts.config.ts",
     "revealer/nts.config.ts",
     "scale/nts.config.ts",
+    "search/nts.config.ts",
     "separator/nts.config.ts",
     "shortcuts-window/nts.config.ts",
     "spin-button/nts.config.ts",

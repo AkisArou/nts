@@ -39,6 +39,8 @@ import {
   GtkPasswordEntry,
   GtkPicture,
   GtkPopover,
+  GtkSearchEntry,
+  GtkStack,
   GtkRange,
   GtkSpinButton,
   GtkSwitch,
@@ -48,6 +50,7 @@ import {
   GtkWidget,
   SortType,
   SpinType,
+  gtk_buildable_get_buildable_id,
 } from "c:Gtk-4.0";
 import { ApplicationFlags, g_data_input_stream_new, g_file_new_for_path } from "c:Gio-2.0";
 import { GObject } from "c:GObject-2.0";
@@ -218,6 +221,16 @@ function act(kind: string, id: string, args: string[], object: GObject | null, w
     case "action":
       if (!(object instanceof GtkWidget)) return false;
       object.activate_action(args[0], args.length > 1 ? g_variant_new_string(args[1]) : null);
+      return true;
+    case "visible-child": {
+      if (!(object instanceof GtkStack)) return false;
+      const child = object.visible_child;
+      console.log(`${id}.visible_child ${child === null ? "none" : (gtk_buildable_get_buildable_id(child) ?? "?")}`);
+      return true;
+    }
+    case "search-changed":
+      if (!(object instanceof GtkSearchEntry)) return false;
+      object.emit("search-changed");
       return true;
     case "visit":
       if (!(object instanceof GtkLinkButton)) return false;

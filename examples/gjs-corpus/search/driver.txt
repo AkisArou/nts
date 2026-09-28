@@ -1,0 +1,9 @@
+visible-child stack
+click button_search
+visible-child stack
+text searchentry ap
+search-changed searchentry
+visible-child stack
+text searchentry zzz
+search-changed searchentry
+visible-child stack

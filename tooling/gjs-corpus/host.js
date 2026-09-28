@@ -41,6 +41,9 @@
 //   revealed <id>  print an action bar's or banner's `revealed`
 //   children <id>  print how many children a widget has
 //   click-child <id> <n> emit `clicked` on a flow box's nth child's widget
+//   visible-child <id> print the builder id of a stack's visible child
+//   search-changed <id> emit a search entry's `search-changed`, which it
+//                  otherwise emits after a delay
 //   visit <id>     mark a link button visited
 //   breakpoint <id> <apply|unapply> emit a breakpoint's signal
 //   about <id>     print the about dialog shown in <id>'s window: its name,
@@ -158,6 +161,8 @@ application.connect("activate", async () => {
     else if (kind === "pick") object.emit("emoji-picked", args[0]);
     else if (kind === "day") object.select_day(GLib.DateTime.new_local(Number(args[0]), Number(args[1]), Number(args[2]), 0, 0, 0));
     else if (kind === "action") object.activate_action(args[0], args.length > 1 ? GLib.Variant.new_string(args[1]) : null);
+    else if (kind === "visible-child") console.log(`${id}.visible_child ${object.visible_child === null ? "none" : (object.visible_child.get_buildable_id() ?? "?")}`);
+    else if (kind === "search-changed") object.emit("search-changed");
     else if (kind === "visit") object.visited = true;
     else if (kind === "breakpoint") object.emit(args[0]);
     else if (kind === "about") {
