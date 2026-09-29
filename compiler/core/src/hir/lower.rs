@@ -13773,6 +13773,17 @@ struct Edge {
     bindings: rustc_hash::FxHashMap<u32, ValueId>,
 }
 
+/// Whether lowering a parameter binds the names it declares.
+///
+/// A forwarder -- a wrapper for a function or a method used as a value -- has no body
+/// to read them, and binding a *pattern* parameter there runs the pattern's defaults
+/// a second time. See [`FuncBuilder::lower_param_binding`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ParameterNames {
+    Bound,
+    Forwarded,
+}
+
 struct FuncBuilder<'a> {
     snapshot: &'a SemanticSnapshot,
     /// Bound foreign members, keyed by `(source, span end)` of the declaration.
@@ -20687,6 +20698,7 @@ impl<'a> FuncBuilder<'a> {
         id: NodeId,
         receiver_ty: HirType,
         origin: &Origin,
+        binds: ParameterNames,
     ) -> Result<(Vec<Param>, Vec<ValueId>), Diagnostic> {
         let mut params = vec![Param {
             name: "this".to_owned(),
@@ -20701,7 +20713,7 @@ impl<'a> FuncBuilder<'a> {
                 continue;
             }
             let at = u32::try_from(params.len()).unwrap_or(0);
-            let added = self.lower_param(child, at)?;
+            let added = self.lower_param_binding(child, at, binds)?;
             for offset in 0..u32::try_from(added.len()).unwrap_or(1) {
                 if let Some(value) = self.param_value(at + offset) {
                     forwarded.push(value);
@@ -20757,7 +20769,16 @@ impl<'a> FuncBuilder<'a> {
         self.this = Some(receiver);
         self.bind_own_name(id, receiver);
         self.in_closure = true;
-        let (params, forwarded) = self.closure_parameters(id, receiver_ty, &origin)?;
+        let (params, forwarded) = self.closure_parameters(
+            id,
+            receiver_ty,
+            &origin,
+            if matches!(info.source, ClosureSource::Authored) {
+                ParameterNames::Bound
+            } else {
+                ParameterNames::Forwarded
+            },
+        )?;
 
         // The captures, read back and bound to the names the body writes. A
         // field read rather than a copy into a local: the value is already
@@ -23440,6 +23461,21 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn lower_param(&mut self, id: NodeId, index: u32) -> Result<Vec<Param>, Diagnostic> {
+        self.lower_param_binding(id, index, ParameterNames::Bound)
+    }
+
+    /// `lower_param`, told whether the parameter's names are to be bound.
+    ///
+    /// [`ParameterNames::Forwarded`] is for a **forwarder** -- a wrapper for a function or a
+    /// method used as a value -- which has no body to read a name and whose binding
+    /// of a *pattern* parameter would therefore only **run the pattern's defaults**,
+    /// once here and once again in the function it forwards to.
+    fn lower_param_binding(
+        &mut self,
+        id: NodeId,
+        index: u32,
+        binds: ParameterNames,
+    ) -> Result<Vec<Param>, Diagnostic> {
         let children = self.children(id);
         // A name, or a pattern standing where one would be. `function f({ x }:
         // P)` is one parameter carrying one value, and the pattern is what the
@@ -23598,7 +23634,16 @@ impl<'a> FuncBuilder<'a> {
             self.kind_of(name_node),
             Some(syntax::OBJECT_BINDING_PATTERN | syntax::ARRAY_BINDING_PATTERN)
         ) {
-            self.bind_pattern(name_node, value)?;
+            // **Not in a forwarder**, which has no body to read the names and whose
+            // binding would therefore only *run the pattern's defaults* -- once
+            // here and once again in the function it forwards to. `#m([[x] =
+            // init()])` handed out through `get m() { return this.#m }` called
+            // `init()` twice; called directly, once. The argument goes through
+            // whole and the real function destructures it, which is the only
+            // place that should.
+            if binds == ParameterNames::Bound {
+                self.bind_pattern(name_node, value)?;
+            }
         } else if let Some(symbol) = self.node(name_node).symbol {
             // A parameter is a name like any other, and `callback =
             // asRequest(callback)` before a closure reads it is common enough
