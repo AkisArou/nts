@@ -1851,6 +1851,38 @@ impl Emitter<'_> {
         Ok(())
     }
 
+    /// An object whose type has no layout, handed to a parameter that names a
+    /// class: a `checkcast`.
+    ///
+    /// `types::descriptor` spells a type with no layout `java/lang/Object`,
+    /// and the checker still relates it to the parameter's type -- so the HIR
+    /// passes it on with no conversion, which C and LLVM need none for. The
+    /// verifier does: `Object` is assignable to no class, and one such call
+    /// in a closure body was a `VerifyError` in `Program`, which killed
+    /// `net`, `stream` and `zlib` whole. `stream`'s `eosWeb` keeps
+    /// `const inner = settle` in a closure whose `once(...)` type nothing
+    /// materialises, and passes it to `complete(callback: EndOfStreamCallback)`.
+    ///
+    /// Sound for the reason the fallback is: nothing constructs a value of a
+    /// type with no layout, so the slot holds null or a value from outside the
+    /// compiled set, and `checkcast` passes null. A value that is not the
+    /// class fails here, naming it, rather than at its first use.
+    fn unerase_layoutless(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        arg: ValueId,
+        want: &str,
+        origin: &nts_semantic_schema::Origin,
+    ) {
+        let object = nts_jvm_emitter::descriptor::object(types::OBJECT);
+        let is_object = matches!(self.ty(arg), HirType::Managed(ManagedType::Object(_)))
+            && types::descriptor(self.shape, self.ty(arg)).as_deref() == Some(object.as_str());
+        if is_object && want != object && want.starts_with('L') {
+            code.check_cast(origin, pool, &want[1..want.len() - 1]);
+        }
+    }
+
 
 
     /// A `number` on the stack, as the boxed primitive a bound parameter
@@ -6151,8 +6183,12 @@ impl Emitter<'_> {
         for (&arg, param) in args.iter().zip(&target.params) {
             self.assignable_types(&self.ty(arg).clone(), &param.ty)?;
         }
-        for &arg in args {
+        let parameters = nts_jvm_emitter::descriptor::parameters(&signature).unwrap_or_default();
+        for (at, &arg) in args.iter().enumerate() {
             self.load(code, pool, arg)?;
+            if let Some(want) = parameters.get(at) {
+                self.unerase_layoutless(code, pool, arg, want, origin);
+            }
         }
         let method = crate::body::method_name(name);
         code.invoke_static(origin, pool, &crate::body::program_class(self.shape.package), &method, &signature);
