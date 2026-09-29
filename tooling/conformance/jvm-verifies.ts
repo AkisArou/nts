@@ -3,6 +3,7 @@
 //   node tooling/conformance/jvm-verifies.ts [project ...]   (default: runtime/node/*, runtime/web-platform)
 //   node tooling/conformance/jvm-verifies.ts --outcomes      the outcomes fixtures instead
 //   NTS_BIN=<a pin> node tooling/conformance/jvm-verifies.ts
+//   node tooling/conformance/jvm-verifies.ts --self-test   the pin's must-fire arms, no JDK
 //
 // # Why
 //
@@ -58,6 +59,25 @@
 // Its failures print and pass; any other fails; one that verifies again
 // prints "remove it".
 //
+// **A pin, for a fix nothing else guards:** `project<TAB>why<TAB>pin:
+// invalid=<site>[,<site>...]`, or `pin: invalid=none`. A site is
+// `Class.method` from the verifier's `Location:`. The module's INVALID sites
+// must be exactly that set, order-free: one the pin does not name fails, a
+// pinned one gone fails, and a pinned module that verifies whole fails rather
+// than printing "remove it" -- the guard is gone with it, which is the
+// direction an unpinned entry cannot report. A pin that does not parse is exit
+// 2, "cannot read the pin on <project>": a pin read as absent is a guard
+// read as permissive. Pin only an entry with a fix behind it: (B) was fixed in
+// 2703efcba with no fixture able to hold it, and zlib and stream are its
+// witnesses while they stay known for other causes.
+//
+// **What a pin cannot see.** The verifier stops at a class's *first* error, so
+// a new fault later in the class of a pinned site is masked by that site --
+// the same "whether, never how many" as the module count, one level down. A
+// pin on `Program.convertQueuingStrategyHighWaterMark` says nothing about the
+// rest of `Program`. `invalid=none` has no such blind spot among classes that
+// load, and says nothing about the MISSING ones.
+//
 // Exit 0: every module verifies or is known not to. Exit 1: a new failure, or
 // a module not measured. Exit 2: the tool could not start.
 
@@ -77,6 +97,8 @@ const DRIVER = join(HERE, "JvmVerify.java");
 const SOURCE = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
 const JAVA = process.env.JAVA_HOME ? join(process.env.JAVA_HOME, "bin/java") : "java";
 const WORKERS = Number(process.env.NTS_JVM_VERIFIES_JOBS ?? 4);
+
+if (process.argv.includes("--self-test")) process.exit(selfTest());
 
 if (!existsSync(SOURCE)) {
   console.log(`  NOT MEASURED: no compiler at ${SOURCE}; set NTS_BIN`);
@@ -123,11 +145,13 @@ const projects = (named.length > 0
     "runtime/web-platform",
   ]).sort();
 
-const known = new Map(
-  (existsSync(KNOWN) ? readFileSync(KNOWN, "utf8") : "")
-    .split("\n").filter((l) => l.trim() !== "" && !l.startsWith("#"))
-    .map((l) => l.split("\t")).map(([p, why]) => [p, why ?? ""]),
-);
+let known;
+try {
+  known = parseKnown(existsSync(KNOWN) ? readFileSync(KNOWN, "utf8") : "");
+} catch (error) {
+  console.log(`  ${error.message}`);
+  process.exit(2);
+}
 
 const run = (cmd, args) =>
   new Promise((done) => {
@@ -146,6 +170,106 @@ export function readVerify(text) {
   if (!summary) return null;
   const lines = (kind) => text.split("\n").filter((l) => l.startsWith(`${kind} `)).map((l) => l.slice(kind.length + 1));
   return { invalid: lines("INVALID"), missing: lines("MISSING"), verified: Number(summary[1]), total: Number(summary[2]) };
+}
+
+/**
+ * jvm-verifies.known as `project -> { why, pin }`, where `pin` is the set of
+ * INVALID sites the entry must show exactly, or null when it has none. Throws
+ * on a pin it cannot read, naming the project: see "A pin" above.
+ */
+export function parseKnown(text) {
+  const entries = new Map();
+  for (const line of text.split("\n")) {
+    if (line.trim() === "" || line.startsWith("#")) continue;
+    const [project, why = "", field, ...rest] = line.split("\t");
+    let pin = null;
+    if (field !== undefined || rest.length > 0) {
+      const m = /^pin: invalid=(none|[\w$]+\.[\w$<>]+(?:,[\w$]+\.[\w$<>]+)*)$/.exec(field ?? "");
+      if (!m || rest.length > 0) throw new Error(`cannot read the pin on ${project}: \`${[field, ...rest].join("\t")}\``);
+      pin = new Set(m[1] === "none" ? [] : m[1].split(","));
+    }
+    entries.set(project, { why, pin });
+  }
+  return entries;
+}
+
+/** An INVALID line's site: `Class.method` from the verifier's `Location:`, else the class. */
+export function siteOf(line) {
+  const at = /Location: (?:[\w$]+\/)*([\w$]+)\.([\w$<>]+)\(/.exec(line);
+  return at ? `${at[1]}.${at[2]}` : (line.split(" ")[0] ?? "").split(".").pop();
+}
+
+/** Why a pinned module's INVALID lines break its pin, or null when they match it. */
+function pinBroken(pin, invalid) {
+  const sites = new Set(invalid.map(siteOf));
+  const extra = [...sites].filter((s) => !pin.has(s));
+  const gone = [...pin].filter((s) => !sites.has(s));
+  const why = [];
+  if (extra.length > 0) why.push(`INVALID at ${extra.join(", ")}, which the pin does not name`);
+  if (gone.length > 0) why.push(`the pinned INVALID at ${gone.join(", ")} is gone`);
+  return why.length > 0 ? why.join("; ") : null;
+}
+
+/** The run's verdict over what was measured: fresh failures, held ones, expired entries, broken pins. */
+export function judge(failed, known, projects, unmeasured) {
+  const fresh = failed.filter((f) => !known.has(f.project));
+  const held = failed.filter((f) => known.has(f.project));
+  const verifies = [...known.keys()].filter((p) => projects.includes(p) && !failed.some((f) => f.project === p) && !unmeasured.some((u) => u.startsWith(`${p}:`)));
+  const pinned = [];
+  for (const f of held) {
+    const reason = known.get(f.project).pin && pinBroken(known.get(f.project).pin, f.invalid);
+    if (reason) pinned.push({ project: f.project, reason });
+  }
+  for (const p of verifies.filter((p) => known.get(p).pin)) {
+    pinned.push({ project: p, reason: "verifies whole, so what the pin guarded is gone with it -- re-pin it on what now stands, or remove it" });
+  }
+  return { fresh, held, expired: verifies.filter((p) => !known.get(p).pin), pinned };
+}
+
+/** The pin's must-fire arms over fabricated verifier output. Exit 0 when every arm fires as it should. */
+function selfTest() {
+  const site = (s) => `nts.gen.Program VerifyError: Bad type on operand stack Exception Details: Location: nts/gen/${s}(Lnts/rt/NtsValue;)V @16: invokestatic`;
+  const known = parseKnown([
+    "m/pinned\t(A) held\tpin: invalid=Program.convertQueuingStrategyHighWaterMark",
+    "m/none\t(E) only missing\tpin: invalid=none",
+    "m/plain\t(A) unpinned",
+  ].join("\n"));
+  const failing = (project, invalid) => ({ project, invalid, missing: ["nts.gen.X NoClassDefFoundError: nts/gen/Transform"] });
+  const all = ["m/pinned", "m/none", "m/plain"];
+  const exit = (v) => (v.fresh.length + v.pinned.length > 0 ? 1 : 0);
+  const HWM = site("Program.convertQueuingStrategyHighWaterMark");
+  const B = site("Program.Closure236$call");
+  const arms = [
+    ["the pin holds", [failing("m/pinned", [HWM]), failing("m/none", []), failing("m/plain", [HWM])], 0, null],
+    ["an extra INVALID", [failing("m/pinned", [HWM, B]), failing("m/none", []), failing("m/plain", [HWM])], 1, "INVALID at Program.Closure236$call, which the pin does not name"],
+    ["an INVALID under invalid=none", [failing("m/pinned", [HWM]), failing("m/none", [B]), failing("m/plain", [HWM])], 1, "INVALID at Program.Closure236$call, which the pin does not name"],
+    ["the pinned INVALID missing", [failing("m/pinned", []), failing("m/none", []), failing("m/plain", [HWM])], 1, "the pinned INVALID at Program.convertQueuingStrategyHighWaterMark is gone"],
+    ["the module verifying whole", [failing("m/none", []), failing("m/plain", [HWM])], 1, "verifies whole"],
+    ["an unpinned entry, unchanged", [failing("m/pinned", [HWM]), failing("m/none", []), failing("m/plain", [HWM, B])], 0, null],
+    ["an unpinned entry verifying whole", [failing("m/pinned", [HWM]), failing("m/none", [])], 0, null],
+  ];
+  let bad = 0;
+  for (const [name, failed, want, reason] of arms) {
+    const v = judge(failed, known, all, []);
+    const said = v.pinned.map((p) => p.reason).join(" | ");
+    const fired = exit(v) === want && (reason === null ? v.pinned.length === 0 : said.includes(reason));
+    if (name === "an unpinned entry verifying whole" && !v.expired.includes("m/plain")) bad++, console.log(`  FAIL  ${name}: no "remove it"`);
+    if (!fired) bad++;
+    console.log(`  ${fired ? "ok  " : "FAIL"}  ${name}: exit ${exit(v)}${said ? ` -- ${said}` : ""}`);
+  }
+  for (const [name, text] of [
+    ["a pin with no site", "m/x\twhy\tpin: invalid="],
+    ["a pin misspelt", "m/x\twhy\tpin: invalid-none"],
+    ["a site with no method", "m/x\twhy\tpin: invalid=Program"],
+    ["a fourth field", "m/x\twhy\tpin: invalid=none\textra"],
+  ]) {
+    let refused = false;
+    try { parseKnown(text); } catch (error) { refused = error.message.startsWith("cannot read the pin on m/x"); }
+    if (!refused) bad++;
+    console.log(`  ${refused ? "ok  " : "FAIL"}  ${name}: ${refused ? "cannot read the pin" : "read, and should not have been"}`);
+  }
+  console.log(bad === 0 ? "  self-test: every arm fired" : `  self-test: ${bad} arm(s) did not fire`);
+  return bad === 0 ? 0 : 1;
 }
 
 /**
@@ -214,9 +338,7 @@ await Promise.all(Array.from({ length: Math.min(WORKERS, projects.length) }, asy
   while (next < projects.length) await check(projects[next++], slot);
 }));
 
-const fresh = failed.filter((f) => !known.has(f.project));
-const held = failed.filter((f) => known.has(f.project));
-const expired = [...known.keys()].filter((p) => projects.includes(p) && !failed.some((f) => f.project === p) && !unmeasured.some((u) => u.startsWith(`${p}:`)));
+const { fresh, held, expired, pinned } = judge(failed, known, projects, unmeasured);
 console.log(`  compiler ${SOURCE} -- ${describe(provenanceOf(SOURCE))}`);
 console.log(`  ${verified} of ${classes} class(es) verify across ${projects.length - unmeasured.length} of ${projects.length} project(s), in ${Math.round((Date.now() - started) / 1000)} s`);
 for (const f of fresh) {
@@ -224,8 +346,9 @@ for (const f of fresh) {
   for (const l of [...f.invalid, ...f.missing].slice(0, 6)) console.log(`                   ${l.slice(0, 220)}`);
   if (f.invalid.length + f.missing.length > 6) console.log(`                   ... ${f.invalid.length + f.missing.length - 6} more`);
 }
-for (const f of held) console.log(`  known            ${f.project}: ${f.invalid.length} invalid, ${f.missing.length} missing -- ${known.get(f.project)}`);
+for (const f of held) console.log(`  known            ${f.project}: ${f.invalid.length} invalid, ${f.missing.length} missing -- ${known.get(f.project).why}`);
 for (const p of expired) console.log(`  ^ ${p} verifies now: remove it from tooling/conformance/jvm-verifies.known`);
+for (const { project, reason } of pinned) console.log(`  PIN BROKEN       ${project}: ${reason}`);
 if (invalidHir.length > 0) console.log(`  invalid HIR, so nothing to verify (outcomes records it): ${invalidHir.length} -- ${invalidHir.map((p) => p.split("/").pop()).join(", ")}`);
 for (const u of unmeasured.sort()) console.log(`  NOT MEASURED     ${u}`);
 // Every NTS4009 is a dispatch C and LLVM perform without checking, so each
@@ -242,6 +365,7 @@ if (declines.size > 0) {
   for (const k of [...declines.keys()].filter((k) => declinesKnown.get(k)?.verdict === "live-on-c")) console.log(`    live on C  ${k.slice(0, 110)} -- ${declinesKnown.get(k).why}`);
   for (const k of unclassified) console.log(`    UNCLASSIFIED  ${k.slice(0, 150)}  (${[...declines.get(k)].slice(0, 3).join(", ")})`);
 }
-const ok = fresh.length === 0 && unmeasured.length === 0 && classes > 0 && unclassified.length === 0;
-console.log(ok ? `  every module verifies, or is known not to (${held.length}); every NTS4009 decline classified` : `  ${fresh.length} new failure(s), ${unmeasured.length} not measured, ${unclassified.length} unclassified decline shape(s)`);
+const ok = fresh.length === 0 && pinned.length === 0 && unmeasured.length === 0 && classes > 0 && unclassified.length === 0;
+const pinsHeld = held.filter((f) => known.get(f.project).pin).length;
+console.log(ok ? `  every module verifies, or is known not to (${held.length}, ${pinsHeld} pinned and holding); every NTS4009 decline classified` : `  ${fresh.length} new failure(s), ${pinned.length} broken pin(s), ${unmeasured.length} not measured, ${unclassified.length} unclassified decline shape(s)`);
 process.exit(ok ? 0 : 1);
