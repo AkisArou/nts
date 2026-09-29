@@ -123,6 +123,13 @@ pub(crate) struct Clang<'a> {
 }
 
 impl Toolchain {
+    /// What a cache of this toolchain's output is keyed by: its frontend,
+    /// by where it is and which build of it.
+    pub(crate) fn identity(&self) -> String {
+        let stamp = std::fs::metadata(&self.frontend).map(|meta| format!("{}{:?}", meta.len(), meta.modified().ok())).unwrap_or_default();
+        format!("{} {stamp}", self.frontend.display())
+    }
+
     /// The arguments every command for `target` takes.
     fn for_target(&self, command: &mut Command, target: Target<'_>) {
         command.args(["-target", target.triple]).arg("-sdk").arg(target.sdk);

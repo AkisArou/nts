@@ -6260,6 +6260,36 @@ impl ObjectCache {
         })
     }
 
+    /// The entry for a compile of a whole module -- Swift's -- whose inputs
+    /// are several files, each hashed into the key as a source is.
+    fn module_entry(&self, inputs: &[&Utf8Path], arguments: &[String]) -> Option<Entry> {
+        use std::hash::{Hash, Hasher};
+        let directory = self.directory.as_ref()?;
+        let mut hasher = rustc_hash::FxHasher::default();
+        for input in inputs {
+            input.hash(&mut hasher);
+            std::fs::read(input).ok()?.hash(&mut hasher);
+        }
+        arguments.hash(&mut hasher);
+        let key = format!("{:016x}", hasher.finish());
+        Some(Entry { object: directory.join(format!("{key}.o")), deps: directory.join(format!("{key}.deps")) })
+    }
+
+    /// Record `inputs` as what the entry was built against, as [`record`]
+    /// does from a depfile: the next build reuses it while they hash the
+    /// same.
+    fn record_inputs(entry: &Entry, inputs: &[&Utf8Path]) {
+        let mut recorded = String::new();
+        for path in inputs {
+            if let Ok(bytes) = std::fs::read(path) {
+                use std::fmt::Write;
+                let _ = writeln!(recorded, "{:016x} {path}", hash_of(&bytes));
+            }
+        }
+        drop(std::fs::create_dir_all(entry.object.parent().unwrap_or(Utf8Path::new("."))));
+        drop(std::fs::write(&entry.deps, recorded));
+    }
+
     /// Whether every file the entry was built against still hashes the same.
     fn current(entry: &Entry) -> bool {
         let Ok(recorded) = std::fs::read_to_string(&entry.deps) else { return false };
@@ -6285,6 +6315,38 @@ impl ObjectCache {
         }
         drop(std::fs::create_dir_all(entry.object.parent().unwrap_or(Utf8Path::new("."))));
         drop(std::fs::write(&entry.deps, recorded));
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod module_cache_tests {
+    use super::{Entry, ObjectCache};
+    use camino::Utf8PathBuf;
+
+    /// A whole module's entry is current while every input hashes the same,
+    /// and its key follows their contents: an edited header is a miss, not a
+    /// stale object. A cache that never hits passes every build test, so
+    /// this asserts the hit.
+    #[test]
+    fn a_module_is_reused_until_an_input_changes() {
+        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-module-cache-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (source, header) = (dir.join("Greeter.swift"), dir.join("Greeter.h"));
+        std::fs::write(&source, "@objc public class Greeter {}\n").unwrap();
+        std::fs::write(&header, "@interface Base\n@end\n").unwrap();
+        let cache = ObjectCache { directory: Some(dir.join("cache")), compiler: 0 };
+        let key = ["Greeter".to_owned(), "x86_64-apple-macos13".to_owned()];
+        let inputs = [source.as_path(), header.as_path()];
+        let entry: Entry = cache.module_entry(&inputs, &key).unwrap();
+        ObjectCache::record_inputs(&entry, &inputs);
+        assert!(ObjectCache::current(&entry), "an unchanged module was not reused");
+        let again = cache.module_entry(&inputs, &key).unwrap();
+        assert_eq!(again.object, entry.object, "the same inputs keyed another entry");
+        std::fs::write(&header, "@interface Base\n- (void)wave;\n@end\n").unwrap();
+        assert!(!ObjectCache::current(&entry), "an edited header left the old object current");
+        assert_ne!(cache.module_entry(&inputs, &key).unwrap().object, entry.object, "an edited header keyed the old entry");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
 
@@ -6397,6 +6459,21 @@ fn compile_native(
                 .collect();
             let imports: Vec<crate::swift::Clang<'_>> = imported.iter().map(|(name, headers)| crate::swift::Clang { name, headers }).collect();
             let unit = crate::swift::Module { name: module, sources, headers: &headers, search: &search, imports: &imports };
+            // Reused while every file it reads hashes the same, as a C
+            // source's object is: its Swift, its own headers and those of the
+            // modules it imports -- and the SDK and toolchain, in the key. A
+            // module recompiled whole on every build was most of a rebuild.
+            let inputs: Vec<&Utf8Path> = native
+                .iter()
+                .filter(|source| source.module == *module && source.path.extension() == Some("swift"))
+                .map(|source| source.path.as_path())
+                .chain(first.headers.iter().map(Utf8PathBuf::as_path))
+                .chain(first.imports.iter().flat_map(|(_, headers)| headers.iter().map(Utf8PathBuf::as_path)))
+                .collect();
+            let key = [(*module).to_owned(), triple.clone(), sdk.clone(), toolchain.identity()];
+            let entry = with.cache.module_entry(&inputs, &key);
+            let cached = entry.as_ref().filter(|entry| entry.object.exists() && ObjectCache::current(entry));
+            let object = out.join(format!("{module}.swift.o"));
             // Its Objective-C reaches its Swift through the header Swift
             // writes, `#import "Mix-Swift.h"` or `<Mix/Mix-Swift.h>`, as
             // Xcode's derived sources have it: both are on the include path
@@ -6405,11 +6482,27 @@ fn compile_native(
                 let nested = out.join(module);
                 std::fs::create_dir_all(&nested).with_context(|| format!("creating {nested}"))?;
                 let header = out.join(format!("{module}-Swift.h"));
-                toolchain.objc_header(&unit, target, header.as_std_path())?;
+                match cached {
+                    Some(entry) if entry.object.with_extension("h").exists() => {
+                        std::fs::copy(entry.object.with_extension("h"), &header).with_context(|| format!("reusing {header}"))?;
+                    }
+                    _ => toolchain.objc_header(&unit, target, header.as_std_path())?,
+                }
                 std::fs::copy(&header, nested.join(format!("{module}-Swift.h"))).with_context(|| format!("copying {header}"))?;
             }
-            let object = out.join(format!("{module}.swift.o"));
-            toolchain.compile(&unit, target, object.as_std_path())?;
+            if let Some(entry) = cached {
+                std::fs::copy(&entry.object, &object).with_context(|| format!("reusing {}", entry.object))?;
+            } else {
+                toolchain.compile(&unit, target, object.as_std_path())?;
+                if let Some(entry) = &entry {
+                    // A cache that cannot be written is not a build failure.
+                    ObjectCache::record_inputs(entry, &inputs);
+                    drop(std::fs::copy(&object, &entry.object));
+                    if !headers.is_empty() {
+                        drop(std::fs::copy(out.join(format!("{module}-Swift.h")), entry.object.with_extension("h")));
+                    }
+                }
+            }
             objects.push(object);
         }
     }
