@@ -3252,7 +3252,7 @@ test/language/expressions/optional-chaining/punctuator-decimal-lookahead.js	pass
 test/language/expressions/optional-chaining/static-semantics-simple-assignment.js	fail	accepted: was refused later (lowering)
 test/language/expressions/optional-chaining/update-expression-postfix.js	fail	accepted: was refused later (lowering)
 test/language/expressions/optional-chaining/update-expression-prefix.js	fail	accepted: was refused later (lowering)
-test/language/expressions/postfix-decrement/S11.3.2_A3_T4.js	fail	nts: uncaught Test262Error: #1: var x; x--; x === Not-a-Number. Actual: -1
+test/language/expressions/postfix-decrement/S11.3.2_A3_T4.js	pass	
 test/language/expressions/postfix-decrement/arguments.js	pass	
 test/language/expressions/postfix-decrement/eval.js	pass	
 test/language/expressions/postfix-decrement/line-terminator-carriage-return.js	pass	
@@ -3266,7 +3266,7 @@ test/language/expressions/postfix-decrement/target-newtarget.js	fail	accepted: w
 test/language/expressions/postfix-decrement/this.js	fail	accepted: was refused later (lowering)
 test/language/expressions/postfix-decrement/whitespace.js	pass	
 test/language/expressions/postfix-increment/11.3.1-2-1gs.js	pass	
-test/language/expressions/postfix-increment/S11.3.1_A3_T4.js	fail	nts: uncaught Test262Error: #1: var x; x++; x === Not-a-Number. Actual: 1
+test/language/expressions/postfix-increment/S11.3.1_A3_T4.js	pass	
 test/language/expressions/postfix-increment/arguments.js	pass	
 test/language/expressions/postfix-increment/eval.js	pass	
 test/language/expressions/postfix-increment/line-terminator-carriage-return.js	pass	
@@ -3280,8 +3280,8 @@ test/language/expressions/postfix-increment/target-newtarget.js	fail	accepted: w
 test/language/expressions/postfix-increment/this.js	fail	accepted: was refused later (lowering)
 test/language/expressions/postfix-increment/whitespace.js	pass	
 test/language/expressions/prefix-decrement/11.4.5-2-2gs.js	pass	
-test/language/expressions/prefix-decrement/S11.4.5_A3_T4.js	fail	nts: uncaught Test262Error: #1: var x; --x; x === Not-a-Number. Actual: -1
-test/language/expressions/prefix-decrement/S11.4.5_A4_T4.js	fail	nts: uncaught Test262Error: #1: var x; --x; x === Not-a-Number. Actual: -1
+test/language/expressions/prefix-decrement/S11.4.5_A3_T4.js	pass	
+test/language/expressions/prefix-decrement/S11.4.5_A4_T4.js	pass	
 test/language/expressions/prefix-decrement/S11.4.5_A4_T5.js	fail	nts: uncaught Test262Error: #1: var x = {}; --x === Not-a-Number. Actual: -2
 test/language/expressions/prefix-decrement/arguments.js	pass	
 test/language/expressions/prefix-decrement/eval.js	pass	
@@ -3291,8 +3291,8 @@ test/language/expressions/prefix-decrement/target-cover-yieldexpr.js	fail	accept
 test/language/expressions/prefix-decrement/target-newtarget.js	fail	accepted: was refused later (lowering)
 test/language/expressions/prefix-decrement/this.js	fail	accepted: was refused later (lowering)
 test/language/expressions/prefix-decrement/whitespace.js	pass	
-test/language/expressions/prefix-increment/S11.4.4_A3_T4.js	fail	nts: uncaught Test262Error: #1: var x; ++x; x === Not-a-Number. Actual: 1
-test/language/expressions/prefix-increment/S11.4.4_A4_T4.js	fail	nts: uncaught Test262Error: #1: var x; ++x === Not-a-Number. Actual: 2
+test/language/expressions/prefix-increment/S11.4.4_A3_T4.js	pass	
+test/language/expressions/prefix-increment/S11.4.4_A4_T4.js	pass	
 test/language/expressions/prefix-increment/S11.4.4_A4_T5.js	fail	nts: uncaught Test262Error: #1: var x = {}; ++x === Not-a-Number. Actual: 2
 test/language/expressions/prefix-increment/arguments.js	pass	
 test/language/expressions/prefix-increment/eval.js	pass	

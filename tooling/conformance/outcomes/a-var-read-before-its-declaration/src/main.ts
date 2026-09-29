@@ -8,9 +8,9 @@
 // assignment dominate this read. The checker settles `x` to its assigned type
 // at every reference, and a global's initial storage is the settled
 // representation's zero, where the language says `undefined` (or a TDZ
-// throw). Shared with an-undefined-incremented, a-var-read-before-its-
-// declaration and a-let-read-before-its-declaration -- not with
-// an-object-incremented, whose read an assignment does dominate.
+// throw). Shared with a-var-read-before-its-declaration and a-let-read-
+// before-its-declaration. an-undefined-incremented was thought to be a third
+// and was not: converting in `step` closed it (1bf78c21d).
 observe("inferred", String(x));
 observe("annotated", String(y));
 var x = true;
