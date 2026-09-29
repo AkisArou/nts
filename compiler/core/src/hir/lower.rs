@@ -35573,7 +35573,96 @@ impl<'a> FuncBuilder<'a> {
         let ty = self
             .type_of(id)
             .ok_or_else(|| self.unrepresentable(id, "a step"))?;
-        let one = self.push(OpKind::ConstFloat(1.0), ty.clone(), origin.clone());
+        // `++x` is `ToNumeric(x) + 1`, and `ToNumeric` is `ToNumber` with one
+        // exception: a BigInt stays a BigInt and steps by `1n`. So an operand
+        // whose representation is *known* takes the conversion unary `+` already
+        // applies, which is one function rather than a second rule about which
+        // types a step may add one to.
+        //
+        // Without it the `Binary` below was pushed at the checker's type for the
+        // *whole expression* -- `number` -- while the operand kept its own, and a
+        // later pass made them agree the only way it can, by converting a pointer
+        // to a double. `++{}` answered **1** where node answers `NaN`
+        // (`outcomes/an-object-incremented`), silently, because the object became
+        // a zero. `{} * 1` is refused, so `++` alone was converting.
+        //
+        // It also refuses the impossible case *where the conversion is
+        // impossible*: `ToNumber` of an object is `ToPrimitive`, which runs
+        // `valueOf` and `toString` off a prototype chain, and
+        // `coerce_to_number`'s fallthrough says so by name. A string and an array
+        // were already refused, but at the **write-back** a step later -- `a
+        // number where a string is wanted` -- which names the store rather than
+        // the conversion that cannot happen.
+        //
+        // # Where the conversion is sound, and what happens where it is not
+        //
+        // `coerce_to_number` answers for four representations and refuses the
+        // rest, and `step` wants only the arms that are *right* -- so it asks
+        // first rather than converting and reporting the refusal. Two arms it
+        // must not take, for opposite reasons:
+        //
+        // **A BigInt, permanently, because the conversion gives the opposite
+        // answer.** `++1n` is `2n` with `typeof === "bigint"`, while `+1n`
+        // *throws* -- so routing one through the arm that rounds a BigInt to a
+        // double would answer 2 where the language says 2n. Checked against node
+        // rather than read off the specification, because that arm serves
+        // `Number(x)` too and is right for it.
+        //
+        // **An erased value whose type admits an object**, because `ToNumber` of
+        // one is `ToPrimitive`: it runs `valueOf` and `toString` off a prototype
+        // chain, so `++[5]` is 6 and no fixed layout can answer it.
+        // `only_primitives` is the same question `coerce_to_number`'s own erased
+        // arm asks, asked here so the answer decides rather than a refusal
+        // travelling up.
+        //
+        // **And where it is not sound the operand is handed on untouched, which
+        // is today's behaviour and today's recorded wrong answer.** That is
+        // deliberate rather than timid, and the numbers are why. Refusing the
+        // unsound case instead costs
+        // `test/language/statements/function/S13_A4_T2.js`, where `function
+        // __func(arg) { return ++arg }` called as `__func(1)` computes 2 today and
+        // is not hollow -- an untyped parameter is an `any`, so it admits an
+        // object and would refuse. Handing it on keeps that pass and leaves
+        // `outcomes/an-object-incremented` exactly as it is: `var obj = {}` is
+        // *erased*, because `{}` is the empty object type and not a layout, so it
+        // was never the concrete-object case it reads as. One recorded failure
+        // stays a recorded failure; no pass becomes a refusal.
+        //
+        // What removes that residue is a **tag dispatch**, not a wider rule here:
+        // `nts_value_to_number` is already ToNumber over the tags and is right for
+        // a number, a string, a boolean, `null`, `undefined` and a plain object.
+        // What it owes first is its reference arm, which answers `NaN` on the
+        // stated argument that lowering never emits the call where an object can
+        // arrive -- so making it reachable would turn a documented unreachable
+        // case into a silent one for an array. That is its own commit.
+        let convertible = match self.values[current.0 as usize].ty {
+            HirType::BigInt => false,
+            HirType::Erased => self.only_primitives(target),
+            _ => true,
+        };
+        let current = if convertible {
+            self.coerce_to_number(id, target, current)?
+        } else {
+            current
+        };
+        // The `1` is one of the operand's own kind, which is the same rule the
+        // conversion above is: a step reads the *operand's* representation and not
+        // the checker's type for the whole expression. A BigInt steps by `1n`,
+        // spelled `ConstInt` at `HirType::BigInt` -- what `lower_absent` uses for a
+        // BigInt zero and what C emits as `__int128`.
+        //
+        // A `ConstFloat` there is **well-typed to C and invalid to the other two**,
+        // which is why it stood: C spells a bigint `__int128` and converts the
+        // double, LLVM types the constant `double` against an `i128` operand and
+        // the module stops assembling, and the JVM's stack accounting disagrees
+        // with its own emitter (`NTS4001 ... moved the operand stack from 0 to 1`).
+        // Pre-existing -- the control pin fails identically on both -- and the
+        // fixture's BigInt arms are what surfaced it. C agreed on every case.
+        let one = if ty == HirType::BigInt {
+            self.push(OpKind::ConstInt(1), ty.clone(), origin.clone())
+        } else {
+            self.push(OpKind::ConstFloat(1.0), ty.clone(), origin.clone())
+        };
         let stepped = self.push(
             OpKind::Binary {
                 op,
@@ -35584,6 +35673,13 @@ impl<'a> FuncBuilder<'a> {
             origin,
         );
         self.write_place(id, &place, stepped)?;
+        // The *converted* value is what a postfix step evaluates to, which is why
+        // the conversion above shadows `current` rather than sitting beside it.
+        // `let b = true; b++` is `1` and `let s = "41"; s++` is `41` -- a number
+        // either way, because the specification's order is `oldValue =
+        // ToNumeric(...)` and then `return oldValue`. Before the conversion this
+        // handed back the raw `true` and the raw `"41"`, so that is a second wrong
+        // answer this closes and an arm the fixture owes.
         Ok((current, stepped))
     }
 
@@ -59144,10 +59240,6 @@ impl<'a> FuncBuilder<'a> {
         Ok((lhs, rhs))
     }
 
-    /// Which [`BinOp`] a binary token is, given what the expression produces.
-    ///
-    /// Two of these depend on more than the token, which is why it is not a `const
-    /// fn` over the token alone: `+` is arithmetic on numbers and concatenation on
     /// Which [`BinOp`] a binary token is, given what the expression produces.
     ///
     /// Two of these depend on more than the token, which is why it is not a `const`
