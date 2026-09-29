@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 62f0f9b5c336539e, harness 16b027e1d2ed8109; machine at start: 16.9 GB available, swap 3.5/20 GB, load 13.5/14 (1m/5m), 32 cores; 4 worker(s)
+# compiler 6aa52e0cc112812d, harness 1206fb95a71de6c1; machine at start: 18.7 GB available, swap 3.5/20 GB, load 4.2/8 (1m/5m), 32 cores; 4 worker(s)
 test/language/arguments-object/10.5-1gs.js	pass	
 test/language/asi/S7.9.2_A1_T1.js	pass	
 test/language/asi/S7.9.2_A1_T2.js	pass	

@@ -1,6 +1,6 @@
 # Test262 test/built-ins cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 62f0f9b5c336539e, harness 16b027e1d2ed8109; machine at start: 20.4 GB available, swap 3.5/20 GB, load 14.3/16.5 (1m/5m), 32 cores; 4 worker(s)
+# compiler 6aa52e0cc112812d, harness 1206fb95a71de6c1; machine at start: 20.6 GB available, swap 3.5/20 GB, load 8.6/10.6 (1m/5m), 32 cores; 4 worker(s)
 test/built-ins/Array/from/from-string.js	pass	
 test/built-ins/Array/isArray/15.4.3.2-0-4.js	pass	
 test/built-ins/Array/isArray/15.4.3.2-0-7.js	pass	
@@ -102,6 +102,7 @@ test/built-ins/DataView/prototype/getUint8/return-value-clean-arraybuffer.js	pas
 test/built-ins/DataView/prototype/getUint8/return-values-custom-offset.js	pass	
 test/built-ins/DataView/prototype/getUint8/return-values.js	pass	
 test/built-ins/Date/S15.9.2.1_A1.js	pass	
+test/built-ins/Date/S15.9.3.2_A1_T1.js	pass	
 test/built-ins/Date/TimeClip_negative_zero.js	pass	
 test/built-ins/Date/now/15.9.4.4-0-4.js	pass	
 test/built-ins/Date/prototype/getTime/this-value-invalid-date.js	pass	
@@ -375,6 +376,7 @@ test/built-ins/Object/entries/getter-removing-future-key.js	fail	nts: uncaught T
 test/built-ins/Object/hasOwn/hasown_own_getter.js	pass	
 test/built-ins/Object/hasOwn/hasown_own_getter_and_setter.js	pass	
 test/built-ins/Object/hasOwn/hasown_own_property_exists.js	pass	
+test/built-ins/Object/internals/DefineOwnProperty/nan-equivalence-define-own-property-reassign.js	pass	
 test/built-ins/Object/is/not-same-value-x-y-symbol.js	pass	
 test/built-ins/Object/is/not-same-value-x-y-undefined.js	pass	
 test/built-ins/Object/is/same-value-x-y-boolean.js	pass	

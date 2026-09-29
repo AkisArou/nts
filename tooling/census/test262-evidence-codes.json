@@ -1,36 +1,36 @@
 {
   "//": "TS codes that valid JavaScript draws: the positive test/language cases of the last full conformance262 run. A negative-parse case rejected only by these is 'refused', not 'pass'. Written by --record; see judgeNegative.",
-  "compiler": "62f0f9b5c336539e",
-  "harness": "16b027e1d2ed8109",
+  "compiler": "6aa52e0cc112812d",
+  "harness": "1206fb95a71de6c1",
   "machine": {
     "start": {
-      "at": 1790636461046,
-      "pages_swapped": 318271027,
-      "available_gb": 16.9,
+      "at": 1790646250788,
+      "pages_swapped": 322361575,
+      "available_gb": 18.7,
       "swap_used_gb": 3.5,
       "swap_total_gb": 20,
       "load": [
-        13.5,
-        14
+        4.2,
+        8
       ],
       "cores": 32
     },
     "end": {
-      "at": 1790636804843,
-      "pages_swapped": 318271729,
-      "available_gb": 20.3,
+      "at": 1790646655759,
+      "pages_swapped": 322361937,
+      "available_gb": 19,
       "swap_used_gb": 3.5,
       "swap_total_gb": 20,
       "load": [
-        14.3,
-        16.5
+        9.3,
+        10.3
       ],
       "cores": 32
     },
     "jobs": 4
   },
   "validJsCodes": {
-    "TS1005": 3,
+    "TS1005": 5,
     "TS1068": 4,
     "TS1089": 4,
     "TS1106": 1,

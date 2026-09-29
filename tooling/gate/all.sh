@@ -1869,7 +1869,7 @@ test262_cases() {
 # Re-baselined with the language floor on 2026-09-29 (875 -> 681), for the
 # same reason: negative-parse tests passing on a type error, and `any`
 # containers (`new Set()` is `Set<any>` in JavaScript) refused.
-TEST262_BUILTINS_PASS_FLOOR=681
+TEST262_BUILTINS_PASS_FLOOR=683
 TEST262_BUILTINS_NEGATIVES_ACCEPTED_CEILING=185
 test262_builtins_cases() {
   test262_recorded test/built-ins tooling/census/test262-builtins.outcomes.tsv \
@@ -1888,7 +1888,7 @@ TEST262_ANNEXB_PASS_FLOOR=7
 TEST262_ANNEXB_NEGATIVES_ACCEPTED_CEILING=1
 TEST262_STAGING_PASS_FLOOR=27
 TEST262_STAGING_NEGATIVES_ACCEPTED_CEILING=0
-TEST262_HARNESS_PASS_FLOOR=7
+TEST262_HARNESS_PASS_FLOOR=11
 TEST262_HARNESS_NEGATIVES_ACCEPTED_CEILING=0
 test262_rest_cases() {
   test262_recorded test/annexB tooling/census/test262-annexb.outcomes.tsv \
