@@ -1157,6 +1157,32 @@ fn is_an_instantiation(snapshot: &SemanticSnapshot, probe: &FuncBuilder, ty: Typ
     })
 }
 
+/// The single interface a record declares as its parent.
+///
+/// **One predicate, two readers**, and the readers want it for two different
+/// things: [`super::Program::record_parents`] publishes it so the JVM can answer
+/// assignability, and `layout_of` uses it to lay the record out **parent-first**.
+/// A third spelling of "which interface does this one extend" is how this file has
+/// gone wrong four times in a week, so there is one.
+///
+/// Exactly one parent, both ends interfaces this program declares, and never
+/// itself -- a type that is its own parent would not terminate either reader.
+/// `snapshot.base_types` is the source, which `collect_interfaces` already
+/// consults for the slot numbering.
+fn declared_record_parent(
+    snapshot: &SemanticSnapshot,
+    hierarchy: &Hierarchy,
+    ty: TypeId,
+) -> Option<TypeId> {
+    if !hierarchy.faces.contains(&ty) {
+        return None;
+    }
+    let [parent] = snapshot.base_types.get(&ty)?[..] else {
+        return None;
+    };
+    (parent != ty && hierarchy.faces.contains(&parent)).then_some(parent)
+}
+
 /// Each record type's single declared parent. See [`super::Program::record_parents`]
 /// for why this is a fact of its own and what may not read it.
 ///
@@ -1180,15 +1206,9 @@ fn record_parents(
     let layout_of = |ty: &TypeId| program.layouts.iter().position(|l| l.types.contains(ty));
     let mut parents = std::collections::BTreeMap::new();
     for ty in &hierarchy.faces {
-        let Some(bases) = snapshot.base_types.get(ty) else {
+        let Some(parent) = declared_record_parent(snapshot, hierarchy, *ty) else {
             continue;
         };
-        let [parent] = bases[..] else {
-            continue;
-        };
-        if !hierarchy.faces.contains(&parent) {
-            continue;
-        }
         // Both ends resolve to a layout, and to *different* layouts. See the
         // caller for what each half of that cost when it was missing.
         let (Some(child), Some(above)) = (layout_of(ty), layout_of(&parent)) else {
@@ -40717,6 +40737,29 @@ impl<'a> FuncBuilder<'a> {
         // stated as a construction instead of hoped for as a sort.
         if let Some(base) = base {
             fields = self.after_the_base(id, base, fields)?;
+        } else if let Some(parent) = declared_record_parent(self.snapshot, &self.hierarchy, ty) {
+            // **A record with a declared parent is laid out parent-first too**, for
+            // the reason the class above is: every upcast in every backend is a
+            // pointer cast that assumes it.
+            //
+            // A record had no `base` to key that off, so it took the written order
+            // -- and the written order is per program. `PerformanceEntryDetailJSON`
+            // is `[detail, name, entryType, startTime, duration]` in `net`, detail
+            // first, and parent-first in `perf_hooks`' own program. `net`'s is the
+            // one that ships: the override returns that struct through
+            // `PerformanceEntry#toJSON`'s slot, so **C reads `name` at `detail`'s
+            // offset** -- the live-on-C `outcomes/a-covariant-record-with-the-base-
+            // fields-reordered`, happening in the runtime. The JVM lane found it by
+            // refusing the store and declining to relax the prefix check, which was
+            // the right call: presence bits for optional fields are indexed by
+            // position too.
+            //
+            // **Order only.** This does not give a record a `base` and nothing here
+            // reads one: `same_shape` and the merge are untouched, so a `{...}`
+            // literal at the child's type still shares the child's layout. That
+            // separation is the whole design of `record_parents` and this is the
+            // half of it that costs nothing to identity.
+            fields = self.after_the_base(id, parent, fields)?;
         } else {
             fields = self.as_the_program_writes_them(fields);
         }
