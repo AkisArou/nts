@@ -311,11 +311,7 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
         if nts_core::hir::runtime::is_foreign_layout_name(&layout.name) {
             continue;
         }
-        match object_class(package, program, layout, &plan, &handed_to) {
-            Ok(Some(class)) => classes.push(class),
-            Ok(None) => {}
-            Err(diagnostic) => diagnostics.push(diagnostic),
-        }
+        collect(&mut classes, &mut diagnostics, object_class(package, program, layout, &plan, &handed_to));
         // One empty subclass per class sharing this layout; see
         // `hierarchy::identities`. The fields stay on the layout's own class,
         // so an object is not a byte larger and a parameter declared as either
@@ -327,6 +323,8 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
             }
         }
     }
+
+    collect(&mut classes, &mut diagnostics, callable_root(package, program));
 
     // **Lambda overloads, last**, because they add methods to the program class
     // and read every exported signature to decide which. Doing it inside the
@@ -550,6 +548,67 @@ fn identity_class(
     })
 }
 
+/// One emitted class, or the reason it was not: pushed where it belongs.
+fn collect(classes: &mut Vec<Class>, diagnostics: &mut Vec<Diagnostic>, emitted: Result<Option<Class>, Diagnostic>) {
+    match emitted {
+        Ok(Some(class)) => classes.push(class),
+        Ok(None) => {}
+        Err(diagnostic) => diagnostics.push(diagnostic),
+    }
+}
+
+/// What a layout's class extends: its base's class, or -- for a class callable
+/// at the uniform entry with no base of its own -- the program's root, so every
+/// class a signature-typed slot can hold is one class's subclass. One with a
+/// base keeps it, and that base, a signature class, extends the root in turn.
+/// See `types::callable_class`.
+fn super_class(package: &str, program: &Program, layout: &nts_core::hir::Layout) -> String {
+    let root = (!hierarchy::is_interface(program, layout) && types::is_callable(program, layout))
+        .then(|| types::callable_class(package));
+    program
+        .base_layout(layout)
+        .and_then(|at| program.layouts.get(at))
+        .map(|l| types::class_name(package, l))
+        .or(root)
+        .unwrap_or_else(|| "java/lang/Object".to_owned())
+}
+
+/// The program's callable root: `types::callable_class`, abstract, declaring
+/// the uniform entry every callable class fills. `None` where no layout is
+/// callable, so a program without closures writes no class for them.
+///
+/// The entry's name and descriptor are read off the first callable layout's own
+/// entry rather than rebuilt here: every one is built by the same
+/// `uniform_params` at one program-wide width, so any of them is all of them,
+/// and a second derivation of that shape is the thing that would drift.
+fn callable_root(package: &str, program: &Program) -> Result<Option<Class>, Diagnostic> {
+    let Some(slot) = program.erased_call_slot else { return Ok(None) };
+    let entry = program.layouts.iter().find_map(|layout| {
+        let name = layout.methods.get(slot as usize)?.as_ref()?;
+        let func = program.funcs.iter().find(|f| &f.name == name)?;
+        let member = hierarchy::declared_member(program, layout, slot as usize)
+            .unwrap_or_else(|| hierarchy::member_name(name));
+        Some((member, instance_descriptor(package, program, func)?))
+    });
+    let Some((member, descriptor)) = entry else { return Ok(None) };
+    let origin = program_origin(program);
+    let mut pool = Pool::new();
+    let mut builder = ClassBuilder::new(types::callable_class(package), "java/lang/Object".to_owned());
+    builder.access = access::PUBLIC | access::SUPER | access::ABSTRACT;
+    builder.source_file = Some("nts".to_owned());
+    builder.method(access::PUBLIC | access::ABSTRACT, member, descriptor, None);
+    builder.default_constructor(&origin, &mut pool).map_err(|error| {
+        Diagnostic::error(
+            "NTS4003",
+            format!("the callable root's constructor could not be written: {error}"),
+            origin.location,
+        )
+    })?;
+    builder.build(pool).map(Some).map_err(|error| {
+        Diagnostic::error("NTS4004", format!("the callable root could not be written: {error}"), origin.location)
+    })
+}
+
 /// Which **bound Java interfaces** a closure is handed to.
 ///
 /// A closure class is emitted once and which interface it should implement
@@ -627,10 +686,7 @@ fn object_class(
     let origin = program_origin(program);
     let mut pool = Pool::new();
     let name = types::class_name(package, layout);
-    let super_name = program
-        .base_layout(layout)
-        .and_then(|at| program.layouts.get(at))
-        .map_or_else(|| "java/lang/Object".to_owned(), |l| types::class_name(package, l));
+    let super_name = super_class(package, program, layout);
     // A dispatch root the program declares -- something another layout says it
     // implements -- is emitted as a JVM interface, not as a class. Its methods
     // are already `ACC_ABSTRACT` by way of `Func::abstract_declaration`; what

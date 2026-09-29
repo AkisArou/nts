@@ -125,6 +125,25 @@ pub fn joined(package: &str, program: &Program, func: &Func) -> FxHashMap<ValueI
         let Some(declared) = closure_layout(program, &func.values[param.0 as usize].ty) else {
             continue;
         };
+        // **Arms that are all callable at the uniform entry share the root**,
+        // whatever their bases: two closures merged into one binding with no
+        // common signature class were refused here, and that was
+        // blockers/two-closures-merged-at-one-signature. See
+        // `types::callable_class`.
+        if types::is_callable(program, declared) {
+            let classes: Option<FxHashSet<String>> = args
+                .iter()
+                .map(|arg| {
+                    closure_layout(program, &func.values[arg.0 as usize].ty)
+                        .filter(|layout| types::is_callable(program, layout))
+                        .map(|layout| types::class_name(package, layout))
+                })
+                .collect();
+            if classes.is_some_and(|classes| classes.len() > 1) {
+                widened.insert(param, types::callable_class(package));
+            }
+            continue;
+        }
         let Some(base) = base_of(program, declared) else {
             continue;
         };

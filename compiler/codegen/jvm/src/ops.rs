@@ -2647,6 +2647,12 @@ impl Emitter<'_> {
         ) else {
             return Ok(());
         };
+        // Any class callable at the uniform entry is a value of any signature
+        // type: both are referred to as `types::callable_class`, which every
+        // such class extends. See it for the 81 declines this answered.
+        if types::is_signature(self.program, target_layout) && types::is_callable(self.program, source_layout) {
+            return Ok(());
+        }
         let wanted = types::class_name(self.shape.package, target_layout);
         if crate::hierarchy::ancestry(self.program, source_layout)
             .iter()
@@ -3892,7 +3898,7 @@ impl Emitter<'_> {
         // `instanceof` tests. A parameter or field keeps the base, which is
         // what leaves `readA(new B())` passing.
         Ok(crate::hierarchy::identity_of(self.program, *id)
-            .map_or_else(|| types::class_name(self.shape.package, layout), |class| {
+            .map_or_else(|| types::reference_class(self.shape.package, self.program, layout), |class| {
                 types::identity_class_name(self.shape.package, layout, class)
             }))
     }

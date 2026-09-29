@@ -1,4 +1,7 @@
-// expect: emit-jvm -> storing a `Closure1` where a `Fn2__2` is declared
+// **Fixed on the JVM, and an example since:** every class callable at the uniform
+// entry now extends one abstract root (`types::callable_class` in codegen/jvm), and
+// a signature-typed value is referred to as that root -- so any closure fits any
+// signature slot. This was a blocker until then; what follows is its record.
 //
 // `() => 1` passed where `(c: number) => number` is declared.
 //

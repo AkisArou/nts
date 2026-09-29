@@ -79,6 +79,61 @@ pub fn class_name(package: &str, layout: &Layout) -> String {
     jvm_class_name(package, &layout.name)
 }
 
+/// The class every value callable at the uniform entry is referred to as: one
+/// abstract root per program declaring `erased_call`.
+///
+/// **Why one root rather than a signature class each.** After the erased-call
+/// entry every closure in a program shares one ABI -- receiver, the program's
+/// widest arity of erased parameters, an erased result (`uniform_params`) -- but
+/// a closure class can extend only one signature class, and the runtime holds
+/// closures at more than one: `assert`'s `Closure14` is stored at `Fn610__144`
+/// and at `Fn79__144`, and two closures merged into one binding have no shared
+/// base at all. 81 functions across the runtime were declined as "storing a
+/// `ClosureN` where a `FnM` is declared" (blockers/two-closures-merged-at-one-
+/// signature). Single inheritance cannot answer that; one root every callable
+/// class extends can, and the entry it declares is the one every call site
+/// already dispatches through.
+///
+/// The `-` is deliberate: `jvm_member_name` maps it to `$`, so no TypeScript
+/// declaration can be spelled this, and DEX accepts it in a simple name.
+#[must_use]
+pub fn callable_class(package: &str) -> String {
+    format!("{package}/Erased-Callable")
+}
+
+/// Whether a layout is called at the uniform entry: it fills
+/// `Program::erased_call_slot`, read at use because removing the unread
+/// `closure_slot` would renumber the table.
+#[must_use]
+pub fn is_callable(program: &nts_core::hir::Program, layout: &Layout) -> bool {
+    program
+        .erased_call_slot
+        .and_then(|slot| layout.methods.get(slot as usize))
+        .is_some_and(Option::is_some)
+}
+
+/// Whether a layout is a *signature*: callable at the entry, and no closure's
+/// own class. A value of a signature type is any closure the program can store
+/// there, so it is referred to as [`callable_class`].
+#[must_use]
+pub fn is_signature(program: &nts_core::hir::Program, layout: &Layout) -> bool {
+    is_callable(program, layout) && !layout.types.iter().any(|ty| nts_core::hir::is_closure_type(*ty))
+}
+
+/// The class a value of this layout's type is referred to as -- in a
+/// descriptor, a frame, a dispatch -- which is [`class_name`] except for a
+/// signature. Constructing, declaring and naming a class still use
+/// `class_name`: a signature class is still written, and still what a closure
+/// with a signature base extends.
+#[must_use]
+pub fn reference_class(package: &str, program: &nts_core::hir::Program, layout: &Layout) -> String {
+    if is_signature(program, layout) && !crate::hierarchy::is_interface(program, layout) {
+        callable_class(package)
+    } else {
+        class_name(package, layout)
+    }
+}
+
 /// The binary name of the empty subclass one class gets when it shares a
 /// layout with another.
 ///
@@ -573,7 +628,7 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
         HirType::Managed(ManagedType::Object(id)) => nts_jvm_emitter::descriptor::object(
             &program
                 .layout(*id)
-                .map_or_else(|| OBJECT.to_owned(), |layout| class_name(shape.package, layout)),
+                .map_or_else(|| OBJECT.to_owned(), |layout| reference_class(shape.package, program, layout)),
         ),
         // UTF-16 code units with a compact one-byte/two-byte representation --
         // which is what `NtsString` implements by hand and what JavaScript's
@@ -787,7 +842,7 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
                 VType::Object(
                     program
                         .layout(*id)
-                        .map_or_else(|| OBJECT.to_owned(), |l| class_name(shape.package, l)),
+                        .map_or_else(|| OBJECT.to_owned(), |l| reference_class(shape.package, program, l)),
                 )
             }
             HirType::Managed(ManagedType::Date) => VType::Object(DATE.to_owned()),
