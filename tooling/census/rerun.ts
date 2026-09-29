@@ -2,10 +2,14 @@
 // reason it could have moved, under the binary before and the binary after.
 //
 //   node tooling/census/rerun.ts --rows <rows> [<rows> ...] <filters> --before <nts> --after <nts>
-//        [--jobs N] [--list N]
+//        [--paths <file>] [--jobs N] [--list N] [--out <jsonl>]
 //
 // filters: rows.ts's own -- --message, --code, --where, --first, --bucket,
 // --why, --path, --source -- each a regular expression, all of which must hold.
+// `--paths` keeps only the rows whose path is a line of <file>: a selection
+// computed elsewhere (any-arrivals' classes, a hand-picked list) that no one
+// regular expression says. `--out` writes one line per file -- path, verdict,
+// and each arm's row -- for a join the summary cannot do.
 //
 // # Why
 //
@@ -33,9 +37,17 @@
 //   same    what it was
 //
 // Exit 0 with no WORSE; 1 with any; 2 when it could not run.
+//
+// **A gain is measured over the selection, and a loss can be anywhere.** On
+// 2026-09-29 a change measured 0 WORSE over the 4,879 files it targeted and
+// regressed 243 recorded passes outside them -- files that had no `any` root
+// and so were never selected. Pair every rerun with the gate's recorded check
+// on the after binary (`NTS_BIN=<after> NTS_GATE_STEPS="test262-cases
+// test262-builtins-cases test262-rest-cases" sh tooling/gate/all.sh`); the
+// summary says so every time.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -109,7 +121,11 @@ for (const bin of [opts.before, opts.after]) {
 // --- the selection -------------------------------------------------------------
 
 const keep = filterFrom(opts);
-const selected = rowFiles.flatMap((f) => [...readRows(readFileSync(f, "utf8")).values()]).filter(keep);
+const listed = opts.paths ? new Set(readFileSync(opts.paths, "utf8").split("\n").filter(Boolean)) : null;
+const selected = rowFiles
+  .flatMap((f) => [...readRows(readFileSync(f, "utf8")).values()])
+  .filter(keep)
+  .filter((r) => listed === null || listed.has(r.path));
 const byDir = new Map();
 for (const r of selected) {
   const dir = r.path.split("/").slice(0, 2).join("/");
@@ -121,6 +137,7 @@ if (selected.length === 0) process.exit(0);
 
 // --- two arms ------------------------------------------------------------------
 
+if (opts.out) writeFileSync(opts.out, "");
 const base = join(homedir(), ".cache/nts-rerun");
 mkdirSync(base, { recursive: true });
 const scratch = mkdtempSync(join(base, "run-"));
@@ -159,10 +176,12 @@ for (const [dir, paths] of byDir) {
     const a = after.get(path);
     const reason = (r) => (r ? `${r.bucket}${r.why ? `/${r.why}` : ""}${r.first ? `: ${r.first}` : ""}${(r.diagnostics ?? []).find((d) => d.code === "NTS1001") ? `: ${r.diagnostics.find((d) => d.code === "NTS1001").message}` : ""}` : "(none)");
     if (v !== "same") lists.set(v, [...(lists.get(v) ?? []), `${path}\n        ${reason(b).slice(0, 110)}\n     -> ${reason(a).slice(0, 110)}`]);
+    if (opts.out) appendFileSync(opts.out, `${JSON.stringify({ path, verdict: v, before: b ?? null, after: a ?? null })}\n`);
   }
 }
 
 console.log(`\n  ${[...tally].map(([v, n]) => `${n} ${v}`).join(", ")}`);
+console.log("  over the selection only: a loss outside it shows in the recorded check on the after binary, not here");
 for (const v of ["WORSE", "FIXED", "MOVED", "not measured"]) {
   const items = lists.get(v) ?? [];
   if (items.length === 0) continue;
