@@ -1895,6 +1895,7 @@ one in two ways, both core gaps:
 | 2026-09-28 | 29 | **25 on main**, with the captured-handle fix (bd58854b9). Left: Stack (a `let` of a handle with no initializer), Scale (`Object.entries` over a table), Context Menu (record fields, designed), Boxed Lists (`GObject.TYPE_STRING` and `Gtk.ClosureExpression`, binding gaps) |
 | 2026-09-28 | 34 | **28**. Also left: Text Colors (a spread in call arguments, then an array stringified), Text View (destructuring a handle's property) |
 | 2026-09-29 | 59 | **47** on main 24f327887, with GIR's constants: Boxed Lists and Drop Down move on to `Gtk.ClosureExpression`, Accessibility to `update_state`'s arrays (both named above), and the same-block-capture bound of 64306803c is now the first blocker of three (Box, Text Colors, Message Dialogs; reported) |
+| 2026-09-29 | 59 | **49**: Boxed Lists and Drop Down, with a closure expression whose string the bridge answers owned (`GtkCClosureExpression.new`) |
 | 2026-09-29 | 59 | **47**: Network Monitor, once 3cf606cea defined a capturing nested function a closure calls. Box is ported. Its hoisted arm, a function passed before its declaration, was fixed by 64306803c; it now stops at that fix's deliberate bound, a hoisted function whose captures are declared in its own block (Box's are all initialized before the use; reported) |
 | 2026-09-28 | 58 | **46**: List Model, one string list bound to a list box and a flow box by functions, and a filter model over it |
 | 2026-09-28 | 57 | **45**: Preferences Dialog, its `AdwStyleManager` color scheme set from a switch row, a subpage pushed and popped, a toast |
@@ -1927,18 +1928,45 @@ count parameter shared by two arrays. That is lowering's `native_arguments`
 and a runtime helper per backend, so it is designed with the compiler lane
 before it is built.
 
-**`Gtk.ClosureExpression` needs a closure that answers C an owned value.**
-Boxed Lists and Drop Down write `new Gtk.ClosureExpression(GObject.TYPE_STRING,
-(item) => item.string, null)`. `gtk_closure_expression_new` takes a
-`GClosure` (refused, "an array"); `gtk_cclosure_expression_new` takes a
-`GCallback` with its user data and destroy function (refused, "a callback
-whose context is not the next parameter"), which is the shape a signal
-handler binds through. But its C signature is known only at run time, from
-`value_type` and the params, and GLib's generic marshaller calls it through
-libffi and takes ownership of what it returns: a string must come back as a
-`g_malloc`ed copy, an object with a reference. So the binding needs a typed
-class value (GJS's three-argument `new`, the callback typed by the program)
-and a bridge that answers an owned value, which no callback does yet.
+**A closure expression, and a callback's string answered owned.** Boxed
+Lists and Drop Down write `new Gtk.ClosureExpression(GObject.TYPE_STRING,
+(item) => item.string, null)`. GLib's generic marshaller, which such a
+closure runs through, takes over what the function answers
+(`g_value_take_string`, `g_value_take_object`): measured with a C program
+under valgrind, whose control arm -- answering a static string and an
+unreferenced object -- gave an invalid free and `G_IS_OBJECT` criticals.
+
+- **An object** is already answered with a reference under `--rc`: a
+  function's result is +1, and the bridge passes it on. Measured on
+  `GtkTreeListModel`'s and `GtkMapListModel`'s transfer-full callbacks: both
+  finalized, no criticals.
+- **A string** is not: the program's string is not a `g_malloc`ed `char *`.
+  A closure's bridge now answers a `string` result as a `malloc`ed copy
+  (`nts_string_to_owned_cstring`; `g_free` is `free`), and under counting
+  gives back the one the function answered (`native::owned_string`, both
+  backends). The binder binds a transfer-full `utf8` callback result; one
+  C only borrows still refuses. A plain function-pointer parameter still
+  refuses a string result: its type is also what a call *through* the pointer
+  reads.
+- **The binding.** GIR types `gtk_cclosure_expression_new`'s callback as a
+  `GCallback` taking nothing, where the marshaller passes the `this` and then
+  the data -- a signal handler's shape. It is a named exception
+  (`Mapper::cclosure_expression`), bound as
+  `GtkCClosureExpression.new(type, (item) => …)` through
+  `nts_gtk_cclosure_expression_new` (`nts_gtk.h`), which passes the generic
+  marshaller and no parameter expressions. The function answers
+  `string | null`; another answer waits for a port. GJS's three-argument `new`
+  comes with the `gi:` surface's constructors.
+- **Witnesses.** gtk-gir's `sorted=banana|apple|kiwi` (a string sorter keyed
+  by the closure, plain and `--rc`); native-closure's `owned_answers` (a C
+  library `free`s each answer, one not ASCII; both backends, both providers);
+  Boxed Lists and Drop Down. Under valgrind the `--rc` arm loses nothing
+  through a bridge; with the copy replaced by the lent string it is an
+  invalid free, and without the release a leak -- each with the same log,
+  which is why the check is valgrind's and not the program's.
+- **Still a leak:** the expression itself, one per `new`, since a
+  `GtkExpression`'s count is not modelled (a fundamental type, as GLib's
+  refcounted records are).
 
 **An override answers its out parameters as GJS's does, a tuple.** GJS
 writes `vfunc_measure(o, s) { return [min, nat, -1, -1]; }`, and so does a

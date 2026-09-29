@@ -2,7 +2,7 @@
 import { GListStore } from "c:Gio-2.0";
 import type { Properties, Property } from "c:types";
 import { G_TYPE_STRING, GObject, type GObjectProps } from "c:GObject-2.0";
-import { GtkClosureExpression, GtkDropDown, GtkPropertyExpression, GtkStringObject } from "c:Gtk-4.0";
+import { GtkCClosureExpression, GtkDropDown, GtkPropertyExpression, GtkStringObject } from "c:Gtk-4.0";
 import { run, type Workbench } from "../../host/workbench.ts";
 
 // GJS's `GObject.registerClass({ Properties: ... })`, as a class declares
@@ -29,7 +29,9 @@ function demo(workbench: Workbench): void {
     console.log(selected_item.get_string());
   });
 
-  const expression = new GtkClosureExpression(G_TYPE_STRING, (obj: GtkStringObject) => obj.string, null);
+  // GJS's `new Gtk.ClosureExpression(type, fn, null)` is C's constructor
+  // here, as GJS spells every other: the function's `this` is any object.
+  const expression = GtkCClosureExpression.new(G_TYPE_STRING, (obj) => (obj instanceof GtkStringObject ? obj.string : null));
 
   drop_down.expression = expression;
 

@@ -74,6 +74,8 @@ pub const GOBJECT_SOURCE: &str = include_str!("../../../../runtime/c/nts_gobject
 /// What a program's `GObject` classes need of GTK itself -- a class built from a
 /// template -- apart from `nts_gobject.c`, so a program using `GObject` without
 /// GTK links none of it. Compiled where the program calls it (`nts_gtk_`).
+pub const GTK_HEADER_NAME: &str = "nts_gtk.h";
+pub const GTK_HEADER: &str = include_str!("../../../../runtime/c/nts_gtk.h");
 pub const GTK_SOURCE_NAME: &str = "nts_gtk.c";
 pub const GTK_SOURCE: &str = include_str!("../../../../runtime/c/nts_gtk.c");
 /// The Windows Runtime at the boundary: HSTRING, COM counts, activation.
@@ -593,6 +595,11 @@ impl Emitted {
         }
         if connects {
             files.push(Support { name: GOBJECT_SOURCE_NAME, contents: GOBJECT_SOURCE, compiled: true });
+        }
+        // The GTK support file includes its header, and a binding that
+        // declares one of its functions names the header to the witness.
+        if text.contains("nts_gtk_") || self.witness.contains(GTK_HEADER_NAME) {
+            files.push(Support { name: GTK_HEADER_NAME, contents: GTK_HEADER, compiled: false });
         }
         if text.contains("nts_gtk_") {
             files.push(Support { name: GTK_SOURCE_NAME, contents: GTK_SOURCE, compiled: true });

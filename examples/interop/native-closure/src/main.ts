@@ -1,4 +1,4 @@
-import { deliver, each_upto, item_weight, subscribe, unsubscribe, visit_items } from "c:closures";
+import { deliver, each_upto, item_weight, owned_answers, subscribe, unsubscribe, visit_items } from "c:closures";
 import type { c_int } from "c:types";
 
 // Scoped: the arrow captures `total`, C calls it `upto` times during the
@@ -45,6 +45,15 @@ export function visitItems(): number {
     weight += item_weight(item);
   });
   return weight;
+}
+
+// A callback answering a string, which C frees: the bridge answers a copy of
+// its own, and under counting gives back the one the arrow made. The second
+// answer is not ASCII, so it is converted, not copied as stored. All three
+// read back as written.
+export function ownedAnswers(count: number): number {
+  const accent = "\u00e9";
+  return owned_answers((n) => (n === 2 ? "item " + accent : "item " + String(n)), count as c_int);
 }
 
 // Retained: `start` registers a closure over a box and returns, so the

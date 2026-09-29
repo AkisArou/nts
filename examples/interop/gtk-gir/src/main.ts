@@ -66,11 +66,20 @@
 //                 `GAsyncReadyCallback` is a closure C calls once, which the
 //                 bridge releases after it, and `_finish` reports through the
 //                 `GError **` slot; 2 is `G_FILE_TYPE_DIRECTORY`
+//   sorted=banana|apple|kiwi  a closure expression, GJS's
+//                 `new Gtk.ClosureExpression(GObject.TYPE_STRING, fn, null)`,
+//                 as a string sorter's key: each word by its last letter. The
+//                 function's string is C's to free -- GLib's marshaller takes it
+//                 over -- so the bridge answers a copy, under `--rc` too
 import {
   gtk_application_new,
   gtk_application_window_new,
   gtk_box_append,
   gtk_box_new,
+  gtk_cclosure_expression_new,
+  GtkSortListModel,
+  GtkStringObject,
+  GtkStringSorter,
   gtk_window_present,
   gtk_window_set_child,
   Orientation,
@@ -113,7 +122,7 @@ import {
   type GError,
   g_bytes_new,
 } from "c:GLib-2.0";
-import { g_signal_group_new } from "c:GObject-2.0";
+import { G_TYPE_STRING, g_signal_group_new } from "c:GObject-2.0";
 import { GdkRGBA } from "c:Gdk-4.0";
 import { pango_context_new, pango_font_description_from_string, pango_parse_markup } from "c:Pango-1.0";
 import type { CNumber, Ptr, c_char } from "c:types";
@@ -426,6 +435,24 @@ function main(): void {
   console.log("ticks=" + String(ticks));
   console.log("kind=" + String(kind));
   console.log(folders);
+  console.log("sorted=" + sortedByLastLetter(["apple", "kiwi", "banana"]));
+}
+
+function lastLetter(item: unknown): string | null {
+  if (!(item instanceof GtkStringObject)) return null;
+  const text = item.get_string();
+  return text.substring(text.length - 1);
+}
+
+function sortedByLastLetter(words: string[]): string {
+  const expression = gtk_cclosure_expression_new(G_TYPE_STRING, (item) => lastLetter(item));
+  const sorted = new GtkSortListModel({ model: gtk_string_list_new(words), sorter: new GtkStringSorter({ expression }) });
+  const order: string[] = [];
+  for (let at = 0; at < sorted.get_n_items(); at++) {
+    const item = sorted.get_item(at);
+    if (item instanceof GtkStringObject) order.push(item.get_string());
+  }
+  return order.join("|");
 }
 
 main();

@@ -1,9 +1,10 @@
-/* What a program's GObject classes need of GTK itself, as distinct from
- * GObject: a class built from a template (`static readonly template` and its
- * `declare`d children, `emit/gobject.rs`). Linked only by a program that
- * declares one, so a program using GObject without GTK keeps linking none of
- * it. */
-#include <gtk/gtk.h>
+/* What a program needs of GTK itself, as distinct from GObject: a class
+ * built from a template (`static readonly template` and its `declare`d
+ * children, `emit/gobject.rs`), and a closure expression made from a function
+ * (`nts_gtk.h`). Linked only by a program that uses one, so a program using
+ * GObject without GTK keeps linking none of it. */
+#include "nts_gtk.h"
+
 #include <stddef.h>
 #include <string.h>
 
@@ -83,4 +84,12 @@ void nts_gtk_bind_callback(void *klass, const char *name,
                            void (*callback)(void)) {
   gtk_widget_class_bind_template_callback_full(GTK_WIDGET_CLASS(klass), name,
                                                G_CALLBACK(callback));
+}
+
+GtkExpression *nts_gtk_cclosure_expression_new(GType value_type,
+                                               GCallback callback,
+                                               gpointer data,
+                                               GClosureNotify notify) {
+  return gtk_cclosure_expression_new(value_type, NULL, 0, NULL, callback, data,
+                                     notify);
 }

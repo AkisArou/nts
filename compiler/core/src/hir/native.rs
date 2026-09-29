@@ -1934,6 +1934,29 @@ pub fn lent_string(foreign: &Type, compiled: &super::HirType) -> bool {
     *foreign == Encoding::Utf8.c_type() && matches!(compiled, super::HirType::Managed(super::ManagedType::String))
 }
 
+/// The C type of a callback's `string` result: `char *`, which C owns.
+#[must_use]
+pub fn owned_c_string() -> Type {
+    Type::Pointer(Pointee::Scalar(Scalar::Char))
+}
+
+/// Whether a callback bridge's result is a string C takes over: the `char *`
+/// a `string` result is in a closure's C signature (`callback_signature`), where
+/// the compiled function answers a string. Both backends' bridges ask this,
+/// and answer a `malloc`ed copy (`nts_string_to_owned_cstring`), releasing
+/// the string the function answered.
+///
+/// Owned, and never lent, because a result outlives the call that made it:
+/// there is no point after which a lent one could be given back. `GLib`'s
+/// callbacks agree -- the generic marshaller `g_value_take_string`s what a
+/// `GtkClosureExpression`'s function answers, and `GtkScaleFormatValueFunc`'s
+/// result is transfer-full -- and the binder refuses a string result that is
+/// not.
+#[must_use]
+pub fn owned_string(foreign: &Type, compiled: &super::HirType) -> bool {
+    *foreign == owned_c_string() && matches!(compiled, super::HirType::Managed(super::ManagedType::String))
+}
+
 /// Whether an Objective-C entry point's argument is an `NSString` the runtime
 /// lends: the `NSString *` a `string` parameter is in the method's C
 /// signature ([`imp_signature`]), where the compiled method takes a string.
@@ -1985,7 +2008,7 @@ fn callback_slots(
     let mut bridging = super::Bridging::default();
     let one = |parameters: &mut Vec<Type>, bridging: &mut super::Bridging, ty: TypeId| -> Option<()> {
         let at = u32::try_from(parameters.len()).ok()?;
-        if is_c_string_parameter(snapshot, ty) {
+        if is_c_string(snapshot, ty) {
             parameters.push(Encoding::Utf8.c_type());
         } else if let Some(array) = native_array(snapshot, ty).filter(|array| array.role == Role::Handles) {
             let slots = array_slots(snapshot, "a callback", "an array", &array, parameters.len()).ok()?;
@@ -2024,8 +2047,8 @@ fn callback_slots(
 }
 
 /// `string` or `string | null`: what a callback's bridge reads from a lent
-/// `const char *` (NULL as `null`).
-fn is_c_string_parameter(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+/// `const char *` (NULL as `null`), or answers as an owned `char *`.
+fn is_c_string(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
     let kind = |ty: &TypeId| snapshot.types.get(ty.0 as usize).map(|record| &record.kind);
     match kind(&ty) {
         Some(TypeKind::String) => true,
@@ -2350,6 +2373,29 @@ fn bridging_of(snapshot: &SemanticSnapshot, function: TypeId) -> super::Bridging
         .unwrap_or_default()
 }
 
+/// The C signature of a closure's bridge: [`abi_type`]'s for its function
+/// type, except that a `string` result is answered as a `char *` C owns
+/// ([`owned_string`]). Only here, since only a bridge converts a result: a
+/// function pointer C calls directly, or a record's member, has no bridge
+/// to copy one, and still refuses it.
+fn callback_signature(snapshot: &SemanticSnapshot, function: TypeId) -> Option<std::sync::Arc<FnPointer>> {
+    let owned = match &snapshot.types.get(function.0 as usize)?.kind {
+        TypeKind::Function(id) => snapshot.signatures.get(id.0 as usize).filter(|signature| is_c_string(snapshot, signature.return_type)),
+        _ => None,
+    };
+    let Some(signature) = owned else {
+        return match abi_type(snapshot, function)? {
+            Type::FnPointer(declared) => Some(declared),
+            _ => None,
+        };
+    };
+    let (parameters, _) = callback_slots(snapshot, signature)?;
+    if parameters.iter().any(|ty| matches!(ty, Type::Record(_))) {
+        return None;
+    }
+    Some(std::sync::Arc::new(FnPointer::spell(parameters, owned_c_string())))
+}
+
 /// The C parameters one `Closure<F>` or `ScopedClosure<F>` becomes: the
 /// callback with the context as its last parameter, the context, and for a
 /// retained closure the function that releases it.
@@ -2360,7 +2406,16 @@ fn closure_slots(
     function: TypeId,
     kind: ClosureKind,
 ) -> Result<Vec<(Type, Role)>, String> {
-    let Some(Type::FnPointer(declared)) = abi_type(snapshot, function) else {
+    // A block's `string` is an `NSString`, which `block_role` spells, and
+    // its result is not one a bridge answers.
+    let declared = match kind {
+        ClosureKind::Block => match abi_type(snapshot, function) {
+            Some(Type::FnPointer(declared)) => Some(declared),
+            _ => None,
+        },
+        _ => callback_signature(snapshot, function),
+    };
+    let Some(declared) = declared else {
         return Err(format!(
             "foreign function `{name}` closure parameter `{parameter}` whose signature has no native ABI type"
         ));
@@ -2478,7 +2533,7 @@ pub(crate) fn imp_signature(
     // point makes of the method's, answered at +0 (`answered_ns_string`).
     let passable = |name: &str, ty: TypeId| {
         ty_of(ty)
-            .or_else(|| is_c_string_parameter(snapshot, ty).then(|| Type::Pointer(Pointee::Opaque(Handle::ns_string()))))
+            .or_else(|| is_c_string(snapshot, ty).then(|| Type::Pointer(Pointee::Opaque(Handle::ns_string()))))
             .filter(|ty| *ty != Type::Void)
             .ok_or_else(|| format!("parameter `{name}`, whose type has no C type the runtime could pass"))
     };
@@ -2497,7 +2552,7 @@ pub(crate) fn imp_signature(
         parameters.push(passable(&parameter.name, parameter.ty)?);
     }
     let result = ty_of(signature.return_type)
-        .or_else(|| is_c_string_parameter(snapshot, signature.return_type).then(|| Type::Pointer(Pointee::Opaque(Handle::ns_string()))))
+        .or_else(|| is_c_string(snapshot, signature.return_type).then(|| Type::Pointer(Pointee::Opaque(Handle::ns_string()))))
         .ok_or("a result whose type has no C type the runtime could take")?;
     Ok(FnPointer::spell(parameters, result))
 }

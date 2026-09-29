@@ -818,14 +818,26 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         let body = if matches!(&*signature.result, nts_core::hir::native::Type::Void) {
             format!("nts_callback_enter();{copies} {call};{releases}{unlend} nts_callback_leave();")
         } else {
-            let _ = return_c_type(program, &compiled.return_type, &compiled.origin)?;
-            format!(
-                "nts_callback_enter();{copies} {result} r = ({result}){call};{releases}{unlend} nts_callback_leave(); return r;"
-            )
+            let answer = bridge_answer(program, signature, compiled, &call)?;
+            format!("nts_callback_enter();{copies} {answer}{releases}{unlend} nts_callback_leave(); return r;")
         };
         writer.line(origin, format!("static {result} {name}({parameters}) {{ {body} }}"));
     }
     Ok(true)
+}
+
+/// The statement a bridge computes its answer `r` with: what the compiled
+/// function answered, as C's type -- or, for a string C takes over
+/// (`native::owned_string`), a copy of its own, and the function's answer
+/// given back, which under counting it owns.
+fn bridge_answer(program: &Program, signature: &nts_core::hir::native::FnPointer, compiled: &Func, call: &str) -> Result<String, Diagnostic> {
+    let result = signature.result.c_type();
+    if nts_core::hir::native::owned_string(&signature.result, &compiled.return_type) {
+        let release = if program.provider == nts_core::hir::Provider::ReferenceCounting { " nts_release((NtsHeader *)v);" } else { "" };
+        return Ok(format!("NtsString *v = {call}; {result} r = nts_string_to_owned_cstring(v);{release}"));
+    }
+    let _ = return_c_type(program, &compiled.return_type, &compiled.origin)?;
+    Ok(format!("{result} r = ({result}){call};"))
 }
 
 /// Argument `at` of a C callback bridge, as the compiled function takes it:

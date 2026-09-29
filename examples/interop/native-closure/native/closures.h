@@ -22,6 +22,13 @@ struct item;
 int item_weight(struct item *item);
 void visit_items(void (*f)(struct item *, void *), void *data);
 
+// Calls `f(n, data)` for `n` in 1..count and counts the answers that read
+// "item <n>" -- "item \u00e9" for 2, which is not ASCII -- freeing each: an
+// answer is the caller's, as GLib takes over what a closure expression's
+// function answers. A string lent instead would be an invalid `free`, which
+// the C library stops on.
+int owned_answers(char *(*f)(int, void *), void *data, int count);
+
 // The control arm: while set, `unsubscribe` forgets without calling
 // `notify`, so whatever the context held is never released.
 extern int closures_skip_notify;

@@ -4970,6 +4970,24 @@ static bool nts_lendable_ascii(const unsigned char *bytes, uint32_t length) {
   return (bad & 0x80u) == 0;
 }
 
+/* `s` as a fresh `malloc`ed C string: the conversion both of the functions
+ * below share. */
+static char *nts_cstring_copy(const NtsString *s) {
+  /* Three bytes per unit is the most any unit needs: a BMP code point is at
+   * most three, and a supplementary one is four bytes for two units. */
+  if ((size_t)s->length > (SIZE_MAX - 1u) / 3u) {
+    fprintf(stderr, "nts: out of memory\n");
+    abort();
+  }
+  char *out = (char *)malloc((size_t)s->length * 3u + 1u);
+  if (!out) {
+    fprintf(stderr, "nts: out of memory\n");
+    abort();
+  }
+  nts_write_cstring(s, out);
+  return out;
+}
+
 const char *nts_string_to_cstring(const NtsString *s) {
   if (s == NULL) {
     return NULL;
@@ -4984,19 +5002,28 @@ const char *nts_string_to_cstring(const NtsString *s) {
       return (const char *)bytes;
     }
   }
-  /* Three bytes per unit is the most any unit needs: a BMP code point is at
-   * most three, and a supplementary one is four bytes for two units. */
-  if ((size_t)s->length > (SIZE_MAX - 1u) / 3u) {
-    fprintf(stderr, "nts: out of memory\n");
-    abort();
+  return nts_cstring_copy(s);
+}
+
+char *nts_string_to_owned_cstring(const NtsString *s) {
+  if (s == NULL) {
+    return NULL;
   }
-  char *out = (char *)malloc((size_t)s->length * 3u + 1u);
-  if (!out) {
-    fprintf(stderr, "nts: out of memory\n");
-    abort();
+  /* ASCII is copied as it is stored, terminator included; anything else is
+   * converted as a lent string that is not ASCII is. */
+  if ((s->flags & NTS_TWO_BYTE) == 0) {
+    const unsigned char *bytes = NTS_ELEMENTS(s, unsigned char);
+    if (nts_lendable_ascii(bytes, s->length)) {
+      char *out = (char *)malloc((size_t)s->length + 1u);
+      if (!out) {
+        fprintf(stderr, "nts: out of memory\n");
+        abort();
+      }
+      memcpy(out, bytes, (size_t)s->length + 1u);
+      return out;
+    }
   }
-  nts_write_cstring(s, out);
-  return out;
+  return nts_cstring_copy(s);
 }
 
 char **nts_strings_to_cstrings(const NtsArray *array) {

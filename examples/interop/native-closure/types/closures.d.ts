@@ -16,4 +16,6 @@ declare module "c:closures" {
   export function subscribers(): c_int;
   export function item_weight(item: Item): c_int;
   export function visit_items(f: ScopedClosure<(item: Item) => void>): void;
+  /** Frees each string `f` answers: a callback's `string` result is C's. */
+  export function owned_answers(f: ScopedClosure<(n: c_int) => string>, count: c_int): c_int;
 }

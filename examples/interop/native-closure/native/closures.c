@@ -1,6 +1,9 @@
 #include "closures.h"
 
 #include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 void each_upto(void (*f)(int, void *), void *data, int upto) {
   for (int n = 1; n <= upto; n++)
@@ -64,4 +67,19 @@ int item_weight(struct item *item) { return item->weight; }
 void visit_items(void (*f)(struct item *, void *), void *data) {
   for (int at = 0; at < 3; at++)
     f(&items[at], data);
+}
+
+int owned_answers(char *(*f)(int, void *), void *data, int count) {
+  int matched = 0;
+  for (int n = 1; n <= count; n++) {
+    char want[32];
+    if (n == 2)
+      snprintf(want, sizeof want, "item \xc3\xa9");
+    else
+      snprintf(want, sizeof want, "item %d", n);
+    char *got = f(n, data);
+    matched += got != NULL && strcmp(got, want) == 0;
+    free(got);
+  }
+  return matched;
 }

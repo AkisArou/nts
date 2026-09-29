@@ -1300,18 +1300,42 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
                 out.push_str(&body);
                 let _ = writeln!(out, "{enter}");
                 let _ = writeln!(out, "  %r = {call}");
-                let _ = writeln!(out, "{leave}");
-                if passes_as_is(&have, &want) {
-                    let _ = writeln!(out, "  ret {want_ty} %r\n}}");
-                } else {
-                    let instruction = conversion(&have, &want, compiled)?;
-                    let _ = writeln!(out, "  %c = {instruction} {} %r to {want_ty}", ty_of(&have, compiled)?);
-                    let _ = writeln!(out, "  ret {want_ty} %c\n}}");
-                }
+                bridge_answer(&mut out, compiled, (&have, &want), (&signature.result, &leave), program.provider)?;
             }
         }
     }
     Ok(out)
+}
+
+/// What a bridge does with the compiled function's answer `%r`, leaving the
+/// callback and returning C's value: `%r` as C's type -- or, for a string C
+/// takes over (`native::owned_string`), a copy of its own, as the C bridge
+/// answers one, and the function's answer given back under counting.
+fn bridge_answer(
+    out: &mut String,
+    compiled: &Func,
+    (have, want): (&HirType, &HirType),
+    (foreign, leave): (&nts_core::hir::native::Type, &str),
+    provider: nts_core::hir::Provider,
+) -> Result<(), Diagnostic> {
+    if nts_core::hir::native::owned_string(foreign, have) {
+        let _ = writeln!(out, "  %c = call ptr @nts_string_to_owned_cstring(ptr %r)");
+        if provider == nts_core::hir::Provider::ReferenceCounting {
+            let _ = writeln!(out, "  call void @nts_release(ptr %r)");
+        }
+        let _ = writeln!(out, "{leave}\n  ret ptr %c\n}}");
+        return Ok(());
+    }
+    let want_ty = ty_of(want, compiled)?;
+    let _ = writeln!(out, "{leave}");
+    if passes_as_is(have, want) {
+        let _ = writeln!(out, "  ret {want_ty} %r\n}}");
+    } else {
+        let instruction = conversion(have, want, compiled)?;
+        let _ = writeln!(out, "  %c = {instruction} {} %r to {want_ty}", ty_of(have, compiled)?);
+        let _ = writeln!(out, "  ret {want_ty} %c\n}}");
+    }
+    Ok(())
 }
 
 /// Argument `at` of a callback bridge, as the compiled function takes it:
@@ -1884,6 +1908,8 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     // (`gobject::template`), in raw IR.
     "nts_string_to_cstring",
     "nts_cstring_release",
+    // A string a callback's bridge answers C (`bridges`), in raw IR.
+    "nts_string_to_owned_cstring",
     "nts_string_truthy",
     "nts_to_int32_fn",
     "nts_to_uint32_fn",

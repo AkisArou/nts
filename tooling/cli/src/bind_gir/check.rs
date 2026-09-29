@@ -41,10 +41,16 @@ pub(crate) fn against_headers(binding: &mut Binding, cflags: &[String]) -> Resul
     // compile, and says so.
     let (text, lines) = probe_text(binding);
     std::fs::write(&probe, &text).with_context(|| format!("writing {}", probe.display()))?;
-    // The runtime's own header a signal's view is declared in, beside the
-    // probe, as the build writes it beside the witness.
-    let gobject = dir.join(nts_codegen_c::GOBJECT_HEADER_NAME);
-    std::fs::write(&gobject, nts_codegen_c::GOBJECT_HEADER).with_context(|| format!("writing {}", gobject.display()))?;
+    // The runtime's own headers a signal's view and a closure expression are
+    // declared in, beside the probe, as the build writes them beside the
+    // witness.
+    for (name, text) in [
+        (nts_codegen_c::GOBJECT_HEADER_NAME, nts_codegen_c::GOBJECT_HEADER),
+        (nts_codegen_c::GTK_HEADER_NAME, nts_codegen_c::GTK_HEADER),
+    ] {
+        let header = dir.join(name);
+        std::fs::write(&header, text).with_context(|| format!("writing {}", header.display()))?;
+    }
     let output = std::process::Command::new(std::env::var("CC").unwrap_or_else(|_| "clang".to_owned()))
         .args(["-std=c11", "-fsyntax-only", "-ferror-limit=0", "-w"])
         .arg("-I")

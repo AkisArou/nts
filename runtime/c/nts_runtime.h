@@ -1947,6 +1947,13 @@ void nts_dictionary_fill_strings_from_nsdictionary(NtsArray *keys,
  * neither should be "fixed" to match the other. */
 const char *nts_string_to_cstring(const NtsString *s);
 void nts_cstring_release(const NtsString *s, const char *c);
+/* A string as a C string the caller owns: a `malloc`ed copy, which it frees
+ * with `free` -- GLib's `g_free` is `free` since 2.46. For a callback's
+ * `string` result, which C takes over (GLib's generic marshaller hands it to
+ * `g_value_take_string`), where a lent one would be freed by the caller or
+ * outlive its source. The conversion is `nts_string_to_cstring`'s, U+0000
+ * included; NULL is NULL. */
+NTS_ALLOCATES_OR_NULL char *nts_string_to_owned_cstring(const NtsString *s);
 /* A string as NUL-terminated UTF-16, for a foreign parameter the binding
  * declares as `Utf16String` -- Windows' `LPCWSTR`, `const uint16_t *` here,
  * which is `const wchar_t *` on Windows and never on Linux, where `wchar_t` is

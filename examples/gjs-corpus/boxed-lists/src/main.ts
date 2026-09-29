@@ -1,7 +1,7 @@
 // Workbench's "Boxed Lists" demo (CC0, workbenchdev/demos), ported.
 import { AdwComboRow } from "c:Adw-1";
 import { G_TYPE_STRING } from "c:GObject-2.0";
-import { GtkClosureExpression, GtkStringObject } from "c:Gtk-4.0";
+import { GtkCClosureExpression, GtkStringObject } from "c:Gtk-4.0";
 import { run, type Workbench } from "../../host/workbench.ts";
 
 function demo(workbench: Workbench): void {
@@ -14,7 +14,9 @@ function demo(workbench: Workbench): void {
     console.log(selected_item.get_string());
   });
 
-  const expression = new GtkClosureExpression(G_TYPE_STRING, (obj: GtkStringObject) => obj.string, null);
+  // GJS's `new Gtk.ClosureExpression(type, fn, null)` is C's constructor
+  // here, as GJS spells every other: the function's `this` is any object.
+  const expression = GtkCClosureExpression.new(G_TYPE_STRING, (obj) => (obj instanceof GtkStringObject ? obj.string : null));
   drop_down.expression = expression;
 }
 

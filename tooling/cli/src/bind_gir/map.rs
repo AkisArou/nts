@@ -39,6 +39,10 @@ pub(crate) const CONNECT: &str = "nts_gobject_connect";
 /// What a signal's `emit` view names: no C function, but a thunk the
 /// compiler defines per signal, which emits by the signal's id.
 pub(crate) const EMIT: &str = "nts_gobject_emit";
+/// `gtk_cclosure_expression_new`, bound as GJS's closure expression makes one
+/// (`Mapper::cclosure_expression`), through the runtime's
+/// `nts_gtk_cclosure_expression_new` (`nts_gtk.h`).
+const CCLOSURE_EXPRESSION: (&str, &str) = ("gtk_cclosure_expression_new", "nts_gtk_cclosure_expression_new");
 /// What a property with no setter method is written through: a thunk the
 /// backend defines per property, `nts_gobject_prop_{kind}__{name}`, as
 /// `g_object_set`.
@@ -1399,15 +1403,9 @@ impl<'a> Mapper<'a> {
     }
 
     fn function(&mut self, callable: &Callable, owner: Option<&'a Class>) -> Result<Function, Reason> {
-        if callable.shadowed {
-            return Err(Reason::Shadowed);
-        }
-        if !callable.introspectable {
-            return Err(Reason::NotIntrospectable);
-        }
-        let symbol = callable.c_identifier.clone().ok_or(Reason::NoSymbol)?;
-        if COUNTING.contains(&symbol.as_str()) {
-            return Err(Reason::CountedByCompiler);
+        let symbol = bindable_symbol(callable)?;
+        if symbol == CCLOSURE_EXPRESSION.0 {
+            return self.cclosure_expression(callable, owner);
         }
         self.comparing_items = COMPARES_ITEMS.contains(&symbol.as_str());
         let signature = &callable.signature;
@@ -2105,6 +2103,67 @@ impl<'a> Mapper<'a> {
         Ok((ts_parameters, emitted))
     }
 
+    /// `gtk_cclosure_expression_new`, as GJS's `new Gtk.ClosureExpression(type,
+    /// fn, null)` makes one: a value type and a function of the evaluated
+    /// `this`, called as `nts_gtk_cclosure_expression_new` (`nts_gtk.h`), which
+    /// passes `GLib`'s generic marshaller and no parameter expressions.
+    ///
+    /// A named exception, because GIR cannot say what the callback is: it
+    /// types it `GCallback`, taking nothing, where the marshaller calls it with
+    /// the `this` and then the user data -- a signal handler's shape, and so
+    /// the same `ErasedClosure` a `connect` takes, with the same destroy
+    /// function. The marshaller takes over what the function answers
+    /// (`g_value_take_string`), so the bridge answers it owned
+    /// (`native::owned_string`). A string is the one answer typed until a port
+    /// needs another.
+    fn cclosure_expression(&mut self, callable: &Callable, owner: Option<&'a Class>) -> Result<Function, Reason> {
+        if !self.binding.headers.iter().any(|header| header == nts_codegen_c::GTK_HEADER_NAME) {
+            self.binding.headers.push(nts_codegen_c::GTK_HEADER_NAME.to_owned());
+        }
+        let value_type = callable.signature.parameters.first().ok_or(Reason::CallbackShape("no value type"))?;
+        let (value, _) = self.plain(value_type)?;
+        let objects = self
+            .repository
+            .namespaces
+            .get("GObject")
+            .ok_or_else(|| Reason::Unknown("GObject".to_owned()))?;
+        let (_, object) = self.reference(objects, "GObject");
+        let (_, gclosure) = self.reference(objects, "GClosure");
+        let closure_tag = self.facts.tags.get("GClosure").cloned().ok_or_else(|| Reason::NoTag("GClosure".to_owned()))?;
+        self.binding.brands.extend(["ErasedClosure", "Ptr"]);
+        let context = Type::Pointer(Pointee::Void);
+        let erased = Type::FnPointer(std::sync::Arc::new(FnPointer::spell(Vec::new(), Type::Void)));
+        let notify = Type::FnPointer(std::sync::Arc::new(FnPointer::spell(
+            vec![context.clone(), Type::Pointer(Pointee::Opaque(Handle::from(closure_tag)))],
+            Type::Void,
+        )));
+        let callback = Mapped {
+            shape: Shape::Other,
+            ts: format!("ErasedClosure<(this_: {object} | null) => string | null, (data: Ptr<unknown>, closure: {gclosure}) => void>"),
+            c: erased.clone(),
+        };
+        let (result, free) = self.result_or_bytes(callable, owner)?;
+        let c_parameters = vec![value.c.clone(), erased, context, notify];
+        Ok(Function {
+            name: CCLOSURE_EXPRESSION.0.to_owned(),
+            symbol: CCLOSURE_EXPRESSION.1.to_owned(),
+            parameters: vec![("value_type".to_owned(), value), ("callback".to_owned(), callback)],
+            result,
+            c_parameters,
+            deprecated: callable.deprecated,
+            free,
+            no_escape: Vec::new(),
+            returns: self.constructed(callable),
+            method: None,
+            throws: None,
+            finish: None,
+            omissible: BTreeMap::new(),
+            method_only: false,
+            statics: static_of(callable, owner),
+            vfunc: None,
+        })
+    }
+
     /// A typed view of `g_signal_connect_data` for one signal of one class:
     ///
     /// ```text
@@ -2578,11 +2637,16 @@ impl<'a> Mapper<'a> {
             c_parameters.push(mapped.c.clone());
             ts_parameters.push(format!("{}: {}", identifier(&p.name), mapped.ts));
         }
-        if matches!(&signature.result.ty, TypeRef::Named { name, .. } if name == "utf8" || name == "filename") {
-            return Err(Reason::StringInCallback);
-        }
         let result = match &signature.result.ty {
             TypeRef::Named { name, .. } if name == "none" => Mapped { shape: Shape::Other, ts: "void".to_owned(), c: Type::Void },
+            // A string C takes over, `GtkScaleFormatValueFunc`'s: the bridge
+            // answers a `malloc`ed copy (`native::owned_string`). One C only
+            // borrows would have no point at which to be given back.
+            TypeRef::Named { name, .. } if name == "utf8" && signature.result.transfer == Transfer::Full => {
+                let ts = if signature.result.nullable { "string | null" } else { "string" };
+                Mapped { shape: Shape::Other, ts: ts.to_owned(), c: Type::Pointer(Pointee::Scalar(Scalar::Char)) }
+            }
+            TypeRef::Named { name, .. } if name == "utf8" || name == "filename" => return Err(Reason::StringInCallback),
             _ => {
                 let mapped = self.typed(&signature.result)?;
                 self.truth(&signature.result, mapped)
@@ -2605,6 +2669,22 @@ impl<'a> Mapper<'a> {
         let shape = if scope == Scope::Async { Shape::Once } else { Shape::Other };
         Ok(Some((Mapped { shape, ts, c: slots[0].clone() }, slots)))
     }
+}
+
+/// The C symbol of a callable a binding may declare: one GIR neither shadows
+/// nor marks unusable, and whose counting is not the compiler's own.
+fn bindable_symbol(callable: &Callable) -> Result<String, Reason> {
+    if callable.shadowed {
+        return Err(Reason::Shadowed);
+    }
+    if !callable.introspectable {
+        return Err(Reason::NotIntrospectable);
+    }
+    let symbol = callable.c_identifier.clone().ok_or(Reason::NoSymbol)?;
+    if COUNTING.contains(&symbol.as_str()) {
+        return Err(Reason::CountedByCompiler);
+    }
+    Ok(symbol)
 }
 
 /// A name as a member of a TypeScript type -- a method or a property --
