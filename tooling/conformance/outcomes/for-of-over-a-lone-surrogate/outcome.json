@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Observed: lone=1:97,1:65533,1:65533,1:65533,1:98,1:65533,1:65533,1:65533;paired=1:97,2:55297,1:98,2:55297;",
+  "node": "exit 1; nts: uncaught Observed: lone=1:97,1:55297,1:98,1:55297;paired=1:97,2:55297,1:98,2:55297;",
+  "measured_with": "db59442100b1632d",
+  "source": "measured"
+}

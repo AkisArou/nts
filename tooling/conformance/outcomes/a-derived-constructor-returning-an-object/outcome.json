@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Observed: returned.prop=number;returned instanceof=true;plain.prop=number;plain instanceof=true;",
+  "node": "exit 1; nts: uncaught Observed: returned.prop=undefined;returned instanceof=false;plain.prop=number;plain instanceof=true;",
+  "measured_with": "db59442100b1632d",
+  "source": "measured"
+}
