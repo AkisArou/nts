@@ -1,4 +1,4 @@
-// expect: a `new` of unrepresentable type (`Map<any, any>`)
+// expect: a property `#pattern` of unrepresentable type (`RegExp`)
 //
 // An exported function returning a class whose own body was refused.
 //
@@ -12,7 +12,10 @@
 // function had vanished, and emitted a second message contradicting the first.
 //
 // The walk records what it refused now, by node rather than by span, so this
-// fixture reports the cause it always had: a `new` of a `Map<any, any>`.
+// fixture reports the cause it always had -- now the `RegExp` field, for the
+// reason written beside the class. The refusal is on the *field* rather than on
+// the literal, which is the stabler of the two: a `RegExp` has no representation
+// at all, where a literal's refusal could move if one were ever given a form.
 //
 // What the filing below argued about the *cone* is unaffected -- the numbers
 // were measured at the wrapper, which never saw the message at all. What is
@@ -77,9 +80,15 @@
 // not evidence -- a file with 260 roots has one near everything.
 
 class Server {
-  #handles: Map<string, number> = new Map();
+  // **A refusal this fixture manufactures, so it has to be one that does not
+  // move.** This read `#handles: Map<string, number> = new Map()` -- whose
+  // initializer is a `Map<any, any>` -- until `any` represented as an erased value
+  // and the `Map` started working, at which point the fixture's *subject* still
+  // existed and its stated cause did not. A regular expression literal is a
+  // documented gap with no representation question anywhere near it.
+  #pattern = /a+/;
   count(): number {
-    return this.#handles.size;
+    return this.#pattern.source.length;
   }
 }
 

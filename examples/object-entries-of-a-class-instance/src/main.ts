@@ -1,4 +1,14 @@
-// expect: NTS1001 `Object.entries` of unrepresentable type
+// **Was a blocker, and `any` gaining a representation cleared it.**
+//
+// `Object.entries` of a class instance was refused as *of unrepresentable type*: the
+// result is a `[string, any][]`, and `any` had none. It does now -- an erased value,
+// wherever `unknown` does -- so the pair array represents and the walk that the key
+// half already used serves all three. Nothing about `enumerable_fields` changed, which
+// is what the filing below had already established.
+//
+// Kept as an example rather than deleted, because the *boundary* it describes is still
+// the interesting part and the split it was filed for -- keys lowering while entries
+// and values refused -- is exactly what a future representation change could reopen.
 //
 // `Object.entries` and `Object.values` work on an object **literal** and refuse
 // on a **class instance**, with uniform field types on both sides:
