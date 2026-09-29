@@ -55,6 +55,7 @@ const ROOT = join(HERE, "../..");
 export const PINS = process.env.NTS_PINS ?? join(homedir(), ".cache/nts-pins");
 const TREE = join(PINS, "tree");
 const TARGET = join(PINS, "target");
+const LOCK = join(PINS, "build.lock");
 
 const git = (args, cwd = ROOT, input) => execFileSync("git", args, { cwd, encoding: "utf8", input, maxBuffer: 1 << 28, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"] });
 const sha256 = (data) => createHash("sha256").update(data).digest("hex");
@@ -202,6 +203,62 @@ function appliedDiff(sha, opts) {
   return null;
 }
 
+const alive = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM";
+  }
+};
+
+/**
+ * **One build at a time in the one pin tree.** Every pin shares `TREE` and
+ * `TARGET`, and a build checks out, applies, compiles, and checks out again
+ * to undo. On 2026-09-29 two pins built minutes apart: one pin's closing
+ * checkout reverted the other's patch in the middle of its `cargo build`, and
+ * that pin shipped a binary without its patch, beside an `applied.diff` and a
+ * provenance record naming it. A provenance record is trusted, so it was the
+ * worst failure this tool can have.
+ *
+ * The lock is a directory, because `mkdir` is atomic, holding the holder's
+ * pid. A holder that no longer runs is stale, and so is a lock with no pid
+ * file after a minute (a crash between the two writes). A waiter says so once
+ * and polls. `lock` and `wait` are parameters for the self-test.
+ */
+export function withBuildLock(fn, { lock = LOCK, wait = 60 * 60 * 1000 } = {}) {
+  const started = Date.now();
+  let said = false;
+  const nap = new Int32Array(new SharedArrayBuffer(4));
+  for (;;) {
+    try {
+      mkdirSync(lock);
+      writeFileSync(join(lock, "pid"), String(process.pid));
+      break;
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+      const pidFile = join(lock, "pid");
+      const holder = existsSync(pidFile) ? Number(readFileSync(pidFile, "utf8")) : 0;
+      const orphaned = holder === 0 && Date.now() - (lstatSync(lock, { throwIfNoEntry: false })?.mtimeMs ?? 0) > 60_000;
+      if ((holder !== 0 && !alive(holder)) || orphaned) {
+        rmSync(lock, { recursive: true, force: true });
+        continue;
+      }
+      if (Date.now() - started >= wait) throw new Error(`the pin tree is held by pid ${holder || "(unknown)"} (${lock}); waited ${Math.round((Date.now() - started) / 1000)} s`);
+      if (!said) {
+        console.error(`  waiting: pin.ts pid ${holder || "(starting)"} is building in ${TREE}`);
+        said = true;
+      }
+      Atomics.wait(nap, 0, 0, 1000);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    rmSync(lock, { recursive: true, force: true });
+  }
+}
+
 /** Build `rev` (plus what `opts` applies) and return the pinned binary's path. */
 export function pin(rev, opts = {}) {
   const sha = git(["rev-parse", "--verify", `${rev}^{commit}`]).trim();
@@ -219,8 +276,14 @@ export function pin(rev, opts = {}) {
   const dir = join(PINS, keyOf(sha, applied));
   const binary = join(dir, "nts");
   if (existsSync(binary) && provenanceOf(binary)?.sha === sha) return binary;
-
   mkdirSync(PINS, { recursive: true });
+  // Re-checked inside: a waiter's key may have been built by the holder.
+  return withBuildLock(() => (existsSync(binary) && provenanceOf(binary)?.sha === sha ? binary : build(sha, diff, applied, dir)));
+}
+
+/** The build itself, run only under the lock. */
+function build(sha, diff, applied, dir) {
+  const binary = join(dir, "nts");
   if (existsSync(join(TREE, ".git"))) git(["checkout", "--detach", "-q", "--force", sha], TREE);
   else git(["worktree", "add", "--detach", "-q", TREE, sha]);
   // A previous pin's patch or build output must not survive into this one.
@@ -235,13 +298,21 @@ export function pin(rev, opts = {}) {
   const clean = git(["status", "--porcelain", "--untracked-files=no", "--ignore-submodules=all"], TREE).trim() === "";
   if (!clean) throw new Error(`the pin tree at ${TREE} is not clean after checkout`);
   if (diff) git(["apply", "--whitespace=nowarn", "-"], TREE, diff.text);
+  // **What the tree holds, before and after the build.** The lock keeps other
+  // pins out; this catches anything else that moves the tree while cargo
+  // reads it. A binary is recorded only if the source it was built from is
+  // still the source the record names.
+  const state = () => `${git(["rev-parse", "HEAD"], TREE).trim()} ${sha256(git(["diff", "--binary", "--ignore-submodules=all", sha], TREE))}`;
+  const before = state();
 
-  const build = spawnSync("cargo", ["build", "--release", "-q", "-p", "nts-cli"], {
+  const cargo = spawnSync("cargo", ["build", "--release", "-q", "-p", "nts-cli"], {
     cwd: TREE,
     stdio: ["ignore", "inherit", "inherit"],
     env: { ...process.env, CARGO_TARGET_DIR: TARGET },
   });
-  if (build.status !== 0) throw new Error(`cargo build failed for ${keyOf(sha, applied)}`);
+  if (cargo.status !== 0) throw new Error(`cargo build failed for ${keyOf(sha, applied)}`);
+  const after = state();
+  if (after !== before) throw new Error(`the pin tree changed during the build of ${keyOf(sha, applied)} (${before} -> ${after}); nothing was pinned`);
   // Undo the applied diff so the next pin starts from a commit.
   if (diff) git(["checkout", "--force", "-q", sha], TREE);
 
@@ -281,6 +352,28 @@ function selfTest() {
   if (describe(null) !== "provenance unknown: not built by pin.ts") return "an unknown binary's description";
   if (provenanceOf("/nonexistent/nts") !== null) return "a binary with no record";
   if (!/was not built by pin.ts/.test(oneChange("/nonexistent/a", "/nonexistent/b") ?? "")) return "one change between two unrecorded binaries";
+  // The build lock: taken from a dead holder, refused by a live one, and
+  // released whether the build returns or throws.
+  const locks = mkdtempSync(join(process.env.TMPDIR ?? "/tmp", "pin-lock-"));
+  try {
+    const lock = join(locks, "build.lock");
+    mkdirSync(lock);
+    writeFileSync(join(lock, "pid"), "2147483646");
+    let taken = "";
+    try { taken = withBuildLock(() => "built", { lock, wait: 0 }); } catch (error) { taken = error.message; }
+    if (taken !== "built") return `a lock left by a dead pid was not taken: ${taken}`;
+    if (existsSync(lock)) return "the lock was not released after a build returned";
+    mkdirSync(lock);
+    writeFileSync(join(lock, "pid"), String(process.pid));
+    let refused = "";
+    try { withBuildLock(() => "built", { lock, wait: 0 }); } catch (error) { refused = error.message; }
+    if (!refused.includes(`held by pid ${process.pid}`)) return `a lock held by a live pid read as ${refused || "free"}`;
+    rmSync(lock, { recursive: true, force: true });
+    try { withBuildLock(() => { throw new Error("the build failed"); }, { lock, wait: 0 }); } catch {}
+    if (existsSync(lock)) return "the lock was not released after a build threw";
+  } finally {
+    rmSync(locks, { recursive: true, force: true });
+  }
   // A pin whose recorded frontend is not the file at that path any more.
   const fake = mkdtempSync(join(process.env.TMPDIR ?? "/tmp", "pin-selftest-"));
   try {
@@ -308,7 +401,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     process.exit(2);
   }
   if (argv.includes("--self-test")) {
-    console.log("  self-test: keys, a pin against itself and against its patched twin, an unknown binary, a frontend rebuilt under a pin");
+    console.log("  self-test: keys, a pin against itself and against its patched twin, an unknown binary, a frontend rebuilt under a pin, and the build lock taken, refused and released");
     process.exit(0);
   }
   const flag = (name) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : undefined);
