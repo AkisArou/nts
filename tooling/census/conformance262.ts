@@ -770,7 +770,7 @@ if (recordFile) {
     recordFile,
     `# Test262 ${under} cases that ran, and what each did. Written by\n` +
       `# tooling/census/conformance262.ts --record; compared by --check.\n` +
-      `# compiler ${FINGERPRINT}, harness ${HARNESS_HASH}; machine at start: ${describeMachine(machineAtStart)}; ${jobs} worker(s)\n` +
+      `# compiler ${FINGERPRINT}, harness ${HARNESS_HASH}${FRONTEND.moved ? `, frontend moved since the pin (${FRONTEND.moved})` : ""}; machine at start: ${describeMachine(machineAtStart)}; ${jobs} worker(s)\n` +
       ranRows.map(recordedRow).sort().join("\n") + "\n",
   );
 }
@@ -816,6 +816,7 @@ const say = (line = "") => out.push(line);
 
 say(`  pin ${pin}`);
 say(`  compiler ${NTS} (sha256:${FINGERPRINT}), harness sha256:${HARNESS_HASH}`);
+if (FRONTEND.moved) say(`  FRONTEND MOVED since this pin was built (${FRONTEND.moved}): ${FRONTEND.path} answered this run`);
 const machineAtEnd = machineState();
 say(`  machine at start: ${describeMachine(machineAtStart)}; ${jobs} worker(s)`);
 say(`  machine at end:   ${describeMachine(machineAtEnd)}`);

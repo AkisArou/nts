@@ -45,7 +45,7 @@
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -80,10 +80,25 @@ export function provenanceOf(binary) {
  * whether it exists -- a tool run from a worktree resolves `target/tsgo`
  * against the worktree, which has none, and every project then prints nothing
  * and reads as "0 violations". A pin names its frontend so that cannot happen.
+ *
+ * **And whether that frontend is still the one the pin was built with.** A pin
+ * records its frontend's path *and* hash, but a path stays true while the file
+ * behind it is rebuilt: on 2026-09-30 `target/tsgo` was rebuilt for a fork
+ * patch, and every earlier pin went on running the new one without a word.
+ * `moved` is null when the bytes match the record (or `NTS_TSGO` names a
+ * frontend on purpose), and says both hashes when they do not -- a report is
+ * then about a compiler and a frontend that were never built together.
  */
 export function frontendFor(binary, root) {
-  const path = process.env.NTS_TSGO ?? provenanceOf(binary)?.tsgo?.path ?? join(root, "target/tsgo");
-  return { path, exists: existsSync(path) };
+  const recorded = process.env.NTS_TSGO ? null : provenanceOf(binary)?.tsgo;
+  const path = process.env.NTS_TSGO ?? recorded?.path ?? join(root, "target/tsgo");
+  const exists = existsSync(path);
+  let moved = null;
+  if (exists && recorded?.sha256) {
+    const now = sha256(readFileSync(path));
+    if (now !== recorded.sha256) moved = `built with ${recorded.sha256.slice(0, 12)}, now ${now.slice(0, 12)}`;
+  }
+  return { path, exists, moved };
 }
 
 /** One line for a report: the commit, what was applied, and the frontend. */
@@ -266,6 +281,22 @@ function selfTest() {
   if (describe(null) !== "provenance unknown: not built by pin.ts") return "an unknown binary's description";
   if (provenanceOf("/nonexistent/nts") !== null) return "a binary with no record";
   if (!/was not built by pin.ts/.test(oneChange("/nonexistent/a", "/nonexistent/b") ?? "")) return "one change between two unrecorded binaries";
+  // A pin whose recorded frontend is not the file at that path any more.
+  const fake = mkdtempSync(join(process.env.TMPDIR ?? "/tmp", "pin-selftest-"));
+  try {
+    const frontend = join(fake, "tsgo");
+    writeFileSync(frontend, "the frontend as it is now");
+    writeFileSync(join(fake, "provenance.json"), JSON.stringify({ sha: "a".repeat(40), applied: null, tsgo: { path: frontend, sha256: sha256("the frontend it was built with") } }));
+    const saved = process.env.NTS_TSGO;
+    delete process.env.NTS_TSGO;
+    const moved = frontendFor(join(fake, "nts"), fake).moved;
+    writeFileSync(frontend, "the frontend it was built with");
+    const kept = frontendFor(join(fake, "nts"), fake).moved;
+    if (saved !== undefined) process.env.NTS_TSGO = saved;
+    if (!moved || kept !== null) return `a rebuilt frontend read as ${moved}, an unchanged one as ${kept}`;
+  } finally {
+    rmSync(fake, { recursive: true, force: true });
+  }
   return null;
 }
 
@@ -277,7 +308,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     process.exit(2);
   }
   if (argv.includes("--self-test")) {
-    console.log("  self-test: keys, a pin against itself and against its patched twin, an unknown binary");
+    console.log("  self-test: keys, a pin against itself and against its patched twin, an unknown binary, a frontend rebuilt under a pin");
     process.exit(0);
   }
   const flag = (name) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : undefined);
