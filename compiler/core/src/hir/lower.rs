@@ -45008,8 +45008,11 @@ impl<'a> FuncBuilder<'a> {
         //     coerces.
         let side = |node: NodeId| self.type_of(node);
         let (Some(left), Some(right)) = (side(lhs), side(rhs)) else {
-            // No representation for one side is the erased case a fortiori: it
-            // cannot be shown to agree, so it is not compared without coercing.
+            // No representation at all for one side: it cannot be shown to agree,
+            // so it is not compared without coercing. An *erased* side is no
+            // longer this case -- it has a representation and is refused by
+            // `comparable_without_coercing`'s first clause, which is where the
+            // reason belongs now.
             return true;
         };
         !comparable_without_coercing(&left, &right)
@@ -60429,6 +60432,29 @@ enum Compound {
 /// and "both concrete" is far too much, because a coercion between a primitive and
 /// a reference is exactly what `ToPrimitive` would do and there is none here.
 fn comparable_without_coercing(left: &HirType, right: &HirType) -> bool {
+    // **An erased value cannot be shown to agree with anything, including
+    // another erased value.** Its representation is a tag and a payload, and the
+    // tag is what decides at run time -- so two of them may hold a number and a
+    // boolean, which is the case the whole refusal exists for: node answers `1 ==
+    // true` with true and `nts_value_strict_eq` answers false.
+    //
+    // This clause is a **restoration**. The guard here used to be one line on the
+    // caller -- `type_of(lhs) == Some(Erased) || type_of(rhs) == Some(Erased)`,
+    // "only an erased side can surprise" -- and 093733f2d replaced it with this
+    // function to catch four cases that sentence let through (`"1" == 1`, `true ==
+    // 1`, `1n == 1`, `true == obj`). It widened the guard and **dropped the case
+    // the old one already caught**, because the `discriminant` fallback below is
+    // satisfied by two `Erased`s: they are one variant.
+    //
+    // The cost was 126 of `tooling/sweep`'s 12,093 cases answering as if `==` were
+    // `===`, on C, LLVM and the JVM alike, and the `jvm` gate step red for every
+    // lane. `outcomes/a-loose-equality-across-kinds-on-unknown` is the guard.
+    //
+    // Only `==` and `!=` reach here -- `===` is identity and coerces nothing, and
+    // `x == null` is the *absence* question, answered before this by the tag pair.
+    if matches!(left, HirType::Erased) || matches!(right, HirType::Erased) {
+        return false;
+    }
     let number = |ty: &HirType| matches!(ty, HirType::Float { .. } | HirType::Int { .. });
     if number(left) && number(right) {
         return true;
