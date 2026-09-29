@@ -13,7 +13,6 @@ test/staging/sm/Math/sign.js	pass
 test/staging/sm/Math/sinh-exact.js	pass	
 test/staging/sm/Math/tanh-exact.js	pass	
 test/staging/sm/Number/tonumber-string-hex.js	pass	
-test/staging/sm/PrivateName/constructor-args.js	fail	nts: uncaught Test262Error: sameValue
 test/staging/sm/PrivateName/parse-utf8-non-ascii-identifier.js	pass	
 test/staging/sm/String/15.5.4.7.js	pass	
 test/staging/sm/String/string-space-trim.js	pass	

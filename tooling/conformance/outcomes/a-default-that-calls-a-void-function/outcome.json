@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "uncompilable-c",
-  "nts": "error: 'vN' undeclared (first use in this function); did you mean 'vN'?",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: seen=true,0;",
   "node": "exit 1; nts: uncaught Observed: seen=true,0;",
-  "measured_with": "c8f0be9bbe27ffc5",
+  "measured_with": "aea7ac243a7f1ce3",
   "source": "measured"
 }

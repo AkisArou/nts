@@ -1,3 +1,4 @@
+// **Agrees since 511180ecb; a guard.** Until then:
 // C that does not compile: `vN undeclared` and "invalid use of void
 // expression". A destructuring default whose initializer calls a function
 // returning nothing -- `{ w = counter() }` with `counter(): void` -- assigns
