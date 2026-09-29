@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Observed: parseInt(11, Infinity)=NaN;",
+  "node": "exit 1; nts: uncaught Observed: parseInt(11, Infinity)=11;",
+  "measured_with": "6aa52e0cc112812d",
+  "source": "measured"
+}
