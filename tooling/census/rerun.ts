@@ -5,7 +5,9 @@
 //        [--paths <file>] [--jobs N] [--list N] [--out <jsonl>]
 //
 // filters: rows.ts's own -- --message, --code, --where, --first, --bucket,
-// --why, --path, --source -- each a regular expression, all of which must hold.
+// --why, --path, --source -- each a regular expression, all of which must hold
+// -- and --root <class>, a named class of lowering root (rows.ts's
+// ROOT_CLASSES: `any`).
 // `--paths` keeps only the rows whose path is a line of <file>: a selection
 // computed elsewhere (any-arrivals' classes, a hand-picked list) that no one
 // regular expression says. `--out` writes one line per file -- path, verdict,

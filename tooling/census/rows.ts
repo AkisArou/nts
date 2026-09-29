@@ -13,6 +13,7 @@
 //   --first <re>      the first line the file failed with (invalid HIR's verifier text)
 //   --path <re>       the test's path
 //   --source <re>     the test's own source, front matter removed -- what it *contains*
+//   --root <class>    a lowering root of a named class: any (see ROOT_CLASSES)
 //
 // --by: bucket (default), why, dir (the path without the file), construct
 // (a dstr/ file's prefix: `gen-meth-static-`...), message (the first NTS1001),
@@ -68,11 +69,28 @@ const KEYS = {
   code: (r) => (r.diagnostics ?? [])[0]?.code ?? "-",
 };
 
+/**
+ * **Named classes of lowering root**, each defined once so every tool asks the
+ * same question. `any`: a root whose message or quoted names say `any` or an
+ * erased value -- "indexing any", "an erased value where a concrete
+ * representation is wanted", "`X` on an array of erased elements", "`X` on
+ * `X`, which is erased here" naming `any`, ... It is the selection the `any`
+ * work's definition of done is stated over: on it, fail and no-verdict go to
+ * zero. A class is a *root* test, so a row whose only `any` is in a
+ * consequence (NTS1005) does not match.
+ */
+export const ROOT_CLASSES = {
+  any: (d) => /\bany\b|erased/i.test(`${d.message} ${(d.named ?? []).join(" ")}`),
+};
+
 /** A predicate over rows from the command line's filters. */
 export function filterFrom(opts, source = (path) => bodyOf(readFileSync(join(ROOT, "third_party/test262", path), "utf8"))) {
   const re = (name) => (opts[name] === undefined ? null : new RegExp(opts[name]));
   const [bucket, why, message, code, where, first, path, src] = ["bucket", "why", "message", "code", "where", "first", "path", "source"].map(re);
+  if (opts.root !== undefined && !ROOT_CLASSES[opts.root]) throw new Error(`no root class ${opts.root}; there are ${Object.keys(ROOT_CLASSES).join(", ")}`);
+  const rootClass = opts.root === undefined ? null : ROOT_CLASSES[opts.root];
   return (r) => {
+    if (rootClass && !(r.diagnostics ?? []).some((d) => d.code === "NTS1001" && (!where || where.test(d.where ?? "")) && rootClass(d))) return false;
     if (bucket && !bucket.test(r.bucket)) return false;
     if (why && !why.test(r.why ?? "")) return false;
     if (first && !first.test(r.first ?? "")) return false;
@@ -134,6 +152,8 @@ function selfTest() {
   if (pick({ message: "erased value", where: "body" }).join() !== "a.js") return "a message filter";
   if (pick({ message: "erased value", where: "harness" }).length !== 0) return "a message filter scoped to the harness";
   if (pick({ source: "function\\s*\\*" }).join() !== "b.js") return "a source filter";
+  if (pick({ root: "any" }).join() !== "a.js") return "the any root class";
+  if (pick({ root: "any", where: "harness" }).length !== 0) return "the any root class scoped to the harness";
   if (group([...rows.values()], "bucket")[0][1].n !== 1 || group([...rows.values()], "bucket").length !== 3) return "grouping by bucket";
   const after = readRows(text.replace('"bucket":"strict-pass"', '"bucket":"threw"').replace("an erased value", "a different cause"));
   const moves = diff(rows, after).map(([k, v]) => `${k.split(":")[0]}=${v.length}`).sort().join(" ");
@@ -150,11 +170,11 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     process.exit(2);
   }
   if (argv.includes("--self-test")) {
-    console.log("  self-test: rows, constructs, message/where/source filters, grouping and a bucket and a cause move each read");
+    console.log("  self-test: rows, constructs, message/where/source/root filters, grouping and a bucket and a cause move each read");
     process.exit(0);
   }
 
-  const FLAGS = ["bucket", "why", "message", "code", "where", "first", "path", "source", "by", "list"];
+  const FLAGS = ["bucket", "why", "message", "code", "where", "first", "path", "source", "root", "by", "list"];
   const opts = {};
   const files = [];
   for (let i = 0; i < argv.length; i++) {
@@ -163,7 +183,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     else if (argv[i] !== "--diff") files.push(argv[i]);
   }
   if (files.length === 0 || (opts.by && !KEYS[opts.by])) {
-    console.log(`  usage: rows.ts <rows> ... [--${FLAGS.slice(0, 8).join(" <re>] [--")} <re>] [--by ${Object.keys(KEYS).join("|")}] [--list N]`);
+    console.log(`  usage: rows.ts <rows> ... [--${FLAGS.slice(0, 8).join(" <re>] [--")} <re>] [--root ${Object.keys(ROOT_CLASSES).join("|")}] [--by ${Object.keys(KEYS).join("|")}] [--list N]`);
     console.log("         rows.ts --diff <before-rows> <after-rows> [filters]");
     process.exit(2);
   }
