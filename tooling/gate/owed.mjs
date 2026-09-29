@@ -146,6 +146,11 @@ export const RULES = [
     // corpus, which has no class declared in a block, no generator function
     // expression and no method handed out as a value, and three changes that
     // night emitted 29 of 29 projects identically while moving recorded rows.
+    // Where evaluation goes missing is a site that decides "nothing to do"
+    // from the wrong quantity: `typeof` answered from the type and skipped its
+    // operand, a class declaration answered `Ok(())` and skipped its statics,
+    // and a pattern that binds no names skipped its initializer. Each dropped
+    // effects silently and made recorded passes hollow (21, 1 and 6 rows).
     steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "outcomes", "integrity", "integrity-runtime", "definitions", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases", "test262-rest-cases"],
     arms: [
       ...COMPARE,
