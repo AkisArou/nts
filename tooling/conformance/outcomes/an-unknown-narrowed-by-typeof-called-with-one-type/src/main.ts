@@ -1,14 +1,16 @@
-// `emit-c` exits 0 and `cc` rejects the C: a `string` branch hands a `double`
-// to `nts_concat`. `describe`'s one caller passes a number, so a pass
-// specialises `value` to `double` and folds `typeof value === "number"` to
-// true -- and leaves the `string` branch standing, where `unerase` of the
-// now-`double` parameter is the double itself. The fold made that branch dead
-// and nothing pruned it. The control, a-typeof-narrowed-unknown-called-with-
-// two-types, differs in one thing: a second caller passing a string, which
-// keeps the parameter erased and compiles.
+// A guard now. Until d48bfb2d2, `emit-c` exited 0 and `cc` rejected the C: a
+// `string` branch handed a `double` to `nts_concat`. `describe`'s one caller
+// passes a number, so `unerase::narrow_parameters` specialised `value` to
+// `double`, folded `typeof value === "number"` to true, and turned the unerase
+// on the now-dead `string` arm into the identity. The guard added there is
+// that an unerase must want the representation the callers agreed on, and
+// `verify` knows `Concat` takes strings. The record holds the right answer, so
+// a return to the miscompile reads as CHANGED. The control,
+// a-typeof-narrowed-unknown-called-with-two-types, differs in one thing: a
+// second caller passing a string.
 //
-// Found by the compiler lane probing `any` as erased (2026-09-29), on a clean
-// binary: an ordinary `unknown` narrowed by `typeof` and called from one place.
+// Found by the compiler lane probing `any` as erased (2026-09-29): an ordinary
+// `unknown` narrowed by `typeof` and called from one place.
 function describe(value: unknown): string {
   if (typeof value === "number") {
     return "n" + String(value);

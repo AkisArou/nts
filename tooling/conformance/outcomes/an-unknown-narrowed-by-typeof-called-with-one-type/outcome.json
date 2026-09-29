@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "uncompilable-c",
-  "nts": "error: incompatible type for argument 2 of 'nts_concat'",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: described=n7;",
   "node": "exit 1; nts: uncaught Observed: described=n7;",
-  "measured_with": "62f0f9b5c336539e",
+  "measured_with": "0010fec6c4d1f4dd",
   "source": "measured"
 }
