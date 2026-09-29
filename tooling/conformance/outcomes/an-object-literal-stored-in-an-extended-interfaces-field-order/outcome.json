@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "invalid-hir",
-  "nts": "invalid HIR: StoreType { func: \"module#init\", what: \"a field read\", expected: Erased, found: Bool }",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: colors=false;breakLength=80;maxArrayLength=100;depth=2;",
   "node": "exit 1; nts: uncaught Observed: colors=false;breakLength=80;maxArrayLength=100;depth=2;",
-  "measured_with": "aea7ac243a7f1ce3",
+  "measured_with": "ecc7aea38b4c3f4b",
   "source": "measured"
 }

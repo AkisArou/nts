@@ -32,6 +32,20 @@
 //
 // **Expected, confirmed under node:** colors=false, breakLength=80,
 // maxArrayLength=100, depth=2.
+//
+// **FIXED by 281719fcc, and re-recorded as a guard.** `collect_module_scope`'s
+// probe lays out every type a module-scope binding mentions and its layouts
+// reach `collect_layouts` first, so they win the merge -- and that probe had the
+// hierarchy but not the written field order, so it laid this type out in the
+// checker's order while every function indexed the program's. `layout_of`
+// returned one order at all five call sites; only the *layout* was the odd one
+// out, which is why the emitted code was self-consistent and no census saw it.
+//
+// It is a record of an agreement now rather than a defect, and that is
+// deliberate: `outcomes-check` reads a change here as CHANGED and **fails**,
+// where a blocker that starts behaving reads FIXED and is only a note. The
+// second guard is `Invalid::DisputedLayout` (5ce8d7388), which reports any type
+// laid out two ways rather than this one shape.
 interface Options {
   depth?: number | null;
   colors?: boolean;
