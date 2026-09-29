@@ -3,9 +3,18 @@
 // slice could clear.
 //
 //   node tooling/census/any-arrivals.ts --rows <rows> [<rows> ...] [--limit N] [--out <jsonl>]
+//   node tooling/census/any-arrivals.ts --passes --rows <rows> ... [--out <jsonl>]
 //   node tooling/census/any-arrivals.ts --self-test
 //
 // # Why
+//
+// **`--passes` is the pre-mortem.** The same classification over the files
+// that *pass*: those whose program holds an `any` today and passes anyway,
+// because the construct that holds it compiles by a fallback. Slice 0 of the
+// `any` work regressed 243 recorded passes (the `var f; f = ...` shape) that
+// no refused-file population contained. Each slice after it changes the same
+// representation, so its before-arm is this list: `--out` it, and hand the
+// paths to `rerun.ts --paths` with the slice's pin.
 //
 // `docs/any-unknown.md` resolves an unannotated JavaScript value from its
 // evidence, and its first and cheapest evidence is a direct caller:
@@ -330,9 +339,12 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   }
   const CASCADE = new Set(["NTS1003", "NTS1005"]);
   const isAny = (d: any) => /\(any\)/.test(d.message) || d.named.some((n: string) => /\bany\b/.test(n));
+  const passes = argv.includes("--passes");
   const population = rowFiles
     .flatMap((f) => [...readRows(readFileSync(f, "utf8")).values()])
-    .filter((r: any) => r.why === "lowering" && (r.diagnostics ?? []).some((d: any) => !CASCADE.has(d.code) && isAny(d)))
+    .filter((r: any) =>
+      passes ? r.bucket === "strict-pass" : r.why === "lowering" && (r.diagnostics ?? []).some((d: any) => !CASCADE.has(d.code) && isAny(d)),
+    )
     .slice(0, limit);
   const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "any-arrivals-"));
   workspace(dir);
@@ -346,7 +358,10 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
       let data = "not measured";
       try {
         const verdict = session.classifyFile(readFileSync(join(ROOT, "third_party/test262", row.path), "utf8"));
-        slice = sliceOf(verdict);
+        // A refused file with an any root always holds one somewhere, so no any
+        // found means a shape this does not read. A pass need not hold any.
+        const noParameter = verdict.anyParameters.filter((a) => a !== "uncalled").length === 0 && verdict.other === 0;
+        slice = !passes || !noParameter ? sliceOf(verdict) : verdict.evolving > 0 ? "evolving any only (var x; / [] / = null)" : "no any in the test";
         data =
           verdict.evolving > 0 && verdict.other > 0 ? "both evolving and written"
           : verdict.evolving > 0 ? "evolving only (var x; / [] / = null)"
@@ -365,7 +380,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
       }
       if (out) appendFileSync(out, `${JSON.stringify({ path: row.path, slice, data })}\n`);
       byData.set(data, (byData.get(data) ?? 0) + 1);
-      const roots = row.diagnostics.filter((d: any) => !CASCADE.has(d.code));
+      const roots = (row.diagnostics ?? []).filter((d: any) => !CASCADE.has(d.code));
       const entry = byClass.get(slice) ?? { files: 0, onlyAny: 0 };
       entry.files += 1;
       if (roots.every(isAny)) entry.onlyAny += 1;
@@ -375,7 +390,11 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     try { session.close(); } catch {}
     rmSync(dir, { recursive: true, force: true });
   }
-  console.log(`  ${population.length} file(s) refused in lowering with an any root, by how their any parameters arrive:`);
+  console.log(
+    passes
+      ? `  ${population.length} file(s) that pass, by how their any parameters arrive -- a pass holding an any is one a representation change can move:`
+      : `  ${population.length} file(s) refused in lowering with an any root, by how their any parameters arrive:`,
+  );
   console.log("    files  only-any-roots  class");
   for (const [k, v] of [...byClass].sort((a, b) => b[1].files - a[1].files)) console.log(`    ${String(v.files).padStart(5)}  ${String(v.onlyAny).padStart(14)}  ${k}`);
   console.log("  only-any-roots: every root the file reported is an any refusal -- the files a slice could clear by itself, before run time");
