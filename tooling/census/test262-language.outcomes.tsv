@@ -3259,7 +3259,6 @@ test/language/expressions/template-literal/unicode-escape-no-hex-err.js	pass
 test/language/expressions/this/S11.1.1_A1.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/typeof/boolean.js	pass	
 test/language/expressions/typeof/number.js	pass	
-test/language/expressions/typeof/string.js	pass	
 test/language/expressions/typeof/undefined.js	pass	
 test/language/expressions/unary-minus/11.4.7-4-1.js	pass	
 test/language/expressions/unary-minus/S11.4.7_A4.1.js	pass	

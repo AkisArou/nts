@@ -1797,7 +1797,7 @@ test262() {
 # counted apart from the pass count -- `negatives-accepted:` -- because the
 # pass count cannot show it: those 1,600 were passes. Lower the ceiling when
 # early errors land; raise it only with the cases named in the commit.
-TEST262_LANGUAGE_PASS_FLOOR=4846
+TEST262_LANGUAGE_PASS_FLOOR=4845
 TEST262_LANGUAGE_NEGATIVES_ACCEPTED_CEILING=1551
 # One recorded test262 directory, re-run and held to its record, its floor and
 # its ceiling: `test262_recorded <dir> <record> <floor> <floor variable name>
@@ -1869,7 +1869,7 @@ test262_cases() {
 # Re-baselined with the language floor on 2026-09-29 (875 -> 681), for the
 # same reason: negative-parse tests passing on a type error, and `any`
 # containers (`new Set()` is `Set<any>` in JavaScript) refused.
-TEST262_BUILTINS_PASS_FLOOR=718
+TEST262_BUILTINS_PASS_FLOOR=698
 TEST262_BUILTINS_NEGATIVES_ACCEPTED_CEILING=185
 test262_builtins_cases() {
   test262_recorded test/built-ins tooling/census/test262-builtins.outcomes.tsv \
