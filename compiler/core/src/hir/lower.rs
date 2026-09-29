@@ -55809,13 +55809,27 @@ impl<'a> FuncBuilder<'a> {
             //
             // The empty call is that fold's identity: `Math.max()` is
             // `-Infinity` and `Math.min()` is `+Infinity`, which is what the
-            // specification says and what a fold with no operands needs. One
-            // argument is itself, which is `ToNumber(a)` where `a` is already a
-            // number.
+            // specification says and what a fold with no operands needs.
+            //
+            // **And every argument is converted, not assumed.** This comment used
+            // to end "one argument is itself, which is `ToNumber(a)` where `a` is
+            // already a number", and that last clause was the bug: nothing made it
+            // so. `Math.max(1, obj)` folded a `Float` against a
+            // `Managed(Object)` and reached the verifier as `OperandsDiffer` --
+            // invalid HIR from a program test262 runs
+            // (`Math/max/Math.max_each-element-coerced.js`), and
+            // `blockers/math-max-converts-every-argument` is the record.
+            //
+            // `coerce_to_number` is the same conversion `Number(x)` gets, which is
+            // the point: an object refuses there with "a conversion to number from
+            // this type", and now refuses here with it too. The record's own header
+            // observed that `Number(obj)` was refused while this compiled, which is
+            // one decision answered two ways.
             (Intrinsic::Binary(op @ (BinOp::Min | BinOp::Max)), args) => {
                 let mut folded: Option<ValueId> = None;
                 for argument in args {
                     let operand = self.lower_expression(*argument)?;
+                    let operand = self.coerce_to_number(id, *argument, operand)?;
                     folded = Some(match folded {
                         None => operand,
                         Some(lhs) => self.push(
@@ -55839,9 +55853,14 @@ impl<'a> FuncBuilder<'a> {
                 };
                 Ok(self.push(OpKind::ConstFloat(identity), ty, origin))
             }
+            // Every other binary `Math` member, and on the same terms: the
+            // specification converts both arguments with `ToNumber` and so does
+            // this. `Math.pow(obj, 2)` had the same `OperandsDiffer` waiting in it.
             (Intrinsic::Binary(op), [left, right]) => {
                 let lhs = self.lower_expression(*left)?;
+                let lhs = self.coerce_to_number(id, *left, lhs)?;
                 let rhs = self.lower_expression(*right)?;
+                let rhs = self.coerce_to_number(id, *right, rhs)?;
                 Ok(self.push(OpKind::Binary { op, lhs, rhs }, ty, origin))
             }
             (Intrinsic::NotANumber, [argument]) => {
