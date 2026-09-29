@@ -20,6 +20,8 @@
 # those four now stop at the closure-slot family. **(H) is unguarded too**: no reduction reproduced
 # the two slots (two instantiations of AsyncIterable, most likely), so stream is its only witness,
 # and a MISSING is not something a pin can hold.
+# (I): a closure call's arguments were loaded unchecked; they are now checked as a direct call's,
+# so http's Socket-for-HTTPDuplex is a named decline rather than a VerifyError in Program.
 #
 # **(B) is an unguarded fix.** Its only witness is the runtime: every reduction gave the value a
 # layout and verified before the fix, so no fixture holds it, and while stream and net fail for
@@ -34,7 +36,7 @@ runtime/node/events	(E) a ClosureN of ReadableStreamDefaultController's, referen
 runtime/node/dgram	(E) PerformanceNodeEntry, referenced by Program and never written -- the perf_hooks family; (B) was not live here on 41dd45663 (jvm lane, 2026-09-29)
 runtime/node/net	(E) PerformanceNodeEntry, referenced by Program and never written -- the perf_hooks family; the first failure since (B) cleared, jvm lane, 2026-09-29
 runtime/node/fs	(E) a ClosureN of ReadableStreamDefaultController's, referenced by Program and never written: declined under NTS4009 at another instantiation, as outcomes/a-controller-stored-by-a-generic-branch -- the closure-slot family; the first failure since (H) cleared (jvm lane, 2026-09-29)
-runtime/node/http	(I) a Socket where an HTTPDuplex is wanted at an invokevirtual in a ClosureN$call, no checkcast -- the first failure since IncomingMessage's fewer-parameter bridge cleared (E) (jvm lane, 2026-09-29)
+runtime/node/http	(E) PerformanceNodeEntry, the perf_hooks family (a covariant record return), referenced by Program and never written -- the first failure since (I) became a named decline: a Socket where HTTPDuplex is declared, which C gets wrong where the fields are reordered (jvm lane, 2026-09-29)
 runtime/node/readline	(C) a closure class that does not implement the signature it is called at, Readline$commit (classified, 2026-09-28)
 runtime/node/stream	(E) a ClosureN of ReadableStreamDefaultController's, referenced by Program and never written: declined under NTS4009 at another instantiation, as outcomes/a-controller-stored-by-a-generic-branch -- the closure-slot family; the first failure since (H) cleared (jvm lane, 2026-09-29) -- pinned: no INVALID, so (B), fixed in 2703efcba and held by no fixture, cannot return unseen	pin: invalid=none
 runtime/node/util	(E) a ClosureN of ReadableStreamDefaultController's, referenced by Program and never written: declined under NTS4009 at another instantiation, as outcomes/a-controller-stored-by-a-generic-branch -- the first failure since (G) cleared (jvm lane, 2026-09-29)

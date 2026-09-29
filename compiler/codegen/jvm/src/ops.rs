@@ -6058,8 +6058,27 @@ impl Emitter<'_> {
                     ));
                 };
                 let member = crate::hierarchy::member_name(declared);
-                for &arg in args {
+                // **Every argument against the parameter it lands in, as a
+                // direct call checks them.** The IR relates a class to a
+                // structural type the callback declares -- http's
+                // `callback(null, socket)`, a `Socket` where `HTTPDuplex` is
+                // declared -- and this path loaded it unchecked, so the class
+                // was a `VerifyError` and all of `Program` with it (jvm-verifies
+                // cause I). Refused by name here, the function alone. C does
+                // not refuse it and reads the fields at the wrong offsets
+                // where the two orders differ:
+                // outcomes/a-class-passed-to-a-callback-at-a-structural-type-in-another-field-order.
+                // The receiver is skipped: it is the closure, typed by the
+                // slot's owner rather than by this call.
+                for (&arg, param) in args.iter().zip(&target.params).skip(1) {
+                    self.assignable_types(&self.ty(arg).clone(), &param.ty)?;
+                }
+                let parameters = nts_jvm_emitter::descriptor::parameters(&descriptor).unwrap_or_default();
+                for (at, &arg) in args.iter().enumerate() {
                     self.load(code, pool, arg)?;
+                    if let Some(want) = at.checked_sub(1).and_then(|at| parameters.get(at)) {
+                        self.unerase_layoutless(code, pool, arg, want, origin);
+                    }
                 }
                 code.invoke_virtual(origin, pool, &owner, &member, &descriptor);
                 // The declaration says what the *type* returns; the call
