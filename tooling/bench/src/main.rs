@@ -938,6 +938,13 @@ enum JvmAbsence {
     Refused,
     /// The backend emitted it and the harness has no way to drive it.
     NoDriver,
+    /// `NTS_BENCH_LANES` left the lane out, so nothing was asked.
+    ///
+    /// It rendered as `refused` until 2026-09-29, because a filtered lane
+    /// pushes no result and recorded no absence -- and a run with
+    /// `NTS_BENCH_LANES=c` then reported six JVM refusals that were six lanes
+    /// nobody ran, which a reader took for a row of the backend's gaps.
+    NotRun,
 }
 
 /// Which memory provider a case runs under.
@@ -1105,6 +1112,9 @@ fn variants(
         if let Some(ref only) = lanes
             && !only.iter().any(|want| lane_matches(want, variant.label))
         {
+            if matches!(variant.generated, Generated::Jvm) {
+                jvm_absence = Some(JvmAbsence::NotRun);
+            }
             results.push(None);
             continue;
         }
@@ -1566,6 +1576,7 @@ fn jvm_cell(time: Option<f64>, absence: Option<JvmAbsence>) -> String {
     match (time, absence) {
         (Some(time), _) => human(time),
         (None, Some(JvmAbsence::NoDriver)) => "no driver".to_owned(),
+        (None, Some(JvmAbsence::NotRun)) => "not run".to_owned(),
         (None, _) => "refused".to_owned(),
     }
 }
