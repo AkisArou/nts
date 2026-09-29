@@ -18,6 +18,49 @@
 use nts_core::hir::{Field, Layout, Program};
 use nts_semantic_schema::TypeId;
 
+/// The layout this one's class extends on the JVM: its `Layout.base`, or --
+/// for a record with none -- its declared parent, `Program::record_parents`.
+///
+/// **Why a record's parent is a class relation here and nowhere else.** `interface
+/// DetailJSON extends EntryJSON` is a declaration, and the layouts leave it out
+/// on purpose: `Layout.base` takes part in representation identity
+/// (`same_shape`), so a literal written at `DetailJSON` would stop sharing its
+/// layout. C and LLVM never ask. The JVM does, because `perf_hooks`'
+/// `PerformanceNodeEntry.toJSON(): PerformanceEntryDetailJSON` overrides
+/// `toJSON(): PerformanceEntryJSON`, and a covariant return is bridged only
+/// between related classes -- so it declined the class under NTS4009, and net,
+/// dgram, process, `perf_hooks`, cluster and http with it.
+///
+/// Taken only where it is a base in every sense this backend relies on: every id
+/// the layout holds that names a parent names the same parent layout; the
+/// parent's fields are a prefix of this layout's, name and type -- which is
+/// what `inherited`, `declared` and `declares_field` rest on; the parent carries
+/// state, so it is no JVM interface; and neither side dispatches, so no slot
+/// table has to agree. Otherwise `None`, and the refusal the JVM would have
+/// given still stands. Deliberately free of `is_interface`, which asks this.
+#[must_use]
+pub fn jvm_base(program: &Program, layout: &Layout) -> Option<usize> {
+    if let Some(at) = program.base_layout(layout) {
+        return Some(at);
+    }
+    let mut parent: Option<usize> = None;
+    for id in &layout.types {
+        let Some(declared) = program.record_parents.get(id) else { continue };
+        let at = program.layouts.iter().position(|candidate| candidate.types.contains(declared))?;
+        if parent.is_some_and(|seen| seen != at) {
+            return None;
+        }
+        parent = Some(at);
+    }
+    let at = parent?;
+    let base = program.layouts.get(at)?;
+    let prefix = !base.fields.is_empty()
+        && base.fields.len() < layout.fields.len()
+        && base.fields.iter().zip(&layout.fields).all(|(theirs, mine)| theirs.name == mine.name && theirs.ty == mine.ty);
+    let dispatches = |l: &Layout| l.methods.iter().any(Option::is_some);
+    (prefix && !dispatches(base) && !dispatches(layout) && !std::ptr::eq(base, layout)).then_some(at)
+}
+
 /// Every layout from `layout` up to the root, `layout` first.
 #[must_use]
 pub fn ancestry<'a>(program: &'a Program, layout: &'a Layout) -> Vec<&'a Layout> {
@@ -27,7 +70,7 @@ pub fn ancestry<'a>(program: &'a Program, layout: &'a Layout) -> Vec<&'a Layout>
     // hang the compiler rather than refuse. `verify` rejects one upstream; this
     // is the cheap belt for a fact this module cannot check for itself.
     for _ in 0..program.layouts.len() {
-        let Some(at) = program.base_layout(current) else { break };
+        let Some(at) = jvm_base(program, current) else { break };
         let Some(next) = program.layouts.get(at) else { break };
         chain.push(next);
         current = next;
@@ -44,8 +87,7 @@ pub fn ancestry<'a>(program: &'a Program, layout: &'a Layout) -> Vec<&'a Layout>
 /// storage rather than failing.
 #[must_use]
 pub fn inherited(program: &Program, layout: &Layout) -> usize {
-    program
-        .base_layout(layout)
+    jvm_base(program, layout)
         .and_then(|at| program.layouts.get(at))
         .map_or(0, |base| base.fields.len())
 }
@@ -150,7 +192,7 @@ pub fn declares_field<'a>(program: &'a Program, layout: &'a Layout, field: usize
     // sufficient: `declared_by` where a class claims the field, arithmetic
     // where none does.
     let mut owner = layout;
-    while let Some(base) = program.base_layout(owner).and_then(|id| program.layouts.get(id)) {
+    while let Some(base) = jvm_base(program, owner).and_then(|id| program.layouts.get(id)) {
         if field < base.fields.len() {
             owner = base;
         } else {
@@ -209,7 +251,7 @@ pub fn extended(program: &Program, layout: &Layout) -> bool {
     program
         .layouts
         .iter()
-        .any(|other| program.base_layout(other) == Some(mine))
+        .any(|other| jvm_base(program, other) == Some(mine))
 }
 
 /// The JVM member name of a lowered method.
@@ -258,7 +300,7 @@ pub fn declared_member(program: &Program, layout: &Layout, slot: usize) -> Optio
     let mut name = at.methods.get(slot)?.as_ref()?;
     // Up the chain while a base also declares this slot: the first declaration
     // is the one the JVM resolved against.
-    while let Some(base) = program.base_layout(at).and_then(|id| program.layouts.get(id)) {
+    while let Some(base) = jvm_base(program, at).and_then(|id| program.layouts.get(id)) {
         match base.methods.get(slot).and_then(Option::as_ref) {
             Some(inherited) => {
                 name = inherited;
@@ -275,7 +317,7 @@ pub fn declared_member(program: &Program, layout: &Layout, slot: usize) -> Optio
 #[must_use]
 pub fn root<'a>(program: &'a Program, layout: &'a Layout) -> &'a Layout {
     let mut at = layout;
-    while let Some(base) = program.base_layout(at).and_then(|id| program.layouts.get(id)) {
+    while let Some(base) = jvm_base(program, at).and_then(|id| program.layouts.get(id)) {
         at = base;
     }
     at
@@ -298,7 +340,7 @@ pub fn root<'a>(program: &'a Program, layout: &'a Layout) -> &'a Layout {
 /// field anywhere.
 #[must_use]
 pub fn holds_presence(package: &str, program: &Program, layout: &Layout) -> bool {
-    if program.base_layout(layout).is_some() {
+    if jvm_base(program, layout).is_some() {
         return false;
     }
     let wanted = crate::types::class_name(package, layout);

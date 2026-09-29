@@ -565,8 +565,7 @@ fn collect(classes: &mut Vec<Class>, diagnostics: &mut Vec<Diagnostic>, emitted:
 fn super_class(package: &str, program: &Program, layout: &nts_core::hir::Layout) -> String {
     let root = (!hierarchy::is_interface(program, layout) && types::is_callable(program, layout))
         .then(|| types::callable_class(package));
-    program
-        .base_layout(layout)
+    crate::hierarchy::jvm_base(program, layout)
         .and_then(|at| program.layouts.get(at))
         .map(|l| types::class_name(package, l))
         .or(root)
@@ -1785,7 +1784,7 @@ fn dispatch_forwarders(
     pool: &mut Pool,
 ) -> Result<(), Diagnostic> {
     let origin = program_origin(program);
-    let base = program.base_layout(layout).and_then(|at| program.layouts.get(at));
+    let base = crate::hierarchy::jvm_base(program, layout).and_then(|at| program.layouts.get(at));
     // **One JVM method per name and descriptor, whatever number of slots
     // reach it.** A class implementing an interface can hold one function in
     // two slots -- its own and the interface's -- and the JVM dispatches both

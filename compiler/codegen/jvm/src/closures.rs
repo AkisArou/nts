@@ -82,7 +82,7 @@ fn closure_layout<'a>(program: &'a Program, ty: &HirType) -> Option<&'a nts_core
 
 /// The layout `layout` names as its base, if it names one.
 fn base_of<'a>(program: &'a Program, layout: &nts_core::hir::Layout) -> Option<&'a nts_core::hir::Layout> {
-    program.base_layout(layout).and_then(|at| program.layouts.get(at))
+    crate::hierarchy::jvm_base(program, layout).and_then(|at| program.layouts.get(at))
 }
 
 /// Every edge in a terminator, as `(target, arguments)`.
