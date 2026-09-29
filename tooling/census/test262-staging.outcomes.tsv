@@ -18,9 +18,7 @@ test/staging/sm/PrivateName/parse-utf8-non-ascii-identifier.js	pass
 test/staging/sm/String/15.5.4.7.js	pass	
 test/staging/sm/String/string-space-trim.js	pass	
 test/staging/sm/String/two-length-nonlatin-indexOf.js	pass	
-test/staging/sm/class/derivedConstructorTDZReturnObject.js	pass	
 test/staging/sm/class/newTargetProxyNative.js	pass	
-test/staging/sm/class/stringConstructor.js	fail	nts: uncaught Test262Error: sameValue
 test/staging/sm/expressions/object-literal-accessor-property-name.js	pass	
 test/staging/sm/extensions/regress-591450.js	pass	
 test/staging/sm/extensions/typedarray-subarray-of-subarray.js	pass	

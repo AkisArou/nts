@@ -5419,7 +5419,6 @@ test/language/statements/class/subclass/builtin-objects/Symbol/symbol-valid-as-e
 test/language/statements/class/subclass/derived-class-return-override-catch-finally.js	pass	
 test/language/statements/class/subclass/derived-class-return-override-finally-super.js	pass	
 test/language/statements/class/subclass/derived-class-return-override-with-empty.js	pass	
-test/language/statements/class/subclass/derived-class-return-override-with-object.js	fail	nts: uncaught Test262Error: sameValue
 test/language/statements/class/subclass/derived-class-return-override-with-this.js	pass	
 test/language/statements/class/super/in-getter.js	pass	
 test/language/statements/class/super/in-methods.js	pass	
