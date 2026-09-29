@@ -168,8 +168,20 @@ export function compare(before, after) {
   return { helpers, changed, added, removed, names: names.sort(), functions, bytes: after.bytes - before.bytes, differs: names.length > 0, renumbered: renumbered.map((r) => r.name), renumberedOnly: names.length === 0 && !identical, identical };
 }
 
+/**
+ * **The unmeasured count is part of every verdict line, not a line above it.**
+ * A change that produces invalid HIR leaves one arm with no program.c, and
+ * refusal-diff cannot see that either. On 2026-09-29 "0 emit a different
+ * program" over the projects that remained read as clean, with the loss
+ * printed just above it.
+ */
+function notMeasuredClause(unmeasured, total) {
+  return unmeasured === 0 ? "" : `; ${unmeasured} of ${total} project(s) NOT MEASURED, and byte-identical says nothing about them`;
+}
+
 // **Seen to tell renumbering from change before it is trusted.**
 function selfTest() {
+  if (notMeasuredClause(0, 5) !== "" || !notMeasuredClause(1, 5).includes("1 of 5 project(s) NOT MEASURED")) return `the verdict's unmeasured clause: ${JSON.stringify([notMeasuredClause(0, 5), notMeasuredClause(1, 5)])}`;
   const prog = (a, b, t, extra = "") => [
     `static NtsObj_Closure${a} * g${t};`,
     `double f${a}(double v0) {`,
@@ -207,7 +219,7 @@ if (broken) {
   process.exit(2);
 }
 if (argv.includes("--self-test")) {
-  console.log("  self-test: a renumbering is the same program and reported as renumbered, never as identical; a literal, a swapped operand, a new call and a declaration each differ");
+  console.log("  self-test: a renumbering is the same program and reported as renumbered, never as identical; a literal, a swapped operand, a new call and a declaration each differ; a verdict names its unmeasured projects");
   process.exit(0);
 }
 
@@ -350,7 +362,8 @@ for (const { project, d } of renumberedOnly) {
 }
 for (const u of unmeasured) console.log(`  NOT MEASURED  ${u}`);
 const measuredCount = projects.length - unmeasured.length;
-console.log(`\n  of ${measuredCount} measured project(s), under ${RC ? "reference counting" : "no-gc"}: ${differing.length} emit a different program, ${renumberedOnly.length} the same program renumbered, ${measuredCount - differing.length - renumberedOnly.length} byte-identical`);
+const notMeasured = notMeasuredClause(unmeasured.length, projects.length);
+console.log(`\n  of ${measuredCount} measured project(s), under ${RC ? "reference counting" : "no-gc"}: ${differing.length} emit a different program, ${renumberedOnly.length} the same program renumbered, ${measuredCount - differing.length - renumberedOnly.length} byte-identical${notMeasured}`);
 
 const axisModules = differing.filter((p) => p.startsWith("runtime/node/")).map((p) => p.slice("runtime/node/".length));
 if (!argv.includes("--axis")) {
@@ -421,5 +434,5 @@ for (const m of axisModules) {
   for (const t of gone) console.log(`    LOST    ${t}`);
   for (const t of gained) console.log(`    gained  ${t}   (read it: an unsound change gains too)`);
 }
-console.log(lost === 0 && axisUnmeasured === 0 ? "  no test file lost a real pass" : `  ${lost} real pass(es) lost, ${axisUnmeasured} module(s) not measured`);
+console.log(lost === 0 && axisUnmeasured === 0 ? `  no test file lost a real pass${notMeasured}` : `  ${lost} real pass(es) lost, ${axisUnmeasured} module(s) not measured${notMeasured}`);
 process.exit(lost === 0 && axisUnmeasured === 0 && unmeasured.length === 0 ? 0 : 1);
