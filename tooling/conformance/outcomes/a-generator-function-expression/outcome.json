@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "invalid-hir",
-  "nts": "invalid HIR: FellThrough { func: \"Closure0#call\", block: BlockId(0) }",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: done=true;",
   "node": "exit 1; nts: uncaught Observed: done=true;",
-  "measured_with": "163593a747457c16",
+  "measured_with": "e0fbe7f8302684d9",
   "source": "measured"
 }

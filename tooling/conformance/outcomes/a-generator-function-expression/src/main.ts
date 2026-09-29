@@ -1,4 +1,5 @@
-// invalid HIR: `FellThrough { func: "Closure0#call", block: BlockId(0) }`.
+// **Agrees since 9da2c4eac; a guard.** Until then, invalid HIR:
+// `FellThrough { func: "Closure0#call", block: BlockId(0) }`.
 // A generator *function expression* is lowered as an ordinary function: its
 // empty body falls through where a generator object should be returned, a
 // `return;` in it is a `ReturnType` mismatch, and a `yield` in it is refused as

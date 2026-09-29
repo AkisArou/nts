@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught Observed: typeof a call=string, called: no;typeof a binding=string, called: yes;",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: typeof a call=string, called: yes;typeof a binding=string, called: yes;",
   "node": "exit 1; nts: uncaught Observed: typeof a call=string, called: yes;typeof a binding=string, called: yes;",
-  "measured_with": "db59442100b1632d",
+  "measured_with": "e0fbe7f8302684d9",
   "source": "measured"
 }

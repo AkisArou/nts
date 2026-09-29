@@ -1,3 +1,4 @@
+// **Agrees since 141c1ea81; a guard.** Until then:
 // `typeof f()` evaluates f() and then names the result's type. nts answers
 // from the static type and never calls f: its side effect is lost. The same
 // fold compiles `typeof new Temporal.Duration().toLocaleString()` with no
