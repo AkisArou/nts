@@ -20535,19 +20535,23 @@ impl<'a> FuncBuilder<'a> {
     /// writes them in. `this` is the closure, so a free variable becomes a
     /// field read on parameter zero and everything downstream sees an ordinary
     /// object.
-    fn lower_closure(&mut self, index: usize, info: &ClosureInfo) -> Result<Func, Diagnostic> {
-        if let Some(reason) = info.refusal {
-            return Err(self.unsupported(info.node, reason));
-        }
-        let id = info.node;
-        let (_, name) = closure_names(index);
-        let receiver_ty = HirType::Managed(ManagedType::Object(closure_type(index)));
-        let origin = self.origin(id);
-
-        let receiver = self.push(OpKind::Param(0), receiver_ty.clone(), origin.clone());
-        self.this = Some(receiver);
-        self.bind_own_name(id, receiver);
-        self.in_closure = true;
+    /// A closure's parameter list, and the values a wrapper forwards.
+    ///
+    /// The receiver is first, so a closure's `#call` is `(this, ...written)` --
+    /// which is what makes a slot's arity uniform.
+    ///
+    /// **`forwarded` is kept here rather than read back from a binding**, because
+    /// a wrapper has no body to read one: `lower_param` pushed the value and bound
+    /// it by symbol, and this is the only `Param(at)` such a function will hold.
+    /// A fixed-arity rest expands to several, so the *range* is forwarded rather
+    /// than the single index -- forwarding only `at` dropped every position after
+    /// the first, silently, at the one site with no body to notice.
+    fn closure_parameters(
+        &mut self,
+        id: NodeId,
+        receiver_ty: HirType,
+        origin: &Origin,
+    ) -> Result<(Vec<Param>, Vec<ValueId>), Diagnostic> {
         let mut params = vec![Param {
             name: "this".to_owned(),
             shape: ParamShape::Ordinary,
@@ -20562,14 +20566,6 @@ impl<'a> FuncBuilder<'a> {
             }
             let at = u32::try_from(params.len()).unwrap_or(0);
             let added = self.lower_param(child, at)?;
-            // `lower_param` pushed the value and bound it by symbol. A wrapper
-            // has no body to read that binding, so the value is kept here --
-            // it is the only `Param(at)` this function will hold.
-            //
-            // A fixed-arity rest expands to several, so the range is what is
-            // forwarded rather than the single index. Forwarding only `at`
-            // would have dropped every position after the first, silently and
-            // at the one site with no body to notice.
             for offset in 0..u32::try_from(added.len()).unwrap_or(1) {
                 if let Some(value) = self.param_value(at + offset) {
                     forwarded.push(value);
@@ -20577,6 +20573,55 @@ impl<'a> FuncBuilder<'a> {
             }
             params.extend(added);
         }
+        Ok((params, forwarded))
+    }
+
+    /// The frame a generator reserves, and the type the function hands back.
+    ///
+    /// **One routine, because three lowering paths need it and each learned that
+    /// separately.** A generator's *declared* `Generator<T, …>` has no
+    /// representation and is not what the compiled function returns -- the frame
+    /// is -- and the frame is deliberately **not** materialized, because
+    /// `hir::suspend` builds its layout and is the only thing that can: what goes
+    /// in one is what survives a suspension.
+    ///
+    /// `begin_generator` had one caller and then two, and each time the path that
+    /// did not ask lowered a generator's body as an ordinary function, so every
+    /// `yield` in it said "a `yield` outside a generator" -- true of the lowering
+    /// and false of the source. A method was the second (the comment at that call
+    /// site records it) and a `function*` **expression** was the third, which is
+    /// what test262 builds every `dstr/` iterator with and which the conformance
+    /// lane counts at 460 of the corpus's ~800 no-verdict rows. Written as a
+    /// function the three share rather than as a third clause, so a fourth path
+    /// gets it by calling this.
+    fn reserved_return_type(
+        &mut self,
+        id: NodeId,
+    ) -> Result<(Option<super::GeneratorFrame>, HirType), Diagnostic> {
+        let generated = self.begin_generator(id)?;
+        if let Some(frame) = &generated {
+            let ty = HirType::Managed(ManagedType::Object(frame.ty));
+            return Ok((generated, ty));
+        }
+        let return_type = self.return_type_of(id)?;
+        self.materialize(id, &return_type)?;
+        Ok((generated, return_type))
+    }
+
+    fn lower_closure(&mut self, index: usize, info: &ClosureInfo) -> Result<Func, Diagnostic> {
+        if let Some(reason) = info.refusal {
+            return Err(self.unsupported(info.node, reason));
+        }
+        let id = info.node;
+        let (_, name) = closure_names(index);
+        let receiver_ty = HirType::Managed(ManagedType::Object(closure_type(index)));
+        let origin = self.origin(id);
+
+        let receiver = self.push(OpKind::Param(0), receiver_ty.clone(), origin.clone());
+        self.this = Some(receiver);
+        self.bind_own_name(id, receiver);
+        self.in_closure = true;
+        let (params, forwarded) = self.closure_parameters(id, receiver_ty, &origin)?;
 
         // The captures, read back and bound to the names the body writes. A
         // field read rather than a copy into a local: the value is already
@@ -20607,8 +20652,55 @@ impl<'a> FuncBuilder<'a> {
             let ty = param.ty.clone();
             self.materialize(id, &ty)?;
         }
-        let return_type = self.return_type_of(id)?;
-        self.materialize(id, &return_type)?;
+        // **A `function*` expression is a generator, and this was the third
+        // lowering path to find out.** `begin_generator` had one caller and a
+        // generator *method* reached its body with no frame reserved, so every
+        // `yield` in it said "a `yield` outside a generator" -- true of the
+        // lowering and false of the source; the comment at that second call site
+        // records it. A generator function *expression* is the same discovery a
+        // third time, and it is what test262's `dstr/` tests build every iterator
+        // with: `var iter = function*() { yield 1; }();`. The conformance lane
+        // counts **460 of the corpus's ~800 no-verdict rows** behind it --
+        // `FellThrough { func: "Closure0#call" }` where the body was lowered as an
+        // ordinary function, plus "a `yield` outside a generator" where it was not.
+        //
+        // The frame is the return type, for the reason `lower_function` gives: a
+        // generator's *declared* `Generator<T, …>` has no representation and is
+        // not what the compiled function hands back. And it is **not**
+        // materialized -- `hir::suspend` builds a frame's layout and is the only
+        // thing that can, because what goes in one is what survives a suspension.
+        // **A wrapper forwards to a generator; it does not generate.** This is
+        // the guard whose absence turned `test262-cases` red -- 4,632 to 4,520,
+        // **112 regressed**, every one a class *private* generator method in
+        // `{expressions,statements}/class/dstr`, and every one this shape:
+        //
+        //     var C = class {
+        //       * #method([[x, y, z] = [4, 5, 6]]) { ... }
+        //       get method() { return this.#method; }   // <- handed out as a VALUE
+        //     };
+        //     new C().method([]).next();
+        //
+        // The method itself lowers as a method and always did. What reaches here is
+        // the **bound-method wrapper** `collect_closures` builds for `this.#method`
+        // as a value (`wraps`, `binds_receiver`), and it has no body of its own: it
+        // forwards. Reserving a frame for it made it *compile* down the closure path
+        // where it had refused, and the field index and the pointer type then
+        // disagreed -- 56 files refused at a field index outside its layout, 56 more
+        // emitted C that does not compile.
+        //
+        // So the question is not "does the declaration have a `*`" but "is this the
+        // generator's own body", and [`ClosureSource::Authored`] is exactly that:
+        // every other variant forwards to something already lowered -- a named
+        // function used as a value, a method used as a value, a promise job, a
+        // settler -- and a forwarder has no `yield` of its own to reserve for. **None of the four
+        // arms I measured that change with contained a method handed out as a
+        // value**, which is why the recorded test262 set is the population for a
+        // lowering change and `runtime/` is the narrow corpus.
+        let (generated, return_type) = if matches!(info.source, ClosureSource::Authored) {
+            self.reserved_return_type(id)?
+        } else {
+            (None, self.return_type_of(id)?)
+        };
 
         // **An `async` arrow allocates its promise before its body runs**, for
         // the two reasons an `async` function does: every `return` needs one to
@@ -20702,6 +20794,14 @@ impl<'a> FuncBuilder<'a> {
                     if !self.is_terminated() {
                         let result = result.clone();
                         self.settle_and_return(id, &result, None)?;
+                    }
+                } else if generated.is_some() {
+                    // Falling off the end of a generator is the end of the walk,
+                    // and `hir::suspend` turns it into the *done* a resumption
+                    // answers -- the same exit `lower_function` gives one, for
+                    // the same reason and in the same words.
+                    if !self.is_terminated() {
+                        self.terminate(Terminator::Return(None));
                     }
                 } else {
                     // `close_body` rather than an unconditional `Return(None)`:
