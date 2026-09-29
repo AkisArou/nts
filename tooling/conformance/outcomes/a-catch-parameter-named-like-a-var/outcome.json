@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Observed: shadowed=initializer in catch;distinct=initializer in catch;",
+  "node": "exit 1; nts: uncaught Observed: shadowed=prior to throw;distinct=initializer in catch;",
+  "measured_with": "db59442100b1632d",
+  "source": "measured"
+}

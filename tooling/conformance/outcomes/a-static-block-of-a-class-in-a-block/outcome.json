@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Observed: order=at module scope;",
+  "node": "exit 1; nts: uncaught Observed: order=in a block,at module scope;",
+  "measured_with": "db59442100b1632d",
+  "source": "measured"
+}
