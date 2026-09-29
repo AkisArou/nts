@@ -142,6 +142,10 @@ export const RULES = [
     // regressed recorded passes by the hundred -- `any` as Erased (243, the
     // `var f;` shape) and generator expressions (112, private generator
     // methods; landed, and reddened main) -- and only these steps saw either.
+    // A byte-identical emitted-diff does not clear them: it reads the runtime
+    // corpus, which has no class declared in a block, no generator function
+    // expression and no method handed out as a value, and three changes that
+    // night emitted 29 of 29 projects identically while moving recorded rows.
     steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "outcomes", "integrity", "integrity-runtime", "definitions", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases", "test262-rest-cases"],
     arms: [
       ...COMPARE,
