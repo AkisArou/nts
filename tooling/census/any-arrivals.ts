@@ -75,13 +75,16 @@ type Verdict = { anyParameters: Arrival[]; other: number; evolving: number };
  * the client's enum agrees with for this bit). A written or declared `any`
  * (`function f(x)`, `JSON.parse(...)`) is the checker's one `anyType`,
  * without it. The API reports no `objectFlags` on the intrinsic `autoType`,
- * so it is told apart by identity -- an `any` that is not `anyType` -- and the
- * array by its flag.
+ * so it is told apart by identity with `autoType` itself -- **not** "an `any`
+ * that is not `anyType"`, because `errorType` is another (`new Math()` is
+ * `any` id 5, `var f;` id 2, `anyType` id 1). The API does not hand out
+ * `autoType`, so a session learns its id from `var e;` (intrinsics are made
+ * in a fixed order when the checker is). The array is told by its flag.
  */
 const NON_INFERRABLE = 1 << 18;
-function isEvolving(checker: any, type: any): boolean {
+function isEvolving(type: any, autoTypeId: number): boolean {
   if (type === undefined) return false;
-  if ((type.flags & TypeFlags.Any) !== 0) return type.id !== checker.getAnyType().id;
+  if ((type.flags & TypeFlags.Any) !== 0) return type.id === autoTypeId;
   return (type.flags & TypeFlags.Object) !== 0 && ((type.objectFlags ?? 0) & NON_INFERRABLE) !== 0;
 }
 
@@ -194,7 +197,7 @@ function arrivals(checker: any, path: string, fn: any, anyIndices: number[]): Ar
 }
 
 /** Every `any` parameter in a file's test, and every other `any`-typed declaration. */
-export function classify(checker: any, file: any, path: string): Verdict {
+export function classify(checker: any, file: any, path: string, autoTypeId: number): Verdict {
   const verdict: Verdict = { anyParameters: [], other: 0, evolving: 0 };
   const visit = (node: any): void => {
     if (FUNCTIONS.has(node.kind)) {
@@ -205,7 +208,7 @@ export function classify(checker: any, file: any, path: string): Verdict {
       // A variable holding a function is typed by its parameters -- `var h = g`
       // is `(y: any) => any` -- and that `any` is the parameter's, counted there.
       const type = checker.getTypeAtLocation(node.name);
-      if (isEvolving(checker, type)) verdict.evolving += 1;
+      if (isEvolving(type, autoTypeId)) verdict.evolving += 1;
       else if (holdsAny(checker, type, node.initializer)) verdict.other += 1;
     } else if (node.kind === SyntaxKind.PropertyDeclaration && node.name) {
       // A class field with no initializer, or one of `null`, is `any` in JavaScript.
@@ -238,27 +241,33 @@ function open(dir: string): { classifyFile: (body: string) => Verdict; close: ()
   const path = join(dir, TEST_FILE);
   const config = join(dir, "tsconfig.json");
   let opened = false;
+  /** One program through the session: materialised, snapshotted, asked, disposed. */
+  const ask = <T>(body: string, question: (project: any) => T): T => {
+    materialise(dir, body);
+    // **Say which files changed, on both sides.** The server's snapshot keeps
+    // what it read, so a file rewritten on disk and not named in
+    // `fileChanges` is answered from the last one -- the self-test's
+    // escaping `g` was first classed by the file before it. The client keeps
+    // the syntax trees it decoded, whose node handles then name a file the
+    // server has replaced ("handle may be stale").
+    api.clearSourceFileCache();
+    const snapshot = api.updateSnapshot(
+      opened ? { fileChanges: { changed: [path, join(dir, HARNESS_FILE)] } } : { openProjects: [config] },
+    );
+    opened = true;
+    try {
+      return question(snapshot.getProjects()[0]);
+    } finally {
+      snapshot.dispose();
+    }
+  };
+  const autoTypeId = ask("var e;\n", (project) => {
+    const declaration = [...project.program.getSourceFile(path).statements].find((s: any) => s.declarationList).declarationList.declarations[0];
+    return project.checker.getTypeAtLocation(declaration.name).id;
+  });
   return {
-    classifyFile(body: string): Verdict {
-      materialise(dir, body);
-      // **Say which files changed, on both sides.** The server's snapshot keeps
-      // what it read, so a file rewritten on disk and not named in
-      // `fileChanges` is answered from the last one -- the self-test's
-      // escaping `g` was first classed by the file before it. The client keeps
-      // the syntax trees it decoded, whose node handles then name a file the
-      // server has replaced ("handle may be stale").
-      api.clearSourceFileCache();
-      const snapshot = api.updateSnapshot(
-        opened ? { fileChanges: { changed: [path, join(dir, HARNESS_FILE)] } } : { openProjects: [config] },
-      );
-      opened = true;
-      try {
-        const project = snapshot.getProjects()[0];
-        return classify(project.checker, project.program.getSourceFile(path), path);
-      } finally {
-        snapshot.dispose();
-      }
-    },
+    classifyFile: (body: string): Verdict =>
+      ask(body, (project) => classify(project.checker, project.program.getSourceFile(path), path, autoTypeId)),
     close: () => api.close(),
   };
 }
@@ -281,6 +290,8 @@ function selfTest(): string | null {
       // `{ a: null }` is not this case: under `strict` it is `{ a: null }`, not
       // `any`; nor is `var q;`, whose `any` is the evolving one.
       ["var w = JSON.parse(\"1\");\nfunction f(x) { return x; }\nf(1);\n", "any parameters, and other any"],
+      // `errorType` is an `any` that is not `anyType`, and not evolving either.
+      ["var m = new Math();\nfunction f(x) { return x; }\nf(1);\n", "any parameters, and other any"],
       ["var q;\nfunction f(x) { return x; }\nf(1);\n", "slice 1: every any parameter filled directly"],
       ["const parts = [];\nparts.push(1);\nfunction f(x) { return x; }\nf(1);\n", "slice 1: every any parameter filled directly"],
       ["var p = { a: null };\nfunction f(x) { return x; }\nf(p);\n", "slice 1: every any parameter filled directly"],
