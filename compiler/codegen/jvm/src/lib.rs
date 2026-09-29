@@ -1730,6 +1730,16 @@ fn dispatch_forwarders(
 ) -> Result<(), Diagnostic> {
     let origin = program_origin(program);
     let base = program.base_layout(layout).and_then(|at| program.layouts.get(at));
+    // **One JVM method per name and descriptor, whatever number of slots
+    // reach it.** A class implementing an interface can hold one function in
+    // two slots -- its own and the interface's -- and the JVM dispatches both
+    // by name and descriptor, so a second declaration is not a second entry
+    // but a duplicate member the class is refused for: stream's
+    // `ClassicReadableSource` declared `__$asyncIterator$3288()` twice, so it
+    // was never written and four runtime modules could not load (jvm-verifies
+    // cause H). Two *different* functions under one name and descriptor are a
+    // real conflict and still reach `DuplicateMember`.
+    let mut forwarded: FxHashMap<(String, String), String> = FxHashMap::default();
     for (slot, entry) in layout.methods.iter().enumerate() {
         let Some(func_name) = entry else { continue };
         // A class declares a forwarder only where its implementation differs
@@ -1786,6 +1796,10 @@ fn dispatch_forwarders(
         // Only the *return* may differ. Covariant parameters are not
         // overriding in any language on this platform -- they are overloading,
         // and a bridge would silently make one call the other.
+        if forwarded.get(&(member.clone(), descriptor.clone())) == Some(func_name) {
+            continue;
+        }
+        forwarded.insert((member.clone(), descriptor.clone()), func_name.clone());
         let bridge = bridge_for(package, program, layout, base, slot, &member, &descriptor, &origin)?;
 
         // An abstract declaration gets the method with no `Code`, and the
