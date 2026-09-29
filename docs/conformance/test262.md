@@ -99,6 +99,23 @@ the census's FIXED? check says so:
 - **Temporal** -- a runtime this project does not build. Its tests are
   classed `inapplicable` by feature, with this section as the authority.
 
+**Because boundaries are attempted, they appear in every refusal ranking, and
+at the top.** Read these rows as boundaries, never as compiler work. In the
+census of 141c1ea81, all within the `--root any` selection and all first
+roots in an *include*:
+
+- "a parameter of unrepresentable type (a union of `X` | undefined)":
+  `verifyProperty`'s `PropertyDescriptor` in `propertyHelper.js`. 1,716
+  language and 2,578 built-ins files, 0 of them sole.
+- "a property of unexpected shape": `temporalHelpers.js`, 1,479 built-ins.
+- "a module-scope variable of unrepresentable type": about 500 of 1,166 name
+  a Temporal type, and 240 name `RegExp`.
+- "`X` on `X`, which is erased here": 272 of 290 are in `regExpUtils.js`.
+  RegExp is QuickJS's, not a boundary, but not `any` work either.
+
+A ranking that has not separated these (`rows.ts --where body`) measures
+the boundaries, not the compiler.
+
 ## The oracle is Test262
 
 A positive Test262 case is self-checking. It completes normally on success and
