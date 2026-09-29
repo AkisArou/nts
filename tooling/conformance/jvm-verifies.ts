@@ -98,7 +98,18 @@ const SOURCE = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
 const JAVA = process.env.JAVA_HOME ? join(process.env.JAVA_HOME, "bin/java") : "java";
 const WORKERS = Number(process.env.NTS_JVM_VERIFIES_JOBS ?? 4);
 
-if (process.argv.includes("--self-test")) process.exit(selfTest());
+// **The pin's arms run on every run, not only under --self-test**: the gate
+// calls this without flags, and an arm nobody runs guards nothing. A failure
+// is NOT MEASURED -- a judge that cannot be trusted has not judged.
+{
+  const printing = process.argv.includes("--self-test");
+  const bad = selfTest(printing);
+  if (printing) process.exit(bad === 0 ? 0 : 1);
+  if (bad !== 0) {
+    console.log(`  NOT MEASURED: the pin's self-test failed (${bad} arm(s)); run with --self-test`);
+    process.exit(2);
+  }
+}
 
 if (!existsSync(SOURCE)) {
   console.log(`  NOT MEASURED: no compiler at ${SOURCE}; set NTS_BIN`);
@@ -165,7 +176,7 @@ const run = (cmd, args) =>
   });
 
 /** JvmVerify's output as `{ invalid, missing, verified, total }`, or null when it printed no summary. */
-export function readVerify(text) {
+function readVerify(text) {
   const summary = /^VERIFIED (\d+) OF (\d+)$/m.exec(text);
   if (!summary) return null;
   const lines = (kind) => text.split("\n").filter((l) => l.startsWith(`${kind} `)).map((l) => l.slice(kind.length + 1));
@@ -177,7 +188,7 @@ export function readVerify(text) {
  * INVALID sites the entry must show exactly, or null when it has none. Throws
  * on a pin it cannot read, naming the project: see "A pin" above.
  */
-export function parseKnown(text) {
+function parseKnown(text) {
   const entries = new Map();
   for (const line of text.split("\n")) {
     if (line.trim() === "" || line.startsWith("#")) continue;
@@ -194,7 +205,7 @@ export function parseKnown(text) {
 }
 
 /** An INVALID line's site: `Class.method` from the verifier's `Location:`, else the class. */
-export function siteOf(line) {
+function siteOf(line) {
   const at = /Location: (?:[\w$]+\/)*([\w$]+)\.([\w$<>]+)\(/.exec(line);
   return at ? `${at[1]}.${at[2]}` : (line.split(" ")[0] ?? "").split(".").pop();
 }
@@ -211,7 +222,7 @@ function pinBroken(pin, invalid) {
 }
 
 /** The run's verdict over what was measured: fresh failures, held ones, expired entries, broken pins. */
-export function judge(failed, known, projects, unmeasured) {
+function judge(failed, known, projects, unmeasured) {
   const fresh = failed.filter((f) => !known.has(f.project));
   const held = failed.filter((f) => known.has(f.project));
   const verifies = [...known.keys()].filter((p) => projects.includes(p) && !failed.some((f) => f.project === p) && !unmeasured.some((u) => u.startsWith(`${p}:`)));
@@ -226,8 +237,8 @@ export function judge(failed, known, projects, unmeasured) {
   return { fresh, held, expired: verifies.filter((p) => !known.get(p).pin), pinned };
 }
 
-/** The pin's must-fire arms over fabricated verifier output. Exit 0 when every arm fires as it should. */
-function selfTest() {
+/** The pin's must-fire arms over fabricated verifier output: how many did not fire. */
+function selfTest(printing) {
   const site = (s) => `nts.gen.Program VerifyError: Bad type on operand stack Exception Details: Location: nts/gen/${s}(Lnts/rt/NtsValue;)V @16: invokestatic`;
   const known = parseKnown([
     "m/pinned\t(A) held\tpin: invalid=Program.convertQueuingStrategyHighWaterMark",
@@ -253,9 +264,9 @@ function selfTest() {
     const v = judge(failed, known, all, []);
     const said = v.pinned.map((p) => p.reason).join(" | ");
     const fired = exit(v) === want && (reason === null ? v.pinned.length === 0 : said.includes(reason));
-    if (name === "an unpinned entry verifying whole" && !v.expired.includes("m/plain")) bad++, console.log(`  FAIL  ${name}: no "remove it"`);
+    if (name === "an unpinned entry verifying whole" && !v.expired.includes("m/plain")) bad++, printing && console.log(`  FAIL  ${name}: no "remove it"`);
     if (!fired) bad++;
-    console.log(`  ${fired ? "ok  " : "FAIL"}  ${name}: exit ${exit(v)}${said ? ` -- ${said}` : ""}`);
+    if (printing) console.log(`  ${fired ? "ok  " : "FAIL"}  ${name}: exit ${exit(v)}${said ? ` -- ${said}` : ""}`);
   }
   for (const [name, text] of [
     ["a pin with no site", "m/x\twhy\tpin: invalid="],
@@ -266,10 +277,10 @@ function selfTest() {
     let refused = false;
     try { parseKnown(text); } catch (error) { refused = error.message.startsWith("cannot read the pin on m/x"); }
     if (!refused) bad++;
-    console.log(`  ${refused ? "ok  " : "FAIL"}  ${name}: ${refused ? "cannot read the pin" : "read, and should not have been"}`);
+    if (printing) console.log(`  ${refused ? "ok  " : "FAIL"}  ${name}: ${refused ? "cannot read the pin" : "read, and should not have been"}`);
   }
-  console.log(bad === 0 ? "  self-test: every arm fired" : `  self-test: ${bad} arm(s) did not fire`);
-  return bad === 0 ? 0 : 1;
+  if (printing) console.log(bad === 0 ? "  self-test: every arm fired" : `  self-test: ${bad} arm(s) did not fire`);
+  return bad;
 }
 
 /**
@@ -278,7 +289,7 @@ function selfTest() {
  * numbering (closures, generic instances, signature layouts) taken out so one
  * shape across programs and runs is one key.
  */
-export function declineShape(line) {
+function declineShape(line) {
   const m = /NTS4009 `([^`]+)` is `([^`]+)` where the method it overrides is `([^`]+)`/.exec(line);
   if (!m) return null;
   const plain = (t) => t.replace(/Closure\d+/g, "ClosureN").replace(/\$\d+\$/g, "$N$").replace(/Fn[\d_]*__\d+/g, "FnN").replace(/Type\d+/g, "TypeN");
