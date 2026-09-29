@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: Number(true) == 1=true;Number(\"1\") == 1=true;1n == BigInt(1)=true;",
+  "node": "exit 1; nts: uncaught Observed: Number(true) == 1=true;Number(\"1\") == 1=true;1n == BigInt(1)=true;",
+  "measured_with": "6aa52e0cc112812d",
+  "source": "measured"
+}

@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "uncompilable-c",
+  "nts": "error: incompatible type for argument 2 of 'nts_string_eq'",
+  "node": "exit 1; nts: uncaught Observed: \"1\" == 1=true;",
+  "measured_with": "6aa52e0cc112812d",
+  "source": "measured"
+}
