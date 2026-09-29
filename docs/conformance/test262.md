@@ -253,6 +253,41 @@ message, and times out when no completion arrives. NativeTS should eventually
 implement this on the deterministic microtask host rather than parsing
 arbitrary stdout as a verdict.
 
+### A recorded pass can be hollow
+
+A pass says the program ran and threw nothing. Many tests assert little: that
+nothing throws, that a default did *not* run, or that `typeof` of something
+names a type. A compiler that never compiles the construct under test
+satisfies these, so the pass is recorded and counted in the floor. On
+2026-09-29 three changes that made a construct evaluate each exposed such
+rows:
+
+- **21** built-ins and language rows: `typeof f()` was answered from the static
+  type and never ran `f` (Temporal with no runtime, `Boolean()`, `Date()`, ...).
+- **6** language rows: a pattern that binds no names was never lowered, and
+  each asserted only that its default did not run.
+- **1** staging row: `new foo()` 1,100 times for a constructor that returns an
+  object, passing because the `return {}` under test was ignored.
+
+Three signs that a pass is hollow:
+- conformance262 reports `FIXED? N passing` on an exclusion whose feature
+  cannot exist at runtime;
+- a pass's assertion could be answered without the construct running;
+- a change that makes something *evaluate* turns a pass into an honest
+  refusal.
+
+The procedure when a pending change exposes them:
+1. Re-run the recorded sets on the change's pin.
+2. For every REGRESSED row, read the test and confirm the pass was hollow. A
+   row that was a real pass is a regression, and the change owes the fix.
+3. Remove the hollow rows from the record, and lower the floor with every row
+   named, in a commit of their own that lands *before* the change. The
+   recorded check re-runs only recorded rows, so the gate is green on both
+   sides of the landing.
+4. After the change lands, re-record its FIXED rows from a clean main pin.
+
+A floor lowered this way is not ground lost: the passes were never real.
+
 ## Tooling architecture and parallel-work boundary
 
 The protocol tooling can be built before representation recovery or script
