@@ -15,7 +15,7 @@
 use rustc_hash::FxHashSet;
 
 use super::{
-    BinOp, Block, BlockId, Callee, Func, HirType, OpKind, Program, Terminator, ValueId,
+    BinOp, Block, BlockId, Callee, Func, HirType, OpKind, Program, Terminator, UnOp, ValueId,
 };
 
 /// A way the IR was malformed.
@@ -476,6 +476,7 @@ fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
         check_native_memory(func, problems);
         check_erasures(func, problems);
         check_lengths(func, problems);
+    check_numeric_coercions(func, problems);
         // The ops a block still holds, not every value the lowering ever made.
         //
         // This asks whether a call "reaches the linker as an undefined symbol",
@@ -694,6 +695,45 @@ fn check_erasures(func: &Func, problems: &mut Vec<Invalid>) {
 /// asks before refusing by name -- one fact, so a backend and a lowering cannot
 /// disagree about it the way three emitters disagreed about an erasure's absence
 /// (see [`check_erasures`]).
+/// A `ToInt32`/`ToUint32` coercion reads a number, so its operand must be one.
+///
+/// **The one operand check whose absence produced uncompilable C rather than
+/// invalid HIR**, which is the wrong way round for a guard to fail. TypeScript
+/// types `x >>> 4` as `number` whatever `x` is, so an erased operand is invisible
+/// downstream: the result coerces cleanly, nothing here objected, and the first
+/// thing to object was **clang** -- `incompatible type for argument 1 of
+/// 'nts_to_uint32'`. 80 recorded test262 built-ins files were in that state on the
+/// day `any` gained a representation.
+///
+/// `push_bitwise` coerces both operands now, so nothing should reach this. That is
+/// the point: a rule enforced in one place and checked in another is how the next
+/// site that forgets is found here instead of by a C compiler. The arm that proves
+/// it can fire is removing that coercion, which puts these back.
+fn check_numeric_coercions(func: &Func, problems: &mut Vec<Invalid>) {
+    for op in func.blocks.iter().flat_map(|b| b.ops.iter().map(|v| func.value(*v))) {
+        let OpKind::Unary { op: unary, operand } = &op.kind else { continue };
+        if !matches!(unary, UnOp::ToInt32 | UnOp::ToUint32) {
+            continue;
+        }
+        let found = &func.value(*operand).ty;
+        // `is_scalar` rather than a list of the number types, deliberately, because
+        // **this guard's failure directions are not symmetric**: invalid HIR costs
+        // the whole program, so rejecting something legitimate here is worse than
+        // the uncompilable C it replaces. A `bool` is admitted for that reason --
+        // `true >>> 0` is 0 in the language and nothing here should be the first to
+        // decide otherwise -- while `BigInt` is not, and correctly: `push_bitwise`
+        // returns before the coercions for one, so a `bigint` arriving here is a
+        // real defect rather than a shape this is unsure about.
+        if !found.is_scalar() {
+            problems.push(Invalid::OperandType {
+                func: func.name.clone(),
+                op: "an integer coercion of something that is not a number",
+                found: found.clone(),
+            });
+        }
+    }
+}
+
 fn check_lengths(func: &Func, problems: &mut Vec<Invalid>) {
     for op in func.blocks.iter().flat_map(|b| b.ops.iter().map(|v| func.value(*v))) {
         let OpKind::Length(of) = &op.kind else { continue };

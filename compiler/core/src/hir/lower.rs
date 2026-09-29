@@ -12941,7 +12941,36 @@ fn representation_of(
     }
     let record = snapshot.types.get(ty.0 as usize)?;
     Some(match &record.kind {
-        TypeKind::Unknown => HirType::Erased,
+        // **`any` and `unknown` share one representation, and separating
+        // `Evolving` is what makes that safe.**
+        //
+        // This arm read `Unknown` alone, and `HirType::Erased`'s doc said `any`
+        // "deliberately does *not* map here ... giving it a representation would
+        // accept the escape hatch that rule exists to close". The fear is real and
+        // the conclusion was backwards. `any`'s danger is that TypeScript
+        // **permits operations it cannot justify** -- a read, a call, an index,
+        // arithmetic, all without narrowing -- and an erased value meets the
+        // refusal `unknown` already meets for every one of them: the same code,
+        // the same place, the same sentence. `docs/any-unknown.md`'s requirement,
+        // "must legalize each one from independent representation evidence before
+        // lowering it", is satisfied **by construction** rather than by a second
+        // analysis. The hatch would be open only if `any` got a representation
+        // *and* were readable without one.
+        //
+        // What made the first attempt cost **243 recorded test262 passes** was not
+        // this arm but the absence of [`TypeKind::Evolving`]: `var x;` and `const
+        // xs = []` are `any` meaning "not yet", every `evolved_type` fallback in
+        // lowering was reached *because `any` had no representation*, and giving
+        // one to all three intrinsics at once switched them off in a single step.
+        // `Evolving` keeps that path, and falls through to the `None` below.
+        //
+        // The floor and not the answer: `erasure.rs` already measures which sites
+        // only carry or test their value and which examine one, and specialising an
+        // examined parameter from its call sites is the next slice. What this does
+        // is make a program with an `any` in it compile at all, which nothing did:
+        // `new Set()` in a JavaScript file is `Set<any>`, and `Set<unknown>` has
+        // compiled all along.
+        TypeKind::Any | TypeKind::Unknown => HirType::Erased,
         TypeKind::Void | TypeKind::Undefined => HirType::Void,
         TypeKind::Never => HirType::Never,
         // A literal shares its widened type's representation. The literal *value*
@@ -13239,6 +13268,11 @@ fn representation_of(
         // slice-1 test262 population that is 8 of the 413 files that reach
         // lowering, all of them the property form. No new diagnostic is needed
         // before the analysis, which is what the plan for this work assumed.
+        // **`any` no longer arrives here and [`TypeKind::Evolving`] does.** Which
+        // is the point of the split: an evolving declaration has no representation
+        // *yet*, and answering `None` is what sends the question to
+        // `evolved_type`, which reads back what the assignments settled on. A
+        // written `any` has no better answer coming and takes `Erased` above.
         _ => return None,
     })
 }
@@ -18166,6 +18200,41 @@ impl<'a> FuncBuilder<'a> {
             return Ok(value);
         };
         if want == HirType::Erased {
+            return Ok(value);
+        }
+        // **An array of `any` is not a narrowing**, and the emphasis is on `any`
+        // rather than on the erasure.
+        //
+        // `Array.isArray(x)` on an `unknown` narrows it to `any[]`. Reading that
+        // back as `Managed(Array(Erased))` is a **reinterpretation**, not a read:
+        // what `nts_is_array` proved is that the value is an array, and the *width
+        // of its elements* is a fact the runtime descriptor holds and `any` does
+        // not. `examples/dynamic-element` is that program, and its header is the
+        // reason it exists -- *"Read as the wrong one, 8589934592 is
+        // 4.2439915819305446e-314 -- finite, and `typeof` still says "number", so
+        // nothing downstream can catch it."* It caught exactly this: 2 of its 9
+        // cases answered the function's own `-1`, because the erased tag read out
+        // of an `i64` slot is not a number tag.
+        //
+        // **Asked of the checker's element type and not of the representation**,
+        // which is the correction: `Array(Erased)` has two sources and only one of
+        // them says nothing. An element that is a *union* is erased because
+        // `NtsValue` is genuinely what those slots hold -- `os`'s
+        // `NetworkInterfaceMap` is `{ [k: string]: NetworkInterfaceInfo[] }` with a
+        // two-shape union for the element, so unerasing to an array of erased
+        // elements there is right, and refusing it cost `networkInterfaces`.
+        //
+        // The control distinguished the two by accident: `any[]` had no
+        // representation at all, so this fell through to leaving the value erased,
+        // while a union-elemented array had one and unerased. Reading the element's
+        // *kind* is that same distinction made on purpose.
+        //
+        // Left erased, the reads that serve it are the dynamic ones -- `Length`'s
+        // erased arm through the header, and `nts_array_element`, which asks the
+        // descriptor what it holds. They are *more* capable here rather than a
+        // fallback. A concrete element (`v as string[]`) still unerases below,
+        // because there the program has supplied a width.
+        if self.element_says_nothing(id) {
             return Ok(value);
         }
         // Narrowed to an absence, which is not a payload to read. After `v =
@@ -35024,14 +35093,34 @@ impl<'a> FuncBuilder<'a> {
         Ok(())
     }
 
+    /// A bitwise operator, with its `ToInt32`/`ToUint32` coercions made explicit.
+    ///
+    /// **Its operands go through [`Self::coerce`] rather than straight into the
+    /// coercion op**, and that is not tidiness. TypeScript types `x >>> 4` as
+    /// `number` **whatever `x` is**, so an `any` operand is invisible to everything
+    /// downstream: the result coerces cleanly, the verifier's operand table does not
+    /// know `ToUint32` cannot take an erased value, and the first thing to object is
+    /// **clang** -- `incompatible type for argument 1 of 'nts_to_uint32'`, which is
+    /// uncompilable C rather than a refusal. 80 recorded test262 built-ins files
+    /// reached that state the day `any` gained a representation, every one of them
+    /// through `decimalToHexString.js`'s untyped `n`.
+    ///
+    /// `n + 1` on the same `any` refuses, and only by luck: `any + 1` is `any`, so
+    /// the *return* coercion catches it. A bitwise operator hands back a `number` and
+    /// leaves nothing later to notice, so the operator is the only place that can --
+    /// which is `docs/any-unknown.md`'s requirement exactly: *"Checker-accepted `any`
+    /// allows those operations syntactically, so Native TypeScript must legalize each
+    /// one from independent representation evidence before lowering it."* A shift is
+    /// one of those operations and the evidence is that the operand is a number.
     fn push_bitwise(
         &mut self,
+        id: NodeId,
         op: BinOp,
         lhs: ValueId,
         rhs: ValueId,
         ty: HirType,
         origin: &Origin,
-    ) -> ValueId {
+    ) -> Result<ValueId, Diagnostic> {
         // A `bigint`'s bitwise operators are not JavaScript's. `1n << 40n` is
         // 2^40, where `1 << 40` is 256 -- a number's shift count is masked to
         // five bits and its operands are truncated to int32, and a `bigint` has
@@ -35041,8 +35130,12 @@ impl<'a> FuncBuilder<'a> {
         // Caught by the differential: `x <<= 40n` came back as 1 where node said
         // 2^32, because 40 & 31 is 8.
         if matches!(ty, HirType::BigInt) {
-            return self.push(OpKind::Binary { op, lhs, rhs }, ty, origin.clone());
+            return Ok(self.push(OpKind::Binary { op, lhs, rhs }, ty, origin.clone()));
         }
+        // Both operands, because either can be the erased one: `count >>> n` and
+        // `n >>> count` are the same hazard at different indices.
+        let lhs = self.coerce(lhs, &HirType::NUMBER, id)?;
+        let rhs = self.coerce(rhs, &HirType::NUMBER, id)?;
         let left_coercion = if matches!(op, BinOp::UShr) {
             UnOp::ToUint32
         } else {
@@ -35064,7 +35157,7 @@ impl<'a> FuncBuilder<'a> {
             HirType::NUMBER,
             origin.clone(),
         );
-        self.push(
+        Ok(self.push(
             OpKind::Binary {
                 op,
                 lhs: left,
@@ -35072,7 +35165,7 @@ impl<'a> FuncBuilder<'a> {
             },
             ty,
             origin.clone(),
-        )
+        ))
     }
 
     /// The shared half of `++`/`--`: add or subtract one and rebind the name.
@@ -35989,7 +36082,8 @@ impl<'a> FuncBuilder<'a> {
         ))
     }
 
-    /// Whether the **checker** typed this node `never[]`, at any depth.
+    /// Whether the **checker** typed this node `never[]` or evolving-`[]`, at any
+    /// depth.
     ///
     /// The companion to [`is_an_unsettled_array`], which asks the same question
     /// of a representation. Both are needed and they answer for different
@@ -36005,7 +36099,15 @@ impl<'a> FuncBuilder<'a> {
         for _ in 0..32 {
             match self.snapshot.types.get(ty.0 as usize).map(|r| &r.kind) {
                 Some(TypeKind::Array(element)) => ty = *element,
-                Some(TypeKind::Never) => return true,
+                // `Evolving` beside `Never`, because `c.autoArrayType` is an array
+                // *of* `c.autoType`: `const xs = []` says nothing about its element
+                // in exactly the way `never[]` does, and the slot it goes into is
+                // what decides. Without this the literal's own `Array(Erased)` won
+                // over the expected type and `path`'s `join@win32` refused
+                // `parts.some(...)` on an array of erased elements where every
+                // other reference said `string[]` -- 18 functions across 7
+                // projects.
+                Some(TypeKind::Never | TypeKind::Evolving) => return true,
                 _ => return false,
             }
         }
@@ -39999,6 +40101,39 @@ impl<'a> FuncBuilder<'a> {
         owed
     }
 
+    /// The array type a `new Array(n)` allocates at.
+    ///
+    /// **An erased element is not an element, so it does not out-rank the context.**
+    /// [`Self::lower_new`]'s own paragraph states the rule -- *"the type comes from
+    /// where the result goes, because the constructor's own type is a union of the
+    /// overloads in `lib.d.ts` and says nothing about the element"* -- and the code
+    /// that implemented it preferred the node's own type whenever that was *any*
+    /// array. `new Array(n)` is declared `any[]` there, so once `any` represents as
+    /// `Erased` the node's own type passes an `Array(_)` test while still saying
+    /// nothing, and the code was a subset of the sentence above it.
+    ///
+    /// `examples/objects` is what noticed: `const balls: Ball[] = new Array(count)`
+    /// allocated an array of erased slots and then refused to be a `Ball[]`, which
+    /// is the same pointer at two widths.
+    ///
+    /// The erased form stays as the last resort rather than being dropped, because
+    /// `const xs: any[] = new Array(3)` has no better answer and is an ordinary
+    /// thing to write.
+    fn allocated_array_type(&mut self, id: NodeId) -> Result<HirType, Diagnostic> {
+        let concrete = |ty: &HirType| {
+            matches!(ty, HirType::Managed(ManagedType::Array(element)) if **element != HirType::Erased)
+        };
+        self.type_of(id)
+            .filter(concrete)
+            .or_else(|| self.contextual_type(id, 0).filter(concrete))
+            .or_else(|| self.contextual_type(id, 0))
+            .or_else(|| {
+                self.type_of(id)
+                    .filter(|ty| matches!(ty, HirType::Managed(ManagedType::Array(_))))
+            })
+            .ok_or_else(|| self.unrepresentable(id, "a `new Array`"))
+    }
+
     fn lower_new(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let children = self.children(id);
         let callee = *children
@@ -40127,11 +40262,7 @@ impl<'a> FuncBuilder<'a> {
         }
 
         if class == "Array" || is_an_array {
-            let ty = self
-                .type_of(id)
-                .filter(|ty| matches!(ty, HirType::Managed(ManagedType::Array(_))))
-                .or_else(|| self.contextual_type(id, 0))
-                .ok_or_else(|| self.unrepresentable(id, "a `new Array`"))?;
+            let ty = self.allocated_array_type(id)?;
             if !matches!(ty, HirType::Managed(ManagedType::Array(_))) {
                 return Err(self.unsupported(id, "a `new Array` that is not an array"));
             }
@@ -44066,7 +44197,7 @@ impl<'a> FuncBuilder<'a> {
                 };
                 let origin = self.origin(id);
                 if bitwise_operator_of(op) {
-                    self.push_bitwise(op, current, addend, ty, &origin)
+                    self.push_bitwise(id, op, current, addend, ty, &origin)?
                 } else {
                     self.push(
                         OpKind::Binary {
@@ -44225,10 +44356,46 @@ impl<'a> FuncBuilder<'a> {
         if absent(lhs) || absent(rhs) {
             return false;
         }
-        // Otherwise only an erased side can surprise: two concrete
-        // representations that reach here already agree, because the checker
-        // rejects a comparison between types that do not.
-        self.type_of(lhs) == Some(HirType::Erased) || self.type_of(rhs) == Some(HirType::Erased)
+        // **"Two concrete representations that reach here already agree" was the
+        // sentence here, and it is false.** It rested on the checker rejecting a
+        // comparison between types that do not agree, which it does under `strict`
+        // -- and a `@ts-expect-error`, a JavaScript file, or any of the coercion
+        // tests test262 is full of goes straight past it. What arrives then is two
+        // representations the language says to *coerce* between, and this compiler
+        // has no `ToPrimitive`:
+        //
+        //     true == obj   a boolean against an object -- `Symbol.toPrimitive` is
+        //                   never called, so the object's own answer is ignored and
+        //                   the comparison is false. Silent.
+        //     "1" == 1      a string against a number -- `nts_string_eq` given a
+        //                   double, which the verifier passes and clang rejects.
+        //     true == 1     a boolean against a number -- invalid HIR, MixedOperands.
+        //     1n == 1       a bigint against a number -- invalid HIR.
+        //
+        // The first is the only *quiet* one and it is the one this sentence let
+        // through; the other three are loud and were loud for the same reason. All
+        // four are one question -- do the two sides share a representation -- so
+        // they get one answer.
+        //
+        // What may be compared without coercing, which is narrower than "concrete"
+        // and wider than "equal":
+        //
+        //   * two numbers, `Int` and `Float` together, because that pair is what
+        //     `agree_on_one_integer_width` exists to reconcile;
+        //   * two of the same scalar kind;
+        //   * two **references**, which `==` compares by identity and never
+        //     coerces -- a `Circle` against a `Square` is a pointer comparison and
+        //     an honest `false`, and refusing it would take every `a === b` in the
+        //     corpus with it. Except a `String`, which is a reference here and a
+        //     *primitive* in the language: an object on the other side of it
+        //     coerces.
+        let side = |node: NodeId| self.type_of(node);
+        let (Some(left), Some(right)) = (side(lhs), side(rhs)) else {
+            // No representation for one side is the erased case a fortiori: it
+            // cannot be shown to agree, so it is not compared without coercing.
+            return true;
+        };
+        !comparable_without_coercing(&left, &right)
     }
 
     /// The absent values a node's *type* admits, as tags.
@@ -45106,7 +45273,7 @@ impl<'a> FuncBuilder<'a> {
             let value = self.lower_expression(*operand)?;
             let origin = self.origin(id);
             let ones = self.push(OpKind::ConstFloat(-1.0), HirType::NUMBER, origin.clone());
-            return Ok(self.push_bitwise(BinOp::BitXor, value, ones, HirType::NUMBER, &origin));
+            return self.push_bitwise(id, BinOp::BitXor, value, ones, HirType::NUMBER, &origin);
         }
 
         let op = match small & syntax::prefix_operator::MASK {
@@ -58396,6 +58563,132 @@ impl<'a> FuncBuilder<'a> {
     /// `number` -- and for a *typed* receiver that is a static dispatch,
     /// because `valueOf` and `toString` are members this compiler already puts
     /// on the descriptor. Everything else is returned unchanged.
+    /// The operands of an arithmetic operator, which have to be numbers.
+    ///
+    /// The sibling of [`Self::relational_operands`], and refusing here rather than
+    /// later is the whole of it: `n + 1` on an `any` happens to refuse, because
+    /// `any + 1` is `any` and the *return* coercion catches it, but that is luck.
+    /// `let x = x + 1` assigns back into an `any` and there is no later coercion at
+    /// all, so the `Add` reached `verify` as `OperandType { found: Erased }` -- which
+    /// costs the **whole program** rather than one function, and took two recorded
+    /// test262 negatives from a recorded `fail` to no verdict.
+    ///
+    /// `HirType::NUMBER` and **not** the result type, which was the first version
+    /// and closed nothing: where both operands are erased the result is erased too,
+    /// so coercing to it is a no-op. What an arithmetic operator needs is a number,
+    /// whatever it happens to produce -- and that is the honest answer semantically
+    /// as well, since JavaScript's `+` on two values of unknown type may be
+    /// concatenation and `BinOp::Add` is not. The checker spells the provable case
+    /// `Concat`; where it can prove neither, guessing is what a refusal is for.
+    ///
+    /// Only the five numeric operators, and only where an operand **is** erased:
+    /// `Concat` has `as_string` before this, a comparison is a different question
+    /// (`==` against an erased value is answered rather than refused), and anything
+    /// with a concrete operand takes the path it took before, so its emitted code
+    /// cannot move.
+    fn arithmetic_operands(
+        &mut self,
+        id: NodeId,
+        op: BinOp,
+        lhs: ValueId,
+        rhs: ValueId,
+    ) -> Result<(ValueId, ValueId), Diagnostic> {
+        if !matches!(
+            op,
+            BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem
+        ) {
+            return Ok((lhs, rhs));
+        }
+        let erased = |builder: &Self, v: ValueId| builder.values[v.0 as usize].ty == HirType::Erased;
+        let lhs = if erased(self, lhs) { self.coerce(lhs, &HirType::NUMBER, id)? } else { lhs };
+        let rhs = if erased(self, rhs) { self.coerce(rhs, &HirType::NUMBER, id)? } else { rhs };
+        Ok((lhs, rhs))
+    }
+
+    /// Which [`BinOp`] a binary token is, given what the expression produces.
+    ///
+    /// Two of these depend on more than the token, which is why it is not a `const
+    /// fn` over the token alone: `+` is arithmetic on numbers and concatenation on
+    /// Which [`BinOp`] a binary token is, given what the expression produces.
+    ///
+    /// Two of these depend on more than the token, which is why it is not a `const`
+    /// function over the token alone: `+` is arithmetic on numbers and concatenation
+    /// on strings, and `==` is refused where the two sides would have to be coerced.
+    fn binary_op_for(
+        &mut self,
+        id: NodeId,
+        operator: NodeId,
+        lhs_node: NodeId,
+        rhs_node: NodeId,
+        token: u16,
+        ty: &HirType,
+    ) -> Result<BinOp, Diagnostic> {
+        Ok(match token {
+            syntax::EQUALS_TOKEN => unreachable!("assignment is handled before this"),
+            syntax::PLUS_TOKEN if ty.is_managed() => BinOp::Concat,
+            syntax::PLUS_TOKEN => BinOp::Add,
+            syntax::MINUS_TOKEN => BinOp::Sub,
+            syntax::ASTERISK_TOKEN => BinOp::Mul,
+            syntax::SLASH_TOKEN => BinOp::Div,
+            syntax::PERCENT_TOKEN => BinOp::Rem,
+            syntax::LESS_THAN_TOKEN => BinOp::Lt,
+            syntax::LESS_THAN_EQUALS_TOKEN => BinOp::Le,
+            syntax::GREATER_THAN_TOKEN => BinOp::Gt,
+            syntax::GREATER_THAN_EQUALS_TOKEN => BinOp::Ge,
+            // `==` and `===` differ only by coercion, and where both operands
+            // have the same representation the two agree exactly -- number
+            // against number, string against string. The checker rejects most
+            // mismatches under `strict`, which is what made this safe.
+            //
+            // It does not reject `unknown == unknown`, and there the runtime
+            // types can differ and coercion is the whole question: node answers
+            // `1 == true` with true, `[1] == 1` with true, and `null ==
+            // undefined` with true. This lowered all three to
+            // `nts_value_strict_eq` and answered false. Refused rather than
+            // answered wrongly -- see the loose-equality note in section 1.
+            //
+            // `x == null` does not come through here: it is the *absence*
+            // question and `erased_absence_test` answered it above, correctly,
+            // which is the one loose comparison real code writes.
+            syntax::EQUALS_EQUALS_TOKEN | syntax::EXCLAMATION_EQUALS_TOKEN
+                if self.coercing_comparison(lhs_node, rhs_node) =>
+            {
+                return Err(self.unsupported(
+                    id,
+                    "`==` between values whose types are not known to agree, which \
+                     coerces -- and this compiler has no `ToPrimitive` to coerce with",
+                ));
+            }
+            syntax::EQUALS_EQUALS_TOKEN | syntax::EQUALS_EQUALS_EQUALS_TOKEN => BinOp::Eq,
+            syntax::EXCLAMATION_EQUALS_TOKEN | syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN => BinOp::Ne,
+            kind => {
+                return Err(
+                    self.unsupported(operator, &format!("the operator {}", spelling(kind)))
+                );
+            }
+        })
+    }
+
+    /// Whether this node's type is an array whose element the checker could not
+    /// name -- `any[]`, or the evolving `[]`.
+    ///
+    /// The width of such an array's elements is the runtime descriptor's fact, so
+    /// a narrowing to it carries no information and must leave the value erased.
+    /// See [`Self::narrowed`], which is the only caller and holds the reasoning.
+    fn element_says_nothing(&self, id: NodeId) -> bool {
+        let Some(ty) = self.snapshot.node_types.get(&id) else {
+            return false;
+        };
+        let Some(TypeKind::Array(element)) = self.snapshot.types.get(ty.0 as usize).map(|r| &r.kind)
+        else {
+            return false;
+        };
+        matches!(
+            self.snapshot.types.get(element.0 as usize).map(|r| &r.kind),
+            Some(TypeKind::Any | TypeKind::Evolving)
+        )
+    }
+
     fn relational_operands(
         &mut self,
         id: NodeId,
@@ -58628,7 +58921,7 @@ impl<'a> FuncBuilder<'a> {
         // author writes exactly that.
         if let Some(op) = bitwise_operator(token) {
             let origin = self.origin(id);
-            return Ok(self.push_bitwise(op, lhs, rhs, ty, &origin));
+            return self.push_bitwise(id, op, lhs, rhs, ty, &origin);
         }
 
         // `+` is not one operator. On numbers it is arithmetic; on strings it is
@@ -58649,52 +58942,11 @@ impl<'a> FuncBuilder<'a> {
             return Ok(self.exponentiate(id, ty, lhs, rhs));
         }
 
-        let op = match token {
-            syntax::EQUALS_TOKEN => unreachable!("assignment is handled before this"),
-            syntax::PLUS_TOKEN if ty.is_managed() => BinOp::Concat,
-            syntax::PLUS_TOKEN => BinOp::Add,
-            syntax::MINUS_TOKEN => BinOp::Sub,
-            syntax::ASTERISK_TOKEN => BinOp::Mul,
-            syntax::SLASH_TOKEN => BinOp::Div,
-            syntax::PERCENT_TOKEN => BinOp::Rem,
-            syntax::LESS_THAN_TOKEN => BinOp::Lt,
-            syntax::LESS_THAN_EQUALS_TOKEN => BinOp::Le,
-            syntax::GREATER_THAN_TOKEN => BinOp::Gt,
-            syntax::GREATER_THAN_EQUALS_TOKEN => BinOp::Ge,
-            // `==` and `===` differ only by coercion, and where both operands
-            // have the same representation the two agree exactly -- number
-            // against number, string against string. The checker rejects most
-            // mismatches under `strict`, which is what made this safe.
-            //
-            // It does not reject `unknown == unknown`, and there the runtime
-            // types can differ and coercion is the whole question: node answers
-            // `1 == true` with true, `[1] == 1` with true, and `null ==
-            // undefined` with true. This lowered all three to
-            // `nts_value_strict_eq` and answered false. Refused rather than
-            // answered wrongly -- see the loose-equality note in section 1.
-            //
-            // `x == null` does not come through here: it is the *absence*
-            // question and `erased_absence_test` answered it above, correctly,
-            // which is the one loose comparison real code writes.
-            syntax::EQUALS_EQUALS_TOKEN | syntax::EXCLAMATION_EQUALS_TOKEN
-                if self.coercing_comparison(*lhs_node, *rhs_node) =>
-            {
-                return Err(self.unsupported(
-                    id,
-                    "`==` between values whose types are not known to agree, which \
-                     coerces -- and this compiler has no `ToPrimitive` to coerce with",
-                ));
-            }
-            syntax::EQUALS_EQUALS_TOKEN | syntax::EQUALS_EQUALS_EQUALS_TOKEN => BinOp::Eq,
-            syntax::EXCLAMATION_EQUALS_TOKEN | syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN => BinOp::Ne,
-            kind => {
-                return Err(
-                    self.unsupported(*operator, &format!("the operator {}", spelling(kind)))
-                );
-            }
-        };
+        let op = self.binary_op_for(id, *operator, *lhs_node, *rhs_node, token, &ty)?;
 
         let (lhs, rhs) = self.relational_operands(id, op, *lhs_node, *rhs_node, lhs, rhs)?;
+
+        let (lhs, rhs) = self.arithmetic_operands(id, op, lhs, rhs)?;
 
         let origin = self.origin(id);
         Ok(self.push(OpKind::Binary { op, lhs, rhs }, ty, origin))
@@ -59536,6 +59788,31 @@ enum EnumMember {
 enum Compound {
     Op(BinOp),
     Exponentiate,
+}
+
+/// Whether `==` between these two representations is an honest comparison rather
+/// than a coercion this compiler cannot perform.
+///
+/// The counterpart of `FuncBuilder::coercing_comparison`, which is where the
+/// reasoning is. Equality is not enough -- `Int` against `Float` is two numbers --
+/// and "both concrete" is far too much, because a coercion between a primitive and
+/// a reference is exactly what `ToPrimitive` would do and there is none here.
+fn comparable_without_coercing(left: &HirType, right: &HirType) -> bool {
+    let number = |ty: &HirType| matches!(ty, HirType::Float { .. } | HirType::Int { .. });
+    if number(left) && number(right) {
+        return true;
+    }
+    // A `String` is a reference in this representation and a primitive in the
+    // language, so it agrees with another string and coerces against anything else
+    // that is a reference.
+    let string = |ty: &HirType| matches!(ty, HirType::Managed(ManagedType::String));
+    if left.holds_a_pointer() && right.holds_a_pointer() {
+        return string(left) == string(right);
+    }
+    // Two of the same scalar kind: `bool == bool`, `bigint == bigint`. Anything
+    // else -- a scalar against a reference, a bool against a number, a bigint
+    // against a number -- is a coercion.
+    std::mem::discriminant(left) == std::mem::discriminant(right)
 }
 
 /// Whether an operator needs the `ToInt32` coercions.

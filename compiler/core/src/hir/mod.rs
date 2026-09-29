@@ -137,11 +137,37 @@ pub enum HirType {
     /// *specific* type is erased at compile time and recovered from the tag.
     ///
     /// One machine value that can hold anything reachable, together with a tag
-    /// saying what it currently holds. `TypeKind::Any` deliberately does *not*
-    /// map here: `docs/any-unknown.md` forbids an `any` from reaching HIR at
-    /// all, because it is the checker announcing it has stopped providing
-    /// safety, and giving it a representation would accept the escape hatch
-    /// that rule exists to close.
+    /// saying what it currently holds.
+    ///
+    /// **`TypeKind::Any` maps here too, and this paragraph said the opposite.** It
+    /// read: *"`docs/any-unknown.md` forbids an `any` from reaching HIR at all,
+    /// because it is the checker announcing it has stopped providing safety, and
+    /// giving it a representation would accept the escape hatch that rule exists to
+    /// close."* The fear is real and the inference was backwards, and that document
+    /// says so in one sentence: *"`unknown` and `NeedsRepresentation` share the same
+    /// whole-program representation planner, but they do not have the same
+    /// source-language semantics. `unknown` is safe and requires narrowing before
+    /// concrete operations. Checker-accepted `any` allows those operations
+    /// syntactically, so Native TypeScript must legalize each one from independent
+    /// representation evidence before lowering it."*
+    ///
+    /// **An erased value already requires narrowing for every concrete operation.**
+    /// An unnarrowed read, call, index or arithmetic on one is refused here by the
+    /// same code, in the same place, with the same sentence it gives `unknown`. So
+    /// the legalization that document requires happens **by construction** rather
+    /// than by a second analysis, and the escape hatch would be open only if `any`
+    /// got a representation *and* were readable without one. It is not.
+    ///
+    /// What is *not* the same is the `any` the checker has not settled -- `var x;`,
+    /// `const xs = []`, which TypeScript also calls `any`. That one has an answer
+    /// coming from its own assignments and erasing it throws the answer away; it is
+    /// [`nts_semantic_schema::TypeKind::Evolving`], it does not reach here, and
+    /// giving all of them one representation cost 243 recorded test262 passes.
+    ///
+    /// And `Erased` is the **floor**, not the answer: it is what a value gets when
+    /// nothing better is proven. `erasure.rs` already measures which sites only
+    /// carry or test their value and which examine one, and specialising an examined
+    /// parameter from its call sites is what the later slices are.
     ///
     /// The *layout* is the backend's, not this type's. A tagged struct and a
     /// NaN-boxed word are the same three operations at different sizes, and

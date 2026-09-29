@@ -1,4 +1,4 @@
-// expect: emit-c --napi -> no wrapper for listenerCount: is exported and was not compiled: it calls `usesAMap`, and a `new` of unrepresentable type (`Map<any, any>`)
+// expect: emit-c --napi -> no wrapper for listenerCount: is exported and was not compiled: it calls `usesAMap`, and a regular expression literal, which needs a regular expression engine
 //
 // FIXED, kept as a guard. **A class static reported its reason against a
 // function of the same name.**
@@ -16,8 +16,8 @@
 //
 //     listenerCount   a module-scope name holding a function, whose closure
 //                     layout its initializer does not fix     <- the STATIC's
-//     alone           it calls `usesAMap`, and a `new` of unrepresentable
-//                     type (`Map<any, any>`)                  <- the root
+//     alone           it calls `usesAMap`, and a regular expression literal,
+//                     which needs a regular expression engine  <- the root
 //
 // # The live instance is `events`, and it costs three exports
 //
@@ -62,8 +62,14 @@
 // representable and lowers, which published both exports and made this fixture
 // answer the same with and without the defect. The refusal has to be real.
 function usesAMap(): number {
-  const m = new Map<any, any>();
-  return m.size;
+  // **A refusal this fixture manufactures, so it has to be one that does not
+  // move.** This read `new Map<any, any>()` until `any` represented as an erased
+  // value and the `Map` started working -- at which point the fixture's subject
+  // still existed and its stated cause did not, which reads as the shadowing
+  // defect coming back. A regular expression literal is a documented gap with no
+  // representation question anywhere near it.
+  const pattern = /a+/;
+  return pattern.source.length;
 }
 
 /** Under test: refused, and shadowed by a static of the same name. */
