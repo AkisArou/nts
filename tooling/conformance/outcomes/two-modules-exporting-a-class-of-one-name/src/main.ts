@@ -22,7 +22,7 @@
 // the virtual call.
 //
 // One fixture on its own, because an abort erases every arm beside it (see
-// `outcomes-check.mjs`). The compiler fix is the compiler lane's; when it
+// `outcomes-check.ts`). The compiler fix is the compiler lane's; when it
 // lands, this reads FIXED and gets re-recorded as a guard.
 import { type Base, Thing as ThingA } from "./a.ts";
 import { Thing as ThingB } from "./b.ts";

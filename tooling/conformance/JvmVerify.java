@@ -1,5 +1,5 @@
 // Link every class under a directory, so the JVM verifies it: the driver
-// jvm-verifies.mjs runs, as `java -Xverify:all -cp <dir>:<runtime jar>
+// jvm-verifies.ts runs, as `java -Xverify:all -cp <dir>:<runtime jar>
 // JvmVerify.java <dir>` (the single-file launcher; nothing is compiled).
 //
 // Loading a class does not verify it -- verification happens when it is

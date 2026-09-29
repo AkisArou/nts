@@ -54,7 +54,7 @@ import { fileURLToPath } from "node:url";
 
 import { attempt, selfChecks } from "./attempt262.ts";
 import { pinCompiler, workspace } from "./project.ts";
-import { frontendFor } from "../conformance/pin.mjs";
+import { frontendFor } from "../conformance/pin.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -100,7 +100,7 @@ const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
 // see `conformance262.ts`, which does the same and says why the cache is
 // named rather than left to follow `TMPDIR` (each case also runs with it off).
 // The frontend the compiler under test runs with: NTS_TSGO, else the one a
-// pin recorded beside the binary (pin.mjs), else the tree's. Set on this
+// pin recorded beside the binary (pin.ts), else the tree's. Set on this
 // process so every attempt inherits it -- a pinned copy in the scratch has no
 // frontend beside it, and the control program then fails as a "frontend-crash".
 const FRONTEND = frontendFor(NTS, ROOT);

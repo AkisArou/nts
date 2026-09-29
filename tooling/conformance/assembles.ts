@@ -1,8 +1,8 @@
 // Does what `emit-llvm` emits assemble?
 //
-//   node tooling/conformance/assembles.mjs [project ...]   (default: runtime/node/*, runtime/web-platform)
-//   NTS_BIN=<a pinned copy> node tooling/conformance/assembles.mjs
-//   node tooling/conformance/assembles.mjs --rc      the counted IR, releases and all
+//   node tooling/conformance/assembles.ts [project ...]   (default: runtime/node/*, runtime/web-platform)
+//   NTS_BIN=<a pinned copy> node tooling/conformance/assembles.ts
+//   node tooling/conformance/assembles.ts --rc      the counted IR, releases and all
 //
 // # Why
 //
@@ -41,14 +41,14 @@ import { copyFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSyn
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { frontendFor } from "./pin.mjs";
+import { frontendFor } from "./pin.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 const KNOWN = join(HERE, "assembles.known");
 const SOURCE = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
 const LLVM_AS = process.env.NTS_LLVM_AS ?? "llvm-as";
-// The frontend follows the pin (pin.mjs `frontendFor`); none stops the run
+// The frontend follows the pin (pin.ts `frontendFor`); none stops the run
 // here, before every project prints nothing and reads as clean.
 const FRONTEND = frontendFor(SOURCE, ROOT);
 if (!FRONTEND.exists) {

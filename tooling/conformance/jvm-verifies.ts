@@ -1,8 +1,8 @@
 // Does what `emit-jvm` emits for the runtime pass the JVM's verifier?
 //
-//   node tooling/conformance/jvm-verifies.mjs [project ...]   (default: runtime/node/*, runtime/web-platform)
-//   node tooling/conformance/jvm-verifies.mjs --outcomes      the outcomes fixtures instead
-//   NTS_BIN=<a pin> node tooling/conformance/jvm-verifies.mjs
+//   node tooling/conformance/jvm-verifies.ts [project ...]   (default: runtime/node/*, runtime/web-platform)
+//   node tooling/conformance/jvm-verifies.ts --outcomes      the outcomes fixtures instead
+//   NTS_BIN=<a pin> node tooling/conformance/jvm-verifies.ts
 //
 // # Why
 //
@@ -66,8 +66,8 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSyn
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { materialise, outcomeFixtures, OUTCOMES, runMode } from "./outcomes-project.mjs";
-import { describe, provenanceOf, frontendFor } from "./pin.mjs";
+import { materialise, outcomeFixtures, OUTCOMES, runMode } from "./outcomes-project.ts";
+import { describe, provenanceOf, frontendFor } from "./pin.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -90,7 +90,7 @@ for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exi
 const NTS = join(scratch, "nts");
 copyFileSync(SOURCE, NTS);
 chmodSync(NTS, 0o755);
-// The frontend follows the pin (pin.mjs `frontendFor`); none stops the run
+// The frontend follows the pin (pin.ts `frontendFor`); none stops the run
 // here, before every project prints nothing and reads as clean.
 const FRONTEND = frontendFor(SOURCE, ROOT);
 if (!FRONTEND.exists) {

@@ -1,5 +1,5 @@
 // What a pinned-outcome fixture calls to say what it saw. Prepended to the
-// fixture's `src/main.ts` by `outcomes-check.mjs`, in both runs -- nts and node --
+// fixture's `src/main.ts` by `outcomes-check.ts`, in both runs -- nts and node --
 // so the two programs are one text.
 //
 // A compiled program has nothing to print with (`examples/standalone` says so in

@@ -50,7 +50,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { materialise, pinCompiler, workspace as scratchProject } from "./project.ts";
-import { frontendFor } from "../conformance/pin.mjs";
+import { frontendFor } from "../conformance/pin.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");

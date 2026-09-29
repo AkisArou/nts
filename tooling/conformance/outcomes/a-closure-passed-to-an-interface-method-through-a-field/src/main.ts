@@ -2,7 +2,7 @@
 // passed as the callback of an interface method, the interface reached
 // through an object's field. On the JVM the closure's class does not
 // implement the callback's signature class at the `invokeinterface`, and the
-// verifier rejects `Program` (jvm-verifies.mjs --outcomes; readline's
+// verifier rejects `Program` (jvm-verifies.ts --outcomes; readline's
 // `Readline#commit` is the runtime site, cause C). Through a parameter
 // instead of a field the call is devirtualised and verifies, and what the
 // closure captures does not matter -- each measured.

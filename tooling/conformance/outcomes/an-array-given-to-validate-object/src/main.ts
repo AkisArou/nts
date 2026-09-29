@@ -8,7 +8,7 @@
 // compiled axis runs a module's own tests, and these are nobody's module.
 //
 // So this compiles the runtime's own TypeScript and runs it against node running
-// the same TypeScript, through `@nts/runtime/` (see outcomes-project.mjs). The
+// the same TypeScript, through `@nts/runtime/` (see outcomes-project.ts). The
 // message is reached the way a caller reaches it -- the error `validateObject`
 // throws -- and not by calling `staticObjectName`, whose name is not API: a
 // rename should not read as a regression.

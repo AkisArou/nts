@@ -47,13 +47,13 @@ import { spawn } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { frontendFor } from "../conformance/pin.mjs";
+import { frontendFor } from "../conformance/pin.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 const TABLE = join(ROOT, "tooling/gate/definitions");
 const NTS = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
-// The frontend follows the pin (pin.mjs `frontendFor`); none stops the run
+// The frontend follows the pin (pin.ts `frontendFor`); none stops the run
 // here, before every project prints nothing and reads as clean.
 const FRONTEND = frontendFor(NTS, ROOT);
 if (!FRONTEND.exists) {

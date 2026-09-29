@@ -1,6 +1,6 @@
 # Runtime modules whose emit-jvm output the JVM verifier rejects, known and owned:
 # project<TAB>why. Classified by the verifier reason on 55698b009 (conformance lane, 2026-09-28);
-# (A)-(E) are the causes jvm-verifies.mjs names; its run prints the live counts, so none are kept
+# (A)-(E) are the causes jvm-verifies.ts names; its run prints the live counts, so none are kept
 # here to go stale. A module that verifies again prints "remove it".
 runtime/node/assert	(A) an array where a record is wanted, convertQueuingStrategyHighWaterMark (classified, 2026-09-28)
 runtime/node/console	(A) an array where a record is wanted, convertQueuingStrategyHighWaterMark (classified, 2026-09-28)

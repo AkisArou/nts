@@ -1908,12 +1908,12 @@ test262_rest_cases() {
 #
 # The harness's **exit status** decides, not a grep of its output: `blockers`
 # above grepped for three loud words and went green over fixtures it had not
-# measured. `outcomes-check.mjs` exits 1 on CHANGED, REGRESSED, ORACLE CHANGED
+# measured. `outcomes-check.ts` exits 1 on CHANGED, REGRESSED, ORACLE CHANGED
 # and NOT MEASURED, 2 when a self-check fails, and 0 -- printing loudly -- on
 # FIXED and REFUSES NOW, which are progress: "a gate that goes red when you fix
 # something teaches people to stop fixing things". About three seconds.
 outcomes() {
-  out=$(node tooling/conformance/outcomes-check.mjs 2>&1)
+  out=$(node tooling/conformance/outcomes-check.ts 2>&1)
   status=$?
   printf '%s\n' "$out" | awk '!/^  (reproduces|holds) / && !/^$/'
   return $status
@@ -1931,7 +1931,7 @@ outcomes() {
 # down toward `nts build` refusing one. Known violations are named, with an owner, in
 # tooling/conformance/integrity.known -- any other fails, and one that stops
 # occurring prints "remove it". A listing that does not reconcile with its own
-# "N function(s)" is NOT MEASURED. See tooling/conformance/integrity.mjs. The
+# "N function(s)" is NOT MEASURED. See tooling/conformance/integrity.ts. The
 # runtime modules are `integrity-runtime`, below. About 30 s.
 #
 # Phantom refusals -- a name `nts refusals` lists that the prepared program
@@ -1942,7 +1942,7 @@ outcomes() {
 # runtime). tooling/conformance/phantoms.mjs stays as the standalone probe:
 # it takes any project directory and runs in seconds.
 integrity() {
-  out=$(node tooling/conformance/integrity.mjs 2>&1)
+  out=$(node tooling/conformance/integrity.ts 2>&1)
   status=$?
   printf '%s\n' "$out" | awk '!/^$/'
   return $status
@@ -1957,7 +1957,7 @@ integrity() {
 # cascade, so a new caller of a known root is not a new failure). About 6 min
 # at four workers: every module is lowered twice, prepared and plain.
 integrity_runtime() {
-  out=$(node tooling/conformance/integrity.mjs --runtime 2>&1)
+  out=$(node tooling/conformance/integrity.ts --runtime 2>&1)
   status=$?
   # One line per open root is still a hundred lines; the verdict and anything
   # new or expired are what a gate reader needs.
@@ -1993,9 +1993,9 @@ snapshot_cache() {
 # module, `emit-llvm` then `llvm-as -o /dev/null`, a parse plus the verifier.
 # It stops at the first error, so a module's first error masks the rest;
 # known failures are named per module in tooling/conformance/assembles.known.
-# See tooling/conformance/assembles.mjs. About 80 s.
+# See tooling/conformance/assembles.ts. About 80 s.
 assembles() {
-  out=$(node tooling/conformance/assembles.mjs 2>&1)
+  out=$(node tooling/conformance/assembles.ts 2>&1)
   status=$?
   printf '%s\n' "$out" | awk '!/^$/'
   return $status
@@ -2025,13 +2025,13 @@ types_check() {
 # run failed 18 of 28 modules for five distinct emitter causes. Per module,
 # `emit-jvm`, then each class loaded without initialising and linked under
 # `-Xverify:all`. tooling/conformance/jvm-verifies.known is the ratchet: a
-# module leaving it is the signal. About 95 s. See jvm-verifies.mjs.
+# module leaving it is the signal. About 95 s. See jvm-verifies.ts.
 jvm_verifies() {
   if ! command -v java > /dev/null 2>&1 && [ ! -x "${JAVA_HOME-}/bin/java" ]; then
     echo "  no JDK on PATH or at JAVA_HOME -- this step cannot verify anything"
     return 1
   fi
-  out=$(node tooling/conformance/jvm-verifies.mjs 2>&1)
+  out=$(node tooling/conformance/jvm-verifies.ts 2>&1)
   status=$?
   # One line per known module is the ratchet's content, not news.
   printf '%s\n' "$out" | awk '!/^$/ && !/^  known /'

@@ -3,7 +3,7 @@
 // has a `length`. web-platform's `requireArguments(args, ...)` is exactly this,
 // called from `convertQueuingStrategyHighWaterMark` with its argument tuple,
 // and the JVM verifier rejects it: `nts/rt/NtsArrayL` is not assignable to
-// the record's class (jvm-verifies.mjs, cause A, five runtime modules). C and
+// the record's class (jvm-verifies.ts, cause A, five runtime modules). C and
 // LLVM pass the one pointer as the other by construction, and read the right
 // length there: measured, so cause A is the JVM's alone, and this is the
 // guard that a fix for it keeps C and LLVM answering.

@@ -1,9 +1,9 @@
 // Defects that neither `examples/` nor `blockers/` can hold, each pinned to what
 // it does today, re-measured against whatever compiler is current.
 //
-//   node tooling/conformance/outcomes-check.mjs [name ...]
-//   node tooling/conformance/outcomes-check.mjs --record <name> [name ...]
-//   NTS_BIN=<a pinned copy> node tooling/conformance/outcomes-check.mjs
+//   node tooling/conformance/outcomes-check.ts [name ...]
+//   node tooling/conformance/outcomes-check.ts --record <name> [name ...]
+//   NTS_BIN=<a pinned copy> node tooling/conformance/outcomes-check.ts
 //
 // **A record is a claim about main, so --record runs on main's binary**: built
 // from a clean tree at a named commit, never a worktree carrying an unlanded
@@ -114,11 +114,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { capped, linkCommand, withCachedObjects } from "../census/attempt262.ts";
-import { OUTCOMES as FIXTURES, materialise as materialiseIn, outcomeFixtures, runMode } from "./outcomes-project.mjs";
+import { OUTCOMES as FIXTURES, materialise as materialiseIn, outcomeFixtures, runMode } from "./outcomes-project.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
-const PRELOAD = join(HERE, "outcomes-node-preload.mjs");
+const PRELOAD = join(HERE, "outcomes-node-preload.ts");
 const NTS = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
 const CC = process.env.CC ?? "cc";
 const SCRATCH = join(homedir(), ".cache/nts/outcomes", String(process.pid));
@@ -145,7 +145,7 @@ process.on("exit", () => rmSync(SCRATCH, { recursive: true, force: true }));
 
 // --- one project in a scratch directory --------------------------------------
 
-/** A fixture as a project under this run's scratch: see outcomes-project.mjs. */
+/** A fixture as a project under this run's scratch: see outcomes-project.ts. */
 const materialise = (name, sources, mode) => materialiseIn(SCRATCH, name, sources, mode);
 
 // `NTS_TSGO` from the caller when it names one: `tooling/gate/pinned.sh` runs the
@@ -456,7 +456,7 @@ function judge(was, now) {
 // violation it does not already know is printed as owed.
 if (recording && chosen.length > 0) {
   const recorded = chosen.map((name) => join("tooling/conformance/outcomes", name));
-  const check = spawnSync("node", [join(HERE, "integrity.mjs"), ...recorded], {
+  const check = spawnSync("node", [join(HERE, "integrity.ts"), ...recorded], {
     cwd: ROOT,
     encoding: "utf8",
     env: { ...process.env, NTS_BIN: NTS },

@@ -1,5 +1,5 @@
 // How `compiled-axis.sh` prints a module, read once: by compiled-axis-floor.mjs,
-// which holds each module to its row, and emitted-diff.mjs, which runs the
+// which holds each module to its row, and emitted-diff.ts, which runs the
 // axis over the modules a change touched. Two readers of four row shapes would
 // be two derivations of which modules were measured.
 

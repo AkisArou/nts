@@ -82,7 +82,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { armLines, frontendFor, oneChange } from "./pin.mjs";
+import { armLines, frontendFor, oneChange } from "./pin.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -193,7 +193,7 @@ if (!beforeBin || !afterBin || !existsSync(beforeBin) || !existsSync(afterBin)) 
   console.log("  usage: refusal-diff.mjs <before-nts> <after-nts> [project ...] [--one-change]  (both binaries must exist)");
   process.exit(2);
 }
-// The frontend follows the pin (pin.mjs `frontendFor`), per binary: two
+// The frontend follows the pin (pin.ts `frontendFor`), per binary: two
 // arms may be two pins, and one shared frontend would serve one the other's.
 // None stops the run here, before every project prints nothing and reads as
 // no move.

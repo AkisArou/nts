@@ -86,7 +86,7 @@ import {
 import { availableParallelism, freemem, homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { armLines, oneChange } from "../conformance/pin.mjs";
+import { armLines, oneChange } from "../conformance/pin.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");

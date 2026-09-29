@@ -102,7 +102,7 @@ import { fileURLToPath } from "node:url";
 
 import { selfChecks } from "./attempt262.ts";
 import { bodyOf, HARNESS_HASH, PROVIDED_INCLUDES, pinCompiler } from "./project.ts";
-import { frontendFor } from "../conformance/pin.mjs";
+import { frontendFor } from "../conformance/pin.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -163,7 +163,7 @@ const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
 // `environment()` gets a private cache by name, which wins over any value the
 // caller set.
 // The frontend the compiler under test runs with: NTS_TSGO, else the one a
-// pin recorded beside the binary (pin.mjs), else the tree's. Set on this
+// pin recorded beside the binary (pin.ts), else the tree's. Set on this
 // process so every attempt inherits it -- a pinned copy in the scratch has no
 // frontend beside it, and the control program then fails as a "frontend-crash".
 const FRONTEND = frontendFor(NTS, ROOT);

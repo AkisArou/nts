@@ -50,7 +50,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, readdirSync, copyFileSync, 
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { armLines, frontendFor, oneChange } from "../conformance/pin.mjs";
+import { armLines, frontendFor, oneChange } from "../conformance/pin.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");

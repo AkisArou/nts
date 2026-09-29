@@ -13,7 +13,7 @@
 // inside an `async` function disagreed with itself about the harness, not the
 // program. (Found probing a rethrow through `await`.)
 // `@nts/runtime/<path>` resolves to `runtime/<path>`, as the tsconfig
-// outcomes-project.mjs writes resolves it for nts: one definition, both sides.
+// outcomes-project.ts writes resolves it for nts: one definition, both sides.
 //
 // **And a runtime module's native half is its stand-in.** A module declares
 // its bindings (`declare function nts_promise_hook_install(...)`) and the
@@ -30,7 +30,7 @@ import { existsSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { RUNTIME_ROOT, RUNTIME_SPECIFIER } from "./outcomes-project.mjs";
+import { RUNTIME_ROOT, RUNTIME_SPECIFIER } from "./outcomes-project.ts";
 
 /** The stand-in file for the runtime module a path belongs to, or null. */
 export function bindingsFor(path) {

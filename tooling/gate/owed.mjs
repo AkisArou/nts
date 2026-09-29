@@ -40,7 +40,7 @@
 // comparison, so what it cannot say is exactly this list. `<before>` is a
 // clean build of the base the change sits on and `<after>` a clean build with
 // it -- never `target/release/nts`, which is whichever session linked last.
-// Build both with `tooling/conformance/pin.mjs <rev> [--worktree <dir>]`: a
+// Build both with `tooling/conformance/pin.ts <rev> [--worktree <dir>]`: a
 // pin records its commit and what was applied, and every comparison tool then
 // prints what separates the two arms, and how many of those commits touch
 // what the binary is built from.
@@ -103,7 +103,7 @@ export const ASKS = {
 const COMPARE = [
   { kind: "answers", asks: "which code is emitted: does every example answer as it did, case by case", run: "node tooling/differential/agree.mjs <before> <after>   # and NTS_BACKEND=llvm, NTS_BACKEND=jvm, NTS_RC=1" },
   { kind: "whether", asks: "whether code is emitted: which functions stopped, started, or lost their root", run: "node tooling/conformance/refusal-diff.mjs <before> <after>   # 0 moves is not no effect" },
-  { kind: "answers", asks: "expected neutral? neutral has two causes -- the construct is absent, or the arm never fired -- and only one is good: which runtime modules emit differently, and what node's tests say of them", run: "node tooling/conformance/emitted-diff.mjs <before> <after> --axis" },
+  { kind: "answers", asks: "expected neutral? neutral has two causes -- the construct is absent, or the arm never fired -- and only one is good: which runtime modules emit differently, and what node's tests say of them", run: "node tooling/conformance/emitted-diff.ts <before> <after> --axis" },
 ];
 
 /**
@@ -150,9 +150,9 @@ export const RULES = [
     when: (p) => /^compiler\/core\/src\/hir\/(rc|own)\.rs$/.test(p),
     steps: ["rc", "llvm-rc", "memory"],
     arms: [
-      { kind: "answers", asks: "where releases go: the default provider is no-gc, rc.rs never runs, and a diff without --rc reads byte-identical whatever this changed", run: "node tooling/conformance/emitted-diff.mjs <before> <after> --rc --axis" },
+      { kind: "answers", asks: "where releases go: the default provider is no-gc, rc.rs never runs, and a diff without --rc reads byte-identical whatever this changed", run: "node tooling/conformance/emitted-diff.ts <before> <after> --rc --axis" },
       { kind: "answers", asks: "does every example still answer under counting", run: "NTS_RC=1 node tooling/differential/agree.mjs <before> <after>" },
-      { kind: "valid", asks: "is the runtime's counted LLVM IR valid -- `assembles` without --rc emits no release", run: "NTS_BIN=<after> node tooling/conformance/assembles.mjs --rc" },
+      { kind: "valid", asks: "is the runtime's counted LLVM IR valid -- `assembles` without --rc emits no release", run: "NTS_BIN=<after> node tooling/conformance/assembles.ts --rc" },
     ],
   },
   {
@@ -173,7 +173,7 @@ export const RULES = [
     steps: ["jvm", "dex"],
     arms: [
       { kind: "answers", asks: "which code is emitted, on the JVM", run: "NTS_BACKEND=jvm node tooling/differential/agree.mjs <before> <after>" },
-      { kind: "valid", asks: "does the runtime's JVM output pass the verifier -- the jvm step runs examples only", run: "NTS_BIN=<after> node tooling/conformance/jvm-verifies.mjs" },
+      { kind: "valid", asks: "does the runtime's JVM output pass the verifier -- the jvm step runs examples only", run: "NTS_BIN=<after> node tooling/conformance/jvm-verifies.ts" },
     ],
   },
   {
@@ -246,7 +246,7 @@ export const RULES = [
     when: (p) => /^tooling\/conformance\/outcomes\//.test(p),
     steps: ["outcomes", "integrity"],
     arms: [
-      { kind: "hygiene", asks: "is the record a claim about main", run: "record it with NTS_BIN=<a clean main build> node tooling/conformance/outcomes-check.mjs --record <name>" },
+      { kind: "hygiene", asks: "is the record a claim about main", run: "record it with NTS_BIN=<a clean main build> node tooling/conformance/outcomes-check.ts --record <name>" },
       { kind: "answers", asks: "is the defect specific to what the fixture names", run: "a control differing in one thing, measured" },
     ],
   },

@@ -1,10 +1,10 @@
 // A compiler binary that says where it came from.
 //
-//   node tooling/conformance/pin.mjs <rev>                      build <rev> as committed
-//   node tooling/conformance/pin.mjs <rev> --patch <file>       <rev> with a patch applied
-//   node tooling/conformance/pin.mjs <rev> --worktree <dir>     <rev> with <dir>'s diff against it
-//   node tooling/conformance/pin.mjs --show <binary>            print a binary's provenance
-//   node tooling/conformance/pin.mjs --self-test
+//   node tooling/conformance/pin.ts <rev>                      build <rev> as committed
+//   node tooling/conformance/pin.ts <rev> --patch <file>       <rev> with a patch applied
+//   node tooling/conformance/pin.ts <rev> --worktree <dir>     <rev> with <dir>'s diff against it
+//   node tooling/conformance/pin.ts --show <binary>            print a binary's provenance
+//   node tooling/conformance/pin.ts --self-test
 //
 // Prints the pinned binary's path as its last line. Exit 2 when it cannot
 // build or cannot say what it built.
@@ -88,7 +88,7 @@ export function frontendFor(binary, root) {
 
 /** One line for a report: the commit, what was applied, and the frontend. */
 export function describe(record) {
-  if (!record) return "provenance unknown: not built by pin.mjs";
+  if (!record) return "provenance unknown: not built by pin.ts";
   const size = (a) => (a.insertions === undefined ? "" : `, +${a.insertions} -${a.deletions}`);
   const applied = record.applied ? ` + ${record.applied.source} ${record.applied.sha256.slice(0, 12)} (${record.applied.files.length} file(s)${size(record.applied)})` : "";
   return `${record.sha.slice(0, 12)}${applied}`;
@@ -150,7 +150,7 @@ export function armLines(before, after) {
 export function oneChange(beforeBin, afterBin) {
   const a = provenanceOf(beforeBin);
   const b = provenanceOf(afterBin);
-  if (!a || !b) return `${!a ? "before" : "after"} was not built by pin.mjs, so what separates the arms is unknown`;
+  if (!a || !b) return `${!a ? "before" : "after"} was not built by pin.ts, so what separates the arms is unknown`;
   const d = between(a, b);
   if (d.sameBase) return d.appliedDiffers ? null : "the arms are the same commit with the same change";
   if (d.backward.length > 0) return `after is not a descendant of before (${d.backward.length} commit(s) only in before)`;
@@ -263,9 +263,9 @@ function selfTest() {
   const sameRev = between(a, a);
   if (!sameRev.sameBase || sameRev.appliedDiffers) return "a pin compared with itself";
   if (!between(a, withPatch).appliedDiffers || !between(a, withPatch).sameBase) return "a base and its patched pin";
-  if (describe(null) !== "provenance unknown: not built by pin.mjs") return "an unknown binary's description";
+  if (describe(null) !== "provenance unknown: not built by pin.ts") return "an unknown binary's description";
   if (provenanceOf("/nonexistent/nts") !== null) return "a binary with no record";
-  if (!/was not built by pin.mjs/.test(oneChange("/nonexistent/a", "/nonexistent/b") ?? "")) return "one change between two unrecorded binaries";
+  if (!/was not built by pin.ts/.test(oneChange("/nonexistent/a", "/nonexistent/b") ?? "")) return "one change between two unrecorded binaries";
   return null;
 }
 
@@ -288,7 +288,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   }
   const rev = argv.find((a, i) => !a.startsWith("--") && !["--patch", "--worktree"].includes(argv[i - 1]));
   if (!rev) {
-    console.log("  usage: pin.mjs <rev> [--patch <file> | --worktree <dir>]");
+    console.log("  usage: pin.ts <rev> [--patch <file> | --worktree <dir>]");
     process.exit(2);
   }
   try {

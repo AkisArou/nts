@@ -1,11 +1,11 @@
 // What two compilers emit differently for the runtime, per module -- and, with
 // `--axis`, what that difference does to node's own tests.
 //
-//   node tooling/conformance/emitted-diff.mjs <before> <after> [project ...]
+//   node tooling/conformance/emitted-diff.ts <before> <after> [project ...]
 //                                        (default: runtime/node/*, runtime/web-platform)
-//   node tooling/conformance/emitted-diff.mjs <before> <after> --axis
-//   node tooling/conformance/emitted-diff.mjs <before> <after> --rc     under reference counting
-//   node tooling/conformance/emitted-diff.mjs --self-test
+//   node tooling/conformance/emitted-diff.ts <before> <after> --axis
+//   node tooling/conformance/emitted-diff.ts <before> <after> --rc     under reference counting
+//   node tooling/conformance/emitted-diff.ts --self-test
 //
 // # Why
 //
@@ -71,7 +71,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readAxis } from "./compiled-axis-rows.mjs";
-import { armLines, oneChange, frontendFor } from "./pin.mjs";
+import { armLines, oneChange, frontendFor } from "./pin.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -217,7 +217,7 @@ const PROVIDER = RC ? "reference counting (--rc)" : "no-gc (the default; rc.rs d
 const positional = argv.filter((a) => !a.startsWith("--"));
 const [beforeBin, afterBin, ...named] = positional;
 if (!beforeBin || !afterBin) {
-  console.log("  usage: emitted-diff.mjs <before-nts> <after-nts> [project ...] [--axis] [--one-change]");
+  console.log("  usage: emitted-diff.ts <before-nts> <after-nts> [project ...] [--axis] [--one-change]");
   process.exit(2);
 }
 for (const bin of [beforeBin, afterBin]) {
@@ -258,7 +258,7 @@ const arms = [["before", beforeBin], ["after", afterBin]].map(([name, source]) =
   chmodSync(nts, 0o755);
   return { name, source, dir, nts };
 });
-// The frontend follows the pin (pin.mjs `frontendFor`); none stops the run
+// The frontend follows the pin (pin.ts `frontendFor`); none stops the run
 // here, before every project prints nothing and reads as clean.
 // Per arm: two arms are two binaries and may be two pins, and one shared
 // frontend would serve one arm the other's -- what the per-arm snapshot

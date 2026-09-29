@@ -1,4 +1,4 @@
-# Violations of tooling/conformance/integrity.mjs that are known and owned.
+# Violations of tooling/conformance/integrity.ts that are known and owned.
 # One per line: project<TAB>rule<TAB>subject<TAB>why. The subject is the
 # violation's text, except under cascade-has-root, where it is the blamed
 # cause: one entry per unrecorded root, covering every cascade through it;
@@ -9,7 +9,7 @@
 # node's full start used for its token start), so a project names it once.
 # Closure numbers and type ids are normalised (ClosureN, <N>, objN). An entry
 # that no longer occurs is reported for removal; any violation not listed
-# here fails. Entries are in byte order (LC_ALL=C sort), and integrity.mjs
+# here fails. Entries are in byte order (LC_ALL=C sort), and integrity.ts
 # enforces it: insert a new entry where it sorts, never at the end.
 examples/calls	top-level-cut	the initializer of overloadedNumber	a per-global cut: the initializer calls a refused function, and its readers are refused with it (compiler lane)
 examples/calls	top-level-cut	the initializer of overloadedString	a per-global cut: the initializer calls a refused function, and its readers are refused with it (compiler lane)

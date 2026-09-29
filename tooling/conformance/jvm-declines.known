@@ -3,7 +3,7 @@
 # refuses it by name, and C and LLVM dispatch it without a check. So each shape is
 # either the JVM's alone by construction, or live on C (and then a fixture shows
 # it), or refused everywhere once lowering refuses it too, or owned and not yet
-# measured. jvm-verifies.mjs fails on a shape not here.
+# measured. jvm-verifies.ts fails on a shape not here.
 # shape<TAB>verdict<TAB>why -- shapes are normalised (ClosureN, $N$, FnN, TypeN).
 ChildWritable._write (Lnts/rt/NtsViewU8;Ljava/lang/String;Lnts/gen/FnN;)V over (Lnts/rt/NtsValue;Ljava/lang/String;Lnts/gen/FnN;)V	refused-everywhere	a narrowed parameter read at an erased argument: was SIGSEGV on C, refused by lowering since b09c3e6f6 -- a-writable-override-narrowing-an-erased-chunk (child_process, cluster)
 Transform._read ()V over (D)V	jvm-only	fewer parameters: C ignores the rest, an-override-declaring-fewer-parameters; the JVM needs a bridge

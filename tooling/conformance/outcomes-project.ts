@@ -1,8 +1,8 @@
 // An outcomes fixture as a compilable project: the one definition of how
 // `tooling/conformance/outcomes/<name>` becomes something `nts` can read.
 //
-// Shared by `outcomes-check.mjs`, which builds and runs it, and
-// `integrity.mjs`, which reads its listings. A fixture's `main.ts` calls
+// Shared by `outcomes-check.ts`, which builds and runs it, and
+// `integrity.ts`, which reads its listings. A fixture's `main.ts` calls
 // `observe` and `done` from `outcomes-harness.ts` and does not typecheck
 // without it, so two tools deriving the project separately would be two
 // derivations of the program the fixture means -- the kind that drift.
@@ -18,7 +18,7 @@ export const OUTCOMES = join(HERE, "outcomes");
 /**
  * How a fixture reaches the runtime's own sources: `@nts/runtime/<path>` is
  * `runtime/<path>` in this repository, on both sides -- a tsconfig `paths`
- * entry for nts, and a resolve hook in `outcomes-node-preload.mjs` for node.
+ * entry for nts, and a resolve hook in `outcomes-node-preload.ts` for node.
  * One definition, so the two cannot drift.
  *
  * It exists for guards on runtime *internals*, which no other instrument

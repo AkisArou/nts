@@ -6,7 +6,7 @@
 #     tooling/conformance/compiled-axis.sh [module ...]
 #
 # Every runtime/node module by default; named modules only when given, which
-# is how emitted-diff.mjs runs the axis over what a change touched. Each
+# is how emitted-diff.ts runs the axis over what a change touched. Each
 # module's real passes are left in `$NTS_ADDON_OUT/<module>.{intact,empty}.txt`.
 #
 # # Why this is its own script

@@ -1,10 +1,10 @@
 // Is what the backend receives whole? Nine facts about a program, checked from
 // the compiler's own listings, each one a defect that shipped silently.
 //
-//   node tooling/conformance/integrity.mjs [project ...]   (default: examples/*, blockers/*, outcomes/*)
-//   node tooling/conformance/integrity.mjs --runtime       runtime/node/* and runtime/web-platform
-//   node tooling/conformance/integrity.mjs --self-test
-//   NTS_BIN=<a pinned copy> node tooling/conformance/integrity.mjs
+//   node tooling/conformance/integrity.ts [project ...]   (default: examples/*, blockers/*, outcomes/*)
+//   node tooling/conformance/integrity.ts --runtime       runtime/node/* and runtime/web-platform
+//   node tooling/conformance/integrity.ts --self-test
+//   NTS_BIN=<a pinned copy> node tooling/conformance/integrity.ts
 //
 // # Why
 //
@@ -150,8 +150,8 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { OUTCOMES, materialise, outcomeFixtures, runMode } from "./outcomes-project.mjs";
-import { frontendFor } from "./pin.mjs";
+import { OUTCOMES, materialise, outcomeFixtures, runMode } from "./outcomes-project.ts";
+import { frontendFor } from "./pin.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");

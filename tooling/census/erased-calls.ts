@@ -33,9 +33,9 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSyn
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { materialise, outcomeFixtures, OUTCOMES, runMode } from "../conformance/outcomes-project.mjs";
+import { materialise, outcomeFixtures, OUTCOMES, runMode } from "../conformance/outcomes-project.ts";
 import { bodyOf, materialise as materialiseCase, placeOf, workspace } from "./project.ts";
-import { describe, provenanceOf, frontendFor } from "../conformance/pin.mjs";
+import { describe, provenanceOf, frontendFor } from "../conformance/pin.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -369,7 +369,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const NTS = join(scratch, "nts");
   copyFileSync(SOURCE, NTS);
   chmodSync(NTS, 0o755);
-// The frontend follows the pin (pin.mjs `frontendFor`); none stops the run
+// The frontend follows the pin (pin.ts `frontendFor`); none stops the run
 // here, before every project prints nothing and reads as clean.
 const FRONTEND = frontendFor(SOURCE, ROOT);
 if (!FRONTEND.exists) {
