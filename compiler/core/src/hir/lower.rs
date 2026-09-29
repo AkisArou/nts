@@ -19363,6 +19363,35 @@ impl<'a> FuncBuilder<'a> {
             self.record_arrival(&have, want, id);
             return Ok(value);
         }
+        // **A `void` value erases to `undefined`, because that is what it is.** A
+        // function with no `return` completes with `undefined`, so
+        //
+        //     function counter(): void { initCount += 1 }
+        //     function h({ w = counter() }) { … }
+        //
+        // has `w` as `undefined` -- and this erased the *call's* result, which in C
+        // is nothing at all:
+        //
+        //     %5 = call counter() : void
+        //     %7 = erase %5 : erased     ->  error: 'v5' undeclared
+        //                                   error: invalid use of void expression
+        //
+        // Uncompilable C rather than a refusal, so `emit-c` wrote nothing for the
+        // whole program: three recorded test262 files, and the conformance lane's
+        // reduction reaches it with a plain function and no generator.
+        //
+        // **The call above this still runs**, which is the half that must not be
+        // lost: node increments `initCount` too. Only the value it did not produce
+        // is replaced.
+        //
+        // Here rather than in [`Self::erased`], which documents itself as owning the
+        // *identity* case, because this is the one place that decides a coercion
+        // **to** an erased value and `absent` is computed beside it. Two readers of
+        // one rule is what that helper's own header is a complaint about.
+        if matches!(have, HirType::Void) {
+            let origin = self.origin(id);
+            return Ok(self.push(OpKind::ConstUndefined, HirType::Erased, origin));
+        }
         if !erasable(&have) {
             return Err(self.unsupported(
                 id,
