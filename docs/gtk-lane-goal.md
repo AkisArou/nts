@@ -1894,6 +1894,7 @@ one in two ways, both core gaps:
 | 2026-09-27 | 25 | 8 on main; 14 stop at the captured narrowed handle, Scale at `Object.entries` over a table, Stack at a `let` of a handle with no initializer, Context Menu at a record's fields (`new Gdk.Rectangle({ x, y })`, designed with the compiler lane) |
 | 2026-09-28 | 29 | **25 on main**, with the captured-handle fix (bd58854b9). Left: Stack (a `let` of a handle with no initializer), Scale (`Object.entries` over a table), Context Menu (record fields, designed), Boxed Lists (`GObject.TYPE_STRING` and `Gtk.ClosureExpression`, binding gaps) |
 | 2026-09-28 | 34 | **28**. Also left: Text Colors (a spread in call arguments, then an array stringified), Text View (destructuring a handle's property) |
+| 2026-09-29 | 59 | **47** on main 24f327887, with GIR's constants: Boxed Lists and Drop Down move on to `Gtk.ClosureExpression`, Accessibility to `update_state`'s arrays (both named above), and the same-block-capture bound of 64306803c is now the first blocker of three (Box, Text Colors, Message Dialogs; reported) |
 | 2026-09-29 | 59 | **47**: Network Monitor, once 3cf606cea defined a capturing nested function a closure calls. Box is ported. Its hoisted arm, a function passed before its declaration, was fixed by 64306803c; it now stops at that fix's deliberate bound, a hoisted function whose captures are declared in its own block (Box's are all initialized before the use; reported) |
 | 2026-09-28 | 58 | **46**: List Model, one string list bound to a list box and a flow box by functions, and a filter model over it |
 | 2026-09-28 | 57 | **45**: Preferences Dialog, its `AdwStyleManager` color scheme set from a switch row, a subpage pushed and popped, a toast |
@@ -1909,6 +1910,22 @@ one in two ways, both core gaps:
 | 2026-09-28 | 42 | **32** on main f3f4ac28e. Left, each named: a fundamental GType (Boxed Lists, Drop Down, Accessibility), GIR constants (Accessibility), record fields (Context Menu), a construct-only property no constructor takes (Notification), `Object.entries` over a table (Scale), a `let` of a handle with no initializer (Stack, Carousel), a property written through a union of handles (Carousel), a spread in call arguments (Text Colors), destructuring a handle's property (Text View) |
 
 ### What the corpus found beyond its blockers
+
+**An array of scalars or records lent to C.** Accessibility writes GJS's
+`button.update_state([Gtk.AccessibleState.PRESSED], [value])`, which is
+GIR's `gtk_accessible_update_state_value(self, n_states, states, values)`:
+a count, a C array of `GtkAccessibleState`s and a contiguous C array of
+`GValue` structs, the count shared by both. The binder lends strings
+(`CStrings`), bytes (`CBytes`) and handles (`CHandles`), each with its
+count beside it, and refuses this one as "an array". Neither array can be
+lent in place: the program holds the states as `number`s, where C wants
+`int`s, and its `GValue`s as boxes, where C wants the structs side by side.
+So it wants a lent copy -- the compiler converting a `readonly T[]` into C
+storage for the call and releasing it after, as it does a `CStrings` --
+for scalars (`CNumbers<"int">`) and records (`CRecords<GValue>`), and a
+count parameter shared by two arrays. That is lowering's `native_arguments`
+and a runtime helper per backend, so it is designed with the compiler lane
+before it is built.
 
 **`Gtk.ClosureExpression` needs a closure that answers C an owned value.**
 Boxed Lists and Drop Down write `new Gtk.ClosureExpression(GObject.TYPE_STRING,
