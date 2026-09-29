@@ -1,4 +1,4 @@
-// expect: NTS1001 a module-scope variable of unrepresentable type (an array of any)
+// expect: NTS1001 a module-scope variable of unrepresentable type (an array of a type the checker had not yet settled)
 //
 // `xs.push(7); xs.push("a")` on an evolving array.
 //

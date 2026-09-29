@@ -58,6 +58,15 @@ pub mod object_flags {
     /// A generic type reference. Its data is a `TypeReference`, the only
     /// kind `getTypeArguments` can read: on any other it dereferences nil.
     pub const REFERENCE: u32 = 1 << 2;
+    /// `ObjectFlagsNonInferrableType`. On an `any` it identifies the checker's
+    /// **`autoType`** -- the *evolving* type of `var x;` and `const xs = []` --
+    /// and nothing else does: `anyType`, `wildcardType` and `blockedStringType`
+    /// carry no flags, `errorType` and `unresolvedType` differ only by an
+    /// `intrinsicName` that `autoType` shares with `anyType` ("any"), and
+    /// `nonInferrableAnyType` uses `ContainsWideningType` instead
+    /// (`checker.go:975-981`). `silentNeverType` also carries this flag and is a
+    /// `Never`, so the pair is what identifies, not the flag alone.
+    pub const NON_INFERRABLE: u32 = 1 << 18;
 }
 
 /// The checker's types as the arena holds them: the slot each tsgo type id
@@ -149,7 +158,21 @@ pub fn classify(response: &TypeResponse, symbols: &FxHashMap<u32, SymbolId>) -> 
         // integer wide enough to carry one faithfully.
         literal_or_structured(response, |v| Some(LiteralValue::BigInt(v.to_string())))
     } else if f & flags::ANY != 0 {
-        TypeKind::Any
+        // **Two intrinsics, two facts.** `c.autoType` is created with
+        // `ObjectFlagsNonInferrableType` and `c.anyType` is not
+        // (`checker.go:975-976`), and the difference is the whole of whether
+        // something better than `any` is knowable: an evolving declaration is
+        // filled in from its assignments, and a written `any` never settles.
+        //
+        // The API dropped the flag for an *intrinsic* until the carried patch to
+        // `proto.go` -- it assigned `ObjectFlags` inside the object-type case, so
+        // only the auto *array* ever showed the bit. Measured before that patch:
+        // all three of a program's `any` records arrived with `objectFlags 0x0`.
+        if response.object_flags & object_flags::NON_INFERRABLE != 0 {
+            TypeKind::Evolving
+        } else {
+            TypeKind::Any
+        }
     } else if f & flags::UNKNOWN != 0 {
         TypeKind::Unknown
     } else if f & flags::NEVER != 0 {
@@ -476,6 +499,38 @@ mod tests {
                  --init third_party/typescript-go`."
             )
         })
+    }
+
+    /// [`object_flags::NON_INFERRABLE`], against the pinned `ObjectFlags`.
+    ///
+    /// The sibling of `symbols.rs`'s `every_flag_matches_the_pinned_tsgo_source`
+    /// and for its reason: a hand-copied bit is self-consistent, so only the pin
+    /// can say it has gone stale, and the pin moves exactly when nobody thinks to
+    /// look. This one decides whether an `any` is the checker's `autoType`, so a
+    /// wrong shift does not fail -- it silently calls every evolving declaration a
+    /// written `any` and erases what its assignments had proven.
+    #[test]
+    fn non_inferrable_matches_the_pinned_object_flags() {
+        let source = pinned("internal/checker/types.go");
+        // `\tObjectFlagsNonInferrableType   ObjectFlags = 1 << 18 // Type is or ...`
+        let declared = source
+            .lines()
+            .find_map(|line| {
+                let (name, rest) = line.split_once(" ObjectFlags = 1 << ")?;
+                (name.trim() == "ObjectFlagsNonInferrableType").then_some(rest)
+            })
+            .expect("`ObjectFlagsNonInferrableType` is not in the pin any more");
+        let shift: u32 = declared
+            .chars()
+            .take_while(char::is_ascii_digit)
+            .collect::<String>()
+            .parse()
+            .expect("its shift is no longer a decimal literal");
+        assert_eq!(
+            object_flags::NON_INFERRABLE,
+            1 << shift,
+            "the pin moved `ObjectFlagsNonInferrableType` to `1 << {shift}`"
+        );
     }
 
     /// **The carried patch is still applied.**

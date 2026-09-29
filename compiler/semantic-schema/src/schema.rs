@@ -48,8 +48,10 @@ use crate::origin::Origin;
 /// Windows Runtime vector's `for...of`. 35: `SourceFile::rewritten_map`,
 /// where a rewritten file's text came from. 36: a type alias carries its
 /// `native` tags, a Windows Runtime interface's `@ntsQuery` IID. 37:
-/// `runtime_class`, a sealed Windows Runtime class a binding declares.
-pub const SCHEMA_VERSION: u32 = 39;
+/// `runtime_class`, a sealed Windows Runtime class a binding declares. 40:
+/// `TypeKind::Evolving`, the checker's `autoType` kept apart from its `anyType`
+/// -- two facts one variant had been flattening.
+pub const SCHEMA_VERSION: u32 = 40;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -398,6 +400,25 @@ pub struct TypeRecord {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TypeKind {
     Any,
+    /// The checker's *evolving* type: `var x;`, `const xs = []`, `let n = null`.
+    ///
+    /// **`any` meaning "not yet", where [`TypeKind::Any`] means "no trust".** The
+    /// checker keeps them as two intrinsics -- `c.anyType` and `c.autoType`, the
+    /// second created with `ObjectFlagsNonInferrableType` -- and fills an evolving
+    /// declaration in from its assignments as it walks, so **every later mention
+    /// of the name carries what it settled on**. Written `any` never settles.
+    ///
+    /// They are two facts and a consumer that gives them one representation is
+    /// wrong about one of them: erasing an evolving declaration threw away a
+    /// `string[]` the assignments had already proven and cost 243 recorded test262
+    /// passes. `docs/any-unknown.md` asks for the distinction in as many words --
+    /// provenance is "retained" -- and this is where it is kept.
+    ///
+    /// A `TypeKind` of its own rather than a flag on `Any`, because every reader
+    /// has to decide: the lowering must not represent one (something better is
+    /// knowable), and `erasure.rs` must not count one as a site needing a
+    /// representation. A flag is a thing a `match` can miss.
+    Evolving,
     Unknown,
     Never,
     Void,

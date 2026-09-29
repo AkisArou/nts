@@ -9,7 +9,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo::decompose::Budget};
 use nts_semantic_schema::{PropertyRecord, SemanticSnapshot, TypeKind};
 
@@ -147,4 +147,88 @@ fn optional_and_rest_parameters_are_distinguished() {
         "`...rest` is a rest parameter"
     );
     assert!(!signature.parameters[0].rest);
+}
+
+/// A snapshot of a program written to hold **both** kinds of `any`, side by
+/// side, in the shape `decomposition.rs` writes a synthetic project in.
+fn over_both_kinds_of_any() -> Option<SemanticSnapshot> {
+    let tsgo = nts_frontend_ts::tsgo::locate()?;
+    let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+        .unwrap()
+        .join(format!("nts-two-anys-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("main.ts"),
+        // `written` is `c.anyType`. `evolving` and `growing` are `c.autoType`
+        // and `c.autoArrayType` -- legal under `strict`, because an implicit
+        // `any` the assignments will settle is not an implicit-`any` error.
+        "export function written(value: any): number {\n  \
+             return value as number;\n\
+         }\n\
+         export function evolving(): number {\n  \
+             var held;\n  \
+             held = 7;\n  \
+             const growing = [];\n  \
+             growing.push(held);\n  \
+             return growing.length;\n\
+         }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("tsconfig.json"),
+        r#"{ "compilerOptions": { "strict": true, "noEmit": true, "target": "es2022", "module": "esnext" }, "files": ["main.ts"] }"#,
+    )
+    .unwrap();
+    let tsconfig = dir.join("tsconfig.json").canonicalize_utf8().unwrap();
+    let mut source = TsgoApi::new(tsgo).with_decomposition(Budget::DEFAULT);
+    Some(source.snapshot(&tsconfig).expect("snapshot should succeed"))
+}
+
+/// **The two `any`s arrive as two kinds, and this is what a stale `target/tsgo`
+/// fails.**
+///
+/// `written(value: any)` is the checker's `c.anyType`; `var held;` and `const
+/// growing = []` are its `c.autoType` and `c.autoArrayType`. They are two facts
+/// -- "no trust" and "not yet" -- and the whole of what separates them on the
+/// wire is one `ObjectFlag` that `newTypeResponse` did not report for an intrinsic
+/// until `third_party/patches/typescript-go-objectflags-on-every-type.patch`.
+///
+/// So this is the **binary** half of that patch's guard, where
+/// `types.rs`'s `the_pin_reports_object_flags_for_every_type` is the source
+/// half. A rebuilt frontend answers both kinds; one built before the patch
+/// answers `Any` to all three, which the lowering cannot tell from a written
+/// `any` -- measured at 243 recorded test262 passes, and **silent**, because
+/// every program still compiles and merely compiles wrongly. A test is the only
+/// thing that can say so: a stale binary is not an absent one, so this runs and
+/// fails rather than skipping.
+#[test]
+fn the_frontend_tells_a_written_any_from_an_evolving_one() {
+    let Some(snapshot) = over_both_kinds_of_any() else {
+        return;
+    };
+    let count = |wanted: &TypeKind| -> usize {
+        snapshot
+            .types
+            .iter()
+            .filter(|record| &record.kind == wanted)
+            .count()
+    };
+    assert!(
+        count(&TypeKind::Any) > 0,
+        "`written(value: any)` is in the fixture, so a written `any` must be in \
+         the snapshot -- if neither kind is here the program did not typecheck"
+    );
+    assert!(
+        count(&TypeKind::Evolving) > 0,
+        "`var held;` and `const growing = []` are in the fixture and no \
+         `TypeKind::Evolving` reached the snapshot, so the frontend cannot tell \
+         the checker's `autoType` from its `anyType`.\n\
+         \n\
+         `target/tsgo` is almost certainly built from before \
+         third_party/patches/typescript-go-objectflags-on-every-type.patch. \
+         `sh tooling/bootstrap/bootstrap.sh` applies it and rebuilds. Until then \
+         every evolving declaration is read as a written `any`, which is silent \
+         and wrong: an erased `const growing = []` throws away the element its \
+         own `push` proves."
+    );
 }

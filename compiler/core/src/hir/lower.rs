@@ -11830,6 +11830,19 @@ pub fn describe(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
     };
     match &record.kind {
         TypeKind::Any => "any".to_owned(),
+        // **What the author wrote, not what the checker called it.** An evolving
+        // declaration's source says nothing at all -- `var x;`, `const xs = []` --
+        // so naming it "any" in a refusal would quote a word the program does not
+        // contain and send its reader looking for one. It would also be the
+        // conflation this variant exists to end: after the split, `(any)` in a
+        // refusal means a *written* `any`, which has no better answer coming, where
+        // this one does and being refused is a gap in the settling.
+        //
+        // "a **type**", because the phrase composes: it lands inside `(an array of
+        // ...)` as well as on its own, and `blockers/pushes-of-disagreeing-types`
+        // read "an array of a declaration the checker had not yet settled" until it
+        // did.
+        TypeKind::Evolving => "a type the checker had not yet settled".to_owned(),
         TypeKind::Unknown => "unknown".to_owned(),
         TypeKind::Null => "null".to_owned(),
         TypeKind::BigInt => "bigint".to_owned(),
@@ -26539,7 +26552,19 @@ impl<'a> FuncBuilder<'a> {
                     _ => false,
                 }
             }
-            TypeKind::Any | TypeKind::Unknown | TypeKind::Union(_) | TypeKind::TypeParameter { .. } => {
+            // [`TypeKind::Evolving`] beside `Any`, because it was one of them until
+            // the two were split and **nothing here may fold on a declaration the
+            // checker has not settled**. Dropping it to the catch-all below is the
+            // constant `false` the comment under this arm is about, 28 of 58 cases
+            // differing from node -- and `const growing = []; ...; Array.isArray(
+            // growing)` is the shape that reaches it. What the assignments settle on
+            // could fold this to `true`, which is better and is a separate question:
+            // asking the runtime is what it did before the split and is correct.
+            TypeKind::Any
+            | TypeKind::Evolving
+            | TypeKind::Unknown
+            | TypeKind::Union(_)
+            | TypeKind::TypeParameter { .. } => {
                 return Ok(self.ask_the_runtime_is_array(id, subject));
             }
             // **TypeScript's `object`, which includes an array.** It is what
@@ -42928,6 +42953,10 @@ impl<'a> FuncBuilder<'a> {
             // because they were not unions.
             let what = match kind {
                 TypeKind::Any => "`any`",
+                // Not "`any`": an evolving declaration's source says no such
+                // word, and quoting one sends the reader looking for it. The
+                // same sentence [`describe`] gives it.
+                TypeKind::Evolving => "a type the checker had not yet settled",
                 TypeKind::Unknown => "`unknown`",
                 TypeKind::Intersection(_) => "an intersection",
                 TypeKind::TypeParameter { .. } => "an uninstantiated type parameter",

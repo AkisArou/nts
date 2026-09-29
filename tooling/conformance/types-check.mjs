@@ -58,7 +58,7 @@ const SIG_LINE = /^sig#(\d+)(?: <\[([^\]]*)\]>)? \((.*)\) -> #(\d+)$/;
  * whose kind is not one of these was not understood, however well it parsed:
  * a new variant is a table this reader has not been taught to check.
  */
-const KINDS = new Set(["Any", "Unknown", "Never", "Void", "Undefined", "Null", "Boolean", "Number", "BigInt", "String", "Symbol", "Literal", "Object", "Array", "Tuple", "Union", "Intersection", "Function", "TypeParameter", "Conditional", "IndexedAccess", "TemplateLiteral", "Structured", "Unsupported"]);
+const KINDS = new Set(["Any", "Evolving", "Unknown", "Never", "Void", "Undefined", "Null", "Boolean", "Number", "BigInt", "String", "Symbol", "Literal", "Object", "Array", "Tuple", "Union", "Intersection", "Function", "TypeParameter", "Conditional", "IndexedAccess", "TemplateLiteral", "Structured", "Unsupported"]);
 const ids = (text, re) => [...(text ?? "").matchAll(re)].map((m) => Number(m[1]));
 const TYPE_REF = /TypeId\((\d+)\)/g;
 const SIG_REF = /SignatureId\((\d+)\)/g;

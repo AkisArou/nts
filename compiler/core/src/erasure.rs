@@ -362,6 +362,13 @@ impl Walk<'_> {
                 let (checker, _) = self.erased(element)?;
                 Some((checker, true))
             }
+            // [`TypeKind::Evolving`] is deliberately not here, and it counted as
+            // `Any` before the two were split. An evolving declaration -- `var x;`,
+            // `const xs = []` -- is not a site *needing* a representation: the
+            // checker fills it in from the assignments and every later mention of
+            // the name carries what it settled on. Counting one would inflate this
+            // analysis's population with declarations that have an answer already,
+            // which is the opposite of what it is measured for.
             _ => None,
         }
     }
