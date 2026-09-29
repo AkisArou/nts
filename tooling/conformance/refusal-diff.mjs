@@ -97,15 +97,27 @@ export const stable = (name) => name.replace(/<\d+>/g, "<N>").replace(/Closure\d
  * cites as a callee ("it calls `X`").
  */
 export function states(prepared, refusals) {
-  const compiled = new Set();
-  for (const m of prepared.matchAll(/^(?:export )?func (.+?)\(/gm)) compiled.add(stable(m[1]));
+  // Each stable name keeps the names it stands for: `Timeout<1334>#invoke` and
+  // `Timeout<1403>#invoke` are one row, and whether a refusal names the very
+  // function the program compiles -- a phantom -- is a question about the
+  // exact names, not the row. Asked of the row, a program with one
+  // instantiation refused and another compiled read as a phantom, and failed
+  // a correct change: any change that makes a second instantiation.
+  const compiled = new Map();
+  for (const m of prepared.matchAll(/^(?:export )?func (.+?)\(/gm)) compiled.set(stable(m[1]), (compiled.get(stable(m[1])) ?? new Set()).add(m[1]));
   const reasons = new Map();
+  const refusedExactly = new Map();
   for (const line of refusals.split("\n")) {
     const [name, reason] = line.split("\t");
-    if (name) reasons.set(stable(name), reason ?? "");
+    if (!name) continue;
+    reasons.set(stable(name), reason ?? "");
+    refusedExactly.set(stable(name), (refusedExactly.get(stable(name)) ?? new Set()).add(name));
   }
   const out = new Map();
-  for (const n of compiled) out.set(n, reasons.has(n) ? "phantom" : "compiled");
+  for (const [n, exact] of compiled) {
+    const refused = refusedExactly.get(n);
+    out.set(n, !refused ? "compiled" : [...refused].some((r) => exact.has(r)) ? "phantom" : "partly refused");
+  }
   for (const n of reasons.keys()) if (!compiled.has(n)) out.set(n, "refused");
   const wanted = new Set();
   for (const reason of reasons.values()) for (const m of reason.matchAll(/it calls `([^`]+)`/g)) wanted.add(stable(m[1]));
@@ -135,6 +147,12 @@ export function moves(beforeArm, afterArm) {
     const to = after.get(name) ?? "absent";
     if (from === to) continue;
     if (to === "phantom" || from === "phantom") add(to === "phantom" ? "PHANTOM APPEARED" : "phantom cleared", name, from, to);
+    // One instantiation refused beside another that compiles. Type ids renumber
+    // between arms, so which instantiation is which cannot be matched: a note
+    // to read, not a loss -- a change that makes a new instantiation (any
+    // representation change) is the ordinary way to get here.
+    else if (to === "partly refused") add("an instantiation refused beside one that compiles", name, from, to);
+    else if (from === "partly refused") add("an instantiation's refusal cleared", name, from, to);
     else if (from === "compiled" && to === "refused") add("STOPPED COMPILING", name, from, to);
     else if (from === "compiled" && to === "absent") add("DROPPED SILENTLY", name, from, to);
     else if (from === "refused" && to === "absent") add(afterArm.wanted.has(name) ? "ROOT LOST" : "dropped, nothing wants it", name, from, to);
@@ -169,6 +187,12 @@ function selfTest() {
   if (names("newly compiles") !== "starts2") return `newly compiles: ${names("newly compiles")}`;
   if (m.has("phantom cleared") || m.has("PHANTOM APPEARED")) return "a phantom present in both arms read as a move";
   if ([...m.values()].flat().some((x) => x.name.startsWith("R<"))) return "a renumbered generic instance read as a move";
+  // Two instantiations of one generic, one refused and one compiled, are not a
+  // phantom -- `Timeout<1334>#invoke` refused beside `Timeout<1403>#invoke`.
+  const two = states("func T<1403>#invoke(this: managed<obj#1>) -> f64 {\n", "T<1334>#invoke\tan apply whose rest has no representation\n");
+  if (two.states.get("T<N>#invoke") !== "partly refused") return `one instantiation refused beside another compiled read as ${two.states.get("T<N>#invoke")}`;
+  const same = states("func T<1403>#invoke(this: managed<obj#1>) -> f64 {\n", "T<1403>#invoke\tx\n");
+  if (same.states.get("T<N>#invoke") !== "phantom") return "a refusal naming the very instantiation compiled was not a phantom";
   // And the loss side must still fire: the same drop with its cause still present.
   // The same message surviving elsewhere is not a caller: the first version's mistake.
   const sameText = moves(states("", "gone\ta regular expression literal\n"), states("", "another\ta regular expression literal\n"));
