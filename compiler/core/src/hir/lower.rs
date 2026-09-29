@@ -20153,6 +20153,26 @@ impl<'a> FuncBuilder<'a> {
     /// module-scope `const`'s everywhere downstream.
     fn lower_static_fields(&mut self, class: NodeId) -> Result<(), Diagnostic> {
         for member in self.children(class) {
+            // **A static element that throws ends the class's evaluation there.**
+            // `ClassDefinitionEvaluation` runs the static elements in source order
+            // and returns the abrupt completion at the one that produced it, so
+            //
+            //     try { class C { static { throw new Error("thrown") } static x = (ran = true) } }
+            //     catch (e) { caught = e.message }
+            //
+            // leaves `ran` false in the language, and this loop ran the field
+            // anyway: the throw terminated the block and the next member's ops were
+            // appended past the terminator.
+            //
+            // Invisible until a class in a block could run its statics at all,
+            // because at module scope an uncaught throw ends the program and there
+            // is no later element to observe. Caught by the conformance lane's
+            // recorded run on `statements/class/static-init-abrupt.js`, which is the
+            // very case that fix was for -- the two halves of one commit, one
+            // enabling the other's defect.
+            if self.is_terminated() {
+                break;
+            }
             // **`static { … }` runs here too, and in this loop rather than
             // beside it.** The specification runs a class's static blocks and
             // its static field initialisers in one source order, so
@@ -36065,10 +36085,37 @@ impl<'a> FuncBuilder<'a> {
             // measured nothing.
             Some(
                 syntax::EMPTY_STATEMENT
-                | syntax::CLASS_DECLARATION
                 | syntax::INTERFACE_DECLARATION
                 | syntax::TYPE_ALIAS_DECLARATION,
             ) => Ok(()),
+            // **A class declaration does one thing at run time: it evaluates its
+            // `static` initialisers and its `static { … }` blocks.** Which is the
+            // one clause the paragraph above was missing -- it said such a
+            // declaration "declares no value and does nothing at run time", true of
+            // the layout and the members and false of the statics, and a class
+            // declared inside **any** block therefore never ran its static block:
+            //
+            //     { class InBlock { static { order.push("in a block") } } }
+            //     class AtModuleScope { static { order.push("at module scope") } }
+            //
+            // answered `at module scope` where node answers both, silently. The two
+            // module-scope loops in `lower` already call this for exactly this
+            // reason, each with a comment saying so; a class one block in reached
+            // here instead and was answered `Ok(())`.
+            //
+            // Pinned by the conformance lane as
+            // `outcomes/a-static-block-of-a-class-in-a-block`, and it is the cause
+            // of `test262`'s `static-init-abrupt` as well: a bare block does it too,
+            // not only a function body.
+            //
+            // **What this does not make exact, and cannot here.** A class declared
+            // in a *function* body is a fresh class per call in the language, so
+            // node runs its statics per call against new storage; this program has
+            // one class and one set of statics, so running them per call re-runs
+            // them against the same storage. Closer than never running them, and
+            // still not the language -- a fresh class per call is a
+            // monomorphisation question rather than a statement-lowering one.
+            Some(syntax::CLASS_DECLARATION) => self.lower_static_fields(id),
             Some(syntax::FUNCTION_DECLARATION) => self.bind_nested_function(id),
             Some(syntax::THROW_STATEMENT) => self.lower_throw(id),
             Some(syntax::TRY_STATEMENT) => self.lower_try(id),
