@@ -22636,11 +22636,49 @@ impl<'a> FuncBuilder<'a> {
                 omitted.push(Omitted::Default(default, callee));
                 continue;
             }
+            // **A parameter that is not optional is still absent in JavaScript**,
+            // where a missing argument *is* `undefined` and no call is too short.
+            // TypeScript rejects `f(1, 1)` against four parameters (TS2554), so
+            // this arm is only reachable from a `.js` file under `checkJs: false`
+            // -- which is what test262 is, and where every parameter is `any`.
+            //
+            // The condition is that the absence be **representable**: an erased
+            // parameter holds `undefined` the way an optional one does, and a
+            // concrete one does not, so `f(1)` against `(a: number, b: number)`
+            // still refuses rather than inventing a zero. That is the whole of the
+            // widening -- `optional` keeps its own behaviour exactly, and a
+            // parameter with a default is taken above.
+            //
+            // It was invisible until `any` had a representation: before that an
+            // erased parameter's function did not lower at all. What it left was
+            // `CallArgumentCount { callee: "inner", expected: 4, found: 2 }`, which
+            // is invalid HIR, so `emit-c` wrote nothing for the **whole program** --
+            // 46 recorded test262 files, led by the block-scope shadowing group and
+            // tagged templates.
+            //
             // Only where the declaration agrees there is a parameter here. An
             // overload's signature and the implementation's parameter list are
             // two different lists, and passing against the wrong one would put
             // the arity out in the other direction.
-            if optional && (target.callee.is_none() || declaration.is_some()) {
+            // **And the new clause needs the declaration, where `optional` does
+            // not.** `parameter_shapes` answers from the *signature*, and for a
+            // library method that is `lib.d.ts`'s list rather than the emitted
+            // function's: `Iterator<T>.return?(value?: any)` declares a parameter
+            // and the `Iterator#return` this program emits takes none, so filling
+            // from the signature alone put the arity out **in the other
+            // direction** -- `CallArgumentCount { callee: "Iterator<9931>#return",
+            // expected: 1, found: 2 }`, in six runtime modules. Which is the
+            // hazard the paragraph above already names, and `optional` is exempt
+            // from it only because an optional parameter the implementation does
+            // not have is not a parameter anyone passes.
+            //
+            // Caught by `emitted-diff` and by nothing else: `refusal-diff` reads 0
+            // moves to a loss, because invalid HIR is a whole-program failure and
+            // not a function that stopped compiling.
+            let absence_is_representable = optional
+                || (declaration.is_some()
+                    && self.parameter_representation(call, at) == Some(HirType::Erased));
+            if absence_is_representable && (target.callee.is_none() || declaration.is_some()) {
                 omitted.push(Omitted::Absent);
             }
         }
@@ -58597,7 +58635,7 @@ impl<'a> FuncBuilder<'a> {
     /// `number` -- and for a *typed* receiver that is a static dispatch,
     /// because `valueOf` and `toString` are members this compiler already puts
     /// on the descriptor. Everything else is returned unchanged.
-    /// The operands of an arithmetic operator, which have to be numbers.
+    /// The operands of an operator that needs numbers, which have to be numbers.
     ///
     /// The sibling of [`Self::relational_operands`], and refusing here rather than
     /// later is the whole of it: `n + 1` on an `any` happens to refuse, because
@@ -58615,12 +58653,22 @@ impl<'a> FuncBuilder<'a> {
     /// concatenation and `BinOp::Add` is not. The checker spells the provable case
     /// `Concat`; where it can prove neither, guessing is what a refusal is for.
     ///
-    /// Only the five numeric operators, and only where an operand **is** erased:
-    /// `Concat` has `as_string` before this, a comparison is a different question
-    /// (`==` against an erased value is answered rather than refused), and anything
-    /// with a concrete operand takes the path it took before, so its emitted code
-    /// cannot move.
-    fn arithmetic_operands(
+    /// **The four relational operators are here beside the five arithmetic ones**,
+    /// and for the same reason rather than by analogy: `n > 0` on an erased `n`
+    /// reached `verify` as `OperandType { op: ">", found: Erased }`, which is invalid
+    /// HIR and costs the whole program. The language compares two non-strings
+    /// numerically, and an erased operand is not provably a string -- so asking for a
+    /// number is both what the operator needs and what cannot be shown. A
+    /// *concrete* string operand is untouched, so `"a" < "b"` still lowers.
+    ///
+    /// `==` and `!=` are deliberately **not** here: an erased operand is answered
+    /// there rather than refused, by the absence test and by
+    /// `comparable_without_coercing`, which is a different and narrower question.
+    ///
+    /// Only where an operand **is** erased: `Concat` has `as_string` before this, and
+    /// anything with a concrete operand takes the path it took before, so its emitted
+    /// code cannot move.
+    fn numeric_operands(
         &mut self,
         id: NodeId,
         op: BinOp,
@@ -58629,7 +58677,15 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<(ValueId, ValueId), Diagnostic> {
         if !matches!(
             op,
-            BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem
+            BinOp::Add
+                | BinOp::Sub
+                | BinOp::Mul
+                | BinOp::Div
+                | BinOp::Rem
+                | BinOp::Lt
+                | BinOp::Le
+                | BinOp::Gt
+                | BinOp::Ge
         ) {
             return Ok((lhs, rhs));
         }
@@ -58980,7 +59036,7 @@ impl<'a> FuncBuilder<'a> {
 
         let (lhs, rhs) = self.relational_operands(id, op, *lhs_node, *rhs_node, lhs, rhs)?;
 
-        let (lhs, rhs) = self.arithmetic_operands(id, op, lhs, rhs)?;
+        let (lhs, rhs) = self.numeric_operands(id, op, lhs, rhs)?;
 
         let origin = self.origin(id);
         Ok(self.push(OpKind::Binary { op, lhs, rhs }, ty, origin))
