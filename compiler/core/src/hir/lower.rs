@@ -1157,6 +1157,50 @@ fn is_an_instantiation(snapshot: &SemanticSnapshot, probe: &FuncBuilder, ty: Typ
     })
 }
 
+/// Each record type's single declared parent. See [`super::Program::record_parents`]
+/// for why this is a fact of its own and what may not read it.
+///
+/// Both ends must be interfaces this program declares. A parent that is a class
+/// is `Layout.base`'s business and already recorded there; a parent nothing
+/// declares -- a carried protocol, a library type with no node -- has no layout
+/// for a consumer to resolve, so an entry naming it would be a name pointing at
+/// nothing, which is the defect this file has fixed three times this week from
+/// the other direction.
+///
+/// **Exactly one, or no entry.** Two or more parents is the case where a consumer
+/// would have to choose, and choosing is what `relate_closures_to_signatures`
+/// declines to do for closures on the same reasoning: its own comment, that two
+/// candidates for one relation "would give two closures two different bases for
+/// the same type", is this situation with the nouns changed.
+fn record_parents(
+    snapshot: &SemanticSnapshot,
+    hierarchy: &Hierarchy,
+    program: &super::Program,
+) -> std::collections::BTreeMap<TypeId, TypeId> {
+    let layout_of = |ty: &TypeId| program.layouts.iter().position(|l| l.types.contains(ty));
+    let mut parents = std::collections::BTreeMap::new();
+    for ty in &hierarchy.faces {
+        let Some(bases) = snapshot.base_types.get(ty) else {
+            continue;
+        };
+        let [parent] = bases[..] else {
+            continue;
+        };
+        if !hierarchy.faces.contains(&parent) {
+            continue;
+        }
+        // Both ends resolve to a layout, and to *different* layouts. See the
+        // caller for what each half of that cost when it was missing.
+        let (Some(child), Some(above)) = (layout_of(ty), layout_of(&parent)) else {
+            continue;
+        };
+        if child != above {
+            parents.insert(*ty, parent);
+        }
+    }
+    parents
+}
+
 fn collect_interfaces(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarchy: &mut Hierarchy) {
     let carried = collect_carried_protocols(snapshot, hierarchy);
     for (index, node) in snapshot.nodes.iter().enumerate() {
@@ -10394,6 +10438,22 @@ pub fn lower_with(
     // Last, because it asks what the program contains and every function that
     // will be emitted is now in it.
     drop_refusals_the_program_contradicts(&mut lowered);
+    // **After the layouts are final, and after canonicalisation.** A consumer
+    // resolves a class from a *layout*, so an entry whose ends do not both have
+    // one is a name pointing at nothing -- and measuring it is what showed that:
+    // `http` produced `TypeId(1891) <- TypeId(1890)` for two types no layout
+    // answers for, and six modules produced `ReadableByteStreamHost <-
+    // ReadableByteStreamHost`, two distinct ids that `Layout::types` merges into
+    // one representation. That second one is a **self-edge**, which is not merely
+    // useless: an ancestry walk over it does not terminate, and a JVM class
+    // extending itself is a `ClassCircularityError`.
+    //
+    // Both are the same rule -- resolve through the layouts and keep the pair only
+    // where they are two -- and it can only be applied here, because `layout_of`
+    // creates layouts as lowering proceeds and `canonicalize_objects` rewrites ids
+    // afterwards. Filled earlier it was the checker's answer to a question the
+    // program had not finished answering.
+    lowered.program.record_parents = record_parents(snapshot, &hierarchy, &lowered.program);
     lowered
 }
 

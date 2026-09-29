@@ -2528,6 +2528,37 @@ pub struct Program {
     /// all erased, which a call site takes when it knows the *signature* and not
     /// the class.
     pub erased_call_slot: Option<u32>,
+    /// Each record type's single declared parent, where it has exactly one.
+    ///
+    /// **A declared relation the representation does not carry, kept as a fact of
+    /// its own.** `interface DetailJSON extends EntryJSON` is assignability: a
+    /// bridge returning a `DetailJSON` where an `EntryJSON` is declared is correct,
+    /// and the JVM's `narrows_return` has to walk an ancestry to agree. A record
+    /// layout has no `Layout.base` to walk, and giving it one is the wrong fix --
+    /// `same_shape` requires equal bases, so a `{...}` literal typed at
+    /// `DetailJSON` would stop sharing `DetailJSON`'s layout and every such return
+    /// would become a struct conversion. That is **representation identity being
+    /// made to carry assignability**, and this tree has shipped a wrong answer from
+    /// the mirror image of it: `canonicalize_objects` records rewriting an object
+    /// type to its *layout's* representative erasing what told two same-shaped
+    /// classes apart, so `new B() instanceof A` answered `true`.
+    ///
+    /// So it is a separate map, and the separation is the whole design: **nothing
+    /// that decides a representation may read it.** Not `same_shape`, not
+    /// `collect_layouts`' merge, not `canonicalize_objects`. A field that is by
+    /// construction invisible to representation questions cannot regress one.
+    ///
+    /// Keyed by **type id, not layout**, because one layout holds several ids and
+    /// this is a fact about a declaration. Empty where a type declares two or more
+    /// parents: which of them a consumer would pick is exactly the guess
+    /// `relate_closures_to_signatures` refuses to make for closures, and for the
+    /// same reason. Classes are absent too -- they keep `Layout.base`, which is
+    /// their representation and says this already.
+    ///
+    /// Read from `snapshot.base_types`, which `collect_interfaces` already
+    /// consults for the same edge, so this is one source read twice rather than
+    /// two derivations.
+    pub record_parents: std::collections::BTreeMap<TypeId, TypeId>,
     /// Types this lowering laid out two different ways. See [`DisputedLayout`]:
     /// a compiler-internal inconsistency rather than anything the source did,
     /// reported by [`verify`] because that is where this codebase says so.

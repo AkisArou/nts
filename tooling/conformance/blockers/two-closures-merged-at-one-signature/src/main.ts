@@ -26,6 +26,13 @@
 // is a third, and the family is worth reading together before anyone changes
 // `relate_closures_to_signatures`.
 //
+// **This is 81 declined functions across the runtime, not one shape.** Measured
+// by the JVM lane at `519195e49`: every one "storing a `ClosureN` where a `FnM`
+// is declared", and some of them are *one closure stored at two signatures*
+// (`assert`'s `Closure14` at `Fn610__144` and `Fn79__144`), which single
+// inheritance cannot answer at all. A reader who takes this fixture for the whole
+// of the problem will under-build the fix.
+//
 // **Control, and it is the half that matters:** `oneClosure` is the identical
 // program with the merge removed -- one closure into the same signature-typed
 // binding. It compiles on every backend. One difference, and the decline goes
