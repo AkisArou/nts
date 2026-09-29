@@ -1,9 +1,8 @@
 {
   "run": "build",
-  "category": "refused",
-  "nts": "NTS2006 an object type with no layout: type 31",
-  "ran": "no artefact: emit-c exited 1",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: rendered=1;",
   "node": "exit 1; nts: uncaught Observed: rendered=1;",
-  "measured_with": "afe07089bcf1736f",
+  "measured_with": "db59442100b1632d",
   "source": "measured"
 }

@@ -1,6 +1,7 @@
-// **A refusal now, and a SIGSEGV until `b9b906a8a`.** The React lane's witness,
-// written standalone so it needs none of their stand-ins. Recorded from a clean
-// build of that commit.
+// **Agrees at `9b4bd02b9`, a refusal from `b9b906a8a`, and a SIGSEGV
+// before.** Now a regression guard: its return to a crash reads REGRESSED.
+// The React lane's witness, written standalone so it needs none of their
+// stand-ins.
 //
 // A top-level function the C backend refuses is handed on **as a value** and
 // called later through `unknown`, which is how React calls a component.
