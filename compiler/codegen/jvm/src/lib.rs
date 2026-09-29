@@ -1818,6 +1818,7 @@ fn dispatch_forwarders(
             };
             locals.push(vtype);
         }
+        let code_locals = locals.clone();
         let slots: u16 = locals.iter().map(VType::slots).sum();
         let mut code = Code::new(locals, slots);
         code.load(&origin, Kind::Ref, 0);
@@ -1842,15 +1843,24 @@ fn dispatch_forwarders(
                 origin.location,
             )
         })?;
-        if let Some(inherited) = bridge {
+        if let Some(bridge) = bridge {
             // Byte-for-byte the forwarder, under the descriptor the base
-            // declared. `ACC_BRIDGE` is what tells a reader -- and any tool
-            // reading these classes -- that the duplicate is deliberate.
+            // declared -- with slots for the arguments it drops, where it
+            // drops any, because a method's frame starts with every parameter
+            // its descriptor names. `ACC_BRIDGE` is what tells a reader, and
+            // any tool reading these classes, that the duplicate is deliberate.
+            let body = if bridge.dropped.is_empty() {
+                rendered.clone()
+            } else {
+                let mut locals = code_locals.clone();
+                locals.extend(bridge.dropped);
+                dropping_bridge(package, pool, target, func_name, &full, locals, &origin)?
+            };
             builder.method(
                 access::PUBLIC | access::BRIDGE | access::SYNTHETIC,
                 member.clone(),
-                inherited,
-                Some(rendered.clone()),
+                bridge.descriptor,
+                Some(body),
             );
         }
         builder.method(access::PUBLIC, member, descriptor, Some(rendered));
@@ -2010,8 +2020,48 @@ fn member_forwarders(
     Ok(())
 }
 
-/// The descriptor a bridge method needs, or `None` when the override agrees
-/// with what it overrides and no bridge is called for.
+/// The body of a bridge that receives the base's parameters and forwards only
+/// those the override declares: `locals` is the whole frame, the dropped
+/// arguments' slots included, and nothing reads them.
+fn dropping_bridge(
+    package: &str,
+    pool: &mut Pool,
+    target: &nts_core::hir::Func,
+    func_name: &str,
+    full: &str,
+    locals: Vec<VType>,
+    origin: &nts_semantic_schema::Origin,
+) -> Result<nts_jvm_emitter::code::Body, Diagnostic> {
+    let slots: u16 = locals.iter().map(VType::slots).sum();
+    let mut code = Code::new(locals, slots);
+    code.load(origin, Kind::Ref, 0);
+    let mut at: u16 = 1;
+    for param in target.params.iter().skip(1) {
+        let Some(kind) = types::kind(&param.ty) else { break };
+        code.load(origin, kind, at);
+        at += kind.words();
+    }
+    code.invoke_static(origin, pool, &body::program_class(package), &body::method_name(func_name), full);
+    code.ret(origin, types::kind(&target.return_type));
+    code.finish(pool).map_err(|error| {
+        Diagnostic::error(
+            "NTS4008",
+            format!("the bridge for `{func_name}` could not be written: {error}"),
+            origin.location,
+        )
+    })
+}
+
+/// A bridge an override needs: the descriptor the base declared, and the
+/// verification types of the base's parameters the override does not declare,
+/// which the bridge receives and drops.
+struct Bridge {
+    descriptor: String,
+    dropped: Vec<VType>,
+}
+
+/// The bridge an override needs, or `None` when it agrees with what it
+/// overrides and no bridge is called for.
 ///
 /// Refuses when they disagree in a way the JVM has no answer for.
 #[allow(clippy::too_many_arguments)]
@@ -2024,42 +2074,74 @@ fn bridge_for(
     member: &str,
     descriptor: &str,
     origin: &nts_semantic_schema::Origin,
-) -> Result<Option<String>, Diagnostic> {
-    let Some(inherited) = base
+) -> Result<Option<Bridge>, Diagnostic> {
+    let Some((overridden, inherited)) = base
         .and_then(|b| b.methods.get(slot))
         .and_then(|m| m.as_ref())
         .and_then(|name| program.funcs.iter().find(|f| &f.name == name))
-        .and_then(|f| instance_descriptor(package, program, f))
-        .filter(|inherited| inherited != descriptor)
+        .and_then(|f| Some((f, instance_descriptor(package, program, f)?)))
+        .filter(|(_, inherited)| inherited != descriptor)
     else {
         return Ok(None);
     };
-    if !narrows_return(package, program, descriptor, &inherited) {
-        return Err(Diagnostic::error(
-            "NTS4009",
-            format!(
-                "`{}.{member}` is `{descriptor}` where the method it overrides is \
-                 `{inherited}` -- the JVM would treat these as two unrelated methods \
-                 and dispatch would silently reach the wrong one",
-                layout.name
-            ),
-            origin.location,
-        ));
+    // **Fewer parameters than the base declares**, `class Transform { _read() }`
+    // over `Readable._read(size)`. JavaScript passes the argument and the
+    // override ignores it, so C, which ignores extra arguments too, agrees
+    // with node by construction; the JVM names a method by its descriptor and
+    // declined `Transform`, `DuplexSide` and `IncomingMessage` under this
+    // refusal -- stream, zlib, crypto, fs and http with them (jvm-verifies
+    // cause E, an-override-declaring-fewer-parameters). A bridge with the
+    // base's descriptor that receives the rest and drops it is that
+    // semantics exactly, and it is the one other disagreement this answers:
+    // the declared parameters still have to be the base's, in order.
+    let declared = overridden.params.len().min(
+        1 + nts_jvm_emitter::descriptor::parameters(descriptor).map_or(0, |list| list.len()),
+    );
+    let dropped: Option<Vec<VType>> = overridden
+        .params
+        .get(declared..)
+        .unwrap_or_default()
+        .iter()
+        .map(|param| types::vtype(types::Shape::packaged(program, package), &param.ty))
+        .collect();
+    if let Some(dropped) = dropped
+        && narrows_return(package, program, descriptor, &inherited, dropped.len())
+    {
+        return Ok(Some(Bridge { descriptor: inherited, dropped }));
     }
-    Ok(Some(inherited))
+    Err(Diagnostic::error(
+        "NTS4009",
+        format!(
+            "`{}.{member}` is `{descriptor}` where the method it overrides is \
+             `{inherited}` -- the JVM would treat these as two unrelated methods \
+             and dispatch would silently reach the wrong one",
+            layout.name
+        ),
+        origin.location,
+    ))
 }
 
-/// Whether two method descriptors differ only in that the first returns a
-/// subclass of what the second returns.
+/// Whether an override's descriptor can be reached through the base's by a
+/// bridge: its parameters are the base's less the last `dropped`, and it
+/// returns what the base returns or a subclass of it.
 ///
-/// The parameters must be identical: a difference there is an overload, and
-/// bridging one to the other would make a call reach a method that was never
-/// written for it.
-fn narrows_return(package: &str, program: &Program, derived: &str, base: &str) -> bool {
-    let Some((derived_params, derived_result)) = derived.split_once(')') else { return false };
-    let Some((base_params, base_result)) = base.split_once(')') else { return false };
-    if derived_params != base_params {
+/// The parameters it declares must be the base's, in order: a difference
+/// there is an overload, and bridging one to the other would make a call
+/// reach a method that was never written for it.
+fn narrows_return(package: &str, program: &Program, derived: &str, base: &str, dropped: usize) -> bool {
+    let Some((_, derived_result)) = derived.split_once(')') else { return false };
+    let Some((_, base_result)) = base.split_once(')') else { return false };
+    let (Some(derived_params), Some(base_params)) = (
+        nts_jvm_emitter::descriptor::parameters(derived),
+        nts_jvm_emitter::descriptor::parameters(base),
+    ) else {
         return false;
+    };
+    if derived_params.len() + dropped != base_params.len() || base_params[..derived_params.len()] != derived_params[..] {
+        return false;
+    }
+    if derived_result == base_result {
+        return dropped > 0;
     }
     let (Some(from), Some(to)) = (class_of(derived_result), class_of(base_result)) else {
         return false;

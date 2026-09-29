@@ -6,9 +6,6 @@
 # measured. jvm-verifies.ts fails on a shape not here.
 # shape<TAB>verdict<TAB>why -- shapes are normalised (ClosureN, $N$, FnN, TypeN).
 ChildWritable._write (Lnts/rt/NtsViewU8;Ljava/lang/String;Lnts/gen/FnN;)V over (Lnts/rt/NtsValue;Ljava/lang/String;Lnts/gen/FnN;)V	refused-everywhere	a narrowed parameter read at an erased argument: was SIGSEGV on C, refused by lowering since b09c3e6f6 -- a-writable-override-narrowing-an-erased-chunk (child_process, cluster)
-Transform._read ()V over (D)V	jvm-only	fewer parameters: C ignores the rest, an-override-declaring-fewer-parameters; the JVM needs a bridge
-DuplexSide._read ()V over (D)V	jvm-only	fewer parameters: C ignores the rest, an-override-declaring-fewer-parameters; the JVM needs a bridge
-IncomingMessage._read ()V over (D)V	jvm-only	fewer parameters: C ignores the rest, an-override-declaring-fewer-parameters; the JVM needs a bridge
 PerformanceNodeEntry.toJSON ()Lnts/gen/PerformanceEntryDetailJSON; over ()Lnts/gen/PerformanceEntryJSON;	jvm-only	a covariant record that extends the base's: a-covariant-record-that-extends-the-base
 PerformanceMark.toJSON ()Lnts/gen/PerformanceEntryDetailJSON; over ()Lnts/gen/PerformanceEntryJSON;	jvm-only	a covariant record that extends the base's: a-covariant-record-that-extends-the-base
 PerformanceMeasure.toJSON ()Lnts/gen/PerformanceEntryDetailJSON; over ()Lnts/gen/PerformanceEntryJSON;	jvm-only	a covariant record that extends the base's: a-covariant-record-that-extends-the-base
