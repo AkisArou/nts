@@ -869,11 +869,30 @@ pub fn closures(program: &Program) -> FieldClosures {
 /// parameter's type, because a call taking a base-typed pointer is handed a
 /// subclass every day. A closure's `call` takes its own class, and the
 /// receiver's static type is the *signature* layout, so this is that same cast.
-pub fn devirtualize(program: &mut Program, known: &FieldClosures) -> usize {
-    let layouts = LayoutIndex::build(program);
-    // Resolved against the program before anything is rewritten, because the
-    // rewrite needs `&mut` and the lookup needs `&`.
-    let mut rewrites: Vec<(usize, usize, String, super::ValueId, super::TypeId)> = Vec::new();
+/// One call this pass will rewrite: where it is, what it should name, the erased
+/// value its receiver was read from, the class that value can only hold, whether
+/// the site used the uniform entry, and that entry's arity and result.
+///
+/// Collected before anything is rewritten, because the rewrite needs `&mut` and
+/// the lookup needs `&`.
+type Rewrite = (
+    usize,
+    usize,
+    String,
+    super::ValueId,
+    super::TypeId,
+    bool,
+    (usize, HirType),
+);
+
+/// Every erased or slot dispatch this pass can turn into a direct call.
+///
+/// Separated from the rewriting because the two need the program differently --
+/// this one reads it, and the other needs `&mut` -- and because "which calls can
+/// be resolved" and "what resolving one costs the surrounding ops" are two
+/// questions, and the second is the one with the index arithmetic in it.
+fn rewrites_for(program: &Program, known: &FieldClosures, layouts: &LayoutIndex) -> Vec<Rewrite> {
+    let mut rewrites: Vec<Rewrite> = Vec::new();
     for (at, func) in program.funcs.iter().enumerate() {
         for (index, op) in func.values.iter().enumerate() {
             let OpKind::Call {
@@ -901,9 +920,25 @@ pub fn devirtualize(program: &mut Program, known: &FieldClosures) -> usize {
             let Some(class) = class else {
                 continue;
             };
+            // **An erased dispatch resolves to the *written* entry, not to the
+            // uniform one the call site had to name.**
+            //
+            // That entry exists because a site knowing only the signature cannot
+            // know which body runs. This pass supplies the class -- that is its
+            // whole content -- so the reason for the erasure is gone with it.
+            // Naming the uniform entry here would keep an indirection and an
+            // erase/unerase pair per argument for a call that is now direct, and
+            // `devirtualize_closures` prices exactly that: `optional-chain` went
+            // 87.98 us to 35.17 us on this pass, and `callback-field` from 35
+            // counting operations to 1, because a reference cannot be borrowed
+            // across a call nothing can name.
+            let uniform = Some(*slot) == program.erased_call_slot;
+            let Some(read) = (if uniform { program.closure_slot } else { Some(*slot) }) else {
+                continue;
+            };
             let Some(name) = layouts
                 .of_class(class)
-                .and_then(|layout| program.layouts[layout].methods.get(*slot as usize))
+                .and_then(|layout| program.layouts[layout].methods.get(read as usize))
                 .and_then(Option::as_ref)
             else {
                 continue;
@@ -918,10 +953,20 @@ pub fn devirtualize(program: &mut Program, known: &FieldClosures) -> usize {
             let OpKind::Unerase { value: erased } = func.values[receiver.0 as usize].kind else {
                 continue;
             };
-            rewrites.push((at, index, name.clone(), erased, class));
+            let Some(written) = program.funcs.iter().find(|known| &known.name == name) else {
+                continue;
+            };
+            let shape = (written.params.len(), written.return_type.clone());
+            rewrites.push((at, index, name.clone(), erased, class, uniform, shape));
         }
     }
 
+    rewrites
+}
+
+pub fn devirtualize(program: &mut Program, known: &FieldClosures) -> usize {
+    let layouts = LayoutIndex::build(program);
+    let rewrites = rewrites_for(program, known, &layouts);
     // The receiver's static type is the *signature* layout, and the function
     // about to be called declares its own class. C casts a pointer for free and
     // the JVM will not: `NTS4001 storing a Fn5__5 where a Closure0 is declared`
@@ -942,45 +987,30 @@ pub fn devirtualize(program: &mut Program, known: &FieldClosures) -> usize {
     // Four errors, in a C file no unit test reads. The example caught it and the
     // three tests over the HIR did not, because the shape they check was right.
     let mut count = 0;
-    for (func, index, name, erased, class) in rewrites {
+    for (func, index, name, erased, class, uniform, (arity, returns)) in rewrites {
         let origin = program.funcs[func].values[index].origin.clone();
-        let Some(block) = program.funcs[func]
-            .blocks
-            .iter()
-            .position(|block| block.ops.contains(&index_of(index)))
-        else {
-            continue;
-        };
-        let at = program.funcs[func].blocks[block]
-            .ops
-            .iter()
-            .position(|op| *op == index_of(index))
-            .unwrap_or(0);
-
-        let receiver = super::ValueId(
-            u32::try_from(program.funcs[func].values.len()).unwrap_or(u32::MAX),
-        );
-        program.funcs[func].values.push(super::Op {
+        // The receiver read back at the class, which is the cast this pass is
+        // entitled to make and the reason it carries `class` at all.
+        let receiver = super::Op {
             kind: OpKind::Unerase { value: erased },
-            ty: HirType::Managed(ManagedType::Object(class)),
+            ty: HirType::Managed(super::ManagedType::Object(class)),
             origin,
-        });
-        program.funcs[func].blocks[block].ops.insert(at, receiver);
-        if let OpKind::Call { callee, args, .. } = &mut program.funcs[func].values[index].kind {
-            *callee = super::Callee::Direct(name);
-            if let Some(first) = args.first_mut() {
-                *first = receiver;
-            }
+        };
+        if super::call_directly(
+            &mut program.funcs[func],
+            index,
+            name,
+            arity,
+            &returns,
+            uniform,
+            Some(receiver),
+        ) {
             count += 1;
         }
     }
     count
 }
 
-/// A value arena index as a [`super::ValueId`].
-fn index_of(index: usize) -> super::ValueId {
-    super::ValueId(u32::try_from(index).unwrap_or(u32::MAX))
-}
 
 /// The `(object, field)` a value was read from, seeing through the erasure.
 ///

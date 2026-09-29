@@ -379,6 +379,49 @@ struct Hierarchy {
     /// Beside `closure_slot` rather than reusing it. A frame is not a closure:
     /// `is_closure_type` decides `typeof`, and a generator answers `"object"`.
     generator_slot: Option<u32>,
+    /// The slot every closure's **erased** `call` goes in: the same body reached
+    /// through the one ABI a site that does not know the closure can spell.
+    ///
+    /// **Two, not one, and not one per function type.** `closure_slot`'s doc is
+    /// right that a table as long as the program's function-type count is
+    /// unaffordable, and right that one index is enough to *dispatch*. It is wrong
+    /// that one index is enough to **agree**: its last clause says two closure
+    /// types sharing an index "cannot be confused for each other" because the call
+    /// spells the signature, and spelling the signature is how they are confused.
+    /// `NTS_ARRIVALS` counts 25 of `zlib`'s 240 admissions disagreeing.
+    ///
+    /// So a receiver whose class is known keeps `closure_slot` and costs nothing,
+    /// and a receiver known only as a signature uses this one, which is correct
+    /// whatever arrived. Two entries per closure rather than N, which is the
+    /// distinction that doc says nobody can observe.
+    erased_call_slot: Option<u32>,
+    /// How many erased parameters the entry in [`Self::erased_call_slot`] takes:
+    /// **the widest closure in the program**, and not a constant.
+    ///
+    /// Fixed *per program* rather than per closure, because the point of the
+    /// entry is that a site knowing only the signature can call it -- a site that
+    /// had to know the arity would be back to knowing the body. But it does not
+    /// have to be fixed across programs, and making it one was expensive: at a
+    /// global eight, `benches/cases/closure-merge` marshalled **nine** `NtsValue`s
+    /// per call in a hot loop where the direct call passed one `double`, and the
+    /// row went 22.25 us to 49.07 us. Its own header had predicted the shape of
+    /// the objection -- "it should not be free ... what it should *not* be is
+    /// proportional to the number of arms" -- and it was not the arms, it was this.
+    ///
+    /// **Why the widest is enough.** A closure assigned to a signature declares no
+    /// more parameters than that signature does (a function wanting more is not
+    /// assignable to one passing fewer), and a body reads no more than it writes.
+    /// So a site passing this many always passes every parameter any admissible
+    /// body reads; where the signature declares more, the extra arguments are ones
+    /// JavaScript drops anyway.
+    ///
+    /// Read from the checker's signature for each closure's own type -- the same
+    /// source the lowering builds `#call`'s parameters from. It is therefore one
+    /// fact read twice, which this file has been bitten by four times this week,
+    /// and the reason that is tolerable here is that the **disagreement cannot be
+    /// silent**: [`erased_call`] holds `written.len() <= width` and emits a named
+    /// abort when it does not, so a program where the two part company says so.
+    erased_call_arity: usize,
     /// The classes the program writes over an Objective-C class that declare
     /// fields, by the name the runtime knows each by -- which is what a handle
     /// to one carries -- with each one's index into
@@ -507,6 +550,7 @@ impl Hierarchy {
     fn table_size(&self) -> usize {
         self.slots.len()
             + usize::from(self.closure_slot.is_some())
+            + usize::from(self.erased_call_slot.is_some())
             + usize::from(self.generator_slot.is_some())
     }
 
@@ -1472,6 +1516,27 @@ fn hierarchy_class_name(
         .unwrap_or_else(|| nominal_or_stand_in(snapshot, ty))
 }
 
+/// How many parameters the erased entry takes: the widest closure in the program.
+///
+/// See [`Hierarchy::erased_call_arity`] for why the width is per program rather
+/// than a constant, and why one fact read twice is tolerable here.
+///
+/// A program whose closures all take nothing gets an entry that takes nothing,
+/// which is the right answer and not a degenerate one. A refused closure is
+/// skipped because its `#call` is never lowered either, so it has no entry to be
+/// wide enough for.
+fn widest_closure(snapshot: &SemanticSnapshot, closures: &[ClosureInfo]) -> usize {
+    closures
+        .iter()
+        .filter(|closure| closure.refusal.is_none())
+        .filter_map(|closure| {
+            let ty = *snapshot.node_types.get(&closure.node)?;
+            Some(signature_key(snapshot, ty)?.0.len())
+        })
+        .max()
+        .unwrap_or(0)
+}
+
 fn collect_hierarchy(
     snapshot: &SemanticSnapshot,
     foreign: &super::runtime::ForeignTable,
@@ -1617,6 +1682,10 @@ fn collect_hierarchy(
     // Or one whose class declares `then`: see `Hierarchy::declares_a_then`.
     if closures.iter().any(|closure| closure.refusal.is_none()) || hierarchy.declares_a_then() {
         hierarchy.closure_slot = Some(u32::try_from(hierarchy.slots.len()).unwrap_or(u32::MAX));
+        // And the erased entry beside it, on exactly the same terms: a program
+        // with no closures carries neither.
+        hierarchy.erased_call_slot = Some(u32::try_from(hierarchy.table_size()).unwrap_or(u32::MAX));
+        hierarchy.erased_call_arity = widest_closure(snapshot, closures);
     }
     // And one for the resumption, on the same terms: a program with no
     // generators carries no slot for one. After the closure slot, so that a
@@ -2761,6 +2830,11 @@ fn closure_names(index: usize) -> (String, String) {
     (class, method)
 }
 
+/// The name of a closure's erased entry. See [`Hierarchy::erased_call_slot`].
+fn erased_call_name(index: usize) -> String {
+    format!("Closure{index}#erased_call")
+}
+
 /// The class name behind a synthetic closure type id.
 ///
 /// The inverse of [`closure_type`], for the passes that meet the id rather than
@@ -2774,6 +2848,13 @@ pub fn closure_class(ty: TypeId) -> String {
 #[must_use]
 pub fn closure_method(ty: TypeId) -> String {
     closure_names(closure_index(ty)).1
+}
+
+/// The same class's erased entry, for a pass that meets a call already made in
+/// the uniform ABI. See [`Hierarchy::erased_call_slot`].
+#[must_use]
+pub fn closure_erased_method(ty: TypeId) -> String {
+    erased_call_name(closure_index(ty))
 }
 
 /// Find every arrow function and work out what it captures.
@@ -10044,7 +10125,22 @@ fn lower_wanted_closures(
         // other closure has one the program wrote.
         let made = builder.lower_made_closure(index, &closures[index]);
         match made.unwrap_or_else(|| builder.lower_closure(index, &closures[index])) {
-            Ok(func) => lowered.program.funcs.push(func),
+            Ok(func) => {
+                // The erased entry beside the body it wraps, built here because
+                // this is the moment the body's own parameter and return types
+                // exist: `coerce_arm` saw the slot and not the closure, and this
+                // sees the closure and not the slot. See [`erased_call`].
+                if let Some(adapter) =
+                    erased_call(
+                        erased_call_name(index),
+                        &func,
+                        shared.hierarchy.erased_call_arity,
+                    )
+                {
+                    lowered.program.funcs.push(adapter);
+                }
+                lowered.program.funcs.push(func);
+            }
             // **A refused closure had no line of its own.** `uncompiled` is keyed
             // by a *declared* name and an arrow has none, so every cascade ending
             // in "it calls `Closure1#call`, which was refused above" had nothing
@@ -10108,6 +10204,10 @@ pub fn lower_with(
     let mut module = collect_module_scope(snapshot, foreign, &closures, &hierarchy);
     lowered.diagnostics.extend(module.refusals.iter().cloned());
     lowered.program.globals.clone_from(&module.globals);
+    // The dispatch table's two closure entries, carried onto the program because
+    // `fields::devirtualize` needs both and runs long after the hierarchy is gone.
+    lowered.program.closure_slot = hierarchy.closure_slot;
+    lowered.program.erased_call_slot = hierarchy.erased_call_slot;
     collect_layouts(&mut lowered.program, module.layouts.clone());
     let mut wanted: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
 
@@ -10263,6 +10363,7 @@ pub fn lower_with(
     lower_wanted_closures(snapshot, foreign, &shared, &closures, &mut lowered, &mut wanted);
 
     relate_closures_to_signatures(snapshot, &closures, &hierarchy, &mut lowered.program);
+    declare_erased_entries(&hierarchy, &mut lowered.program);
 
     // Stage 0: count what a fix would have to convert, before anything converts.
     // `NTS_ARRIVALS` only -- this pass changes nothing yet, and a measurement that
@@ -10278,7 +10379,6 @@ pub fn lower_with(
             eprintln!("  ARRIVAL {call}: {why}");
         }
     }
-    declare_unfilled_signatures(&hierarchy, &mut lowered.program);
     declare_interface_methods(&hierarchy, &mut lowered.program);
 
     publish_surface(&mut lowered, snapshot, &shared.naming, &module, entry);
@@ -11134,122 +11234,316 @@ fn record_unimplemented_interfaces(hierarchy: &Hierarchy, program: &mut Program)
     program.uncompiled.sort();
 }
 
-/// The declaration a closure call implies: its shape, and no body.
+/// A closure's `#call` in the one ABI a site that cannot know the closure is able
+/// to spell: every written parameter erased, the result erased.
 ///
-/// Split out of [`declare_unfilled_signatures`] for length. `None` when an
-/// argument names no value, which leaves the signature undeclared and the
-/// backend's refusal standing rather than declaring a shorter function than the
-/// call performs.
-fn signature_shell(
-    func: &Func,
-    name: String,
-    base: TypeId,
-    call: &Op,
-    args: &[ValueId],
-) -> Option<Func> {
+/// **Why this exists.** [`Hierarchy::closure_slot`]'s doc says one slot suffices
+/// because "a call through the slot spells the signature it is making, so two
+/// closure types sharing an index cannot be confused for each other". Spelling the
+/// signature is *how* they are confused -- the call spells
+/// `NtsValue (*)(NtsObj_Fn... *, ...)`, the closure at that index returns
+/// `NtsString *`, and the spelling is the misread. `NTS_ARRIVALS` counts 25 of
+/// `zlib`'s 240 admissions disagreeing, and
+/// `outcomes/two-components-called-on-their-props-through-unknown` segfaults
+/// seventeen times on it. A second entry, in the ABI every site can spell *without*
+/// knowing, is what makes the spelling true.
+///
+/// **Three conversions, and the third had no witness until the corpus was
+/// counted.** Unerase each parameter to what the real `#call` wants; erase the
+/// result; and where the closure returns **nothing**, answer `undefined` -- a
+/// `void` function called through a pointer typed as returning a value reads a
+/// garbage return register. That is the majority case, 13 of `zlib`'s 25, and it
+/// survives in the corpus only because such a result is nearly always discarded.
+///
+/// Arity is deliberately not adapted. JavaScript drops extra arguments and fills
+/// missing ones, so a closure written at one arity and called at another is
+/// correct, and `erased-fn-arity-only` agrees on both arms. Reading "arity is free"
+/// as "parameters are free" is the mistake this function exists downstream of.
+fn erased_call(name: String, call: &Func, width: usize) -> Option<Func> {
     let origin = Origin::generated(
         call.origin.location,
         nts_semantic_schema::GeneratedReason::ClosureLowering,
     );
-    let mut shell = Func {
+    // A closure's `#call` always has its receiver; this is the only shape that
+    // could not be built, and no caller can produce it.
+    let receiver = call.params.first()?.clone();
+    let written = call.params.get(1..)?.to_vec();
+    // **Every parameter and the result have to cross the erasure boundary, and
+    // `erasable` is the one predicate that says so.** Not a second list: its own
+    // doc records that it and the backends' `erased_tag` are "one decision
+    // written twice" and have disagreed six times, always the same way -- a
+    // variant taught to the backend that spells it and not to the predicate that
+    // decides whether it may be asked about. A seventh would be this.
+    //
+    // A `bigint` parameter and a native record are the two the bridge tests
+    // found: neither carries a tag, so the `Unerase` below is `NTS2008 a value
+    // of type BigInt cannot be read back yet` and the program stops emitting.
+    //
+    // **Where they cannot cross the entry still exists, and aborts by name.**
+    // Returning `None` here was the first attempt and it is the defect this file
+    // has fixed three times this week: the layout fills the slot with
+    // `erased_call_name(index)` in one place and the function is produced in
+    // another, so a missing adapter leaves a table naming something nothing
+    // defines -- `sumTo cannot be compiled because it calls
+    // `Closure14#erased_call`, which nothing in this program defines`, which is
+    // how the bridge tests read it. One fact, one place: the entry is always
+    // emitted, and what it does is the question.
+    //
+    // A closure whose parameters cannot be erased cannot be *called* through an
+    // erased receiver either, so this abort is unreachable in the same way
+    // `nts_no_arm` is -- and it is here for the same reason: a tag switch with a
+    // hole is worse than one with an answer that cannot be reached.
+    //
+    // **The arity is that same question in the other direction, so it takes that
+    // same answer.** A site that knows only the signature pads to `width`, so a
+    // closure writing more parameters cannot be reached this way either -- and
+    // returning `None` for it was the very defect the paragraph above describes,
+    // left standing one condition over.
+    //
+    // It is also the guard on [`Hierarchy::erased_call_arity`]'s derivation: that
+    // width is the checker's count and this is the lowering's, and the two parting
+    // company is the one way this abort is reachable from a program anybody wrote.
+    //
+    // **A parameter the body already reads `Erased` crosses by having nothing to
+    // cross.** `erasable` answers "may this be boxed into an `unknown`", and for
+    // `Erased` the answer is no -- it is already one, and `Unerase`ing it is what
+    // the backends refuse as "a value of type Erased cannot be read back yet".
+    // The body below has that case and this test did not, which made every async
+    // arrow's entry a refusal: `an-async-arrow`'s `Closure5#call` takes a `double`
+    // and an already-erased second parameter and returns a promise -- every part
+    // of which crosses. The two were one fact written twice, twelve lines apart.
+    let crosses = written.len() <= width
+        && written
+            .iter()
+            .all(|param| param.ty == HirType::Erased || erasable(&param.ty))
+        && (matches!(
+            call.return_type,
+            HirType::Erased | HirType::Void | HirType::Never
+        ) || erasable(&call.return_type));
+
+    // The parameters first, in order, because a `Param` op *is* the signature in
+    // this IR, and a value id has to be its index.
+    let (params, mut values) = uniform_params(&receiver, &written, &origin, width)?;
+
+    // Then the body. Each written parameter is unerased to what the real `#call`
+    // declared, which is the half a site cannot do because it does not know what
+    // that is.
+    let mut ops = Vec::new();
+    if !crosses {
+        return Some(refuses_to_cross(name, params, values, &origin, &call.name));
+    }
+    let mut args = vec![ValueId(0)];
+    for (at, param) in written.iter().enumerate() {
+        let from = ValueId(u32::try_from(at + 1).ok()?);
+        // A parameter the body already reads erased needs nothing: unerasing
+        // `Erased` to `Erased` is a no-op the backend rightly refuses, since
+        // `erased_tag` has no tag to give for it -- "a value of type Erased
+        // cannot be read back yet".
+        if param.ty == HirType::Erased {
+            args.push(from);
+            continue;
+        }
+        let id = ValueId(u32::try_from(values.len()).ok()?);
+        values.push(Op {
+            kind: OpKind::Unerase { value: from },
+            ty: param.ty.clone(),
+            origin: origin.clone(),
+        });
+        ops.push(id);
+        args.push(id);
+    }
+
+    let answered = ValueId(u32::try_from(values.len()).ok()?);
+    values.push(Op {
+        kind: OpKind::Call {
+            callee: Callee::Direct(call.name.clone()),
+            args,
+            frame: None,
+        },
+        ty: call.return_type.clone(),
+        origin: origin.clone(),
+    });
+    ops.push(answered);
+
+    // And the answer, in the ABI the site spelled.
+    let answer = match &call.return_type {
+        HirType::Erased => answered,
+        // Nothing to erase: a `void` body has no value, and `undefined` is what
+        // JavaScript says such a call answers.
+        HirType::Void | HirType::Never => {
+            let id = ValueId(u32::try_from(values.len()).ok()?);
+            values.push(Op {
+                kind: OpKind::ConstUndefined,
+                ty: HirType::Erased,
+                origin: origin.clone(),
+            });
+            ops.push(id);
+            id
+        }
+        _ => {
+            let id = ValueId(u32::try_from(values.len()).ok()?);
+            values.push(Op {
+                kind: OpKind::Erase {
+                    value: answered,
+                    // A returned value is present: the closure produced it. An
+                    // absence would be the closure's own `null`, which is already
+                    // in `call.return_type` and erases with it.
+                    absent: Absent::Impossible,
+                },
+                ty: HirType::Erased,
+                origin: origin.clone(),
+            });
+            ops.push(id);
+            id
+        }
+    };
+
+    Some(Func {
         name,
-        params: Vec::new(),
-        return_type: call.ty.clone(),
-        values: Vec::new(),
-        // A declaration is its signature: the parameters are value ops because
-        // those *are* the signature in this IR, and the single block says there
-        // is nothing else.
+        params,
+        return_type: HirType::Erased,
+        values,
         blocks: vec![Block {
             params: Vec::new(),
-            ops: Vec::new(),
+            ops,
+            terminator: Terminator::Return(Some(answer)),
+        }],
+        origin,
+        exported: false,
+        initializes_receiver: false,
+        abstract_declaration: false,
+        async_result: None,
+        frame: None,
+    })
+}
+
+/// The uniform signature every closure's erased entry has: the receiver, then
+/// `width` erased parameters -- see [`Hierarchy::erased_call_arity`] -- and the
+/// `Param` op for each.
+///
+/// Fixed width rather than the closure's own, because the point of the entry is
+/// that a call site which knows only the signature can make it. A site padding
+/// with `undefined` is what JavaScript does for a missing argument anyway; a site
+/// that had to know the arity would be back to knowing the body.
+///
+/// Shared with [`declare_erased_entries`], which builds the *declaration* a
+/// signature layout carries, so a declaration and every body that overrides it
+/// cannot drift apart.
+fn uniform_params(
+    receiver: &Param,
+    written: &[Param],
+    origin: &Origin,
+    width: usize,
+) -> Option<(Vec<Param>, Vec<Op>)> {
+    let mut params = vec![receiver.clone()];
+    let mut values = vec![Op {
+        kind: OpKind::Param(0),
+        ty: receiver.ty.clone(),
+        origin: origin.clone(),
+    }];
+    for at in 0..width {
+        let index = u32::try_from(at + 1).ok()?;
+        // Everything but the type from the original where there is one -- the name
+        // a reader sees, and whatever `shape` and `known` said, because that is
+        // the *same* parameter in a different representation. Past the written
+        // ones the parameter exists only to make every entry one shape, so a site
+        // can pass this many without knowing which closure it has.
+        params.push(match written.get(at) {
+            Some(param) => Param {
+                ty: HirType::Erased,
+                ..param.clone()
+            },
+            None => Param {
+                name: format!("padding{at}"),
+                ty: HirType::Erased,
+                origin: origin.clone(),
+                ..receiver.clone()
+            },
+        });
+        values.push(Op {
+            kind: OpKind::Param(index),
+            ty: HirType::Erased,
+            origin: origin.clone(),
+        });
+    }
+    Some((params, values))
+}
+
+/// The entry for a closure no site can legally reach through it: it aborts by
+/// name. See [`erased_call`], which states why it exists rather than being
+/// absent.
+fn refuses_to_cross(
+    name: String,
+    params: Vec<Param>,
+    mut values: Vec<Op>,
+    origin: &Origin,
+    called: &str,
+) -> Func {
+    let mut ops = Vec::new();
+    let reason = ValueId(u32::try_from(values.len()).unwrap_or(u32::MAX));
+    values.push(Op {
+        kind: OpKind::ConstString(format!(
+            "calling `{called}` through an erased receiver, whose parameters or \
+             result have no erased form, or which writes more parameters than an \
+             erased call carries"
+        )),
+        ty: HirType::Managed(ManagedType::String),
+        origin: origin.clone(),
+    });
+    ops.push(reason);
+    let stop = ValueId(u32::try_from(values.len()).unwrap_or(u32::MAX));
+    values.push(Op {
+        kind: OpKind::Call {
+            callee: Callee::External("nts_refused".to_owned()),
+            args: vec![reason],
+            frame: None,
+        },
+        ty: HirType::Void,
+        origin: origin.clone(),
+    });
+    ops.push(stop);
+    Func {
+        name,
+        params,
+        return_type: HirType::Erased,
+        values,
+        blocks: vec![Block {
+            params: Vec::new(),
+            ops,
             terminator: Terminator::Unreachable,
         }],
         origin: origin.clone(),
         exported: false,
         initializes_receiver: false,
-        abstract_declaration: true,
+        abstract_declaration: false,
         async_result: None,
         frame: None,
-    };
-    for (index, arg) in args.iter().enumerate() {
-        let ty = if index == 0 {
-            HirType::Managed(ManagedType::Object(base))
-        } else {
-            func.values.get(arg.0 as usize)?.ty.clone()
-        };
-        shell.values.push(Op {
-            kind: OpKind::Param(u32::try_from(index).unwrap_or(u32::MAX)),
-            ty: ty.clone(),
-            origin: origin.clone(),
-        });
-        shell.params.push(Param {
-            name: format!("v{index}"),
-            ty,
-            origin: origin.clone(),
-            shape: ParamShape::Ordinary,
-            known: Facts::TOP,
-        });
     }
-    Some(shell)
 }
 
-/// Declare `call` on a signature layout that no closure in this program fills.
+/// Every live call that dispatches through a closure slot: the index of the
+/// function it is in, the value index of the call, the slot it uses, and the
+/// layout its receiver's type resolves to.
 ///
-/// [`relate_closures_to_signatures`] walks *closures*, so a signature acquires
-/// its abstract declaration from an implementer. A signature with no
-/// implementer gets nothing -- and one exists whenever a program reads a
-/// closure out of a container it did not populate. `materialize_within` is what
-/// makes those programs get this far: it gives `Map<string, Weigh>` a layout
-/// for `Weigh` because the signature mentions it, and nothing constructs one.
-///
-/// The result was a layout that lies about itself, which is the standing
-/// hazard with an empty shape. The C and LLVM backends did not notice: a
-/// closure call dispatches through the *receiver's* descriptor, so the static
-/// layout's table is never read and the emitted code is correct. The JVM has to
-/// name a method and a descriptor at the call, reads the static layout, finds
-/// nothing, and refuses -- which is the third backend doing the job it is kept
-/// for, since the first two compiled a shape with a hole in it and said nothing.
-///
-/// # The signature comes from the call
-///
-/// Not from the checker. [`Callee::Closure`] already says why that is the right
-/// source -- "the signature is built from the call itself, which knows the
-/// argument types and the result type exactly" -- and it is the same principle
-/// the other two declarers apply when they take a signature from an
-/// implementer: a descriptor that has to agree with something is checkable,
-/// and one synthesized here would be a third opinion nothing else holds.
-///
-/// Where two call sites disagree the signature is left undeclared and the
-/// backend's refusal stands. Two calls through one signature that disagree
-/// about its shape is a fact worth refusing over, not one to pick a winner in.
-fn declare_unfilled_signatures(hierarchy: &Hierarchy, program: &mut Program) {
-    let Some(slot) = hierarchy.closure_slot.map(|slot| slot as usize) else {
-        return;
-    };
-    // Layout index to the shell built for it, and to whether every call agreed.
-    let mut found: Vec<(usize, Func, bool)> = Vec::new();
-    for func in &program.funcs {
-        // Live ops only. A `ValueId` is an index, so a pass that removes a call
-        // from the control flow leaves it in `values` -- and a declaration
-        // synthesized for a call nothing performs is a function the program
-        // does not need and `verify` would have to account for.
-        for op in func
-            .blocks
-            .iter()
-            .flat_map(|block| block.ops.iter())
-            .filter_map(|id| func.values.get(id.0 as usize))
-        {
+/// **Live ops only.** A `ValueId` is an index, so a pass that removes a call
+/// from the control flow leaves it in `values` -- and a declaration synthesized
+/// for a call nothing performs is a function the program does not need and
+/// `verify` would have to account for.
+fn closure_dispatches(program: &Program) -> Vec<(usize, usize, u32, usize)> {
+    let mut found = Vec::new();
+    for (func_at, func) in program.funcs.iter().enumerate() {
+        for id in func.blocks.iter().flat_map(|block| block.ops.iter()) {
+            let Some(op) = func.values.get(id.0 as usize) else {
+                continue;
+            };
             let OpKind::Call {
-                callee: Callee::Closure { slot: at },
+                callee: Callee::Closure { slot },
                 args,
                 ..
             } = &op.kind
             else {
                 continue;
             };
-            if *at as usize != slot {
-                continue;
-            }
             let Some(receiver) = args.first() else {
                 continue;
             };
@@ -11258,54 +11552,120 @@ fn declare_unfilled_signatures(hierarchy: &Hierarchy, program: &mut Program) {
             else {
                 continue;
             };
-            let Some(at) = program.layouts.iter().position(|l| l.types.contains(&ty)) else {
+            let Some(layout) = program.layouts.iter().position(|l| l.types.contains(&ty)) else {
                 continue;
             };
-            if program.layouts[at]
-                .methods
-                .get(slot)
-                .is_some_and(Option::is_some)
-            {
-                continue;
-            }
-            // The layout's own id, not the receiver's. A signature the program
-            // wrote and the type the checker inferred for an arrow are two ids
-            // over one signature, and only the layout's is one any backend can
-            // resolve a class from -- the same reasoning
-            // `relate_closures_to_signatures` gives for its `base`.
-            let Some(&base) = program.layouts[at].types.first() else {
-                continue;
-            };
-            let name = format!("{}#call", program.layouts[at].name);
-            let Some(shell) = signature_shell(func, name, base, op, args) else {
-                continue;
-            };
-            match found.iter_mut().find(|(layout, _, _)| *layout == at) {
-                Some((_, first, agreed)) => {
-                    *agreed = *agreed
-                        && first.return_type == shell.return_type
-                        && first.params.len() == shell.params.len()
-                        && first
-                            .params
-                            .iter()
-                            .zip(&shell.params)
-                            .all(|(a, b)| a.ty == b.ty);
-                }
-                None => found.push((at, shell, true)),
-            }
+            found.push((func_at, id.0 as usize, *slot, layout));
         }
+    }
+    found
+}
+
+/// Declare `erased_call` on every signature layout a call dispatches through.
+///
+/// A signature layout is empty until something *implements* it, and one exists
+/// with nothing implementing it whenever a program reads a closure out of a
+/// container it did not populate -- `materialize_within` gives `Map<string,
+/// Weigh>` a layout for `Weigh` because the signature mentions it, and nothing
+/// constructs one. The result is a layout that lies about itself, which is the
+/// standing hazard with an empty shape.
+///
+/// **C and LLVM do not notice, and are not evidence.** A closure call dispatches
+/// through the *receiver's* descriptor, so the static layout's table is never
+/// read and the emitted code is correct. The JVM has to name a method and a
+/// descriptor at the call site, reads the static layout, finds nothing, and
+/// refuses with `NTS4001 a closure call through a slot its type declares nothing
+/// for` -- the third backend doing the job it is kept for, since the first two
+/// compiled a shape with a hole in it and said nothing.
+///
+/// # It replaced a larger pass, and the difference is that this shape is
+/// inferred from nothing
+///
+/// `declare_unfilled_signatures` reconstructed the *written* `#call` from a call
+/// site, since that was the program's only description of a signature nothing
+/// implements -- with an agreement check across the sites, because two that
+/// disagree about a signature are a fact to refuse over rather than one to pick a
+/// winner in. Since [`FuncBuilder::closure_callee`] sends every signature-typed
+/// call through the erased entry, no call spells a written signature any more, so
+/// that pass could not fire; and nothing is lost, because the erased entry is a
+/// receiver, [`Hierarchy::erased_call_arity`] erased parameters and an erased
+/// result **at every site by construction**. Nothing to reconstruct, so nothing to disagree
+/// about, and no shape for this to be wrong about.
+fn declare_erased_entries(hierarchy: &Hierarchy, program: &mut Program) {
+    let Some(slot) = hierarchy.erased_call_slot.map(|slot| slot as usize) else {
+        return;
+    };
+    // Layout index to the declaration built for it. One per layout: every site
+    // through one signature asks for the same function, and a second would reach
+    // `verify` as `DuplicateFunction`.
+    let mut found: Vec<(usize, Func)> = Vec::new();
+    for (func_at, value_at, at, layout) in closure_dispatches(program) {
+        if at as usize != slot || found.iter().any(|(seen, _)| *seen == layout) {
+            continue;
+        }
+        if program.layouts[layout]
+            .methods
+            .get(slot)
+            .is_some_and(Option::is_some)
+        {
+            continue;
+        }
+        // The layout's own id, not the receiver's. A signature the program wrote
+        // and the type the checker inferred for an arrow are two ids over one
+        // signature, and only the layout's is one any backend can resolve a class
+        // from -- the same reasoning `relate_closures_to_signatures` gives for
+        // its `base`.
+        let Some(&base) = program.layouts[layout].types.first() else {
+            continue;
+        };
+        let origin = Origin::generated(
+            program.funcs[func_at].values[value_at].origin.location,
+            nts_semantic_schema::GeneratedReason::ClosureLowering,
+        );
+        let receiver = Param {
+            name: "v0".to_owned(),
+            ty: HirType::Managed(ManagedType::Object(base)),
+            origin: origin.clone(),
+            shape: ParamShape::Ordinary,
+            known: Facts::TOP,
+        };
+        let Some((params, values)) =
+            uniform_params(&receiver, &[], &origin, hierarchy.erased_call_arity)
+        else {
+            continue;
+        };
+        found.push((
+            layout,
+            Func {
+                name: format!("{}#erased_call", program.layouts[layout].name),
+                params,
+                // A declaration is its signature: the parameters keep their value
+                // ops because those *are* the signature in this IR, and the
+                // single block says there is nothing else.
+                return_type: HirType::Erased,
+                values,
+                blocks: vec![Block {
+                    params: Vec::new(),
+                    ops: Vec::new(),
+                    terminator: Terminator::Unreachable,
+                }],
+                origin,
+                exported: false,
+                initializes_receiver: false,
+                abstract_declaration: true,
+                async_result: None,
+                frame: None,
+            },
+        ));
     }
     // Sorted, so one compiler on one input emits them in one order.
     found.sort_by(|a, b| a.1.name.cmp(&b.1.name));
-    for (at, shell, agreed) in found {
-        if !agreed {
-            continue;
-        }
+    for (layout, shell) in found {
         let table = hierarchy.table_size();
-        if program.layouts[at].methods.len() < table {
-            program.layouts[at].methods.resize(table, None);
+        if program.layouts[layout].methods.len() < table {
+            program.layouts[layout].methods.resize(table, None);
         }
-        program.layouts[at].methods[slot] = Some(shell.name.clone());
+        program.layouts[layout].methods[slot] = Some(shell.name.clone());
         program.funcs.push(shell);
     }
 }
@@ -15137,6 +15497,23 @@ impl<'a> FuncBuilder<'a> {
         let HirType::Managed(ManagedType::Object(ty)) = self.values[callee.0 as usize].ty else {
             return None;
         };
+        // **A closure class is not a function type in the snapshot**, so asking
+        // the checker about the synthetic id answers nothing and this fell through
+        // to the *expression's* type -- the very thing the caller's comment says
+        // must not decide a call's result. Where the receiver has been narrowed to
+        // one closure class the callee is that class's own `#call`, so its return
+        // is the closure's own, which is a question the checker can answer about
+        // the arrow it came from.
+        //
+        // It cost an uncompilable program: `const slot: () => unknown = aVoidOne;
+        // slot()` narrowed to the class, called `Closure0#call` directly, took
+        // `unknown` from the expression, and C emitted `v1 = <void call>` where
+        // `v1` rightly has no declaration.
+        if ty.0 >= super::SYNTHETIC_TYPE_FLOOR {
+            let info = self.closures.get(closure_index(ty))?;
+            let declared = *self.snapshot.node_types.get(&info.node)?;
+            return self.represent(signature_key(self.snapshot, declared)?.1);
+        }
         let record = self.snapshot.types.get(ty.0 as usize)?;
         let nts_semantic_schema::TypeKind::Function(signature) = record.kind else {
             return None;
@@ -22408,6 +22785,9 @@ impl<'a> FuncBuilder<'a> {
         let mut methods = vec![None; self.hierarchy.table_size()];
         if let Some(slot) = self.hierarchy.closure_slot {
             methods[slot as usize] = Some(method);
+        }
+        if let Some(slot) = self.hierarchy.erased_call_slot {
+            methods[slot as usize] = Some(erased_call_name(index));
         }
         Layout {
             types: vec![closure_type(index)],
@@ -54272,7 +54652,16 @@ impl<'a> FuncBuilder<'a> {
         // should be an inlined multiply.
         let callee = if receiver_ty.0 >= super::SYNTHETIC_TYPE_FLOOR {
             Callee::Direct(closure_names(closure_index(receiver_ty)).1)
-        } else if let Some(slot) = self.hierarchy.closure_slot {
+        } else if let Some(slot) = self.hierarchy.erased_call_slot {
+            // **The erased entry, because this is the branch that does not know
+            // the body.** The comment above states the condition exactly: where
+            // the receiver's static type *is* the closure class, which body runs
+            // is known and the call is direct; where it is only the signature, it
+            // is not -- so the ABI has to be the one every closure answers rather
+            // than the one this site happens to spell. Spelling it was the bug:
+            // `closure_slot`'s own doc claims two closures at one index "cannot
+            // be confused for each other" *because* the call spells the
+            // signature.
             Callee::Closure { slot }
         } else {
             return Err(self.unsupported(
@@ -54553,15 +54942,77 @@ impl<'a> FuncBuilder<'a> {
         // class.
         self.materialize(id, &ty)?;
         let origin = self.origin(id);
-        Ok(self.push(
+        // Through the erased entry, the site spells the one ABI it can: every
+        // written argument erased and the answer unerased to what it reads. The
+        // receiver is not one of them -- it is the closure object, and the entry
+        // takes it at its own class, which is the one thing this site does know.
+        //
+        // `coerce` rather than a hand-rolled `Erase`, because an erasure carries
+        // which absence it was (`OpKind::Erase`'s `absent`) and getting that from
+        // the type alone is the mistake `absence_at_excluding` exists to prevent.
+        let erased_entry = matches!(
+            callee,
+            Callee::Closure { slot } if Some(slot) == self.hierarchy.erased_call_slot
+        );
+        if !erased_entry {
+            return Ok(self.push(
+                OpKind::Call {
+                    callee,
+                    args,
+                    frame: None,
+                },
+                ty,
+                origin,
+            ));
+        }
+        let width = self.hierarchy.erased_call_arity;
+        let mut erased = Vec::with_capacity(width + 1);
+        for (at, arg) in args.into_iter().enumerate() {
+            if at > width {
+                // More arguments than any closure in this program reads.
+                // JavaScript drops them and so does this; see
+                // [`Hierarchy::erased_call_arity`].
+                break;
+            }
+            erased.push(if at == 0 {
+                arg
+            } else {
+                self.coerce(arg, &HirType::Erased, id)?
+            });
+        }
+        // Up to the entry's fixed arity, because this site does not know the
+        // closure and so cannot know how many it declares. `undefined` is what
+        // JavaScript hands an argument nobody passed, and it is what the entry
+        // unerases for a parameter the caller left out.
+        while erased.len() < width + 1 {
+            erased.push(self.push(OpKind::ConstUndefined, HirType::Erased, origin.clone()));
+        }
+        let answered = self.push(
             OpKind::Call {
                 callee,
-                args,
+                args: erased,
                 frame: None,
             },
-            ty,
-            origin,
-        ))
+            HirType::Erased,
+            origin.clone(),
+        );
+        // The answer, read back at what this site expects.
+        //
+        // An explicit `Unerase` rather than `coerce`, and the difference is a
+        // licence rather than a spelling: `coerce` from `Erased` to a concrete
+        // type is the *narrowing* path, which refuses without a test proving what
+        // arrived -- "an erased value where a concrete representation is wanted".
+        // Here nothing needs proving. This site asked for the erased ABI one line
+        // above; unerasing the answer is the inverse of its own request, and the
+        // type is what the checker gave the call. It is the same entitlement any
+        // typed read has and no more.
+        Ok(match &ty {
+            // Nothing to read back. An erased site wanted the erased answer, and
+            // a `void` one discards it -- the entry returned `undefined` there,
+            // which is what makes the two one arm rather than two spellings.
+            HirType::Erased | HirType::Void | HirType::Never => answered,
+            _ => self.push(OpKind::Unerase { value: answered }, ty, origin),
+        })
     }
 
     /// The `Math` or `Number` member a callee names, if it names one.

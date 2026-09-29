@@ -942,17 +942,30 @@ fn a_dispatched_call_keeps_the_return_its_declaration_promises() {
     // `double`, and the answer came out of the wrong register.
     //
     // Raw lowering has no specialization in it, so what this pins is the other
-    // half -- that the call takes its type from the *callee* and not from the
-    // expression, which for `f?.(x)` carries an `undefined` the call cannot
-    // produce.
+    // half -- that the value the expression yields takes its type from the
+    // *callee* and not from the expression, which for `f?.(x)` carries an
+    // `undefined` the call cannot produce. `number | undefined` has no single
+    // representation, so getting that wrong reads here as `Erased`.
+    //
+    // **Read at the end of the chain rather than at the call**, because the
+    // dispatch is now the erased entry: a site holding only the signature cannot
+    // know the closure, so it passes the uniform ABI and unerases the answer
+    // itself. The call is *legitimately* `Erased` there and the declared return
+    // arrives one op later -- which is the whole of what moved, and the defect
+    // this was written for would still be an `Erased` at the end.
     let optional = func(&lowered, "optionalCall");
     let call = optional
         .values
         .iter()
-        .find(|op| matches!(op.kind, OpKind::Call { callee: Callee::Closure { .. }, .. }))
+        .position(|op| matches!(op.kind, OpKind::Call { callee: Callee::Closure { .. }, .. }))
         .expect("`f?.(x)` calls through the closure table");
+    let answer = optional
+        .values
+        .iter()
+        .find(|op| matches!(op.kind, OpKind::Unerase { value } if value.0 as usize == call))
+        .unwrap_or(&optional.values[call]);
     assert_ne!(
-        call.ty,
+        answer.ty,
         HirType::Erased,
         "the call returns what the closure returns, not `number | undefined`"
     );

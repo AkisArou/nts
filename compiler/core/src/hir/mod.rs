@@ -2513,6 +2513,21 @@ pub struct DisputedLayout {
 #[derive(Debug, Clone, Default)]
 pub struct Program {
     pub funcs: Vec<Func>,
+    /// Where a closure's written `call` sits in every dispatch table, and where
+    /// its uniform entry sits.
+    ///
+    /// **On `Program` because two passes need them and neither is lowering.**
+    /// `fields::devirtualize` turns an erased dispatch into a direct call, and to
+    /// do that it has to know which of the two entries the call used and which
+    /// one it should name instead. Deriving that from the *names* --
+    /// `Closure3#call` beside `Closure3#erased_call` -- would be a second
+    /// derivation of a fact the hierarchy already decided, and this file has
+    /// three comments about what that costs.
+    pub closure_slot: Option<u32>,
+    /// See [`Program::closure_slot`]. The entry whose parameters and result are
+    /// all erased, which a call site takes when it knows the *signature* and not
+    /// the class.
+    pub erased_call_slot: Option<u32>,
     /// Types this lowering laid out two different ways. See [`DisputedLayout`]:
     /// a compiler-internal inconsistency rather than anything the source did,
     /// reported by [`verify`] because that is where this codebase says so.
@@ -3307,6 +3322,157 @@ pub fn closure_call_slot(program: &Program) -> u32 {
 #[must_use]
 pub fn bridged_through_table(program: &Program, layout: &Layout) -> Option<u32> {
     (!layout.types.iter().copied().any(has_a_closure_body)).then(|| closure_call_slot(program))
+}
+
+/// Make one closure dispatch a direct call to `name`, undoing the erasure the
+/// uniform entry forced on it.
+///
+/// **Three places decide "the receiver's class is known here, so call the body
+/// that class names"**, and asking how many there are is what produced this
+/// function. The lowering decides it for a receiver whose static type *is* the
+/// closure class, and has nothing to undo because no erasure has happened yet.
+/// [`fields::devirtualize`] decides it for a field that can hold exactly one
+/// class, and [`monomorphize::retype_parameter`] for a clone's parameter that was
+/// given one -- and both of those meet a call **already made** in the uniform
+/// ABI, so both have the same erasure to undo.
+///
+/// **Undoing it is most of what the redirect is worth, which was measured the
+/// wrong way round first.** `retype_parameter` originally redirected such a call
+/// to the concrete class's *erased* entry -- direct, same ABI, no surgery -- on
+/// the argument that what a clone buys is the dispatch. `benches/cases/closures`
+/// refuted it: the hot loop paid one `nts_value_of_number`, **seven**
+/// `nts_value_of_undefined`, and a read-back per iteration, for a call the control
+/// made with a raw `double`. `devirtualize_closures` prices the same thing from
+/// the other side (`optional-chain` 87.98 us to 35.17 us). So the surgery is one
+/// operation here rather than a copy in each caller.
+///
+/// `args` drops the padding and takes each `Erase`'s operand. The result is the
+/// fiddly half: the site pushed `Unerase { value: call }` as an op of its own,
+/// and with the written entry the call already answers concretely -- so that op
+/// is what the direct call *becomes*, and the original is dropped from the block
+/// and neutralised rather than left to look like a call nothing evaluates. An
+/// `Unerase` of an already-concrete value is not a no-op to a backend: C reads
+/// `nts_value_reference(v)` off it.
+///
+/// `receiver` is an op to stand in front of the call, for a caller that has to
+/// re-type the receiver (`devirtualize` reads the erased field back at the
+/// class); it is pushed and sequenced here so no caller has to guess an id.
+/// `false` when the op is not a call or its block cannot be found, which cannot
+/// happen for a site a caller resolved and is not worth a panic.
+pub(super) fn call_directly(
+    func: &mut Func,
+    index: usize,
+    name: String,
+    arity: usize,
+    returns: &HirType,
+    uniform: bool,
+    receiver: Option<Op>,
+) -> bool {
+    let id = |at: usize| ValueId(u32::try_from(at).unwrap_or(u32::MAX));
+    let OpKind::Call { args, .. } = &func.values[index].kind else {
+        return false;
+    };
+    let mut args: Vec<ValueId> = if uniform {
+        args.iter()
+            .take(arity)
+            .enumerate()
+            .map(|(position, arg)| match func.values[arg.0 as usize].kind {
+                // The receiver keeps its place; a caller's `receiver` op replaces
+                // it below. An argument the site left erased -- because the
+                // parameter was erased already -- has no `Erase` to undo.
+                OpKind::Erase { value, .. } if position > 0 => value,
+                _ => *arg,
+            })
+            .collect()
+    } else {
+        args.clone()
+    };
+
+    // **A live read-back, not merely one in the arena.** A `ValueId` is an index,
+    // so a pass that drops an op from the control flow leaves it in `values`;
+    // moving the direct call into a dead one would put it where nothing runs it.
+    let reads_back = uniform
+        .then(|| {
+            func.blocks
+                .iter()
+                .flat_map(|block| block.ops.iter())
+                .map(|op| op.0 as usize)
+                .find(|&op| {
+                    matches!(func.values[op].kind, OpKind::Unerase { value } if value == id(index))
+                })
+        })
+        .flatten();
+    let target = reads_back.unwrap_or(index);
+    let Some(block) = func
+        .blocks
+        .iter()
+        .position(|block| block.ops.contains(&id(target)))
+    else {
+        return false;
+    };
+
+    if reads_back.is_some() {
+        func.blocks[block].ops.retain(|op| *op != id(index));
+        // **And it stops being a call**, rather than merely stopping being run.
+        // A value is not removed from the arena -- every `ValueId` after it would
+        // move -- so the dispatch would otherwise sit in `values` looking like a
+        // call nothing evaluates, and several passes read `values` directly:
+        // `elements` matches helper names in it, and the devirtualization test
+        // counts dispatches there. A phantom is how a later reader concludes this
+        // program still dispatches.
+        func.values[index].kind = OpKind::ConstUndefined;
+        func.values[index].ty = HirType::Erased;
+    }
+    // After the removal, because that shifts the positions.
+    let Some(at) = func.blocks[block]
+        .ops
+        .iter()
+        .position(|op| *op == id(target))
+    else {
+        return false;
+    };
+    if let Some(op) = receiver {
+        let pushed = id(func.values.len());
+        func.values.push(op);
+        func.blocks[block].ops.insert(at, pushed);
+        if let Some(first) = args.first_mut() {
+            *first = pushed;
+        }
+    }
+    let call = OpKind::Call {
+        callee: Callee::Direct(name),
+        args,
+        frame: None,
+    };
+    if !uniform {
+        func.values[target].kind = call;
+        return true;
+    }
+    // **A site that wanted the answer erased still does.** With no `Unerase` the
+    // site is one of the lowering's other two arms: it discards the result, or its
+    // own type *is* `Erased` -- `const y: any = f(1)`, where `f` is
+    // signature-typed. The written entry answers concretely, so writing the direct
+    // call into that slot would hand a `Float` to a consumer reading an
+    // `NtsValue`. So the slot becomes the erasure and the call is appended behind
+    // it: the same three faces the entry itself has, at the other end of the wire.
+    if reads_back.is_none() && func.values[target].ty == HirType::Erased && *returns != HirType::Erased {
+        let moved = id(func.values.len());
+        let mut op = func.values[target].clone();
+        op.kind = call;
+        op.ty = returns.clone();
+        func.values.push(op);
+        func.blocks[block].ops.insert(at, moved);
+        func.values[target].kind = OpKind::Erase {
+            value: moved,
+            // The closure produced it. An absence would be the body's own `null`,
+            // which is in `returns` and erases with it.
+            absent: Absent::Impossible,
+        };
+        return true;
+    }
+    func.values[target].kind = call;
+    func.values[target].ty = returns.clone();
+    true
 }
 
 /// Values carried through boxing and control-flow joins. These operations

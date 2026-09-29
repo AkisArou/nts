@@ -105,7 +105,26 @@ pub fn monomorphize(program: &mut Program) -> usize {
         clone.exported = false;
         clone.params[request.slot as usize].ty =
             HirType::Managed(ManagedType::Object(request.concrete));
-        retype_parameter(&mut clone, request.slot, request.concrete);
+        // The written entry's name and shape, resolved here because the clone
+        // cannot see the program. Its absence is already handled above -- that
+        // check is what keeps a clone from naming a function reachability
+        // removed -- so this only fails for a `concrete` that is not a closure
+        // type at all, where there is nothing to make direct.
+        let target = super::lower::closure_method(request.concrete);
+        let written = program
+            .funcs
+            .iter()
+            .find(|func| func.name == target)
+            .map(|func| (target, func.params.len(), func.return_type.clone()));
+        if let Some(written) = written {
+            retype_parameter(
+                &mut clone,
+                request.slot,
+                request.concrete,
+                program.erased_call_slot,
+                written,
+            );
+        }
         program.funcs.push(clone);
 
         clones.insert(
@@ -224,7 +243,16 @@ fn only_called(func: &Func, slot: u32) -> bool {
 }
 
 /// Give the clone's parameter its concrete type, and make what it calls direct.
-fn retype_parameter(clone: &mut Func, slot: u32, concrete: TypeId) {
+///
+/// `written` is the class's `#call` with its parameter count and return type,
+/// resolved by the caller because this has only the clone.
+fn retype_parameter(
+    clone: &mut Func,
+    slot: u32,
+    concrete: TypeId,
+    erased_slot: Option<u32>,
+    written: (String, usize, HirType),
+) {
     let param = ValueId(slot);
     let ty = HirType::Managed(ManagedType::Object(concrete));
     clone.values[param.0 as usize].ty = ty;
@@ -233,15 +261,33 @@ fn retype_parameter(clone: &mut Func, slot: u32, concrete: TypeId) {
     // closure class is final. So this is the same reasoning the lowering does
     // for a receiver it can see -- it is only that the receiver became visible
     // here rather than there.
-    let target = super::lower::closure_method(concrete);
-    for value in &mut clone.values {
-        let OpKind::Call { callee, args, .. } = &mut value.kind else {
-            continue;
-        };
-        if !matches!(callee, Callee::Closure { .. }) || args.first() != Some(&param) {
-            continue;
-        }
-        *callee = Callee::Direct(target.clone());
+    //
+    // **And a call the site made in the uniform ABI has that ABI undone**, which
+    // is not a nicety: pointing such a call at the written `#call` and leaving
+    // its arguments is `CallArgumentCount { expected: 2, found: 9 }`, and
+    // *keeping* the uniform entry -- direct, so the dispatch is still bought --
+    // cost `benches/cases/closures` seven `nts_value_of_undefined` constructions
+    // and a read-back inside its hot loop. [`super::call_directly`] is that
+    // surgery, shared with `fields::devirtualize` because both arrive at the same
+    // question from different evidence. The receiver needs no re-typing here: the
+    // parameter *is* the class, which is what this pass just decided.
+    let (name, arity, returns) = written;
+    let sites: Vec<(usize, bool)> = clone
+        .values
+        .iter()
+        .enumerate()
+        .filter_map(|(index, value)| {
+            let OpKind::Call { callee, args, .. } = &value.kind else {
+                return None;
+            };
+            let Callee::Closure { slot: at } = callee else {
+                return None;
+            };
+            (args.first() == Some(&param)).then_some((index, Some(*at) == erased_slot))
+        })
+        .collect();
+    for (index, uniform) in sites {
+        super::call_directly(clone, index, name.clone(), arity, &returns, uniform, None);
     }
 }
 

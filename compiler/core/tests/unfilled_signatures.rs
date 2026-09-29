@@ -89,7 +89,7 @@ fn a_signature_only_a_container_mentions_gets_a_layout() {
     );
 }
 
-/// Every signature layout declares its `call`, implemented or not.
+/// Every signature layout declares the entry its calls go through.
 ///
 /// `Step` has three arrows and would have been declared anyway. `Weigh` and
 /// `Blend` have none -- their layouts exist only because a `Map`'s value type
@@ -130,15 +130,23 @@ fn a_signature_with_no_closure_still_declares_its_call() {
     }
 }
 
-/// The declaration's shape comes from the call, so the two agree.
+/// The declaration and the bodies that override it are one shape.
 ///
 /// `Blend` is `(a: number, b: number, c: number) => number` and nothing in the
-/// program constructs one, so the only description of it that exists is the
-/// call site's. A receiver and three doubles, returning a double -- and the
-/// receiver typed as the signature rather than as any closure, because there is
-/// no closure to type it as.
+/// program constructs one, so before the erased entry existed the only
+/// description of it anywhere was the call site's, reconstructed by
+/// `declare_unfilled_signatures` -- and that test asserted the reconstruction: a
+/// receiver and three doubles, returning a double.
+///
+/// **There is nothing to reconstruct now, and that is the point.** Every
+/// signature-typed call is made in the uniform ABI, so the declaration's shape is
+/// fixed rather than inferred, and the property worth pinning moved with it: the
+/// declaration a signature layout carries and the entry a closure class fills it
+/// with have to be the *same* shape, or an override is not an override and the
+/// JVM says so at class load. `uniform_params` builds both for exactly that
+/// reason, and this is the arm that fails if one side is edited alone.
 #[test]
-fn the_declaration_matches_the_call_that_needed_it() {
+fn the_declaration_and_the_entries_that_override_it_are_one_shape() {
     let Some(lowered) = lowered("keyed-closures") else {
         return;
     };
@@ -147,33 +155,60 @@ fn the_declaration_matches_the_call_that_needed_it() {
         .layouts
         .iter()
         .find_map(|layout| {
-            let declared = layout.methods.iter().flatten().next()?;
+            let declared = layout
+                .methods
+                .iter()
+                .flatten()
+                .find(|name| name.ends_with("#erased_call"))?;
             (layout.name == "Fn2_2_2__2").then_some((layout, declared))
         })
-        .expect("the three-parameter signature has a layout and declares its call");
-    let func = lowered
+        .expect("the three-parameter signature has a layout and declares its erased call");
+    let declaration = lowered
         .program
         .funcs
         .iter()
         .find(|func| &func.name == declared)
         .expect("the declaration is in the program");
-    assert_eq!(
-        func.params.len(),
-        4,
-        "a receiver and three arguments: {:?}",
-        func.params.iter().map(|p| &p.ty).collect::<Vec<_>>(),
+    assert!(
+        declaration.abstract_declaration,
+        "`{declared}` is a declaration and must carry no body",
     );
-    assert_eq!(func.return_type, HirType::NUMBER);
-    let receiver = &func.params[0].ty;
+    assert_eq!(declaration.return_type, HirType::Erased);
+
+    // The receiver is the signature's own id, which is the only one a backend
+    // can resolve a class from -- and the reason the two had to be matched by
+    // signature rather than by identity in `relate_closures_to_signatures`.
+    let receiver = &declaration.params[0].ty;
     let HirType::Managed(ManagedType::Object(ty)) = receiver else {
         panic!("the receiver is an object: {receiver:?}");
     };
     assert!(
         layout.types.contains(ty),
-        "the receiver is typed as the signature's own id, which is the only one \
-         a backend can resolve a class from",
+        "the receiver is typed as the signature's own id",
     );
-    for param in &func.params[1..] {
-        assert_eq!(param.ty, HirType::NUMBER);
+    for param in &declaration.params[1..] {
+        assert_eq!(param.ty, HirType::Erased, "every argument crosses erased");
+    }
+
+    // And the same shape a closure class's own entry has. Compared against a
+    // real one rather than against a constant, because a constant here would be
+    // this file's opinion of the ABI and the whole defect class is two
+    // derivations of one fact.
+    let filled = lowered
+        .program
+        .funcs
+        .iter()
+        .find(|func| func.name.starts_with("Closure") && func.name.ends_with("#erased_call"))
+        .expect("`keyed-closures` has arrows, so some closure class fills the slot");
+    assert_eq!(
+        declaration.params.len(),
+        filled.params.len(),
+        "`{}` and `{}` are the same entry at two classes",
+        declaration.name,
+        filled.name,
+    );
+    assert_eq!(declaration.return_type, filled.return_type);
+    for (declared, implemented) in declaration.params[1..].iter().zip(&filled.params[1..]) {
+        assert_eq!(declared.ty, implemented.ty);
     }
 }
