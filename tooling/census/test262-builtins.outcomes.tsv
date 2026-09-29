@@ -1,6 +1,7 @@
 # Test262 test/built-ins cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 6aa52e0cc112812d, harness 1206fb95a71de6c1; machine at start: 20.6 GB available, swap 3.5/20 GB, load 8.6/10.6 (1m/5m), 32 cores; 4 worker(s)
+# compiler 06491c196e396873, harness 1206fb95a71de6c1; machine at start: 20.5 GB available, swap 3.7/20 GB, load 10.2/9.4 (1m/5m), 32 cores; 4 worker(s)
+test/built-ins/Array/S15.4.2.1_A1.3_T1.js	pass	
 test/built-ins/Array/from/from-string.js	pass	
 test/built-ins/Array/isArray/15.4.3.2-0-4.js	pass	
 test/built-ins/Array/isArray/15.4.3.2-0-7.js	pass	
@@ -118,8 +119,16 @@ test/built-ins/Iterator/prototype/some/result-is-boolean.js	pass
 test/built-ins/Map/map-iterable.js	pass	
 test/built-ins/Map/prototype/delete/returns-false.js	pass	
 test/built-ins/Map/prototype/delete/returns-true-for-deleted-entry.js	pass	
+test/built-ins/Map/prototype/get/returns-undefined.js	pass	
+test/built-ins/Map/prototype/get/returns-value-normalized-zero-key.js	pass	
+test/built-ins/Map/prototype/has/normalizes-zero-key.js	pass	
+test/built-ins/Map/prototype/has/return-true-different-key-types.js	pass	
+test/built-ins/Map/prototype/set/append-new-values-normalizes-zero-key.js	pass	
 test/built-ins/Map/prototype/set/replaces-a-value-normalizes-zero-key.js	pass	
 test/built-ins/Map/prototype/set/replaces-a-value.js	pass	
+test/built-ins/Map/prototype/size/returns-count-of-present-values-before-after-set-clear.js	pass	
+test/built-ins/Map/prototype/size/returns-count-of-present-values-before-after-set-delete.js	pass	
+test/built-ins/Map/prototype/size/returns-count-of-present-values-by-insertion.js	pass	
 test/built-ins/Math/E/value.js	pass	
 test/built-ins/Math/LN10/value.js	pass	
 test/built-ins/Math/LN2/value.js	pass	
@@ -376,6 +385,7 @@ test/built-ins/Object/entries/getter-removing-future-key.js	fail	nts: uncaught T
 test/built-ins/Object/hasOwn/hasown_own_getter.js	pass	
 test/built-ins/Object/hasOwn/hasown_own_getter_and_setter.js	pass	
 test/built-ins/Object/hasOwn/hasown_own_property_exists.js	pass	
+test/built-ins/Object/hasOwn/hasown_own_setter.js	pass	
 test/built-ins/Object/internals/DefineOwnProperty/nan-equivalence-define-own-property-reassign.js	pass	
 test/built-ins/Object/is/not-same-value-x-y-symbol.js	pass	
 test/built-ins/Object/is/not-same-value-x-y-undefined.js	pass	
@@ -390,6 +400,7 @@ test/built-ins/Object/keys/15.2.3.14-3-1.js	pass
 test/built-ins/Object/keys/15.2.3.14-3-5.js	pass	
 test/built-ins/Object/prototype/hasOwnProperty/8.12.1-1_2.js	pass	
 test/built-ins/Object/prototype/hasOwnProperty/8.12.1-1_20.js	pass	
+test/built-ins/Object/prototype/hasOwnProperty/8.12.1-1_21.js	pass	
 test/built-ins/Object/prototype/hasOwnProperty/8.12.1-1_22.js	pass	
 test/built-ins/Object/values/getter-removing-future-key.js	fail	nts: uncaught Test262Error: result has 2 items
 test/built-ins/Promise/resolve/S25.4.4.5_A2.1_T1.js	fail	nts: uncaught Test262Error: The value of p1 is expected to equal the value of p2
@@ -586,11 +597,34 @@ test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-26.js	fa
 test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-27.js	fail	accepted: was refused later (lowering)
 test/built-ins/RegExp/prototype/unicodeSets/breaking-change-from-u-to-v-28.js	fail	accepted: was refused later (lowering)
 test/built-ins/RegExp/prototype/unicodeSets/uv-flags.js	fail	accepted: was refused later (lowering)
+test/built-ins/Set/prototype/add/preserves-insertion-order.js	pass	
 test/built-ins/Set/prototype/add/returns-this-when-ignoring-duplicate.js	pass	
+test/built-ins/Set/prototype/add/returns-this.js	pass	
 test/built-ins/Set/prototype/add/will-not-add-duplicate-entry-initial-iterable.js	pass	
 test/built-ins/Set/prototype/add/will-not-add-duplicate-entry-normalizes-zero.js	pass	
+test/built-ins/Set/prototype/add/will-not-add-duplicate-entry.js	pass	
 test/built-ins/Set/prototype/delete/delete-entry-initial-iterable.js	pass	
 test/built-ins/Set/prototype/delete/delete-entry-normalizes-zero.js	pass	
+test/built-ins/Set/prototype/delete/delete-entry.js	pass	
+test/built-ins/Set/prototype/delete/returns-false-when-delete-is-noop.js	pass	
+test/built-ins/Set/prototype/delete/returns-true-when-delete-operation-occurs.js	pass	
+test/built-ins/Set/prototype/has/returns-false-when-undefined-added-deleted-not-present-undefined.js	pass	
+test/built-ins/Set/prototype/has/returns-false-when-value-not-present-boolean.js	pass	
+test/built-ins/Set/prototype/has/returns-false-when-value-not-present-nan.js	pass	
+test/built-ins/Set/prototype/has/returns-false-when-value-not-present-null.js	pass	
+test/built-ins/Set/prototype/has/returns-false-when-value-not-present-number.js	pass	
+test/built-ins/Set/prototype/has/returns-false-when-value-not-present-string.js	pass	
+test/built-ins/Set/prototype/has/returns-false-when-value-not-present-symbol.js	pass	
+test/built-ins/Set/prototype/has/returns-false-when-value-not-present-undefined.js	pass	
+test/built-ins/Set/prototype/has/returns-true-when-value-present-boolean.js	pass	
+test/built-ins/Set/prototype/has/returns-true-when-value-present-nan.js	pass	
+test/built-ins/Set/prototype/has/returns-true-when-value-present-null.js	pass	
+test/built-ins/Set/prototype/has/returns-true-when-value-present-number.js	pass	
+test/built-ins/Set/prototype/has/returns-true-when-value-present-string.js	pass	
+test/built-ins/Set/prototype/has/returns-true-when-value-present-symbol.js	pass	
+test/built-ins/Set/prototype/has/returns-true-when-value-present-undefined.js	pass	
+test/built-ins/Set/prototype/size/returns-count-of-present-values-before-after-add-delete.js	pass	
+test/built-ins/Set/prototype/size/returns-count-of-present-values-by-insertion.js	pass	
 test/built-ins/Set/prototype/size/returns-count-of-present-values-by-iterable.js	pass	
 test/built-ins/Set/set-iterable.js	pass	
 test/built-ins/String/S15.5.1.1_A1_T10.js	pass	
@@ -615,6 +649,7 @@ test/built-ins/String/S9.8.1_A7.js	pass
 test/built-ins/String/S9.8.1_A8.js	pass	
 test/built-ins/String/S9.8.1_A9_T1.js	pass	
 test/built-ins/String/S9.8.1_A9_T2.js	pass	
+test/built-ins/String/S9.8_A2_T1.js	pass	
 test/built-ins/String/S9.8_A3_T1.js	pass	
 test/built-ins/String/S9.8_A4_T1.js	pass	
 test/built-ins/String/fromCharCode/S15.5.3.2_A3_T1.js	pass	

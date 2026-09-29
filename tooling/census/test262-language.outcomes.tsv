@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 6aa52e0cc112812d, harness 1206fb95a71de6c1; machine at start: 18.7 GB available, swap 3.5/20 GB, load 4.2/8 (1m/5m), 32 cores; 4 worker(s)
+# compiler 06491c196e396873, harness 1206fb95a71de6c1; machine at start: 21.1 GB available, swap 3.7/20 GB, load 3.6/5.4 (1m/5m), 32 cores; 4 worker(s)
 test/language/arguments-object/10.5-1gs.js	pass	
 test/language/asi/S7.9.2_A1_T1.js	pass	
 test/language/asi/S7.9.2_A1_T2.js	pass	
@@ -8,14 +8,11 @@ test/language/asi/S7.9.2_A1_T3.js	pass
 test/language/asi/S7.9.2_A1_T5.js	pass	
 test/language/asi/S7.9.2_A1_T6.js	pass	
 test/language/asi/S7.9_A1.js	pass	
-test/language/asi/S7.9_A10_T1.js	pass	
 test/language/asi/S7.9_A10_T10.js	pass	
 test/language/asi/S7.9_A10_T11.js	pass	
 test/language/asi/S7.9_A10_T12.js	pass	
 test/language/asi/S7.9_A10_T2.js	pass	
-test/language/asi/S7.9_A10_T3.js	pass	
 test/language/asi/S7.9_A10_T4.js	pass	
-test/language/asi/S7.9_A10_T5.js	pass	
 test/language/asi/S7.9_A10_T6.js	pass	
 test/language/asi/S7.9_A10_T7.js	pass	
 test/language/asi/S7.9_A10_T8.js	pass	
@@ -112,11 +109,14 @@ test/language/block-scope/leave/x-after-break-to-label.js	pass
 test/language/block-scope/leave/x-before-continue.js	pass	
 test/language/block-scope/return-from/block-const.js	pass	
 test/language/block-scope/return-from/block-let.js	pass	
+test/language/block-scope/shadowing/catch-parameter-shadowing-function-parameter-name.js	pass	
 test/language/block-scope/shadowing/catch-parameter-shadowing-let-declaration.js	pass	
 test/language/block-scope/shadowing/catch-parameter-shadowing-var-variable.js	pass	
 test/language/block-scope/shadowing/const-declaration-shadowing-catch-parameter.js	pass	
+test/language/block-scope/shadowing/const-declarations-shadowing-parameter-name-let-const-and-var-variables.js	pass	
 test/language/block-scope/shadowing/hoisting-var-declarations-out-of-blocks.js	pass	
 test/language/block-scope/shadowing/let-declaration-shadowing-catch-parameter.js	pass	
+test/language/block-scope/shadowing/let-declarations-shadowing-parameter-name-let-const-and-var.js	pass	
 test/language/block-scope/syntax/for-in/disallow-initialization-assignment.js	pass	
 test/language/block-scope/syntax/for-in/disallow-multiple-lexical-bindings-with-and-without-initializer.js	pass	
 test/language/block-scope/syntax/for-in/disallow-multiple-lexical-bindings-with-initializer.js	pass	
@@ -248,17 +248,27 @@ test/language/comments/multi-line-asi-paragraph-separator.js	pass
 test/language/comments/multi-line-html-close-extra.js	pass	
 test/language/comments/single-line-html-close-without-lt.js	pass	
 test/language/computed-property-names/class/accessor/getter.js	pass	
+test/language/computed-property-names/class/accessor/setter.js	pass	
 test/language/computed-property-names/class/method/constructor-can-be-generator.js	pass	
 test/language/computed-property-names/class/method/constructor-can-be-getter.js	pass	
+test/language/computed-property-names/class/method/constructor-can-be-setter.js	pass	
 test/language/computed-property-names/class/method/constructor-duplicate-1.js	pass	
 test/language/computed-property-names/class/method/constructor-duplicate-2.js	pass	
 test/language/computed-property-names/class/method/constructor-duplicate-3.js	pass	
 test/language/computed-property-names/class/static/generator-constructor.js	pass	
 test/language/computed-property-names/class/static/getter-constructor.js	pass	
 test/language/computed-property-names/class/static/method-constructor.js	pass	
+test/language/computed-property-names/class/static/setter-constructor.js	pass	
 test/language/computed-property-names/object/method/generator.js	pass	
+test/language/destructuring/binding/syntax/array-elements-with-initializer.js	pass	
+test/language/destructuring/binding/syntax/array-elements-with-object-patterns.js	pass	
+test/language/destructuring/binding/syntax/array-elements-without-initializer.js	pass	
+test/language/destructuring/binding/syntax/array-pattern-with-elisions.js	pass	
 test/language/destructuring/binding/syntax/array-pattern-with-no-elements.js	pass	
 test/language/destructuring/binding/syntax/object-pattern-with-no-property-list.js	pass	
+test/language/destructuring/binding/syntax/property-list-followed-by-a-single-comma.js	pass	
+test/language/destructuring/binding/syntax/property-list-single-name-bindings.js	pass	
+test/language/destructuring/binding/syntax/property-list-with-property-list.js	pass	
 test/language/expressions/addition/S11.6.1_A2.4_T1.js	pass	
 test/language/expressions/addition/S11.6.1_A4_T1.js	pass	
 test/language/expressions/addition/S11.6.1_A4_T2.js	pass	
@@ -271,9 +281,13 @@ test/language/expressions/addition/S11.6.1_A4_T8.js	pass
 test/language/expressions/addition/S11.6.1_A4_T9.js	pass	
 test/language/expressions/addition/coerce-bigint-to-string.js	pass	
 test/language/expressions/array/11.1.4-0.js	pass	
-test/language/expressions/arrow-function/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/expressions/arrow-function/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/expressions/arrow-function/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/arrow-function/arrow/concisebody-lookahead-assignmentexpression-1.js	pass	
+test/language/expressions/arrow-function/arrow/concisebody-lookahead-assignmentexpression-2.js	pass	
+test/language/expressions/arrow-function/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/arrow-function/dflt-params-ref-prior.js	pass	
 test/language/expressions/arrow-function/dflt-params-rest.js	pass	
+test/language/expressions/arrow-function/dstr/ary-name-iter-val.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-elem-iter.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-empty-iter.js	pass	
@@ -281,8 +295,10 @@ test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-rest-init.js	pas
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-id-init-hole.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-id-init-undef.js	pass	
+test/language/expressions/arrow-function/dstr/ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-id.js	pass	
+test/language/expressions/arrow-function/dstr/ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-rest-init-ary.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-rest-init-id.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-rest-init-obj.js	pass	
@@ -314,6 +330,8 @@ test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-not-final-obj.j
 test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-obj-id.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/arrow-function/dstr/obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/arrow-function/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-break-escaped.js	pass	
 test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-case-escaped.js	pass	
 test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-catch-escaped.js	pass	
@@ -359,14 +377,14 @@ test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-var-escaped
 test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-void-escaped.js	pass	
 test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-while-escaped.js	pass	
 test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-with-escaped.js	pass	
-test/language/expressions/arrow-function/object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/expressions/arrow-function/param-dflt-yield-expr.js	fail	accepted: was refused later (lowering)
-test/language/expressions/arrow-function/param-dflt-yield-id-strict.js	fail	accepted: was refused later (lowering)
-test/language/expressions/arrow-function/params-duplicate.js	fail	accepted: was refused later (lowering)
-test/language/expressions/arrow-function/rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/arrow-function/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/arrow-function/param-dflt-yield-expr.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/arrow-function/param-dflt-yield-id-strict.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/arrow-function/params-duplicate.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/arrow-function/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/arrow-function/rest-params-trailing-comma-early-error.js	pass	
 test/language/expressions/arrow-function/static-init-await-binding.js	pass	
-test/language/expressions/arrow-function/static-init-await-reference.js	fail	accepted: was refused later (lowering)
+test/language/expressions/arrow-function/static-init-await-reference.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-bindingidentifier-identifier-futurereservedword.js	pass	
 test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-bindingidentifier-identifier-strict-futurereservedword.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-bindingidentifier-identifier.js	pass	
@@ -411,6 +429,8 @@ test/language/expressions/assignment/dstr/array-elem-put-obj-literal-prop-ref.js
 test/language/expressions/assignment/dstr/array-elem-target-identifier.js	pass	
 test/language/expressions/assignment/dstr/array-elem-target-simple-strict.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignment/dstr/array-elem-target-yield-invalid.js	fail	accepted: was refused later (lowering)
+test/language/expressions/assignment/dstr/array-elision-val-array.js	pass	
+test/language/expressions/assignment/dstr/array-empty-val-array.js	pass	
 test/language/expressions/assignment/dstr/array-empty-val-string.js	pass	
 test/language/expressions/assignment/dstr/array-rest-after-element.js	pass	
 test/language/expressions/assignment/dstr/array-rest-after-elision.js	pass	
@@ -870,7 +890,7 @@ test/language/expressions/assignmenttargettype/parenthesized-updateexpression-st
 test/language/expressions/assignmenttargettype/parenthesized-yieldexpression-0.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignmenttargettype/parenthesized-yieldexpression-1.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignmenttargettype/simple-basic-identifierreference-await.js	pass	
-test/language/expressions/async-arrow-function/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-arrow-function/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-arrow-function/await-as-identifier-reference-escaped.js	pass	
 test/language/expressions/async-arrow-function/await-as-identifier-reference.js	pass	
 test/language/expressions/async-arrow-function/await-as-label-identifier-escaped.js	pass	
@@ -879,22 +899,22 @@ test/language/expressions/async-arrow-function/await-as-param-ident-nested-arrow
 test/language/expressions/async-arrow-function/await-as-param-nested-arrow-body-position.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-arrow-function/await-as-param-nested-arrow-parameter-position.js	pass	
 test/language/expressions/async-arrow-function/await-as-param-rest-nested-arrow-parameter-position.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/async-arrow-function/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-arrow-function/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-arrow-function/dflt-params-rest.js	pass	
 test/language/expressions/async-arrow-function/early-errors-arrow-NSPL-with-USD.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-arrow-function/early-errors-arrow-arguments-in-formal-parameters.js	pass	
 test/language/expressions/async-arrow-function/early-errors-arrow-await-in-formals-default.js	pass	
 test/language/expressions/async-arrow-function/early-errors-arrow-body-contains-super-call.js	fail	accepted: was refused later (lowering)
 test/language/expressions/async-arrow-function/early-errors-arrow-body-contains-super-property.js	fail	accepted: was refused later (lowering)
-test/language/expressions/async-arrow-function/early-errors-arrow-duplicate-parameters.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-arrow-function/early-errors-arrow-duplicate-parameters.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-arrow-function/early-errors-arrow-eval-in-formal-parameters.js	pass	
-test/language/expressions/async-arrow-function/early-errors-arrow-formals-body-duplicate.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-arrow-function/early-errors-arrow-formals-body-duplicate.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-arrow-function/early-errors-arrow-formals-contains-super-call.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/async-arrow-function/early-errors-arrow-formals-contains-super-property.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-arrow-function/early-errors-arrow-formals-contains-super-property.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-arrow-function/early-errors-arrow-formals-lineterminator.js	pass	
 test/language/expressions/async-arrow-function/escaped-async.js	pass	
-test/language/expressions/async-arrow-function/object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/expressions/async-arrow-function/rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-arrow-function/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/async-arrow-function/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-arrow-function/rest-params-trailing-comma-early-error.js	pass	
 test/language/expressions/async-function/await-as-identifier-reference-escaped.js	pass	
 test/language/expressions/async-function/await-as-identifier-reference.js	pass	
@@ -906,34 +926,34 @@ test/language/expressions/async-function/early-errors-expression-binding-identif
 test/language/expressions/async-function/early-errors-expression-body-contains-super-call.js	fail	accepted: was refused later (lowering)
 test/language/expressions/async-function/early-errors-expression-body-contains-super-property.js	fail	accepted: was refused later (lowering)
 test/language/expressions/async-function/early-errors-expression-eval-in-formal-parameters.js	pass	
-test/language/expressions/async-function/early-errors-expression-formals-body-duplicate.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-function/early-errors-expression-formals-body-duplicate.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-function/early-errors-expression-formals-contains-super-call.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/async-function/early-errors-expression-formals-contains-super-property.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-function/early-errors-expression-formals-contains-super-property.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-function/early-errors-expression-not-simple-assignment-target.js	pass	
 test/language/expressions/async-function/escaped-async.js	pass	
 test/language/expressions/async-function/expression-returns-promise.js	pass	
-test/language/expressions/async-function/named-array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-function/named-array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-function/named-await-as-identifier-reference-escaped.js	pass	
 test/language/expressions/async-function/named-await-as-identifier-reference.js	pass	
 test/language/expressions/async-function/named-await-as-label-identifier-escaped.js	pass	
 test/language/expressions/async-function/named-await-as-label-identifier.js	pass	
-test/language/expressions/async-function/named-dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-function/named-dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-function/named-dflt-params-rest.js	pass	
-test/language/expressions/async-function/named-object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/expressions/async-function/named-rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-function/named-object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/async-function/named-rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-function/named-rest-params-trailing-comma-early-error.js	pass	
-test/language/expressions/async-function/nameless-array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/expressions/async-function/nameless-dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-function/nameless-array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/async-function/nameless-dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-function/nameless-dflt-params-rest.js	pass	
-test/language/expressions/async-function/nameless-object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/expressions/async-function/nameless-rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-function/nameless-object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/async-function/nameless-rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-function/nameless-rest-params-trailing-comma-early-error.js	pass	
-test/language/expressions/async-generator/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-generator/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-generator/await-as-identifier-reference-escaped.js	pass	
 test/language/expressions/async-generator/await-as-identifier-reference.js	pass	
 test/language/expressions/async-generator/await-as-label-identifier-escaped.js	pass	
 test/language/expressions/async-generator/await-as-label-identifier.js	pass	
-test/language/expressions/async-generator/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-generator/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-generator/dflt-params-rest.js	pass	
 test/language/expressions/async-generator/dstr/ary-ptrn-rest-init-ary.js	pass	
 test/language/expressions/async-generator/dstr/ary-ptrn-rest-init-id.js	pass	
@@ -966,28 +986,28 @@ test/language/expressions/async-generator/early-errors-expression-binding-identi
 test/language/expressions/async-generator/early-errors-expression-body-contains-super-call.js	fail	accepted: was refused later (lowering)
 test/language/expressions/async-generator/early-errors-expression-body-contains-super-property.js	fail	accepted: was refused later (lowering)
 test/language/expressions/async-generator/early-errors-expression-eval-in-formal-parameters.js	pass	
-test/language/expressions/async-generator/early-errors-expression-formals-body-duplicate-const.js	fail	accepted: was refused later (lowering)
-test/language/expressions/async-generator/early-errors-expression-formals-body-duplicate-let.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-generator/early-errors-expression-formals-body-duplicate-const.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/async-generator/early-errors-expression-formals-body-duplicate-let.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-generator/early-errors-expression-formals-contains-await-expr.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-generator/early-errors-expression-formals-contains-super-call.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/async-generator/early-errors-expression-formals-contains-super-property.js	fail	accepted: was refused later (lowering)
-test/language/expressions/async-generator/early-errors-expression-formals-contains-yield-expr.js	fail	accepted: was refused later (lowering)
-test/language/expressions/async-generator/early-errors-expression-formals-contains-yield.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-generator/early-errors-expression-formals-contains-super-property.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/async-generator/early-errors-expression-formals-contains-yield-expr.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/async-generator/early-errors-expression-formals-contains-yield.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-generator/early-errors-expression-label-name-await.js	pass	
 test/language/expressions/async-generator/early-errors-expression-label-name-yield.js	pass	
 test/language/expressions/async-generator/early-errors-expression-not-simple-assignment-target.js	pass	
 test/language/expressions/async-generator/early-errors-expression-yield-as-function-binding-identifier.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-generator/early-errors-expression-yield-star-after-newline.js	pass	
 test/language/expressions/async-generator/escaped-async.js	pass	
-test/language/expressions/async-generator/named-array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-generator/named-array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-generator/named-await-as-identifier-reference-escaped.js	pass	
 test/language/expressions/async-generator/named-await-as-identifier-reference.js	pass	
 test/language/expressions/async-generator/named-await-as-label-identifier-escaped.js	pass	
 test/language/expressions/async-generator/named-await-as-label-identifier.js	pass	
-test/language/expressions/async-generator/named-dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-generator/named-dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-generator/named-dflt-params-rest.js	pass	
-test/language/expressions/async-generator/named-object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/expressions/async-generator/named-rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-generator/named-object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/async-generator/named-rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-generator/named-rest-params-trailing-comma-early-error.js	pass	
 test/language/expressions/async-generator/named-yield-as-binding-identifier-escaped.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-generator/named-yield-as-binding-identifier.js	fail	accepted: ran and threw Test262Error
@@ -997,8 +1017,8 @@ test/language/expressions/async-generator/named-yield-as-label-identifier-escape
 test/language/expressions/async-generator/named-yield-as-label-identifier.js	pass	
 test/language/expressions/async-generator/named-yield-identifier-spread-strict.js	fail	accepted: was refused later (lowering)
 test/language/expressions/async-generator/named-yield-identifier-strict.js	fail	accepted: was refused later (lowering)
-test/language/expressions/async-generator/object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/expressions/async-generator/rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-generator/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/async-generator/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-generator/rest-params-trailing-comma-early-error.js	pass	
 test/language/expressions/async-generator/yield-as-binding-identifier-escaped.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-generator/yield-as-binding-identifier.js	fail	accepted: ran and threw Test262Error
@@ -1008,6 +1028,7 @@ test/language/expressions/async-generator/yield-as-label-identifier-escaped.js	p
 test/language/expressions/async-generator/yield-as-label-identifier.js	pass	
 test/language/expressions/async-generator/yield-identifier-spread-strict.js	fail	accepted: was refused later (lowering)
 test/language/expressions/async-generator/yield-identifier-strict.js	fail	accepted: was refused later (lowering)
+test/language/expressions/await/await-in-function.js	pass	
 test/language/expressions/await/await-in-global.js	pass	
 test/language/expressions/await/await-in-nested-function.js	pass	
 test/language/expressions/await/await-in-nested-generator.js	pass	
@@ -1080,25 +1101,25 @@ test/language/expressions/class/async-gen-method/yield-as-label-identifier-escap
 test/language/expressions/class/async-gen-method/yield-as-label-identifier.js	pass	
 test/language/expressions/class/async-gen-method/yield-identifier-spread-strict.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/async-gen-method/yield-identifier-strict.js	fail	accepted: was refused later (lowering)
-test/language/expressions/class/async-method-static/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/async-method-static/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/async-method-static/await-as-identifier-reference-escaped.js	pass	
 test/language/expressions/class/async-method-static/await-as-identifier-reference.js	pass	
 test/language/expressions/class/async-method-static/await-as-label-identifier-escaped.js	pass	
 test/language/expressions/class/async-method-static/await-as-label-identifier.js	pass	
-test/language/expressions/class/async-method-static/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/async-method-static/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/async-method-static/dflt-params-rest.js	pass	
-test/language/expressions/class/async-method-static/object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/expressions/class/async-method-static/rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/async-method-static/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/async-method-static/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/async-method-static/rest-params-trailing-comma-early-error.js	pass	
-test/language/expressions/class/async-method/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/async-method/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/async-method/await-as-identifier-reference-escaped.js	pass	
 test/language/expressions/class/async-method/await-as-identifier-reference.js	pass	
 test/language/expressions/class/async-method/await-as-label-identifier-escaped.js	pass	
 test/language/expressions/class/async-method/await-as-label-identifier.js	pass	
-test/language/expressions/class/async-method/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/async-method/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/async-method/dflt-params-rest.js	pass	
-test/language/expressions/class/async-method/object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/expressions/class/async-method/rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/async-method/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/async-method/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/async-method/rest-params-trailing-comma-early-error.js	pass	
 test/language/expressions/class/class-name-ident-await-escaped.js	pass	
 test/language/expressions/class/class-name-ident-await.js	pass	
@@ -1161,6 +1182,7 @@ test/language/expressions/class/dstr/async-private-gen-meth-static-dflt-ary-ptrn
 test/language/expressions/class/dstr/async-private-gen-meth-static-dflt-ary-ptrn-rest-not-final-ary.js	pass	
 test/language/expressions/class/dstr/async-private-gen-meth-static-dflt-ary-ptrn-rest-not-final-id.js	pass	
 test/language/expressions/class/dstr/async-private-gen-meth-static-dflt-ary-ptrn-rest-not-final-obj.js	pass	
+test/language/expressions/class/dstr/gen-meth-ary-name-iter-val.js	pass	
 test/language/expressions/class/dstr/gen-meth-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/expressions/class/dstr/gen-meth-ary-ptrn-elem-ary-elem-iter.js	pass	
 test/language/expressions/class/dstr/gen-meth-ary-ptrn-elem-ary-empty-iter.js	pass	
@@ -1168,8 +1190,10 @@ test/language/expressions/class/dstr/gen-meth-ary-ptrn-elem-ary-rest-init.js	pas
 test/language/expressions/class/dstr/gen-meth-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/class/dstr/gen-meth-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/expressions/class/dstr/gen-meth-ary-ptrn-elem-id-init-undef.js	pass	
+test/language/expressions/class/dstr/gen-meth-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/class/dstr/gen-meth-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/class/dstr/gen-meth-ary-ptrn-elem-obj-id.js	pass	
+test/language/expressions/class/dstr/gen-meth-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/gen-meth-ary-ptrn-rest-init-ary.js	pass	
 test/language/expressions/class/dstr/gen-meth-ary-ptrn-rest-init-id.js	pass	
 test/language/expressions/class/dstr/gen-meth-ary-ptrn-rest-init-obj.js	pass	
@@ -1201,6 +1225,9 @@ test/language/expressions/class/dstr/gen-meth-dflt-ary-ptrn-rest-not-final-obj.j
 test/language/expressions/class/dstr/gen-meth-dflt-ary-ptrn-rest-obj-id.js	pass	
 test/language/expressions/class/dstr/gen-meth-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/class/dstr/gen-meth-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/class/dstr/gen-meth-obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/class/dstr/gen-meth-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/class/dstr/gen-meth-static-ary-name-iter-val.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-ary-ptrn-elem-ary-elem-iter.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-ary-ptrn-elem-ary-empty-iter.js	pass	
@@ -1208,8 +1235,10 @@ test/language/expressions/class/dstr/gen-meth-static-ary-ptrn-elem-ary-rest-init
 test/language/expressions/class/dstr/gen-meth-static-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-ary-ptrn-elem-id-init-undef.js	pass	
+test/language/expressions/class/dstr/gen-meth-static-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-ary-ptrn-elem-obj-id.js	pass	
+test/language/expressions/class/dstr/gen-meth-static-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-ary-ptrn-rest-init-ary.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-ary-ptrn-rest-init-id.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-ary-ptrn-rest-init-obj.js	pass	
@@ -1241,6 +1270,9 @@ test/language/expressions/class/dstr/gen-meth-static-dflt-ary-ptrn-rest-not-fina
 test/language/expressions/class/dstr/gen-meth-static-dflt-ary-ptrn-rest-obj-id.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/class/dstr/gen-meth-static-obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/class/dstr/gen-meth-static-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/class/dstr/meth-ary-name-iter-val.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-ary-elem-iter.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-ary-empty-iter.js	pass	
@@ -1248,8 +1280,10 @@ test/language/expressions/class/dstr/meth-ary-ptrn-elem-ary-rest-init.js	pass
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-id-init-undef.js	pass	
+test/language/expressions/class/dstr/meth-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-obj-id.js	pass	
+test/language/expressions/class/dstr/meth-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-rest-init-ary.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-rest-init-id.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-rest-init-obj.js	pass	
@@ -1281,6 +1315,9 @@ test/language/expressions/class/dstr/meth-dflt-ary-ptrn-rest-not-final-obj.js	pa
 test/language/expressions/class/dstr/meth-dflt-ary-ptrn-rest-obj-id.js	pass	
 test/language/expressions/class/dstr/meth-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/class/dstr/meth-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/class/dstr/meth-obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/class/dstr/meth-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/class/dstr/meth-static-ary-name-iter-val.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-ary-elem-iter.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-ary-empty-iter.js	pass	
@@ -1288,8 +1325,10 @@ test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-ary-rest-init.js	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-id-init-undef.js	pass	
+test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-obj-id.js	pass	
+test/language/expressions/class/dstr/meth-static-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-rest-init-ary.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-rest-init-id.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-rest-init-obj.js	pass	
@@ -1321,6 +1360,9 @@ test/language/expressions/class/dstr/meth-static-dflt-ary-ptrn-rest-not-final-ob
 test/language/expressions/class/dstr/meth-static-dflt-ary-ptrn-rest-obj-id.js	pass	
 test/language/expressions/class/dstr/meth-static-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/class/dstr/meth-static-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/class/dstr/meth-static-obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/class/dstr/meth-static-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/class/dstr/private-gen-meth-ary-name-iter-val.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-elem-ary-elem-iter.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-elem-ary-empty-iter.js	pass	
@@ -1328,8 +1370,10 @@ test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-elem-ary-rest-ini
 test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-elem-id-init-undef.js	pass	
+test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-elem-obj-id.js	pass	
+test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-rest-init-ary.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-rest-init-id.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-rest-init-obj.js	pass	
@@ -1361,6 +1405,9 @@ test/language/expressions/class/dstr/private-gen-meth-dflt-ary-ptrn-rest-not-fin
 test/language/expressions/class/dstr/private-gen-meth-dflt-ary-ptrn-rest-obj-id.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/class/dstr/private-gen-meth-obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/class/dstr/private-gen-meth-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/class/dstr/private-gen-meth-static-ary-name-iter-val.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-static-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-static-ary-ptrn-elem-ary-elem-iter.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-static-ary-ptrn-elem-ary-empty-iter.js	pass	
@@ -1368,8 +1415,10 @@ test/language/expressions/class/dstr/private-gen-meth-static-ary-ptrn-elem-ary-r
 test/language/expressions/class/dstr/private-gen-meth-static-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-static-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-static-ary-ptrn-elem-id-init-undef.js	pass	
+test/language/expressions/class/dstr/private-gen-meth-static-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-static-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-static-ary-ptrn-elem-obj-id.js	pass	
+test/language/expressions/class/dstr/private-gen-meth-static-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-static-ary-ptrn-rest-init-ary.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-static-ary-ptrn-rest-init-id.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-static-ary-ptrn-rest-init-obj.js	pass	
@@ -1401,6 +1450,9 @@ test/language/expressions/class/dstr/private-gen-meth-static-dflt-ary-ptrn-rest-
 test/language/expressions/class/dstr/private-gen-meth-static-dflt-ary-ptrn-rest-obj-id.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-static-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-static-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/class/dstr/private-gen-meth-static-obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/class/dstr/private-gen-meth-static-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/class/dstr/private-meth-ary-name-iter-val.js	pass	
 test/language/expressions/class/dstr/private-meth-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/expressions/class/dstr/private-meth-ary-ptrn-elem-ary-elem-iter.js	pass	
 test/language/expressions/class/dstr/private-meth-ary-ptrn-elem-ary-empty-iter.js	pass	
@@ -1408,8 +1460,10 @@ test/language/expressions/class/dstr/private-meth-ary-ptrn-elem-ary-rest-init.js
 test/language/expressions/class/dstr/private-meth-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/class/dstr/private-meth-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/expressions/class/dstr/private-meth-ary-ptrn-elem-id-init-undef.js	pass	
+test/language/expressions/class/dstr/private-meth-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/class/dstr/private-meth-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/class/dstr/private-meth-ary-ptrn-elem-obj-id.js	pass	
+test/language/expressions/class/dstr/private-meth-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/private-meth-ary-ptrn-rest-init-ary.js	pass	
 test/language/expressions/class/dstr/private-meth-ary-ptrn-rest-init-id.js	pass	
 test/language/expressions/class/dstr/private-meth-ary-ptrn-rest-init-obj.js	pass	
@@ -1441,6 +1495,9 @@ test/language/expressions/class/dstr/private-meth-dflt-ary-ptrn-rest-not-final-o
 test/language/expressions/class/dstr/private-meth-dflt-ary-ptrn-rest-obj-id.js	pass	
 test/language/expressions/class/dstr/private-meth-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/class/dstr/private-meth-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/class/dstr/private-meth-obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/class/dstr/private-meth-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/class/dstr/private-meth-static-ary-name-iter-val.js	pass	
 test/language/expressions/class/dstr/private-meth-static-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/expressions/class/dstr/private-meth-static-ary-ptrn-elem-ary-elem-iter.js	pass	
 test/language/expressions/class/dstr/private-meth-static-ary-ptrn-elem-ary-empty-iter.js	pass	
@@ -1448,8 +1505,10 @@ test/language/expressions/class/dstr/private-meth-static-ary-ptrn-elem-ary-rest-
 test/language/expressions/class/dstr/private-meth-static-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/class/dstr/private-meth-static-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/expressions/class/dstr/private-meth-static-ary-ptrn-elem-id-init-undef.js	pass	
+test/language/expressions/class/dstr/private-meth-static-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/class/dstr/private-meth-static-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/class/dstr/private-meth-static-ary-ptrn-elem-obj-id.js	pass	
+test/language/expressions/class/dstr/private-meth-static-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/private-meth-static-ary-ptrn-rest-init-ary.js	pass	
 test/language/expressions/class/dstr/private-meth-static-ary-ptrn-rest-init-id.js	pass	
 test/language/expressions/class/dstr/private-meth-static-ary-ptrn-rest-init-obj.js	pass	
@@ -1481,6 +1540,8 @@ test/language/expressions/class/dstr/private-meth-static-dflt-ary-ptrn-rest-not-
 test/language/expressions/class/dstr/private-meth-static-dflt-ary-ptrn-rest-obj-id.js	pass	
 test/language/expressions/class/dstr/private-meth-static-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/class/dstr/private-meth-static-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/class/dstr/private-meth-static-obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/class/dstr/private-meth-static-obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/expressions/class/elements/arrow-fnc-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/arrow-fnc-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/async-gen-private-method-static/await-as-identifier-reference-escaped.js	pass	
@@ -1598,41 +1659,53 @@ test/language/expressions/class/elements/private-ternary-init-err-contains-argum
 test/language/expressions/class/elements/private-ternary-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/private-typeof-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/private-typeof-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/elements/regular-definitions-grammar-privatename-identifier-semantics-stringvalue.js	pass	
 test/language/expressions/class/elements/regular-definitions-private-field-usage.js	pass	
 test/language/expressions/class/elements/regular-definitions-private-method-getter-usage.js	pass	
 test/language/expressions/class/elements/regular-definitions-private-method-usage.js	pass	
 test/language/expressions/class/elements/regular-definitions-rs-field-identifier-initializer.js	pass	
+test/language/expressions/class/elements/regular-definitions-rs-field-identifier.js	pass	
+test/language/expressions/class/elements/regular-definitions-rs-private-getter-alt.js	pass	
+test/language/expressions/class/elements/regular-definitions-rs-private-getter.js	pass	
+test/language/expressions/class/elements/regular-definitions-rs-private-method-alt.js	pass	
+test/language/expressions/class/elements/regular-definitions-rs-private-method.js	pass	
+test/language/expressions/class/elements/regular-definitions-rs-private-setter-alt.js	pass	
+test/language/expressions/class/elements/regular-definitions-rs-private-setter.js	pass	
+test/language/expressions/class/elements/regular-definitions-rs-privatename-identifier-alt.js	pass	
 test/language/expressions/class/elements/regular-definitions-rs-privatename-identifier-initializer-alt.js	pass	
 test/language/expressions/class/elements/regular-definitions-rs-privatename-identifier-initializer.js	pass	
+test/language/expressions/class/elements/regular-definitions-rs-privatename-identifier.js	pass	
+test/language/expressions/class/elements/regular-definitions-rs-static-method-privatename-identifier-alt.js	pass	
+test/language/expressions/class/elements/regular-definitions-rs-static-method-privatename-identifier.js	pass	
 test/language/expressions/class/elements/regular-definitions-rs-static-privatename-identifier-initializer-alt-by-classname.js	pass	
 test/language/expressions/class/elements/regular-definitions-rs-static-privatename-identifier-initializer-alt.js	pass	
 test/language/expressions/class/elements/regular-definitions-rs-static-privatename-identifier-initializer.js	pass	
 test/language/expressions/class/elements/static-comp-name-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/static-comp-name-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/class/elements/static-literal-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/elements/static-literal-init-err-contains-arguments.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/elements/static-literal-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/class/elements/static-private-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/elements/static-private-init-err-contains-arguments.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/elements/static-private-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/class/elements/static-string-literal-name-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/elements/static-string-literal-name-init-err-contains-arguments.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/elements/static-string-literal-name-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/string-literal-name-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/string-literal-name-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/syntax/early-errors/class-heritage-array-literal-arrow-heritage.js	pass	
 test/language/expressions/class/elements/syntax/early-errors/class-heritage-array-literal-async-arrow-heritage.js	pass	
-test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-covered-err-delete-call-expression-privatename.js	fail	accepted: was refused later (lowering)
-test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-covered-err-delete-member-expression-private-method-async-gen.js	fail	accepted: was refused later (lowering)
-test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-covered-err-delete-member-expression-private-method-async.js	fail	accepted: was refused later (lowering)
-test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-covered-err-delete-member-expression-private-method-gen.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-covered-err-delete-call-expression-privatename.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-covered-err-delete-member-expression-private-method-async-gen.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-covered-err-delete-member-expression-private-method-async.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-covered-err-delete-member-expression-private-method-gen.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-covered-err-delete-member-expression-privatename.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-err-delete-call-expression-privatename.js	fail	accepted: was refused later (lowering)
-test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-err-delete-member-expression-private-method-async-gen.js	fail	accepted: was refused later (lowering)
-test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-err-delete-member-expression-private-method-async.js	fail	accepted: was refused later (lowering)
-test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-err-delete-member-expression-private-method-gen.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-err-delete-call-expression-privatename.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-err-delete-member-expression-private-method-async-gen.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-err-delete-member-expression-private-method-async.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-err-delete-member-expression-private-method-gen.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-err-delete-member-expression-privatename.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-twice-covered-err-delete-call-expression-privatename.js	fail	accepted: was refused later (lowering)
-test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-twice-covered-err-delete-member-expression-private-method-async-gen.js	fail	accepted: was refused later (lowering)
-test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-twice-covered-err-delete-member-expression-private-method-async.js	fail	accepted: was refused later (lowering)
-test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-twice-covered-err-delete-member-expression-private-method-gen.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-twice-covered-err-delete-call-expression-privatename.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-twice-covered-err-delete-member-expression-private-method-async-gen.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-twice-covered-err-delete-member-expression-private-method-async.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-twice-covered-err-delete-member-expression-private-method-gen.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/syntax/early-errors/delete/field-delete-twice-covered-err-delete-member-expression-privatename.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/syntax/early-errors/delete/method-delete-covered-err-delete-call-expression-privatename.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/elements/syntax/early-errors/delete/method-delete-covered-err-delete-member-expression-private-method-async-gen.js	fail	accepted: was refused later (lowering)
@@ -1643,7 +1716,7 @@ test/language/expressions/class/elements/syntax/early-errors/delete/method-delet
 test/language/expressions/class/elements/syntax/early-errors/delete/method-delete-err-delete-member-expression-private-method-async-gen.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/elements/syntax/early-errors/delete/method-delete-err-delete-member-expression-private-method-async.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/elements/syntax/early-errors/delete/method-delete-err-delete-member-expression-private-method-gen.js	fail	accepted: was refused later (lowering)
-test/language/expressions/class/elements/syntax/early-errors/delete/method-delete-err-delete-member-expression-privatename.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/elements/syntax/early-errors/delete/method-delete-err-delete-member-expression-privatename.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/syntax/early-errors/delete/method-delete-twice-covered-err-delete-call-expression-privatename.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/elements/syntax/early-errors/delete/method-delete-twice-covered-err-delete-member-expression-private-method-async-gen.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/elements/syntax/early-errors/delete/method-delete-twice-covered-err-delete-member-expression-private-method-async.js	fail	accepted: was refused later (lowering)
@@ -1659,19 +1732,19 @@ test/language/expressions/class/elements/syntax/early-errors/grammar-private-env
 test/language/expressions/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage-obj-literal.js	pass	
 test/language/expressions/class/elements/syntax/early-errors/grammar-private-field-on-object-destructuring.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/syntax/early-errors/grammar-private-field-super-access.js	fail	accepted: was refused later (lowering)
-test/language/expressions/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-async-gen.js	fail	accepted: was refused later (lowering)
-test/language/expressions/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-async.js	fail	accepted: was refused later (lowering)
-test/language/expressions/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-gen.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-async-gen.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-async.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-gen.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-get-field.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-get-get.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-meth-field.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-meth-field.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-meth-get.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-meth-meth.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-meth-set.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-meth-set.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-meth-staticfield.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-meth-staticmeth.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-set-field.js	fail	accepted: was refused later (lowering)
-test/language/expressions/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-set-set.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-set-field.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-set-set.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/syntax/early-errors/grammar-privatename-constructor.js	pass	
 test/language/expressions/class/elements/syntax/early-errors/grammar-privatename-error.js	pass	
 test/language/expressions/class/elements/syntax/early-errors/grammar-privatename-identifier-invalid-ues.js	pass	
@@ -1725,7 +1798,7 @@ test/language/expressions/class/elements/syntax/early-errors/grammar-static-priv
 test/language/expressions/class/elements/syntax/early-errors/grammar-static-private-meth-constructor.js	pass	
 test/language/expressions/class/elements/syntax/early-errors/grammar-static-private-meth-super.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/elements/syntax/early-errors/grammar-static-privatename-constructor.js	pass	
-test/language/expressions/class/elements/syntax/early-errors/grammar-static-set-meth-prototype.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/elements/syntax/early-errors/grammar-static-set-meth-prototype.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/syntax/early-errors/grammar-static-set-meth-super.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/elements/syntax/early-errors/invalid-names/field-init-heritage-call-expression-this.js	pass	
 test/language/expressions/class/elements/syntax/early-errors/invalid-names/field-init-heritage-member-expression-this.js	pass	
@@ -1751,6 +1824,7 @@ test/language/expressions/class/elements/syntax/valid/grammar-privatemeth-duplic
 test/language/expressions/class/elements/syntax/valid/grammar-privatename-classelementname-initializer-alt.js	pass	
 test/language/expressions/class/elements/syntax/valid/grammar-privatename-classelementname-initializer.js	pass	
 test/language/expressions/class/elements/syntax/valid/grammar-privatename-identifier.js	pass	
+test/language/expressions/class/elements/syntax/valid/grammar-privatename-no-initializer-with-method.js	pass	
 test/language/expressions/class/elements/syntax/valid/grammar-privatenames-multi-line.js	pass	
 test/language/expressions/class/elements/syntax/valid/grammar-static-private-async-gen-meth-prototype.js	pass	
 test/language/expressions/class/elements/syntax/valid/grammar-static-private-async-meth-prototype.js	pass	
@@ -1760,18 +1834,31 @@ test/language/expressions/class/elements/ternary-init-err-contains-arguments.js	
 test/language/expressions/class/elements/ternary-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/typeof-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/typeof-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/elements/wrapped-in-sc-grammar-privatename-identifier-semantics-stringvalue.js	pass	
 test/language/expressions/class/elements/wrapped-in-sc-private-field-usage.js	pass	
 test/language/expressions/class/elements/wrapped-in-sc-private-method-getter-usage.js	pass	
 test/language/expressions/class/elements/wrapped-in-sc-private-method-usage.js	pass	
 test/language/expressions/class/elements/wrapped-in-sc-rs-field-identifier-initializer.js	pass	
+test/language/expressions/class/elements/wrapped-in-sc-rs-field-identifier.js	pass	
+test/language/expressions/class/elements/wrapped-in-sc-rs-private-getter-alt.js	pass	
+test/language/expressions/class/elements/wrapped-in-sc-rs-private-getter.js	pass	
+test/language/expressions/class/elements/wrapped-in-sc-rs-private-method-alt.js	pass	
+test/language/expressions/class/elements/wrapped-in-sc-rs-private-method.js	pass	
+test/language/expressions/class/elements/wrapped-in-sc-rs-private-setter-alt.js	pass	
+test/language/expressions/class/elements/wrapped-in-sc-rs-private-setter.js	pass	
+test/language/expressions/class/elements/wrapped-in-sc-rs-privatename-identifier-alt.js	pass	
 test/language/expressions/class/elements/wrapped-in-sc-rs-privatename-identifier-initializer-alt.js	pass	
 test/language/expressions/class/elements/wrapped-in-sc-rs-privatename-identifier-initializer.js	pass	
+test/language/expressions/class/elements/wrapped-in-sc-rs-privatename-identifier.js	pass	
+test/language/expressions/class/elements/wrapped-in-sc-rs-static-method-privatename-identifier-alt.js	pass	
+test/language/expressions/class/elements/wrapped-in-sc-rs-static-method-privatename-identifier.js	pass	
 test/language/expressions/class/elements/wrapped-in-sc-rs-static-privatename-identifier-initializer-alt-by-classname.js	pass	
 test/language/expressions/class/elements/wrapped-in-sc-rs-static-privatename-identifier-initializer-alt.js	pass	
 test/language/expressions/class/elements/wrapped-in-sc-rs-static-privatename-identifier-initializer.js	pass	
 test/language/expressions/class/gen-method-param-dflt-yield.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/gen-method-static/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/gen-method-static/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/gen-method-static/dflt-params-ref-prior.js	pass	
 test/language/expressions/class/gen-method-static/dflt-params-rest.js	pass	
 test/language/expressions/class/gen-method-static/object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/gen-method-static/rest-param-strict-body.js	fail	accepted: was refused later (lowering)
@@ -1847,6 +1934,7 @@ test/language/expressions/class/ident-name-method-def-with-escaped.js	pass
 test/language/expressions/class/method-param-dflt-yield.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/method-static/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/method-static/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/method-static/dflt-params-ref-prior.js	pass	
 test/language/expressions/class/method-static/dflt-params-rest.js	pass	
 test/language/expressions/class/method-static/object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/method-static/rest-param-strict-body.js	fail	accepted: was refused later (lowering)
@@ -1924,6 +2012,18 @@ test/language/expressions/compound-assignment/div-arguments-strict.js	pass
 test/language/expressions/compound-assignment/div-eval-strict.js	pass	
 test/language/expressions/compound-assignment/div-non-simple.js	fail	accepted: was refused later (lowering)
 test/language/expressions/compound-assignment/div-whitespace.js	pass	
+test/language/expressions/compound-assignment/left-hand-side-private-reference-accessor-property-add.js	pass	
+test/language/expressions/compound-assignment/left-hand-side-private-reference-accessor-property-bitand.js	pass	
+test/language/expressions/compound-assignment/left-hand-side-private-reference-accessor-property-bitor.js	pass	
+test/language/expressions/compound-assignment/left-hand-side-private-reference-accessor-property-bitxor.js	pass	
+test/language/expressions/compound-assignment/left-hand-side-private-reference-accessor-property-div.js	pass	
+test/language/expressions/compound-assignment/left-hand-side-private-reference-accessor-property-exp.js	pass	
+test/language/expressions/compound-assignment/left-hand-side-private-reference-accessor-property-lshift.js	pass	
+test/language/expressions/compound-assignment/left-hand-side-private-reference-accessor-property-mod.js	pass	
+test/language/expressions/compound-assignment/left-hand-side-private-reference-accessor-property-mult.js	pass	
+test/language/expressions/compound-assignment/left-hand-side-private-reference-accessor-property-rshift.js	pass	
+test/language/expressions/compound-assignment/left-hand-side-private-reference-accessor-property-srshift.js	pass	
+test/language/expressions/compound-assignment/left-hand-side-private-reference-accessor-property-sub.js	pass	
 test/language/expressions/compound-assignment/left-hand-side-private-reference-data-property-add.js	pass	
 test/language/expressions/compound-assignment/left-hand-side-private-reference-data-property-bitand.js	pass	
 test/language/expressions/compound-assignment/left-hand-side-private-reference-data-property-bitor.js	pass	
@@ -1998,7 +2098,6 @@ test/language/expressions/does-not-equals/S11.9.2_A5.1.js	pass
 test/language/expressions/does-not-equals/S11.9.2_A6.2_T1.js	pass	
 test/language/expressions/does-not-equals/S11.9.2_A6.2_T2.js	pass	
 test/language/expressions/does-not-equals/bigint-and-bigint.js	pass	
-test/language/expressions/does-not-equals/bigint-and-incomparable-primitive.js	pass	
 test/language/expressions/dynamic-import/escape-sequence-import.js	pass	
 test/language/expressions/dynamic-import/import-attributes/2nd-param-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/invalid-assignmenttargettype-syntax-error-1-update-expression.js	fail	accepted: was refused later (lowering)
@@ -2349,7 +2448,6 @@ test/language/expressions/equals/S11.9.1_A5.1.js	pass
 test/language/expressions/equals/S11.9.1_A6.2_T1.js	pass	
 test/language/expressions/equals/S11.9.1_A6.2_T2.js	pass	
 test/language/expressions/equals/bigint-and-bigint.js	pass	
-test/language/expressions/equals/bigint-and-incomparable-primitive.js	pass	
 test/language/expressions/exponentiation/applying-the-exp-operator_A1.js	pass	
 test/language/expressions/exponentiation/applying-the-exp-operator_A10.js	pass	
 test/language/expressions/exponentiation/applying-the-exp-operator_A12.js	pass	
@@ -2379,9 +2477,11 @@ test/language/expressions/exponentiation/exp-operator-syntax-error-void-unary-ex
 test/language/expressions/exponentiation/exp-operator.js	pass	
 test/language/expressions/exponentiation/int32_min-exponent.js	pass	
 test/language/expressions/function/S10.1.1_A1_T2.js	pass	
-test/language/expressions/function/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/expressions/function/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/expressions/function/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/function/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/function/dflt-params-ref-prior.js	pass	
 test/language/expressions/function/dflt-params-rest.js	pass	
+test/language/expressions/function/dstr/ary-name-iter-val.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-ary-elem-iter.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-ary-empty-iter.js	pass	
@@ -2389,8 +2489,10 @@ test/language/expressions/function/dstr/ary-ptrn-elem-ary-rest-init.js	pass
 test/language/expressions/function/dstr/ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-id-init-hole.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-id-init-undef.js	pass	
+test/language/expressions/function/dstr/ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-obj-id.js	pass	
+test/language/expressions/function/dstr/ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-rest-init-ary.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-rest-init-id.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-rest-init-obj.js	pass	
@@ -2422,6 +2524,8 @@ test/language/expressions/function/dstr/dflt-ary-ptrn-rest-not-final-obj.js	pass
 test/language/expressions/function/dstr/dflt-ary-ptrn-rest-obj-id.js	pass	
 test/language/expressions/function/dstr/dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/function/dstr/dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/function/dstr/obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/function/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/expressions/function/early-body-super-call.js	fail	accepted: was refused later (lowering)
 test/language/expressions/function/early-body-super-prop.js	fail	accepted: was refused later (lowering)
 test/language/expressions/function/early-errors/invalid-names-call-expression-bad-reference.js	fail	accepted: ran and threw Test262Error
@@ -2429,20 +2533,21 @@ test/language/expressions/function/early-errors/invalid-names-call-expression-th
 test/language/expressions/function/early-errors/invalid-names-member-expression-bad-reference.js	pass	
 test/language/expressions/function/early-errors/invalid-names-member-expression-this.js	pass	
 test/language/expressions/function/early-params-super-call.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/function/early-params-super-prop.js	fail	accepted: was refused later (lowering)
+test/language/expressions/function/early-params-super-prop.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/function/name-arguments-strict.js	pass	
 test/language/expressions/function/name-eval-strict.js	pass	
-test/language/expressions/function/object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/function/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/function/param-dflt-yield-strict.js	fail	accepted: was refused later (lowering)
-test/language/expressions/function/param-duplicated-strict-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/function/param-duplicated-strict-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/function/param-duplicated-strict-3.js	fail	accepted: was refused later (lowering)
-test/language/expressions/function/rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/function/param-duplicated-strict-1.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/function/param-duplicated-strict-2.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/function/param-duplicated-strict-3.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/function/params-dflt-ref-arguments.js	fail	nts: uncaught Test262Error: first parameter
+test/language/expressions/function/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/function/rest-params-trailing-comma-early-error.js	pass	
 test/language/expressions/function/static-init-await-reference.js	pass	
 test/language/expressions/function/use-strict-with-non-simple-param.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/generators/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/expressions/generators/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/expressions/generators/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/generators/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/generators/dflt-params-rest.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-rest-init-ary.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-rest-init-id.js	pass	
@@ -2464,9 +2569,9 @@ test/language/expressions/generators/named-yield-as-label-identifier-escaped.js	
 test/language/expressions/generators/named-yield-as-label-identifier.js	pass	
 test/language/expressions/generators/named-yield-identifier-spread-strict.js	fail	accepted: was refused later (lowering)
 test/language/expressions/generators/named-yield-identifier-strict.js	fail	accepted: was refused later (lowering)
-test/language/expressions/generators/object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/expressions/generators/param-dflt-yield.js	fail	accepted: was refused later (lowering)
-test/language/expressions/generators/rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/generators/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/generators/param-dflt-yield.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/generators/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/generators/rest-params-trailing-comma-early-error.js	pass	
 test/language/expressions/generators/use-strict-with-non-simple-param.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/generators/yield-as-binding-identifier-escaped.js	fail	accepted: ran and threw Test262Error
@@ -2524,7 +2629,7 @@ test/language/expressions/in/private-field-in-nested.js	pass
 test/language/expressions/in/private-field-in.js	pass	
 test/language/expressions/in/private-field-invalid-assignment-reference.js	fail	accepted: was refused later (lowering)
 test/language/expressions/in/private-field-invalid-assignment-target.js	pass	
-test/language/expressions/in/private-field-invalid-identifier-complex.js	fail	accepted: was refused later (lowering)
+test/language/expressions/in/private-field-invalid-identifier-complex.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/in/private-field-invalid-identifier-simple.js	pass	
 test/language/expressions/in/private-field-invalid-rhs.js	pass	
 test/language/expressions/in/private-field-rhs-yield-absent.js	fail	accepted: was refused later (lowering)
@@ -2581,6 +2686,8 @@ test/language/expressions/logical-and/S11.11.1_A2.4_T1.js	pass
 test/language/expressions/logical-and/S11.11.1_A3_T1.js	pass	
 test/language/expressions/logical-and/S11.11.1_A3_T4.js	pass	
 test/language/expressions/logical-and/S11.11.1_A4_T4.js	pass	
+test/language/expressions/logical-assignment/left-hand-side-private-reference-accessor-property-and.js	pass	
+test/language/expressions/logical-assignment/left-hand-side-private-reference-accessor-property-or.js	pass	
 test/language/expressions/logical-assignment/left-hand-side-private-reference-accessor-property-short-circuit-nullish.js	pass	
 test/language/expressions/logical-assignment/left-hand-side-private-reference-data-property-and.js	pass	
 test/language/expressions/logical-assignment/left-hand-side-private-reference-data-property-or.js	pass	
@@ -2589,6 +2696,7 @@ test/language/expressions/logical-assignment/lgcl-and-arguments-strict.js	pass
 test/language/expressions/logical-assignment/lgcl-and-assignment-operator-non-simple-lhs.js	fail	accepted: was refused later (lowering)
 test/language/expressions/logical-assignment/lgcl-and-eval-strict.js	pass	
 test/language/expressions/logical-assignment/lgcl-and-non-simple.js	fail	accepted: was refused later (lowering)
+test/language/expressions/logical-assignment/lgcl-and-whitespace.js	pass	
 test/language/expressions/logical-assignment/lgcl-nullish-arguments-strict.js	pass	
 test/language/expressions/logical-assignment/lgcl-nullish-assignment-operator-non-simple-lhs.js	fail	accepted: was refused later (lowering)
 test/language/expressions/logical-assignment/lgcl-nullish-assignment-operator-unresolved-rhs.js	pass	
@@ -2598,6 +2706,7 @@ test/language/expressions/logical-assignment/lgcl-or-arguments-strict.js	pass
 test/language/expressions/logical-assignment/lgcl-or-assignment-operator-non-simple-lhs.js	fail	accepted: was refused later (lowering)
 test/language/expressions/logical-assignment/lgcl-or-eval-strict.js	pass	
 test/language/expressions/logical-assignment/lgcl-or-non-simple.js	fail	accepted: was refused later (lowering)
+test/language/expressions/logical-assignment/lgcl-or-whitespace.js	pass	
 test/language/expressions/logical-not/S11.4.9_A3_T5.js	pass	
 test/language/expressions/logical-not/S9.2_A3_T2.js	pass	
 test/language/expressions/logical-not/S9.2_A4_T2.js	pass	
@@ -2713,6 +2822,7 @@ test/language/expressions/object/dstr/async-gen-meth-dflt-ary-ptrn-rest-init-obj
 test/language/expressions/object/dstr/async-gen-meth-dflt-ary-ptrn-rest-not-final-ary.js	pass	
 test/language/expressions/object/dstr/async-gen-meth-dflt-ary-ptrn-rest-not-final-id.js	pass	
 test/language/expressions/object/dstr/async-gen-meth-dflt-ary-ptrn-rest-not-final-obj.js	pass	
+test/language/expressions/object/dstr/gen-meth-ary-name-iter-val.js	pass	
 test/language/expressions/object/dstr/gen-meth-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/expressions/object/dstr/gen-meth-ary-ptrn-elem-ary-elem-iter.js	pass	
 test/language/expressions/object/dstr/gen-meth-ary-ptrn-elem-ary-empty-iter.js	pass	
@@ -2720,8 +2830,10 @@ test/language/expressions/object/dstr/gen-meth-ary-ptrn-elem-ary-rest-init.js	pa
 test/language/expressions/object/dstr/gen-meth-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/object/dstr/gen-meth-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/expressions/object/dstr/gen-meth-ary-ptrn-elem-id-init-undef.js	pass	
+test/language/expressions/object/dstr/gen-meth-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/object/dstr/gen-meth-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/object/dstr/gen-meth-ary-ptrn-elem-obj-id.js	pass	
+test/language/expressions/object/dstr/gen-meth-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/object/dstr/gen-meth-ary-ptrn-rest-init-ary.js	pass	
 test/language/expressions/object/dstr/gen-meth-ary-ptrn-rest-init-id.js	pass	
 test/language/expressions/object/dstr/gen-meth-ary-ptrn-rest-init-obj.js	pass	
@@ -2753,6 +2865,9 @@ test/language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-rest-not-final-obj.
 test/language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-rest-obj-id.js	pass	
 test/language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/object/dstr/gen-meth-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/object/dstr/gen-meth-obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/object/dstr/gen-meth-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/object/dstr/meth-ary-name-iter-val.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-ary-elem-iter.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-ary-empty-iter.js	pass	
@@ -2760,8 +2875,10 @@ test/language/expressions/object/dstr/meth-ary-ptrn-elem-ary-rest-init.js	pass
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-id-init-undef.js	pass	
+test/language/expressions/object/dstr/meth-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-obj-id.js	pass	
+test/language/expressions/object/dstr/meth-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-rest-init-ary.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-rest-init-id.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-rest-init-obj.js	pass	
@@ -2793,6 +2910,8 @@ test/language/expressions/object/dstr/meth-dflt-ary-ptrn-rest-not-final-obj.js	p
 test/language/expressions/object/dstr/meth-dflt-ary-ptrn-rest-obj-id.js	pass	
 test/language/expressions/object/dstr/meth-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/object/dstr/meth-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/object/dstr/meth-obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/object/dstr/meth-obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/expressions/object/getter-body-strict-outside.js	fail	accepted: was refused later (lowering)
 test/language/expressions/object/getter-param-dflt.js	pass	
 test/language/expressions/object/ident-name-method-def-break-escaped.js	pass	
@@ -2897,12 +3016,12 @@ test/language/expressions/object/method-definition/async-gen-await-as-identifier
 test/language/expressions/object/method-definition/async-gen-await-as-identifier-reference.js	pass	
 test/language/expressions/object/method-definition/async-gen-await-as-label-identifier-escaped.js	pass	
 test/language/expressions/object/method-definition/async-gen-await-as-label-identifier.js	pass	
-test/language/expressions/object/method-definition/async-gen-meth-array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/expressions/object/method-definition/async-gen-meth-dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/expressions/object/method-definition/async-gen-meth-array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/object/method-definition/async-gen-meth-dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/object/method-definition/async-gen-meth-dflt-params-rest.js	pass	
 test/language/expressions/object/method-definition/async-gen-meth-escaped-async.js	pass	
-test/language/expressions/object/method-definition/async-gen-meth-object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/expressions/object/method-definition/async-gen-meth-rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/object/method-definition/async-gen-meth-object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/object/method-definition/async-gen-meth-rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/object/method-definition/async-gen-meth-rest-params-trailing-comma-early-error.js	pass	
 test/language/expressions/object/method-definition/async-gen-yield-as-binding-identifier-escaped.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/object/method-definition/async-gen-yield-as-binding-identifier.js	fail	accepted: ran and threw Test262Error
@@ -2912,20 +3031,20 @@ test/language/expressions/object/method-definition/async-gen-yield-as-label-iden
 test/language/expressions/object/method-definition/async-gen-yield-as-label-identifier.js	pass	
 test/language/expressions/object/method-definition/async-gen-yield-identifier-spread-strict.js	fail	accepted: was refused later (lowering)
 test/language/expressions/object/method-definition/async-gen-yield-identifier-strict.js	fail	accepted: was refused later (lowering)
-test/language/expressions/object/method-definition/async-meth-array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/expressions/object/method-definition/async-meth-dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/expressions/object/method-definition/async-meth-array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/object/method-definition/async-meth-dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/object/method-definition/async-meth-dflt-params-rest.js	pass	
 test/language/expressions/object/method-definition/async-meth-escaped-async.js	pass	
-test/language/expressions/object/method-definition/async-meth-object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/expressions/object/method-definition/async-meth-rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/object/method-definition/async-meth-object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/object/method-definition/async-meth-rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/object/method-definition/async-meth-rest-params-trailing-comma-early-error.js	pass	
-test/language/expressions/object/method-definition/early-errors-object-async-method-duplicate-parameters.js	fail	accepted: was refused later (lowering)
+test/language/expressions/object/method-definition/early-errors-object-async-method-duplicate-parameters.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/object/method-definition/early-errors-object-method-NSPL-with-USD.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/object/method-definition/early-errors-object-method-arguments-in-formal-parameters.js	pass	
 test/language/expressions/object/method-definition/early-errors-object-method-async-lineterminator.js	pass	
 test/language/expressions/object/method-definition/early-errors-object-method-await-in-formals-default.js	pass	
 test/language/expressions/object/method-definition/early-errors-object-method-body-contains-super-call.js	fail	accepted: was refused later (lowering)
-test/language/expressions/object/method-definition/early-errors-object-method-duplicate-parameters.js	fail	accepted: was refused later (lowering)
+test/language/expressions/object/method-definition/early-errors-object-method-duplicate-parameters.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/object/method-definition/early-errors-object-method-eval-in-formal-parameters.js	pass	
 test/language/expressions/object/method-definition/early-errors-object-method-formals-body-duplicate.js	pass	
 test/language/expressions/object/method-definition/early-errors-object-method-formals-contains-super-call.js	fail	accepted: ran and threw Test262Error
@@ -2937,11 +3056,12 @@ test/language/expressions/object/method-definition/escaped-set-e.js	pass
 test/language/expressions/object/method-definition/escaped-set-s.js	pass	
 test/language/expressions/object/method-definition/escaped-set-t.js	pass	
 test/language/expressions/object/method-definition/escaped-set.js	pass	
-test/language/expressions/object/method-definition/gen-meth-array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/expressions/object/method-definition/gen-meth-dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/expressions/object/method-definition/gen-meth-array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/object/method-definition/gen-meth-dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/object/method-definition/gen-meth-dflt-params-ref-prior.js	pass	
 test/language/expressions/object/method-definition/gen-meth-dflt-params-rest.js	pass	
-test/language/expressions/object/method-definition/gen-meth-object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/expressions/object/method-definition/gen-meth-rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/object/method-definition/gen-meth-object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/object/method-definition/gen-meth-rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/object/method-definition/gen-meth-rest-params-trailing-comma-early-error.js	pass	
 test/language/expressions/object/method-definition/gen-yield-as-binding-identifier-escaped.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/object/method-definition/gen-yield-as-binding-identifier.js	fail	accepted: ran and threw Test262Error
@@ -2951,18 +3071,21 @@ test/language/expressions/object/method-definition/gen-yield-as-label-identifier
 test/language/expressions/object/method-definition/gen-yield-as-label-identifier.js	pass	
 test/language/expressions/object/method-definition/gen-yield-identifier-spread-strict.js	fail	accepted: was refused later (lowering)
 test/language/expressions/object/method-definition/gen-yield-identifier-strict.js	fail	accepted: was refused later (lowering)
-test/language/expressions/object/method-definition/generator-param-redecl-const.js	fail	accepted: was refused later (lowering)
-test/language/expressions/object/method-definition/generator-param-redecl-let.js	fail	accepted: was refused later (lowering)
+test/language/expressions/object/method-definition/generator-param-redecl-const.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/object/method-definition/generator-param-redecl-let.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/object/method-definition/generator-params.js	pass	
 test/language/expressions/object/method-definition/generator-super-call-body.js	fail	accepted: was refused later (lowering)
 test/language/expressions/object/method-definition/generator-super-call-param.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/object/method-definition/generator-use-strict-with-non-simple-param.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/object/method-definition/meth-array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/expressions/object/method-definition/meth-dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/expressions/object/method-definition/meth-array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/object/method-definition/meth-dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/object/method-definition/meth-dflt-params-ref-prior.js	pass	
 test/language/expressions/object/method-definition/meth-dflt-params-rest.js	pass	
-test/language/expressions/object/method-definition/meth-object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/expressions/object/method-definition/meth-rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/object/method-definition/meth-object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/object/method-definition/meth-rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/object/method-definition/meth-rest-params-trailing-comma-early-error.js	pass	
-test/language/expressions/object/method-definition/name-param-redecl.js	fail	accepted: was refused later (lowering)
+test/language/expressions/object/method-definition/name-param-redecl.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/object/method-definition/name-params.js	pass	
 test/language/expressions/object/method-definition/name-super-call-body.js	fail	accepted: was refused later (lowering)
 test/language/expressions/object/method-definition/name-super-call-param.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/object/method-definition/object-method-returns-promise.js	pass	
@@ -2979,11 +3102,14 @@ test/language/expressions/object/method-definition/private-name-early-error-meth
 test/language/expressions/object/method-definition/private-name-early-error-set-method-inside-class.js	pass	
 test/language/expressions/object/method-definition/private-name-early-error-set-method.js	pass	
 test/language/expressions/object/method-definition/setter-use-strict-with-non-simple-param.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/object/method-definition/static-init-await-binding-accessor.js	pass	
+test/language/expressions/object/method-definition/static-init-await-binding-generator.js	pass	
+test/language/expressions/object/method-definition/static-init-await-binding-normal.js	pass	
 test/language/expressions/object/method-definition/static-init-await-reference-generator.js	pass	
 test/language/expressions/object/method-definition/static-init-await-reference-normal.js	pass	
 test/language/expressions/object/method-definition/use-strict-with-non-simple-param.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/object/method-definition/yield-as-logical-or-expression.js	pass	
-test/language/expressions/object/method-definition/yield-as-parameter.js	fail	accepted: was refused later (lowering)
+test/language/expressions/object/method-definition/yield-as-parameter.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/object/method-definition/yield-star-after-newline.js	pass	
 test/language/expressions/object/method-definition/yield-weak-binding.js	pass	
 test/language/expressions/object/prop-def-invalid-async-prefix.js	pass	
@@ -3160,6 +3286,7 @@ test/language/expressions/yield/star-in-iteration-stmt.js	pass
 test/language/function-code/10.4.3-1-54-s.js	pass	
 test/language/function-code/10.4.3-1-55-s.js	pass	
 test/language/function-code/10.4.3-1-55gs.js	pass	
+test/language/function-code/S10.2.1_A5.2_T1.js	pass	
 test/language/function-code/S10.4_A1.1_T1.js	pass	
 test/language/future-reserved-words/_implements.js	pass	
 test/language/future-reserved-words/abstract.js	pass	
@@ -3997,6 +4124,7 @@ test/language/reserved-words/label-ident-true-escaped.js	pass
 test/language/reserved-words/label-ident-true.js	pass	
 test/language/rest-parameters/position-invalid.js	pass	
 test/language/rest-parameters/rest-index.js	pass	
+test/language/rest-parameters/rest-parameters-call.js	pass	
 test/language/source-text/6.1.js	pass	
 test/language/statementList/block-array-literal-with-item.js	pass	
 test/language/statementList/block-array-literal.js	pass	
@@ -4022,15 +4150,6 @@ test/language/statementList/class-block-with-labels.js	pass
 test/language/statementList/class-block.js	pass	
 test/language/statementList/class-expr-arrow-function-boolean-literal.js	pass	
 test/language/statementList/class-let-declaration.js	pass	
-test/language/statementList/eval-block-with-statment-array-literal-with-item.js	pass	
-test/language/statementList/eval-block-with-statment-array-literal.js	pass	
-test/language/statementList/eval-block-with-statment-arrow-function-assignment-expr.js	pass	
-test/language/statementList/eval-block-with-statment-arrow-function-functionbody.js	pass	
-test/language/statementList/eval-block-with-statment-block-with-labels.js	pass	
-test/language/statementList/eval-block-with-statment-expr-arrow-function-boolean-literal.js	pass	
-test/language/statementList/eval-block-with-statment-let-declaration.js	pass	
-test/language/statementList/eval-block-with-statment-regexp-literal-flags.js	pass	
-test/language/statementList/eval-block-with-statment-regexp-literal.js	pass	
 test/language/statementList/fn-array-literal-with-item.js	pass	
 test/language/statementList/fn-array-literal.js	pass	
 test/language/statementList/fn-arrow-function-assignment-expr.js	pass	
@@ -4039,13 +4158,13 @@ test/language/statementList/fn-block-with-labels.js	pass
 test/language/statementList/fn-block.js	pass	
 test/language/statementList/fn-expr-arrow-function-boolean-literal.js	pass	
 test/language/statementList/fn-let-declaration.js	pass	
-test/language/statements/async-function/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/statements/async-function/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/statements/async-function/await-as-identifier-reference-escaped.js	pass	
 test/language/statements/async-function/await-as-identifier-reference.js	pass	
 test/language/statements/async-function/await-as-label-identifier-escaped.js	pass	
 test/language/statements/async-function/await-as-label-identifier.js	pass	
 test/language/statements/async-function/declaration-returns-promise.js	pass	
-test/language/statements/async-function/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/statements/async-function/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/statements/async-function/dflt-params-rest.js	pass	
 test/language/statements/async-function/early-errors-declaration-NSPL-with-USD.js	fail	accepted: ran and threw Test262Error
 test/language/statements/async-function/early-errors-declaration-arguments-in-formal-parameters.js	pass	
@@ -4054,23 +4173,23 @@ test/language/statements/async-function/early-errors-declaration-binding-identif
 test/language/statements/async-function/early-errors-declaration-binding-identifier-eval.js	pass	
 test/language/statements/async-function/early-errors-declaration-body-contains-super-call.js	fail	accepted: was refused later (lowering)
 test/language/statements/async-function/early-errors-declaration-body-contains-super-property.js	fail	accepted: was refused later (lowering)
-test/language/statements/async-function/early-errors-declaration-duplicate-parameters.js	fail	accepted: was refused later (lowering)
+test/language/statements/async-function/early-errors-declaration-duplicate-parameters.js	fail	accepted: ran and threw Test262Error
 test/language/statements/async-function/early-errors-declaration-eval-in-formal-parameters.js	pass	
-test/language/statements/async-function/early-errors-declaration-formals-body-duplicate.js	fail	accepted: was refused later (lowering)
+test/language/statements/async-function/early-errors-declaration-formals-body-duplicate.js	fail	accepted: ran and threw Test262Error
 test/language/statements/async-function/early-errors-declaration-formals-contains-super-call.js	fail	accepted: ran and threw Test262Error
-test/language/statements/async-function/early-errors-declaration-formals-contains-super-property.js	fail	accepted: was refused later (lowering)
+test/language/statements/async-function/early-errors-declaration-formals-contains-super-property.js	fail	accepted: ran and threw Test262Error
 test/language/statements/async-function/escaped-async.js	pass	
 test/language/statements/async-function/let-newline-await-in-async-function.js	pass	
-test/language/statements/async-function/object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/statements/async-function/rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/statements/async-function/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/statements/async-function/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/statements/async-function/rest-params-trailing-comma-early-error.js	pass	
 test/language/statements/async-function/syntax-declaration-line-terminators-allowed.js	pass	
-test/language/statements/async-generator/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/statements/async-generator/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/statements/async-generator/await-as-identifier-reference-escaped.js	pass	
 test/language/statements/async-generator/await-as-identifier-reference.js	pass	
 test/language/statements/async-generator/await-as-label-identifier-escaped.js	pass	
 test/language/statements/async-generator/await-as-label-identifier.js	pass	
-test/language/statements/async-generator/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/statements/async-generator/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/statements/async-generator/dflt-params-rest.js	pass	
 test/language/statements/async-generator/dstr/ary-ptrn-rest-init-ary.js	pass	
 test/language/statements/async-generator/dstr/ary-ptrn-rest-init-id.js	pass	
@@ -4085,8 +4204,8 @@ test/language/statements/async-generator/dstr/dflt-ary-ptrn-rest-not-final-ary.j
 test/language/statements/async-generator/dstr/dflt-ary-ptrn-rest-not-final-id.js	pass	
 test/language/statements/async-generator/dstr/dflt-ary-ptrn-rest-not-final-obj.js	pass	
 test/language/statements/async-generator/escaped-async.js	pass	
-test/language/statements/async-generator/object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/statements/async-generator/rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/statements/async-generator/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/statements/async-generator/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/statements/async-generator/rest-params-trailing-comma-early-error.js	pass	
 test/language/statements/async-generator/yield-as-binding-identifier-escaped.js	fail	accepted: ran and threw Test262Error
 test/language/statements/async-generator/yield-as-binding-identifier.js	fail	accepted: ran and threw Test262Error
@@ -4168,15 +4287,15 @@ test/language/statements/class/accessor-name-static/literal-string-line-continua
 test/language/statements/class/accessor-name-static/literal-string-single-quote.js	pass	
 test/language/statements/class/accessor-name-static/literal-string-unicode-escape.js	pass	
 test/language/statements/class/async-gen-meth-escaped-async.js	pass	
-test/language/statements/class/async-gen-method-static/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/async-gen-method-static/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/async-gen-method-static/await-as-identifier-reference-escaped.js	pass	
 test/language/statements/class/async-gen-method-static/await-as-identifier-reference.js	pass	
 test/language/statements/class/async-gen-method-static/await-as-label-identifier-escaped.js	pass	
 test/language/statements/class/async-gen-method-static/await-as-label-identifier.js	pass	
-test/language/statements/class/async-gen-method-static/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/async-gen-method-static/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/async-gen-method-static/dflt-params-rest.js	pass	
-test/language/statements/class/async-gen-method-static/object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/async-gen-method-static/rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/async-gen-method-static/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/async-gen-method-static/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/async-gen-method-static/rest-params-trailing-comma-early-error.js	pass	
 test/language/statements/class/async-gen-method-static/yield-as-binding-identifier-escaped.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/async-gen-method-static/yield-as-binding-identifier.js	fail	accepted: ran and threw Test262Error
@@ -4186,15 +4305,15 @@ test/language/statements/class/async-gen-method-static/yield-as-label-identifier
 test/language/statements/class/async-gen-method-static/yield-as-label-identifier.js	pass	
 test/language/statements/class/async-gen-method-static/yield-identifier-spread-strict.js	fail	accepted: was refused later (lowering)
 test/language/statements/class/async-gen-method-static/yield-identifier-strict.js	fail	accepted: ran and threw Test262Error
-test/language/statements/class/async-gen-method/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/async-gen-method/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/async-gen-method/await-as-identifier-reference-escaped.js	pass	
 test/language/statements/class/async-gen-method/await-as-identifier-reference.js	pass	
 test/language/statements/class/async-gen-method/await-as-label-identifier-escaped.js	pass	
 test/language/statements/class/async-gen-method/await-as-label-identifier.js	pass	
-test/language/statements/class/async-gen-method/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/async-gen-method/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/async-gen-method/dflt-params-rest.js	pass	
-test/language/statements/class/async-gen-method/object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/async-gen-method/rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/async-gen-method/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/async-gen-method/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/async-gen-method/rest-params-trailing-comma-early-error.js	pass	
 test/language/statements/class/async-gen-method/yield-as-binding-identifier-escaped.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/async-gen-method/yield-as-binding-identifier.js	fail	accepted: ran and threw Test262Error
@@ -4205,25 +4324,25 @@ test/language/statements/class/async-gen-method/yield-as-label-identifier.js	pas
 test/language/statements/class/async-gen-method/yield-identifier-spread-strict.js	fail	accepted: was refused later (lowering)
 test/language/statements/class/async-gen-method/yield-identifier-strict.js	fail	accepted: was refused later (lowering)
 test/language/statements/class/async-meth-escaped-async.js	pass	
-test/language/statements/class/async-method-static/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/async-method-static/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/async-method-static/await-as-identifier-reference-escaped.js	pass	
 test/language/statements/class/async-method-static/await-as-identifier-reference.js	pass	
 test/language/statements/class/async-method-static/await-as-label-identifier-escaped.js	pass	
 test/language/statements/class/async-method-static/await-as-label-identifier.js	pass	
-test/language/statements/class/async-method-static/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/async-method-static/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/async-method-static/dflt-params-rest.js	pass	
-test/language/statements/class/async-method-static/object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/async-method-static/rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/async-method-static/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/async-method-static/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/async-method-static/rest-params-trailing-comma-early-error.js	pass	
-test/language/statements/class/async-method/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/async-method/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/async-method/await-as-identifier-reference-escaped.js	pass	
 test/language/statements/class/async-method/await-as-identifier-reference.js	pass	
 test/language/statements/class/async-method/await-as-label-identifier-escaped.js	pass	
 test/language/statements/class/async-method/await-as-label-identifier.js	pass	
-test/language/statements/class/async-method/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/async-method/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/async-method/dflt-params-rest.js	pass	
-test/language/statements/class/async-method/object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/async-method/rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/async-method/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/async-method/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/async-method/rest-params-trailing-comma-early-error.js	pass	
 test/language/statements/class/class-name-ident-await-escaped.js	pass	
 test/language/statements/class/class-name-ident-await.js	pass	
@@ -4234,24 +4353,28 @@ test/language/statements/class/class-name-ident-static.js	fail	accepted: ran and
 test/language/statements/class/class-name-ident-yield-escaped.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/class-name-ident-yield.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/decorator/syntax/class-valid/decorator-member-expr-private-identifier.js	pass	
+test/language/statements/class/decorator/syntax/valid/class-element-decorator-call-expr-identifier-reference.js	pass	
+test/language/statements/class/decorator/syntax/valid/class-element-decorator-member-expr-decorator-member-expr.js	pass	
+test/language/statements/class/decorator/syntax/valid/class-element-decorator-member-expr-identifier-reference.js	pass	
+test/language/statements/class/decorator/syntax/valid/class-element-decorator-parenthesized-expr-identifier-reference.js	pass	
 test/language/statements/class/decorator/syntax/valid/decorator-call-expr-identifier-reference.js	pass	
 test/language/statements/class/decorator/syntax/valid/decorator-member-expr-decorator-member-expr.js	pass	
 test/language/statements/class/decorator/syntax/valid/decorator-member-expr-identifier-reference.js	pass	
 test/language/statements/class/decorator/syntax/valid/decorator-parenthesized-expr-identifier-reference.js	pass	
 test/language/statements/class/definition/class-method-returns-promise.js	pass	
-test/language/statements/class/definition/early-errors-class-async-method-duplicate-parameters.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/definition/early-errors-class-async-method-duplicate-parameters.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/definition/early-errors-class-method-NSPL-with-USD.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/definition/early-errors-class-method-arguments-in-formal-parameters.js	pass	
 test/language/statements/class/definition/early-errors-class-method-await-in-formals-default.js	pass	
 test/language/statements/class/definition/early-errors-class-method-body-contains-super-call.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/definition/early-errors-class-method-duplicate-parameters.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/definition/early-errors-class-method-duplicate-parameters.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/definition/early-errors-class-method-eval-in-formal-parameters.js	pass	
 test/language/statements/class/definition/early-errors-class-method-formals-contains-super-call.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/definition/getters-restricted-ids.js	pass	
 test/language/statements/class/definition/methods-gen-yield-as-function-expression-binding-identifier.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/definition/methods-gen-yield-as-identifier-in-nested-function.js	fail	accepted: was refused later (lowering)
 test/language/statements/class/definition/methods-gen-yield-as-logical-or-expression.js	pass	
-test/language/statements/class/definition/methods-gen-yield-as-parameter.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/definition/methods-gen-yield-as-parameter.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/definition/methods-gen-yield-star-after-newline.js	pass	
 test/language/statements/class/definition/methods-gen-yield-weak-binding.js	pass	
 test/language/statements/class/definition/methods-named-eval-arguments.js	pass	
@@ -4303,6 +4426,7 @@ test/language/statements/class/dstr/async-private-gen-meth-static-dflt-ary-ptrn-
 test/language/statements/class/dstr/async-private-gen-meth-static-dflt-ary-ptrn-rest-not-final-ary.js	pass	
 test/language/statements/class/dstr/async-private-gen-meth-static-dflt-ary-ptrn-rest-not-final-id.js	pass	
 test/language/statements/class/dstr/async-private-gen-meth-static-dflt-ary-ptrn-rest-not-final-obj.js	pass	
+test/language/statements/class/dstr/gen-meth-ary-name-iter-val.js	pass	
 test/language/statements/class/dstr/gen-meth-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/statements/class/dstr/gen-meth-ary-ptrn-elem-ary-elem-iter.js	pass	
 test/language/statements/class/dstr/gen-meth-ary-ptrn-elem-ary-empty-iter.js	pass	
@@ -4310,8 +4434,10 @@ test/language/statements/class/dstr/gen-meth-ary-ptrn-elem-ary-rest-init.js	pass
 test/language/statements/class/dstr/gen-meth-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/statements/class/dstr/gen-meth-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/statements/class/dstr/gen-meth-ary-ptrn-elem-id-init-undef.js	pass	
+test/language/statements/class/dstr/gen-meth-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/statements/class/dstr/gen-meth-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/class/dstr/gen-meth-ary-ptrn-elem-obj-id.js	pass	
+test/language/statements/class/dstr/gen-meth-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/gen-meth-ary-ptrn-rest-init-ary.js	pass	
 test/language/statements/class/dstr/gen-meth-ary-ptrn-rest-init-id.js	pass	
 test/language/statements/class/dstr/gen-meth-ary-ptrn-rest-init-obj.js	pass	
@@ -4343,6 +4469,9 @@ test/language/statements/class/dstr/gen-meth-dflt-ary-ptrn-rest-not-final-obj.js
 test/language/statements/class/dstr/gen-meth-dflt-ary-ptrn-rest-obj-id.js	pass	
 test/language/statements/class/dstr/gen-meth-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/class/dstr/gen-meth-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/statements/class/dstr/gen-meth-obj-ptrn-id-trailing-comma.js	pass	
+test/language/statements/class/dstr/gen-meth-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/statements/class/dstr/gen-meth-static-ary-name-iter-val.js	pass	
 test/language/statements/class/dstr/gen-meth-static-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/statements/class/dstr/gen-meth-static-ary-ptrn-elem-ary-elem-iter.js	pass	
 test/language/statements/class/dstr/gen-meth-static-ary-ptrn-elem-ary-empty-iter.js	pass	
@@ -4350,8 +4479,10 @@ test/language/statements/class/dstr/gen-meth-static-ary-ptrn-elem-ary-rest-init.
 test/language/statements/class/dstr/gen-meth-static-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/statements/class/dstr/gen-meth-static-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/statements/class/dstr/gen-meth-static-ary-ptrn-elem-id-init-undef.js	pass	
+test/language/statements/class/dstr/gen-meth-static-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/statements/class/dstr/gen-meth-static-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/class/dstr/gen-meth-static-ary-ptrn-elem-obj-id.js	pass	
+test/language/statements/class/dstr/gen-meth-static-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/gen-meth-static-ary-ptrn-rest-init-ary.js	pass	
 test/language/statements/class/dstr/gen-meth-static-ary-ptrn-rest-init-id.js	pass	
 test/language/statements/class/dstr/gen-meth-static-ary-ptrn-rest-init-obj.js	pass	
@@ -4383,6 +4514,9 @@ test/language/statements/class/dstr/gen-meth-static-dflt-ary-ptrn-rest-not-final
 test/language/statements/class/dstr/gen-meth-static-dflt-ary-ptrn-rest-obj-id.js	pass	
 test/language/statements/class/dstr/gen-meth-static-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/class/dstr/gen-meth-static-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/statements/class/dstr/gen-meth-static-obj-ptrn-id-trailing-comma.js	pass	
+test/language/statements/class/dstr/gen-meth-static-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/statements/class/dstr/meth-ary-name-iter-val.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-elem-ary-elem-iter.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-elem-ary-empty-iter.js	pass	
@@ -4390,8 +4524,10 @@ test/language/statements/class/dstr/meth-ary-ptrn-elem-ary-rest-init.js	pass
 test/language/statements/class/dstr/meth-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-elem-id-init-undef.js	pass	
+test/language/statements/class/dstr/meth-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-elem-obj-id.js	pass	
+test/language/statements/class/dstr/meth-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-rest-init-ary.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-rest-init-id.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-rest-init-obj.js	pass	
@@ -4423,6 +4559,9 @@ test/language/statements/class/dstr/meth-dflt-ary-ptrn-rest-not-final-obj.js	pas
 test/language/statements/class/dstr/meth-dflt-ary-ptrn-rest-obj-id.js	pass	
 test/language/statements/class/dstr/meth-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/class/dstr/meth-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/statements/class/dstr/meth-obj-ptrn-id-trailing-comma.js	pass	
+test/language/statements/class/dstr/meth-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/statements/class/dstr/meth-static-ary-name-iter-val.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-ary-elem-iter.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-ary-empty-iter.js	pass	
@@ -4430,8 +4569,10 @@ test/language/statements/class/dstr/meth-static-ary-ptrn-elem-ary-rest-init.js	p
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-id-init-undef.js	pass	
+test/language/statements/class/dstr/meth-static-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-obj-id.js	pass	
+test/language/statements/class/dstr/meth-static-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-rest-init-ary.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-rest-init-id.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-rest-init-obj.js	pass	
@@ -4463,6 +4604,9 @@ test/language/statements/class/dstr/meth-static-dflt-ary-ptrn-rest-not-final-obj
 test/language/statements/class/dstr/meth-static-dflt-ary-ptrn-rest-obj-id.js	pass	
 test/language/statements/class/dstr/meth-static-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/class/dstr/meth-static-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/statements/class/dstr/meth-static-obj-ptrn-id-trailing-comma.js	pass	
+test/language/statements/class/dstr/meth-static-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/statements/class/dstr/private-gen-meth-ary-name-iter-val.js	pass	
 test/language/statements/class/dstr/private-gen-meth-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/statements/class/dstr/private-gen-meth-ary-ptrn-elem-ary-elem-iter.js	pass	
 test/language/statements/class/dstr/private-gen-meth-ary-ptrn-elem-ary-empty-iter.js	pass	
@@ -4470,8 +4614,10 @@ test/language/statements/class/dstr/private-gen-meth-ary-ptrn-elem-ary-rest-init
 test/language/statements/class/dstr/private-gen-meth-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/statements/class/dstr/private-gen-meth-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/statements/class/dstr/private-gen-meth-ary-ptrn-elem-id-init-undef.js	pass	
+test/language/statements/class/dstr/private-gen-meth-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/statements/class/dstr/private-gen-meth-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/class/dstr/private-gen-meth-ary-ptrn-elem-obj-id.js	pass	
+test/language/statements/class/dstr/private-gen-meth-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/private-gen-meth-ary-ptrn-rest-init-ary.js	pass	
 test/language/statements/class/dstr/private-gen-meth-ary-ptrn-rest-init-id.js	pass	
 test/language/statements/class/dstr/private-gen-meth-ary-ptrn-rest-init-obj.js	pass	
@@ -4503,6 +4649,9 @@ test/language/statements/class/dstr/private-gen-meth-dflt-ary-ptrn-rest-not-fina
 test/language/statements/class/dstr/private-gen-meth-dflt-ary-ptrn-rest-obj-id.js	pass	
 test/language/statements/class/dstr/private-gen-meth-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/class/dstr/private-gen-meth-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/statements/class/dstr/private-gen-meth-obj-ptrn-id-trailing-comma.js	pass	
+test/language/statements/class/dstr/private-gen-meth-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/statements/class/dstr/private-gen-meth-static-ary-name-iter-val.js	pass	
 test/language/statements/class/dstr/private-gen-meth-static-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/statements/class/dstr/private-gen-meth-static-ary-ptrn-elem-ary-elem-iter.js	pass	
 test/language/statements/class/dstr/private-gen-meth-static-ary-ptrn-elem-ary-empty-iter.js	pass	
@@ -4510,8 +4659,10 @@ test/language/statements/class/dstr/private-gen-meth-static-ary-ptrn-elem-ary-re
 test/language/statements/class/dstr/private-gen-meth-static-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/statements/class/dstr/private-gen-meth-static-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/statements/class/dstr/private-gen-meth-static-ary-ptrn-elem-id-init-undef.js	pass	
+test/language/statements/class/dstr/private-gen-meth-static-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/statements/class/dstr/private-gen-meth-static-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/class/dstr/private-gen-meth-static-ary-ptrn-elem-obj-id.js	pass	
+test/language/statements/class/dstr/private-gen-meth-static-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/private-gen-meth-static-ary-ptrn-rest-init-ary.js	pass	
 test/language/statements/class/dstr/private-gen-meth-static-ary-ptrn-rest-init-id.js	pass	
 test/language/statements/class/dstr/private-gen-meth-static-ary-ptrn-rest-init-obj.js	pass	
@@ -4543,6 +4694,9 @@ test/language/statements/class/dstr/private-gen-meth-static-dflt-ary-ptrn-rest-n
 test/language/statements/class/dstr/private-gen-meth-static-dflt-ary-ptrn-rest-obj-id.js	pass	
 test/language/statements/class/dstr/private-gen-meth-static-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/class/dstr/private-gen-meth-static-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/statements/class/dstr/private-gen-meth-static-obj-ptrn-id-trailing-comma.js	pass	
+test/language/statements/class/dstr/private-gen-meth-static-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/statements/class/dstr/private-meth-ary-name-iter-val.js	pass	
 test/language/statements/class/dstr/private-meth-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/statements/class/dstr/private-meth-ary-ptrn-elem-ary-elem-iter.js	pass	
 test/language/statements/class/dstr/private-meth-ary-ptrn-elem-ary-empty-iter.js	pass	
@@ -4550,8 +4704,10 @@ test/language/statements/class/dstr/private-meth-ary-ptrn-elem-ary-rest-init.js	
 test/language/statements/class/dstr/private-meth-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/statements/class/dstr/private-meth-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/statements/class/dstr/private-meth-ary-ptrn-elem-id-init-undef.js	pass	
+test/language/statements/class/dstr/private-meth-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/statements/class/dstr/private-meth-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/class/dstr/private-meth-ary-ptrn-elem-obj-id.js	pass	
+test/language/statements/class/dstr/private-meth-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/private-meth-ary-ptrn-rest-init-ary.js	pass	
 test/language/statements/class/dstr/private-meth-ary-ptrn-rest-init-id.js	pass	
 test/language/statements/class/dstr/private-meth-ary-ptrn-rest-init-obj.js	pass	
@@ -4583,6 +4739,9 @@ test/language/statements/class/dstr/private-meth-dflt-ary-ptrn-rest-not-final-ob
 test/language/statements/class/dstr/private-meth-dflt-ary-ptrn-rest-obj-id.js	pass	
 test/language/statements/class/dstr/private-meth-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/class/dstr/private-meth-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/statements/class/dstr/private-meth-obj-ptrn-id-trailing-comma.js	pass	
+test/language/statements/class/dstr/private-meth-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/statements/class/dstr/private-meth-static-ary-name-iter-val.js	pass	
 test/language/statements/class/dstr/private-meth-static-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/statements/class/dstr/private-meth-static-ary-ptrn-elem-ary-elem-iter.js	pass	
 test/language/statements/class/dstr/private-meth-static-ary-ptrn-elem-ary-empty-iter.js	pass	
@@ -4590,8 +4749,10 @@ test/language/statements/class/dstr/private-meth-static-ary-ptrn-elem-ary-rest-i
 test/language/statements/class/dstr/private-meth-static-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/statements/class/dstr/private-meth-static-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/statements/class/dstr/private-meth-static-ary-ptrn-elem-id-init-undef.js	pass	
+test/language/statements/class/dstr/private-meth-static-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/statements/class/dstr/private-meth-static-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/class/dstr/private-meth-static-ary-ptrn-elem-obj-id.js	pass	
+test/language/statements/class/dstr/private-meth-static-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/private-meth-static-ary-ptrn-rest-init-ary.js	pass	
 test/language/statements/class/dstr/private-meth-static-ary-ptrn-rest-init-id.js	pass	
 test/language/statements/class/dstr/private-meth-static-ary-ptrn-rest-init-obj.js	pass	
@@ -4623,6 +4784,8 @@ test/language/statements/class/dstr/private-meth-static-dflt-ary-ptrn-rest-not-f
 test/language/statements/class/dstr/private-meth-static-dflt-ary-ptrn-rest-obj-id.js	pass	
 test/language/statements/class/dstr/private-meth-static-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/class/dstr/private-meth-static-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/statements/class/dstr/private-meth-static-obj-ptrn-id-trailing-comma.js	pass	
+test/language/statements/class/dstr/private-meth-static-obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/statements/class/elements/arrow-fnc-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/arrow-fnc-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/async-gen-private-method-static/await-as-identifier-reference-escaped.js	pass	
@@ -4748,42 +4911,55 @@ test/language/statements/class/elements/privatename-not-valid-earlyerr-script-5.
 test/language/statements/class/elements/privatename-not-valid-earlyerr-script-6.js	fail	accepted: was refused later (lowering)
 test/language/statements/class/elements/privatename-not-valid-earlyerr-script-7.js	pass	
 test/language/statements/class/elements/privatename-not-valid-earlyerr-script-8.js	pass	
+test/language/statements/class/elements/regular-definitions-grammar-privatename-identifier-semantics-stringvalue.js	pass	
 test/language/statements/class/elements/regular-definitions-private-field-usage.js	pass	
 test/language/statements/class/elements/regular-definitions-private-method-getter-usage.js	pass	
 test/language/statements/class/elements/regular-definitions-private-method-usage.js	pass	
 test/language/statements/class/elements/regular-definitions-rs-field-identifier-initializer.js	pass	
+test/language/statements/class/elements/regular-definitions-rs-field-identifier.js	pass	
+test/language/statements/class/elements/regular-definitions-rs-private-getter-alt.js	pass	
+test/language/statements/class/elements/regular-definitions-rs-private-getter.js	pass	
+test/language/statements/class/elements/regular-definitions-rs-private-method-alt.js	pass	
+test/language/statements/class/elements/regular-definitions-rs-private-method.js	pass	
+test/language/statements/class/elements/regular-definitions-rs-private-setter-alt.js	pass	
+test/language/statements/class/elements/regular-definitions-rs-private-setter.js	pass	
+test/language/statements/class/elements/regular-definitions-rs-privatename-identifier-alt.js	pass	
 test/language/statements/class/elements/regular-definitions-rs-privatename-identifier-initializer-alt.js	pass	
 test/language/statements/class/elements/regular-definitions-rs-privatename-identifier-initializer.js	pass	
+test/language/statements/class/elements/regular-definitions-rs-privatename-identifier.js	pass	
+test/language/statements/class/elements/regular-definitions-rs-static-method-privatename-identifier-alt.js	pass	
+test/language/statements/class/elements/regular-definitions-rs-static-method-privatename-identifier.js	pass	
 test/language/statements/class/elements/regular-definitions-rs-static-privatename-identifier-initializer-alt-by-classname.js	pass	
 test/language/statements/class/elements/regular-definitions-rs-static-privatename-identifier-initializer-alt.js	pass	
 test/language/statements/class/elements/regular-definitions-rs-static-privatename-identifier-initializer.js	pass	
 test/language/statements/class/elements/static-comp-name-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/static-comp-name-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
-test/language/statements/class/elements/static-literal-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/elements/static-literal-init-err-contains-arguments.js	fail	accepted: was refused later (lowering)
 test/language/statements/class/elements/static-literal-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
-test/language/statements/class/elements/static-private-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/elements/static-private-init-err-contains-arguments.js	fail	accepted: was refused later (lowering)
 test/language/statements/class/elements/static-private-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
-test/language/statements/class/elements/static-string-literal-name-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/elements/static-string-literal-name-init-err-contains-arguments.js	fail	accepted: was refused later (lowering)
 test/language/statements/class/elements/static-string-literal-name-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/string-literal-name-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/string-literal-name-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/super-access-inside-a-private-getter.js	pass	
+test/language/statements/class/elements/super-access-inside-a-private-setter.js	pass	
 test/language/statements/class/elements/syntax/early-errors/class-heritage-array-literal-arrow-heritage.js	pass	
 test/language/statements/class/elements/syntax/early-errors/class-heritage-array-literal-async-arrow-heritage.js	pass	
-test/language/statements/class/elements/syntax/early-errors/delete/field-delete-covered-err-delete-call-expression-privatename.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/elements/syntax/early-errors/delete/field-delete-covered-err-delete-member-expression-private-method-async-gen.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/elements/syntax/early-errors/delete/field-delete-covered-err-delete-member-expression-private-method-async.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/elements/syntax/early-errors/delete/field-delete-covered-err-delete-member-expression-private-method-gen.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/elements/syntax/early-errors/delete/field-delete-covered-err-delete-call-expression-privatename.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/elements/syntax/early-errors/delete/field-delete-covered-err-delete-member-expression-private-method-async-gen.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/elements/syntax/early-errors/delete/field-delete-covered-err-delete-member-expression-private-method-async.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/elements/syntax/early-errors/delete/field-delete-covered-err-delete-member-expression-private-method-gen.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/syntax/early-errors/delete/field-delete-covered-err-delete-member-expression-privatename.js	fail	accepted: ran and threw Test262Error
-test/language/statements/class/elements/syntax/early-errors/delete/field-delete-err-delete-call-expression-privatename.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/elements/syntax/early-errors/delete/field-delete-err-delete-member-expression-private-method-async-gen.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/elements/syntax/early-errors/delete/field-delete-err-delete-member-expression-private-method-async.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/elements/syntax/early-errors/delete/field-delete-err-delete-member-expression-private-method-gen.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/elements/syntax/early-errors/delete/field-delete-err-delete-call-expression-privatename.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/elements/syntax/early-errors/delete/field-delete-err-delete-member-expression-private-method-async-gen.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/elements/syntax/early-errors/delete/field-delete-err-delete-member-expression-private-method-async.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/elements/syntax/early-errors/delete/field-delete-err-delete-member-expression-private-method-gen.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/syntax/early-errors/delete/field-delete-err-delete-member-expression-privatename.js	fail	accepted: ran and threw Test262Error
-test/language/statements/class/elements/syntax/early-errors/delete/field-delete-twice-covered-err-delete-call-expression-privatename.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/elements/syntax/early-errors/delete/field-delete-twice-covered-err-delete-member-expression-private-method-async-gen.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/elements/syntax/early-errors/delete/field-delete-twice-covered-err-delete-member-expression-private-method-async.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/elements/syntax/early-errors/delete/field-delete-twice-covered-err-delete-member-expression-private-method-gen.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/elements/syntax/early-errors/delete/field-delete-twice-covered-err-delete-call-expression-privatename.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/elements/syntax/early-errors/delete/field-delete-twice-covered-err-delete-member-expression-private-method-async-gen.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/elements/syntax/early-errors/delete/field-delete-twice-covered-err-delete-member-expression-private-method-async.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/elements/syntax/early-errors/delete/field-delete-twice-covered-err-delete-member-expression-private-method-gen.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/syntax/early-errors/delete/field-delete-twice-covered-err-delete-member-expression-privatename.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/syntax/early-errors/delete/method-delete-covered-err-delete-call-expression-privatename.js	fail	accepted: was refused later (lowering)
 test/language/statements/class/elements/syntax/early-errors/delete/method-delete-covered-err-delete-member-expression-private-method-async-gen.js	fail	accepted: was refused later (lowering)
@@ -4794,7 +4970,7 @@ test/language/statements/class/elements/syntax/early-errors/delete/method-delete
 test/language/statements/class/elements/syntax/early-errors/delete/method-delete-err-delete-member-expression-private-method-async-gen.js	fail	accepted: was refused later (lowering)
 test/language/statements/class/elements/syntax/early-errors/delete/method-delete-err-delete-member-expression-private-method-async.js	fail	accepted: was refused later (lowering)
 test/language/statements/class/elements/syntax/early-errors/delete/method-delete-err-delete-member-expression-private-method-gen.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/elements/syntax/early-errors/delete/method-delete-err-delete-member-expression-privatename.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/elements/syntax/early-errors/delete/method-delete-err-delete-member-expression-privatename.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/syntax/early-errors/delete/method-delete-twice-covered-err-delete-call-expression-privatename.js	fail	accepted: was refused later (lowering)
 test/language/statements/class/elements/syntax/early-errors/delete/method-delete-twice-covered-err-delete-member-expression-private-method-async-gen.js	fail	accepted: was refused later (lowering)
 test/language/statements/class/elements/syntax/early-errors/delete/method-delete-twice-covered-err-delete-member-expression-private-method-async.js	fail	accepted: was refused later (lowering)
@@ -4810,19 +4986,19 @@ test/language/statements/class/elements/syntax/early-errors/grammar-private-envi
 test/language/statements/class/elements/syntax/early-errors/grammar-private-environment-on-class-heritage-obj-literal.js	pass	
 test/language/statements/class/elements/syntax/early-errors/grammar-private-field-on-object-destructuring.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/syntax/early-errors/grammar-private-field-super-access.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-async-gen.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-async.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-gen.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-async-gen.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-async.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-gen.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-get-field.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-get-get.js	fail	accepted: ran and threw Test262Error
-test/language/statements/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-meth-field.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-meth-field.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-meth-get.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-meth-meth.js	fail	accepted: ran and threw Test262Error
-test/language/statements/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-meth-set.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-meth-set.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-meth-staticfield.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-meth-staticmeth.js	fail	accepted: ran and threw Test262Error
-test/language/statements/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-set-field.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-set-set.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-set-field.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/elements/syntax/early-errors/grammar-privatemeth-duplicate-set-set.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/syntax/early-errors/grammar-privatename-constructor.js	pass	
 test/language/statements/class/elements/syntax/early-errors/grammar-privatename-error.js	pass	
 test/language/statements/class/elements/syntax/early-errors/grammar-privatename-identifier-invalid-ues.js	pass	
@@ -4876,7 +5052,7 @@ test/language/statements/class/elements/syntax/early-errors/grammar-static-priva
 test/language/statements/class/elements/syntax/early-errors/grammar-static-private-meth-constructor.js	pass	
 test/language/statements/class/elements/syntax/early-errors/grammar-static-private-meth-super.js	fail	accepted: was refused later (lowering)
 test/language/statements/class/elements/syntax/early-errors/grammar-static-privatename-constructor.js	pass	
-test/language/statements/class/elements/syntax/early-errors/grammar-static-set-meth-prototype.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/elements/syntax/early-errors/grammar-static-set-meth-prototype.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/syntax/early-errors/grammar-static-set-meth-super.js	fail	accepted: was refused later (lowering)
 test/language/statements/class/elements/syntax/early-errors/invalid-names/fields-init-heritage-call-expression-this.js	pass	
 test/language/statements/class/elements/syntax/early-errors/invalid-names/fields-init-heritage-member-expression-this.js	pass	
@@ -4902,6 +5078,7 @@ test/language/statements/class/elements/syntax/valid/grammar-privatemeth-duplica
 test/language/statements/class/elements/syntax/valid/grammar-privatename-classelementname-initializer-alt.js	pass	
 test/language/statements/class/elements/syntax/valid/grammar-privatename-classelementname-initializer.js	pass	
 test/language/statements/class/elements/syntax/valid/grammar-privatename-identifier.js	pass	
+test/language/statements/class/elements/syntax/valid/grammar-privatename-no-initializer-with-method.js	pass	
 test/language/statements/class/elements/syntax/valid/grammar-privatenames-multi-line.js	pass	
 test/language/statements/class/elements/syntax/valid/grammar-static-private-async-gen-meth-prototype.js	pass	
 test/language/statements/class/elements/syntax/valid/grammar-static-private-async-meth-prototype.js	pass	
@@ -4911,21 +5088,34 @@ test/language/statements/class/elements/ternary-init-err-contains-arguments.js	f
 test/language/statements/class/elements/ternary-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/typeof-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/typeof-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/elements/wrapped-in-sc-grammar-privatename-identifier-semantics-stringvalue.js	pass	
 test/language/statements/class/elements/wrapped-in-sc-private-field-usage.js	pass	
 test/language/statements/class/elements/wrapped-in-sc-private-method-getter-usage.js	pass	
 test/language/statements/class/elements/wrapped-in-sc-private-method-usage.js	pass	
 test/language/statements/class/elements/wrapped-in-sc-rs-field-identifier-initializer.js	pass	
+test/language/statements/class/elements/wrapped-in-sc-rs-field-identifier.js	pass	
+test/language/statements/class/elements/wrapped-in-sc-rs-private-getter-alt.js	pass	
+test/language/statements/class/elements/wrapped-in-sc-rs-private-getter.js	pass	
+test/language/statements/class/elements/wrapped-in-sc-rs-private-method-alt.js	pass	
+test/language/statements/class/elements/wrapped-in-sc-rs-private-method.js	pass	
+test/language/statements/class/elements/wrapped-in-sc-rs-private-setter-alt.js	pass	
+test/language/statements/class/elements/wrapped-in-sc-rs-private-setter.js	pass	
+test/language/statements/class/elements/wrapped-in-sc-rs-privatename-identifier-alt.js	pass	
 test/language/statements/class/elements/wrapped-in-sc-rs-privatename-identifier-initializer-alt.js	pass	
 test/language/statements/class/elements/wrapped-in-sc-rs-privatename-identifier-initializer.js	pass	
+test/language/statements/class/elements/wrapped-in-sc-rs-privatename-identifier.js	pass	
+test/language/statements/class/elements/wrapped-in-sc-rs-static-method-privatename-identifier-alt.js	pass	
+test/language/statements/class/elements/wrapped-in-sc-rs-static-method-privatename-identifier.js	pass	
 test/language/statements/class/elements/wrapped-in-sc-rs-static-privatename-identifier-initializer-alt-by-classname.js	pass	
 test/language/statements/class/elements/wrapped-in-sc-rs-static-privatename-identifier-initializer-alt.js	pass	
 test/language/statements/class/elements/wrapped-in-sc-rs-static-privatename-identifier-initializer.js	pass	
-test/language/statements/class/gen-method-param-dflt-yield.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/gen-method-static/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/gen-method-static/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/gen-method-param-dflt-yield.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/gen-method-static/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/gen-method-static/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/gen-method-static/dflt-params-ref-prior.js	pass	
 test/language/statements/class/gen-method-static/dflt-params-rest.js	pass	
-test/language/statements/class/gen-method-static/object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/gen-method-static/rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/gen-method-static/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/gen-method-static/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/gen-method-static/rest-params-trailing-comma-early-error.js	pass	
 test/language/statements/class/gen-method-static/yield-as-binding-identifier-escaped.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/gen-method-static/yield-as-binding-identifier.js	fail	accepted: ran and threw Test262Error
@@ -4935,11 +5125,11 @@ test/language/statements/class/gen-method-static/yield-as-label-identifier-escap
 test/language/statements/class/gen-method-static/yield-as-label-identifier.js	pass	
 test/language/statements/class/gen-method-static/yield-identifier-spread-strict.js	fail	accepted: was refused later (lowering)
 test/language/statements/class/gen-method-static/yield-identifier-strict.js	fail	accepted: ran and threw Test262Error
-test/language/statements/class/gen-method/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/gen-method/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/gen-method/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/gen-method/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/gen-method/dflt-params-rest.js	pass	
-test/language/statements/class/gen-method/object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/gen-method/rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/gen-method/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/gen-method/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/gen-method/rest-params-trailing-comma-early-error.js	pass	
 test/language/statements/class/gen-method/yield-as-binding-identifier-escaped.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/gen-method/yield-as-binding-identifier.js	fail	accepted: ran and threw Test262Error
@@ -4995,25 +5185,26 @@ test/language/statements/class/ident-name-method-def-var-escaped.js	pass
 test/language/statements/class/ident-name-method-def-void-escaped.js	pass	
 test/language/statements/class/ident-name-method-def-while-escaped.js	pass	
 test/language/statements/class/ident-name-method-def-with-escaped.js	pass	
-test/language/statements/class/method-param-yield.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/method-static/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/method-static/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/method-param-yield.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/method-static/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/method-static/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/method-static/dflt-params-ref-prior.js	pass	
 test/language/statements/class/method-static/dflt-params-rest.js	pass	
-test/language/statements/class/method-static/object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/method-static/rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/method-static/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/method-static/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/method-static/rest-params-trailing-comma-early-error.js	pass	
-test/language/statements/class/method/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/method/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/method/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/method/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/method/dflt-params-rest.js	pass	
-test/language/statements/class/method/object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/method/rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/method/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/method/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/method/rest-params-trailing-comma-early-error.js	pass	
 test/language/statements/class/name-binding/basic.js	pass	
-test/language/statements/class/private-non-static-getter-static-setter-early-error.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/private-non-static-setter-static-getter-early-error.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/private-static-getter-non-static-setter-early-error.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/private-static-setter-non-static-getter-early-error.js	fail	accepted: was refused later (lowering)
-test/language/statements/class/static-gen-method-param-dflt-yield.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/private-non-static-getter-static-setter-early-error.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/private-non-static-setter-static-getter-early-error.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/private-static-getter-non-static-setter-early-error.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/private-static-setter-non-static-getter-early-error.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/static-gen-method-param-dflt-yield.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/static-init-abrupt.js	fail	nts: uncaught Test262Error: sameValue
 test/language/statements/class/static-init-await-binding-valid.js	pass	
 test/language/statements/class/static-init-invalid-arguments.js	fail	accepted: was refused later (lowering)
@@ -5035,7 +5226,7 @@ test/language/statements/class/static-init-scope-var-derived.js	pass
 test/language/statements/class/static-init-scope-var-open.js	pass	
 test/language/statements/class/static-init-sequence.js	fail	nts: uncaught Test262Error: sameValue
 test/language/statements/class/static-init-statement-list-optional.js	pass	
-test/language/statements/class/static-method-param-yield.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/static-method-param-yield.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/strict-mode/with.js	pass	
 test/language/statements/class/subclass-builtins/subclass-Error.js	pass	
 test/language/statements/class/subclass-builtins/subclass-EvalError.js	pass	
@@ -5067,8 +5258,10 @@ test/language/statements/class/subclass/derived-class-return-override-with-objec
 test/language/statements/class/subclass/derived-class-return-override-with-this.js	pass	
 test/language/statements/class/super/in-getter.js	pass	
 test/language/statements/class/super/in-methods.js	pass	
+test/language/statements/class/super/in-setter.js	pass	
 test/language/statements/class/super/in-static-getter.js	pass	
 test/language/statements/class/super/in-static-methods.js	pass	
+test/language/statements/class/super/in-static-setter.js	pass	
 test/language/statements/class/syntax/class-body-has-direct-super-class-heritage.js	pass	
 test/language/statements/class/syntax/class-method-propname-constructor.js	pass	
 test/language/statements/class/syntax/early-errors/class-definition-evaluation-block-duplicate-binding.js	fail	accepted: ran and threw Test262Error
@@ -5099,7 +5292,6 @@ test/language/statements/const/dstr/ary-ptrn-rest-not-final-id.js	pass
 test/language/statements/const/dstr/ary-ptrn-rest-not-final-obj.js	pass	
 test/language/statements/const/dstr/obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/const/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/statements/const/global-use-before-initialization-in-declaration-statement.js	fail	completed
 test/language/statements/const/global-use-before-initialization-in-prior-statement.js	fail	completed
 test/language/statements/const/static-init-await-binding-valid.js	pass	
 test/language/statements/const/syntax/block-scope-syntax-const-declarations-mixed-with-without-initialiser.js	pass	
@@ -5507,6 +5699,8 @@ test/language/statements/for-of/return-from-catch.js	pass
 test/language/statements/for-of/return-from-finally.js	pass	
 test/language/statements/for-of/return-from-try.js	pass	
 test/language/statements/for-of/return.js	pass	
+test/language/statements/for-of/set-contract.js	pass	
+test/language/statements/for-of/set-expand-contract.js	pass	
 test/language/statements/for-of/string-astral-truncated.js	fail	nts: uncaught Test262Error: sameValue
 test/language/statements/for-of/string-astral.js	pass	
 test/language/statements/for-of/string-bmp.js	pass	
@@ -5635,6 +5829,7 @@ test/language/statements/for/dstr/var-obj-ptrn-id-trailing-comma.js	pass
 test/language/statements/for/dstr/var-obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/statements/for/head-const-bound-names-in-stmt.js	fail	accepted: ran and threw Test262Error
 test/language/statements/for/head-const-fresh-binding-per-iteration.js	pass	
+test/language/statements/for/head-init-async-of.js	pass	
 test/language/statements/for/head-init-expr-check-empty-inc-empty-syntax.js	pass	
 test/language/statements/for/head-init-var-check-empty-inc-empty-syntax.js	pass	
 test/language/statements/for/head-let-bound-names-in-stmt.js	fail	accepted: ran and threw Test262Error
@@ -5645,7 +5840,7 @@ test/language/statements/function/13.0_4-5gs.js	pass
 test/language/statements/function/13.1-13gs.js	pass	
 test/language/statements/function/13.1-1gs.js	pass	
 test/language/statements/function/13.1-4gs.js	pass	
-test/language/statements/function/13.1-5gs.js	fail	accepted: was refused later (lowering)
+test/language/statements/function/13.1-5gs.js	fail	accepted: ran and threw Test262Error
 test/language/statements/function/13.1-8gs.js	fail	accepted: ran and threw Test262Error
 test/language/statements/function/S10.1.1_A1_T1.js	pass	
 test/language/statements/function/S13.2.1_A1_T1.js	pass	
@@ -5653,10 +5848,13 @@ test/language/statements/function/S13.2_A7_T1.js	pass
 test/language/statements/function/S13.2_A7_T2.js	pass	
 test/language/statements/function/S13_A10.js	pass	
 test/language/statements/function/S13_A4_T1.js	pass	
+test/language/statements/function/S13_A4_T2.js	pass	
 test/language/statements/function/S13_A7_T3.js	pass	
-test/language/statements/function/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/statements/function/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/statements/function/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/statements/function/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
+test/language/statements/function/dflt-params-ref-prior.js	pass	
 test/language/statements/function/dflt-params-rest.js	pass	
+test/language/statements/function/dstr/ary-name-iter-val.js	pass	
 test/language/statements/function/dstr/ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/statements/function/dstr/ary-ptrn-elem-ary-elem-iter.js	pass	
 test/language/statements/function/dstr/ary-ptrn-elem-ary-empty-iter.js	pass	
@@ -5664,8 +5862,10 @@ test/language/statements/function/dstr/ary-ptrn-elem-ary-rest-init.js	pass
 test/language/statements/function/dstr/ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/statements/function/dstr/ary-ptrn-elem-id-init-hole.js	pass	
 test/language/statements/function/dstr/ary-ptrn-elem-id-init-undef.js	pass	
+test/language/statements/function/dstr/ary-ptrn-elem-id-iter-val.js	pass	
 test/language/statements/function/dstr/ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/function/dstr/ary-ptrn-elem-obj-id.js	pass	
+test/language/statements/function/dstr/ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/function/dstr/ary-ptrn-rest-init-ary.js	pass	
 test/language/statements/function/dstr/ary-ptrn-rest-init-id.js	pass	
 test/language/statements/function/dstr/ary-ptrn-rest-init-obj.js	pass	
@@ -5697,6 +5897,8 @@ test/language/statements/function/dstr/dflt-ary-ptrn-rest-not-final-obj.js	pass
 test/language/statements/function/dstr/dflt-ary-ptrn-rest-obj-id.js	pass	
 test/language/statements/function/dstr/dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/function/dstr/dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/statements/function/dstr/obj-ptrn-id-trailing-comma.js	pass	
+test/language/statements/function/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/statements/function/early-body-super-call.js	fail	accepted: was refused later (lowering)
 test/language/statements/function/early-body-super-prop.js	fail	accepted: was refused later (lowering)
 test/language/statements/function/early-errors/invalid-names-call-expression-bad-reference.js	fail	accepted: was refused later (lowering)
@@ -5704,7 +5906,7 @@ test/language/statements/function/early-errors/invalid-names-call-expression-thi
 test/language/statements/function/early-errors/invalid-names-member-expression-bad-reference.js	pass	
 test/language/statements/function/early-errors/invalid-names-member-expression-this.js	pass	
 test/language/statements/function/early-params-super-call.js	fail	accepted: ran and threw Test262Error
-test/language/statements/function/early-params-super-prop.js	fail	accepted: was refused later (lowering)
+test/language/statements/function/early-params-super-prop.js	fail	accepted: ran and threw Test262Error
 test/language/statements/function/enable-strict-via-outer-script.js	pass	
 test/language/statements/function/invalid-2-names.js	pass	
 test/language/statements/function/invalid-3-names.js	pass	
@@ -5716,20 +5918,22 @@ test/language/statements/function/invalid-name-two-dots.js	pass
 test/language/statements/function/line-terminator.js	pass	
 test/language/statements/function/name-arguments-strict.js	pass	
 test/language/statements/function/name-eval-strict.js	pass	
-test/language/statements/function/object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/statements/function/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/statements/function/param-arguments-strict.js	pass	
 test/language/statements/function/param-dflt-yield-strict.js	fail	accepted: was refused later (lowering)
-test/language/statements/function/param-duplicated-strict-1.js	fail	accepted: was refused later (lowering)
-test/language/statements/function/param-duplicated-strict-2.js	fail	accepted: was refused later (lowering)
-test/language/statements/function/param-duplicated-strict-3.js	fail	accepted: was refused later (lowering)
+test/language/statements/function/param-duplicated-strict-1.js	fail	accepted: ran and threw Test262Error
+test/language/statements/function/param-duplicated-strict-2.js	fail	accepted: ran and threw Test262Error
+test/language/statements/function/param-duplicated-strict-3.js	fail	accepted: ran and threw Test262Error
 test/language/statements/function/param-eval-strict.js	pass	
-test/language/statements/function/rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/statements/function/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/statements/function/rest-params-trailing-comma-early-error.js	pass	
 test/language/statements/function/static-init-await-binding-valid.js	pass	
 test/language/statements/function/use-strict-with-non-simple-param.js	fail	accepted: ran and threw Test262Error
-test/language/statements/generators/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/statements/generators/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
+test/language/statements/generators/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/statements/generators/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
+test/language/statements/generators/dflt-params-ref-prior.js	pass	
 test/language/statements/generators/dflt-params-rest.js	pass	
+test/language/statements/generators/dstr/ary-name-iter-val.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-elem-ary-elem-iter.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-elem-ary-empty-iter.js	pass	
@@ -5737,8 +5941,10 @@ test/language/statements/generators/dstr/ary-ptrn-elem-ary-rest-init.js	pass
 test/language/statements/generators/dstr/ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-elem-id-init-hole.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-elem-id-init-undef.js	pass	
+test/language/statements/generators/dstr/ary-ptrn-elem-id-iter-val.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-elem-obj-id.js	pass	
+test/language/statements/generators/dstr/ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-rest-init-ary.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-rest-init-id.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-rest-init-obj.js	pass	
@@ -5770,9 +5976,11 @@ test/language/statements/generators/dstr/dflt-ary-ptrn-rest-not-final-obj.js	pas
 test/language/statements/generators/dstr/dflt-ary-ptrn-rest-obj-id.js	pass	
 test/language/statements/generators/dstr/dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/generators/dstr/dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/statements/generators/object-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
-test/language/statements/generators/param-dflt-yield.js	fail	accepted: was refused later (lowering)
-test/language/statements/generators/rest-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/statements/generators/dstr/obj-ptrn-id-trailing-comma.js	pass	
+test/language/statements/generators/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/statements/generators/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/statements/generators/param-dflt-yield.js	fail	accepted: ran and threw Test262Error
+test/language/statements/generators/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/statements/generators/rest-params-trailing-comma-early-error.js	pass	
 test/language/statements/generators/use-strict-with-non-simple-param.js	fail	accepted: ran and threw Test262Error
 test/language/statements/generators/yield-as-binding-identifier-escaped.js	fail	accepted: ran and threw Test262Error
@@ -5782,7 +5990,7 @@ test/language/statements/generators/yield-as-identifier-reference.js	pass
 test/language/statements/generators/yield-as-label-identifier-escaped.js	pass	
 test/language/statements/generators/yield-as-label-identifier.js	pass	
 test/language/statements/generators/yield-as-logical-or-expression.js	pass	
-test/language/statements/generators/yield-as-parameter.js	fail	accepted: was refused later (lowering)
+test/language/statements/generators/yield-as-parameter.js	fail	accepted: ran and threw Test262Error
 test/language/statements/generators/yield-identifier-spread-strict.js	fail	accepted: was refused later (lowering)
 test/language/statements/generators/yield-identifier-strict.js	fail	accepted: ran and threw Test262Error
 test/language/statements/generators/yield-star-after-newline.js	pass	
@@ -5865,7 +6073,6 @@ test/language/statements/let/dstr/ary-ptrn-rest-not-final-id.js	pass
 test/language/statements/let/dstr/ary-ptrn-rest-not-final-obj.js	pass	
 test/language/statements/let/dstr/obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/let/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/statements/let/global-use-before-initialization-in-declaration-statement.js	fail	completed
 test/language/statements/let/global-use-before-initialization-in-prior-statement.js	fail	completed
 test/language/statements/let/static-init-await-binding-valid.js	pass	
 test/language/statements/let/syntax/identifier-let-allowed-as-lefthandside-expression-strict.js	pass	
@@ -5908,12 +6115,14 @@ test/language/statements/return/S12.9_A1_T7.js	fail	accepted: ran and threw Test
 test/language/statements/return/S12.9_A1_T8.js	fail	accepted: ran and threw Test262Error
 test/language/statements/return/S12.9_A1_T9.js	fail	accepted: ran and threw Test262Error
 test/language/statements/return/S12.9_A5.js	pass	
+test/language/statements/switch/S12.11_A1_T1.js	pass	
 test/language/statements/switch/S12.11_A2_T1.js	pass	
 test/language/statements/switch/S12.11_A3_T1.js	pass	
 test/language/statements/switch/S12.11_A3_T2.js	pass	
 test/language/statements/switch/S12.11_A3_T3.js	pass	
 test/language/statements/switch/S12.11_A3_T4.js	pass	
 test/language/statements/switch/S12.11_A3_T5.js	pass	
+test/language/statements/switch/S12.11_A4_T1.js	pass	
 test/language/statements/switch/syntax/redeclaration/async-function-name-redeclaration-attempt-with-async-function.js	fail	accepted: was refused later (lowering)
 test/language/statements/switch/syntax/redeclaration/async-function-name-redeclaration-attempt-with-async-generator.js	fail	accepted: was refused later (lowering)
 test/language/statements/switch/syntax/redeclaration/async-function-name-redeclaration-attempt-with-class.js	fail	accepted: was refused later (lowering)
@@ -5979,9 +6188,12 @@ test/language/statements/switch/syntax/redeclaration/var-name-redeclaration-atte
 test/language/statements/switch/syntax/redeclaration/var-name-redeclaration-attempt-with-let.js	fail	accepted: ran and threw Test262Error
 test/language/statements/switch/syntax/redeclaration/var-name-redeclaration-attempt-with-var.js	pass	
 test/language/statements/throw/S12.13_A1.js	pass	
+test/language/statements/try/12.14-10.js	pass	
+test/language/statements/try/12.14-11.js	pass	
 test/language/statements/try/12.14-3.js	pass	
 test/language/statements/try/12.14-4.js	pass	
 test/language/statements/try/12.14-8.js	pass	
+test/language/statements/try/12.14-9.js	pass	
 test/language/statements/try/S12.14_A1.js	pass	
 test/language/statements/try/S12.14_A10_T2.js	pass	
 test/language/statements/try/S12.14_A10_T3.js	pass	
@@ -6173,6 +6385,7 @@ test/language/types/reference/8.7.2-3-1-s.js	pass
 test/language/types/reference/8.7.2-8-s.js	pass	
 test/language/types/reference/S8.7.2_A1_T1.js	fail	accepted: was refused later (lowering)
 test/language/types/reference/S8.7.2_A1_T2.js	fail	accepted: was refused later (lowering)
+test/language/types/reference/S8.7_A6.js	pass	
 test/language/types/string/S8.4_A1.js	pass	
 test/language/types/string/S8.4_A10.js	pass	
 test/language/types/string/S8.4_A11.js	pass	
