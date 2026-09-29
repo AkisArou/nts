@@ -96,6 +96,10 @@ export const ASKS = {
   "test262-cases": ["answers", "does every recorded test/language case still do what it did, read from the printed diagnostics"],
   "test262-builtins-cases": ["answers", "the same over test/built-ins"],
   "test262-rest-cases": ["answers", "the same over test/annexB, test/staging and test/harness"],
+  // A corpus of its own, and the only step that compiles it: `any` as Erased
+  // (093733f2d) left awfy-towers emitting C that clang rejects, and nothing a
+  // lowering change owed pointed at it until another lane found it red.
+  "benches": ["answers", "does every benches/cases program still emit C that compiles and runs"],
   addons: ["valid", "does each runtime module build, load and publish something"],
 };
 
@@ -152,7 +156,7 @@ export const RULES = [
     // and a pattern that binds no names skipped its initializer. Each dropped
     // effects silently; two of them had made recorded passes hollow (21 rows
     // for `typeof`, 6 for the pattern).
-    steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "outcomes", "integrity", "integrity-runtime", "definitions", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases", "test262-rest-cases"],
+    steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "outcomes", "integrity", "integrity-runtime", "definitions", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "benches"],
     arms: [
       ...COMPARE,
       { if: "a type rule", kind: "answers", asks: "a generic class with two live instantiations appears in the corpus, never in a hand-written fixture", run: "the emitted-diff --axis above, and a full census per-case diff (conformance262.ts --rows, both binaries)" },
@@ -174,7 +178,7 @@ export const RULES = [
   {
     name: "the C backend",
     when: (p) => /^compiler\/codegen\/c\//.test(p),
-    steps: ["examples", "rc", "outcomes", "snapshot-cache", "test262-cases", "test262-builtins-cases", "test262-rest-cases"],
+    steps: ["examples", "rc", "outcomes", "snapshot-cache", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "benches"],
     arms: [COMPARE[0], COMPARE[2]],
   },
   {
@@ -347,6 +351,7 @@ function selfTest() {
   if (!printed?.steps.includes("test262-cases") || !printed.arms.some((a) => /git grep/.test(a.run))) return "a change to the driver's printing does not owe its readers";
   const lowered = owed([{ path: "compiler/core/src/hir/lower.rs", added: false }]).find((r) => r.name === "lowering");
   if (!["test262-cases", "test262-builtins-cases", "test262-rest-cases"].every((st) => lowered.steps.includes(st))) return "a lowering change does not owe the recorded test262 sets";
+  if (!lowered.steps.includes("benches")) return "a lowering change does not owe the benches corpus";
   const order = gateSteps(owed([{ path: "compiler/codegen/llvm/src/lib.rs", added: false }]));
   if (order.join(" ") !== "build clippy tests llvm llvm-rc assembles") return `the LLVM backend's steps: ${order.join(" ")}`;
   // A step without its question could not say what it asks.
