@@ -89,6 +89,76 @@ fn check_signature(package: &str, program: &Program, func: &Func) -> Result<(), 
     Ok(())
 }
 
+/// Whether emitting this op puts a label inside its block: a comparison or a
+/// truthiness test turned into a 0 or a 1, or an `instanceof` chain.
+///
+/// **One answer for two questions**, which had two derivations and so
+/// disagreed. `materializes` asks it to decide whether a scratch slot and a
+/// prologue exist; `crossing_values` asks it to decide which slots a frame
+/// must type. The second list lacked `convert <number> : bool`, so in
+/// `runtime/node/url`'s `module$init` an options object built one op before
+/// `colors: 80` became a bool, and written one op after, was `top` at the
+/// label's frame -- "Bad local variable type ... locals[242] is top" -- and the
+/// module did not load.
+fn puts_label(func: &Func, value: ValueId) -> bool {
+    match &func.values[value.0 as usize].kind {
+        OpKind::Binary { op, .. } => comparison(*op).is_some(),
+        OpKind::Unary { op: UnOp::Truthy, operand } => {
+            !matches!(&func.values[operand.0 as usize].ty, HirType::Bool)
+        }
+        // Anything converted to a boolean is truthiness, which
+        // branches and rejoins and so needs the slot -- `Code`
+        // counts one linear depth, and an arm that pushes on both
+        // sides of a join is counted twice.
+        //
+        // **The same condition `ops::convert` uses, and it has to
+        // be.** This asked whether the operand was `Managed` and
+        // not `String`; the emitter asks `to == Bool && from !=
+        // Bool` and calls `materialize_truth` for every one of
+        // them. Two derivations of "does this function need a
+        // scratch slot", and the gap was a `f64`:
+        //
+        //     async function g(): Promise<boolean> { return true; }
+        //     export async function f(): Promise<boolean> {
+        //       return await g();
+        //     }
+        //
+        // `f__resume` reads the payload as an `f64` and emits
+        // `convert %13 : bool`, which this did not count, so no
+        // slot was reserved and the whole function declined with
+        // *a truthiness test with no scratch slot*.
+        //
+        // `Promise.resolve(b)` is clean because it reaches the
+        // payload another way and the lowering emits `truthy`
+        // there, which the arm above already counts -- the same
+        // job, two ops, and only one of them was known here.
+        //
+        // Over-reserving costs one `int` local in a function that
+        // does not use it. Under-reserving refuses the function.
+        OpKind::Convert(operand) => {
+            matches!(func.values[value.0 as usize].ty, HirType::Bool)
+                && !matches!(&func.values[operand.0 as usize].ty, HirType::Bool)
+        }
+        // An `instanceof` chain with a join; see `crossing_values`.
+        // It needs no scratch slot -- the result goes to the value's
+        // own -- but it does put labels in a block, and this is the
+        // question that decides whether the prologue runs at all.
+        //
+        // A label per arm and a join at the end, so a slot left `Top`
+        // is `Top` at the join and the verifier says "Type top (current
+        // frame, locals[1]) is not assignable to reference type" -- the
+        // sentence `examples/async-catch` produced, from a different op,
+        // for the same reason. The open pair is the same chain with
+        // per-arm indices, and `OpenFieldSet` puts labels too although it
+        // produces nothing, because the labels are the chain and not the
+        // result.
+        OpKind::SharedFieldGet { .. }
+        | OpKind::OpenFieldGet { .. }
+        | OpKind::OpenFieldSet { .. } => true,
+        _ => false,
+    }
+}
+
 /// The values whose slots need a declared verification type.
 ///
 /// A slot needs a declared verification type only where a frame can see
@@ -105,30 +175,6 @@ fn check_signature(package: &str, program: &Program, func: &Func) -> Result<(), 
 /// in between. Fusion is ignored -- a fused comparison emits no label,
 /// so counting it costs a slot its `Top` and never soundness.
 fn crossing_values(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
-    let puts_label = |value: ValueId| match &func.values[value.0 as usize].kind {
-        OpKind::Binary { op, .. } => comparison(*op).is_some(),
-        OpKind::Unary { op: UnOp::Truthy, operand } => {
-            !matches!(func.values[operand.0 as usize].ty, HirType::Bool)
-        }
-        // The third, and the one that proves the list is the thing to keep
-        // current rather than the comment above it. `SharedFieldGet` is an
-        // `instanceof` chain: a label per arm and a join at the end, so a slot
-        // this walk leaves as `Top` is `Top` at the join and the verifier says
-        //
-        //     Type top (current frame, locals[1]) is not assignable to
-        //     reference type
-        //
-        // which is the same sentence `examples/async-catch` produced, from a
-        // different op, for the same reason.
-        //
-        // The open pair is the same chain with per-arm indices, so it is the
-        // same answer -- and `OpenFieldSet` puts labels too, even though it
-        // produces nothing, because the labels are the chain and not the result.
-        OpKind::SharedFieldGet { .. }
-        | OpKind::OpenFieldGet { .. }
-        | OpKind::OpenFieldSet { .. } => true,
-        _ => false,
-    };
     let mut defined_at: Vec<Option<(usize, usize)>> = vec![None; func.values.len()];
     for (block_at, block) in func.blocks.iter().enumerate() {
         for (index, value) in block.ops.iter().enumerate() {
@@ -199,7 +245,7 @@ fn crossing_values(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
             .ops
             .iter()
             .enumerate()
-            .filter(|&(_, &value)| puts_label(value))
+            .filter(|&(_, &value)| puts_label(func, value))
             .map(|(index, _)| index)
             .collect();
         let reads = block
@@ -567,53 +613,7 @@ impl<'a> Emitter<'a> {
                 if Some(value) == fused {
                     return false;
                 }
-                match &self.func.values[value.0 as usize].kind {
-                    OpKind::Binary { op, .. } => comparison(*op).is_some(),
-                    OpKind::Unary { op: UnOp::Truthy, operand } => {
-                        !matches!(self.ty(*operand), HirType::Bool)
-                    }
-                    // Anything converted to a boolean is truthiness, which
-                    // branches and rejoins and so needs the slot -- `Code`
-                    // counts one linear depth, and an arm that pushes on both
-                    // sides of a join is counted twice.
-                    //
-                    // **The same condition `ops::convert` uses, and it has to
-                    // be.** This asked whether the operand was `Managed` and
-                    // not `String`; the emitter asks `to == Bool && from !=
-                    // Bool` and calls `materialize_truth` for every one of
-                    // them. Two derivations of "does this function need a
-                    // scratch slot", and the gap was a `f64`:
-                    //
-                    //     async function g(): Promise<boolean> { return true; }
-                    //     export async function f(): Promise<boolean> {
-                    //       return await g();
-                    //     }
-                    //
-                    // `f__resume` reads the payload as an `f64` and emits
-                    // `convert %13 : bool`, which this did not count, so no
-                    // slot was reserved and the whole function declined with
-                    // *a truthiness test with no scratch slot*.
-                    //
-                    // `Promise.resolve(b)` is clean because it reaches the
-                    // payload another way and the lowering emits `truthy`
-                    // there, which the arm above already counts -- the same
-                    // job, two ops, and only one of them was known here.
-                    //
-                    // Over-reserving costs one `int` local in a function that
-                    // does not use it. Under-reserving refuses the function.
-                    OpKind::Convert(operand) => {
-                        matches!(self.func.values[value.0 as usize].ty, HirType::Bool)
-                            && !matches!(self.ty(*operand), HirType::Bool)
-                    }
-                    // An `instanceof` chain with a join; see `crossing_values`.
-                    // It needs no scratch slot -- the result goes to the value's
-                    // own -- but it does put labels in a block, and this is the
-                    // question that decides whether the prologue runs at all.
-                    OpKind::SharedFieldGet { .. }
-                    | OpKind::OpenFieldGet { .. }
-                    | OpKind::OpenFieldSet { .. } => true,
-                    _ => false,
-                }
+                puts_label(self.func, value)
             })
         })
     }
@@ -783,4 +783,59 @@ pub fn signature(package: &str, program: &Program, func: &Func) -> Option<String
         &borrowed,
         &types::return_descriptor(types::Shape::packaged(program, package), &func.return_type)?,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nts_core::hir::{Block, ManagedType, Op};
+    use nts_diagnostics::{Location, SourceId, Span};
+    use nts_semantic_schema::Origin;
+
+    fn op(kind: OpKind, ty: HirType) -> Op {
+        let origin = Origin::source(Location { file: SourceId(0), span: Span::new(0, 1) });
+        Op { kind, ty, origin }
+    }
+
+    /// `o = new; b = <kind of %1> : bool; o.0 = b` in one block, and whether
+    /// the frame at a label between `o`'s definition and its read types it.
+    fn object_crosses(to_bool: OpKind) -> bool {
+        let object = HirType::Managed(ManagedType::Object(nts_semantic_schema::TypeId(0)));
+        let values = vec![
+            op(OpKind::ObjectNew { frame: false }, object.clone()),
+            op(OpKind::ConstFloat(80.0), HirType::Float { bits: 64 }),
+            op(to_bool, HirType::Bool),
+            op(OpKind::FieldSet { object: ValueId(0), field: 0, value: ValueId(2) }, HirType::Void),
+        ];
+        let origin = values[0].origin.clone();
+        let func = Func {
+            name: "f".to_owned(),
+            params: Vec::new(),
+            return_type: HirType::Void,
+            values,
+            blocks: vec![Block {
+                params: Vec::new(),
+                ops: (0..4).map(ValueId).collect(),
+                terminator: Terminator::Return(None),
+            }],
+            origin,
+            exported: true,
+            initializes_receiver: false,
+            async_result: None,
+            frame: None,
+            abstract_declaration: false,
+        };
+        crossing_values(&func).contains(&ValueId(0))
+    }
+
+    /// `runtime/node/url`'s `module$init`: "Bad local variable type ...
+    /// locals[242] is top". A number converted to a bool materializes with a
+    /// label, so an object written on both sides of it is live at that frame.
+    /// The control is the same block with the bool a constant: no label, and
+    /// the slot may stay `Top`.
+    #[test]
+    fn a_number_converted_to_a_bool_puts_a_label_between_a_definition_and_its_read() {
+        assert!(object_crosses(OpKind::Convert(ValueId(1))));
+        assert!(!object_crosses(OpKind::ConstBool(true)));
+    }
 }
