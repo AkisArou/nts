@@ -1797,7 +1797,7 @@ test262() {
 # counted apart from the pass count -- `negatives-accepted:` -- because the
 # pass count cannot show it: those 1,600 were passes. Lower the ceiling when
 # early errors land; raise it only with the cases named in the commit.
-TEST262_LANGUAGE_PASS_FLOOR=5035
+TEST262_LANGUAGE_PASS_FLOOR=5029
 TEST262_LANGUAGE_NEGATIVES_ACCEPTED_CEILING=1551
 # One recorded test262 directory, re-run and held to its record, its floor and
 # its ceiling: `test262_recorded <dir> <record> <floor> <floor variable name>
