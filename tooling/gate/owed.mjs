@@ -150,7 +150,8 @@ export const RULES = [
     // from the wrong quantity: `typeof` answered from the type and skipped its
     // operand, a class declaration answered `Ok(())` and skipped its statics,
     // and a pattern that binds no names skipped its initializer. Each dropped
-    // effects silently and made recorded passes hollow (21, 1 and 6 rows).
+    // effects silently; two of them had made recorded passes hollow (21 rows
+    // for `typeof`, 6 for the pattern).
     steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "outcomes", "integrity", "integrity-runtime", "definitions", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases", "test262-rest-cases"],
     arms: [
       ...COMPARE,
