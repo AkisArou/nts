@@ -7277,6 +7277,7 @@ fn lower_class(
             // parent's handle, so every method takes one as `this`.
             if gobject.is_some() && !is_static_member(snapshot, member) {
                 let lowered_member = builder.lower_gobject_member(class, member, instance);
+                let lowered_member = with_vfunc_slot(snapshot, foreign, shared, (lowered_member, builder.vfunc_slot.take()), lowered);
                 keep_foreign_member(snapshot, member, lowered_member, &mut gobject_methods, lowered);
                 builder.harvest(wanted, &mut lowered.arrivals);
                 collect_layouts(&mut lowered.program, builder.layouts);
@@ -7900,10 +7901,34 @@ fn signals_of_type(snapshot: &SemanticSnapshot, instance: nts_semantic_schema::T
 /// A member of a class over a foreign one, lowered by its family's own
 /// method: its function joins the program and its record the family's list,
 /// or its refusal is noted and reported.
+/// A member of a class over a `GObject` class, with the wrapper of its
+/// slot's C shape where it is an override answering its outs as a tuple
+/// (`VfuncSlot`), which is lowered here and kept beside it -- or refuses the
+/// member where the wrapper cannot be made.
+fn with_vfunc_slot(
+    snapshot: &SemanticSnapshot,
+    foreign: &super::runtime::ForeignTable,
+    shared: &Shared,
+    (lowered_member, slot): (LoweredMember, Option<VfuncSlot>),
+    lowered: &mut Lowered,
+) -> LoweredMember {
+    let Some(slot) = slot else { return lowered_member };
+    let (func, method) = lowered_member?;
+    let mut wrapper = shared.builder(snapshot, foreign, Copy::default());
+    let built = wrapper.lower_vfunc_slot(&slot, &func);
+    collect_layouts(&mut lowered.program, wrapper.layouts);
+    lowered.program.funcs.push(built?);
+    Ok((func, method))
+}
+
+/// A class member lowered for a foreign runtime: its function, and how the
+/// runtime reaches it where it does.
+type LoweredMember = Result<(Func, Option<super::ForeignMethod>), Diagnostic>;
+
 fn keep_foreign_member(
     snapshot: &SemanticSnapshot,
     member: NodeId,
-    lowered_member: Result<(Func, Option<super::ForeignMethod>), Diagnostic>,
+    lowered_member: LoweredMember,
     methods: &mut Vec<super::ForeignMethod>,
     lowered: &mut Lowered,
 ) {
@@ -13911,6 +13936,20 @@ enum ParameterNames {
     Forwarded,
 }
 
+/// An override answering its out parameters as GJS does, as a tuple
+/// (`vfunc_measure(o, s): [min, nat, …]`), reached through a wrapper of its
+/// slot's C shape: `name`, taking the override's parameters and then a
+/// pointer per out, and answering the slot's result (`lower_vfunc_slot`).
+struct VfuncSlot {
+    name: String,
+    entry: super::native::FnPointer,
+    /// Per out, in the slot's order: whether GTK may pass NULL for it.
+    outs: Vec<bool>,
+    /// Whether the tuple's first element is the slot's own C result.
+    has_result: bool,
+    member: NodeId,
+}
+
 struct FuncBuilder<'a> {
     snapshot: &'a SemanticSnapshot,
     /// Bound foreign members, keyed by `(source, span end)` of the declaration.
@@ -14049,6 +14088,9 @@ struct FuncBuilder<'a> {
     /// The name of the class over a `GObject` class whose constructor is
     /// being lowered: its `super(...)` makes the instance (`gobject_super`).
     gobject_construct: Option<String>,
+    /// An override just lowered that answers its out parameters as a tuple:
+    /// the slot wrapper the member loop builds for it (`lower_vfunc_slot`).
+    vfunc_slot: Option<VfuncSlot>,
     /// The name of the class over a composable Windows Runtime class whose
     /// constructor is being lowered: its `super()` composes the instance.
     com_construct: Option<String>,
@@ -14379,6 +14421,7 @@ impl<'a> FuncBuilder<'a> {
             in_constructor: false,
             objc_construct: None,
             gobject_construct: None,
+            vfunc_slot: None,
             com_construct: None,
             chaining_up: None,
             objc_entry: None,
@@ -16647,11 +16690,165 @@ impl<'a> FuncBuilder<'a> {
             .transpose()
             .map_err(|why| self.unsupported(member, &why))?
             .unwrap_or_default();
-        let entry = super::native::vfunc_signature(self.snapshot, this, &signature, &defaults)
-            .map_err(|why| self.unsupported(member, &format!("a virtual function's {why}")))?;
+        let outs = self.vfunc_outs(declaration);
+        let (entry, has_result) = self.vfunc_entry(member, &this, signature, &defaults, &outs)?;
         let func = self.lower_method_of(class, member, instance)?;
-        let method = super::ForeignMethod { dispatch: super::Dispatch::Selector(slot), function: func.name.clone(), signature: std::sync::Arc::new(entry) };
+        // An override answering its out parameters as a tuple is reached
+        // through a wrapper of the slot's C shape, built beside it.
+        let function = if outs.is_empty() {
+            func.name.clone()
+        } else {
+            let wrapper = format!("{}#slot", func.name);
+            self.vfunc_slot = Some(VfuncSlot { name: wrapper.clone(), entry: entry.clone(), outs, has_result, member });
+            wrapper
+        };
+        let method = super::ForeignMethod { dispatch: super::Dispatch::Selector(slot), function, signature: std::sync::Arc::new(entry) };
         Ok((func, Some(method)))
+    }
+
+    /// The out parameters a virtual function's declaration answers as a
+    /// tuple (`@ntsVfuncOut minimum? natural?`), each by whether GTK may pass
+    /// NULL for it. None for a slot whose outs its declaration takes.
+    fn vfunc_outs(&self, declaration: NodeId) -> Vec<bool> {
+        self.node(declaration)
+            .native
+            .as_ref()
+            .and_then(|native| native.vfunc_out.as_deref())
+            .map(|outs| outs.split_whitespace().map(|out| out.ends_with('?')).collect())
+            .unwrap_or_default()
+    }
+
+    /// The C signature of an override's slot, and whether a tuple the
+    /// declaration answers starts with the slot's own result. Where the
+    /// declaration answers its outs as a tuple, the slot takes a pointer to
+    /// each element's C scalar after the ins, and returns the tuple's first
+    /// element where there is one more than the outs.
+    fn vfunc_entry(
+        &self,
+        member: NodeId,
+        this: &super::native::Pointee,
+        mut signature: nts_semantic_schema::SignatureRecord,
+        defaults: &[(String, super::native::ParameterDefault)],
+        outs: &[bool],
+    ) -> Result<(super::native::FnPointer, bool), Diagnostic> {
+        let spell = |signature: &nts_semantic_schema::SignatureRecord| {
+            super::native::vfunc_signature(self.snapshot, this.clone(), signature, defaults)
+                .map_err(|why| self.unsupported(member, &format!("a virtual function's {why}")))
+        };
+        if outs.is_empty() {
+            return Ok((spell(&signature)?, false));
+        }
+        let (elements, has_result) = self.vfunc_answer(member, signature.return_type, outs)?;
+        signature.return_type = if has_result { elements[0] } else { self.void_type()? };
+        let entry = spell(&signature)?;
+        let mut parameters = entry.parameters.clone();
+        for element in &elements[usize::from(has_result)..] {
+            match super::native::abi_type(self.snapshot, *element) {
+                Some(super::native::Type::Scalar(scalar)) => parameters.push(super::native::Type::Pointer(super::native::Pointee::Scalar(scalar))),
+                _ => return Err(self.unsupported(member, "a virtual function's out parameter that is not a C scalar")),
+            }
+        }
+        Ok((super::native::FnPointer::spell(parameters, (*entry.result).clone()), has_result))
+    }
+
+    /// The elements of a tuple a virtual function's declaration answers its
+    /// outs as, and whether the first of them is the slot's own C result:
+    /// one element more than the outs. A single out with no result is the
+    /// value itself, as a call's values form answers one.
+    fn vfunc_answer(&self, id: NodeId, answer: TypeId, outs: &[bool]) -> Result<(Vec<TypeId>, bool), Diagnostic> {
+        let elements = match self.snapshot.types.get(answer.0 as usize).map(|record| &record.kind) {
+            Some(TypeKind::Tuple(elements)) if outs.len() > 1 || elements.len() == 2 => elements.clone(),
+            _ => vec![answer],
+        };
+        let has_result = match elements.len().checked_sub(outs.len()) {
+            Some(0) => false,
+            Some(1) => true,
+            _ => return Err(self.unsupported(id, "a virtual function whose answer does not match the out parameters its slot takes")),
+        };
+        Ok((elements, has_result))
+    }
+
+    /// The wrapper an override answering its outs as a tuple is reached
+    /// through: the slot's C shape -- the override's own parameters, then a
+    /// pointer per out -- calling the override, storing each tuple element
+    /// through its pointer (where GTK passed one, for an out it may leave
+    /// NULL), and answering the slot's result, the tuple's first element.
+    fn lower_vfunc_slot(&mut self, slot: &VfuncSlot, func: &Func) -> Result<Func, Diagnostic> {
+        let origin = self.origin(slot.member);
+        let mut params = Vec::new();
+        let mut arguments = Vec::new();
+        for (at, param) in func.params.iter().enumerate() {
+            let value = self.push(OpKind::Param(u32::try_from(at).unwrap_or(0)), param.ty.clone(), origin.clone());
+            params.push(Param { name: param.name.clone(), shape: ParamShape::Ordinary, ty: param.ty.clone(), origin: origin.clone(), known: Facts::TOP });
+            arguments.push(value);
+        }
+        self.this = arguments.first().copied();
+        let mut pointers = Vec::new();
+        for (at, ty) in slot.entry.parameters.iter().enumerate().skip(func.params.len()) {
+            let ty = ty.representation();
+            let value = self.push(OpKind::Param(u32::try_from(at).unwrap_or(0)), ty.clone(), origin.clone());
+            params.push(Param { name: format!("out{at}"), shape: ParamShape::Ordinary, ty: ty.clone(), origin: origin.clone(), known: Facts::TOP });
+            pointers.push((value, ty));
+        }
+        let answer_ty = func.return_type.clone();
+        let answer = self.push(OpKind::Call { callee: Callee::Direct(func.name.clone()), args: arguments, frame: None }, answer_ty.clone(), origin.clone());
+        let count = slot.outs.len() + usize::from(slot.has_result);
+        let zero = self.push(OpKind::ConstInt(0), HirType::Int { bits: 64, signed: true }, origin.clone());
+        for (at, ((pointer, ty), nullable)) in pointers.into_iter().zip(slot.outs.iter().copied()).enumerate() {
+            let HirType::NativePointer(super::native::Pointee::Scalar(scalar)) = ty.clone() else {
+                return Err(self.unsupported(slot.member, "a virtual function's out parameter that is not a pointer to a C scalar"));
+            };
+            let element = self.tuple_element(slot.member, answer, &answer_ty, count, at + usize::from(slot.has_result))?;
+            let value = self.coerce(element, &super::native::Type::Scalar(scalar).representation(), slot.member)?;
+            // GTK passes NULL for an output it does not want.
+            let after = nullable.then(|| {
+                let null = self.push(OpKind::ConstNull, ty.clone(), origin.clone());
+                let absent = self.push(OpKind::Binary { op: BinOp::Eq, lhs: pointer, rhs: null }, HirType::Bool, origin.clone());
+                let (store, after) = (self.new_block(), self.new_block());
+                self.terminate(Terminator::Branch { cond: absent, then_target: after, then_args: Vec::new(), else_target: store, else_args: Vec::new() });
+                self.switch_to(store);
+                after
+            });
+            self.push(OpKind::NativeStore { pointer, index: zero, value }, HirType::Void, origin.clone());
+            if let Some(after) = after {
+                self.terminate(Terminator::Jump { target: after, args: Vec::new() });
+                self.switch_to(after);
+            }
+        }
+        let result = slot.entry.result.representation();
+        self.returns = result.clone();
+        if slot.has_result {
+            let element = self.tuple_element(slot.member, answer, &answer_ty, count, 0)?;
+            let value = self.coerce(element, &result, slot.member)?;
+            self.terminate(Terminator::Return(Some(value)));
+        } else {
+            self.terminate(Terminator::Return(None));
+        }
+        Ok(self.finish(slot.name.clone(), params, result, origin, false))
+    }
+
+    /// Element `at` of a tuple of `count` an override answers: the value
+    /// itself for one, an array's element for a tuple of one type, and a
+    /// field of its layout for a mixed one.
+    fn tuple_element(&mut self, id: NodeId, tuple: ValueId, ty: &HirType, count: usize, at: usize) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        if count == 1 {
+            return Ok(tuple);
+        }
+        match ty {
+            HirType::Managed(ManagedType::Array(element)) => {
+                #[allow(clippy::cast_precision_loss)]
+                let index = self.push(OpKind::ConstFloat(at as f64), HirType::NUMBER, origin.clone());
+                Ok(self.push(OpKind::ArrayGet { array: tuple, index, checked: false }, (**element).clone(), origin))
+            }
+            HirType::Managed(ManagedType::Object(layout)) => {
+                let layout = self.layout_of(id, *layout)?;
+                let field = u32::try_from(at).unwrap_or(0);
+                let element = layout.fields.get(at).map(|field| field.ty.clone()).ok_or_else(|| self.unsupported(id, "a tuple shorter than the out parameters it answers"))?;
+                Ok(self.push(OpKind::FieldGet { object: tuple, field }, element, origin))
+            }
+            _ => Err(self.unsupported(id, "a virtual function answering its out parameters as something other than a tuple")),
+        }
     }
 
     /// A method a template names as a signal's handler: lowered as any method,
@@ -17086,6 +17283,15 @@ impl<'a> FuncBuilder<'a> {
             0,
             nts_semantic_schema::ParameterRecord { name: "this".to_owned(), ty: this, optional: false, rest: false },
         );
+        // A slot whose outs the declaration answers as a tuple: the thunk
+        // is called with the ins, then an address per out, and answers the
+        // slot's own result; the tuple is made from them after.
+        let outs = self.vfunc_outs(declaration);
+        let answer = with_this.return_type;
+        let shape = if outs.is_empty() { None } else { Some(self.vfunc_answer(id, answer, &outs)?) };
+        if let Some((elements, has_result)) = &shape {
+            with_this.return_type = if *has_result { elements[0] } else { self.void_type()? };
+        }
         self.chaining_up = Some(id);
         let built = self.native_callee(id, Some(declaration), name.clone(), &with_this);
         self.chaining_up = None;
@@ -17100,7 +17306,87 @@ impl<'a> FuncBuilder<'a> {
         thunk.declared_at = None;
         let callee = Callee::Native(target);
         let (args, lent) = self.lower_call_arguments(id, &callee, arguments, Some(receiver))?;
-        self.finish_call(id, callee, args, lent, Some(declaration))
+        match shape {
+            None => self.finish_call(id, callee, args, lent, Some(declaration)),
+            Some((elements, has_result)) => self.chain_up_answering_a_tuple(id, (callee, args, lent), declaration, answer, (&elements, has_result)),
+        }
+    }
+
+    /// `super.vfunc_measure(o, s)` where the declaration answers the slot's
+    /// outs as a tuple: a local per out, its address passed after the ins,
+    /// and the tuple made from the slot's result and what C wrote to them.
+    fn chain_up_answering_a_tuple(
+        &mut self,
+        id: NodeId,
+        (callee, mut args, lent): (Callee, Vec<ValueId>, Vec<Lent>),
+        declaration: NodeId,
+        answer: TypeId,
+        (elements, has_result): (&[TypeId], bool),
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let Callee::Native(mut target) = callee else {
+            return Err(self.unsupported(id, "a virtual function that is not foreign"));
+        };
+        let mut locals = Vec::new();
+        for element in &elements[usize::from(has_result)..] {
+            let Some(super::native::Type::Scalar(scalar)) = super::native::abi_type(self.snapshot, *element) else {
+                return Err(self.unsupported(id, "a virtual function's out parameter that is not a C scalar"));
+            };
+            let pointee = super::native::Pointee::Scalar(scalar);
+            let thunk = std::sync::Arc::make_mut(&mut target);
+            thunk.parameters.push(super::native::Type::Pointer(pointee.clone()));
+            thunk.retention.push(super::native::Retention::NotRetained);
+            let local = self.push(OpKind::NativeLocal { count: 1 }, HirType::NativePointer(pointee), origin.clone());
+            args.push(local);
+            locals.push(local);
+        }
+        let result_ty = target.call_result();
+        let result = self.finish_call_typed(id, Callee::Native(target), args, lent, Some(declaration), Some(result_ty))?;
+        let zero = self.push(OpKind::ConstInt(0), HirType::Int { bits: 64, signed: true }, origin.clone());
+        let mut values = Vec::new();
+        if has_result {
+            values.push(result);
+        }
+        for local in locals {
+            values.push(self.native_load(id, local, zero)?);
+        }
+        self.make_tuple(id, answer, values)
+    }
+
+    /// The tuple `ty` made of `values` in order -- one value itself, an
+    /// array for a tuple of one type, the tuple's layout otherwise -- each
+    /// at its position's type.
+    fn make_tuple(&mut self, id: NodeId, ty: TypeId, values: Vec<ValueId>) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let represented = self.represent(ty).ok_or_else(|| self.unrepresentable(id, "a virtual function's answer"))?;
+        if let [value] = values.as_slice() {
+            return self.coerce(*value, &represented, id);
+        }
+        match represented.clone() {
+            HirType::Managed(ManagedType::Array(element)) => {
+                #[allow(clippy::cast_precision_loss)]
+                let length = self.push(OpKind::ConstFloat(values.len() as f64), HirType::NUMBER, origin.clone());
+                let array = self.push(OpKind::ArrayNew { length, zeroed: true }, represented, origin.clone());
+                for (at, value) in values.into_iter().enumerate() {
+                    let value = self.coerce(value, &element, id)?;
+                    #[allow(clippy::cast_precision_loss)]
+                    let index = self.push(OpKind::ConstFloat(at as f64), HirType::NUMBER, origin.clone());
+                    self.push(OpKind::ArraySet { array, index, value, checked: true }, HirType::Void, origin.clone());
+                }
+                Ok(array)
+            }
+            HirType::Managed(ManagedType::Object(layout_ty)) => {
+                let layout = self.layout_of(id, layout_ty)?;
+                let object = self.push(OpKind::ObjectNew { frame: false }, represented, origin.clone());
+                for (at, value) in values.into_iter().enumerate() {
+                    let want = layout.fields.get(at).map(|field| field.ty.clone()).ok_or_else(|| self.unsupported(id, "a tuple shorter than the values made for it"))?;
+                    let value = self.coerce(value, &want, id)?;
+                    self.field_set(object, u32::try_from(at).unwrap_or(0), value, &origin);
+                }
+                Ok(object)
+            }
+            _ => Err(self.unsupported(id, "a virtual function answering its out parameters as something other than a tuple")),
+        }
     }
 
     /// Whether a constructor body opens with its `super(...)`: `this` is one

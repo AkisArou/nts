@@ -1940,31 +1940,35 @@ libffi and takes ownership of what it returns: a string must come back as a
 class value (GJS's three-argument `new`, the callback typed by the program)
 and a bridge that answers an owned value, which no callback does yet.
 
-**An override's out parameters are pointers, where GJS returns them.** GJS
-writes `vfunc_get_section(position) { return [start, end]; }`, and a port
-writes `out_start[0] = start` through the `Ptr<CNumber<"uint">>` the binding
-declares (List View with Sections; `Square`'s `vfunc_measure` in
-gtk-subclass). A call already answers GJS's way, a tuple for its out
-parameters. An override could too. The design, not built yet because it
-changes every override with out parameters and wants the user's word:
+**An override answers its out parameters as GJS's does, a tuple.** GJS
+writes `vfunc_measure(o, s) { return [min, nat, -1, -1]; }`, and so does a
+port (the user chose the breaking form, 2026-09-29; a call already answered
+GJS's way).
 
-- The binder declares such a virtual function as GJS has it,
-  `vfunc_measure?(orientation, for_size): [minimum, natural, min_baseline,
-  nat_baseline]` (a single one bare, as `_values` answers), where its out
-  parameters trail its in parameters, which is every one in the closure
-  measured so far; any other shape keeps its pointers. A tag names the out
-  parameters' positions so the slot's C signature is still known.
-- The lowering synthesizes the slot's entry: the C-shaped function GTK
-  calls, which calls the program's method and writes each element through
-  its pointer where the pointer is not NULL (GTK passes NULL for an output
-  it does not want). These are the ops `out[0] = v` lowers to today, so
+- **The binder** declares such a virtual function with its trailing scalar
+  out parameters taken out of its parameters and answered, after its own
+  result, as a tuple -- one value bare, as a call's values form answers --
+  where every out is a scalar and all of them trail the ins; any other
+  shape keeps its pointers. The tag names the slot's out pointers, `?` where
+  GTK may pass NULL: `@ntsVfuncOut minimum? natural? minimum_baseline?
+  natural_baseline?` (`NativeAttributes.vfunc_out`, SCHEMA 41). Its C
+  parameters are the slot's, unchanged, which the self-check compares.
+- **The lowering** gives the slot its C signature from the tuple
+  (`vfunc_entry`), and synthesizes the entry GTK calls: `{method}#slot`,
+  taking the override's parameters and a pointer per out, calling the
+  override, storing each element through its pointer where GTK passed one,
+  and answering the slot's result (`lower_vfunc_slot`, beside the method
+  through `with_vfunc_slot`). These are the ops `out[0] = v` lowers to, so
   neither backend changes.
-- Chaining up, `super.vfunc_measure(o, s)`, answers the tuple too: locals
-  for the out slots (`local<T>()`), the chain-up thunk given their
-  addresses, the tuple read from them.
-- Witnesses: List View with Sections and gtk-subclass's `Square` rewritten
-  in GJS's form, and Workbench's Snapshot, whose `vfunc_measure` returns
-  `[board_size, board_size, -1, -1]`.
+- **Chaining up**, `super.vfunc_measure(o, s)`, answers the tuple too: a
+  `NativeLocal` per out, their addresses passed after the ins, the tuple
+  made from the slot's result and what C wrote (`chain_up_answering_a_tuple`).
+- **Performance:** gtk-bench's `vfunc` row, the override GTK calls, is
+  14.3-14.8 ns before and 13.6-14.1 ns after, pinned, under the lock.
+- **Witnesses:** gtk-subclass's `Square` in GJS's form (`measure 42 17`),
+  and `wider 10`, a `GtkLabel` subclass chaining up through the tuple and
+  widening its parent's natural width; List View with Sections; the bench's
+  `Square`. The store test pins `vfunc_measure` and `vfunc_get_section`.
 
 Ports that pass still surfaced binding and harness gaps, each fixed or
 named:

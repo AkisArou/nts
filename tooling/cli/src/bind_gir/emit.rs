@@ -443,7 +443,7 @@ fn implementation(out: &mut String, binding: &Binding, name: &str, tag: &str, ow
     let structure = vfuncs
         .first()
         .and_then(|function| function.vfunc.as_ref())
-        .map_or_else(|| format!("{}Interface", tag.trim_start_matches('_')), |(structure, ..)| structure.clone());
+        .map_or_else(|| format!("{}Interface", tag.trim_start_matches('_')), |vfunc| vfunc.class_struct.clone());
     let Some(get_type) = binding.interface_types.get(tag.trim_start_matches('_')).or_else(|| binding.interface_types.get(name)) else {
         return;
     };
@@ -728,8 +728,14 @@ fn notes(out: &mut String, function: &Function, symbol: bool, defaulted: &[(&str
         notes.push(format!("@ntsNoEscape {name}"));
     }
     // A virtual function names its slot, and has no symbol to name.
-    if let Some((class_struct, member, offset)) = &function.vfunc {
+    if let Some(super::map::Vfunc { class_struct, member, offset, outs }) = &function.vfunc {
         notes.push(format!("@ntsVfunc {class_struct} {member} {offset}"));
+        // The out parameters the override answers as a tuple, which the
+        // slot's C signature still takes as pointers after the ins.
+        if !outs.is_empty() {
+            let named: Vec<String> = outs.iter().map(|(name, nullable)| format!("{name}{}", if *nullable { "?" } else { "" })).collect();
+            notes.push(format!("@ntsVfuncOut {}", named.join(" ")));
+        }
     } else if symbol {
         notes.push(format!("@ntsSymbol {}", function.symbol));
     }

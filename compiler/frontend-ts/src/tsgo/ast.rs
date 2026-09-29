@@ -480,6 +480,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
     let listener = leading_tag(source, "@ntsListener");
     let iterate = leading_tag(source, "@ntsIterate");
     let vfunc = leading_tag(source, "@ntsVfunc");
+    let vfunc_out = leading_tag(source, "@ntsVfuncOut");
     let gtype = leading_tag(source, "@ntsGType");
     let composable = leading_tag(source, "@ntsComposable");
     let runtime_class = leading_tag(source, "@ntsRuntimeClass");
@@ -513,6 +514,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         listener,
         iterate,
         vfunc,
+        vfunc_out,
         gtype,
         composable,
         runtime_class,

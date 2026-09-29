@@ -11,18 +11,16 @@ import {
   GtkStringList,
   GtkStringObject,
 } from "c:Gtk-4.0";
-import type { CNumber, Ptr } from "c:types";
+import type { CNumber } from "c:types";
 import { run, type Workbench } from "../../host/workbench.ts";
 
 // GJS's `Implements: [Gtk.SectionModel]`, as the class's second type
-// argument. C's out parameters are the override's pointers, where GJS
-// returns `[start, end]`.
+// argument.
 class CustomModel extends GtkStringList<{}, GtkSectionModelImplementation> {
-  vfunc_get_section(position: CNumber<"uint">, out_start: Ptr<CNumber<"uint">>, out_end: Ptr<CNumber<"uint">>): void {
+  vfunc_get_section(position: CNumber<"uint">): [CNumber<"uint">, CNumber<"uint">] {
     const start = position;
     const end = start + 5;
-    out_start[0] = start;
-    out_end[0] = end;
+    return [start, end];
   }
 }
 

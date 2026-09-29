@@ -150,7 +150,7 @@ fn probe_text(binding: &Binding) -> (String, BTreeMap<usize, (String, String)>) 
         }
         // A virtual function is its class struct's member, whose type is the
         // pointer this compares against.
-        if let Some((class_struct, member, offset)) = &function.vfunc {
+        if let Some(super::map::Vfunc { class_struct, member, offset, .. }) = &function.vfunc {
             let _ = writeln!(
                 out,
                 "_Static_assert(__builtin_types_compatible_p(__typeof__((({class_struct} *)0)->{member}), {result} (*)({parameters})) \

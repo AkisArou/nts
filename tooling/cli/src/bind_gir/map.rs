@@ -214,11 +214,23 @@ pub(crate) struct Function {
     /// a class rather than a method: a static member of the class's value,
     /// `GtkStringObject.new("x")`, as GJS has it.
     pub(crate) statics: Option<(String, String)>,
-    /// `(class struct, member, offset)` for a virtual function
-    /// (`@ntsVfunc`): a slot a subclass overrides, with no symbol of its own,
-    /// at the offset C's `offsetof` gives. Written only as a method,
-    /// `vfunc_clicked`, as GJS names an override.
-    pub(crate) vfunc: Option<(String, String, u64)>,
+    /// A virtual function (`@ntsVfunc`): a slot a subclass overrides, with no
+    /// symbol of its own. Written only as a method, `vfunc_clicked`, as GJS
+    /// names an override.
+    pub(crate) vfunc: Option<Vfunc>,
+}
+
+/// A virtual function's slot: its class struct, member and the offset C's
+/// `offsetof` gives, and the out parameters its override answers as a tuple
+/// rather than takes (`vfunc_out`).
+#[derive(Debug, Clone)]
+pub(crate) struct Vfunc {
+    pub(crate) class_struct: String,
+    pub(crate) member: String,
+    pub(crate) offset: u64,
+    /// The slot's trailing out parameters, each by name and whether GTK may
+    /// pass NULL for it, in C's order: `@ntsVfuncOut minimum? natural?`.
+    pub(crate) outs: Vec<(String, bool)>,
 }
 
 #[derive(Debug)]
@@ -834,11 +846,12 @@ fn vfuncs<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
                 continue;
             };
             match mapper.function(&named, Some(class)) {
-                Ok(function) => {
+                Ok(mut function) => {
                     let Some((class, _)) = function.method.clone() else {
                         mapper.binding.refused.push((label, Reason::OutParameter));
                         continue;
                     };
+                    let outs = vfunc_tuple(&mut function);
                     let name = format!("{class_struct}_{}", vfunc.name);
                     mapper.binding.functions.push(Function {
                         name: name.clone(),
@@ -847,7 +860,7 @@ fn vfuncs<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
                         method_only: true,
                         statics: None,
                         finish: None,
-                        vfunc: Some((class_struct.clone(), vfunc.name.clone(), offset)),
+                        vfunc: Some(Vfunc { class_struct: class_struct.clone(), member: vfunc.name.clone(), offset, outs }),
                         ..function
                     });
                 }
@@ -856,6 +869,39 @@ fn vfuncs<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
             }
         }
     }
+}
+
+/// GJS's form of an override: its trailing scalar out parameters taken out
+/// of its parameters and answered, after its own result, as the tuple GJS
+/// returns -- `vfunc_measure(orientation, for_size): [minimum, natural,
+/// minimum_baseline, natural_baseline]`, one value bare, as a call's values
+/// form answers. Its C parameters and result are the slot's, unchanged,
+/// which the self-check compares. The outs, by name and whether GTK may pass
+/// NULL for one; none, and the parameters as they were, unless every out
+/// parameter is a scalar and all of them trail the ins.
+fn vfunc_tuple(function: &mut Function) -> Vec<(String, bool)> {
+    let is_out = |mapped: &Mapped| matches!(mapped.shape, Shape::Out { .. });
+    let Some(first) = function.parameters.iter().position(|(_, mapped)| is_out(mapped)) else { return Vec::new() };
+    if !function.parameters[first..].iter().all(|(_, mapped)| is_out(mapped)) {
+        return Vec::new();
+    }
+    let outs = function.parameters.split_off(first);
+    let mut elements: Vec<String> = Vec::new();
+    if function.result.ts != "void" {
+        elements.push(function.result.ts.clone());
+    }
+    elements.extend(outs.iter().filter_map(|(_, mapped)| match &mapped.shape {
+        Shape::Out { value } => Some(value.clone()),
+        _ => None,
+    }));
+    let ts = if elements.len() == 1 { elements.remove(0) } else { format!("[{}]", elements.join(", ")) };
+    function.result = Mapped { shape: Shape::Other, ts, c: function.result.c.clone() };
+    let names: Vec<(String, bool)> = outs.into_iter().map(|(name, mapped)| (name, mapped.ts.ends_with(" | null"))).collect();
+    function.no_escape.retain(|name| !names.iter().any(|(out, _)| out == name));
+    for (name, _) in &names {
+        function.omissible.remove(name);
+    }
+    names
 }
 
 /// A method of the class its instance is: `this` on that class's methods.

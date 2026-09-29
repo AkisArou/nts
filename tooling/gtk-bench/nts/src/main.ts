@@ -17,7 +17,7 @@ import {
 import { ApplicationFlags, type GListModelImplementation } from "c:Gio-2.0";
 import { GObject } from "c:GObject-2.0";
 import { bench_case, bench_log, bench_now } from "c:bench";
-import type { CEnum, CNumber, Erased, Owned, Ptr, c_size_t, c_uint } from "c:types";
+import type { CEnum, CNumber, Erased, Owned, c_size_t, c_uint } from "c:types";
 import { local } from "c:memory";
 
 function best(name: string, n: number, run: (n: number) => void): void {
@@ -98,20 +98,10 @@ function outs(): void {
 // program writes. `for_size` cycles through more values than GTK's size
 // cache holds, so every call reaches the override.
 class Square extends GtkWidget {
-  vfunc_measure(
-    orientation: CEnum<GtkOrientation, c_uint>,
-    for_size: CNumber<"int">,
-    minimum: Ptr<CNumber<"int">> | null,
-    natural: Ptr<CNumber<"int">> | null,
-    minimum_baseline: Ptr<CNumber<"int">> | null,
-    natural_baseline: Ptr<CNumber<"int">> | null,
-  ): void {
-    if (minimum !== null) minimum[0] = 42;
-    if (natural !== null) natural[0] = 42;
-    if (minimum_baseline !== null) minimum_baseline[0] = -1;
-    if (natural_baseline !== null) natural_baseline[0] = -1;
+  vfunc_measure(orientation: CEnum<GtkOrientation, c_uint>, for_size: CNumber<"int">): [CNumber<"int">, CNumber<"int">, CNumber<"int">, CNumber<"int">] {
     void orientation;
     void for_size;
+    return [42, 42, -1, -1];
   }
 }
 

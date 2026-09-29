@@ -292,6 +292,7 @@ mod tests {
             "GtkTextBuffer's delete is not named delete"
         );
         pinned_constructions(&packages);
+        pinned_vfunc_tuples(gtk);
         pinned_constants(&packages, gobject);
         let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize_utf8().unwrap();
         let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-gir-packages-{}", std::process::id()));
@@ -359,6 +360,17 @@ mod tests {
     }
 
     /// GIR's constants and the fundamental types, as the binder declares them.
+    /// An override answering its trailing scalar outs as GJS's does, a
+    /// tuple, with the tag naming the slot's out pointers.
+    fn pinned_vfunc_tuples(gtk: &Package) {
+        for present in [
+            "     * @ntsVfuncOut minimum? natural? minimum_baseline? natural_baseline?\n     */\n    vfunc_measure(this: GtkWidget, orientation: CEnum<GtkOrientation, c_uint>, for_size: CNumber<\"int\">): [CNumber<\"int\">, CNumber<\"int\">, CNumber<\"int\">, CNumber<\"int\">];",
+            "vfunc_get_section?(this: GtkSectionModel, position: CNumber<\"uint\">): [CNumber<\"uint\">, CNumber<\"uint\">];",
+        ] {
+            assert!(gtk.declarations.contains(present), "missing: {present}");
+        }
+    }
+
     fn pinned_constants(packages: &[Package], gobject: &Package) {
         // A constant is declared with its type and its value in a tag, where
         // GIR states the value exactly, a negative one included; absent where

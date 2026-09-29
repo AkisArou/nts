@@ -59,6 +59,8 @@
 //                 `gtk_widget_measure` through its `vfunc_measure`, which
 //                 writes through the out parameters GTK passes
 //   square Nts_Square
+//   wider 10      `Wider` chains up to `GtkLabel`'s `vfunc_measure`, which
+//                 answers a tuple as GJS's does, and widens its natural size
 //   shy 1 true  `Shy`'s `vfunc_show` counts and chains up
 //                 (`super.vfunc_show()`) to GTK's, which is what makes the
 //                 widget visible: an override that skipped it reads `shy 1 false`
@@ -426,21 +428,22 @@ function panel(): string {
   return before + " pressed " + String(made.pressed) + " " + (made.title.label ?? "");
 }
 
+// An override answering its out parameters as GJS's does, a tuple the
+// compiler writes through the pointers GTK passes (NULL skipped).
 class Square extends GtkWidget {
-  vfunc_measure(
-    orientation: CEnum<GtkOrientation, c_uint>,
-    for_size: CNumber<"int">,
-    minimum: Ptr<CNumber<"int">> | null,
-    natural: Ptr<CNumber<"int">> | null,
-    minimum_baseline: Ptr<CNumber<"int">> | null,
-    natural_baseline: Ptr<CNumber<"int">> | null,
-  ): void {
+  vfunc_measure(orientation: CEnum<GtkOrientation, c_uint>, for_size: CNumber<"int">): [CNumber<"int">, CNumber<"int">, CNumber<"int">, CNumber<"int">] {
     const size = orientation === Orientation.HORIZONTAL ? 42 : 17;
-    if (minimum !== null) minimum[0] = size;
-    if (natural !== null) natural[0] = size;
-    if (minimum_baseline !== null) minimum_baseline[0] = -1;
-    if (natural_baseline !== null) natural_baseline[0] = -1;
     void for_size;
+    return [size, size, -1, -1];
+  }
+}
+
+// Chaining up through a tuple: the parent's measurement, as GJS's
+// `super.vfunc_measure(...)` answers it, widened by 10.
+class Wider extends GtkLabel {
+  vfunc_measure(orientation: CEnum<GtkOrientation, c_uint>, for_size: CNumber<"int">): [CNumber<"int">, CNumber<"int">, CNumber<"int">, CNumber<"int">] {
+    const [minimum, natural, minimum_baseline, natural_baseline] = super.vfunc_measure(orientation, for_size);
+    return [minimum + 10, natural + 10, minimum_baseline, natural_baseline];
   }
 }
 
@@ -620,6 +623,11 @@ function main(): void {
   gtk_widget_measure(square, Orientation.VERTICAL, -1, height);
   console.log("measure " + String(width[0]) + " " + String(height[0]));
   console.log("square " + g_type_name_from_instance(square));
+  const unwidened = new GtkLabel({ label: "wide" });
+  const wider = new Wider({ label: "wide" });
+  const [, plainNatural] = unwidened.measure(Orientation.HORIZONTAL, -1);
+  const [, widerNatural] = wider.measure(Orientation.HORIZONTAL, -1);
+  console.log("wider " + String(widerNatural - plainNatural));
 
   const shy = new Shy({ label: "s" });
   shy.set_visible(false);

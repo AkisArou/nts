@@ -50,8 +50,9 @@ use crate::origin::Origin;
 /// `native` tags, a Windows Runtime interface's `@ntsQuery` IID. 37:
 /// `runtime_class`, a sealed Windows Runtime class a binding declares. 40:
 /// `TypeKind::Evolving`, the checker's `autoType` kept apart from its `anyType`
-/// -- two facts one variant had been flattening.
-pub const SCHEMA_VERSION: u32 = 40;
+/// -- two facts one variant had been flattening. 41: `vfunc_out`, the out
+/// parameters a `GObject` override answers as a tuple.
+pub const SCHEMA_VERSION: u32 = 41;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -855,6 +856,14 @@ pub struct NativeAttributes {
     /// overrides. It has no C symbol.
     #[serde(default)]
     pub vfunc: Option<String>,
+    /// `@ntsVfuncOut minimum? natural?`, beside `@ntsVfunc`: the slot's
+    /// trailing out parameters, which the declaration answers as a tuple, as
+    /// GJS's override returns them (`vfunc_measure(o, s): [min, nat, …]`),
+    /// rather than takes. Each by name, `?` where GTK may pass NULL for it;
+    /// the slot's C signature takes each as a pointer to the tuple element's
+    /// type, after the ins.
+    #[serde(default)]
+    pub vfunc_out: Option<String>,
     /// `@ntsGType gtk_button_get_type`, on the phantom `__c_gtype` member of
     /// the value a binding declares beside a `GObject` class: the function
     /// answering the class's `GType`, which a subclass the program writes
