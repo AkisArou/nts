@@ -60,7 +60,7 @@ const ROOT = join(HERE, "../..");
 const TYPESCRIPT = dirname(createRequire(join(ROOT, "package.json")).resolve("typescript/package.json"));
 const { API, SignatureKind, TypeFlags } = await import(pathToFileURL(join(TYPESCRIPT, "dist/api/sync/api.js")).href);
 const { SyntaxKind } = await import(pathToFileURL(join(TYPESCRIPT, "dist/ast/index.js")).href);
-const { bodyOf, HARNESS_FILE, materialise, TEST_FILE, workspace } = await import(pathToFileURL(join(HERE, "project.ts")).href);
+const { HARNESS_FILE, materialise, TEST_FILE, workspace } = await import(pathToFileURL(join(HERE, "project.ts")).href);
 const { readRows } = await import(pathToFileURL(join(HERE, "rows.ts")).href);
 
 type Arrival = "escapes" | "chained" | "direct" | "uncalled" | "unfollowed";
@@ -345,7 +345,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
       let slice: string;
       let data = "not measured";
       try {
-        const verdict = session.classifyFile(bodyOf(readFileSync(join(ROOT, "third_party/test262", row.path), "utf8")));
+        const verdict = session.classifyFile(readFileSync(join(ROOT, "third_party/test262", row.path), "utf8"));
         slice = sliceOf(verdict);
         data =
           verdict.evolving > 0 && verdict.other > 0 ? "both evolving and written"

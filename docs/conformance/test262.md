@@ -77,6 +77,28 @@ full Test262 file pass when the file's default metadata also requires a sloppy
 variant. Sloppy scripts, raw tests, and modules may be reconsidered later
 without changing metadata parsing, variant identity, or the report schema.
 
+## Done, and the permanent boundaries (decided 2026-09-29)
+
+Test262 is **done** when every ECMA-262 strict-lane file -- all directories:
+`language`, `built-ins`, `annexB`, `staging`, `harness` -- ends as a pass or
+under a **named permanent boundary**: an exclusion with an authority in
+`tooling/census/test262-exclusions.json` or `tooling/census/features.json`.
+No `fail`, no `no-verdict`, no unclassified refusal. Modules, sloppy-mode and
+raw tests stay scope-excluded, counted and not attempted.
+
+These are permanent boundaries by the project owner's decision, not backlog.
+Each is attempted all the same -- a boundary that starts passing is news, and
+the census's FIXED? check says so:
+
+- property descriptors (`propertyHelper.js`, `Object.defineProperty` and
+  friends) -- `typescript.md` §13;
+- the metaobject protocol (`Proxy`, `Reflect`) -- `typescript.md` §13;
+- the global object and realms (`globalThis`, cross-realm);
+- the redirect hooks (`Symbol.toPrimitive`, `Symbol.hasInstance`,
+  `Symbol.unscopables`);
+- **Temporal** -- a runtime this project does not build. Its tests are
+  classed `inapplicable` by feature, with this section as the authority.
+
 ## The oracle is Test262
 
 A positive Test262 case is self-checking. It completes normally on success and

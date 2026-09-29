@@ -101,7 +101,7 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import { selfChecks } from "./attempt262.ts";
-import { bodyOf, HARNESS_HASH, PROVIDED_INCLUDES, pinCompiler } from "./project.ts";
+import { bodyOf, HARNESS_HASH, pinCompiler } from "./project.ts";
 import { frontendFor } from "../conformance/pin.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -354,8 +354,8 @@ function harnessGap(record, source) {
   // Parse and runtime negatives are judged (see `judgeNegative`); resolution is
   // module loading, and modules are out of this lane.
   if (record.negative?.phase === "resolution") return "negative:resolution (module loading is not in this lane)";
-  const missing = record.includes.filter((include) => !PROVIDED_INCLUDES.has(include));
-  if (missing.length > 0) return `include:${missing.sort().join("+")}`;
+  // An include is not a gap: `materialise` compiles it as test262 wrote it,
+  // and one nts cannot compile refuses like any other source, ranked.
   // An `async` test is attempted: the stand-in has `$DONE`, and `attempt`
   // judges the case by the line it prints (harness-done.ts).
   const body = bodyOf(source);

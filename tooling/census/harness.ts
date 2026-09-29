@@ -54,12 +54,12 @@
 //
 // # What it is not
 //
-// Not the harness. `propertyHelper.js` needs property descriptors, which do not
-// lower, and a test whose `includes:` names a file this does not provide is not
-// in the census's leading slice -- the census says so rather than substituting
-// a weaker stand-in. Members some tests call and others must not see
-// (`assert.throws`, `assert.compareArray`) are spliced in per test; see
-// `project.ts`'s `MEMBERS` and `PROVIDED_INCLUDES`.
+// Not the harness: only `assert.js` and `sta.js`, which every test receives.
+// A test's `includes:` are compiled as test262 wrote them, beside it, and one
+// that does not lower refuses like any source -- `propertyHelper.js` needs
+// property descriptors, which do not. Members some tests call and others must
+// not see (`assert.throws`, `assert.compareArray`) are spliced in per test;
+// see `project.ts`'s `MEMBERS`, `GLOBALS` and `materialise`.
 
 /**
  * `message` is optional, as `harness/sta.js` has it (`this.message = message

@@ -20,11 +20,13 @@
     {
       "code": "TS1005",
       "tsgo_pin": "7.0.2",
-      "reason": "tsgo parse gaps on valid JavaScript: Unicode 16/17 identifier characters (its identifier tables predate them), and `in` inside an initializer in a for-of destructuring head. 554 negatives draw TS1005 ('X' expected).",
+      "reason": "tsgo parse gaps on valid JavaScript: Unicode 16/17 identifier characters (its identifier tables predate them), and `in` inside an initializer in a for-of or for-await-of destructuring head (the for-await-of twins listed since 2026-09-29, when async tests began to be attempted). 554 negatives draw TS1005 ('X' expected).",
       "positives": [
         "test/language/identifiers/part-unicode-16.0.0-escaped.js",
         "test/language/identifiers/part-unicode-17.0.0-escaped.js",
-        "test/language/statements/for-of/dstr/array-elem-init-in.js"
+        "test/language/statements/for-of/dstr/array-elem-init-in.js",
+        "test/language/statements/for-await-of/async-func-decl-dstr-array-elem-init-in.js",
+        "test/language/statements/for-await-of/async-gen-decl-dstr-array-elem-init-in.js"
       ]
     },
     {

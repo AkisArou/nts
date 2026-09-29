@@ -7,7 +7,7 @@
 // different programs while reporting the same corpus.
 
 import { createHash } from "node:crypto";
-import { chmodSync, copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -38,11 +38,18 @@ const MEMBERS = [
 ];
 
 /**
- * The `includes:` files this stand-in provides. Any other include makes a case
- * `unsupported` before it is compiled. `compareArray.js` is empty upstream --
- * its entry moved into `assert.js` -- so it asks for nothing `MEMBERS` lacks.
+ * The `includes:` files the stand-in answers for, so they are not compiled
+ * from test262's own source. `compareArray.js` is empty upstream -- its entry
+ * moved into `assert.js` -- so it asks for nothing `MEMBERS` lacks. Every
+ * other include is compiled as test262 wrote it (`materialise`).
  */
 export const PROVIDED_INCLUDES = new Set(["compareArray.js"]);
+
+/** Where test262's own harness files are, read verbatim for a test's `includes:`. */
+const SUITE_HARNESS = join(HERE, "../../third_party/test262/harness");
+
+/** A test's own includes are compiled beside it as `src/include-<name>`: before `main.js` in file order, after the stand-in. */
+const INCLUDE_PREFIX = "src/include-";
 
 /** Where `materialise` puts the stand-in and the test, relative to the workspace. */
 export const HARNESS_FILE = "src/harness.ts";
@@ -60,7 +67,7 @@ const TEST_PRELUDE = '"use strict";\n';
  * stand-in laid out two ways -- are two runs even under one compiler. Derived
  * here, beside the list, so a member added is a member hashed.
  */
-const LAYOUT = `${HARNESS_FILE} + ${TEST_FILE} (allowJs, checkJs unset), test prelude ${JSON.stringify(TEST_PRELUDE)}`;
+const LAYOUT = `${HARNESS_FILE} + ${INCLUDE_PREFIX}*.js verbatim + ${TEST_FILE} (allowJs, checkJs unset), test prelude ${JSON.stringify(TEST_PRELUDE)}`;
 export const HARNESS_HASH = [LAYOUT, HARNESS, ...GLOBALS.map((g) => g.source), ...MEMBERS.map((m) => m.source)]
   .reduce((hash, source) => hash.update(source), createHash("sha256"))
   .digest("hex")
@@ -87,6 +94,15 @@ export function flagsOf(source) {
   const flow = /^\s*flags:\s*\[([^\]]*)\]/m.exec(meta);
   if (flow) return flow[1].split(",").map((f) => f.trim()).filter(Boolean);
   const block = /^\s*flags:\s*\n((?:\s*-\s*\S+\s*\n?)+)/m.exec(meta);
+  return block ? [...block[1].matchAll(/-\s*(\S+)/g)].map((m) => m[1]) : [];
+}
+
+/** A test262 file's `includes:`, flow-style or a block list, as `flagsOf` reads flags. */
+export function includesOf(source) {
+  const meta = FRONTMATTER.exec(source)?.[1] ?? "";
+  const flow = /^\s*includes:\s*\[([^\]]*)\]/m.exec(meta);
+  if (flow) return flow[1].split(",").map((f) => f.trim()).filter(Boolean);
+  const block = /^\s*includes:\s*\n((?:\s*-\s*\S+\s*\n?)+)/m.exec(meta);
   return block ? [...block[1].matchAll(/-\s*(\S+)/g)].map((m) => m[1]) : [];
 }
 
@@ -143,17 +159,30 @@ export function workspace(dir) {
 }
 
 /**
- * One test, as two global scripts: the stand-in in `HARNESS_FILE`, typed
- * TypeScript, and the test in `TEST_FILE`, JavaScript as test262 wrote it.
+ * One test, as global scripts: the stand-in in `HARNESS_FILE`, typed
+ * TypeScript; each of the test's `includes:` as test262 wrote it, in
+ * `src/include-<name>`; and the test in `TEST_FILE`, JavaScript as test262
+ * wrote it. `body` is the file as read, front matter and all, which is where
+ * its includes are named.
  *
- * Two source units in one realm is test262's own model -- harness files and
- * the test "remain separate source units evaluated in one realm"
- * (`docs/conformance/test262.md`). Neither imports the other: an `import`
- * would make them modules, which changes top-level `var` scoping and `this`.
- * Both carry the strict directive, as the prepended single script did.
+ * Separate source units in one realm is test262's own model -- harness files
+ * and the test "remain separate source units evaluated in one realm"
+ * (`docs/conformance/test262.md`). None imports another: an `import` would
+ * make them modules, which changes top-level `var` scoping and `this`. Each
+ * carries the strict directive. An include is compiled verbatim rather than
+ * stood in for: a stand-in is a second derivation of the harness, and an
+ * include nts cannot compile then refuses, named and ranked, instead of
+ * holding its test out of the census. Scripts run in file order, so an
+ * include's top-level statements (`tcoHelper.js`'s `$MAX_ITERATIONS`) are
+ * done before the test's first line.
  */
 export function materialise(dir, body) {
+  const src = join(dir, "src");
+  for (const stale of readdirSync(src).filter((f) => `src/${f}`.startsWith(INCLUDE_PREFIX))) rmSync(join(src, stale));
   writeFileSync(join(dir, HARNESS_FILE), `"use strict";\n${harnessFor(body)}`);
+  for (const include of includesOf(body).filter((name) => !PROVIDED_INCLUDES.has(name))) {
+    writeFileSync(join(dir, `${INCLUDE_PREFIX}${include}`), `"use strict";\n${bodyOf(readFileSync(join(SUITE_HARNESS, include), "utf8"))}`);
+  }
   writeFileSync(join(dir, TEST_FILE), `${TEST_PRELUDE}${body}`);
 }
 
@@ -165,7 +194,7 @@ export function materialise(dir, body) {
  */
 export function placeOf(file, line) {
   if (file.endsWith(TEST_FILE)) return { where: "body", line: line - TEST_PRELUDE.split("\n").length + 1 };
-  if (file.endsWith(HARNESS_FILE)) return { where: "harness" };
+  if (file.endsWith(HARNESS_FILE) || file.includes(INCLUDE_PREFIX)) return { where: "harness" };
   return { where: "other" };
 }
 

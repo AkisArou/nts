@@ -55,6 +55,11 @@
     "Int8Array": {
       "class": "gap"
     },
+    "Intl.Era-monthcode": {
+      "class": "inapplicable",
+      "reason": "ecma-402",
+      "authority": "docs/conformance/test262.md §Scope at the pin"
+    },
     "Map": {
       "class": "gap"
     },
@@ -108,6 +113,11 @@
       "class": "inapplicable",
       "reason": "runtime-redirect-hook",
       "authority": "docs/conformance/typescript.md §13"
+    },
+    "Temporal": {
+      "class": "inapplicable",
+      "reason": "no-temporal-runtime",
+      "authority": "docs/conformance/test262.md §Done, and the permanent boundaries"
     },
     "TypedArray": {
       "class": "gap"

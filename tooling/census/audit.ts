@@ -163,7 +163,9 @@ for (const [name, row] of Object.entries(rows)) {
     problems.push(`${name}: authority names ${file}, which does not exist`);
   } else if (section) {
     const text = readFileSync(path, "utf8");
-    if (!text.includes(`§${section}`) && !text.includes(`\n## ${section}.`)) {
+    // `§13` of typescript.md is a numbered heading (`## 13.`); test262.md's
+    // are named, and a section is then its heading's title (`## Done, …`).
+    if (!text.includes(`§${section}`) && !text.includes(`\n## ${section}.`) && !text.includes(`\n## ${section}`)) {
       problems.push(`${name}: authority names §${section} of ${file}, which has no such section`);
     }
   }

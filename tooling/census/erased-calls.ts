@@ -34,7 +34,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { materialise, outcomeFixtures, OUTCOMES, runMode } from "../conformance/outcomes-project.ts";
-import { bodyOf, materialise as materialiseCase, placeOf, workspace } from "./project.ts";
+import { materialise as materialiseCase, placeOf, workspace } from "./project.ts";
 import { describe, provenanceOf, frontendFor } from "../conformance/pin.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -411,7 +411,7 @@ if (!FRONTEND.exists) {
     }
     return cases.map((path, i) => {
       const dir = workspace(join(scratch, "t262", String(i)));
-      materialiseCase(dir, bodyOf(readFileSync(join(ROOT, "third_party/test262", path), "utf8")));
+      materialiseCase(dir, readFileSync(join(ROOT, "third_party/test262", path), "utf8"));
       return { corpus: "test262", label: path, at: dir, test262: true };
     });
   }
