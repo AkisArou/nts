@@ -4993,9 +4993,23 @@ fn declare_a_destructured_module_binding(
         };
         storage.push(resolved);
     }
-    if storage.is_empty() {
-        return;
-    }
+    // **A pattern that binds no names still evaluates**, and returning here for
+    // want of storage meant it did not. `const [[] = init()] = []` declares
+    // nothing, so `storage` is empty, so the declaration never joined
+    // `destructured` -- and `lower_module_binding` then looked for a name it does
+    // not have, found none, and skipped it. Its **initializer** was never lowered
+    // and neither was the default, so `init()` was never called: 11 recorded
+    // test262 language files, and `[[x] = init()]` one character over calls it.
+    //
+    // The language destructures for its effects as much as for its names:
+    // `ArrayBindingPattern : [ ]` still performs `GetIterator` on the source, and a
+    // nested element still evaluates its `Initializer` when the source has no
+    // element there. `defaulted_array_element` already lowers exactly that -- a
+    // source whose constant length is at or below the position takes the default and
+    // only the default -- and nothing was reaching it.
+    //
+    // So the declaration is registered whatever its storage, and the loop below
+    // declares as many globals as there are names, which may be none.
     for (name, symbol, ty) in storage {
         declare_a_module_global(scope, probe, name, symbol, &ty, 0.0, true);
     }
