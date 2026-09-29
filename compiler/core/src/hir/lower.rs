@@ -23697,6 +23697,44 @@ impl<'a> FuncBuilder<'a> {
                 Some(self.returns.clone())
             }
             .filter(|ty| !matches!(ty, HirType::Void));
+            // **A constructor that returns an object replaces `this`, and this
+            // cannot.** `[[Construct]]` takes the constructor's result when it is an
+            // Object and `this` otherwise, so
+            //
+            //     class Returning { constructor() { return {} } }
+            //     new Returning() instanceof Returning        // false in the language
+            //
+            // and nts answered `true`, having ignored the `return` -- a wrong answer
+            // for `new`, for `instanceof`, and for every field read on the result,
+            // which sees the class's layout over an object that does not have it.
+            //
+            // **Refused rather than honoured, because the layouts need not agree.**
+            // The returned object is an ordinary object literal: its layout is
+            // whatever it declares, not the class's, so handing it back as the
+            // class's instance is exactly the pointer-into-a-disagreeing-struct
+            // confusion this compiler refuses everywhere else. Replacing `this`
+            // soundly means the `new` site reading the result and every later access
+            // going through whatever it turns out to be -- an erased receiver, which
+            // is the interface-indirection work rather than a clause here.
+            //
+            // `return;` and `return this` stay: the specification ignores a
+            // non-Object result, and `this` is what `new` answers anyway, so a
+            // constructor ending in `return this` is the common idiom and is exact.
+            // Pinned as `outcomes/a-{base,derived}-constructor-returning-an-object`,
+            // one cause across two fixtures.
+            if self.in_constructor
+                && let Some(expression) = expression
+                && self.kind_of(expression) != Some(syntax::THIS_KEYWORD)
+                && self
+                    .type_of(expression)
+                    .is_some_and(|ty| ty.holds_a_pointer() || ty == HirType::Erased)
+            {
+                return Err(self.unsupported(
+                    expression,
+                    "a constructor returning an object, which replaces the instance \
+                     `new` would have answered",
+                ));
+            }
             let value = match (expression, &want) {
                 (Some(expression), Some(want)) => {
                     Some(self.lower_expecting(expression, want)?)
