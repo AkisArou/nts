@@ -1,9 +1,9 @@
 // What happened to each function between two compilers: compiled, refused,
 // both, or absent -- and which way it moved.
 //
-//   node tooling/conformance/refusal-diff.mjs <before> <after> [project ...]
+//   node tooling/conformance/refusal-diff.ts <before> <after> [project ...]
 //                                         (default: runtime/node/*, runtime/web-platform)
-//   node tooling/conformance/refusal-diff.mjs --self-test
+//   node tooling/conformance/refusal-diff.ts --self-test
 //
 // # Why
 //
@@ -214,7 +214,7 @@ if (process.argv.includes("--self-test")) {
 
 const [beforeBin, afterBin, ...named] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 if (!beforeBin || !afterBin || !existsSync(beforeBin) || !existsSync(afterBin)) {
-  console.log("  usage: refusal-diff.mjs <before-nts> <after-nts> [project ...] [--one-change]  (both binaries must exist)");
+  console.log("  usage: refusal-diff.ts <before-nts> <after-nts> [project ...] [--one-change]  (both binaries must exist)");
   process.exit(2);
 }
 // The frontend follows the pin (pin.ts `frontendFor`), per binary: two

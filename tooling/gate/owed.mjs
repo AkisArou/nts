@@ -102,7 +102,7 @@ export const ASKS = {
 /** The comparisons a lowering change owes, each with the question only it answers. */
 const COMPARE = [
   { kind: "answers", asks: "which code is emitted: does every example answer as it did, case by case", run: "node tooling/differential/agree.mjs <before> <after>   # and NTS_BACKEND=llvm, NTS_BACKEND=jvm, NTS_RC=1" },
-  { kind: "whether", asks: "whether code is emitted: which functions stopped, started, or lost their root", run: "node tooling/conformance/refusal-diff.mjs <before> <after>   # 0 moves is not no effect" },
+  { kind: "whether", asks: "whether code is emitted: which functions stopped, started, or lost their root", run: "node tooling/conformance/refusal-diff.ts <before> <after>   # 0 moves is not no effect" },
   { kind: "answers", asks: "expected neutral? neutral has two causes -- the construct is absent, or the arm never fired -- and only one is good: which runtime modules emit differently, and what node's tests say of them", run: "node tooling/conformance/emitted-diff.ts <before> <after> --axis" },
 ];
 
