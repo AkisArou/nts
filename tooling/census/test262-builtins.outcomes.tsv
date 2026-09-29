@@ -1,6 +1,6 @@
 # Test262 test/built-ins cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 06491c196e396873, harness 1206fb95a71de6c1; machine at start: 20.5 GB available, swap 3.7/20 GB, load 10.2/9.4 (1m/5m), 32 cores; 4 worker(s)
+# compiler e0fbe7f8302684d9, harness 1206fb95a71de6c1; machine at start: 19.9 GB available, swap 3.9/20 GB, load 9.1/11.2 (1m/5m), 32 cores; 8 worker(s)
 test/built-ins/Array/S15.4.2.1_A1.3_T1.js	pass	
 test/built-ins/Array/from/from-string.js	pass	
 test/built-ins/Array/isArray/15.4.3.2-0-4.js	pass	
