@@ -42417,8 +42417,42 @@ impl<'a> FuncBuilder<'a> {
             callee: Callee::Direct(format!("{owner}.set {name}")),
             getter: declares_a_getter
                 .then(|| Callee::Direct(format!("{owner}.get {name}"))),
-            wants: self.type_of(member),
+            // **The setter's own parameter, and only then the member's type.**
+            //
+            // A setter is a call, so what the write must convert to is the
+            // *parameter* -- and for an accessor pair the two can differ, because
+            // the checker infers an untyped setter parameter from the getter's
+            // return. `static get #tag(): string` with `static set #tag(param)`
+            // gives the parameter `string` while the member reads as `any`, and
+            // taking the member's type meant coercing an erased value *to erased*:
+            // a no-op, after which `verify` found `CallArgumentType { callee: "C.set
+            // #tag", expected: Managed(String), found: Erased }` and `emit-c` wrote
+            // nothing for the whole program. 20 recorded test262 files, every one a
+            // class-private accessor.
+            //
+            // It was invisible until `any` had a representation: `type_of(member)`
+            // answered `None` before, so `wants` was absent and the parameter was
+            // refused for its own reason. The declaration is already in hand here --
+            // this function found it to build the callee -- so the right type was
+            // one read away the whole time.
+            wants: self
+                .accessor_parameter_type(declaration)
+                .or_else(|| self.type_of(member)),
         })
+    }
+
+    /// The representation a `set` accessor's parameter is declared with.
+    ///
+    /// Read from the accessor's **own** declaration rather than from the member,
+    /// because for an accessor pair those differ: the checker infers an untyped
+    /// setter parameter from the getter's return type. See
+    /// [`Self::static_accessor_place`], which is where that mattered.
+    fn accessor_parameter_type(&mut self, declaration: NodeId) -> Option<HirType> {
+        let parameter = self
+            .children(declaration)
+            .into_iter()
+            .find(|child| self.kind_of(*child) == Some(syntax::PARAMETER))?;
+        self.type_of(parameter)
     }
 
     fn super_setter_place(&mut self, object: NodeId, member: NodeId) -> Option<Place> {
