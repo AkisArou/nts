@@ -1,3 +1,4 @@
+// **Agrees since 95f656df2; a guard.** Until then:
 // A class declared inside a block never runs its static elements: its static
 // block does not run, so a `throw` in it is not caught and a push in it never
 // happens. Found by test262's statements/class/static-init-abrupt.js, whose
