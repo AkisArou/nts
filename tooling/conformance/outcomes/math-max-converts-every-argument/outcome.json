@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "invalid-hir",
+  "nts": "invalid HIR: OperandsDiffer { func: \"module#init\", op: \"Math.max\", left: Float { bits: 64 }, right: Managed(Object(TypeId(12))) }",
+  "node": "exit 1; nts: uncaught Observed: calls=1;ofObject=2;ofNumber=2;",
+  "measured_with": "db59442100b1632d",
+  "source": "measured"
+}
