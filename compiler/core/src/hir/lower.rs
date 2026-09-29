@@ -22272,6 +22272,7 @@ impl<'a> FuncBuilder<'a> {
         for omitted in self.omitted_after(call, arguments.len()) {
             let value = match omitted {
                 Omitted::Default(node, callee) => {
+                    self.a_default_the_instance_cannot_answer(node, callee)?;
                     // The parameters before this one, bound to what the call
                     // already computed for them.
                     //
@@ -38197,6 +38198,79 @@ impl<'a> FuncBuilder<'a> {
                 Callee::Direct(name)
             },
         )
+    }
+
+    /// **A constructor's parameter default cannot read `this`, because the instance
+    /// is not built yet.**
+    ///
+    /// The receiver bound at the call is the right object -- `new A()` allocates it
+    /// first -- and its *fields* are written by the constructor, which has not run:
+    ///
+    /// ```text
+    /// class A { #x = "hello"; constructor(o = this.#x) { … } }
+    ///
+    /// %1 = object.new heap
+    /// %2 = field.get %1.0        <- #x, before it is written
+    /// %3 = call A#constructor(%1, %2)
+    /// ```
+    ///
+    /// So the default read an uninitialised slot and the string it answered was a
+    /// garbage pointer: **SIGSEGV**, with no diagnostic. The language runs
+    /// `InitializeInstanceElements` before the body, so node answers `"hello"` -- and
+    /// a **public** field crashes identically, which is what says this is about
+    /// *order* rather than about privacy.
+    ///
+    /// Refused rather than reordered, because there is nowhere at the call site to
+    /// put it: the field initialisers are inside the constructor and the parameter
+    /// has to be passed *to* it. The fix is the callee evaluating its own default --
+    /// an absence test after `initialize_fields` -- which is the same mechanism
+    /// `outcomes/an-explicit-undefined-at-a-defaulted-parameter` is waiting for, and
+    /// it moves where every default in the corpus is evaluated.
+    ///
+    /// A **method**'s default reading `this` is untouched and must stay so:
+    /// `slice(start = 0, end = this.length)` is `Buffer.prototype.toString`'s shape,
+    /// the receiver is fully built by then, and refusing it cost real reach once
+    /// before -- the paragraph beside this call site records that.
+    fn a_default_the_instance_cannot_answer(
+        &mut self,
+        node: NodeId,
+        callee: NodeId,
+    ) -> Result<(), Diagnostic> {
+        if self.kind_of(callee) == Some(syntax::CONSTRUCTOR) && self.reads_this(node) {
+            return Err(self.unsupported(
+                node,
+                "a constructor's parameter default that reads `this`, whose fields the \
+                 constructor has not yet written",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Whether an expression mentions `this`, at any depth.
+    ///
+    /// Bounded by the node count rather than recursive, and it does **not** descend
+    /// into a nested function: an arrow's `this` is the enclosing one and is the same
+    /// question, but a `function` expression or a method declares its own and the
+    /// answer there is about that one instead.
+    fn reads_this(&self, root: NodeId) -> bool {
+        let mut stack = vec![root];
+        for _ in 0..self.snapshot.nodes.len() {
+            let Some(id) = stack.pop() else { return false };
+            match self.kind_of(id) {
+                Some(syntax::THIS_KEYWORD) => return true,
+                // A nested `function`, method or class declares its own `this`, so
+                // the answer inside one is about that one: not descended into.
+                Some(
+                    syntax::FUNCTION_EXPRESSION
+                    | syntax::FUNCTION_DECLARATION
+                    | syntax::METHOD_DECLARATION
+                    | syntax::CLASS_DECLARATION
+                    | syntax::CLASS_EXPRESSION,
+                ) => {}
+                _ => stack.extend(self.children(id)),
+            }
+        }
+        false
     }
 
     /// The type a member is declared with, where the type declares one.
