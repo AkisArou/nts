@@ -30,6 +30,21 @@ jobs:
         with:
           go-version-file: third_party/typescript-go/go.mod
           cache-dependency-path: third_party/typescript-go/go.sum
+      # Changes we carry on top of the pin, because a submodule's content cannot
+      # be committed from here -- third_party/patches/README.md. They change what
+      # the frontend answers, so the binary has to be built *after* them, and a
+      # patch that no longer applies fails the job rather than being skipped.
+      - name: Apply carried patches
+        run: |
+          for patch in third_party/patches/*.patch; do
+            name="${patch##*/}"
+            if git -C third_party/typescript-go apply --reverse --check "../patches/$name" 2>/dev/null; then
+              echo "$name: already applied"
+            else
+              git -C third_party/typescript-go apply "../patches/$name"
+              echo "$name: applied"
+            fi
+          done
       - name: Build pinned tsgo
         run: go build -o "$GITHUB_WORKSPACE/target/tsgo" ./cmd/tsgo
         working-directory: third_party/typescript-go

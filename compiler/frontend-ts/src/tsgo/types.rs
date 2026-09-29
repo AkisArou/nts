@@ -459,4 +459,66 @@ mod tests {
     fn node_handles_match_the_go_format() {
         assert_eq!(node_handle(12, 79, "/w/a.ts"), "12.79./w/a.ts");
     }
+
+    /// The pinned source, read the way `symbols.rs` reads `symbolflags.go`.
+    ///
+    /// Not skipped when absent, for that test's reason and this one's: a check
+    /// that passes because it could not run is the failure it exists to prevent.
+    fn pinned(relative: &str) -> String {
+        let path = format!(
+            "{}/../../third_party/typescript-go/{relative}",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        std::fs::read_to_string(&path).unwrap_or_else(|error| {
+            panic!(
+                "the pin is what this is checked against, and it did not read: {path}: \
+                 {error}\na fresh worktree has no submodules -- `git submodule update \
+                 --init third_party/typescript-go`."
+            )
+        })
+    }
+
+    /// **The carried patch is still applied.**
+    ///
+    /// `third_party/patches/typescript-go-objectflags-on-every-type.patch` moves
+    /// one assignment in `newTypeResponse` above the switch, so an *intrinsic*
+    /// reports its flags -- which is the only thing separating the checker's
+    /// `autoType` from its `anyType` (`checker.go:975-976`), and therefore the only
+    /// thing that lets [`classify`] answer [`TypeKind::Evolving`].
+    ///
+    /// A carried patch's hazard is that **nothing goes red when a submodule bump
+    /// drops it**: Go still builds, the dependency is self-consistent, and the only
+    /// thing that changes is an answer deep inside our own lowering -- measured at
+    /// 243 recorded test262 passes. So this asserts the *invariant* rather than the
+    /// patch's text, both so a cosmetic upstream edit does not fail it and so the
+    /// day upstream takes the change it keeps passing on its own.
+    #[test]
+    fn the_pin_reports_object_flags_for_every_type() {
+        let source = pinned("internal/api/proto.go");
+        let body = source
+            .split_once("func newTypeResponse(")
+            .expect("`newTypeResponse` is not in the pin any more -- the patch's header \
+                     says what invariant to restore")
+            .1;
+        let assigns = body
+            .find("resp.ObjectFlags = uint32(t.ObjectFlags())")
+            .expect(
+                "`newTypeResponse` does not report ObjectFlags at all. Apply \
+                 third_party/patches/typescript-go-objectflags-on-every-type.patch \
+                 (`sh tooling/bootstrap/bootstrap.sh` does it) and rebuild target/tsgo.",
+            );
+        let switches = body
+            .find("switch flags := t.Flags(); {")
+            .expect("`newTypeResponse`'s switch has been restructured -- the patch's \
+                     header says what invariant to restore");
+        assert!(
+            assigns < switches,
+            "ObjectFlags is reported from inside the switch, so an *intrinsic* never \
+             carries it and the checker's `autoType` is indistinguishable from its \
+             `anyType`. The carried patch has been dropped, most likely by a submodule \
+             bump: `sh tooling/bootstrap/bootstrap.sh` re-applies it and rebuilds \
+             target/tsgo. A stale target/tsgo is the same defect and is not visible \
+             from here."
+        );
+    }
 }

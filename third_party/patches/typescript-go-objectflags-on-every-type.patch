@@ -1,0 +1,100 @@
+Report every type's ObjectFlags, not only an object type's.
+
+    Applies to: third_party/typescript-go, from its own root.
+    Apply:      git -C third_party/typescript-go apply ../patches/<this file>
+    Then:       (cd third_party/typescript-go && go build -o ../../target/tsgo ./cmd/tsgo)
+
+`tooling/bootstrap/bootstrap.sh` does both, and rebuilds `target/tsgo` whenever
+a file in this directory is newer than it. Run bootstrap after pulling a change
+here; a stale binary is the one failure mode that is not loud, and
+`the_pin_reports_object_flags_for_every_type` is what makes the *source* half
+loud if a submodule bump drops this.
+
+WHY
+
+The checker keeps two `any`s and tells them apart by one ObjectFlag:
+
+    checker.go:975  c.anyType  = newIntrinsicType(TypeFlagsAny, "any")
+    checker.go:976  c.autoType = newIntrinsicTypeEx(TypeFlagsAny, "any",
+                                     ObjectFlagsNonInferrableType)
+
+`autoType` is the *evolving* type of `var x;` and `const xs = []` -- "not yet,
+the assignments say what it is" -- where a written `any` means "no trust".
+Nothing else separates them: both spell `intrinsicName` "any" and both carry
+TypeFlagsAny, `anyType`/`wildcardType`/`blockedStringType` report no flags at
+all, and `nonInferrableAnyType` uses ContainsWideningType instead.
+
+`newTypeResponse` assigned `resp.ObjectFlags` *inside* `case
+flags&TypeFlagsObject != 0:`, so an intrinsic never reported its flags and the
+two arrived at a consumer identical. Measured before this patch: all three of a
+program's `any` records came over the wire with `objectFlags 0x0`. Giving them
+one representation cost Native TypeScript 243 recorded test262 passes -- an
+evolving declaration erased throws away the `string[]` its assignments had
+already proven.
+
+`autoArrayType` did show the bit, because an array *is* an object type. The
+intrinsic it holds did not, which is why the shape looked half-working.
+
+WHY A FORK PATCH AND NOT A RULE OF OUR OWN
+
+The syntactic stand-in -- no annotation, no initializer or an empty-array one,
+not a for-in/for-of head -- needs four clauses and still disagrees with the
+checker about once per ~1,500 declarations, because what makes a declaration
+evolving is a flow analysis and not a spelling. The checker has already done
+that analysis and the answer is one bit wide.
+
+REBASING ONTO A NEWER typescript-go
+
+This hunk is additive: it moves one assignment earlier and deletes the copy it
+supersedes. For an object type the value is identical to what the case below
+assigned, and for every other type the field was zero, which `omitempty` kept
+off the wire -- so no existing consumer sees a change. If `newTypeResponse` has
+been restructured, the invariant to restore is the one the test asserts: the
+assignment stands above `switch flags := t.Flags(); {`, not inside an arm of it.
+
+UPSTREAM
+
+Worth sending: a msgpack/JSON API that reports ObjectFlags for some types and
+not others cannot express the checker's own `anyType`/`autoType` distinction,
+and any consumer doing type-directed codegen needs it. Not sent yet.
+
+diff --git a/internal/api/proto.go b/internal/api/proto.go
+index 0917c385d..b86b19e62 100644
+--- a/internal/api/proto.go
++++ b/internal/api/proto.go
+@@ -654,6 +654,27 @@ func newTypeResponse(t *checker.Type, id TypeID) *TypeResponse {
+ 		}
+ 	}
+ 
++	// **Every type's ObjectFlags, not only an object type's.** This lived inside
++	// the object case below, so an *intrinsic* never reported its flags -- and the
++	// checker distinguishes two `any`s by exactly one of them:
++	//
++	//     checker.go:975  c.anyType  = newIntrinsicType(TypeFlagsAny, "any")
++	//     checker.go:976  c.autoType = newIntrinsicTypeEx(TypeFlagsAny, "any",
++	//                                      ObjectFlagsNonInferrableType)
++	//
++	// `autoType` is the *evolving* type of `var x;` and `const xs = []` -- "not
++	// yet, the assignments say what it is" -- where a written `any` means "no
++	// trust". Neither `intrinsicName` nor `flags` separates them: both are "any"
++	// and TypeFlagsAny. A consumer that cannot tell them apart gives them one
++	// representation, which cost Native TypeScript 243 recorded test262 passes.
++	// `autoArrayType` showed the bit because an array *is* an object type; the
++	// intrinsic it holds did not.
++	//
++	// Additive by construction: for an object type this is the same value the case
++	// below assigned, and for every other type it was zero, which `omitempty` kept
++	// off the wire. Carried patch -- see docs/records for the pin and the rebase.
++	resp.ObjectFlags = uint32(t.ObjectFlags())
++
+ 	switch flags := t.Flags(); {
+ 	case flags&checker.TypeFlagsFreshable != 0:
+ 		lit := t.AsLiteralType()
+@@ -667,7 +688,6 @@ func newTypeResponse(t *checker.Type, id TypeID) *TypeResponse {
+ 			resp.RegularType = TypeHandle(lit.RegularType())
+ 		}
+ 	case flags&checker.TypeFlagsObject != 0:
+-		resp.ObjectFlags = uint32(t.ObjectFlags())
+ 		objectFlags := t.ObjectFlags()
+ 		if objectFlags&checker.ObjectFlagsReference != 0 {
+ 			var ref *checker.TypeReference
