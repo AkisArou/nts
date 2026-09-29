@@ -42,6 +42,31 @@ pub enum Invalid {
         layout: String,
         base: String,
     },
+    /// One type was laid out two ways, and the merge kept one of them.
+    ///
+    /// Recorded by `collect_layouts` and reported here rather than there,
+    /// because that merge has no source location to name and this is not a fact
+    /// about the program's source: it is the compiler disagreeing with itself,
+    /// which is what every other variant of this enum is about.
+    ///
+    /// **The silent one.** Two layouts for one type with the same field *names*
+    /// in a different *order* make a struct of the same size whose
+    /// `_Static_assert`ed offsets all hold, so clang says nothing and only a
+    /// neighbouring field of a different type turns it into a diagnostic. Half
+    /// the accesses index the wrong slot. It has shipped twice: `fetch`'s
+    /// `Request`, where `get method` returned `requestHeaders`, and
+    /// `runtime/node/url`, whose `inspectDefaultOptions` answered `colors` true
+    /// and `maxArrayLength` false on every backend.
+    ///
+    /// Both causes were one builder lacking an input another had -- the
+    /// hierarchy the first time, the written field order the second -- so the
+    /// message names both orders, because which one is *right* is decided by
+    /// which builder was short of what, and that is what a reader needs.
+    DisputedLayout {
+        layout: String,
+        kept: Vec<String>,
+        discarded: Vec<String>,
+    },
     /// Two layouts share a name and are not the same shape.
     ///
     /// A layout's name is what every backend names its type after, so two of
@@ -381,6 +406,15 @@ fn check_native_calls(program: &Program, problems: &mut Vec<Invalid>) {
 /// this is what keeps it honest: a base named here has to be laid out as the
 /// prefix every backend already treats it as.
 fn check_layouts(program: &Program, problems: &mut Vec<Invalid>) {
+    // What the merge saw and could not report from where it stood.
+    for disputed in &program.disputed_layouts {
+        problems.push(Invalid::DisputedLayout {
+            layout: disputed.name.clone(),
+            kept: disputed.kept.clone(),
+            discarded: disputed.discarded.clone(),
+        });
+    }
+
     // **One name, one shape.** See `Invalid::DuplicateLayout`. Keyed on the
     // name and compared on the fields, because a layout reached twice for the
     // same type is ordinary -- `layout_of` is asked from many places and hands

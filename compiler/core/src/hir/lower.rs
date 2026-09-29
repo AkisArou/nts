@@ -10699,7 +10699,35 @@ fn class_symbol(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<u32> {
         .then_some(symbol.0)
 }
 
+/// Two layouts for one type holding the same field *names* in a different
+/// *order*, which is the shape [`super::DisputedLayout`] exists for.
+///
+/// Name sets rather than whole fields: a difference in a field's *type* is a
+/// different question and one `same_shape` already decides. This asks only
+/// whether two derivations of one type disagreed about **where** its fields go,
+/// which is the disagreement no later pass can see.
+fn one_type_two_orders(kept: &[Field], incoming: &[Field]) -> Option<(Vec<String>, Vec<String>)> {
+    if kept.len() != incoming.len() {
+        return None;
+    }
+    let order = |fields: &[Field]| -> Vec<String> {
+        fields.iter().map(|field| field.name.clone()).collect()
+    };
+    let (kept, incoming) = (order(kept), order(incoming));
+    if kept == incoming {
+        return None;
+    }
+    let (mut left, mut right) = (kept.clone(), incoming.clone());
+    left.sort();
+    right.sort();
+    (left == right).then_some((kept, incoming))
+}
+
 fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
+    // Collected rather than pushed inside the loop: `existing` borrows
+    // `program.layouts` for the whole merge arm, and the record lives on
+    // `program` too.
+    let mut disputed: Vec<super::DisputedLayout> = Vec::new();
     for layout in layouts {
         if let Some(existing) = program.layouts.iter_mut().find(|known| {
             // The same type, however the two were built. A layout is named
@@ -10742,6 +10770,19 @@ fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
                 || (may_merge(&known.name, &layout.name)
                     && known.same_shape(&layout.fields, &layout.methods, layout.base))
         }) {
+            // **Before the merge takes the incoming layout's type ids and drops
+            // the rest of it.** Both orders are visible here and nowhere else:
+            // afterwards there is one layout, its fields are whichever arrived
+            // first, and every function that indexed the other is already wrong
+            // by a slot. `verify` reports it; this only has to not throw the
+            // evidence away.
+            if let Some((kept, discarded)) = one_type_two_orders(&existing.fields, &layout.fields) {
+                disputed.push(super::DisputedLayout {
+                    name: existing.name.clone(),
+                    kept,
+                    discarded,
+                });
+            }
             for ty in layout.types {
                 if !existing.types.contains(&ty) {
                     existing.types.push(ty);
@@ -10776,6 +10817,7 @@ fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
                 .push(unshared_layout_name(&program.layouts, layout));
         }
     }
+    program.disputed_layouts.extend(disputed);
 }
 
 /// A layout name no other layout in this program already has.
@@ -61132,6 +61174,70 @@ mod tests {
             interfaces: Vec::new(),
             base: None,
         }
+    }
+
+    /// One type laid out two ways is recorded, and the same type laid out the
+    /// same way twice is not.
+    ///
+    /// **The must-fire arm for a guard whose whole point is a silence.** Two
+    /// layouts for one type with the same field *names* in a different *order*
+    /// merge into one, and the merge keeps whichever arrived first -- so every
+    /// function that indexed the other is wrong by a slot, the struct is the
+    /// same size, the offset asserts all hold, and clang says nothing. Without
+    /// the record there is no evidence left by the time anything can look.
+    ///
+    /// The three negative arms are what say the record is about *order*: a
+    /// layout reached twice identically is ordinary (`layout_of` is asked from
+    /// many places and hands back a clone), a different field *set* is a
+    /// different question `same_shape` already decides, and a different *count*
+    /// is not a reordering at all.
+    #[test]
+    fn one_type_laid_out_two_ways_is_recorded() {
+        let mut program = Program::default();
+        super::collect_layouts(&mut program, vec![layout("Resolved", 10, &["depth", "colors"])]);
+        super::collect_layouts(&mut program, vec![layout("Resolved", 10, &["colors", "depth"])]);
+        assert_eq!(program.disputed_layouts.len(), 1, "a reorder must be recorded");
+        let disputed = &program.disputed_layouts[0];
+        assert_eq!(disputed.name, "Resolved");
+        assert_eq!(disputed.kept, ["depth", "colors"], "the order that arrived first is kept");
+        assert_eq!(disputed.discarded, ["colors", "depth"], "and the one some function indexed by");
+
+        // The same layout twice: ordinary, and the commonest case there is.
+        let mut program = Program::default();
+        super::collect_layouts(&mut program, vec![layout("Same", 11, &["a", "b"])]);
+        super::collect_layouts(&mut program, vec![layout("Same", 11, &["a", "b"])]);
+        assert!(program.disputed_layouts.is_empty(), "one order twice is not a dispute");
+
+        // A different field set is `same_shape`'s question, not this one.
+        let mut program = Program::default();
+        super::collect_layouts(&mut program, vec![layout("Other", 12, &["a", "b"])]);
+        super::collect_layouts(&mut program, vec![layout("Other", 12, &["a", "c"])]);
+        assert!(program.disputed_layouts.is_empty(), "a different name is not a reorder");
+
+        // And a different count is not a reordering either.
+        let mut program = Program::default();
+        super::collect_layouts(&mut program, vec![layout("Wider", 13, &["a", "b"])]);
+        super::collect_layouts(&mut program, vec![layout("Wider", 13, &["a", "b", "c"])]);
+        assert!(program.disputed_layouts.is_empty(), "a different width is not a reorder");
+    }
+
+    /// `verify` reports what the merge recorded.
+    ///
+    /// Separate from the test above because they are two failures: the merge
+    /// can record and nothing read it, which is the state every silent defect
+    /// in this file started from.
+    #[test]
+    fn a_disputed_layout_is_reported_by_verify() {
+        let mut program = Program::default();
+        super::collect_layouts(&mut program, vec![layout("Resolved", 10, &["depth", "colors"])]);
+        super::collect_layouts(&mut program, vec![layout("Resolved", 10, &["colors", "depth"])]);
+        let problems = super::super::verify::verify(&program).expect_err("a dispute is invalid");
+        assert!(
+            problems
+                .iter()
+                .any(|problem| matches!(problem, super::super::verify::Invalid::DisputedLayout { .. })),
+            "expected a DisputedLayout, got {problems:?}",
+        );
     }
 
     /// Two dispatch roots that `hierarchy.name` spells alike get one shell.

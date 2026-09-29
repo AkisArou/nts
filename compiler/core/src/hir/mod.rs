@@ -2485,10 +2485,38 @@ impl ForeignMethod {
     }
 }
 
+/// One type laid out two ways: the same field *names* in a different *order*.
+///
+/// Recorded by `collect_layouts` because that merge is the only place both
+/// orders are visible at once -- it keeps the layout that arrived first and
+/// takes only the other's type ids, so by the time anything else looks there is
+/// one layout and no sign there were two.
+///
+/// **Always a defect, and a silent one.** Every field access was computed from
+/// one of the two, so half of them index the wrong slot -- and the field *sets*
+/// are identical, so the struct is the same size, the `_Static_assert`s on the
+/// offsets all hold, and clang says nothing. It is caught only when a
+/// neighbouring field happens to have a different type. Twice now it has
+/// shipped: `fetch`'s `Request`, where `get method` returned `requestHeaders`,
+/// and `runtime/node/url`, whose `inspectDefaultOptions` had `colors` true and
+/// `maxArrayLength` false on every backend.
+#[derive(Debug, Clone)]
+pub struct DisputedLayout {
+    pub name: String,
+    /// The order the program kept, which is whichever arrived first.
+    pub kept: Vec<String>,
+    /// The order discarded by the merge, which some function indexed by.
+    pub discarded: Vec<String>,
+}
+
 /// A lowered program.
 #[derive(Debug, Clone, Default)]
 pub struct Program {
     pub funcs: Vec<Func>,
+    /// Types this lowering laid out two different ways. See [`DisputedLayout`]:
+    /// a compiler-internal inconsistency rather than anything the source did,
+    /// reported by [`verify`] because that is where this codebase says so.
+    pub disputed_layouts: Vec<DisputedLayout>,
     /// The C headers this program's native bindings claim to describe, and the
     /// feature-test macros to read them under. Sorted and deduplicated.
     ///
