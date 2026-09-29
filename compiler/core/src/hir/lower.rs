@@ -10407,7 +10407,7 @@ pub fn lower_with(
     lower_wanted_closures(snapshot, foreign, &shared, &closures, &mut lowered, &mut wanted);
 
     relate_closures_to_signatures(snapshot, &closures, &hierarchy, &mut lowered.program);
-    declare_erased_entries(&hierarchy, &mut lowered.program);
+    declare_erased_entries(snapshot, &hierarchy, &mut lowered.program);
 
     // Stage 0: count what a fix would have to convert, before anything converts.
     // `NTS_ARRIVALS` only -- this pass changes nothing yet, and a measurement that
@@ -11581,47 +11581,79 @@ fn refuses_to_cross(
     }
 }
 
-/// Every live call that dispatches through a closure slot: the index of the
-/// function it is in, the value index of the call, the slot it uses, and the
-/// layout its receiver's type resolves to.
+/// Where a signature layout was written, for a declaration this program generates.
 ///
-/// **Live ops only.** A `ValueId` is an index, so a pass that removes a call
-/// from the control flow leaves it in `values` -- and a declaration synthesized
-/// for a call nothing performs is a function the program does not need and
-/// `verify` would have to account for.
-fn closure_dispatches(program: &Program) -> Vec<(usize, usize, u32, usize)> {
-    let mut found = Vec::new();
-    for (func_at, func) in program.funcs.iter().enumerate() {
-        for id in func.blocks.iter().flat_map(|block| block.ops.iter()) {
-            let Some(op) = func.values.get(id.0 as usize) else {
-                continue;
-            };
-            let OpKind::Call {
-                callee: Callee::Closure { slot },
-                args,
-                ..
-            } = &op.kind
-            else {
-                continue;
-            };
-            let Some(receiver) = args.first() else {
-                continue;
-            };
-            let Some(HirType::Managed(ManagedType::Object(ty))) =
-                func.values.get(receiver.0 as usize).map(|op| op.ty.clone())
-            else {
-                continue;
-            };
-            let Some(layout) = program.layouts.iter().position(|l| l.types.contains(&ty)) else {
-                continue;
-            };
-            found.push((func_at, id.0 as usize, *slot, layout));
+/// The type's **symbol** first, which is what names a declaration and is the place
+/// a reader would want a diagnostic to point at.
+///
+/// **And a mention when there is no symbol, which is the common case and was
+/// measured.** A function type usually carries none: in `type Weigh = (a: number)
+/// => number` the symbol belongs to the *alias*, and the `TypeKind::Function`
+/// record the layout is built from has `symbol: None`. Asking only the symbol left
+/// `Fn2_2__2` -- a signature `keyed-closures` mentions twice and implements never,
+/// which is exactly the case this pass exists for -- with no declaration at all,
+/// and two tests said so.
+///
+/// A mention is a true location and a useful one: "this signature, where the
+/// program named it". `node_types` is walked once into the reverse index rather
+/// than per layout, because it is the whole program's nodes and there is a layout
+/// for every signature.
+fn signature_locations(snapshot: &SemanticSnapshot) -> rustc_hash::FxHashMap<TypeId, Location> {
+    let mut mentions: rustc_hash::FxHashMap<TypeId, Location> = rustc_hash::FxHashMap::default();
+    for (node, ty) in &snapshot.node_types {
+        if let Some(record) = snapshot.nodes.get(node.0 as usize) {
+            mentions.entry(*ty).or_insert(record.origin.location);
         }
     }
-    found
+    mentions
 }
 
-/// Declare `erased_call` on every signature layout a call dispatches through.
+fn signature_origin(
+    snapshot: &SemanticSnapshot,
+    layout: &Layout,
+    mentions: &rustc_hash::FxHashMap<TypeId, Location>,
+) -> Origin {
+    let declared = |ty: &TypeId| {
+        let symbol = snapshot.types.get(ty.0 as usize)?.symbol?;
+        let declaration = *snapshot
+            .symbols
+            .get(symbol.0 as usize)?
+            .declarations
+            .first()?;
+        Some(snapshot.nodes.get(declaration.0 as usize)?.origin.location)
+    };
+    // **The declaration is never skipped for want of a place**, which is the
+    // mistake this function was written with: returning `None` made a *location* a
+    // precondition for a *declaration*, and the signatures with no syntax are
+    // exactly the ones this pass exists for. `runtime/node/timers`'
+    // `Fn1303_28__188` has neither symbol nor mention -- `materialize_within`
+    // built it from a container's type argument -- and the effect was that my
+    // change **removed** its entry: `abstract class ... extends Erased-Callable`
+    // at the parent became a bare class, and `Closure5` stopped being assignable
+    // where the signature was declared. One invalid class in `timers`, from a pass
+    // whose whole purpose is to stop a layout having a hole.
+    //
+    // So the location degrades and the entry does not: the declaration, then a
+    // mention, then the synthetic origin other passes here use for a value no
+    // source produced. An abstract declaration is never a diagnostic's primary
+    // position -- what a reader gets is its name -- so the third is a worse
+    // location and not a worse program.
+    let located = layout
+        .types
+        .iter()
+        .find_map(declared)
+        .or_else(|| layout.types.iter().find_map(|ty| mentions.get(ty).copied()))
+        .unwrap_or(Location {
+            file: nts_diagnostics::SourceId(0),
+            span: nts_diagnostics::Span::new(0, 0),
+        });
+    Origin::generated(
+        located,
+        nts_semantic_schema::GeneratedReason::ClosureLowering,
+    )
+}
+
+/// Declare `erased_call` on every signature layout.
 ///
 /// A signature layout is empty until something *implements* it, and one exists
 /// with nothing implementing it whenever a program reads a closure out of a
@@ -11638,8 +11670,24 @@ fn closure_dispatches(program: &Program) -> Vec<(usize, usize, u32, usize)> {
 /// for` -- the third backend doing the job it is kept for, since the first two
 /// compiled a shape with a hole in it and said nothing.
 ///
-/// # It replaced a larger pass, and the difference is that this shape is
-/// inferred from nothing
+/// # Every signature, and not only the ones something calls
+///
+/// This was first driven by call sites, which made "fills `erased_call_slot`" mean
+/// *"is a signature something dispatches through"* -- two facts in one test, and
+/// the JVM lane's `Erased-Callable` root needs the one. `assert`'s `Fn79__144`
+/// declares only `call(NtsViewU8)`, because a view parameter cannot be erased, and
+/// nothing dispatches through it; so it had no entry, and a backend asking "is
+/// this callable" could not tell it from an ordinary record. Driven by the layouts
+/// the answer is one fact, and it survives `closure_slot` being dropped.
+///
+/// **Including the signatures whose parameters cannot cross**, which is
+/// [`erased_call`]'s argument unchanged: the entry exists rather than being
+/// absent, because a layout naming something nothing defines is worse than an
+/// entry nothing can reach, and `nts_no_arm` is the precedent. A declaration is
+/// abstract in any case -- it has no body to be unreachable.
+///
+/// # It replaced a larger pass, and the difference is that this shape is inferred
+/// from nothing
 ///
 /// `declare_unfilled_signatures` reconstructed the *written* `#call` from a call
 /// site, since that was the program's only description of a signature nothing
@@ -11649,39 +11697,53 @@ fn closure_dispatches(program: &Program) -> Vec<(usize, usize, u32, usize)> {
 /// call through the erased entry, no call spells a written signature any more, so
 /// that pass could not fire; and nothing is lost, because the erased entry is a
 /// receiver, [`Hierarchy::erased_call_arity`] erased parameters and an erased
-/// result **at every site by construction**. Nothing to reconstruct, so nothing to disagree
-/// about, and no shape for this to be wrong about.
-fn declare_erased_entries(hierarchy: &Hierarchy, program: &mut Program) {
+/// result **at every site by construction**. Nothing to reconstruct, so nothing
+/// to disagree about, and no shape for this to be wrong about.
+fn declare_erased_entries(
+    snapshot: &SemanticSnapshot,
+    hierarchy: &Hierarchy,
+    program: &mut Program,
+) {
     let Some(slot) = hierarchy.erased_call_slot.map(|slot| slot as usize) else {
         return;
     };
-    // Layout index to the declaration built for it. One per layout: every site
-    // through one signature asks for the same function, and a second would reach
-    // `verify` as `DuplicateFunction`.
+    // **A signature is a function type, asked of the checker.** Not re-derived
+    // from the layout's name (`Fn...`), which would be a second spelling of a
+    // fact the snapshot holds, and not from what dispatches through it, which is
+    // the conflation this pass was rewritten to remove. A closure class is a
+    // synthetic id the snapshot has no record for, so it is not caught here --
+    // and does not need to be, `closure_layout` having filled its slot already,
+    // which the emptiness test below sees.
+    let is_signature = |layout: &Layout| {
+        layout.types.iter().any(|ty| {
+            snapshot
+                .types
+                .get(ty.0 as usize)
+                .is_some_and(|record| matches!(record.kind, TypeKind::Function(_)))
+        })
+    };
+    let mentions = signature_locations(snapshot);
     let mut found: Vec<(usize, Func)> = Vec::new();
-    for (func_at, value_at, at, layout) in closure_dispatches(program) {
-        if at as usize != slot || found.iter().any(|(seen, _)| *seen == layout) {
+    for (at, layout) in program.layouts.iter().enumerate() {
+        if !is_signature(layout) || layout.methods.get(slot).is_some_and(Option::is_some) {
             continue;
         }
-        if program.layouts[layout]
-            .methods
-            .get(slot)
-            .is_some_and(Option::is_some)
-        {
-            continue;
-        }
-        // The layout's own id, not the receiver's. A signature the program wrote
-        // and the type the checker inferred for an arrow are two ids over one
+        // The layout's own id, not a caller's. A signature the program wrote and
+        // the type the checker inferred for an arrow are two ids over one
         // signature, and only the layout's is one any backend can resolve a class
-        // from -- the same reasoning `relate_closures_to_signatures` gives for
-        // its `base`.
-        let Some(&base) = program.layouts[layout].types.first() else {
+        // from -- the same reasoning `relate_closures_to_signatures` gives for its
+        // `base`.
+        let Some(&base) = layout.types.first() else {
             continue;
         };
-        let origin = Origin::generated(
-            program.funcs[func_at].values[value_at].origin.location,
-            nts_semantic_schema::GeneratedReason::ClosureLowering,
-        );
+        // **The location is where the signature was written**, reached through
+        // the type's symbol. A `Layout` carries no span -- it is a shape, not a
+        // place -- and a declaration still owes a diagnostic somewhere real. Where
+        // the checker interned the type without a symbol (an inferred function
+        // type, which is the arrow's own rather than a written signature) there is
+        // nothing to point at, and a layout of that kind is a closure's, whose
+        // slot `closure_layout` filled already.
+        let origin = signature_origin(snapshot, layout, &mentions);
         let receiver = Param {
             name: "v0".to_owned(),
             ty: HirType::Managed(ManagedType::Object(base)),
@@ -11689,15 +11751,17 @@ fn declare_erased_entries(hierarchy: &Hierarchy, program: &mut Program) {
             shape: ParamShape::Ordinary,
             known: Facts::TOP,
         };
+        // The same builder the implementations use, so a declaration and every
+        // body that overrides it cannot drift apart.
         let Some((params, values)) =
             uniform_params(&receiver, &[], &origin, hierarchy.erased_call_arity)
         else {
             continue;
         };
         found.push((
-            layout,
+            at,
             Func {
-                name: format!("{}#erased_call", program.layouts[layout].name),
+                name: format!("{}#erased_call", layout.name),
                 params,
                 // A declaration is its signature: the parameters keep their value
                 // ops because those *are* the signature in this IR, and the
@@ -55818,7 +55882,7 @@ impl<'a> FuncBuilder<'a> {
             // `Managed(Object)` and reached the verifier as `OperandsDiffer` --
             // invalid HIR from a program test262 runs
             // (`Math/max/Math.max_each-element-coerced.js`), and
-            // `blockers/math-max-converts-every-argument` is the record.
+            // `outcomes/math-max-converts-every-argument` is the record.
             //
             // `coerce_to_number` is the same conversion `Number(x)` gets, which is
             // the point: an object refuses there with "a conversion to number from
