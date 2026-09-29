@@ -136,7 +136,13 @@ export const RULES = [
     // The refusal tables are read by four steps, and a change that adds or
     // rewords a refusal moves them whatever it compiles: c3eeff139 gained
     // ~10 rows in 26 of 29 projects with program.c byte-identical.
-    steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "outcomes", "integrity", "integrity-runtime", "definitions", "example-refusals", "blockers"],
+    //
+    // **And the recorded test262 sets**, the largest corpus a lowering change
+    // reaches: on 2026-09-29 two changes that were green on every step above
+    // regressed recorded passes by the hundred -- `any` as Erased (243, the
+    // `var f;` shape) and generator expressions (112, private generator
+    // methods; landed, and reddened main) -- and only these steps saw either.
+    steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "outcomes", "integrity", "integrity-runtime", "definitions", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases", "test262-rest-cases"],
     arms: [
       ...COMPARE,
       { if: "a type rule", kind: "answers", asks: "a generic class with two live instantiations appears in the corpus, never in a hand-written fixture", run: "the emitted-diff --axis above, and a full census per-case diff (conformance262.ts --rows, both binaries)" },
@@ -158,7 +164,7 @@ export const RULES = [
   {
     name: "the C backend",
     when: (p) => /^compiler\/codegen\/c\//.test(p),
-    steps: ["examples", "rc", "outcomes", "snapshot-cache"],
+    steps: ["examples", "rc", "outcomes", "snapshot-cache", "test262-cases", "test262-builtins-cases", "test262-rest-cases"],
     arms: [COMPARE[0], COMPARE[2]],
   },
   {
@@ -179,7 +185,7 @@ export const RULES = [
   {
     name: "the frontend or the snapshot schema",
     when: (p) => /^compiler\/(frontend-ts|semantic-schema)\//.test(p),
-    steps: ["snapshot-cache", "types", "examples"],
+    steps: ["snapshot-cache", "types", "examples", "test262-cases", "test262-builtins-cases", "test262-rest-cases"],
     arms: [
       { kind: "hygiene", asks: "does a cache written by the old schema get rejected", run: "bump SCHEMA_VERSION if a semantic-schema struct changed" },
       { kind: "valid", asks: "the examples' type tables too, not only the runtime's", run: "NTS_BIN=<after> node tooling/conformance/types-check.mjs --examples" },
@@ -307,6 +313,8 @@ function selfTest() {
   if (owed([]).length !== 0) return "an empty change owed something";
   const printed = owed([{ path: "tooling/cli/src/main.rs", added: false }]).find((r) => r.name === "the printed diagnostics");
   if (!printed?.steps.includes("test262-cases") || !printed.arms.some((a) => /git grep/.test(a.run))) return "a change to the driver's printing does not owe its readers";
+  const lowered = owed([{ path: "compiler/core/src/hir/lower.rs", added: false }]).find((r) => r.name === "lowering");
+  if (!["test262-cases", "test262-builtins-cases", "test262-rest-cases"].every((st) => lowered.steps.includes(st))) return "a lowering change does not owe the recorded test262 sets";
   const order = gateSteps(owed([{ path: "compiler/codegen/llvm/src/lib.rs", added: false }]));
   if (order.join(" ") !== "build clippy tests llvm llvm-rc assembles") return `the LLVM backend's steps: ${order.join(" ")}`;
   // A step without its question could not say what it asks.
