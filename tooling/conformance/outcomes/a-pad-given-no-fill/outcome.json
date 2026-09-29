@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: padEnd=abc  ;",
+  "node": "exit 1; nts: uncaught Observed: padEnd=abc  ;",
+  "measured_with": "6aa52e0cc112812d",
+  "source": "measured"
+}
