@@ -4228,13 +4228,31 @@ fn class_token_indices(snapshot: &SemanticSnapshot) -> rustc_hash::FxHashMap<u32
     tokens
 }
 
-fn naming(snapshot: &SemanticSnapshot) -> Naming {
-    let probe = FuncBuilder::probe(snapshot);
-    let class_tokens = class_token_indices(snapshot);
-    let generators = generator_indices(snapshot);
-    // Every object literal, by the type the checker gave it, with its property
-    // names in source order. A type written two different ways is dropped: a
-    // conflict has no answer and a guess would be a wrong one.
+/// Every object literal's property names, in source order, keyed by the same
+/// names sorted -- the order a *layout* of those fields is laid out in.
+///
+/// A type written two different ways is dropped: a conflict has no answer and a
+/// guess would be a wrong one.
+///
+/// **A function rather than a block inside [`naming`], because two places need
+/// it and one of them runs before `Naming` exists.** `collect_module_scope`'s
+/// probe lays out every type a module-scope binding mentions, and its layouts
+/// reach `collect_layouts` *first*, so they win the merge -- which keeps the
+/// existing field order and discards the incoming one without comparing them.
+/// A probe that does not know the written order lays those types out in the
+/// checker's, and every function lowered afterwards indexes them in the
+/// program's. The field *sets* are identical, so nothing refuses and nothing
+/// verifies differently until a neighbour's type happens to disagree.
+///
+/// That is the second time this probe has produced a layout in the wrong order
+/// for want of something `Naming` holds -- `Hierarchy` was the first, and its
+/// fix is the comment above the probe. Computed twice rather than threaded,
+/// which is what `qualified_names` does three lines above for the same reason
+/// and at the same cost: one pass over the nodes, against a whole lowering.
+fn written_field_orders(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+) -> rustc_hash::FxHashMap<Vec<String>, Vec<String>> {
     let mut written_order: rustc_hash::FxHashMap<Vec<String>, Vec<String>> =
         rustc_hash::FxHashMap::default();
     let mut conflicting: rustc_hash::FxHashSet<Vec<String>> = rustc_hash::FxHashSet::default();
@@ -4243,7 +4261,7 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
             continue;
         }
         let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
-        let Some(names) = literal_field_names(&probe, id) else {
+        let Some(names) = literal_field_names(probe, id) else {
             continue;
         };
         let mut signature = names.clone();
@@ -4262,6 +4280,14 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
             }
         }
     }
+    written_order
+}
+
+fn naming(snapshot: &SemanticSnapshot) -> Naming {
+    let probe = FuncBuilder::probe(snapshot);
+    let class_tokens = class_token_indices(snapshot);
+    let generators = generator_indices(snapshot);
+    let written_order = written_field_orders(snapshot, &probe);
 
     let (qualified, ambiguous) = qualified_names(snapshot);
     let mut naming = Naming {
@@ -4657,6 +4683,19 @@ fn collect_module_scope(
     // the wrong value.
     let mut probe = FuncBuilder::new(snapshot, foreign);
     probe.hierarchy = hierarchy.clone();
+    // **And with the written field order, for the same reason as the hierarchy.**
+    // Without it this probe laid `interface R extends Required<Omit<O, …>> { … }`
+    // out in the checker's own-members-first order while every function indexed
+    // it in the order the program's literal writes -- so `url`'s
+    // `inspectDefaultOptions` shipped `colors` true and `maxArrayLength` false on
+    // every backend, and the reduction is invalid HIR.
+    //
+    // The comment above says a layout built without the hierarchy is a different
+    // layout; this is the same sentence about a different input, and the site had
+    // one of the two. `wire_naming`'s doc predicted exactly that: *a site that
+    // copies two of the four has that same problem for the other two, and says
+    // nothing about it.*
+    probe.written_order = written_field_orders(snapshot, &probe);
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
         if node.kind != NodeKind::Syntax(syntax::VARIABLE_DECLARATION) {
