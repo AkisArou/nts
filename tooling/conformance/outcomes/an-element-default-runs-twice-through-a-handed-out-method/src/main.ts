@@ -1,3 +1,4 @@
+// **Agrees since da05da249; a guard.** Until then:
 // A private method handed out as a value -- `get method() { return
 // this.#method; }` -- evaluates an element default in its parameter pattern
 // twice: `#m([[x] = init()])` called through the value with `[]` runs init()

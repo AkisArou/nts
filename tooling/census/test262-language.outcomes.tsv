@@ -1397,7 +1397,7 @@ test/language/expressions/class/dstr/meth-static-obj-ptrn-prop-ary-trailing-comm
 test/language/expressions/class/dstr/private-gen-meth-ary-name-iter-val.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-elem-ary-elem-iter.js	pass	
-test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-elem-ary-empty-init.js	fail	nts: uncaught Test262Error: sameValue
+test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-elem-ary-empty-iter.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-elem-ary-rest-init.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-elem-id-init-exhausted.js	pass	
@@ -1418,7 +1418,7 @@ test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-rest-not-final-ob
 test/language/expressions/class/dstr/private-gen-meth-dflt-ary-name-iter-val.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-dflt-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-dflt-ary-ptrn-elem-ary-elem-iter.js	pass	
-test/language/expressions/class/dstr/private-gen-meth-dflt-ary-ptrn-elem-ary-empty-init.js	fail	nts: uncaught Test262Error: sameValue
+test/language/expressions/class/dstr/private-gen-meth-dflt-ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-dflt-ary-ptrn-elem-ary-rest-init.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-dflt-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-dflt-ary-ptrn-elem-id-init-hole.js	pass	
@@ -1499,7 +1499,7 @@ test/language/expressions/class/dstr/private-gen-meth-static-obj-ptrn-prop-ary-t
 test/language/expressions/class/dstr/private-meth-ary-name-iter-val.js	pass	
 test/language/expressions/class/dstr/private-meth-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/expressions/class/dstr/private-meth-ary-ptrn-elem-ary-elem-iter.js	pass	
-test/language/expressions/class/dstr/private-meth-ary-ptrn-elem-ary-empty-init.js	fail	nts: uncaught Test262Error: sameValue
+test/language/expressions/class/dstr/private-meth-ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/expressions/class/dstr/private-meth-ary-ptrn-elem-ary-empty-iter.js	pass	
 test/language/expressions/class/dstr/private-meth-ary-ptrn-elem-ary-rest-init.js	pass	
 test/language/expressions/class/dstr/private-meth-ary-ptrn-elem-id-init-exhausted.js	pass	
@@ -1520,7 +1520,7 @@ test/language/expressions/class/dstr/private-meth-ary-ptrn-rest-not-final-obj.js
 test/language/expressions/class/dstr/private-meth-dflt-ary-name-iter-val.js	pass	
 test/language/expressions/class/dstr/private-meth-dflt-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/expressions/class/dstr/private-meth-dflt-ary-ptrn-elem-ary-elem-iter.js	pass	
-test/language/expressions/class/dstr/private-meth-dflt-ary-ptrn-elem-ary-empty-init.js	fail	nts: uncaught Test262Error: sameValue
+test/language/expressions/class/dstr/private-meth-dflt-ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/expressions/class/dstr/private-meth-dflt-ary-ptrn-elem-ary-rest-init.js	pass	
 test/language/expressions/class/dstr/private-meth-dflt-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/class/dstr/private-meth-dflt-ary-ptrn-elem-id-init-hole.js	pass	
@@ -4750,7 +4750,7 @@ test/language/statements/class/dstr/meth-static-obj-ptrn-prop-ary-trailing-comma
 test/language/statements/class/dstr/private-gen-meth-ary-name-iter-val.js	pass	
 test/language/statements/class/dstr/private-gen-meth-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/statements/class/dstr/private-gen-meth-ary-ptrn-elem-ary-elem-iter.js	pass	
-test/language/statements/class/dstr/private-gen-meth-ary-ptrn-elem-ary-empty-init.js	fail	nts: uncaught Test262Error: sameValue
+test/language/statements/class/dstr/private-gen-meth-ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/statements/class/dstr/private-gen-meth-ary-ptrn-elem-ary-empty-iter.js	pass	
 test/language/statements/class/dstr/private-gen-meth-ary-ptrn-elem-ary-rest-init.js	pass	
 test/language/statements/class/dstr/private-gen-meth-ary-ptrn-elem-id-init-exhausted.js	pass	
@@ -4771,7 +4771,7 @@ test/language/statements/class/dstr/private-gen-meth-ary-ptrn-rest-not-final-obj
 test/language/statements/class/dstr/private-gen-meth-dflt-ary-name-iter-val.js	pass	
 test/language/statements/class/dstr/private-gen-meth-dflt-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/statements/class/dstr/private-gen-meth-dflt-ary-ptrn-elem-ary-elem-iter.js	pass	
-test/language/statements/class/dstr/private-gen-meth-dflt-ary-ptrn-elem-ary-empty-init.js	fail	nts: uncaught Test262Error: sameValue
+test/language/statements/class/dstr/private-gen-meth-dflt-ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/statements/class/dstr/private-gen-meth-dflt-ary-ptrn-elem-ary-rest-init.js	pass	
 test/language/statements/class/dstr/private-gen-meth-dflt-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/statements/class/dstr/private-gen-meth-dflt-ary-ptrn-elem-id-init-hole.js	pass	
@@ -4852,7 +4852,7 @@ test/language/statements/class/dstr/private-gen-meth-static-obj-ptrn-prop-ary-tr
 test/language/statements/class/dstr/private-meth-ary-name-iter-val.js	pass	
 test/language/statements/class/dstr/private-meth-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/statements/class/dstr/private-meth-ary-ptrn-elem-ary-elem-iter.js	pass	
-test/language/statements/class/dstr/private-meth-ary-ptrn-elem-ary-empty-init.js	fail	nts: uncaught Test262Error: sameValue
+test/language/statements/class/dstr/private-meth-ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/statements/class/dstr/private-meth-ary-ptrn-elem-ary-empty-iter.js	pass	
 test/language/statements/class/dstr/private-meth-ary-ptrn-elem-ary-rest-init.js	pass	
 test/language/statements/class/dstr/private-meth-ary-ptrn-elem-id-init-exhausted.js	pass	
@@ -4873,7 +4873,7 @@ test/language/statements/class/dstr/private-meth-ary-ptrn-rest-not-final-obj.js	
 test/language/statements/class/dstr/private-meth-dflt-ary-name-iter-val.js	pass	
 test/language/statements/class/dstr/private-meth-dflt-ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/statements/class/dstr/private-meth-dflt-ary-ptrn-elem-ary-elem-iter.js	pass	
-test/language/statements/class/dstr/private-meth-dflt-ary-ptrn-elem-ary-empty-init.js	fail	nts: uncaught Test262Error: sameValue
+test/language/statements/class/dstr/private-meth-dflt-ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/statements/class/dstr/private-meth-dflt-ary-ptrn-elem-ary-rest-init.js	pass	
 test/language/statements/class/dstr/private-meth-dflt-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/statements/class/dstr/private-meth-dflt-ary-ptrn-elem-id-init-hole.js	pass	
