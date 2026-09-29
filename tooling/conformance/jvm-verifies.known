@@ -2,6 +2,18 @@
 # project<TAB>why. Classified by the verifier reason on 55698b009 (conformance lane, 2026-09-28);
 # (A)-(E) are the causes jvm-verifies.ts names; its run prints the live counts, so none are kept
 # here to go stale. A module that verifies again prints "remove it".
+#
+# **A module count barely moves when a cause is fixed, and that is not the fix failing.** The
+# verifier stops at a class's first error, so it answers *whether* a module loads, never *how many*
+# causes stand behind that. On 2026-09-29 (B) and (D) were fixed and failing modules went 19 -> 18:
+# url verifies whole, and net, stream and zlib now stop at the error that (B) had masked -- stream
+# at (A), net at (E) PerformanceNodeEntry, zlib at (E) Transform. (B) was the first failure in
+# those three only, not nine as first classified.
+#
+# **(B) is an unguarded fix.** Its only witness is the runtime: every reduction gave the value a
+# layout and verified before the fix, so no fixture holds it, and while stream and net fail for
+# other reasons a regression of (B) prints "known" like everything else. (D) has a unit test,
+# body.rs `a_number_converted_to_a_bool_puts_a_label_between_a_definition_and_its_read`.
 runtime/node/assert	(A) an array where a record is wanted, convertQueuingStrategyHighWaterMark (classified, 2026-09-28)
 runtime/node/console	(A) an array where a record is wanted, convertQueuingStrategyHighWaterMark (classified, 2026-09-28)
 runtime/node/dns	(E) a class the JVM declines under NTS4009 (an override at another representation), referenced and never written (classified, 2026-09-28)
