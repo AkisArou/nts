@@ -36,15 +36,16 @@ fn repository() -> PathBuf {
 }
 
 /// Emit the refusals fixture and return every diagnostic the backend produced.
-fn declined() -> Option<Vec<(String, String)>> {
-    let Ok(tsgo) = std::env::var("NTS_TSGO").map(Utf8PathBuf::from) else {
-        eprintln!("SKIP refusals: NTS_TSGO is not set");
-        return None;
-    };
-    if !tsgo.exists() {
-        eprintln!("SKIP refusals: no tsgo at {tsgo}");
-        return None;
-    }
+fn declined() -> Vec<(String, String)> {
+    // **Found the way the frontend's own tests find it, and not skipped when
+    // absent.** This read `NTS_TSGO` alone and returned `ok` without it, so a
+    // bare `cargo test --workspace` -- the run everyone makes by habit -- never
+    // ran it: on 2026-09-30 a signature spelled `Erased-Callable` refused four
+    // callbacks here while six landings in a row read the suite as green. A
+    // check that passes by not running is the failure it exists to prevent.
+    let tsgo = nts_frontend_ts::tsgo::locate().unwrap_or_else(|| {
+        panic!("no tsgo: set NTS_TSGO or build target/tsgo (tooling/bootstrap/bootstrap.sh)")
+    });
     let tsconfig = Utf8PathBuf::from_path_buf(
         repository()
             .join("compiler/codegen/jvm/tests/refusals/tsconfig.json")
@@ -65,20 +66,16 @@ fn declined() -> Option<Vec<(String, String)>> {
     )
     .expect("prepared HIR should verify");
 
-    Some(
-        nts_codegen_jvm::emit(&prepared.program)
-            .diagnostics
-            .iter()
-            .map(|it| (it.code.clone(), it.message.clone()))
-            .collect(),
-    )
+    nts_codegen_jvm::emit(&prepared.program)
+        .diagnostics
+        .iter()
+        .map(|it| (it.code.clone(), it.message.clone()))
+        .collect()
 }
 
 #[test]
 fn two_properties_that_become_one_jvm_field_are_refused_by_name() {
-    let Some(diagnostics) = declined() else {
-        return;
-    };
+    let diagnostics = declined();
 
     let found = diagnostics.iter().find(|(code, _)| code == "NTS4013");
     let Some((_, message)) = found else {
@@ -116,9 +113,7 @@ fn two_properties_that_become_one_jvm_field_are_refused_by_name() {
 /// know which declaration to change.
 #[test]
 fn an_interface_that_carries_state_is_refused_rather_than_cast() {
-    let Some(diagnostics) = declined() else {
-        return;
-    };
+    let diagnostics = declined();
 
     let found = diagnostics
         .iter()

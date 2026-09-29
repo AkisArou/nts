@@ -93,16 +93,15 @@ proxy DIRECT
 
 #[test]
 fn typescript_reaches_the_provider_through_the_intrinsic_table() {
-    let Ok(tsgo) = std::env::var("NTS_TSGO").map(Utf8PathBuf::from) else {
-        // Announced, because a skip that prints nothing is indistinguishable
-        // from a pass.
-        eprintln!("SKIP intrinsics: NTS_TSGO is not set");
-        return;
-    };
-    if !tsgo.exists() {
-        eprintln!("SKIP intrinsics: no tsgo at {tsgo}");
-        return;
-    }
+    // **Found the way the frontend's own tests find it, and not skipped when
+    // absent.** This read `NTS_TSGO` alone and returned `ok` without it, so a
+    // bare `cargo test --workspace` -- the run everyone makes by habit -- never
+    // ran it: on 2026-09-30 a signature spelled `Erased-Callable` refused four
+    // callbacks here while six landings in a row read the suite as green. A
+    // check that passes by not running is the failure it exists to prevent.
+    let tsgo = nts_frontend_ts::tsgo::locate().unwrap_or_else(|| {
+        panic!("no tsgo: set NTS_TSGO or build target/tsgo (tooling/bootstrap/bootstrap.sh)")
+    });
     let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else {
         eprintln!("SKIP intrinsics: no JDK");
         return;
