@@ -4047,11 +4047,14 @@ impl Emitter<'_> {
         }
         let equality = matches!(op, BinOp::Eq | BinOp::Ne);
         let (owner, name, signature) = match self.ty(lhs) {
-            HirType::Managed(ManagedType::String) if equality => (
-                RUNTIME,
-                "stringEq",
-                "(Ljava/lang/String;Ljava/lang/String;)Z",
-            ),
+            // **An erased side first, whichever side it is.** The string arm
+            // asked only the left operand, so `name === wanted` -- a `string`
+            // against a `string | number` held erased -- took `stringEq(String,
+            // String)` with an `NtsValue` on the stack, and child_process's
+            // `validSignal` was a `VerifyError` that killed the module
+            // (jvm-verifies cause F). C reaches the same op as
+            // `nts_value_eq_string(value, string)`; boxing the concrete side
+            // and asking `strictEq` is that answer here.
             _ if equality
                 && (*self.ty(lhs) == HirType::Erased || *self.ty(rhs) == HirType::Erased) =>
             {
@@ -4071,6 +4074,11 @@ impl Emitter<'_> {
                 }
                 return Ok(Some(Placed::OnStack));
             }
+            HirType::Managed(ManagedType::String) if equality => (
+                RUNTIME,
+                "stringEq",
+                "(Ljava/lang/String;Ljava/lang/String;)Z",
+            ),
             _ if op == BinOp::Concat => {
                 let origin = self.func.values[lhs.0 as usize].origin.clone();
                 // An accumulator is already a builder, and `append` returns the

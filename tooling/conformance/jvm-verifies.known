@@ -13,6 +13,7 @@
 # now stop at (G), an async frame emit-jvm declines under NTS4013, while fs and stream stop at (E).
 # (G) was fixed next and the count stayed 18 again: those five now stop at (E), a closure declined
 # at another generic instantiation -- the closure-slot family, which lowering owns, not the backend.
+# (F) next: child_process and cluster lose their only INVALID and stop at (E), classes never written.
 #
 # **(B) is an unguarded fix.** Its only witness is the runtime: every reduction gave the value a
 # layout and verified before the fix, so no fixture holds it, and while stream and net fail for
@@ -21,8 +22,8 @@
 runtime/node/assert	(E) a ClosureN of ReadableStreamDefaultController's, referenced by Program and never written: declined under NTS4009 at another instantiation, as outcomes/a-controller-stored-by-a-generic-branch -- the first failure since (G) cleared (jvm lane, 2026-09-29)
 runtime/node/console	(E) a ClosureN of ReadableStreamDefaultController's, referenced by Program and never written: declined under NTS4009 at another instantiation, as outcomes/a-controller-stored-by-a-generic-branch -- the first failure since (G) cleared (jvm lane, 2026-09-29)
 runtime/node/dns	(E) a class the JVM declines under NTS4009 (an override at another representation), referenced and never written (classified, 2026-09-28)
-runtime/node/child_process	(F) an erased value where a String is wanted, validSignal -- the first failure since 2026-09-28; (E) a class the JVM declines under NTS4009 (an override at another representation), referenced and never written (classified, 2026-09-28) -- (B) was not the first failure here on 41dd45663 (jvm lane, 2026-09-29)
-runtime/node/cluster	(F) an erased value where a String is wanted, validSignal -- the first failure since 2026-09-28; (E) a class the JVM declines under NTS4009 (an override at another representation), referenced and never written (classified, 2026-09-28) -- (B) was not the first failure here on 41dd45663 (jvm lane, 2026-09-29)
+runtime/node/child_process	(E) ChildWritable, referenced and never written -- lowering refuses its `_write`, an override narrowing an erased chunk (live on C, a-writable-override-narrowing-an-erased-chunk), and Program references a ClosureN beside it; the first failure since (F) cleared (jvm lane, 2026-09-29)
+runtime/node/cluster	(E) ChildWritable, as child_process's, and PerformanceNodeEntry, the perf_hooks family, both referenced and never written -- the first failure since (F) cleared (jvm lane, 2026-09-29)
 runtime/node/events	(E) a ClosureN of ReadableStreamDefaultController's, referenced by Program and never written: declined under NTS4009 at another instantiation, as outcomes/a-controller-stored-by-a-generic-branch -- the first failure since (G) cleared (jvm lane, 2026-09-29)
 runtime/node/dgram	(E) PerformanceNodeEntry, referenced by Program and never written -- the perf_hooks family; (B) was not live here on 41dd45663 (jvm lane, 2026-09-29)
 runtime/node/net	(E) PerformanceNodeEntry, referenced by Program and never written -- the perf_hooks family; the first failure since (B) cleared, jvm lane, 2026-09-29
