@@ -64,7 +64,26 @@ const { bodyOf, HARNESS_FILE, materialise, TEST_FILE, workspace } = await import
 const { readRows } = await import(pathToFileURL(join(HERE, "rows.ts")).href);
 
 type Arrival = "escapes" | "chained" | "direct" | "uncalled" | "unfollowed";
-type Verdict = { anyParameters: Arrival[]; other: number };
+type Verdict = { anyParameters: Arrival[]; other: number; evolving: number };
+
+/**
+ * TypeScript's *evolving* `any` -- `var f;`, `let n = null`, `const parts = []`
+ * in JavaScript -- is not a written `any`: it means "not yet", and the checker
+ * answers each later use with the type the assignments settle. The checker
+ * makes it a different object (`autoType`, and `autoArrayType` of it), marked
+ * `ObjectFlagsNonInferrableType` (1 << 18 in internal/checker/types.go, which
+ * the client's enum agrees with for this bit). A written or declared `any`
+ * (`function f(x)`, `JSON.parse(...)`) is the checker's one `anyType`,
+ * without it. The API reports no `objectFlags` on the intrinsic `autoType`,
+ * so it is told apart by identity -- an `any` that is not `anyType` -- and the
+ * array by its flag.
+ */
+const NON_INFERRABLE = 1 << 18;
+function isEvolving(checker: any, type: any): boolean {
+  if (type === undefined) return false;
+  if ((type.flags & TypeFlags.Any) !== 0) return type.id !== checker.getAnyType().id;
+  return (type.flags & TypeFlags.Object) !== 0 && ((type.objectFlags ?? 0) & NON_INFERRABLE) !== 0;
+}
 
 const FUNCTIONS = new Set([
   SyntaxKind.FunctionDeclaration,
@@ -176,7 +195,7 @@ function arrivals(checker: any, path: string, fn: any, anyIndices: number[]): Ar
 
 /** Every `any` parameter in a file's test, and every other `any`-typed declaration. */
 export function classify(checker: any, file: any, path: string): Verdict {
-  const verdict: Verdict = { anyParameters: [], other: 0 };
+  const verdict: Verdict = { anyParameters: [], other: 0, evolving: 0 };
   const visit = (node: any): void => {
     if (FUNCTIONS.has(node.kind)) {
       const parameters = [...(node.parameters ?? [])];
@@ -185,7 +204,9 @@ export function classify(checker: any, file: any, path: string): Verdict {
     } else if (node.kind === SyntaxKind.VariableDeclaration && node.name?.kind === SyntaxKind.Identifier) {
       // A variable holding a function is typed by its parameters -- `var h = g`
       // is `(y: any) => any` -- and that `any` is the parameter's, counted there.
-      if (holdsAny(checker, checker.getTypeAtLocation(node.name), node.initializer)) verdict.other += 1;
+      const type = checker.getTypeAtLocation(node.name);
+      if (isEvolving(checker, type)) verdict.evolving += 1;
+      else if (holdsAny(checker, type, node.initializer)) verdict.other += 1;
     } else if (node.kind === SyntaxKind.PropertyDeclaration && node.name) {
       // A class field with no initializer, or one of `null`, is `any` in JavaScript.
       if (holdsAny(checker, checker.getTypeAtLocation(node.name))) verdict.other += 1;
@@ -257,8 +278,11 @@ function selfTest(): string | null {
       ["var o = { m(x) { return x; } };\no.m(1);\n", "an any parameter of a member whose calls this cannot follow"],
       ["class C { constructor(x) { this.v = 1; } }\nnew C(1);\n", "slice 1: every any parameter filled directly"],
       ["class D { #x; }\n", "no live any parameter; other any"],
-      // `{ a: null }` is not this case: under `strict` it is `{ a: null }`, not `any`.
-      ["var q;\nfunction f(x) { return x; }\nf(1);\n", "any parameters, and other any"],
+      // `{ a: null }` is not this case: under `strict` it is `{ a: null }`, not
+      // `any`; nor is `var q;`, whose `any` is the evolving one.
+      ["var w = JSON.parse(\"1\");\nfunction f(x) { return x; }\nf(1);\n", "any parameters, and other any"],
+      ["var q;\nfunction f(x) { return x; }\nf(1);\n", "slice 1: every any parameter filled directly"],
+      ["const parts = [];\nparts.push(1);\nfunction f(x) { return x; }\nf(1);\n", "slice 1: every any parameter filled directly"],
       ["var p = { a: null };\nfunction f(x) { return x; }\nf(p);\n", "slice 1: every any parameter filled directly"],
       ["function f(x) { return x; }\nfunction u(w) { return w; }\nf(1);\n", "slice 1: every any parameter filled directly"],
     ];
@@ -303,12 +327,20 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   workspace(dir);
   let session = open(dir);
   const byClass = new Map<string, { files: number; onlyAny: number }>();
+  const byData = new Map<string, number>();
   const failures = new Map<string, number>();
   try {
     for (const row of population as any[]) {
       let slice: string;
+      let data = "not measured";
       try {
-        slice = sliceOf(session.classifyFile(bodyOf(readFileSync(join(ROOT, "third_party/test262", row.path), "utf8"))));
+        const verdict = session.classifyFile(bodyOf(readFileSync(join(ROOT, "third_party/test262", row.path), "utf8")));
+        slice = sliceOf(verdict);
+        data =
+          verdict.evolving > 0 && verdict.other > 0 ? "both evolving and written"
+          : verdict.evolving > 0 ? "evolving only (var x; / [] / = null)"
+          : verdict.other > 0 ? "written only (a declared any held as data)"
+          : "none";
       } catch (error) {
         // The API server can panic on a query (`checker.TypeData is
         // *checker.TypeReference, not *checker.TupleType`): the file is not
@@ -320,7 +352,8 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
         try { session.close(); } catch {}
         session = open(dir);
       }
-      if (out) appendFileSync(out, `${JSON.stringify({ path: row.path, slice })}\n`);
+      if (out) appendFileSync(out, `${JSON.stringify({ path: row.path, slice, data })}\n`);
+      byData.set(data, (byData.get(data) ?? 0) + 1);
       const roots = row.diagnostics.filter((d: any) => !CASCADE.has(d.code));
       const entry = byClass.get(slice) ?? { files: 0, onlyAny: 0 };
       entry.files += 1;
@@ -336,4 +369,6 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   for (const [k, v] of [...byClass].sort((a, b) => b[1].files - a[1].files)) console.log(`    ${String(v.files).padStart(5)}  ${String(v.onlyAny).padStart(14)}  ${k}`);
   console.log("  only-any-roots: every root the file reported is an any refusal -- the files a slice could clear by itself, before run time");
   for (const [said, n] of failures) console.log(`  not measured, ${n} file(s): ${said}`);
+  console.log("  the same files, by the any their declarations hold as data -- evolving is \"not yet\", settled by the assignments:");
+  for (const [k, n] of [...byData].sort((a, b) => b[1] - a[1])) console.log(`    ${String(n).padStart(5)}  ${k}`);
 }
