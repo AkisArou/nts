@@ -5435,7 +5435,7 @@ test/language/statements/class/syntax/escaped-static.js	pass
 test/language/statements/const/dstr/ary-name-iter-val.js	pass	
 test/language/statements/const/dstr/ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/statements/const/dstr/ary-ptrn-elem-ary-elem-iter.js	pass	
-test/language/statements/const/dstr/ary-ptrn-elem-ary-empty-init.js	fail	nts: uncaught Test262Error: sameValue
+test/language/statements/const/dstr/ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/statements/const/dstr/ary-ptrn-elem-ary-rest-init.js	pass	
 test/language/statements/const/dstr/ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/statements/const/dstr/ary-ptrn-elem-id-init-hole.js	pass	
@@ -6246,7 +6246,7 @@ test/language/statements/labeled/value-yield-strict.js	fail	accepted: ran and th
 test/language/statements/let/dstr/ary-name-iter-val.js	pass	
 test/language/statements/let/dstr/ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/statements/let/dstr/ary-ptrn-elem-ary-elem-iter.js	pass	
-test/language/statements/let/dstr/ary-ptrn-elem-ary-empty-init.js	fail	nts: uncaught Test262Error: sameValue
+test/language/statements/let/dstr/ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/statements/let/dstr/ary-ptrn-elem-ary-rest-init.js	pass	
 test/language/statements/let/dstr/ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/statements/let/dstr/ary-ptrn-elem-id-init-hole.js	pass	
@@ -6493,7 +6493,7 @@ test/language/statements/variable/arguments-strict-single.js	pass
 test/language/statements/variable/dstr/ary-name-iter-val.js	pass	
 test/language/statements/variable/dstr/ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/statements/variable/dstr/ary-ptrn-elem-ary-elem-iter.js	pass	
-test/language/statements/variable/dstr/ary-ptrn-elem-ary-empty-init.js	fail	nts: uncaught Test262Error: sameValue
+test/language/statements/variable/dstr/ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/statements/variable/dstr/ary-ptrn-elem-ary-rest-init.js	pass	
 test/language/statements/variable/dstr/ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/statements/variable/dstr/ary-ptrn-elem-id-init-hole.js	pass	

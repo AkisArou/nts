@@ -1,3 +1,4 @@
+// **Agrees since 8965cdd2e; a guard.** Until then:
 // `const [[] = init()] = []` must run init(): the element is missing, so the
 // default is evaluated and then destructured by the empty pattern. nts never
 // calls it. Found by test262's statements/{const,let,variable}/dstr/
