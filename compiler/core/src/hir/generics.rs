@@ -1114,7 +1114,7 @@ fn suffix_of(
 ///
 /// Short on purpose: this ends up in a C identifier, and `Float { bits: 64 }`
 /// is both unreadable and full of characters that have to be escaped.
-fn spell(ty: &super::HirType) -> String {
+pub(crate) fn spell(ty: &super::HirType) -> String {
     use super::{HirType, ManagedType};
     match ty {
         HirType::Void => "void".to_owned(),

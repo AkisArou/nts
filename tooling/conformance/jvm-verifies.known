@@ -9,30 +9,31 @@
 # url verifies whole, and net, stream and zlib now stop at the error that (B) had masked -- stream
 # at (A), net at (E) PerformanceNodeEntry, zlib at (E) Transform. (B) was the first failure in
 # those three only, not nine as first classified.
+# (A) was fixed the same day and the count stayed 18: seven modules lost (A), and five of them
+# now stop at (G), an async frame emit-jvm declines under NTS4013, while fs and stream stop at (E).
 #
 # **(B) is an unguarded fix.** Its only witness is the runtime: every reduction gave the value a
 # layout and verified before the fix, so no fixture holds it, and while stream and net fail for
 # other reasons a regression of (B) prints "known" like everything else. (D) has a unit test,
 # body.rs `a_number_converted_to_a_bool_puts_a_label_between_a_definition_and_its_read`.
-runtime/node/assert	(A) an array where a record is wanted, convertQueuingStrategyHighWaterMark (classified, 2026-09-28)
-runtime/node/console	(A) an array where a record is wanted, convertQueuingStrategyHighWaterMark (classified, 2026-09-28)
+runtime/node/assert	(G) HttpCache$serve$frame, referenced by Program and never written: emit-jvm declines it under NTS4013, the frame declaring two different properties both named `state` -- the first failure since (A) cleared (jvm lane, 2026-09-29)
+runtime/node/console	(G) HttpCache$serve$frame, referenced by Program and never written: emit-jvm declines it under NTS4013, the frame declaring two different properties both named `state` -- the first failure since (A) cleared (jvm lane, 2026-09-29)
 runtime/node/dns	(E) a class the JVM declines under NTS4009 (an override at another representation), referenced and never written (classified, 2026-09-28)
 runtime/node/child_process	(F) an erased value where a String is wanted, validSignal -- the first failure since 2026-09-28; (E) a class the JVM declines under NTS4009 (an override at another representation), referenced and never written (classified, 2026-09-28) -- (B) was not the first failure here on 41dd45663 (jvm lane, 2026-09-29)
 runtime/node/cluster	(F) an erased value where a String is wanted, validSignal -- the first failure since 2026-09-28; (E) a class the JVM declines under NTS4009 (an override at another representation), referenced and never written (classified, 2026-09-28) -- (B) was not the first failure here on 41dd45663 (jvm lane, 2026-09-29)
-runtime/node/events	(A) an array where a record is wanted, convertQueuingStrategyHighWaterMark (classified, 2026-09-28)
+runtime/node/events	(G) HttpCache$serve$frame, referenced by Program and never written: emit-jvm declines it under NTS4013, the frame declaring two different properties both named `state` -- the first failure since (A) cleared (jvm lane, 2026-09-29)
 runtime/node/dgram	(E) PerformanceNodeEntry, referenced by Program and never written -- the perf_hooks family; (B) was not live here on 41dd45663 (jvm lane, 2026-09-29)
 runtime/node/net	(E) PerformanceNodeEntry, referenced by Program and never written -- the perf_hooks family; the first failure since (B) cleared, jvm lane, 2026-09-29
-runtime/node/fs	(A) an array where a record is wanted, convertQueuingStrategyHighWaterMark -- the first failure; (E) a class the JVM declines under NTS4009 (an override at another representation), referenced and never written (classified, 2026-09-28) -- (B) was not the first failure here on 41dd45663 (jvm lane, 2026-09-29)
+runtime/node/fs	(E) Transform and DuplexSide, declined under NTS4009 and never written -- the first failure since (A) cleared (jvm lane, 2026-09-29)
 runtime/node/http	(E) a class the JVM declines under NTS4009 (an override at another representation), referenced and never written (classified, 2026-09-28) -- (B) was not the first failure here on 41dd45663 (jvm lane, 2026-09-29)
 runtime/node/readline	(C) a closure class that does not implement the signature it is called at, Readline$commit (classified, 2026-09-28)
-runtime/node/stream	(A) an array where a record is wanted, convertQueuingStrategyHighWaterMark -- the first failure since (B) cleared; (E) a class the JVM declines under NTS4009 (an override at another representation), referenced and never written (jvm lane, 2026-09-29) -- pinned: (A) is the only INVALID, so (B), fixed in 2703efcba and held by no fixture, cannot return unseen	pin: invalid=Program.convertQueuingStrategyHighWaterMark
-runtime/node/util	(A) an array where a record is wanted, convertQueuingStrategyHighWaterMark (classified, 2026-09-28)
+runtime/node/stream	(E) Transform and DuplexSide, declined under NTS4009 and never written; Program verifies since (A) cleared -- pinned: no INVALID, so (B), fixed in 2703efcba and held by no fixture, cannot return unseen (jvm lane, 2026-09-29)	pin: invalid=none
+runtime/node/util	(G) HttpCache$serve$frame, referenced by Program and never written: emit-jvm declines it under NTS4013, the frame declaring two different properties both named `state` -- the first failure since (A) cleared (jvm lane, 2026-09-29)
 runtime/node/process	(E) a class the JVM declines under NTS4009 (an override at another representation), referenced and never written (classified, 2026-09-28) -- (B) was not the first failure here on 41dd45663 (jvm lane, 2026-09-29)
 runtime/node/crypto	(E) a class the JVM declines under NTS4009 (an override at another representation), referenced and never written -- `Transform` and `DuplexSide`, as stream's and zlib's (classified by its verifier reasons, node lane, 2026-09-28) -- (B) was not the first failure here on 41dd45663 (jvm lane, 2026-09-29)
 runtime/node/zlib	(E) Transform, and the classes that extend it, declined under NTS4009 and never written; Program verifies since (B) cleared (jvm lane, 2026-09-29) -- pinned: no INVALID, so (B), fixed in 2703efcba and held by no fixture, cannot return to Program unseen	pin: invalid=none
-runtime/web-platform	(A) an array where a record is wanted, convertQueuingStrategyHighWaterMark (classified, 2026-09-28)
+runtime/web-platform	(G) HttpCache$serve$frame, referenced by Program and never written: emit-jvm declines it under NTS4013, the frame declaring two different properties both named `state` -- the first failure since (A) cleared (jvm lane, 2026-09-29)
 tooling/conformance/outcomes/a-closure-passed-to-an-interface-method-through-a-field	(C) the witness for it: a closure class that does not implement the callback's signature at an invokeinterface reached through a field (conformance lane, 2026-09-28)
-tooling/conformance/outcomes/an-array-given-where-a-length-record-is-wanted	(A) the witness for it: an array where a `{ length }` record is wanted; C answers right (conformance lane, 2026-09-28)
 runtime/node/perf_hooks	(E) classes the JVM declines under NTS4009 (overrides at another representation), referenced and never written: PerformanceNodeTiming, PerformanceNodeEntry, PerformanceResourceTiming -- the family build-floor already blocks, classes only a return or a subclass reaches (classified; owner confirmed, 2026-09-28)
 tooling/conformance/outcomes/an-override-declaring-fewer-parameters	(E) the witness for it: the JVM declines Transform under NTS4009 for want of a bridge; C agrees (conformance lane, 2026-09-28)
 tooling/conformance/outcomes/a-controller-stored-by-a-generic-branch	(E) the witness for it: the JVM declines the closure under NTS4009 at another instantiation; C agrees (conformance lane, 2026-09-28)

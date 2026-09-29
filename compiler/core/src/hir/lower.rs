@@ -6218,6 +6218,68 @@ fn structural_instantiations(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy)
     found
 }
 
+/// Whether a callee is copied with one parameter re-typed to what its argument
+/// actually is, and to what: the re-typed representation and the copy name's
+/// spelling of it. `None` keeps the declared parameter.
+///
+/// **One decision, whatever triggers it.** An object passed where another
+/// object type is declared, and an array where a record is declared, are two
+/// triggers of the same transform -- and a third (an `any` parameter pinned by
+/// its call sites) is the next one, which is why this is a function and not a
+/// second arm at the call.
+///
+/// It does not ask what `monomorphize` asks, and that is deliberate. That pass
+/// re-types a parameter of HIR already lowered, so it refuses one that is
+/// "stored, returned or passed on": everything downstream would need re-typing
+/// too. A copy here is *lowered again from source* with the parameter's new
+/// type, so each downstream use is decided again -- a call passing it on is
+/// walked and copied in turn (`pending`), and a read the new type does not
+/// have refuses by name. A store or return of it into the declared type is the
+/// one use left as it was, unconverted, which is what every use was before.
+///
+/// That holds for these two triggers and not for the third. An `any` parameter
+/// is eligible by whether it *escapes*, and a local view of that is optimistic:
+/// `erasure.rs` answers it whole-program, and 99 sites answer differently once
+/// calls are followed, 34 by a use in another file. So that trigger passes in
+/// erasure's classification rather than asking here.
+///
+/// **An array where a record is declared** -- `requireArguments(args: {
+/// readonly length: number })` called with an argument tuple, which
+/// TypeScript accepts because an array has a `length`. Without a copy the
+/// array reaches the record's parameter unconverted: C reads the record's
+/// field at the array's length by layout, and the JVM verifier rejects
+/// `NtsArrayL` where the record's class is wanted (jvm-verifies cause A, seven
+/// runtime modules). In the copy `args.length` is the array's own length.
+fn copy_retype(probe: &FuncBuilder, declared: TypeId, actual: TypeId) -> Option<(HirType, String)> {
+    if actual == declared {
+        return None;
+    }
+    let (Some(HirType::Managed(ManagedType::Object(want))), Some(represented)) =
+        (probe.represent(declared), probe.represent(actual))
+    else {
+        return None;
+    };
+    match represented {
+        // Spelled by representation, as an object's is: seven tuple types in
+        // web-platform are one `[str]`, and a spelling by type id made seven
+        // copies of one body.
+        HirType::Managed(ManagedType::Array(ref element)) => {
+            let spelling = format!("arr{}", super::generics::spell(element));
+            Some((represented, spelling))
+        }
+        HirType::Managed(ManagedType::Object(have))
+            if want != have
+                && !super::is_closure_type(declared)
+                && !super::is_closure_type(actual)
+                && !probe.is_a_signature(declared)
+                && !probe.is_a_signature(actual) =>
+        {
+            Some((represented, format!("obj{}", have.0)))
+        }
+        _ => None,
+    }
+}
+
 /// Decide what one call names, given what each argument actually is.
 ///
 /// `actual` answers the argument's type in the context the call is being
@@ -6255,27 +6317,11 @@ fn record_structural_call(
         if actual == *declared {
             continue;
         }
-        let (Some(HirType::Managed(ManagedType::Object(want))), Some(HirType::Managed(
-            ManagedType::Object(have),
-        ))) = (probe.represent(*declared), probe.represent(actual))
-        else {
+        let Some((ty, spelling)) = copy_retype(probe, *declared, actual) else {
             continue;
         };
-        if want == have {
-            continue;
-        }
-        if super::is_closure_type(*declared)
-            || super::is_closure_type(actual)
-            || probe.is_a_signature(*declared)
-            || probe.is_a_signature(actual)
-        {
-            continue;
-        }
-        retyped.insert(
-            u32::try_from(at).unwrap_or(u32::MAX),
-            HirType::Managed(ManagedType::Object(have)),
-        );
-        spelled.push(format!("{at}obj{}", have.0));
+        retyped.insert(u32::try_from(at).unwrap_or(u32::MAX), ty);
+        spelled.push(format!("{at}{spelling}"));
     }
     if retyped.is_empty() {
         return;
@@ -56649,6 +56695,43 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, "a `fill` with a range on this array"));
         };
         let value = self.lower_expecting(*value, element)?;
+        // **The helper above is chosen from `element`, so the argument is at
+        // `element`.** Otherwise the two are two derivations of one fact and only
+        // one of them reaches the C prototype.
+        //
+        // `nts_array_fill_ref` takes a `void *`. `benches/cases/awfy-towers`
+        // writes `new Array(3).fill(null)` into a `(TowersDisk | null)[]`, and
+        // `lower_absent` prefers the *contextual* type over the expectation this
+        // function states -- here `fill`'s parameter on `new Array(3)`, which
+        // TypeScript types `any[]`. While `any` had no representation that
+        // answered nothing and the expectation won: `(NtsObj_TowersDisk *)0`.
+        // Once `any` erased (093733f2d) it answered `Erased`, the `null` became
+        // `nts_value_of_null()`, and a sixteen-byte value reached a pointer
+        // parameter. **Nothing refused it** -- the HIR is valid and clang is a
+        // stage away -- so `benches` was red for five weeks.
+        //
+        // # Why here rather than in what `lower_absent` prefers
+        //
+        // That was tried: prefer a concrete expectation over an erased contextual
+        // type. Measured on the recorded test262 sets, it **loses three passes**,
+        // and it is too broad in two directions at once:
+        //
+        //   * `var x; x = null ?? undefined ?? 42` and `new Set().add(undefined)`
+        //     (`Set<any>` in JavaScript) *want* the erased answer -- a concrete
+        //     slot cannot hold `undefined`, and both refuse;
+        //   * `"gnulluna".slice(null, -3)` wants `ToNumber(null)` at a numeric
+        //     parameter, not a C null of the wrong type -- and it emitted
+        //     **uncompilable C**, which is the class this commit exists to fix.
+        //
+        // So the authority is local rather than general. This function knows the
+        // element because it picked the helper from it, and nothing outside it has
+        // to change.
+        let value = if self.values[value.0 as usize].ty == *element {
+            value
+        } else {
+            let element = element.clone();
+            self.coerce(value, &element, id)?
+        };
         let origin = self.origin(id);
         let ty = HirType::Managed(ManagedType::Array(Box::new(element.clone())));
         Ok(self.push(
