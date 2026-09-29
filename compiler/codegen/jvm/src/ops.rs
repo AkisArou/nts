@@ -2303,15 +2303,15 @@ impl Emitter<'_> {
             code.check_cast(origin, pool, &want[1..want.len() - 1]);
             return Ok(());
         }
-        let implements = types::descriptor(self.shape, &ty)
-            .and_then(|descriptor| {
-                let class = descriptor.strip_prefix('L')?.strip_suffix(';')?.to_owned();
-                self.shape
-                    .program
-                    .layouts
-                    .iter()
-                    .find(|layout| types::class_name(self.shape.package, layout) == class)
-            })
+        // The layout the value's *type* names, not the one its descriptor
+        // spells: a signature is spelled `types::callable_class`, which no
+        // layout is named, so looking the class up by descriptor found nothing
+        // for every signature-typed callback once every signature declared the
+        // uniform entry -- and `setTimeout`-shaped calls were refused by name.
+        let implements = match &ty {
+            HirType::Managed(ManagedType::Object(id)) => self.shape.program.layout(*id),
+            _ => None,
+        }
             .is_some_and(|layout| {
                 layout.methods.iter().flatten().any(|name| {
                     crate::hierarchy::member_name(name) == "call"
