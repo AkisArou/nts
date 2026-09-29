@@ -1,3 +1,12 @@
+// **FIXED by `519195e49` and kept as a guard.** This pinned the *return* face
+// of the closure-slot type pun: a closure returning a value, reached through a
+// slot that reads an `NtsValue`, answering `not a number` / `not a string` /
+// `not true` / `not a record` while its own control arm answered 42. A closure
+// now carries an erased entry whose result is erased for it, so every row
+// matches node. The category is `agrees`: what it guards is that the entry
+// keeps doing the conversion, and the four kinds are there because the pun was
+// silent in all four.
+//
 // **Ours, not upstream's: the return face of a closure called through a
 // signature that is not its own.** A closure kept as `unknown` is called
 // through a function type whose return is `unknown`: the call site reads the

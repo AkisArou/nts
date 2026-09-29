@@ -1,3 +1,12 @@
+// **FIXED by `519195e49` and kept as a guard.** This was `aborted (SIGSEGV)`:
+// React's every-compiled-component crash, reduced. `Closure3117__call` was
+// reached as `NtsValue (*)(NtsObj_Fn41020_48552__3921 *, NtsMap *, NtsValue)`,
+// and the site *cannot* know which closure it holds because the component
+// arrives from `fiber.type`, which is erased -- so the fix had to be at the
+// callee, and is: a uniform entry every closure implements. Kept as `agrees`
+// because a segfault that becomes a right answer is exactly the thing a guard
+// should notice going back.
+//
 // **Ours, not upstream's.** React's component call with two components, so
 // the call cannot be devirtualised to one: a fiber keeps its component and
 // its props as `unknown`, and rendering calls the one on the other through a

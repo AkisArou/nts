@@ -1,3 +1,10 @@
+// **FIXED by `519195e49` and kept as a guard.** `through another return type`
+// answered `not an element` while `through its own signature` answered `box` --
+// the same value read two ways, which is the whole of the defect in one line.
+// The erased entry converts at the callee, so both now answer `box`. Recorded
+// as `agrees`; the second arm was always the control and is why this fixture
+// could say what was wrong rather than only that something was.
+//
 // **A function carried as `unknown` and called back through a signature whose
 // return representation differs reads the result wrong.** `Counter` returns a
 // pointer to an `Elem`; called through `(props, secondArg) => unknown` the result is

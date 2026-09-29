@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught Observed: through another return type=not an element;through its own signature=box;",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: through another return type=box;through its own signature=box;",
   "node": "exit 1; nts: uncaught Observed: through another return type=box;through its own signature=box;",
-  "measured_with": "4c71bbd8e1497221",
+  "measured_with": "dac14034fccd6ba7",
   "source": "measured"
 }
