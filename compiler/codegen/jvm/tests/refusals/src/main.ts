@@ -7,17 +7,29 @@
 // watched fire, and the failure it guards against is a class the JVM rejects at
 // load with `ClassFormatError: Duplicate field name`.
 
-/// Two properties that are different in TypeScript and the same on the JVM.
+/// Properties that are different in TypeScript and the same on the JVM.
 ///
 /// `jvm_member_name` maps every non-alphanumeric ASCII character to `$`, so a
-/// space and a hyphen both become one. Four lines of legal TypeScript, and the
-/// class would not load.
+/// space and a hyphen both become one. Since `hierarchy::field_name` took C's
+/// rule, the second of a spelling takes its slot index -- `a$b_1` -- so two
+/// such properties load (`Spelled`, the control). A third *named* `a$b_1` is
+/// the collision that rule cannot resolve, and the class would not load.
 export class Collides {
+  "a b": number = 1;
+  "a-b": number = 2;
+  "a$b_1": number = 3;
+}
+
+export function reach(it: Collides): number {
+  return it["a b"] + it["a-b"] + it["a$b_1"];
+}
+
+export class Spelled {
   "a b": number = 1;
   "a-b": number = 2;
 }
 
-export function reach(it: Collides): number {
+export function reachSpelled(it: Spelled): number {
   return it["a b"] + it["a-b"];
 }
 

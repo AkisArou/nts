@@ -92,9 +92,14 @@ fn two_properties_that_become_one_jvm_field_are_refused_by_name() {
     // Naming one of the two would leave a reader hunting for the other, and the
     // whole value of this refusal over `ClassFormatError` is that it says which
     // two lines of their program disagree.
-    assert!(message.contains("`a b`"), "names the first property: {message}");
-    assert!(message.contains("`a-b`"), "names the second property: {message}");
-    assert!(message.contains("`a$b`"), "names the JVM field they collide on: {message}");
+    assert!(message.contains("`a-b`"), "names the first property: {message}");
+    assert!(message.contains("`a$b_1`"), "names the second property and the field they collide on: {message}");
+    // The control: two properties of one spelling, and nothing else, now load
+    // as `a$b` and `a$b_1` -- C's rule, `hierarchy::field_name`.
+    assert!(
+        !diagnostics.iter().any(|(code, message)| code == "NTS4013" && message.contains("Spelled")),
+        "two properties of one spelling are told apart by index: {diagnostics:?}"
+    );
 }
 
 /// An interface carrying state, reached through an erased value.

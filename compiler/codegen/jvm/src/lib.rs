@@ -386,15 +386,18 @@ fn declare_fields(
     // the two properties are told apart by their *types*, which is a rule
     // nobody can hold in their head.
     //
-    // Refused by name. The injective mangling that would accept it -- escape
-    // `$` as `$$`, forbidden characters as `$` plus a letter -- costs every
-    // generated name its readability (`module#init` becomes `module$hinit`,
-    // not `module$init`), and this shape has never occurred outside the test
-    // that found it. If a real program hits this, that is the fix, and it is a
-    // change to `symbols.rs` rather than to this refusal.
+    // **Resolved by index first, refused only past that.** Each name comes from
+    // `hierarchy::field_name`, which is C's rule: the second of a spelling
+    // takes its slot index, `a$b_1`. That is what an async frame needed -- a
+    // parameter named `state` beside the frame's own `state` declined
+    // web-platform's `HttpCache$serve$frame` here and five modules with it.
+    // What is left for this check is a property *spelled* like an index
+    // suffix, `"a$b_1"` beside `"a b"` and `"a-b"`, which no rule of this
+    // shape can tell apart; the refusals fixture holds both.
     let mut spelled: FxHashMap<String, String> = FxHashMap::default();
-    for field in hierarchy::declared(program, layout) {
-        if let Some(other) = spelled.insert(body::method_name(&field.name), field.name.clone()) {
+    let names = hierarchy::declared_names(program, layout);
+    for (field, name) in hierarchy::declared(program, layout).iter().zip(&names) {
+        if let Some(other) = spelled.insert(name.clone(), field.name.clone()) {
             return Err(Diagnostic::error(
                 "NTS4013",
                 format!(
@@ -404,7 +407,7 @@ fn declare_fields(
                     layout.name,
                     other,
                     field.name,
-                    body::method_name(&field.name)
+                    name
                 ),
                 origin.location,
             ));
@@ -441,13 +444,13 @@ fn declare_fields(
         // A field this backend holds as a `double`; see `widen`. The
         // declaration and every access ask the same plan with the same key, so
         // they cannot disagree about the descriptor.
-        let descriptor = if plan.field(&types::class_name(package, layout), &field.name) {
+        let descriptor = if plan.field(&types::class_name(package, layout), name) {
             types::descriptor(types::Shape::packaged(program, package), &nts_core::hir::HirType::Float { bits: 64 })
                 .unwrap_or(descriptor)
         } else {
             descriptor
         };
-        builder.field(access::PACKAGE, body::method_name(&field.name), descriptor);
+        builder.field(access::PACKAGE, name.clone(), descriptor);
     }
     Ok(())
 }
@@ -478,7 +481,9 @@ fn declare_presence(
     }
     if let Some(clash) = hierarchy::declared(program, layout)
         .iter()
-        .find(|field| body::method_name(&field.name) == types::PRESENCE)
+        .zip(hierarchy::declared_names(program, layout))
+        .find(|(_, name)| name == types::PRESENCE)
+        .map(|(field, _)| field)
     {
         return Err(Diagnostic::error(
             "NTS4013",
@@ -761,8 +766,9 @@ fn object_class(
     // zeroed and this is what keeping that promise costs on this platform.
     let erased: Vec<_> = hierarchy::declared(program, layout)
         .iter()
-        .filter(|field| matches!(field.ty, nts_core::hir::HirType::Erased))
-        .map(|field| body::method_name(&field.name))
+        .zip(hierarchy::declared_names(program, layout))
+        .filter(|(field, _)| matches!(field.ty, nts_core::hir::HirType::Erased))
+        .map(|(_, name)| name)
         .collect();
     let initial: Vec<nts_jvm_emitter::FieldFromStatic<'_>> = erased
         .iter()

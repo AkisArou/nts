@@ -168,7 +168,7 @@ fn field_of<'a>(
     // `contains(&(types::class_name(..), name))` -- so a key spelled any other
     // way answers `false` for every field and the widening silently stops
     // happening. It reads like a pass-internal identity and is not one.
-    Some(((crate::types::class_name(package, owner), field.name.clone()), &field.ty))
+    Some(((crate::types::class_name(package, owner), crate::hierarchy::field_name(program, owner, index as usize)), &field.ty))
 }
 
 /// The functions this backend actually renders.

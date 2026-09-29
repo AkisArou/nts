@@ -3994,7 +3994,8 @@ impl Emitter<'_> {
         // A field this backend holds as a `double`; see `widen`. Keyed by the
         // *declaring* class and the field's name, which is the one identity the
         // declaration in `object_class` and this access can both compute.
-        let held = if self.widened_fields.contains(&(types::class_name(self.shape.package, owner), entry.name.clone())) {
+        let member = crate::hierarchy::field_name(self.program, owner, field as usize);
+        let held = if self.widened_fields.contains(&(types::class_name(self.shape.package, owner), member.clone())) {
             HirType::Float { bits: 64 }
         } else {
             entry.ty.clone()
@@ -4005,12 +4006,7 @@ impl Emitter<'_> {
                 &format!("a field of unrepresentable type: {}", types::describe(&entry.ty)),
             ));
         };
-        Ok((
-            types::class_name(self.shape.package, owner),
-            crate::body::method_name(&entry.name),
-            descriptor,
-            held,
-        ))
+        Ok((types::class_name(self.shape.package, owner), member, descriptor, held))
     }
 
     /// The binary operations whose operands are references, which is every one

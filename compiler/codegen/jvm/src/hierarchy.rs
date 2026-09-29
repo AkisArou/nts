@@ -50,6 +50,43 @@ pub fn inherited(program: &Program, layout: &Layout) -> usize {
         .map_or(0, |base| base.fields.len())
 }
 
+/// The JVM name of the field at `at` in `owner`, the layout that declares it.
+///
+/// **Not a function of the field's name alone.** A class's own fields share one
+/// namespace, and a layout can hold two that spell alike: an async frame keeps
+/// its resumption in `state` and each parameter under the parameter's name, so
+/// `serve(entry, method, age, state)` in web-platform's `HttpCache` declared
+/// `state` twice and emit-jvm declined the frame under NTS4013 -- which left
+/// `HttpCache$serve$frame` unwritten and five runtime modules unable to load.
+///
+/// C's rule, because C met this first (`c_member_at`, the `#count` a derived
+/// class repeats): the first of a spelling keeps it and each later one takes
+/// its index. The index is unique in the layout and fixed before any backend
+/// runs, so the declaration, every access and the widen plan's key all compute
+/// the same name. Only fields the owner declares are compared: a derived class
+/// repeating a base's name is two fields on two classes, which the JVM resolves
+/// from the class the access names.
+#[must_use]
+pub fn field_name(program: &Program, owner: &Layout, at: usize) -> String {
+    let Some(field) = owner.fields.get(at) else {
+        return String::new();
+    };
+    let spelled = crate::body::method_name(&field.name);
+    let from = inherited(program, owner).min(at);
+    if owner.fields[from..at].iter().any(|before| crate::body::method_name(&before.name) == spelled) {
+        format!("{spelled}_{at}")
+    } else {
+        spelled
+    }
+}
+
+/// [`field_name`] for each field a class declares itself, in order.
+#[must_use]
+pub fn declared_names(program: &Program, layout: &Layout) -> Vec<String> {
+    let from = inherited(program, layout).min(layout.fields.len());
+    (from..layout.fields.len()).map(|at| field_name(program, layout, at)).collect()
+}
+
 /// The fields a class declares itself.
 #[must_use]
 pub fn declared<'a>(program: &Program, layout: &'a Layout) -> &'a [Field] {
