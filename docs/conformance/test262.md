@@ -288,6 +288,27 @@ The procedure when a pending change exposes them:
 
 A floor lowered this way is not ground lost: the passes were never real.
 
+**The ledger.** Each class of hollow pass found so far, and the guard that
+goes red if it comes back. "Fired" means the guard was recorded failing on a
+compiler that had the defect, so it is known to detect the class, not assumed
+to.
+
+| class | found | rows | guard | fired |
+|---|---|---|---|---|
+| a negative-parse test "rejected" by a TypeScript *type* error, not the early error it names | 2026-09-29, compiling the suite as JavaScript | ~1,600 language | conformance262's evidence-code judge and `negatives-accepted:` ceiling; the census self-check refusal arm | the re-baseline 5,463 -> 4,632 |
+| `typeof <call>` answered from the static type, operand never run (incl. Temporal with no runtime) | `FIXED? 9 passing` on the Temporal exclusion | 21 | outcomes/typeof-a-call-drops-the-call | wrong-answer on 9b4bd02b9; agrees from 141c1ea81 |
+| a pattern binding no names never lowered, so its default "did not run" | a change making it evaluate | 6 | outcomes/an-empty-nested-pattern-with-a-default | wrong-answer on 9b4bd02b9; agrees from 8965cdd2e |
+| a constructor's `return {}` ignored, so a test asserting only "nothing threw" passed | a change refusing it | 1 staging | blockers/a-{base,derived}-constructor-returning-an-object | wrong-answer on 9b4bd02b9; refused from f51f5a2cc |
+
+No generic detector covers the last three classes, and the obvious one does
+not work. Counting executed assertions would flag a pass that asserted
+nothing, but each class above *did* assert: on a folded value, on a counter
+that stayed 0, or not at all by design. A pass row keeps no diagnostics, and
+the dropped-statement warnings (NTS1003/NTS1005) only follow a refusal, which
+makes the file unsupported, not a pass. So the ledger grows by the signs
+above, and each new class gets a guard fixture recorded on a compiler that
+has the defect.
+
 ### Reporting a failing case: materialise it, do not reconstruct it
 
 The first move on any census failure is the case as the census compiled it:
