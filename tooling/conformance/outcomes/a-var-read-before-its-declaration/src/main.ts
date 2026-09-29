@@ -4,6 +4,13 @@
 // closure, whose note says annotating `| undefined` makes nts agree; the
 // control here does that and differs in the annotation only.
 // @ts-expect-error -- JavaScript: a var is undefined before its declaration runs
+// **Root, diagnosed 2026-09-29:** a definite-assignment analysis -- does an
+// assignment dominate this read. The checker settles `x` to its assigned type
+// at every reference, and a global's initial storage is the settled
+// representation's zero, where the language says `undefined` (or a TDZ
+// throw). Shared with an-undefined-incremented, a-var-read-before-its-
+// declaration and a-let-read-before-its-declaration -- not with
+// an-object-incremented, whose read an assignment does dominate.
 observe("inferred", String(x));
 observe("annotated", String(y));
 var x = true;

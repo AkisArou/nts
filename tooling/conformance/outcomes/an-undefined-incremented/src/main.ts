@@ -6,6 +6,13 @@
 // refused ("`null` or `undefined` where what it stands in for is not a
 // reference"), so `++` alone converts silently. The control starts at 0 and
 // differs in that value only.
+// **Root, diagnosed 2026-09-29:** a definite-assignment analysis -- does an
+// assignment dominate this read. The checker settles `x` to its assigned type
+// at every reference, and a global's initial storage is the settled
+// representation's zero, where the language says `undefined` (or a TDZ
+// throw). Shared with an-undefined-incremented, a-var-read-before-its-
+// declaration and a-let-read-before-its-declaration -- not with
+// an-object-incremented, whose read an assignment does dominate.
 var bare;
 // @ts-expect-error -- JavaScript: `++` on undefined is NaN, not an error
 ++bare;
