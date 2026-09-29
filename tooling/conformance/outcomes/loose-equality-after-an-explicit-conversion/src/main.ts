@@ -1,4 +1,4 @@
-// The control for the three loose-equality fixtures: the same comparisons
+// The control for the three loose-equality blockers (blockers/loose-equality-of-a-*): the same comparisons
 // with the conversion IsLooselyEqual would make written out, so each side is
 // one representation. Agrees with node -- the equality is fine; the implicit
 // conversion across representations is what is missing.

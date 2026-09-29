@@ -1,4 +1,4 @@
-// The control for an-unread-eval-result-drops-its-statement, differing in the
+// The control for blockers/an-unread-eval-result-drops-its-statement, differing in the
 // callee: `String` rather than `eval`, so the unread declaration has a
 // representation. `source()` runs once. Agrees with node.
 let calls = 0;

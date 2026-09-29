@@ -1,8 +1,0 @@
-{
-  "run": "build",
-  "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught Observed: 1 * {} is NaN=false;",
-  "node": "exit 1; nts: uncaught Observed: 1 * {} is NaN=true;",
-  "measured_with": "5d17240b5f129432",
-  "source": "measured"
-}

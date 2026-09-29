@@ -1,4 +1,4 @@
-// The control for a-number-times-an-empty-object, differing in the operand:
+// The control for blockers/a-number-times-an-empty-object, differing in the operand:
 // the value `{}` converts to (NaN) given directly, where the defect gives the
 // object. Agrees with node. (`Number({})` would be the conversion written out,
 // and is itself refused -- "a conversion to number from this type".)
