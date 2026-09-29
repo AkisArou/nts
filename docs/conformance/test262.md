@@ -288,6 +288,22 @@ The procedure when a pending change exposes them:
 
 A floor lowered this way is not ground lost: the passes were never real.
 
+### Reporting a failing case: materialise it, do not reconstruct it
+
+The first move on any census failure is the case as the census compiled it:
+
+    node tooling/census/materialise262.ts <test/...js> <dir>
+    NTS_TSGO=target/tsgo <pinned nts> emit-c <dir>/tsconfig.json --out <dir>/out --main
+
+Then link it with the `cc` line that prints, run it, and label the file's
+assertions to see which one fails. Hand over the emitted C line or the first
+diagnostic, and reduce from that program, one change at a time. On
+2026-09-29, three typed TypeScript reconstructions of the
+`private-gen-meth-*` failures all agreed with node, and so did a typed
+reduction of three `vN undeclared` files. The materialised JavaScript showed
+what each had dropped: the exact pattern (`[[] = init()]`), and a callee with
+no `return`.
+
 ## Tooling architecture and parallel-work boundary
 
 The protocol tooling can be built before representation recovery or script
