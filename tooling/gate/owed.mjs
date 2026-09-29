@@ -239,7 +239,10 @@ export const RULES = [
   },
   {
     name: "an instrument",
-    when: (p) => /^tooling\/(conformance|census|differential|gate)\/.*\.(mjs|sh)$/.test(p),
+    // `.ts` since the lanes' tools became TypeScript (2026-09-29): until then
+    // this matched none of them, and no instrument change owed a self-test.
+    // The fixture trees are programs, not instruments, and have rules below.
+    when: (p) => /^tooling\/(conformance|census|differential|gate)\/.*\.(mjs|ts|sh)$/.test(p) && !/^tooling\/conformance\/(outcomes|blockers)\//.test(p),
     steps: [],
     arms: [
       { kind: "valid", asks: "does it catch what it guards", run: "its --self-test, and a sabotage arm: break the thing it guards and watch it fail, naming the thing" },
@@ -264,6 +267,20 @@ export const RULES = [
     arms: [
       { kind: "hygiene", asks: "is the record a claim about main", run: "record it with NTS_BIN=<a clean main build> node tooling/conformance/outcomes-check.ts --record <name>" },
       { kind: "answers", asks: "is the defect specific to what the fixture names", run: "a control differing in one thing, measured" },
+    ],
+  },
+  {
+    // A fixture is a program, so it is an input to `integrity`, and one that
+    // pins a refusal shows that refusal's structural consequences -- a cut
+    // module-scope statement -- which want their `integrity.known` entries in
+    // the same commit. On 2026-09-29 two fixtures moved here from outcomes/
+    // reddened integrity for exactly that.
+    name: "a blockers fixture",
+    when: (p) => /^tooling\/conformance\/blockers\//.test(p),
+    steps: ["blockers", "integrity"],
+    arms: [
+      { kind: "hygiene", asks: "is the `// expect:` line the refusal main prints", run: "emit-c it on a clean main build and copy the NTS1001 text, names included" },
+      { kind: "hygiene", asks: "will it fail for the gap being fixed", run: "when the refusal is only a means, pick a documented permanent gap (a RegExp field, a stack read), not whatever refuses today" },
     ],
   },
 ];
@@ -316,6 +333,11 @@ function selfTest() {
   if (!example.includes("a new example") || example.includes("an example changed")) return `a new example: ${example}`;
   const blocked = names([{ path: "tooling/conformance/build-floor.sh", added: false }]);
   if (!blocked.includes("an instrument")) return `a change to build-floor.sh: ${blocked}`;
+  const tool = names([{ path: "tooling/census/rows.ts", added: false }]);
+  if (!tool.includes("an instrument")) return `a change to a TypeScript tool: ${tool}`;
+  const blocker = owed([{ path: "tooling/conformance/blockers/x/src/main.ts", added: true }]);
+  if (blocker.some((r) => r.name === "an instrument")) return "a blockers fixture's source read as an instrument";
+  if (!blocker.find((r) => r.name === "a blockers fixture")?.steps.includes("integrity")) return "a blockers fixture does not owe integrity";
   const backend = names([{ path: "compiler/codegen/c/src/emit.rs", added: false }]);
   if (!backend.includes("the C backend") || !backend.includes("every change")) return `a backend change: ${backend}`;
   const helper = names([{ path: "runtime/c/nts_runtime.h", added: false }]);
@@ -344,7 +366,7 @@ if (broken) {
   process.exit(2);
 }
 if (argv.includes("--self-test")) {
-  console.log("  self-test: each change selects its arms; every gate step says what it asks; lowering owes answers, counts and the emitted-C diff");
+  console.log("  self-test: each change selects its arms; every gate step says what it asks; lowering owes answers, counts and the emitted-C diff; a .ts tool is an instrument and a blockers fixture owes integrity");
   process.exit(0);
 }
 
