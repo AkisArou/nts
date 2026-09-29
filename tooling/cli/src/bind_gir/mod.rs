@@ -23,6 +23,7 @@ mod check;
 mod emit;
 mod map;
 mod model;
+mod naming;
 mod parse;
 mod facts;
 mod prerequisites;
@@ -72,10 +73,14 @@ pub(crate) fn search_path() -> Vec<Utf8PathBuf> {
     search
 }
 
-/// The namespace a `c:` module names, when it names one this machine has GIR
-/// for: `c:Gtk-4.0` is `Gtk-4.0`. A `c:` module naming a header binding
-/// (`c:sys/stat`) is not one, and is left to `bind-c`.
+/// The namespace a `c:` or `gi:` module names, when it names one this machine
+/// has GIR for: `c:Gtk-4.0` is `Gtk-4.0`, and `gi:gtk` the newest `Gtk-*.gir`
+/// installed. A `c:` module naming a header binding (`c:sys/stat`) is not one,
+/// and is left to `bind-c`.
 pub(crate) fn namespace_of(module: &str, search: &[Utf8PathBuf]) -> Option<String> {
+    if let Some(name) = module.strip_prefix("gi:") {
+        return newest(name, search);
+    }
     let spec = module.strip_prefix("c:")?;
     let (name, version) = spec.split_once('-')?;
     let plausible = !name.is_empty()
@@ -84,6 +89,27 @@ pub(crate) fn namespace_of(module: &str, search: &[Utf8PathBuf]) -> Option<Strin
     // cairo is the binder's own (`parse::CAIRO`), shipped or not.
     let known = spec == "cairo-1.0" || search.iter().any(|dir| dir.join(format!("{spec}.gir")).exists());
     (plausible && known).then(|| spec.to_owned())
+}
+
+/// The newest version of the namespace `gi:` names in lowercase (`gtk`), among
+/// the GIR files of `search`: `Gtk-4.0` where `Gtk-3.0` is installed beside it.
+fn newest(name: &str, search: &[Utf8PathBuf]) -> Option<String> {
+    if name == "cairo" {
+        return Some("cairo-1.0".to_owned());
+    }
+    let version = |text: &str| text.split('.').map(str::parse::<u32>).collect::<Result<Vec<_>, _>>().ok();
+    let mut found: Vec<(Vec<u32>, String)> = search
+        .iter()
+        .flat_map(|dir| std::fs::read_dir(dir).into_iter().flatten().flatten())
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter_map(|file| {
+            let stem = file.strip_suffix(".gir")?;
+            let (namespace, at) = stem.split_once('-')?;
+            (namespace.to_ascii_lowercase() == name).then(|| Some((version(at)?, stem.to_owned())))?
+        })
+        .collect();
+    found.sort();
+    found.pop().map(|(_, stem)| stem)
 }
 
 /// Bind `request.root` and its closure into `request.out`.
@@ -169,6 +195,8 @@ pub(crate) struct Generated {
     /// `Gtk-4.0`: the namespace and its version.
     pub(crate) stem: String,
     pub(crate) declarations: String,
+    /// The same declarations on the `gi:` surface (`naming`): `gi:gtk`.
+    pub(crate) gi: String,
     pub(crate) values: String,
     pub(crate) refused: String,
     pub(crate) promises: String,
@@ -221,6 +249,7 @@ pub(crate) fn generate(root: &str, search: &[Utf8PathBuf]) -> Result<(Vec<Genera
             .map(|run| run.join().map_err(|_| anyhow::anyhow!("a binding thread panicked"))?)
             .collect::<Result<Vec<_>>>()
     })?;
+    let names = naming::Names::of(&repository);
     let generated = namespaces
         .iter()
         .zip(&bindings)
@@ -229,6 +258,7 @@ pub(crate) fn generate(root: &str, search: &[Utf8PathBuf]) -> Result<(Vec<Genera
             Generated {
                 stem: format!("{}-{}", namespace.name, namespace.version),
                 declarations: emit::declarations(binding, &command),
+                gi: emit::declarations(&naming::gi(binding, namespace, &names), &command),
                 values: emit::companion(binding, &command),
                 refused: report(binding),
                 promises: promises_report(&census),
@@ -347,6 +377,7 @@ fn pkg_config_of(what: &str, package: &str) -> Vec<String> {
 fn write_namespace(out: &Utf8PathBuf, namespace: &Generated) -> Result<()> {
     let stem = &namespace.stem;
     write(&out.join(format!("{stem}.d.ts")), &namespace.declarations)?;
+    write(&out.join(format!("{stem}.gi.d.ts")), &namespace.gi)?;
     // Not `{stem}.ts`: TypeScript reads a `.d.ts` beside a `.ts` of the same
     // stem as that file's own output and drops it, and every `c:` import of
     // the module then fails to resolve.

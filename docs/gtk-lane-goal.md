@@ -2022,6 +2022,66 @@ named:
   functions on six records in all of GLib, so refusing them needs a source
   of truth rather than a name.
 
+## M5: a surface better than GJS
+
+The user's decision (2026-09-29, the plan's "a surface better than GJS"):
+camelCase members, imported from `gi:gtk`, `gi:gio`, `gi:adw`, …, by name or
+as a namespace; the version the newest installed GIR, a pin in
+`nts.config.ts` to come. Then, on that surface, `property()`/`signal()` and a
+self-typed heritage clause for subclasses, typed list models and factories,
+and templates imported from `.ui` files.
+
+### The `gi:` surface: built, phase 1
+
+```ts
+import { Box, Label, Orientation, init } from "gi:gtk";
+import * as Gio from "gi:gio";
+
+const box = new Box({ orientation: Orientation.VERTICAL, spacing: 6 });
+box.append(new Label({ label: "hi", useMarkup: true }));
+const store = new Gio.ListStore({ itemType: Label.$gtype });
+```
+
+- **Naming is presentation** (`bind_gir/naming.rs`). The mapping is the
+  `c:` surface's, checked against the headers once; the `gi:` module is the
+  same binding renamed. The `c:` output is byte-identical to before (all 52
+  files of the Gtk and Adw closures, diffed against a pinned binary).
+- **Types** through one table built from the repository: own namespace
+  bare (`GtkBox` is `Box`), another's qualified (`Gio.ListModel`, a whole
+  namespace imported), so Gtk's `Application` never collides with its parent
+  `Gio.Application`. Type text is renamed per identifier token; a name the
+  table does not hold -- a brand, a parameter -- is left. A class named like
+  a JavaScript global keeps its C name: `GObject`, `GError`.
+- **Members and parameters** camelCased, and the tags naming them with them
+  (`@ntsGet`, `@ntsSet`, `@ntsConstruct`, `@ntsNoEscape`, `@ntsDefault`,
+  `@ntsThrows`, `@ntsVfuncOut`), since the compiler finds each by the name
+  the declaration has. A construct-only property's thunk is renamed with its
+  key (`GtkLabel_with_cssName`).
+- **Functions.** GIR's namespace functions by GIR's name (`init`, with
+  `@ntsSymbol gtk_init`); a method is a method only, not also a free
+  function, as in GJS. Views, thunks and `get_type` functions keep their
+  names, which tags find them by. A renamed function colliding with a name
+  the module has is refused by name.
+- **Constants** by GIR's name: `PRIORITY_DEFAULT`, `TYPE_STRING`.
+- **The compiler** needed one rule: an override is `vfunc_x` or `vfuncX`
+  (`is_override_name`); the slot is the declaration's `@ntsVfunc` either way.
+  The `vfunc` prefix stays, by the user's decision: it names the class
+  struct's slot, not the public method of the same name that wraps it
+  (`gtk_widget_measure` adds constraints and caching; `size_allocate`'s
+  method and slot differ in signature).
+- **Packaging.** Each namespace has a second package, `@nts/gi-gtk`, in the
+  same store entry; a program is opened with it only when it imports a `gi:`
+  module, so a `c:` program typechecks exactly what it did. A `gi:` program
+  opens the `c:` packages too: the companion (Promise and values forms) is
+  the `c:` binding's, found by name (`@ntsCall`).
+- **Witnesses.** `the_gir_packages_typecheck` checks all 29 packages
+  together (a name the table missed would not resolve) and pins the `gi:`
+  spellings. `examples/interop/gtk-gi` runs construction by camelCase props,
+  a method, a property, an override chaining up in plain types, `connect` and
+  `connectAfter`, a namespace import's construct-only property, and GIR's
+  constants, on C and LLVM, plain and `--rc`. A namespace import
+  (`import * as Gtk from "gi:gtk"`) lowered with no change.
+
 ## Completeness: the binding census
 
 The second gauge is what the GIR binder refuses and a GJS program could

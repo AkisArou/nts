@@ -245,6 +245,7 @@ fn vfuncs(class: Node<'_, '_>) -> Vec<Callable> {
 /// A `<constant>`, where GIR names its C macro, its type and its value.
 fn constant(node: Node<'_, '_>) -> Option<Constant> {
     Some(Constant {
+        name: attribute(node, "name")?.to_owned(),
         c_name: c_attribute(node, "type")?.to_owned(),
         ty: attribute(child(node, "type")?, "name")?.to_owned(),
         value: attribute(node, "value")?.to_owned(),

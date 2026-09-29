@@ -40,10 +40,12 @@ pub(crate) struct Namespace {
     pub(crate) constants: Vec<Constant>,
 }
 
-/// A `<constant>`: its C macro's name (`G_PRIORITY_DEFAULT`), its GIR type
-/// name (`gint`, `utf8`), and its value as GIR writes it.
+/// A `<constant>`: its GIR name (`PRIORITY_DEFAULT`), its C macro's name
+/// (`G_PRIORITY_DEFAULT`), its GIR type name (`gint`, `utf8`), and its value
+/// as GIR writes it.
 #[derive(Debug)]
 pub(crate) struct Constant {
+    pub(crate) name: String,
     pub(crate) c_name: String,
     pub(crate) ty: String,
     pub(crate) value: String,

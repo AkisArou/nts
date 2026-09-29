@@ -36,6 +36,9 @@ fn preamble(binding: &Binding, command: &str) -> String {
             names.iter().cloned().collect::<Vec<_>>().join(", ")
         );
     }
+    for (module, name) in &binding.namespaces {
+        let _ = writeln!(out, "  import type * as {name} from \"{module}\";");
+    }
     out
 }
 
@@ -1105,6 +1108,7 @@ mod tests {
             method_only: false,
             statics: None,
             vfunc: None,
+            gir_name: None,
         }
     }
 

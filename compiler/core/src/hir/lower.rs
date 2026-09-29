@@ -19594,7 +19594,7 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// A member of a class the program writes over a `GObject` class: the
-    /// compiled function, and -- for a `vfunc_` method -- the class struct
+    /// compiled function, and -- for an override (`is_override_name`) -- the class struct
     /// slot it fills and the C signature the slot is called with, which are
     /// the overridden declaration's (`@ntsVfunc`). A constructor is refused:
     /// the instance is made by `new` with its properties, and a body run
@@ -19622,7 +19622,7 @@ impl<'a> FuncBuilder<'a> {
                     }
                 }
                 None => {
-                    if !name.starts_with("vfunc_")
+                    if !is_override_name(&name)
                         && self.kind_of(member) == Some(syntax::METHOD_DECLARATION)
                         && let Ok(entry) = self.template_callback_entry(class, member, instance, &name)
                     {
@@ -19631,15 +19631,15 @@ impl<'a> FuncBuilder<'a> {
                 }
             }
         }
-        if !name.starts_with("vfunc_") {
+        if !is_override_name(&name) {
             return Ok((self.lower_method_of(class, member, instance)?, None));
         }
         // `finalize` is where a class's fields are given back, and the
         // registration installs its own for a class with fields; an override
         // would be written over, and one without chaining up would leak the
         // parent's. `dispose` is the one to override.
-        if name == "vfunc_finalize" {
-            return Err(self.unsupported(member, "an override of `vfunc_finalize`, which gives the class's fields back; override `vfunc_dispose`"));
+        if name == "vfunc_finalize" || name == "vfuncFinalize" {
+            return Err(self.unsupported(member, &format!("an override of `{name}`, which gives the class's fields back; override `vfunc_dispose`")));
         }
         let receiver = instance
             .or_else(|| instance_type_of(self.snapshot, class))
@@ -66505,6 +66505,14 @@ enum Branch {
     /// *falsy*, and `undefined` is falsy, so the same read there would be a
     /// payload that is not present.
     Present(ValueId),
+}
+
+/// Whether a member of a class over a `GObject` class names an override:
+/// `vfunc_measure`, as the `c:` surface and GJS spell one, or `vfuncMeasure`,
+/// as the `gi:` surface does. The slot it fills is the overridden
+/// declaration's `@ntsVfunc`, whichever the spelling.
+fn is_override_name(name: &str) -> bool {
+    name.strip_prefix("vfunc").is_some_and(|rest| rest.starts_with('_') || rest.starts_with(|c: char| c.is_ascii_uppercase()))
 }
 
 #[cfg(test)]

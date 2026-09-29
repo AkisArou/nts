@@ -65,9 +65,13 @@ pub(crate) const INTERNAL_GET: &str = "$ntsPropGet_";
 pub(crate) const INTERNAL_SET: &str = "$ntsPropSet_";
 
 /// One namespace's binding, ready to write.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct Binding {
     pub(crate) module: String,
+    /// The `gi:` surface's imports: each other namespace a spelling names,
+    /// as `(module, name)`, imported whole (`import type * as Gio from
+    /// "gi:gio"`). Empty for the `c:` surface, which imports by name.
+    pub(crate) namespaces: Vec<(String, String)>,
     pub(crate) headers: Vec<String>,
     pub(crate) types: Vec<TypeDecl>,
     pub(crate) functions: Vec<Function>,
@@ -102,7 +106,7 @@ pub(crate) struct Binding {
 }
 
 /// A class's construct-only properties, GJS's `new Gio.ThemedIcon({ name })`.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Constructed {
     /// Its own, as `(name, TypeScript type)`, which `…Props` offers.
     pub(crate) own: Vec<(String, String)>,
@@ -115,9 +119,12 @@ pub(crate) struct Constructed {
 /// value in a tag, as every binding's constant is (`@ntsConstant`):
 /// `/** @ntsConstant 200 */ export const G_PRIORITY_DEFAULT_IDLE:
 /// CNumber<"int">;`.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct ConstantDecl {
     pub(crate) name: String,
+    /// GIR's own name, `PRIORITY_DEFAULT`, which the `gi:` surface spells it
+    /// by (`naming`).
+    pub(crate) gir_name: String,
     pub(crate) ts: String,
     pub(crate) value: String,
 }
@@ -126,7 +133,7 @@ pub(crate) struct ConstantDecl {
 /// `new` taking nothing (`gtk_button_new`), or else its view of
 /// `g_object_new_with_properties` given its `GType` (`GtkLabel_construct`,
 /// `gtk_label_get_type`).
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Constructor {
     pub(crate) function: String,
     pub(crate) get_type: Option<String>,
@@ -142,7 +149,7 @@ pub(crate) struct Constructor {
 
 /// A property as the binding names it (`icon_name`), and the methods GIR
 /// says read and write it (`get_icon_name`).
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Accessor {
     pub(crate) name: String,
     pub(crate) getter: Option<String>,
@@ -151,13 +158,13 @@ pub(crate) struct Accessor {
 
 /// One `asGtkBox`-style helper: the class, and the function answering its
 /// `GType`.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Cast {
     pub(crate) class: String,
     pub(crate) get_type: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum TypeDecl {
     /// `Class<"_GtkButton", GtkWidget>`; the parent as `(module, name)` when
     /// it lives in another namespace.
@@ -222,6 +229,10 @@ pub(crate) struct Function {
     /// symbol of its own. Written only as a method, `vfunc_clicked`, as GJS
     /// names an override.
     pub(crate) vfunc: Option<Vfunc>,
+    /// For a function of the namespace itself -- not a class's, a record's or
+    /// a view -- GIR's name for it (`init` for `gtk_init`), which the `gi:`
+    /// surface exports it as (`naming`).
+    pub(crate) gir_name: Option<String>,
 }
 
 /// A virtual function's slot: its class struct, member and the offset C's
@@ -237,7 +248,7 @@ pub(crate) struct Vfunc {
     pub(crate) outs: Vec<(String, bool)>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct EnumDecl {
     pub(crate) name: String,
     /// The C type, `GtkOrientation`: the name a signature spells the enum
@@ -333,6 +344,9 @@ pub(crate) enum Reason {
     /// `g_object_ref`, `g_object_unref` and their kin: the compiler counts a
     /// `GObject` itself, and a program that also did would count it twice.
     CountedByCompiler,
+    /// A function the `gi:` surface would export under a name the module
+    /// already has (`naming`).
+    NameClash(String),
 }
 
 impl fmt::Display for Reason {
@@ -362,6 +376,7 @@ impl fmt::Display for Reason {
             Self::Header(error) => write!(f, "the header disagrees: {error}"),
             Self::Undeclared => write!(f, "declared by none of the headers GIR names"),
             Self::CountedByCompiler => write!(f, "a reference count the compiler keeps itself"),
+            Self::NameClash(name) => write!(f, "`{name}` on the gi: surface, a name the module already has"),
         }
     }
 }
@@ -375,6 +390,7 @@ impl Reason {
             Self::Unknown(_) => "a type this binder does not know".to_owned(),
             Self::NoTag(_) => "a type the headers do not define as a tagged struct".to_owned(),
             Self::Header(_) => "the header disagrees".to_owned(),
+            Self::NameClash(_) => "a name the gi: surface already has".to_owned(),
             other => other.to_string(),
         }
     }
@@ -540,6 +556,7 @@ pub(crate) fn bind<'a>(
         let name = callable.c_identifier.clone().unwrap_or_else(|| callable.name.clone());
         match mapper.function(callable, owner) {
             Ok(mut function) => {
+                function.gir_name = (owner.is_none() && record.is_none() && function.method.is_none()).then(|| callable.name.clone());
                 if let Some(record) = record
                     && function.method.is_none()
                     && matches!(callable.kind, CallableKind::Constructor | CallableKind::Function)
@@ -594,6 +611,18 @@ pub(crate) fn bind<'a>(
     }
     vfuncs(&mut mapper, namespace);
     set_by_name(&mut mapper, namespace);
+    signals(&mut mapper, namespace);
+    mapper.binding.functions.sort_by(|a, b| a.name.cmp(&b.name));
+    // Two GIR entries can name one C symbol (a function and a method moved to
+    // it); the first is the binding. Signal connects share a symbol and have
+    // names of their own, which is what this compares.
+    mapper.binding.functions.dedup_by(|a, b| a.name == b.name);
+    mapper.binding
+}
+
+/// Each class's signals, as the views that connect to one (`connect`,
+/// `connect_after`) and emit it (`emit`), where its parameters map.
+fn signals<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
     for class in &namespace.classes {
         for signal in &class.signals {
             let label = format!("{}::{}", class.c_type.as_deref().unwrap_or(&class.name), signal.name);
@@ -613,12 +642,6 @@ pub(crate) fn bind<'a>(
             }
         }
     }
-    mapper.binding.functions.sort_by(|a, b| a.name.cmp(&b.name));
-    // Two GIR entries can name one C symbol (a function and a method moved to
-    // it); the first is the binding. Signal connects share a symbol and have
-    // names of their own, which is what this compares.
-    mapper.binding.functions.dedup_by(|a, b| a.name == b.name);
-    mapper.binding
 }
 
 /// Each property writable after construction with no setter method --
@@ -681,6 +704,7 @@ fn set_by_name<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
                 method_only: true,
                 statics: None,
                 vfunc: None,
+                gir_name: None,
             });
             if let Some(accessor) =
                 mapper.binding.properties.get_mut(&c_type).and_then(|all| all.iter_mut().find(|accessor| accessor.name == ident))
@@ -711,6 +735,7 @@ fn plain_function(name: String, symbol: String, parameters: Vec<(String, Mapped)
         method_only: false,
         statics: None,
         vfunc: None,
+        gir_name: None,
     }
 }
 
@@ -821,6 +846,7 @@ fn get_by_name(mapper: &mut Mapper<'_>, class: &Class, c_type: &str, property: &
         method_only: true,
         statics: None,
         vfunc: None,
+        gir_name: None,
     });
     if let Some(accessor) = mapper.binding.properties.get_mut(c_type).and_then(|all| all.iter_mut().find(|accessor| accessor.name == ident)) {
         accessor.getter = Some(method);
@@ -1371,7 +1397,12 @@ impl<'a> Mapper<'a> {
             let Some(value) = exact_integer(&constant.value) else { continue };
             let c = brand.strip_prefix("c_").unwrap_or(brand);
             self.binding.brands.insert("CNumber");
-            self.binding.constants.push(ConstantDecl { name: constant.c_name.clone(), ts: format!("CNumber<\"{c}\">"), value });
+            self.binding.constants.push(ConstantDecl {
+                name: constant.c_name.clone(),
+                gir_name: constant.name.clone(),
+                ts: format!("CNumber<\"{c}\">"),
+                value,
+            });
         }
         // The fundamental types, from the headers, each a `GType` as a
         // type's is: GJS's `GObject.TYPE_STRING`, which a list store's
@@ -1379,7 +1410,9 @@ impl<'a> Mapper<'a> {
         for name in super::FUNDAMENTAL_TYPES {
             if let Some(value) = self.facts.macros.get(*name) {
                 self.binding.brands.insert("c_size_t");
-                self.binding.constants.push(ConstantDecl { name: (*name).to_owned(), ts: "c_size_t".to_owned(), value: value.to_string() });
+                // GJS's `GObject.TYPE_STRING`: the macro without its prefix.
+                let gir_name = name.strip_prefix("G_").unwrap_or(name).to_owned();
+                self.binding.constants.push(ConstantDecl { name: (*name).to_owned(), gir_name, ts: "c_size_t".to_owned(), value: value.to_string() });
             }
         }
     }
@@ -1499,6 +1532,7 @@ impl<'a> Mapper<'a> {
             method_only: false,
             statics,
             vfunc: None,
+            gir_name: None,
         })
     }
 
@@ -2161,6 +2195,7 @@ impl<'a> Mapper<'a> {
             method_only: false,
             statics: static_of(callable, owner),
             vfunc: None,
+            gir_name: None,
         })
     }
 
@@ -2271,6 +2306,7 @@ impl<'a> Mapper<'a> {
             method_only: true,
             statics: None,
             vfunc: None,
+            gir_name: None,
         };
         // What an emit answers: nothing, or a number or a boolean -- the
         // handlers' answer through the location `g_signal_emit` writes. A
@@ -2512,6 +2548,7 @@ impl<'a> Mapper<'a> {
             method_only: false,
             statics: None,
             vfunc: None,
+            gir_name: None,
         })
     }
 
@@ -2698,7 +2735,7 @@ fn member(name: &str) -> String {
 /// A GIR parameter name as a TypeScript identifier: a name that stands
 /// alone, escaped where it is a word TypeScript reserves -- `delete` is
 /// `delete_`.
-fn identifier(name: &str) -> String {
+pub(crate) fn identifier(name: &str) -> String {
     const RESERVED: &[&str] = &[
         "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete",
         "do", "else", "enum", "export", "extends", "false", "finally", "for", "function", "if",
@@ -2735,6 +2772,7 @@ fn get_type_function(get_type: &str) -> Function {
         method_only: false,
         statics: None,
         vfunc: None,
+        gir_name: None,
     }
 }
 

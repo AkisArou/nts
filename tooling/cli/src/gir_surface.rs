@@ -29,6 +29,7 @@ const GENERATOR: u64 = fnv(&[
     include_bytes!("bind_gir/facts.rs"),
     include_bytes!("bind_gir/map.rs"),
     include_bytes!("bind_gir/model.rs"),
+    include_bytes!("bind_gir/naming.rs"),
     include_bytes!("bind_gir/parse.rs"),
     include_bytes!("bind_gir/prerequisites.rs"),
     include_bytes!("bind_gir/cairo-1.0.gir"),
@@ -52,6 +53,9 @@ const fn fnv(parts: &[&[u8]]) -> u64 {
 
 /// The platform package, which names every namespace's.
 pub(crate) const PLATFORM_PACKAGE: &str = "@nts/platform-gtk";
+
+/// What a `gi:` surface's package is named by: `@nts/gi-gtk`.
+const GI_PACKAGE: &str = "@nts/gi-";
 
 /// GTK's packages for one set of root namespaces on this machine.
 #[derive(Debug, Clone)]
@@ -86,6 +90,13 @@ impl GirPlatform {
     /// A namespace's package name: `@nts/gir-gtk-4.0`.
     fn package(stem: &str) -> String {
         format!("@nts/gir-{}", stem.to_lowercase())
+    }
+
+    /// Its `gi:` surface's (`naming`): `@nts/gi-gtk`, which only a program
+    /// importing a `gi:` module is opened with.
+    fn gi_package(stem: &str) -> String {
+        let namespace = stem.split_once('-').map_or(stem, |(namespace, _)| namespace);
+        format!("{GI_PACKAGE}{}", namespace.to_lowercase())
     }
 
     /// Every root's closure, bound: the namespaces once each, and the GIR
@@ -142,13 +153,15 @@ impl Binder for GirPlatform {
         let mut references = String::new();
         for namespace in namespaces {
             let name = Self::package(&namespace.stem);
-            let _ = writeln!(references, "/// <reference types=\"{name}\" />");
+            let gi = Self::gi_package(&namespace.stem);
+            let _ = writeln!(references, "/// <reference types=\"{name}\" />\n/// <reference types=\"{gi}\" />");
             packages.push(Package {
                 name,
                 surface: Surface::Gobject,
                 declarations: namespace.declarations,
                 values: Some((format!("{}.values.ts", namespace.stem), namespace.values)),
             });
+            packages.push(Package { name: gi, surface: Surface::Gobject, declarations: namespace.gi, values: None });
         }
         packages.push(Package {
             name: PLATFORM_PACKAGE.to_owned(),
@@ -192,21 +205,21 @@ impl Generated for GirBindings {
             return Ok(None);
         }
         let search = bind_gir::search_path();
-        let modules: BTreeSet<String> = complaints
-            .iter()
-            .filter_map(missing_module)
-            .filter_map(|module| bind_gir::namespace_of(&format!("c:{module}"), &search))
-            .collect();
+        let missing: Vec<&str> = complaints.iter().filter_map(missing_module).collect();
+        let modules: BTreeSet<String> = missing.iter().filter_map(|module| bind_gir::namespace_of(module, &search)).collect();
         if modules.is_empty() {
             return Ok(None);
         }
-        install(tsconfig, &GirPlatform::for_modules(&modules, &search)).map(Some).map_err(|error| format!("{error:#}"))
+        let gi = missing.iter().any(|module| module.starts_with("gi:"));
+        install(tsconfig, &GirPlatform::for_modules(&modules, &search), gi).map(Some).map_err(|error| format!("{error:#}"))
     }
 }
 
 /// The platform's packages, from the store and linked into the project, and
-/// the config opening the project with their files.
-fn install(tsconfig: &Utf8Path, platform: &GirPlatform) -> Result<Utf8PathBuf> {
+/// the config opening the project with their files -- the `gi:` surface's only
+/// where the program imports it (`gi`), so a `c:` program typechecks what it
+/// did.
+fn install(tsconfig: &Utf8Path, platform: &GirPlatform, gi: bool) -> Result<Utf8PathBuf> {
     let project = tsconfig.parent().unwrap_or(Utf8Path::new("."));
     let installed = nts_surfaces::Store::new(nts_surfaces::Store::default_root()).ensure(platform)?;
     let linked = nts_surfaces::link(&installed, project)?;
@@ -217,17 +230,25 @@ fn install(tsconfig: &Utf8Path, platform: &GirPlatform) -> Result<Utf8PathBuf> {
             "note: linked {PLATFORM_PACKAGE} into {project}/node_modules; for an editor to see it, add \"types\": [\"{PLATFORM_PACKAGE}\"] to tsconfig.json's compilerOptions"
         );
     }
-    nts_surfaces::wrapper(tsconfig, "gir", &installed.files())
+    let files: Vec<Utf8PathBuf> = installed
+        .packages
+        .iter()
+        .filter(|(name, _)| gi || !name.starts_with(GI_PACKAGE))
+        .map(|(_, dir)| dir.join("index.d.ts"))
+        .chain(installed.values.iter().cloned())
+        .collect();
+    nts_surfaces::wrapper(tsconfig, "gir", &files)
 }
 
-/// The `c:` module a complaint says cannot be found -- TypeScript's `Cannot
-/// find module 'c:Gtk-4.0' or its corresponding type declarations.` (2307) --
-/// by the name after the prefix.
+/// The `c:` or `gi:` module a complaint says cannot be found -- TypeScript's
+/// `Cannot find module 'c:Gtk-4.0' or its corresponding type declarations.`
+/// (2307).
 fn missing_module(complaint: &Complaint) -> Option<&str> {
     if complaint.code != 2307 {
         return None;
     }
-    complaint.text.split_once("'c:")?.1.split('\'').next()
+    let module = complaint.text.split_once('\'')?.1.split('\'').next()?;
+    (module.starts_with("c:") || module.starts_with("gi:")).then_some(module)
 }
 
 #[cfg(test)]
@@ -258,8 +279,10 @@ mod tests {
         // Each type is declared once, by its namespace's package, and
         // imported by the rest: two declarations of one class would be two
         // unrelated types to the checker, and two layouts to lowering.
+        // On each surface: `gi:gobject` exports `GObject` as `c:GObject-2.0`
+        // does, and the checker sees two modules.
         let mut owners: std::collections::BTreeMap<&str, &str> = std::collections::BTreeMap::new();
-        for package in &packages {
+        for package in packages.iter().filter(|p| !p.name.starts_with(GI_PACKAGE)) {
             for line in package.declarations.lines() {
                 let Some(name) = line.strip_prefix("  export type ").and_then(|rest| rest.split([' ', '<']).next()) else { continue };
                 if let Some(first) = owners.insert(name, &package.name) {
@@ -294,6 +317,7 @@ mod tests {
         pinned_constructions(&packages);
         pinned_vfunc_tuples(gtk);
         pinned_constants(&packages, gobject);
+        pinned_gi(&packages);
         let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize_utf8().unwrap();
         let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-gir-packages-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -362,6 +386,31 @@ mod tests {
     /// GIR's constants and the fundamental types, as the binder declares them.
     /// An override answering its trailing scalar outs as GJS's does, a
     /// tuple, with the tag naming the slot's out pointers.
+    /// The `gi:` surface (`bind_gir::naming`): short names, camelCase members
+    /// and parameters, another namespace's types qualified, GIR's names for a
+    /// constant and a namespace function, and a class named like a JavaScript
+    /// global keeping its C name.
+    fn pinned_gi(packages: &[Package]) {
+        let text = |name: &str| &packages.iter().find(|p| p.name == name).unwrap().declarations;
+        let pins = [
+            ("@nts/gi-gtk", "declare module \"gi:gtk\" {"),
+            ("@nts/gi-gtk", "  import type * as Gio from \"gi:gio\";"),
+            ("@nts/gi-gtk", "    append(this: Box, child: Widget): void;"),
+            ("@nts/gi-gtk", "     * @ntsVfuncOut minimum? natural? minimumBaseline? naturalBaseline?\n     */\n    vfuncMeasure(this: Widget, orientation: CEnum<Orientation, c_uint>, forSize: CNumber<\"int\">): [CNumber<\"int\">, CNumber<\"int\">, CNumber<\"int\">, CNumber<\"int\">];"),
+            ("@nts/gi-gtk", "  export interface AnyFilterProps extends MultiFilterProps, Gio.ListModelProps, BuildableProps {"),
+            ("@nts/gi-gtk", "   * @ntsSymbol gtk_init\n   */\n  export function init(): void;"),
+            ("@nts/gi-glib", "  export const PRIORITY_DEFAULT: CNumber<\"int\">;"),
+            ("@nts/gi-glib", "  export type GError = Class<\"_GError\"> & GErrorMethods;"),
+            ("@nts/gi-gobject", "  export type GObject = GObjectClass<\"_GObject\", TypeInstance> & GObjectMethods;"),
+            ("@nts/gi-gobject", "  export const TYPE_STRING: c_size_t;"),
+        ];
+        for (package, present) in pins {
+            assert!(text(package).contains(present), "{package} is missing: {present}");
+        }
+        // A method is a method only there, as GJS has it: no free function.
+        assert!(!text("@nts/gi-gtk").contains("export function gtk_box_append("), "gi:gtk exports a method as a function");
+    }
+
     fn pinned_vfunc_tuples(gtk: &Package) {
         for present in [
             "     * @ntsVfuncOut minimum? natural? minimum_baseline? natural_baseline?\n     */\n    vfunc_measure(this: GtkWidget, orientation: CEnum<GtkOrientation, c_uint>, for_size: CNumber<\"int\">): [CNumber<\"int\">, CNumber<\"int\">, CNumber<\"int\">, CNumber<\"int\">];",
