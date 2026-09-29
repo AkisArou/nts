@@ -19780,12 +19780,13 @@ impl<'a> FuncBuilder<'a> {
     /// `unknown` is a property of the *value* rather than of its type, and
     /// answering it needs a runtime tag this compiler has not decided on. Those
     /// stay refused, by name now.
-    fn lower_typeof(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
-        let operand = *self
-            .children(id)
-            .first()
-            .ok_or_else(|| self.unsupported(id, "`typeof` with no operand"))?;
-        let answer = self
+    /// What the checker's type for a `typeof` operand answers, where it answers.
+    ///
+    /// A single primitive is a constant and no tag is read. Extracted so
+    /// [`Self::lower_typeof`] reads as the two things it does -- find the answer,
+    /// and run the operand -- rather than as one long match with a decision after.
+    fn typeof_from_the_checkers_type(&self, operand: NodeId) -> Option<&'static str> {
+        self
             .snapshot
             .node_types
             .get(&operand)
@@ -19805,22 +19806,123 @@ impl<'a> FuncBuilder<'a> {
                 // a reference`: a sentence about storage, for something with no
                 // storage and a known answer.
                 //
-                // Nothing is skipped by not lowering it. `typeof` evaluates its
-                // operand, and the operand here is a *keyword*: the literal
-                // `null` and the literal `undefined` have no effects to run. A
-                // `typeof f()` whose result is `null` is a different node and
-                // still goes below.
+                // Nothing is skipped by not lowering *these two*, and the
+                // sentence here used to stop at that -- "the operand here is a
+                // keyword: the literal `null` and the literal `undefined` have
+                // no effects to run" -- which is true of these two arms and was
+                // **false of the function**: every arm that found an answer
+                // returned the constant without lowering the operand at all, so
+                // `typeof f()` folded to `"number"` and **never called `f`**.
+                //
+                // A silent dropped side effect wherever `typeof` is applied to a
+                // call, and it made 9 recorded test262 built-ins files pass by
+                // running nothing: `typeof new Temporal.Duration()
+                // .toLocaleString()` compiled with no Temporal runtime present,
+                // where node throws a `ReferenceError`. The conformance lane found
+                // it looking at why an exclusion reported FIXED.
+                //
+                // So the answer is still a constant -- the checker's type decides
+                // it and no tag is read -- and the operand is **evaluated for its
+                // effects** below, with `null` and `undefined` exempt because a
+                // keyword has none and no representation to lower into either.
                 TypeKind::Null => Some("object"),
                 TypeKind::Undefined => Some("undefined"),
                 _ => None,
             })
-            .ok_or_else(|| {
-                self.unsupported(
-                    id,
-                    "`typeof` on a value whose type is not a single primitive, which needs a \
-                     runtime tag",
-                )
-            });
+    }
+
+    /// The expression inside any number of parentheses.
+    ///
+    /// `(((x)))` is `x` for every question this compiler asks of an operand, and a
+    /// predicate that does not look through them answers about the parentheses.
+    /// Bounded rather than recursive so a cycle in the node table cannot hang here.
+    fn through_parentheses(&self, mut node: NodeId) -> NodeId {
+        for _ in 0..32 {
+            if self.kind_of(node) != Some(syntax::PARENTHESIZED_EXPRESSION) {
+                return node;
+            }
+            match self.children(node).first() {
+                Some(inner) => node = *inner,
+                None => return node,
+            }
+        }
+        node
+    }
+
+    /// Whether a `typeof` operand has nothing to evaluate.
+    ///
+    /// A keyword, a name, or a literal. [`Self::lower_typeof`] runs everything else
+    /// for its effects, and stops here for three reasons rather than one:
+    ///
+    /// * there is nothing to run -- reading a name is not an effect, where reading a
+    ///   *property* may be a getter and so is deliberately absent from this list;
+    /// * `null` and `undefined` have no representation to lower into, so lowering
+    ///   them would refuse the expression rather than evaluate it;
+    /// * and `typeof undeclaredGlobal === "undefined"` is the one idiom that depends
+    ///   on the operand *not* being looked up. Lowering a name that resolves to
+    ///   nothing refuses as "a global with no definition here", which would take a
+    ///   working guard with it.
+    ///
+    /// It also keeps the corpus where it was: without the name and literal arms,
+    /// 17 of 29 runtime projects emitted the same program renumbered -- a binding
+    /// read pushed and then removed by DCE, which is churn for nothing.
+    fn operand_has_no_effects(&self, operand: NodeId) -> bool {
+        // **Through parentheses first.** `typeof(null)` is a
+        // `ParenthesizedExpression` around the keyword, so without this it fell to
+        // the effects path, lowered a bare `null`, and was refused as "`null` or
+        // `undefined` where what it stands in for is not a reference" -- a sentence
+        // about storage for something with no storage and a known answer. Caught by
+        // the conformance lane on `types/null/S8.2_A3.js`, which is the one row of
+        // theirs this change regressed rather than exposed.
+        //
+        // `typeof(undeclaredGlobal)` is the same hazard and the worse one: it is a
+        // *working guard* whose whole point is that the operand is not looked up.
+        let operand = self.through_parentheses(operand);
+        matches!(
+            self.kind_of(operand),
+            Some(
+                syntax::NULL_KEYWORD
+                    | syntax::IDENTIFIER
+                    | syntax::NUMERIC_LITERAL
+                    | syntax::STRING_LITERAL
+                    | syntax::BIGINT_LITERAL
+                    | syntax::TRUE_KEYWORD
+                    | syntax::FALSE_KEYWORD
+                    | syntax::NO_SUBSTITUTION_TEMPLATE_LITERAL
+            )
+        )
+    }
+
+    fn lower_typeof(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let operand = *self
+            .children(id)
+            .first()
+            .ok_or_else(|| self.unsupported(id, "`typeof` with no operand"))?;
+        let answer = self.typeof_from_the_checkers_type(operand).ok_or_else(|| {
+            self.unsupported(
+                id,
+                "`typeof` on a value whose type is not a single primitive, which needs a \
+                 runtime tag",
+            )
+        });
+        // **The operand runs, whatever the answer is.** `typeof` evaluates it
+        // (ECMA-262's `UnaryExpression : typeof UnaryExpression` begins by
+        // evaluating the operand), and only a bare `null` or `undefined` keyword
+        // has nothing to evaluate -- those two also having no representation to
+        // lower into, which is why they are the exemption rather than a special
+        // case. The value is discarded: the answer is the constant above, and DCE
+        // removes the evaluation where it has no effects.
+        if let Ok(answer) = answer {
+            if !self.operand_has_no_effects(operand) {
+                self.lower_expression(operand)?;
+            }
+            let origin = self.origin(id);
+            return Ok(self.push(
+                OpKind::ConstString(answer.to_owned()),
+                HirType::Managed(ManagedType::String),
+                origin,
+            ));
+        }
         // An erased value *has* the runtime tag the message above asks for, and
         // reading it is what `typeof` means. The tag is an integer and the
         // expression's type is a string, so it goes through `nts_tag_name`.
