@@ -1,9 +1,8 @@
 {
   "run": "build",
-  "category": "refused",
-  "nts": "NTS1001 a call inside a `try` whose `throw` would not reach this handler: through a function value, which has no raising copy to call",
-  "ran": "exit 1; nts: uncaught Observed: ",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: direct=caught;one call deeper=caught;",
   "node": "exit 1; nts: uncaught Observed: direct=caught;one call deeper=caught;",
-  "measured_with": "85bd233d71d96b58",
+  "measured_with": "87d5573779e3bbe2",
   "source": "measured"
 }

@@ -1,3 +1,4 @@
+// **Agrees since ac1533ca4; a guard.** Until then:
 // A throw from a plain function called *by* a function value, inside a `try`
 // around the call of that value, must be caught. A guard for the raising copy
 // of a function value (the compiler lane's 6a7911652b0e, 2026-09-30): on its
