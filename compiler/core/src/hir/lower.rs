@@ -20683,8 +20683,23 @@ impl<'a> FuncBuilder<'a> {
     /// `delete o.x`, which TypeScript permits only where `x` is optional.
     ///
     /// `TS2790: The operand of a 'delete' operator must be optional` -- so the
-    /// property being deleted always holds `T | undefined` and always has a slot
-    /// with a tag in it. Deleting it is writing the `undefined` tag.
+    /// property being deleted holds `T | undefined` and has a slot with a tag in
+    /// it. Deleting it is writing the `undefined` tag.
+    ///
+    /// **That precondition is checked here rather than assumed**, and this
+    /// paragraph used to read *"always holds"* on the strength of the checker's
+    /// refusal alone. A program that suppresses `TS2790` reaches this lowering
+    /// with a **required** property, and then `coerce_to_slot` re-makes the
+    /// `undefined` at whatever the slot's representation is. That arm is
+    /// licensed by the checker having approved an *assignment*; a `delete`
+    /// invents the value and nothing approved it. So a required `c: string` took
+    /// a null `NtsString *` -- which is neither `undefined` nor a string -- and
+    /// the next read of `c` dereferenced it. That is the SIGSEGV
+    /// `outcomes/object-entries-after-a-getter-deletes-a-later-key` recorded for
+    /// four weeks under the wrong cause -- its header blamed `Object.entries`,
+    /// and `delete` alone crashes with no `Object.entries` anywhere in the
+    /// program. It is now
+    /// `blockers/a-delete-of-a-property-that-is-not-optional`.
     ///
     /// # Why that is the whole of it
     ///
@@ -20724,12 +20739,13 @@ impl<'a> FuncBuilder<'a> {
         // the `undefined` at the slot's own representation rather than at a
         // guess.
         let place = self.place_of(*target)?;
-        if !matches!(place, Place::Field { .. }) {
+        let &Place::Field { object, field } = &place else {
             return Err(self.unsupported(
                 *target,
                 "a `delete` of something that is not a stored field",
             ));
-        }
+        };
+        self.the_absence_has_a_slot(*target, object, field)?;
         let absent = self.push(OpKind::ConstUndefined, HirType::Erased, origin.clone());
         // `coerce_to_slot` and then `field_delete` rather than `write_place`,
         // which is the write path and would record a *write*. The coercion is
@@ -20741,11 +20757,68 @@ impl<'a> FuncBuilder<'a> {
         // type: `delete b.maybe` after `new Box()` makes `"maybe" in b` false,
         // and no static answer can follow that.
         let absent = self.coerce_to_slot(id, &place, absent)?;
-        let Place::Field { object, field } = place else {
-            unreachable!("checked above");
-        };
         self.field_delete(object, field, absent, &origin);
         Ok(self.push(OpKind::ConstBool(true), HirType::Bool, origin))
+    }
+
+    /// Refuses a `delete` whose property has nowhere to record the absence.
+    ///
+    /// **One question -- is this property optional -- and
+    /// [`super::presence::Presence`] answers it in the three ways that matter**,
+    /// which is why it is asked of that rather than of the slot's type. An
+    /// optional property's slot is erased *and* carries a bit; a required one's
+    /// is the property's own representation, with no room for an absence in it.
+    /// Deriving "can this be absent" from the type would be that same fact a
+    /// second time, and this file has four defects this week from exactly that.
+    ///
+    /// Asked of [`Self::presence_of_key`] rather than of
+    /// [`Self::presence_bit_of`], which collapses `Always` and `TooMany` into
+    /// one `None` **and also gates on `presence_keys`**. That gate is right for
+    /// a writer -- a bit nobody tests is a store nobody reads -- and would be
+    /// wrong here twice over: it would refuse an optional property whose
+    /// presence no `in` asks about, which is representable and correct today.
+    ///
+    /// Both sentences name the *property* and its type, because the fix is at
+    /// the declaration -- `c?: string` rather than `c: string` -- which is also
+    /// what TypeScript asks for. So nothing legitimate is refused: every named
+    /// `delete` in either runtime corpus is of an optional property, and the
+    /// rest are `delete o[k]`, refused above as not a named property.
+    fn the_absence_has_a_slot(
+        &mut self,
+        at: NodeId,
+        object: ValueId,
+        field: u32,
+    ) -> Result<(), Diagnostic> {
+        // Unreachable, with a proof rather than an assertion. `place_of` reaches
+        // `Place::Field` only through `HirType::Managed(ManagedType::Object)`
+        // and a `layout_of` that succeeded, and it took `field` out of that
+        // layout's own fields -- so all three of `property_at`'s `None` causes
+        // are ruled out before this line. Degraded to today's behaviour rather
+        // than panicked on or refused, because a refusal here could name
+        // neither the property nor its type: it would be a sentence about the
+        // compiler with nothing in it for the reader to fix.
+        let Some((ty, key)) = self.property_at(object, field) else {
+            return Ok(());
+        };
+        let who = self.type_in_a_message(ty);
+        match self.presence_of_key(ty, &key) {
+            Some(super::presence::Presence::Bit(_)) => Ok(()),
+            Some(super::presence::Presence::TooMany { optional }) => Err(self.unsupported(
+                at,
+                &format!(
+                    "a `delete` of `{key}` on {who}, which declares {optional} optional \
+                     properties -- an object header records {}",
+                    super::presence::BITS
+                ),
+            )),
+            // `Always` is "not optional", and `None` is "the program does not
+            // carry the layout" -- ruled out above, and it joins the refusal
+            // rather than the permission for the reason the block there gives.
+            _ => Err(self.unsupported(
+                at,
+                &format!("a `delete` of `{key}` on {who}, which does not declare it optional"),
+            )),
+        }
     }
 
     /// `typeof x`, where `x` has one known primitive type.
@@ -31793,11 +31866,11 @@ impl<'a> FuncBuilder<'a> {
             Some(super::presence::Presence::Bit(bit)) => Ok(Some(bit)),
             Some(super::presence::Presence::TooMany { optional }) => {
                 // Named, because the fix is at the declaration and "a type"
-                // points at nothing. `declared_at` is what answers for an
+                // points at nothing. `type_in_a_message` is what answers for an
                 // anonymous one -- an inline `{ k?: T }`, a `Partial<T>` -- and
-                // it is the helper the refusal this replaced was built around.
-                let who = named(self.snapshot, class)
-                    .map_or_else(|| self.declared_at(class), |name| format!("`{name}`"));
+                // it carries the `__object` filter this spelled out before the
+                // `delete` refusal needed the same sentence.
+                let who = self.type_in_a_message(class);
                 Err(self.unsupported(
                     at,
                     &format!(
@@ -32796,12 +32869,12 @@ impl<'a> FuncBuilder<'a> {
 
     /// A type described by what it holds, for one that has nothing else.
     ///
-    /// The last fallback under [`Self::declared_at`], and the one the case that
-    /// matters actually reaches. A **synthesised** type — an intersection, a
-    /// mapped type, a `Partial<T>` instantiation — has no symbol, so it has no
-    /// name *and* no declaration, and both of the answers above run out. Under
-    /// `Buffer.from` that is exactly what stood: `an anonymous type`, twice
-    /// over, describing nothing.
+    /// The fallback under [`Self::type_in_a_message`], and **every type with no
+    /// declared name reaches it** -- which it did not when a location rung sat
+    /// in front of it. A **synthesised** type — an intersection, a mapped type,
+    /// a `Partial<T>` instantiation — has no symbol, so it has no name, and this
+    /// is what is left. Under `Buffer.from` what stood before it was `an
+    /// anonymous type`, twice over, describing nothing.
     ///
     /// Its property names are what is left and they identify it: a reader who
     /// sees `{ length?, 0? }` knows a `Partial<ArrayLike>` when the name and
@@ -32904,29 +32977,42 @@ impl<'a> FuncBuilder<'a> {
     /// `an anonymous type` remains the answer where there is genuinely nothing
     /// to point at: a symbol declared outside the decoded file set has an empty
     /// `declarations`, which is honest rather than a gap.
-    fn declared_at(&self, ty: TypeId) -> String {
-        let Some(symbol) = self.snapshot.types.get(ty.0 as usize).and_then(|r| r.symbol) else {
-            return self.shaped_like(ty);
-        };
-        let Some(declaration) = self
-            .snapshot
-            .symbols
-            .get(symbol.0 as usize)
-            .and_then(|declared| declared.declarations.first())
-        else {
-            return self.shaped_like(ty);
-        };
-        let Some(node) = self.snapshot.nodes.get(declaration.0 as usize) else {
-            return self.shaped_like(ty);
-        };
-        let location = node.origin.location;
-        let Some(source) = self.snapshot.sources.get(location.file.0 as usize) else {
-            return self.shaped_like(ty);
-        };
-        format!(
-            "the anonymous type at {}+{}",
-            source.display_path, location.span.start
-        )
+    /// How a refusal names a type, when what the reader has to fix is its
+    /// declaration.
+    ///
+    /// Two rungs -- the declared name, then the shape -- and the third one this
+    /// replaced is gone because it could not be *recorded*.
+    ///
+    /// `named` answers with whatever symbol the checker attached, and for a type
+    /// with no declaration that is `__object`, `__type` or `__class`:
+    /// TypeScript's placeholders, which [`is_anonymous_shape`] exists to
+    /// recognise and which the refusal below was printing verbatim. *"a `delete`
+    /// of `c` on `__object`"* names nothing a reader can go and edit.
+    ///
+    /// **`declared_at` used to sit between them and answered with a path and a
+    /// byte offset** -- `the anonymous type at /abs/path/main.ts+1657`. Three
+    /// things were wrong with that at once, and the third is what removed it:
+    /// an absolute path is not the same sentence on two machines, so a fixture
+    /// cannot hold it in an `// expect:` line and the refusal could not be
+    /// pinned at all; a byte offset is not a place anyone reads, while the
+    /// diagnostic already carries a real `file:line:col` of its own; and
+    /// [`Self::shaped_like`]'s own doc calls itself *"the one the case that
+    /// matters actually reaches"*, so the rung existed for object literals and
+    /// answered them worst. It had exactly one caller.
+    ///
+    /// So the shape is the fallback, and it is the better sentence anyway: for a
+    /// refusal about *optionality*, printing the shape `{ a, b, c }` shows at a
+    /// glance that none of the three carries a `?`, because `shaped_like` prints
+    /// the mark.
+    ///
+    /// One spelling, because the two callers ([`Self::presence_bit_named`] and
+    /// [`Self::the_absence_has_a_slot`]) are the two sides of one question --
+    /// whether a property may be absent -- and a refusal pair that names the
+    /// same type two ways is the reader's problem, not a tidiness one.
+    fn type_in_a_message(&self, ty: TypeId) -> String {
+        named(self.snapshot, ty)
+            .filter(|name| !is_anonymous_shape(name))
+            .map_or_else(|| self.shaped_like(ty), |name| format!("`{name}`"))
     }
 
     /// A type's declared name, where it has one.
@@ -36265,6 +36351,27 @@ impl<'a> FuncBuilder<'a> {
         ))
     }
 
+    /// The type and property name a field place names.
+    ///
+    /// One derivation, because [`Self::presence_bit_of`] and
+    /// [`Self::the_absence_has_a_slot`] both need it and *"which property is
+    /// field `n` of this value"* answered twice is how this file has gone wrong
+    /// four times in a week.
+    ///
+    /// Looked up rather than built, for the reason
+    /// [`Self::presence_of_key`] states: `layout_of` **creates**, and creating
+    /// one here would materialise a layout for a type the program does not
+    /// carry. So `None` is about the compilation rather than about the property
+    /// -- the value is not an object, or the program carries no layout for it --
+    /// and each caller says which way that falls for it.
+    fn property_at(&self, object: ValueId, field: u32) -> Option<(TypeId, String)> {
+        let HirType::Managed(ManagedType::Object(ty)) = self.values[object.0 as usize].ty else {
+            return None;
+        };
+        let layout = self.layouts.iter().find(|layout| layout.types.contains(&ty))?;
+        Some((ty, layout.fields.get(field as usize)?.name.clone()))
+    }
+
     /// The presence bit for a field of the object this value holds, where
     /// something in the program reads it.
     ///
@@ -36273,11 +36380,7 @@ impl<'a> FuncBuilder<'a> {
     /// nobody tests is a store into a header word that is never read, and it
     /// cost `callback-field` one counted operation against a floor of zero.
     fn presence_bit_of(&self, object: ValueId, field: u32) -> Option<u32> {
-        let HirType::Managed(ManagedType::Object(ty)) = self.values[object.0 as usize].ty else {
-            return None;
-        };
-        let layout = self.layouts.iter().find(|layout| layout.types.contains(&ty))?;
-        let name = layout.fields.get(field as usize)?.name.clone();
+        let (ty, name) = self.property_at(object, field)?;
         if !self.presence_keys.contains(&name) {
             return None;
         }
