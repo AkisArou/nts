@@ -2509,6 +2509,35 @@ pub struct DisputedLayout {
     pub discarded: Vec<String>,
 }
 
+/// One written signature's typed face, for a backend that publishes it to a
+/// foreign language. See [`Program::signature_faces`].
+///
+/// Each position is the type that position **represents as**, or `None` where it
+/// has no representation and so cannot be given a typed face. The consumer
+/// publishes the erased face for that position and names the reason, rather than
+/// dropping the typed face entirely -- which is the failure this exists to stop.
+///
+/// `optional` and `rest` ride along because the signature record already carries
+/// them and a consumer that had to re-derive "is this parameter a rest" would be a
+/// second answer to a question the checker already answered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignatureFace {
+    /// One per declared parameter, in declaration order, and **not** the uniform
+    /// entry's width: this is the written list, which is the whole point.
+    pub params: Vec<SignatureFacePart>,
+    /// What the signature returns, or `None` where that has no representation.
+    pub returns: Option<HirType>,
+}
+
+/// One parameter of a [`SignatureFace`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignatureFacePart {
+    /// What this parameter represents as, or `None` where it cannot be typed.
+    pub ty: Option<HirType>,
+    pub optional: bool,
+    pub rest: bool,
+}
+
 /// A lowered program.
 #[derive(Debug, Clone, Default)]
 pub struct Program {
@@ -2559,6 +2588,52 @@ pub struct Program {
     /// consults for the same edge, so this is one source read twice rather than
     /// two derivations.
     pub record_parents: std::collections::BTreeMap<TypeId, TypeId>,
+    /// The **typed** face of each written signature, for a backend that publishes
+    /// one to a foreign language.
+    ///
+    /// # Why it has to be published rather than derived
+    ///
+    /// The JVM gives a signature class a Java-callable face: `implements
+    /// NtsNumberCallback`, a concrete `call(double)`, a `Fn…$Lambda` so a Java
+    /// lambda can be passed, and friendly overloads beside the erased entry. That
+    /// surface was keyed on the signature layout's *typed* `call` slot, which
+    /// `declare_unfilled_signatures` and `signature_shell` used to declare --
+    /// and A6 (`519195e49`) deleted both, correctly, because after the uniform
+    /// entry no call spells a written signature any more.
+    ///
+    /// **So a fact one lane depended on was removed by another, and nothing went
+    /// red**: `Fn3__41` silently stopped implementing its interface, lost
+    /// `call(double)` and its `$Lambda`, and the friendly overload disappeared,
+    /// leaving a published Java API that Java cannot call. Six weeks passed before
+    /// a full gate ran `interop`. A backend receives only a `Program` and never
+    /// the snapshot, so it could not ask the checker itself.
+    ///
+    /// # What `None` means, and why it is not an absent key
+    ///
+    /// The two say different things and collapsing them is how the surface
+    /// vanished the first time:
+    ///
+    ///   no entry          not a written signature. An inferred function type --
+    ///                     an arrow's own -- is a closure's layout, whose slot
+    ///                     `closure_layout` filled; there is no Java face to give.
+    ///   entry, `None` at  a written signature whose face cannot be *typed* at
+    ///     a position      that position. The consumer publishes the erased face
+    ///                     and says so by name, exactly as `refuses_to_cross`
+    ///                     makes the entry exist and abort rather than be absent.
+    ///
+    /// # The separation, which is `record_parents`' and for its reason
+    ///
+    /// **Nothing that decides a representation may read this.** Not `same_shape`,
+    /// not `collect_layouts`' merge, not `canonicalize_objects`. It is keyed by
+    /// the layout's own type id (`layout.types.first()`), because a written
+    /// signature and the type inferred for an arrow are two ids over one
+    /// signature and only the layout's is one a backend can resolve a class from
+    /// -- the reasoning `relate_closures_to_signatures` gives for its `base`.
+    ///
+    /// Filled by `declare_erased_entries` under the same predicate that declares
+    /// the entry, so the declaration and the face cannot disagree about what a
+    /// signature is.
+    pub signature_faces: std::collections::BTreeMap<TypeId, SignatureFace>,
     /// Types this lowering laid out two different ways. See [`DisputedLayout`]:
     /// a compiler-internal inconsistency rather than anything the source did,
     /// reported by [`verify`] because that is where this codebase says so.

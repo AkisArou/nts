@@ -11762,8 +11762,22 @@ fn declare_erased_entries(
                 .is_some_and(|record| matches!(record.kind, TypeKind::Function(_)))
         })
     };
+    // **The signature's own id, for the typed face.** `is_signature` above answers
+    // whether *any* of a layout's ids is a function type, which is the right test
+    // for declaring the entry; the face needs the one that *is* the signature, and
+    // for a layout that carries several ids over one signature they agree.
+    let signature_of = |layout: &Layout| {
+        layout.types.iter().find_map(|ty| {
+            match snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
+                Some(TypeKind::Function(signature)) => Some((*ty, *signature)),
+                _ => None,
+            }
+        })
+    };
     let mentions = signature_locations(snapshot);
     let mut found: Vec<(usize, Func)> = Vec::new();
+    let mut faces: std::collections::BTreeMap<TypeId, super::SignatureFace> =
+        std::collections::BTreeMap::new();
     for (at, layout) in program.layouts.iter().enumerate() {
         if !is_signature(layout) || layout.methods.get(slot).is_some_and(Option::is_some) {
             continue;
@@ -11784,6 +11798,38 @@ fn declare_erased_entries(
         // nothing to point at, and a layout of that kind is a closure's, whose
         // slot `closure_layout` filled already.
         let origin = signature_origin(snapshot, layout, &mentions);
+        // **The typed face, recorded beside the erased declaration.** A backend
+        // receives only a `Program`, so a Java-callable `call(double)` cannot ask
+        // the checker for the parameter list -- and when A6 removed the typed slot
+        // this surface was keyed on, the whole of it vanished with nothing red.
+        // See `super::Program::signature_faces`, which carries that account.
+        //
+        // Keyed by the *signature's* id rather than by `base`, which is
+        // `layout.types.first()` and need not be the function-typed one.
+        if let Some((id, signature)) = signature_of(layout)
+            && let Some(record) = snapshot.signatures.get(signature.0 as usize)
+        {
+            let params = record
+                .parameters
+                .iter()
+                .map(|parameter| super::SignatureFacePart {
+                    // `representation` and not `represent`: this runs after
+                    // lowering and must not *create* a layout for a type the
+                    // program does not carry -- the trap `presence_of_key` and
+                    // `record_parents` both record.
+                    ty: representation(snapshot, parameter.ty),
+                    optional: parameter.optional,
+                    rest: parameter.rest,
+                })
+                .collect();
+            faces.insert(
+                id,
+                super::SignatureFace {
+                    params,
+                    returns: representation(snapshot, record.return_type),
+                },
+            );
+        }
         let receiver = Param {
             name: "v0".to_owned(),
             ty: HirType::Managed(ManagedType::Object(base)),
@@ -11832,6 +11878,7 @@ fn declare_erased_entries(
         program.layouts[layout].methods[slot] = Some(shell.name.clone());
         program.funcs.push(shell);
     }
+    program.signature_faces = faces;
 }
 
 fn relate_closures_to_signatures(
