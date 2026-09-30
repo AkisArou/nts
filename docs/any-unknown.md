@@ -199,6 +199,42 @@ and its entry is present and aborts by name. A layout naming a function nothing
 defines is worse than an entry that cannot be reached — the same argument
 `nts_no_arm` makes for a tag switch with a hole.
 
+#### What it removed, which was not only dead code (`584bb5e64`)
+
+Because no call spells a written signature after this, the pass that reconstructed
+one from a call site became unreachable, and `519195e49` deleted
+`declare_unfilled_signatures` and `signature_shell`. That was correct, and it is
+**not** the pure simplification it was recorded as.
+
+The JVM's Java-callable surface was keyed on the typed `call` slot those functions
+declared: a signature class `implements NtsNumberCallback`, a concrete
+`call(double)`, a `Fn…$Lambda` so a Java lambda can be passed, and friendly
+overloads. All of it vanished silently. The published API became
+
+```text
+-public abstract class nts.gen.Fn3__41 implements nts.rt.NtsNumberCallback {
+-  public abstract void call(double);
++public abstract class nts.gen.Fn3__41 extends nts.gen.Erased-Callable {
+-  public static void eachUpTo(double, nts.rt.NtsNumberCallback);
+```
+
+`NtsNumberCallback` is an `interface`, so a Java **lambda** could satisfy it;
+extending an abstract class instead means none can. **Six weeks passed** before a
+full `tooling/gate/pinned.sh` ran the `interop` step and said so, because no
+assembled subset runs it — and the root's name turned out to be unloadable by
+`javac` as well, `-` not being a Java identifier, so it is now
+`nts/gen/erased/Callable`.
+
+**The general fact, which is the reason this paragraph exists.** A backend receives
+only a `Program` and never the snapshot, so it cannot ask the checker for anything
+lowering stops publishing; it caches what it is given. "Is this still read?" is
+therefore a question about *every crate that receives the artefact*, and grepping
+the module the code lives in answers a narrower one. `Program::signature_faces`
+(`9d8400ff9`) publishes the fact explicitly instead, with `None` at a position whose
+Java face cannot be typed — distinct from an absent key, which means "not a written
+signature" — so the consumer names what it cannot express rather than dropping the
+surface.
+
 ### Declaration-originated `any`
 
 Native TypeScript does not modify upstream `lib.*.d.ts`, `@types/node`, or third-party declarations merely to replace `any` with `unknown`.
