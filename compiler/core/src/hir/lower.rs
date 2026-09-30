@@ -4183,6 +4183,16 @@ fn names_a_body(kind: Option<u16>) -> bool {
                 | syntax::FUNCTION_EXPRESSION
                 | syntax::ARROW_FUNCTION
                 | syntax::METHOD_DECLARATION
+                // **An accessor has a body and can `throw` from it**, and leaving it
+                // out meant its symbol got no entry, so the `throw` was in no set and
+                // a function that *read* it was in none either. `static get #g() {
+                // throw … }` with `Priv.read()` returning `Priv.#g`, called from a
+                // closure inside a `try`, escaped the handler on `ac1533ca4`: the
+                // conformance lane's private-static-getter and -setter files. Found
+                // by running the emitted C, because the read is not a call node and
+                // no census sees a program that compiles.
+                | syntax::GET_ACCESSOR
+                | syntax::SET_ACCESSOR
         )
     )
 }
@@ -4215,6 +4225,202 @@ fn a_callee_with_a_body(snapshot: &SemanticSnapshot, probe: &FuncBuilder, symbol
     })
 }
 
+/// One declaration's body, as far as raising is concerned: whether it `throw`s, and
+/// what it reaches.
+///
+/// Its own function because [`throwing_symbols`] is the outer loop over symbols and
+/// this is the descent over one body, and because the three things it counts as
+/// reaching something -- a call, a `new`, and an accessor access -- were added one at
+/// a time, each after a program the census called compiled turned out to escape its
+/// handler.
+/// The symbol of the class a class declaration **extends**, where that base is a class
+/// this program declares.
+///
+/// `None` for anything else, which is the answer `super(…)` needs: a provided base's
+/// constructor is emitted inline and cannot throw, so recording nothing for it is
+/// right, while a program base's own entry is what its `throw` reaches through. See
+/// the `super` arm in [`walk_one_declaration`].
+fn declared_base_class(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    declaration: NodeId,
+) -> Option<u32> {
+    if !probe.kind_of(declaration).is_some_and(declares_a_class) {
+        return None;
+    }
+    let mut pending: Vec<NodeId> = probe.children(declaration);
+    for _ in 0..64 {
+        let at = pending.pop()?;
+        match probe.kind_of(at) {
+            Some(syntax::HERITAGE_CLAUSE | syntax::EXPRESSION_WITH_TYPE_ARGUMENTS) => {
+                pending.extend(probe.children(at));
+            }
+            Some(syntax::IDENTIFIER) => {
+                if let Some(symbol) = probe.node(at).symbol
+                    && snapshot.symbols.get(symbol.0 as usize).is_some_and(|record| {
+                        record
+                            .declarations
+                            .iter()
+                            .any(|at| probe.kind_of(*at).is_some_and(declares_a_class))
+                    })
+                {
+                    return Some(symbol.0);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn walk_one_declaration(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    declaration: NodeId,
+    symbol: u32,
+    base: Option<u32>,
+    throws: &mut rustc_hash::FxHashSet<u32>,
+    reached: &mut Vec<Reached>,
+) {
+        // This declaration's own parameters, so a call to one is told apart
+        // from a call to a field or a capture. See [`Reached::OwnCallback`].
+        //
+        // By **node**, matched against the callee symbol's declarations, and not
+        // by asking each parameter node for its symbol: a `PARAMETER` carries
+        // none in this encoding -- its name child does -- so that spelling
+        // collected an empty set and every callback read as `Elsewhere`, which
+        // is the answer it would have given with no code at all. Through
+        // `parameters_of`, which is the one derivation of "which children are
+        // the parameters" and is what `class_thenable` asks with.
+        let own: rustc_hash::FxHashSet<NodeId> =
+            parameters_of(probe, declaration).into_iter().collect();
+        let mut pending: Vec<NodeId> = children_that_run(probe, declaration);
+        while let Some(at) = pending.pop() {
+            let kind = probe.kind_of(at);
+            if names_a_body(kind) {
+                continue;
+            }
+            if kind == Some(syntax::THROW_STATEMENT) {
+                throws.insert(symbol);
+            }
+            // **An accessor access is a call to its body**, which this walk did
+            // not see either -- the same omission as `calls_in_the_body_of`, in
+            // the other of the two walks that answer "what can raise here". One
+            // fact, two walks, and they disagreed until a program that compiles
+            // was run by hand.
+            if matches!(
+                kind,
+                Some(syntax::PROPERTY_ACCESS_EXPRESSION | syntax::ELEMENT_ACCESS_EXPRESSION)
+            ) && probe.reads_an_accessor(at)
+            {
+                reached.push(
+                    probe
+                        .children(at)
+                        .last()
+                        .and_then(|member| probe.node(*member).symbol)
+                        .map_or(Reached::Elsewhere, |member| Reached::Body(member.0)),
+                );
+            }
+            if matches!(kind, Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION)) {
+                let callee = probe.children(at).first().copied();
+                // **`super(…)` is a call to the base's constructor, and the `super`
+                // keyword carries no symbol.** So it read as an *unresolved* callee,
+                // which puts its caller in the set at once -- and since a class now
+                // has an entry, every class with an explicit `super()` became a raiser
+                // and every `try` constructing one refused.
+                // `examples/an-error-subclass-that-carries-a-field`'s
+                // `try { throw new TaggedError(…) }` is the witness, and it was one
+                // `agree` regression standing for most of a +69.
+                //
+                // Resolved to the base class instead, from the heritage clause of the
+                // class being walked. Where the base is **not** a class this program
+                // declares -- `class TaggedError extends Error` -- nothing is recorded:
+                // a provided constructor is emitted inline and cannot throw, which is
+                // the sentence `calls_compiled_code` already makes about one.
+                if callee.is_some_and(|it| probe.kind_of(it) == Some(syntax::SUPER_KEYWORD)) {
+                    if let Some(base) = base {
+                        reached.push(Reached::Body(base));
+                    }
+                    pending.extend(children_that_run(probe, at));
+                    continue;
+                }
+                let named = callee.and_then(|callee| probe.node(callee).symbol).map(|it| it.0);
+                // **A `new` is resolved by its type, not by a value.** Which
+                // constructor runs is fixed by the name, so a `new X(...)` is
+                // not a callee arriving from somewhere -- and treating it as one
+                // made every function that constructs anything an unresolved
+                // caller, which is most of them:
+                // `examples/an-await-of-a-thenable` refused 6 thenables instead
+                // of 2, on four `then`s whose bodies call their own two
+                // callbacks and `new Error(...)`. `Error` is a provided
+                // constructor, whose symbol declares `interface Error` and
+                // `declare var Error`, so neither the body test nor a class test
+                // catches it; the *construct* is what answers.
+                //
+                // Recorded exactly as it was before `Reached` existed -- the
+                // named symbol, which for a class is in no throwing set because
+                // this walk does not descend into a `CONSTRUCTOR`. That hole is
+                // named rather than closed here: closing it is descending into
+                // constructors, which is its own change with its own
+                // measurement.
+                let constructs = kind == Some(syntax::NEW_EXPRESSION);
+                reached.push(
+                    match named {
+                        Some(target)
+                            if constructs || a_callee_with_a_body(snapshot, probe, target) =>
+                        {
+                            Reached::Body(target)
+                        }
+                        Some(target) if a_parameter_among(snapshot, target, &own) => {
+                            Reached::OwnCallback
+                        }
+                        _ => Reached::Elsewhere,
+                    },
+                        // **A symbol is not the same as a function, and that
+                        // is where the difference escaped.**
+                        // `component(props)` with `component` a *parameter*
+                        // has a symbol, so it was recorded as a resolved
+                        // callee -- and a parameter's symbol is in no
+                        // throwing set, because that set holds functions
+                        // whose body throws. So `renderWithHooks`, which
+                        // calls it, never joined; the `try` around it
+                        // compiled; and the throw escaped **silently**. The
+                        // React lane's reduction compiled and then declined 6
+                        // of 29 cases, the negative inputs where node answers
+                        // -1. The arm below already had the rule -- "an
+                        // unresolved callee is unbounded, so its caller joins
+                        // the set at once" -- and a parameter is an
+                        // unresolved callee wearing a symbol.
+                        //
+                        // **It was built, measured and left unlanded, and the
+                        // reason is worth keeping because it is the reason it
+                        // lands now.** On its own the rule is right and blunt:
+                        // over `runtime/node`, definitions 29915 -> 29344 and
+                        // `emit-c --napi` refusals 14632 -> 15158. It refused
+                        // every `try` whose call reaches a parameter or field
+                        // holding a closure, including those whose closures
+                        // provably cannot throw, because there was nothing for
+                        // such a call to name. The note ended *"precision
+                        // first, then the rule"*.
+                        //
+                        // `Hierarchy::raising_call_slot` is the precision. A
+                        // call through a function value inside a `try` now
+                        // dispatches at an entry that records the `throw` and
+                        // returns, and `a_copy_can_contain` admits such a call
+                        // into a copy, so the functions this rule newly calls
+                        // raisers get copies instead of refusals. The two
+                        // halves have to land together: this one alone is the
+                        // measured cost with none of the gain, and the other
+                        // alone leaves the escape above standing one level up
+                        // -- which is what `outcomes/a-throw-through-a-try-
+                        // with-only-a-finally` said, in the words its own
+                        // header had promised.
+                );
+            }
+            pending.extend(children_that_run(probe, at));
+        }
+}
+
 fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwing {
     let nested = |kind: Option<u16>| names_a_body(kind);
     // What each symbol's declarations write: whether one throws, and which
@@ -4230,7 +4436,25 @@ fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwin
         let mut reached: Vec<Reached> = Vec::new();
         for declaration in &record.declarations {
             let declaration = &the_function_of(probe, *declaration);
-            if !nested(probe.kind_of(*declaration)) {
+            // **A class gets an entry too, and its entry is its *construction*.**
+            // `walk_one_declaration` skips a nested body, and a `Constructor` and a
+            // `PropertyDeclaration`'s initializer are not nested bodies -- so walking
+            // the class node gives exactly what `new X()` runs, and skips its methods
+            // and accessors, which have entries of their own.
+            //
+            // Without it a class symbol was in no set, so `new X()` could not raise
+            // however loudly its field initializer threw:
+            // `class Init { v = (() => { throw … })() }` constructed inside a closure
+            // reached a run-time abort where node catches.
+            //
+            // **And the blunt version of this cost 14 working functions**, measured:
+            // refusing every `new` of a program class took `web-platform`'s
+            // `readHttp2Frame` and every `parseHttp2*@raises` with it, because they
+            // construct `Http2ProtocolError` -- whose constructor cannot throw. The
+            // precise rule keeps them and still refuses `Init`.
+            if !nested(probe.kind_of(*declaration))
+                && !probe.kind_of(*declaration).is_some_and(declares_a_class)
+            {
                 continue;
             }
             // An `async` function never raises *synchronously*: a `throw` in
@@ -4246,104 +4470,10 @@ fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwin
             {
                 continue;
             }
-            // This declaration's own parameters, so a call to one is told apart
-            // from a call to a field or a capture. See [`Reached::OwnCallback`].
-            //
-            // By **node**, matched against the callee symbol's declarations, and not
-            // by asking each parameter node for its symbol: a `PARAMETER` carries
-            // none in this encoding -- its name child does -- so that spelling
-            // collected an empty set and every callback read as `Elsewhere`, which
-            // is the answer it would have given with no code at all. Through
-            // `parameters_of`, which is the one derivation of "which children are
-            // the parameters" and is what `class_thenable` asks with.
-            let own: rustc_hash::FxHashSet<NodeId> =
-                parameters_of(probe, *declaration).into_iter().collect();
-            let mut pending: Vec<NodeId> = children_that_run(probe, *declaration);
-            while let Some(at) = pending.pop() {
-                let kind = probe.kind_of(at);
-                if nested(kind) {
-                    continue;
-                }
-                if kind == Some(syntax::THROW_STATEMENT) {
-                    throws.insert(symbol);
-                }
-                if matches!(kind, Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION)) {
-                    let callee = probe.children(at).first().copied();
-                    let named = callee.and_then(|callee| probe.node(callee).symbol).map(|it| it.0);
-                    // **A `new` is resolved by its type, not by a value.** Which
-                    // constructor runs is fixed by the name, so a `new X(...)` is
-                    // not a callee arriving from somewhere -- and treating it as one
-                    // made every function that constructs anything an unresolved
-                    // caller, which is most of them:
-                    // `examples/an-await-of-a-thenable` refused 6 thenables instead
-                    // of 2, on four `then`s whose bodies call their own two
-                    // callbacks and `new Error(...)`. `Error` is a provided
-                    // constructor, whose symbol declares `interface Error` and
-                    // `declare var Error`, so neither the body test nor a class test
-                    // catches it; the *construct* is what answers.
-                    //
-                    // Recorded exactly as it was before `Reached` existed -- the
-                    // named symbol, which for a class is in no throwing set because
-                    // this walk does not descend into a `CONSTRUCTOR`. That hole is
-                    // named rather than closed here: closing it is descending into
-                    // constructors, which is its own change with its own
-                    // measurement.
-                    let constructs = kind == Some(syntax::NEW_EXPRESSION);
-                    reached.push(
-                        match named {
-                            Some(target)
-                                if constructs || a_callee_with_a_body(snapshot, probe, target) =>
-                            {
-                                Reached::Body(target)
-                            }
-                            Some(target) if a_parameter_among(snapshot, target, &own) => {
-                                Reached::OwnCallback
-                            }
-                            _ => Reached::Elsewhere,
-                        },
-                            // **A symbol is not the same as a function, and that
-                            // is where the difference escaped.**
-                            // `component(props)` with `component` a *parameter*
-                            // has a symbol, so it was recorded as a resolved
-                            // callee -- and a parameter's symbol is in no
-                            // throwing set, because that set holds functions
-                            // whose body throws. So `renderWithHooks`, which
-                            // calls it, never joined; the `try` around it
-                            // compiled; and the throw escaped **silently**. The
-                            // React lane's reduction compiled and then declined 6
-                            // of 29 cases, the negative inputs where node answers
-                            // -1. The arm below already had the rule -- "an
-                            // unresolved callee is unbounded, so its caller joins
-                            // the set at once" -- and a parameter is an
-                            // unresolved callee wearing a symbol.
-                            //
-                            // **It was built, measured and left unlanded, and the
-                            // reason is worth keeping because it is the reason it
-                            // lands now.** On its own the rule is right and blunt:
-                            // over `runtime/node`, definitions 29915 -> 29344 and
-                            // `emit-c --napi` refusals 14632 -> 15158. It refused
-                            // every `try` whose call reaches a parameter or field
-                            // holding a closure, including those whose closures
-                            // provably cannot throw, because there was nothing for
-                            // such a call to name. The note ended *"precision
-                            // first, then the rule"*.
-                            //
-                            // `Hierarchy::raising_call_slot` is the precision. A
-                            // call through a function value inside a `try` now
-                            // dispatches at an entry that records the `throw` and
-                            // returns, and `a_copy_can_contain` admits such a call
-                            // into a copy, so the functions this rule newly calls
-                            // raisers get copies instead of refusals. The two
-                            // halves have to land together: this one alone is the
-                            // measured cost with none of the gain, and the other
-                            // alone leaves the escape above standing one level up
-                            // -- which is what `outcomes/a-throw-through-a-try-
-                            // with-only-a-finally` said, in the words its own
-                            // header had promised.
-                    );
-                }
-                pending.extend(children_that_run(probe, at));
-            }
+            let base = declared_base_class(snapshot, probe, *declaration);
+            walk_one_declaration(
+                snapshot, probe, *declaration, symbol, base, &mut throws, &mut reached,
+            );
         }
         if !reached.is_empty() {
             calls.insert(symbol, reached);
@@ -4484,9 +4614,23 @@ const RAISING_SUFFIX: &str = "@raises";
 /// Named because three places need the same answer and they are in three passes:
 /// [`FuncBuilder::reason_without_a_leaf`] gives it as a refusal,
 /// [`FuncBuilder::call_within`] asks whether the raising uniform entry covers the
-/// call instead, and [`FuncBuilder::dispatches_to_a_raising_entry`] asks it again
-/// at the call to choose the slot. A second spelling would let the walk that
-/// decides which calls a `try` handles and the site that dispatches them disagree.
+/// call instead, and [`FuncBuilder::dispatches_to_a_raising_entry`] asks it again at
+/// the call to choose the slot -- both through [`FuncBuilder::calls_a_closure`],
+/// which is where this sentence and [`A_FUNCTION_WRITTEN_AS_A_VALUE`] become one
+/// question. A second spelling would let the walk that decides which calls a `try`
+/// handles and the site that dispatches them disagree.
+/// Why a call whose callee the checker resolves to an **arrow or a function
+/// expression** had nothing to name, before the raising slot.
+///
+/// Distinct from [`THROUGH_A_FUNCTION_VALUE`] because the two are different facts
+/// about the site -- there the callee arrived as a value the checker has no body
+/// for; here it has the body and the body is a closure -- and
+/// [`FuncBuilder::calls_a_closure`] is the one place that treats them as one, for
+/// the one question where they are: at run time both are a closure object, and a
+/// closure has a raising entry.
+const A_FUNCTION_WRITTEN_AS_A_VALUE: &str =
+    "a function written as a value, which has no raising copy to call";
+
 const THROUGH_A_FUNCTION_VALUE: &str =
     "through a function value, which has no raising copy to call";
 
@@ -4711,10 +4855,19 @@ fn every_raising_body_can_carry(
     throwing: &Throwing,
     copies: &rustc_hash::FxHashSet<NodeId>,
 ) -> bool {
+    // **A closure callee is carried by the closure it names**, which is why this is a
+    // different predicate from the one `eligible` is shrunk with. Every closure body
+    // in the program is in the conjunction below, so accepting one here discharges
+    // itself: if all of them carry, the inner one does. A greatest fixpoint, the same
+    // shape `Throwing::copyable`'s doc argues for, and the reason a *plain* copy may
+    // not have this arm -- `a_copy_can_contain` stays strict there, because a plain
+    // function is eligible whether or not the gate is on and a copy naming an entry
+    // the gate withheld would dangle.
     let carries = |body: NodeId| {
-        calls_in_the_body_of(probe, body)
-            .into_iter()
-            .all(|call| a_copy_can_contain(snapshot, probe, throwing, copies, call))
+        calls_in_the_body_of(probe, body).into_iter().all(|call| {
+            a_copy_can_contain(snapshot, probe, throwing, copies, call)
+                || a_closure_callee(snapshot, probe, call)
+        })
     };
     let written = snapshot
         .nodes
@@ -4776,6 +4929,25 @@ fn wrappable_functions(
 
 /// Whether a raising copy may contain this call: it cannot raise, or the copy
 /// it would name exists.
+/// Whether this call's callee is an arrow or a function expression -- a closure, whose
+/// raising variant `lower_wanted_closures` builds.
+///
+/// The free-function half of [`FuncBuilder::calls_a_closure`], for the passes that run
+/// before any builder exists. It answers only the *resolved* half: an unresolved callee
+/// is already carried by `a_copy_can_contain`'s own arm for it.
+fn a_closure_callee(snapshot: &SemanticSnapshot, probe: &FuncBuilder, call: NodeId) -> bool {
+    snapshot
+        .call_targets
+        .get(&call)
+        .and_then(|target| target.callee)
+        .is_some_and(|declaration| {
+            matches!(
+                probe.kind_of(declaration),
+                Some(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION)
+            )
+        })
+}
+
 fn a_copy_can_contain(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
@@ -4783,6 +4955,19 @@ fn a_copy_can_contain(
     eligible: &rustc_hash::FxHashSet<NodeId>,
     call: NodeId,
 ) -> bool {
+    // **An accessor can never be carried**, because a raising copy is made of plain
+    // functions and `function_copies` is consulted for `FunctionDeclaration`s only --
+    // the same sentence `call_within` refuses a `try` around one with. It reaches here
+    // because the walk above now yields accessor accesses beside calls.
+    if probe.reads_an_accessor(call) {
+        return false;
+    }
+    // **A `new` needs no arm of its own.** `throwing_symbols` walks a class over its
+    // constructor and its field initializers, so a class that can throw is in
+    // `Throwing::any` and `a_call_that_can_raise` below says so -- and the callee a
+    // `new` resolves to is a `Constructor`, which is never `eligible`, so it comes out
+    // uncarriable exactly when construction can raise. The blunt version, refusing
+    // every `new` of a program class, cost 14 working functions in `web-platform`.
     // **An indirect callee -- `fns[0]()`, `this.handler()`, a parameter -- can be
     // carried now, and could not be.** What it reaches cannot be known, which used
     // to be the end of it: a copy holding such a call would dispatch at the
@@ -4865,8 +5050,24 @@ fn functions_used_as_values(
             excluded.extend(probe.children(id).first().copied());
         }
     }
+    // **The declaration's name, which is not always its first child.** `export
+    // function f()` puts the modifier there, so excluding `first()` left `f`'s own
+    // name reading as a mention *of a value* -- and since a function calling a
+    // throwing closure is itself in `throwing.any`, every exported function in the
+    // program then failed the wrapped test and switched the gate off. The probe that
+    // caught it is three exported functions and an IIFE, which is
+    // `examples/an-iife-inside-a-try` now.
+    //
+    // Every identifier child, because a declaration's direct identifier children are
+    // its name: parameters are `Parameter` nodes, the body is a `Block`, the return
+    // annotation is a type.
     for declaration in eligible {
-        excluded.extend(probe.children(*declaration).first().copied());
+        excluded.extend(
+            probe
+                .children(*declaration)
+                .into_iter()
+                .filter(|child| probe.kind_of(*child) == Some(syntax::IDENTIFIER)),
+        );
     }
     let mut found = Vec::new();
     for (index, node) in snapshot.nodes.iter().enumerate() {
@@ -7170,7 +7371,31 @@ fn calls_in_the_body_of(probe: &FuncBuilder, declaration: NodeId) -> Vec<NodeId>
                 | syntax::CLASS_DECLARATION
                 | syntax::CLASS_EXPRESSION,
             ) => return,
-            Some(syntax::CALL_EXPRESSION) => into.push(id),
+            // **A `new` belongs here too**, and did not: the walk yielded
+            // `CallExpression` only, so a body that constructs a class whose
+            // constructor or field initializer throws looked like a body that calls
+            // nothing. Third omission in the same shape, after the accessor in this
+            // walk and the accessor in `throwing_symbols`' -- and every one of them
+            // was found by running a program the census called compiled.
+            Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION) => into.push(id),
+            // **An accessor is a call, and an assignment to one is not a call node.**
+            // `call_within` draws exactly this line for a `try` and has since 6 of 29
+            // cases declined without it; this walk did not, so a body that writes a
+            // throwing setter looked like a body that calls nothing. `{ set y(v) {
+            // throw … } }` with `attempt(() => { x.y = 23; })` then escaped the
+            // handler on `ac1533ca4` -- loud, and a wrong answer -- because the gate
+            // counts what a body *calls* and never saw the setter. Found by the
+            // conformance lane through test262's dstr `put-prop-ref-user-err` files
+            // and recorded as `outcomes/a-setter-throwing-inside-a-function-value`.
+            //
+            // A read is the same shape, which is what their private-static-getter
+            // file shows, and `reads_an_accessor` answers for both by the member
+            // symbol's declarations rather than by the syntax around it.
+            Some(syntax::PROPERTY_ACCESS_EXPRESSION | syntax::ELEMENT_ACCESS_EXPRESSION)
+                if probe.reads_an_accessor(id) =>
+            {
+                into.push(id);
+            }
             _ => {}
         }
         for child in children_that_run(probe, id) {
@@ -47599,7 +47824,7 @@ impl<'a> FuncBuilder<'a> {
             // on every layout that fills the ordinary one, so a program that has
             // it has an entry for every callable class -- and a program without it
             // has no closures at all, where the call refuses anyway.
-            if self.calls_a_function_value(node) {
+            if self.calls_a_closure(node) {
                 if self.hierarchy.raising_call_slot.is_some() && self.hierarchy.closures_carry {
                     handled.push(node);
                     return None;
@@ -47614,8 +47839,8 @@ impl<'a> FuncBuilder<'a> {
                 // question is asked of the whole program.
                 return Some((
                     node,
-                    "through a function value, and some closure in this program calls something \
-                     whose own `throw` cannot be carried"
+                    "through a closure, and some closure in this program calls something whose \
+                     own `throw` cannot be carried"
                         .to_owned(),
                 ));
             }
@@ -47750,24 +47975,23 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// A bound has to sit on every edge of the cycle it bounds, and the cheapest
     /// way to be sure of that is for the walk to have one entry point.
-    /// Whether this call's callee arrived as a **value**: a parameter, a field, an
-    /// element, anything the checker has no body for.
+    /// Whether this call's callee is a **closure object** at run time, however the
+    /// checker resolved it: a value it has no body for, or an arrow or function
+    /// expression it does.
     ///
-    /// [`THROUGH_A_FUNCTION_VALUE`] read back out of `reason_without_a_leaf`
-    /// rather than the two conditions restated, because the raising uniform entry
-    /// covers exactly the calls that sentence refuses and a second derivation of
-    /// "is this a function value" is how the two would come apart. The comparison
-    /// is on the constant, so it cannot match a sentence that merely reads alike.
-    ///
-    /// **Restricted to a `CallExpression`.** A `new` through a value dispatches
-    /// through a constructor rather than through a closure entry, and a getter read
-    /// is a call `call_within` reaches by its own path; neither goes through
-    /// [`Self::closure_callee`], which is what the entry serves.
-    fn calls_a_function_value(&self, call: NodeId) -> bool {
+    /// **The distinction the two sentences draw does not survive here**, and that is
+    /// the point. `(() => { … })()` and `try { held() }` have a body the checker can
+    /// name, and `fn()` on a parameter does not -- but every one of them is a closure
+    /// when it runs, and a closure has an entry at
+    /// [`Hierarchy::raising_call_slot`]. So a raising body can carry all three, which
+    /// is what an **IIFE inside a `try`** needed: the conformance lane counts 48
+    /// test262 files whose gate nothing else holds down.
+    fn calls_a_closure(&self, call: NodeId) -> bool {
         self.kind_of(call) == Some(syntax::CALL_EXPRESSION)
-            && self
-                .reason_without_a_leaf(call)
-                .is_some_and(|why| std::ptr::eq(why, THROUGH_A_FUNCTION_VALUE))
+            && self.reason_without_a_leaf(call).is_some_and(|why| {
+                std::ptr::eq(why, THROUGH_A_FUNCTION_VALUE)
+                    || std::ptr::eq(why, A_FUNCTION_WRITTEN_AS_A_VALUE)
+            })
     }
 
     fn reason_without_a_leaf(&self, call: NodeId) -> Option<&'static str> {
@@ -47815,7 +48039,7 @@ impl<'a> FuncBuilder<'a> {
                 Some("an accessor, and a raising copy is made of plain functions only")
             },
             Some(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION) => {
-                Some("a function written as a value, which has no raising copy to call")
+                Some(A_FUNCTION_WRITTEN_AS_A_VALUE)
             },
             // A plain function that was eligible and lost the fixpoint: the
             // repair is its callee's, not this call's. `None`, so the caller
@@ -48009,7 +48233,7 @@ impl<'a> FuncBuilder<'a> {
     fn dispatches_to_a_raising_entry(&self, call: NodeId) -> bool {
         self.hierarchy.raising_call_slot.is_some()
             && (self.raising_calls.contains(&call) || self.raises)
-            && self.calls_a_function_value(call)
+            && self.calls_a_closure(call)
     }
 
     /// Refuse a call a raising body cannot carry, which is the whole of what makes
@@ -56289,20 +56513,17 @@ impl<'a> FuncBuilder<'a> {
         // name it inside one that accepted it -- and also answers for a raising
         // copy's own body, where every call that can raise names its raising form.
         let raising = self.dispatches_to_a_raising_entry(id);
-        let callee = if receiver_ty.0 >= super::SYNTHETIC_TYPE_FLOOR {
-            // **A raising call cannot arrive here**, and saying so is cheaper than
-            // being right by accident. This branch is the receiver whose static type
-            // *is* the closure class, which is what an arrow written at the site
-            // gives; `calls_a_function_value` answers only for a callee the checker
-            // has no body for -- a parameter, a field, an element -- whose type is
-            // the signature. If the two ever meet, the direct name would have to be
-            // the raising body, which exists only where it is a different program.
-            if raising {
-                return Err(self.unsupported(
-                    id,
-                    "a call inside a `try` through a function value whose closure class is known                      here, which would name a raising body that may not have been made",
-                ));
-            }
+        // **And a raising call goes through the slot even here**, where the class *is*
+        // known. The direct name would have to be the raising body, and that body
+        // exists only where it is a different program -- which this site cannot know,
+        // because the closure it names may not have been lowered yet. The slot is
+        // filled per class with the raising entry or the ordinary one, so it is right
+        // either way, and the cost is one table load on a path inside a `try`.
+        //
+        // What it buys is the **IIFE**: `try { (() => { … })() }` has a known class
+        // and is 48 test262 files on the conformance lane's count with nothing else
+        // holding their gate down.
+        let callee = if receiver_ty.0 >= super::SYNTHETIC_TYPE_FLOOR && !raising {
             Callee::Direct(closure_names(closure_index(receiver_ty)).1)
         } else if let Some(slot) = if raising {
             self.hierarchy.raising_call_slot
