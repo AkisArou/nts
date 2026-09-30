@@ -94,11 +94,17 @@ pub fn class_name(package: &str, layout: &Layout) -> String {
 /// class extends can, and the entry it declares is the one every call site
 /// already dispatches through.
 ///
-/// The `-` is deliberate: `jvm_member_name` maps it to `$`, so no TypeScript
-/// declaration can be spelled this, and DEX accepts it in a simple name.
+/// **In a sub-package, so it is a name both no TypeScript declaration and every
+/// Java compiler can spell.** It was `Erased-Callable`, whose `-` no
+/// TypeScript identifier maps to -- and which `javac` cannot load either, so a
+/// Java caller of any function taking a callback failed to compile ("cannot
+/// access Erased-Callable"): the class is `Fn…`'s superclass and in public
+/// descriptors. Every TypeScript class is emitted directly in `package` and a
+/// `/` cannot appear in an identifier, so `package/erased/` is a namespace
+/// none of them reaches.
 #[must_use]
 pub fn callable_class(package: &str) -> String {
-    format!("{package}/Erased-Callable")
+    format!("{package}/erased/Callable")
 }
 
 /// Whether a layout is called at the uniform entry: it fills

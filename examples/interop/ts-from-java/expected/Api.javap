@@ -11,17 +11,24 @@ Compiled from "nts"
 public final class nts.gen.Closure0 extends nts.gen.Fn3__41 implements nts.rt.NtsNumberCallback {
   nts.gen.Cell0 total;
   public void call(double);
+  public nts.rt.NtsValue erased_call(nts.rt.NtsValue);
   public nts.gen.Closure0();
+}
+Compiled from "nts"
+public abstract class nts.gen.erased.Callable {
+  public abstract nts.rt.NtsValue erased_call(nts.rt.NtsValue);
+  public nts.gen.erased.Callable();
 }
 Compiled from "nts"
 public final class nts.gen.Fn3__41$Lambda extends nts.gen.Fn3__41 {
   nts.rt.NtsNumberCallback it;
   public nts.gen.Fn3__41$Lambda(nts.rt.NtsNumberCallback);
-  public void call(double);
+  public nts.rt.NtsValue erased_call(nts.rt.NtsValue);
 }
 Compiled from "nts"
-public abstract class nts.gen.Fn3__41 implements nts.rt.NtsNumberCallback {
-  public abstract void call(double);
+public abstract class nts.gen.Fn3__41 extends nts.gen.erased.Callable implements nts.rt.NtsNumberCallback {
+  public abstract nts.rt.NtsValue erased_call(nts.rt.NtsValue);
+  public void call(double);
   public nts.gen.Fn3__41();
 }
 Compiled from "nts"
@@ -36,11 +43,12 @@ public final class nts.gen.Program {
   public static nts.rt.NtsBigInt scaled(nts.rt.NtsBigInt);
   public static java.lang.String joined(java.lang.String[], java.lang.String);
   public static nts.rt.NtsSet<java.lang.String> labels();
-  public static void eachUpTo(double, nts.gen.Fn3__41);
+  public static void eachUpTo(double, nts.gen.erased.Callable);
   public static double triangle(double);
+  public static nts.rt.NtsValue Closure0$erased_call(nts.gen.Closure0, nts.rt.NtsValue);
   public static void Closure0$call(nts.gen.Closure0, double);
   public static void eachUpTo$Closure0(double, nts.gen.Closure0);
-  public static void eachUpTo$whole(int, nts.gen.Fn3__41);
+  public static void eachUpTo$whole(int, nts.gen.erased.Callable);
   public static void eachUpTo(double, nts.rt.NtsNumberCallback);
 }
 Compiled from "nts"

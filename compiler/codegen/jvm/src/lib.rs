@@ -43,6 +43,7 @@
 pub mod closures;
 mod intcall;
 mod builder;
+mod face;
 mod fuse;
 pub mod body;
 pub mod hierarchy;
@@ -572,6 +573,30 @@ fn super_class(package: &str, program: &Program, layout: &nts_core::hir::Layout)
         .unwrap_or_else(|| "java/lang/Object".to_owned())
 }
 
+/// A written signature's typed face, for Java; see `face`. Only where the class
+/// does not declare it already: a signature some closure implements still
+/// carries its typed `call` through `closure_slot`, and a second `call` at one
+/// descriptor is a duplicate member the class is refused for.
+fn typed_face(
+    package: &str,
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+    builder: &mut ClassBuilder,
+    pool: &mut Pool,
+    origin: &nts_semantic_schema::Origin,
+) -> Result<(), Diagnostic> {
+    let Some(face) = face::of(package, program, layout)
+        .filter(|face| !builder.methods.iter().any(|m| m.name == "call" && m.descriptor == face.typed))
+    else {
+        return Ok(());
+    };
+    let body = face::typed_call(package, layout, &face, pool, origin).map_err(|error| {
+        Diagnostic::error("NTS4003", format!("the typed face of `{}`: {error}", layout.name), origin.location)
+    })?;
+    builder.method(access::PUBLIC, "call".to_owned(), face.typed, Some(body));
+    Ok(())
+}
+
 /// The program's callable root: `types::callable_class`, abstract, declaring
 /// the uniform entry every callable class fills. `None` where no layout is
 /// callable, so a program without closures writes no class for them.
@@ -804,6 +829,7 @@ fn object_class(
     // eventually and the disagreement here is a class that does not load.
     dispatch_forwarders(package, program, layout, &mut builder, &mut pool)?;
     member_forwarders(package, program, layout, &mut builder, &mut pool)?;
+    typed_face(package, program, layout, &mut builder, &mut pool, &origin)?;
     // A bound interface declares its own widths; see `foreign_bridges`.
     foreign_bridges(package, program, layout, handed_to, &mut pool, &mut builder, &origin)?;
     // A field the JVM zeroes to `null` where the language's zero is
@@ -926,6 +952,11 @@ fn callback_interfaces(
     layout: &nts_core::hir::Layout,
 ) -> Vec<&'static str> {
     let mut found: Vec<&'static str> = Vec::new();
+    // A written signature's interface comes from its face, which reads the
+    // checker's signature; its dispatch table has no typed `call` since A6.
+    if let Some(face) = face::of(package, program, layout) {
+        found.push(face.interface);
+    }
     for name in layout.methods.iter().flatten() {
         if hierarchy::member_name(name) != "call" {
             continue;
@@ -1414,7 +1445,7 @@ fn lambda_overloads(
     }
 
     for (base, (interface, call)) in adapters {
-        match lambda_adapter(program, &base, interface, &call, origin) {
+        match lambda_adapter(package, program, &base, interface, &call, origin) {
             Ok(class) => classes.push(class),
             Err(diagnostic) => diagnostics.push(diagnostic),
         }
@@ -1510,16 +1541,13 @@ fn lambda_interface(
     program: &Program,
     ty: &nts_core::hir::HirType,
 ) -> Option<(String, &'static str, String)> {
-    let descriptor = types::descriptor(types::Shape::packaged(program, package), ty)?;
-    let class = descriptor.strip_prefix('L')?.strip_suffix(';')?.to_owned();
-    let layout = program.layouts.iter().find(|it| types::class_name(package, it) == class)?;
-    let call = layout.methods.iter().flatten().find(|name| hierarchy::member_name(name) == "call")?;
-    let func = program.funcs.iter().find(|it| &it.name == call)?;
-    let shape = instance_descriptor(package, program, func)?;
-    // **`instance_descriptor` already excludes the receiver**, which cost a
-    // debug session: stripping one off `(D)V` looked for a `;` that is not
-    // there and answered `None` for every closure, silently.
-    types::callback_interface(&shape).map(|interface| (class, interface, shape))
+    // The layout the parameter's *type* names, and its face: the descriptor
+    // spells a signature as the callable root, which no layout is named, and
+    // the typed `call` this used to find is not declared since A6.
+    let nts_core::hir::HirType::Managed(nts_core::hir::ManagedType::Object(id)) = ty else { return None };
+    let layout = program.layout(*id)?;
+    let face = face::of(package, program, layout)?;
+    Some((types::class_name(package, layout), face.interface, face.typed))
 }
 
 /// The class that lets a Java lambda stand in for a closure.
@@ -1531,13 +1559,13 @@ fn lambda_interface(
 /// that could not happen at all before, which is the shape this lane prefers to
 /// a wrapper on the common path.
 fn lambda_adapter(
+    package: &str,
     program: &Program,
     base: &str,
     interface: &'static str,
     call: &str,
     origin: &nts_semantic_schema::Origin,
 ) -> Result<nts_jvm_emitter::Class, Diagnostic> {
-    let _ = program;
     let name = format!("{base}$Lambda");
     let held = format!("L{interface};");
     let mut pool = Pool::new();
@@ -1567,39 +1595,38 @@ fn lambda_adapter(
     builder.method(access::PUBLIC, "<init>", format!("({held})V"), Some(body));
 
     // `call(...)`: forward to the interface, whose method is also `call`.
+    // **The uniform entry, not a typed `call`**: since A6 the signature class
+    // declares `erased_call` abstract and its typed `call` concretely over it
+    // (`face::typed_call`), so an adapter implements the entry -- unbox each
+    // written position, call the Java lambda through its interface, answer
+    // `undefined` because every callback interface returns `void`.
+    let face = program
+        .layouts
+        .iter()
+        .find(|layout| types::class_name(package, layout) == base)
+        .and_then(|layout| face::of(package, program, layout))
+        .filter(|face| face.typed == call)
+        .ok_or_else(|| {
+            Diagnostic::error("NTS4003", format!("the lambda adapter for `{base}` has no typed face"), origin.location)
+        })?;
+    let width = nts_jvm_emitter::descriptor::parameters(&face.erased).map_or(0, |list| list.len());
     let mut locals = vec![VType::Object(name.clone())];
-    for spelled in nts_jvm_emitter::descriptor::parameters(call).unwrap_or_default() {
-        locals.push(match spelled {
-            "I" | "S" | "B" | "C" | "Z" => VType::Integer,
-            "J" => VType::Long,
-            "F" => VType::Float,
-            "D" => VType::Double,
-            other => VType::Object(other.trim_matches(|c| c == 'L' || c == ';').to_owned()),
-        });
-    }
-    let slots: u16 = locals.iter().map(VType::slots).sum();
-    let mut code = Code::new(locals.clone(), slots);
-    code.initialize_locals(origin, slots);
+    locals.extend((0..width).map(|_| VType::Object(types::VALUE.to_owned())));
+    let slots = u16::try_from(locals.len()).unwrap_or(u16::MAX);
+    let mut code = Code::new(locals, slots);
     code.load(origin, Kind::Ref, 0);
     code.get_field(origin, &mut pool, &name, "it", &held);
-    let mut at: u16 = 1;
-    for local in locals.iter().skip(1) {
-        let kind = match local {
-            VType::Double => Kind::Double,
-            VType::Long => Kind::Long,
-            VType::Float => Kind::Float,
-            VType::Integer => Kind::Int,
-            _ => Kind::Ref,
-        };
-        code.load(origin, kind, at);
-        at += local.slots();
+    for (at, ty) in face.params.iter().enumerate() {
+        code.load(origin, Kind::Ref, u16::try_from(at + 1).unwrap_or(u16::MAX));
+        face::unboxed(&mut code, &mut pool, origin, ty);
     }
     code.invoke_interface(origin, &mut pool, interface, "call", call);
-    code.ret(origin, None);
+    code.get_static(origin, &mut pool, types::VALUE, "UNDEFINED_VALUE", types::VALUE_DESCRIPTOR);
+    code.ret(origin, Some(Kind::Ref));
     let body = code.finish(&pool).map_err(|error| {
-        Diagnostic::error("NTS4003", format!("the lambda adapter's call: {error}"), origin.location)
+        Diagnostic::error("NTS4003", format!("the lambda adapter's entry: {error}"), origin.location)
     })?;
-    builder.method(access::PUBLIC, "call", call.to_owned(), Some(body));
+    builder.method(access::PUBLIC, face.member, face.erased, Some(body));
 
     builder.build(pool).map_err(|error| {
         Diagnostic::error("NTS4003", format!("the lambda adapter `{name}`: {error}"), origin.location)
