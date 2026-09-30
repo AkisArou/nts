@@ -1,0 +1,9 @@
+{
+  "run": "build",
+  "category": "refused",
+  "nts": "NTS1001 a spread of something that is not an array",
+  "ran": "exit 1; nts: uncaught Observed: uniform=not 3;mixed=not s1;notStored=3 ok;",
+  "node": "exit 1; nts: uncaught Observed: uniform=3 ok;mixed=s1 ok;notStored=3 ok;",
+  "measured_with": "9968f2c9bd045c64",
+  "source": "measured"
+}
