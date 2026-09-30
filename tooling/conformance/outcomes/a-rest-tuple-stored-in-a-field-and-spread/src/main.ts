@@ -23,28 +23,40 @@
 // answer goes wrong, which is what says the defect is the store-and-read rather
 // than the gathering or the spread.
 //
-// # Where it is
+// # Where it is, read out of the emitted C
 //
-// `gather_rest`'s own comment states the invariant it breaks: *"the declaration
-// and the call have to agree, and they ask two different questions to get
-// there"*, and it lists two earlier spellings that were each wrong in one
-// direction. `lower_param` gives the parameter `Array(element)` while
-// `tuple_representation` gives a mixed tuple `Object(ty)`; the field is typed by
-// the second and written by the first. `element_of` restoring the declared type
-// on the way out is what makes the uniform case *look* fine while reading the
-// wrong slot.
+// **The spread is not expanded: the array is passed whole as argument one.**
+// `this.fn(...this.args)` compiles to
+//
+//     v5 = nts_array_concat(v3, v4);                    // the args array
+//     v6 = nts_value_of_reference((NtsHeader *)v5, NTS_TAG_OBJECT);
+//     v7 = nts_value_of_undefined();
+//     ((NtsValue (*)(Fn24__7 *, NtsValue, NtsValue))
+//        v1->header.descriptor->methods[1])(v1, v6, v7);
+//
+// so the callee -- `Closure0__call(Closure0 *, double, double)` reached through the
+// uniform entry -- unerases argument one to a `double` and gets **a pointer
+// reinterpreted as a float**. That is where `6.9…e-310` comes from, and why it
+// differs per run: it is the array's address. Argument two is the padding
+// `undefined`.
+//
+// The gather is not at fault. `hold` allocates `double[2]`, converts both
+// arguments and stores them at slots 0 and 1, correctly. Only the *spread* is
+// wrong, which is what the `notStored` control already said and this confirms in
+// the emitted code.
+//
+// **A spread of a dynamically sized array into a fixed-arity call cannot be
+// expanded at all**, and that is the real shape of the gap: the uniform entry takes
+// a fixed number of arguments, so a spread is expandable only where the length is
+// statically known. For a **tuple** it is -- `[number, number]` is two -- so the
+// fix is to expand a tuple-typed spread into that many element reads, and to refuse
+// where the length is not known rather than hand the container over as one
+// argument. The `mixed` arm refuses today for a different reason (its tuple
+// represents as a struct, so it is "not an array"), which is why only the uniform
+// case reaches the silent path.
 //
 // The plan holds this as the heterogeneous tuple, builder and reader together
-// (`tuple_representation` and `read_for_pattern`).
-//
-// # The observations are predicates, because the wrong value is not stable
-//
-// The `uniform` arm reads **uninitialised memory**, so its answer differs between
-// runs of the same binary -- `6.9125973766231e-310`, then `6.9462198196977e-310`.
-// Recording the value would make this fixture report CHANGED for ever and pin
-// nothing. So each arm observes whether it got node's answer, not what it got, and
-// the instability is itself part of the finding: a wrong answer that varies per run
-// is reading storage nobody wrote.
+// (`tuple_representation` and `read_for_pattern`); this is the reader.
 //
 // **Expected, confirmed under node:** `3 ok`, `s1 ok`, `3 ok`.
 
