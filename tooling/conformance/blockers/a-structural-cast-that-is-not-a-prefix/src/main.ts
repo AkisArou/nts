@@ -1,4 +1,4 @@
-// expect: a `Thing` where a `Named` is wanted
+// expect: `Thing` where `Named` is wanted
 //
 // **The expectation moved on 2026-09-17, and it moved forward.** It was
 // `an array of`, because `const xs: Named[] = [new Thing(n)]` used to build the
@@ -6,7 +6,7 @@
 // array: `an array of Managed(Object(…)) where an array of Managed(Object(…))
 // is wanted`. An array literal is now built at the type of the slot it is
 // filling, so there is no array to convert and the element store is what
-// refuses — naming the actual cast, `a `Thing` where a `Named` is wanted`,
+// refuses — naming the actual cast, ``Thing` where `Named` is wanted`,
 // with the two type names rather than two `Managed(Object(TypeId(…)))`.
 //
 // Same program, same refusal, one layer in. The array message was a true

@@ -1,9 +1,9 @@
-// expect: NTS1001 a `Thing` where a `Named` is wanted
+// expect: NTS1001 `Thing` where `Named` is wanted
 
 // A class instance stored into an **interface-typed array**, at three
 // entrances: the literal, `push`, and an indexed store.
 //
-// `coerce` refuses a `Thing` where a `Named` is wanted at a parameter, and
+// `coerce` refuses `Thing` where `Named` is wanted at a parameter, and
 // says why: `Thing.name` is at one offset and `Named.name` at another, so a
 // pointer cast between the two structs reads `id` --- a `double` --- as the
 // string pointer. The three entrances here lowered the value *expecting* the

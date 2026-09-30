@@ -2,7 +2,7 @@
 //
 // `count({ depth: n })` where the parameter is declared `Options` refused with
 //
-//     a `Options` where a `an anonymous type` is wanted, which is a pointer
+//     a `Options` where an anonymous type is wanted, which is a pointer
 //     cast between two structs that do not agree about where their shared
 //     fields are
 //

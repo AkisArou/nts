@@ -7,7 +7,7 @@
 //
 //   [string[], number[]]  "an array of Float where an array of Managed(String) is
 //                          wanted -- the two hold different widths"
-//   [Box, Label]          "a `Label` where a `Box` is wanted"; the read: "`size`,
+//   [Box, Label]          "`Label` where `Box` is wanted"; the read: "`size`,
 //                          which `Box` does not declare"
 //   [Map, Counts]         "a `Counts` where a table is wanted"; the read: "`a`,
 //                          where a `Map` or a `Set` has only `size`" (the arm a

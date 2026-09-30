@@ -1,4 +1,4 @@
-// expect: NTS1001 a `Box` where a `Box` is wanted
+// expect: NTS1001 `Box` where `Box` is wanted
 //
 // **The same type name on both sides of the cast.** Two instantiations of one
 // generic class -- `Box<number>` and `Box<bigint>` -- reached through an

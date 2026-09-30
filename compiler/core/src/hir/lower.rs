@@ -20352,10 +20352,12 @@ impl<'a> FuncBuilder<'a> {
             ) = (&have, want)
                 && let Some(why) = self.not_a_prefix(id, *from, *to)
             {
-                let (from, to) = (
-                    self.name_of_type(*from).unwrap_or("an anonymous type").to_owned(),
-                    self.name_of_type(*to).unwrap_or("an anonymous type").to_owned(),
-                );
+                // `type_in_a_message` and not a fifth spelling of it. This read
+                // `name_of_type(..).unwrap_or("an anonymous type")`, which
+                // `spell` then wrapped in backticks and prefixed with `a `,
+                // giving `a `an anonymous type``. Four helpers answered "name
+                // this type for a reader" four ways; they answer once now.
+                let (from, to) = (self.type_in_a_message(*from), self.type_in_a_message(*to));
                 return Err(self.unsupported(id, &why.spell(&from, &to)));
             }
             if let Some(why) = self.crossing_storage(&have, want) {
@@ -33028,6 +33030,36 @@ impl<'a> FuncBuilder<'a> {
     /// recognition rather than a full printing, and a mapped type over a long
     /// interface would otherwise fill the terminal.
     fn shaped_like(&self, ty: TypeId) -> String {
+        // **A tuple, which this had no arm for** -- it matched `Object` only, so
+        // every tuple fell to the fallback and a refusal about two of them read
+        // `a `an anonymous type` where a `an anonymous type` is wanted`. Tuples
+        // reach messages far more often since a fixed-arity rest began taking its
+        // type's representation, which is how the sentence became common enough
+        // to notice.
+        if let Some(TypeKind::Tuple(positions)) =
+            self.snapshot.types.get(ty.0 as usize).map(|r| &r.kind)
+        {
+            // Each position abbreviated, on this function's own rule: *"the point
+            // is recognition rather than a full printing"*. A four-position tuple
+            // of unions printed 240 characters, three of them the same
+            // `a union of a boolean literal | undefined` -- which tells a reader
+            // less than the shape does, because the repetition hides the arity.
+            let mut shown: Vec<String> = positions
+                .iter()
+                .take(6)
+                .map(|position| {
+                    let described = describe(self.snapshot, *position);
+                    match described.char_indices().nth(28) {
+                        Some((at, _)) => format!("{}…", &described[..at]),
+                        None => described,
+                    }
+                })
+                .collect();
+            if positions.len() > shown.len() {
+                shown.push("...".to_owned());
+            }
+            return format!("the tuple `[{}]`", shown.join(", "));
+        }
         let Some(TypeKind::Object { properties }) =
             self.snapshot.types.get(ty.0 as usize).map(|r| &r.kind)
         else {
@@ -62363,28 +62395,35 @@ enum NotAPrefix {
 }
 
 impl NotAPrefix {
-    /// The refusal, given the two type names as the program spells them.
+    /// The refusal, given each type as [`FuncBuilder::type_in_a_message`] spells it.
+    ///
+    /// **The phrase arrives complete**, and this adds neither an article nor
+    /// backticks. It used to do both -- `a `{from}`` -- which is right for a
+    /// declared name and produces `a `an anonymous type`` for everything else. One
+    /// contract instead: the helper owns the whole noun phrase, so `` `Bag` ``,
+    /// `the anonymous `{ a, c }`` and `the tuple `[string, number]`` all read in
+    /// this sentence and in `on {who}` next door.
     fn spell(&self, from: &str, to: &str) -> String {
         match self {
             Self::Widens { wanted, held, first } => format!(
-                "a `{from}` where a `{to}` is wanted -- a `{to}` declares {wanted} fields and a \
-                 `{from}` holds {held}, so `{first}` has no storage at any offset and a pointer \
+                "{from} where {to} is wanted -- {to} declares {wanted} fields and {from} \
+                 holds {held}, so `{first}` has no storage at any offset and a pointer \
                  cast cannot widen a struct"
             ),
             Self::Missing { name } => format!(
-                "a `{from}` where a `{to}` is wanted -- a `{to}` holds `{name}` and a `{from}` \
+                "{from} where {to} is wanted -- {to} holds `{name}` and {from} \
                  has no field of that name and type, so a pointer cast leaves the read with \
                  nothing to land on"
             ),
             Self::Disagrees { at, wanted, held } => format!(
-                "a `{from}` where a `{to}` is wanted, which is a pointer cast between two \
-                 structs that do not agree about where their shared fields are -- a `{to}` \
-                 holds `{wanted}` in slot {at} where a `{from}` holds `{held}`, and a base's \
+                "{from} where {to} is wanted, which is a pointer cast between two \
+                 structs that do not agree about where their shared fields are -- {to} \
+                 holds `{wanted}` in slot {at} where {from} holds `{held}`, and a base's \
                  fields keep their offsets in a subclass where a structural type's do not"
             ),
             Self::Unknown => format!(
-                "a `{from}` where a `{to}` is wanted, and a `{from}` has no layout here, so \
-                 nothing can show it holds a `{to}`'s fields where a `{to}` expects them"
+                "{from} where {to} is wanted, and {from} has no layout here, so \
+                 nothing can show it holds {to}'s fields where {to} expects them"
             ),
         }
     }

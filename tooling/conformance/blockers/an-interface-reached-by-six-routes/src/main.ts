@@ -1,4 +1,4 @@
-// expect: a `WithBase` where a `Slice` is wanted, which is a pointer cast
+// expect: `WithBase` where `Slice` is wanted, which is a pointer cast
 //         between two structs that do not agree about where their shared
 //         fields are
 //
