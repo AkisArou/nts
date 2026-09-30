@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Observed: own class=Test262;foreign this=Test262;",
+  "node": "exit 1; nts: uncaught Observed: own class=Test262;foreign this=TypeError;",
+  "measured_with": "fec2a12200dbbb52",
+  "source": "measured"
+}
