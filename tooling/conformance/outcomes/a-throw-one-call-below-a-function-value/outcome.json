@@ -1,0 +1,9 @@
+{
+  "run": "build",
+  "category": "refused",
+  "nts": "NTS1001 a call inside a `try` whose `throw` would not reach this handler: through a function value, which has no raising copy to call",
+  "ran": "exit 1; nts: uncaught Observed: ",
+  "node": "exit 1; nts: uncaught Observed: direct=caught;one call deeper=caught;",
+  "measured_with": "85bd233d71d96b58",
+  "source": "measured"
+}

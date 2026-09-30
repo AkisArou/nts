@@ -457,6 +457,9 @@ export function attempt(dir, body, tools) {
       // `Test262Error` cannot tell one wrong value from another, so a case that
       // changes *how* it is wrong would look unchanged.
       const said = String(error.stderr ?? "").split("\n").find((text) => UNCAUGHT.test(text));
+      // The stand-in's own "I cannot judge this" (harness-throws.ts): a limit
+      // of ours, recorded as the harness refusing, never as the test failing.
+      if (thrown[1] === "StandInCannotJudge") return { bucket: "unsupported", why: "harness", first: said?.trim().slice(0, 200) };
       return { bucket: "threw", thrown: thrown[1], message: said?.trim().slice(0, 240) };
     }
     // The program's last word, kept: a runtime refusal prints
