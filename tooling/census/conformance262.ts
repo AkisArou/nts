@@ -141,6 +141,19 @@ function cannotMeasure(why) {
 
 if (!existsSync(NTS)) cannotMeasure(`no compiler at ${NTS}; set NTS_BIN`);
 if (!existsSync(SUITE)) cannotMeasure("no test262 checkout; tooling/bootstrap/bootstrap.sh clones it");
+// **A record is a claim about a commit, so it is written from a pin of one.**
+// A record's header names its commit only for a clean, unpatched pin (see
+// recordCommit), and the gate's record-age line reads that name. On
+// 2026-09-30 a record written from target/release/nts came out "written
+// before records named their commit", undoing the age line by the shape of
+// an invocation. So --record refuses anything else, before the run, not after it.
+if (recordFile && !recordCommit()) {
+  const record = provenanceOf(NTS);
+  cannotMeasure(
+    `--record writes a claim about a commit, and ${NTS} is ${record ? (record.applied ? "a pin with a patch applied" : "a pin of a tree that was not clean") : "not a pin"}; ` +
+      "pin a commit of main (node tooling/conformance/pin.ts <rev>) and pass NTS_BIN=<that pin>",
+  );
+}
 
 const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
 
