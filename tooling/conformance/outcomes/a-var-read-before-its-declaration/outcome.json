@@ -1,8 +1,8 @@
 {
   "run": "build",
   "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught Observed: inferred=true;annotated=undefined;",
-  "node": "exit 1; nts: uncaught Observed: inferred=undefined;annotated=undefined;",
-  "measured_with": "db59442100b1632d",
+  "nts": "exit 1; nts: uncaught Observed: inferred=true;annotated=undefined;deferred=false;",
+  "node": "exit 1; nts: uncaught Observed: inferred=undefined;annotated=undefined;deferred=undefined;",
+  "measured_with": "9968f2c9bd045c64",
   "source": "measured"
 }
