@@ -1633,6 +1633,12 @@ fn run_done(path: &Utf8Path) -> Option<usize> {
 struct Run {
     results: Vec<String>,
     output: Vec<String>,
+    /// The cases the compiled program stopped on by *throwing* -- an uncaught
+    /// exception, `nts: uncaught ...` -- with the line it printed. Only these
+    /// among the declines are paired with node's answer in [`report`]: a
+    /// refusal is two languages answering differently, but a throw where node
+    /// answered is one answer, and the compiled program got it wrong.
+    thrown: Vec<(usize, String)>,
 }
 
 /// Run a case set, restarting past whatever ends it.
@@ -1658,6 +1664,7 @@ fn collect_restarting(
     let total = results.len();
     let mut collected: Vec<String> = Vec::new();
     let mut output: Vec<String> = Vec::new();
+    let mut thrown: Vec<(usize, String)> = Vec::new();
     let mut from = 0;
     let mut restarts = 0;
     while from < total && restarts <= REFUSALS {
@@ -1726,7 +1733,11 @@ fn collect_restarting(
             break;
         }
         match stopped_with(run.status.code(), signal_of(run.status), &complaint) {
-            Stopped::Declined => {}
+            Stopped::Declined => {
+                if let Some(line) = complaint.lines().find(|line| line.starts_with(UNCAUGHT)) {
+                    thrown.push((from + reached, line.to_owned()));
+                }
+            }
             Stopped::TimedOut => *timeouts += 1,
             Stopped::Defect(what) => aborts.push(what),
         }
@@ -1736,7 +1747,7 @@ fn collect_restarting(
         from += reached + 1;
         restarts += 1;
     }
-    Ok(Run { results: collected, output })
+    Ok(Run { results: collected, output, thrown })
 }
 
 /// The JVM lane: classes, a jar, and `java`.
@@ -2129,7 +2140,7 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<R
         .output()
         .context("running node")?;
     let results = node_results(&results_path, &run)?;
-    Ok(Run { results, output: lines(&run.stdout) })
+    Ok(Run { results, output: lines(&run.stdout), thrown: Vec::new() })
 }
 
 /// The node oracle, uncoloured whatever shell launched it.
@@ -2288,20 +2299,35 @@ fn report(
     // the order the cases ran. What a program prints itself (`console.log`)
     // is no longer among them: results arrive on their own file, and the
     // program's stdout is compared as a separate stream below.
+    //
+    // **Except a throw where node answered.** `nts: uncaught` was a decline
+    // on the claim that node's driver "reports the same event as `threw`",
+    // and nothing checked it: on 2026-09-30 an example read "agreed on every
+    // case" while 17 of its cases ended in an uncaught `TypeError` where node
+    // answered 4. So an uncaught stop is skipped only when node threw at that
+    // case too; otherwise it is a disagreement, the compiled throw against
+    // node's answer. A refusal (`nts: refused:`) keeps the skip.
     let native = &native_run.results;
     let results = results(testable);
     let mut case = 0;
-    let engine: Vec<&String> = engine_run
-        .results
-        .iter()
-        .filter(|line| {
-            if !results.get(case).is_some_and(|result| line.starts_with(result.as_str())) {
-                return true;
-            }
-            case += 1;
-            !refused.contains(&(case - 1))
-        })
-        .collect();
+    let mut threw_against = Vec::new();
+    let mut engine: Vec<&String> = Vec::new();
+    for line in &engine_run.results {
+        let Some(result) = results.get(case).filter(|result| line.starts_with(result.as_str())) else {
+            engine.push(line);
+            continue;
+        };
+        case += 1;
+        if !refused.contains(&(case - 1)) {
+            engine.push(line);
+            continue;
+        }
+        if let Some((_, said)) = native_run.thrown.iter().find(|(at, _)| *at == case - 1)
+            && *line != format!("{result}threw")
+        {
+            threw_against.push((format!("{result}{said}"), line.clone()));
+        }
+    }
 
     let compared = native.len().min(engine.len());
     // Cases, not lines, for the same reason: a result line is `name at value`.
@@ -2314,6 +2340,8 @@ fn report(
         })
         .count();
     let mut disagreements = Vec::new();
+    let answered_where_we_threw = threw_against.len();
+    disagreements.append(&mut threw_against);
     let mut approximated = 0;
     for at in 0..compared {
         let name = native[at].split(' ').next().unwrap_or_default();
@@ -2340,9 +2368,9 @@ fn report(
     }
     Report {
         functions: testable.len(),
-        checked,
+        checked: checked + answered_where_we_threw,
         expected: testable.iter().map(|one| tuples(&one.params).len()).sum(),
-        refused: refused.len(),
+        refused: refused.len() - answered_where_we_threw,
         approximated,
         disagreements,
         aborts: Vec::new(),
@@ -2640,5 +2668,57 @@ mod result_channel {
         assert_eq!(run.results, vec!["f 0 1".to_owned(), "f 1 2".to_owned()]);
         assert_eq!(run.output, vec!["f 1 999 printed by the program".to_owned()]);
         assert!(refused.is_empty() && aborts.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod pairing {
+    use super::{HirType, Run, Testable, report};
+    use std::collections::HashSet;
+
+    /// One function of no parameters: one case, `f 0 `.
+    fn one() -> Vec<Testable> {
+        vec![Testable { name: "f".to_owned(), returns: HirType::Void, params: Vec::new() }]
+    }
+
+    fn run(results: &[&str], thrown: &[(usize, &str)]) -> Run {
+        Run {
+            results: results.iter().map(|line| (*line).to_owned()).collect(),
+            output: Vec::new(),
+            thrown: thrown.iter().map(|(at, line)| (*at, (*line).to_owned())).collect(),
+        }
+    }
+
+    /// The hole this closes: the compiled program threw where node answered,
+    /// and the case was skipped as a decline. It is a disagreement.
+    #[test]
+    fn a_throw_where_node_answered_is_a_disagreement() {
+        let compiled = run(&[], &[(0, "nts: uncaught TypeError: x")]);
+        let node = run(&["f 0 4"], &[]);
+        let got = report(&compiled, &node, &one(), &[0], &HashSet::new());
+        assert_eq!(got.disagreements, vec![("f 0 nts: uncaught TypeError: x".to_owned(), "f 0 4".to_owned())]);
+        assert_eq!((got.refused, got.checked), (0, 1));
+        assert!(!got.agreed());
+    }
+
+    /// Both sides threw: nothing to compare, and the case is still skipped.
+    #[test]
+    fn a_throw_where_node_threw_is_still_skipped() {
+        let compiled = run(&[], &[(0, "nts: uncaught RangeError: r")]);
+        let node = run(&["f 0 threw"], &[]);
+        let got = report(&compiled, &node, &one(), &[0], &HashSet::new());
+        assert!(got.disagreements.is_empty());
+        assert_eq!(got.refused, 1);
+    }
+
+    /// A refusal is two languages answering differently, and keeps the skip
+    /// whatever node answered -- the sibling of `a_refusal_is_still_a_declined_case`.
+    #[test]
+    fn a_refusal_where_node_answered_is_still_skipped() {
+        let compiled = run(&[], &[]);
+        let node = run(&["f 0 undefined"], &[]);
+        let got = report(&compiled, &node, &one(), &[0], &HashSet::new());
+        assert!(got.disagreements.is_empty());
+        assert_eq!(got.refused, 1);
     }
 }
