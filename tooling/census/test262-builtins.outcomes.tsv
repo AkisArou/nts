@@ -1,6 +1,6 @@
 # Test262 test/built-ins cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler e0fbe7f8302684d9, harness 1206fb95a71de6c1; machine at start: 19.9 GB available, swap 3.9/20 GB, load 9.1/11.2 (1m/5m), 32 cores; 8 worker(s)
+# compiler 9968f2c9bd045c64, harness 1206fb95a71de6c1; machine at start: 20.5 GB available, swap 4.7/20 GB, load 4/5.1 (1m/5m), 32 cores; 6 worker(s)
 test/built-ins/Array/S15.4.2.1_A1.3_T1.js	pass	
 test/built-ins/Array/from/from-string.js	pass	
 test/built-ins/Array/isArray/15.4.3.2-0-4.js	pass	
@@ -192,12 +192,8 @@ test/built-ins/Math/log/S15.8.2.10_A3.js	pass
 test/built-ins/Math/log/S15.8.2.10_A4.js	pass	
 test/built-ins/Math/log/S15.8.2.10_A5.js	pass	
 test/built-ins/Math/log1p/specific-results.js	pass	
-test/built-ins/Math/max/15.8.2.11-1.js	fail	nts: uncaught Test262Error: sameValue
-test/built-ins/Math/max/Math.max_each-element-coerced.js	fail	nts: uncaught Test262Error: sameValue
 test/built-ins/Math/max/S15.8.2.11_A1.js	pass	
 test/built-ins/Math/max/zeros.js	pass	
-test/built-ins/Math/min/15.8.2.12-1.js	fail	nts: uncaught Test262Error: sameValue
-test/built-ins/Math/min/Math.min_each-element-coerced.js	fail	nts: uncaught Test262Error: sameValue
 test/built-ins/Math/min/S15.8.2.12_A1.js	pass	
 test/built-ins/Math/min/zeros.js	pass	
 test/built-ins/Math/pow/int32_min-exponent.js	pass	
