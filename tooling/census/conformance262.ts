@@ -93,7 +93,7 @@
 // at a lowering or backend refusal the checker had kept out of sight.
 // `sole` is an upper bound for every root, and for a checker root a loose one.
 
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism, homedir, loadavg } from "node:os";
 import { dirname, join } from "node:path";
@@ -102,7 +102,7 @@ import { fileURLToPath } from "node:url";
 
 import { selfChecks } from "./attempt262.ts";
 import { bodyOf, HARNESS_HASH, pinCompiler } from "./project.ts";
-import { frontendFor } from "../conformance/pin.ts";
+import { frontendFor, provenanceOf } from "../conformance/pin.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -765,12 +765,31 @@ if (recordFile && derivesEvidence) {
     }, null, 2)}\n`,
   );
 }
+/**
+ * **The commit a record was written at, so its age can be counted.** A record
+ * is re-checked by `--recorded`, whose population is the cases that already
+ * ran, so it cannot contain a new pass. Passes a later commit gains stay out
+ * of the record until someone needs a full run for another reason: on
+ * 2026-09-30, 72 had accumulated unseen. The header names the commit when the
+ * compiler is a clean pin, so the gate can say how far behind the record is.
+ */
+function recordCommit() {
+  const record = provenanceOf(NTS);
+  return record?.sha && record.clean && !record.applied ? `, commit ${record.sha}` : "";
+}
+
+/** The record's commit, from its header, or null for one written before records named it. */
+function recordedCommitOf(file) {
+  const header = readFileSync(file, "utf8").split("\n").find((l) => l.startsWith("# compiler "));
+  return /, commit ([0-9a-f]{40})/.exec(header ?? "")?.[1] ?? null;
+}
+
 if (recordFile) {
   writeFileSync(
     recordFile,
     `# Test262 ${under} cases that ran, and what each did. Written by\n` +
       `# tooling/census/conformance262.ts --record; compared by --check.\n` +
-      `# compiler ${FINGERPRINT}, harness ${HARNESS_HASH}${FRONTEND.moved ? `, frontend moved since the pin (${FRONTEND.moved})` : ""}; machine at start: ${describeMachine(machineAtStart)}; ${jobs} worker(s)\n` +
+      `# compiler ${FINGERPRINT}${recordCommit()}, harness ${HARNESS_HASH}${FRONTEND.moved ? `, frontend moved since the pin (${FRONTEND.moved})` : ""}; machine at start: ${describeMachine(machineAtStart)}; ${jobs} worker(s)\n` +
       ranRows.map(recordedRow).sort().join("\n") + "\n",
   );
 }
@@ -861,6 +880,15 @@ if (partial) {
   // denominator is not the suite. Printed as what it is, and nothing else.
   say(`  ${recordedFile ? "recorded cases" : "sample"}: ${tally.pass} of ${population.length} pass -- ` +
     "not a conformance rate; the denominator is not the suite");
+if (recordedFile) {
+  const at = recordedCommitOf(recordedFile);
+  if (!at) say("  record age: unknown -- written before records named their commit; a full run re-records it with one");
+  else {
+    const since = spawnSync("git", ["rev-list", "--count", `${at}..HEAD`, "--", "compiler", "runtime"], { cwd: ROOT, encoding: "utf8" });
+    const count = since.status === 0 ? since.stdout.trim() : "?";
+    say(`  record age: written at ${at.slice(0, 12)}; ${count} commit(s) since touch compiler/ or runtime/ -- a pass any of them gained is not in this record until a full run`);
+  }
+}
   say(`  pass-count: ${tally.pass}`);
   say(`  negatives-accepted: ${negativesAccepted}`);
 } else say(

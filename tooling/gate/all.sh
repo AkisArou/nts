@@ -1927,7 +1927,7 @@ test262_recorded() {
   out=$(NTS_BIN="${NTS_BIN:-target/release/nts}" node tooling/census/conformance262.ts \
     --under "$under" --recorded "$record" --jobs "$cap" 2>&1)
   status=$?
-  printf '%s\n' "$out" | awk '(/^  (outcome|pass|fail|refused|unsupported|no-verdict|sum|recorded cases|pass-count|negatives-accepted|reconciled|NOT RECONCILED|INSTRUMENT FAILURE|self-checks|compiler)/ || /REGRESSED|CHANGED|MISSING|FIXED|NEW (PASS|FAIL)|^              /) && !/ranked by|by what|by family/ && !/\((test262-exclusions|features)\.json\)$/'
+  printf '%s\n' "$out" | awk '(/^  (outcome|pass|fail|refused|unsupported|no-verdict|sum|recorded cases|record age|pass-count|negatives-accepted|reconciled|NOT RECONCILED|INSTRUMENT FAILURE|self-checks|compiler)/ || /REGRESSED|CHANGED|MISSING|FIXED|NEW (PASS|FAIL)|^              /) && !/ranked by|by what|by family/ && !/\((test262-exclusions|features)\.json\)$/'
   [ "$status" -eq 0 ] || return 1
   passed=$(printf '%s\n' "$out" | awk '/^  pass-count: [0-9]+$/ { print $2 }')
   if [ -z "$passed" ]; then
