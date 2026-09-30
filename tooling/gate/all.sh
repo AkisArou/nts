@@ -855,8 +855,13 @@ profile() {
     printf '  ^ definitions flat or down means reach went backwards -- do not\n'
     return 1
   fi
-  # 40 rather than the old 400, which was a tenth of a number ten times larger.
-  [ "$pairs" -lt $((ceiling - 40)) ] && \
+  # **Wider than the slack, which the first version of this got wrong.** With both
+  # at 40 the hint fired the moment the count dropped by one below the measured
+  # figure -- 1416 against a ceiling of 1457 printed "lower it toward 1416" -- so
+  # it nagged on ordinary noise and would have trained a reader to ignore it. The
+  # threshold has to be the movement that actually earns a lower bound, which is
+  # larger than the headroom, not equal to it.
+  [ "$pairs" -lt $((ceiling - 100)) ] && \
     printf '  ^ lower the ceiling in tooling/gate/all.sh toward %s\n' "$pairs"
   if [ -n "$crashed" ]; then
     echo "  the emitter panicked on:"
