@@ -1,6 +1,7 @@
 # Test262 test/built-ins cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 09f9952cd8d3a15f, harness 1206fb95a71de6c1; machine at start: 20.6 GB available, swap 5.4/20 GB, load 11.7/18.7 (1m/5m), 32 cores; 8 worker(s)
+# compiler 87d5573779e3bbe2, commit ac1533ca4ca437ee183238e0c701239d94107b4c, harness 3b36e94947c1b127; machine at start: 19 GB available, swap 5.7/20 GB, load 13.6/15.2 (1m/5m), 32 cores; 8 worker(s)
+test/built-ins/AggregateError/errors-iterabletolist-failures.js	fail	nts: uncaught Test262Error: get Symbol.iterator
 test/built-ins/Array/S15.4.2.1_A1.3_T1.js	pass	
 test/built-ins/Array/from/from-string.js	pass	
 test/built-ins/Array/isArray/15.4.3.2-0-4.js	pass	
@@ -38,15 +39,24 @@ test/built-ins/Array/prototype/sort/stability-513-elements.js	pass
 test/built-ins/Array/prototype/splice/15.4.4.12-9-a-1.js	pass	
 test/built-ins/Array/prototype/splice/called_with_one_argument.js	pass	
 test/built-ins/Array/prototype/toReversed/immutable.js	pass	
+test/built-ins/ArrayBuffer/allocation-limit.js	pass	
 test/built-ins/ArrayBuffer/init-zero.js	pass	
 test/built-ins/ArrayBuffer/isView/arg-is-arraybuffer.js	pass	
 test/built-ins/ArrayBuffer/isView/arg-is-dataview-buffer.js	pass	
 test/built-ins/ArrayBuffer/isView/arg-is-dataview.js	pass	
 test/built-ins/ArrayBuffer/isView/arg-is-not-object.js	pass	
+test/built-ins/ArrayBuffer/length-is-too-large-throws.js	pass	
+test/built-ins/ArrayBuffer/negative-length-throws.js	pass	
+test/built-ins/ArrayBuffer/options-maxbytelength-allocation-limit.js	pass	
+test/built-ins/ArrayBuffer/options-maxbytelength-diminuitive.js	pass	
+test/built-ins/ArrayBuffer/options-maxbytelength-excessive.js	pass	
+test/built-ins/ArrayBuffer/options-maxbytelength-negative.js	pass	
 test/built-ins/ArrayBuffer/prototype/byteLength/return-bytelength.js	pass	
 test/built-ins/ArrayBuffer/prototype/maxByteLength/return-maxbytelength-non-resizable.js	pass	
 test/built-ins/ArrayBuffer/prototype/maxByteLength/return-maxbytelength-resizable.js	pass	
 test/built-ins/ArrayBuffer/prototype/resizable/return-resizable.js	pass	
+test/built-ins/ArrayBuffer/prototype/resize/new-length-excessive.js	pass	
+test/built-ins/ArrayBuffer/prototype/resize/new-length-negative.js	pass	
 test/built-ins/ArrayBuffer/prototype/slice/end-default-if-absent.js	pass	
 test/built-ins/ArrayBuffer/prototype/slice/end-exceeds-length.js	pass	
 test/built-ins/ArrayBuffer/prototype/slice/negative-end.js	pass	
@@ -56,6 +66,32 @@ test/built-ins/ArrayBuffer/prototype/slice/start-exceeds-end.js	pass
 test/built-ins/ArrayBuffer/prototype/slice/start-exceeds-length.js	pass	
 test/built-ins/ArrayBuffer/prototype/slice/tointeger-conversion-end.js	pass	
 test/built-ins/ArrayBuffer/prototype/slice/tointeger-conversion-start.js	pass	
+test/built-ins/ArrayBuffer/prototype/transfer/from-fixed-to-larger-no-resizable.js	pass	
+test/built-ins/ArrayBuffer/prototype/transfer/from-fixed-to-larger.js	fail	nts: uncaught Test262Error: dest.maxByteLength
+test/built-ins/ArrayBuffer/prototype/transfer/from-fixed-to-same-no-resizable.js	pass	
+test/built-ins/ArrayBuffer/prototype/transfer/from-fixed-to-same.js	pass	
+test/built-ins/ArrayBuffer/prototype/transfer/from-fixed-to-smaller-no-resizable.js	pass	
+test/built-ins/ArrayBuffer/prototype/transfer/from-fixed-to-smaller.js	fail	nts: uncaught Test262Error: dest.maxByteLength
+test/built-ins/ArrayBuffer/prototype/transfer/from-fixed-to-zero-no-resizable.js	pass	
+test/built-ins/ArrayBuffer/prototype/transfer/from-fixed-to-zero.js	fail	nts: uncaught Test262Error: dest.maxByteLength
+test/built-ins/ArrayBuffer/prototype/transfer/from-resizable-to-larger.js	pass	
+test/built-ins/ArrayBuffer/prototype/transfer/from-resizable-to-same.js	pass	
+test/built-ins/ArrayBuffer/prototype/transfer/from-resizable-to-smaller.js	pass	
+test/built-ins/ArrayBuffer/prototype/transfer/from-resizable-to-zero.js	pass	
+test/built-ins/ArrayBuffer/prototype/transfer/new-length-excessive.js	pass	
+test/built-ins/ArrayBuffer/prototype/transferToFixedLength/from-fixed-to-larger-no-resizable.js	pass	
+test/built-ins/ArrayBuffer/prototype/transferToFixedLength/from-fixed-to-larger.js	pass	
+test/built-ins/ArrayBuffer/prototype/transferToFixedLength/from-fixed-to-same-no-resizable.js	pass	
+test/built-ins/ArrayBuffer/prototype/transferToFixedLength/from-fixed-to-same.js	pass	
+test/built-ins/ArrayBuffer/prototype/transferToFixedLength/from-fixed-to-smaller-no-resizable.js	pass	
+test/built-ins/ArrayBuffer/prototype/transferToFixedLength/from-fixed-to-smaller.js	pass	
+test/built-ins/ArrayBuffer/prototype/transferToFixedLength/from-fixed-to-zero-no-resizable.js	pass	
+test/built-ins/ArrayBuffer/prototype/transferToFixedLength/from-fixed-to-zero.js	pass	
+test/built-ins/ArrayBuffer/prototype/transferToFixedLength/from-resizable-to-larger.js	pass	
+test/built-ins/ArrayBuffer/prototype/transferToFixedLength/from-resizable-to-same.js	pass	
+test/built-ins/ArrayBuffer/prototype/transferToFixedLength/from-resizable-to-smaller.js	pass	
+test/built-ins/ArrayBuffer/prototype/transferToFixedLength/from-resizable-to-zero.js	pass	
+test/built-ins/ArrayBuffer/prototype/transferToFixedLength/new-length-excessive.js	pass	
 test/built-ins/ArrayBuffer/zero-length.js	pass	
 test/built-ins/BigInt/prototype/toString/string-is-code-units-of-decimal-digits-only.js	pass	
 test/built-ins/Boolean/S15.6.1.1_A1_T2.js	pass	
@@ -68,45 +104,66 @@ test/built-ins/Boolean/S9.2_A4_T3.js	pass
 test/built-ins/Boolean/S9.2_A5_T1.js	pass	
 test/built-ins/Boolean/S9.2_A5_T3.js	pass	
 test/built-ins/DataView/buffer-reference.js	pass	
+test/built-ins/DataView/byteoffset-is-negative-throws.js	pass	
+test/built-ins/DataView/excessive-bytelength-throws.js	pass	
+test/built-ins/DataView/excessive-byteoffset-throws.js	pass	
+test/built-ins/DataView/negative-bytelength-throws.js	pass	
+test/built-ins/DataView/negative-byteoffset-throws.js	pass	
 test/built-ins/DataView/prototype/buffer/return-buffer.js	pass	
 test/built-ins/DataView/prototype/byteLength/return-bytelength.js	pass	
 test/built-ins/DataView/prototype/byteOffset/return-byteoffset.js	pass	
 test/built-ins/DataView/prototype/getFloat32/minus-zero.js	pass	
+test/built-ins/DataView/prototype/getFloat32/negative-byteoffset-throws.js	pass	
 test/built-ins/DataView/prototype/getFloat32/return-infinity.js	pass	
 test/built-ins/DataView/prototype/getFloat32/return-nan.js	pass	
 test/built-ins/DataView/prototype/getFloat32/return-value-clean-arraybuffer.js	pass	
 test/built-ins/DataView/prototype/getFloat32/return-values-custom-offset.js	pass	
 test/built-ins/DataView/prototype/getFloat32/return-values.js	pass	
 test/built-ins/DataView/prototype/getFloat64/minus-zero.js	pass	
+test/built-ins/DataView/prototype/getFloat64/negative-byteoffset-throws.js	pass	
 test/built-ins/DataView/prototype/getFloat64/return-infinity.js	pass	
 test/built-ins/DataView/prototype/getFloat64/return-nan.js	pass	
 test/built-ins/DataView/prototype/getFloat64/return-value-clean-arraybuffer.js	pass	
 test/built-ins/DataView/prototype/getFloat64/return-values-custom-offset.js	pass	
 test/built-ins/DataView/prototype/getFloat64/return-values.js	pass	
+test/built-ins/DataView/prototype/getInt16/negative-byteoffset-throws.js	pass	
 test/built-ins/DataView/prototype/getInt16/return-value-clean-arraybuffer.js	pass	
 test/built-ins/DataView/prototype/getInt16/return-values-custom-offset.js	pass	
 test/built-ins/DataView/prototype/getInt16/return-values.js	pass	
+test/built-ins/DataView/prototype/getInt32/negative-byteoffset-throws.js	pass	
 test/built-ins/DataView/prototype/getInt32/return-value-clean-arraybuffer.js	pass	
 test/built-ins/DataView/prototype/getInt32/return-values-custom-offset.js	pass	
 test/built-ins/DataView/prototype/getInt32/return-values.js	pass	
+test/built-ins/DataView/prototype/getInt8/negative-byteoffset-throws.js	pass	
 test/built-ins/DataView/prototype/getInt8/return-value-clean-arraybuffer.js	pass	
 test/built-ins/DataView/prototype/getInt8/return-values-custom-offset.js	pass	
 test/built-ins/DataView/prototype/getInt8/return-values.js	pass	
+test/built-ins/DataView/prototype/getUint16/negative-byteoffset-throws.js	pass	
 test/built-ins/DataView/prototype/getUint16/return-value-clean-arraybuffer.js	pass	
 test/built-ins/DataView/prototype/getUint16/return-values-custom-offset.js	pass	
 test/built-ins/DataView/prototype/getUint16/return-values.js	pass	
+test/built-ins/DataView/prototype/getUint32/negative-byteoffset-throws.js	pass	
 test/built-ins/DataView/prototype/getUint32/return-value-clean-arraybuffer.js	pass	
 test/built-ins/DataView/prototype/getUint32/return-values-custom-offset.js	pass	
 test/built-ins/DataView/prototype/getUint32/return-values.js	pass	
+test/built-ins/DataView/prototype/getUint8/negative-byteoffset-throws.js	pass	
 test/built-ins/DataView/prototype/getUint8/return-value-clean-arraybuffer.js	pass	
 test/built-ins/DataView/prototype/getUint8/return-values-custom-offset.js	pass	
 test/built-ins/DataView/prototype/getUint8/return-values.js	pass	
+test/built-ins/DataView/prototype/setFloat32/negative-byteoffset-throws.js	pass	
 test/built-ins/DataView/prototype/setFloat32/set-values-little-endian-order.js	pass	
+test/built-ins/DataView/prototype/setFloat64/negative-byteoffset-throws.js	pass	
 test/built-ins/DataView/prototype/setFloat64/set-values-little-endian-order.js	pass	
+test/built-ins/DataView/prototype/setInt16/negative-byteoffset-throws.js	pass	
 test/built-ins/DataView/prototype/setInt16/set-values-little-endian-order.js	pass	
+test/built-ins/DataView/prototype/setInt32/negative-byteoffset-throws.js	pass	
 test/built-ins/DataView/prototype/setInt32/set-values-little-endian-order.js	pass	
+test/built-ins/DataView/prototype/setInt8/negative-byteoffset-throws.js	pass	
+test/built-ins/DataView/prototype/setUint16/negative-byteoffset-throws.js	pass	
 test/built-ins/DataView/prototype/setUint16/set-values-little-endian-order.js	pass	
+test/built-ins/DataView/prototype/setUint32/negative-byteoffset-throws.js	pass	
 test/built-ins/DataView/prototype/setUint32/set-values-little-endian-order.js	pass	
+test/built-ins/DataView/prototype/setUint8/negative-byteoffset-throws.js	pass	
 test/built-ins/Date/S15.9.3.2_A1_T1.js	pass	
 test/built-ins/Date/TimeClip_negative_zero.js	pass	
 test/built-ins/Date/prototype/getTime/this-value-invalid-date.js	pass	
@@ -303,8 +360,11 @@ test/built-ins/Number/isSafeInteger/not-integer.js	pass
 test/built-ins/Number/isSafeInteger/not-safe-integer.js	pass	
 test/built-ins/Number/isSafeInteger/safe-integers.js	pass	
 test/built-ins/Number/prototype/toFixed/exactness.js	pass	
+test/built-ins/Number/prototype/toFixed/range.js	pass	
+test/built-ins/Number/prototype/toFixed/toFixed-tonumber-throws-typeerror-bigint.js	fail	nts: uncaught Test262Error: Number.prototype.toFixed must throw a TypeError if _fractionDigits_ is Bigint
 test/built-ins/Number/prototype/toString/a-z.js	pass	
 test/built-ins/Number/prototype/toString/numeric-literal-tostring-default-radix.js	pass	
+test/built-ins/Number/prototype/toString/numeric-literal-tostring-radix-1.js	pass	
 test/built-ins/Number/prototype/toString/numeric-literal-tostring-radix-10.js	pass	
 test/built-ins/Number/prototype/toString/numeric-literal-tostring-radix-11.js	pass	
 test/built-ins/Number/prototype/toString/numeric-literal-tostring-radix-12.js	pass	
@@ -334,6 +394,7 @@ test/built-ins/Number/prototype/toString/numeric-literal-tostring-radix-33.js	pa
 test/built-ins/Number/prototype/toString/numeric-literal-tostring-radix-34.js	pass	
 test/built-ins/Number/prototype/toString/numeric-literal-tostring-radix-35.js	pass	
 test/built-ins/Number/prototype/toString/numeric-literal-tostring-radix-36.js	pass	
+test/built-ins/Number/prototype/toString/numeric-literal-tostring-radix-37.js	pass	
 test/built-ins/Number/prototype/toString/numeric-literal-tostring-radix-4.js	pass	
 test/built-ins/Number/prototype/toString/numeric-literal-tostring-radix-5.js	pass	
 test/built-ins/Number/prototype/toString/numeric-literal-tostring-radix-6.js	pass	
@@ -375,6 +436,7 @@ test/built-ins/Number/string-numeric-separator-literal-sign-minus-dds-nsl-dd.js	
 test/built-ins/Number/string-numeric-separator-literal-sign-plus-dds-nsl-dd.js	pass	
 test/built-ins/Number/string-octal-literal-invald.js	pass	
 test/built-ins/Number/string-octal-literal.js	pass	
+test/built-ins/Object/entries/exception-during-enumeration.js	fail	nts: uncaught RangeError: This error should be re-thrown
 test/built-ins/Object/hasOwn/hasown_own_getter.js	pass	
 test/built-ins/Object/hasOwn/hasown_own_getter_and_setter.js	pass	
 test/built-ins/Object/hasOwn/hasown_own_property_exists.js	pass	
@@ -395,6 +457,7 @@ test/built-ins/Object/prototype/hasOwnProperty/8.12.1-1_2.js	pass
 test/built-ins/Object/prototype/hasOwnProperty/8.12.1-1_20.js	pass	
 test/built-ins/Object/prototype/hasOwnProperty/8.12.1-1_21.js	pass	
 test/built-ins/Object/prototype/hasOwnProperty/8.12.1-1_22.js	pass	
+test/built-ins/Object/values/exception-during-enumeration.js	fail	nts: uncaught RangeError: This error should be re-thrown
 test/built-ins/Promise/resolve/S25.4.4.5_A2.1_T1.js	fail	nts: uncaught Test262Error: The value of p1 is expected to equal the value of p2
 test/built-ins/RegExp/15.10.4.1-4.js	pass	
 test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_F-negated.js	fail	accepted: was refused later (lowering)
@@ -653,6 +716,7 @@ test/built-ins/String/fromCharCode/S9.7_A1.js	pass
 test/built-ins/String/fromCharCode/S9.7_A2.1.js	pass	
 test/built-ins/String/fromCharCode/S9.7_A2.2.js	pass	
 test/built-ins/String/fromCharCode/S9.7_A3.2_T1.js	pass	
+test/built-ins/String/fromCharCode/touint16-tonumber-throws-bigint.js	fail	nts: uncaught Test262Error: ToNumber throws when argument is BigInt, and String.fromCharCode must propagate it.
 test/built-ins/String/prototype/charAt/S15.5.4.4_A1_T4.js	pass	
 test/built-ins/String/prototype/charAt/S15.5.4.4_A4_T1.js	pass	
 test/built-ins/String/prototype/charAt/S15.5.4.4_A4_T2.js	pass	
@@ -684,7 +748,9 @@ test/built-ins/String/prototype/padEnd/fill-string-empty.js	pass
 test/built-ins/String/prototype/padEnd/normal-operation.js	fail	nts: uncaught Test262Error: sameValue
 test/built-ins/String/prototype/padStart/fill-string-empty.js	pass	
 test/built-ins/String/prototype/padStart/normal-operation.js	fail	nts: uncaught Test262Error: sameValue
+test/built-ins/String/prototype/repeat/count-is-infinity-throws.js	pass	
 test/built-ins/String/prototype/repeat/count-is-zero-returns-empty-string.js	pass	
+test/built-ins/String/prototype/repeat/count-less-than-zero-throws.js	pass	
 test/built-ins/String/prototype/repeat/empty-string-returns-empty.js	pass	
 test/built-ins/String/prototype/repeat/repeat-string-n-times.js	pass	
 test/built-ins/String/prototype/replaceAll/getSubstitution-0x0024-0x0024.js	pass	
@@ -810,6 +876,7 @@ test/built-ins/decodeURIComponent/S15.1.3.2_A4_T1.js	pass
 test/built-ins/decodeURIComponent/S15.1.3.2_A4_T2.js	pass	
 test/built-ins/decodeURIComponent/S15.1.3.2_A4_T3.js	pass	
 test/built-ins/decodeURIComponent/S15.1.3.2_A4_T4.js	pass	
+test/built-ins/decodeURIComponent/throw-URIError.js	pass	
 test/built-ins/encodeURI/S15.1.3.3_A3.1_T1.js	pass	
 test/built-ins/encodeURI/S15.1.3.3_A3.2_T1.js	pass	
 test/built-ins/encodeURI/S15.1.3.3_A3.2_T2.js	pass	
@@ -828,10 +895,13 @@ test/built-ins/encodeURIComponent/S15.1.3.4_A4_T1.js	pass
 test/built-ins/encodeURIComponent/S15.1.3.4_A4_T2.js	pass	
 test/built-ins/encodeURIComponent/S15.1.3.4_A4_T3.js	pass	
 test/built-ins/encodeURIComponent/S15.1.3.4_A4_T4.js	pass	
+test/built-ins/global/10.2.1.1.3-4-16-s.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/built-ins/global/10.2.1.1.3-4-18-s.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/built-ins/global/S10.2.3_A1.1_T1.js	pass	
 test/built-ins/global/S10.2.3_A1.2_T1.js	pass	
 test/built-ins/isFinite/return-false-on-nan-or-infinities.js	pass	
 test/built-ins/isFinite/return-true-for-valid-finite-numbers.js	pass	
+test/built-ins/isNaN/return-abrupt-from-tonumber-number.js	fail	nts: uncaught Test262Error: valueOf
 test/built-ins/isNaN/return-false-not-nan-numbers.js	pass	
 test/built-ins/parseFloat/15.1.2.3-2-1.js	pass	
 test/built-ins/parseFloat/S15.1.2.3_A1_T3.js	pass	
