@@ -162,7 +162,7 @@ export const RULES = [
       { if: "a type rule", kind: "answers", asks: "a generic class with two live instantiations appears in the corpus, never in a hand-written fixture", run: "the emitted-diff --axis above, and a full census per-case diff (conformance262.ts --rows, both binaries)" },
       { if: "a representation change", kind: "answers", asks: "only the JVM types references; C and LLVM agree by construction", run: "NTS_BACKEND=jvm node tooling/differential/agree.mjs <before> <after>" },
       { if: "it records, rewords or removes a refusal", kind: "whether", asks: "which refusal rows moved, and in which tables -- the byte-identical C cannot say. Blockers is not a formality behind the census here: it is the only corpus that holds a refusal about some constructs (an evolving type's, 2026-09-30, where every other step was green on a wrong phrasing)", run: "node tooling/census/messages.ts <before> <after>; the example-refusals, blockers, outcomes and integrity steps above hold the tables" },
-      { if: "meant to make programs compile", kind: "answers", asks: "did it buy cases, per file -- --recorded cannot see a gain", run: "a full census for both binaries, per-case diff; check the prediction against the last run's rows first" },
+      { if: "meant to make programs compile", kind: "answers", asks: "did it buy cases, per file -- --recorded cannot see a gain", run: "node tooling/census/rerun.ts --rows <census rows> --message '<the root it clears>' --before <control> --after <pin>: FIXED is a pass bought, MOVED the next blocker. On 2026-09-30 a change aimed at 117 sole-root files read 0 FIXED, 299 MOVED here, and nothing else could have said so. A full census for both binaries only when the root is not one message" },
     ],
   },
   {
