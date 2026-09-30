@@ -1,9 +1,9 @@
 {
   "run": "build",
   "category": "refused",
-  "nts": "NTS1001 a `Base` where a `Leaf` is wanted -- a `Leaf` declares 2 fields and a `Base` holds 1, so `extra` has no storage at any offset and a pointer cast cannot widen a struct",
+  "nts": "NTS1001 `Base` where `Leaf` is wanted -- `Leaf` declares 2 fields and `Base` holds 1, so `extra` has no storage at any offset and a pointer cast cannot widen a struct",
   "ran": "exit 1; nts: uncaught Observed: narrowed, assigned to a new binding, read=0;narrowed, read directly=2;a capture of something never narrowed=1;",
   "node": "exit 1; nts: uncaught Observed: narrowed, assigned to a new binding, read=2;narrowed, read directly=2;a capture of something never narrowed=1;",
-  "measured_with": "bf68ff5a44403ce1",
+  "measured_with": "3c4052aa8772e21e",
   "source": "measured"
 }

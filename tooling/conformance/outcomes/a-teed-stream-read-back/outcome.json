@@ -1,9 +1,9 @@
 {
   "run": "build",
   "category": "refused",
-  "nts": "NTS1001 a `an anonymous type` where a `QueuingStrategy` is wanted -- a `QueuingStrategy` declares 2 fields and a `an anonymous type` holds 1, so `size` has no storage at any offset and a pointer cast cannot widen a struct",
+  "nts": "NTS1001 the anonymous `{ highWaterMark }` where `QueuingStrategy` is wanted -- `QueuingStrategy` declares 2 fields and the anonymous `{ highWaterMark }` holds 1, so `size` has no storage at any offset and a pointer cast cannot widen a struct",
   "ran": "exit 0",
   "node": "exit 1; nts: uncaught Observed: first branch=1,2,3;second branch=1,2,3;strings, first=a,b;",
-  "measured_with": "82c65520cbe233b6",
+  "measured_with": "3c4052aa8772e21e",
   "source": "measured"
 }
