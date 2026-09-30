@@ -1882,7 +1882,21 @@ test262() {
 # counted apart from the pass count -- `negatives-accepted:` -- because the
 # pass count cannot show it: those 1,600 were passes. Lower the ceiling when
 # early errors land; raise it only with the cases named in the commit.
-TEST262_LANGUAGE_PASS_FLOOR=5046
+# **2026-09-30: 5046 -> 5108, and none of the 62 is the commit that raised it.**
+# The record was last written at compiler `e0fbe7f8302684d9`. Re-recording the two
+# rows a `delete` refusal moved needed a full run, and a full run is the only
+# thing that finds new passes -- `--recorded`'s population is the cases that
+# already ran, which by construction cannot contain one. So these had accumulated
+# unrecorded since then. The control binary (`c2e47028a`) run against the new
+# record gives **pass-count 5108 as well**, with 0 REGRESSED, 0 NEW FAIL, 0 FIXED,
+# 0 NEW PASS and exactly 2 CHANGED -- the `delete this.#x` rows. Two binaries over
+# one corpus, which is this file's own remedy, and it says the whole difference
+# between them is those two rows.
+#
+# The gap worth knowing: a stale record hides passes indefinitely and nothing goes
+# red while it does, so this floor moves when somebody needs a full run for an
+# unrelated reason rather than when the work lands.
+TEST262_LANGUAGE_PASS_FLOOR=5108
 TEST262_LANGUAGE_NEGATIVES_ACCEPTED_CEILING=1551
 # One recorded test262 directory, re-run and held to its record, its floor and
 # its ceiling: `test262_recorded <dir> <record> <floor> <floor variable name>
@@ -1954,7 +1968,12 @@ test262_cases() {
 # Re-baselined with the language floor on 2026-09-29 (875 -> 681), for the
 # same reason: negative-parse tests passing on a type error, and `any`
 # containers (`new Set()` is `Set<any>` in JavaScript) refused.
-TEST262_BUILTINS_PASS_FLOOR=698
+# 2026-09-30: 698 -> 708, the same re-record and the same attribution. The
+# control binary reconciles against the new record at **708**, 0 of everything --
+# so all ten accumulated since `9968f2c9bd045c64` and none is the commit that
+# raised the floor. The two `Object/{entries,values}/getter-removing-future-key`
+# rows that change left the record, as a case that refuses does.
+TEST262_BUILTINS_PASS_FLOOR=708
 TEST262_BUILTINS_NEGATIVES_ACCEPTED_CEILING=185
 test262_builtins_cases() {
   test262_recorded test/built-ins tooling/census/test262-builtins.outcomes.tsv \

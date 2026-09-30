@@ -1,6 +1,6 @@
 # Test262 test/built-ins cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 9968f2c9bd045c64, harness 1206fb95a71de6c1; machine at start: 20.5 GB available, swap 4.7/20 GB, load 4/5.1 (1m/5m), 32 cores; 6 worker(s)
+# compiler 09f9952cd8d3a15f, harness 1206fb95a71de6c1; machine at start: 20.6 GB available, swap 5.4/20 GB, load 11.7/18.7 (1m/5m), 32 cores; 8 worker(s)
 test/built-ins/Array/S15.4.2.1_A1.3_T1.js	pass	
 test/built-ins/Array/from/from-string.js	pass	
 test/built-ins/Array/isArray/15.4.3.2-0-4.js	pass	
@@ -101,6 +101,12 @@ test/built-ins/DataView/prototype/getUint32/return-values.js	pass
 test/built-ins/DataView/prototype/getUint8/return-value-clean-arraybuffer.js	pass	
 test/built-ins/DataView/prototype/getUint8/return-values-custom-offset.js	pass	
 test/built-ins/DataView/prototype/getUint8/return-values.js	pass	
+test/built-ins/DataView/prototype/setFloat32/set-values-little-endian-order.js	pass	
+test/built-ins/DataView/prototype/setFloat64/set-values-little-endian-order.js	pass	
+test/built-ins/DataView/prototype/setInt16/set-values-little-endian-order.js	pass	
+test/built-ins/DataView/prototype/setInt32/set-values-little-endian-order.js	pass	
+test/built-ins/DataView/prototype/setUint16/set-values-little-endian-order.js	pass	
+test/built-ins/DataView/prototype/setUint32/set-values-little-endian-order.js	pass	
 test/built-ins/Date/S15.9.3.2_A1_T1.js	pass	
 test/built-ins/Date/TimeClip_negative_zero.js	pass	
 test/built-ins/Date/prototype/getTime/this-value-invalid-date.js	pass	
@@ -369,7 +375,6 @@ test/built-ins/Number/string-numeric-separator-literal-sign-minus-dds-nsl-dd.js	
 test/built-ins/Number/string-numeric-separator-literal-sign-plus-dds-nsl-dd.js	pass	
 test/built-ins/Number/string-octal-literal-invald.js	pass	
 test/built-ins/Number/string-octal-literal.js	pass	
-test/built-ins/Object/entries/getter-removing-future-key.js	fail	nts: uncaught Test262Error: result has 2 items
 test/built-ins/Object/hasOwn/hasown_own_getter.js	pass	
 test/built-ins/Object/hasOwn/hasown_own_getter_and_setter.js	pass	
 test/built-ins/Object/hasOwn/hasown_own_property_exists.js	pass	
@@ -390,7 +395,6 @@ test/built-ins/Object/prototype/hasOwnProperty/8.12.1-1_2.js	pass
 test/built-ins/Object/prototype/hasOwnProperty/8.12.1-1_20.js	pass	
 test/built-ins/Object/prototype/hasOwnProperty/8.12.1-1_21.js	pass	
 test/built-ins/Object/prototype/hasOwnProperty/8.12.1-1_22.js	pass	
-test/built-ins/Object/values/getter-removing-future-key.js	fail	nts: uncaught Test262Error: result has 2 items
 test/built-ins/Promise/resolve/S25.4.4.5_A2.1_T1.js	fail	nts: uncaught Test262Error: The value of p1 is expected to equal the value of p2
 test/built-ins/RegExp/15.10.4.1-4.js	pass	
 test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_F-negated.js	fail	accepted: was refused later (lowering)
@@ -591,6 +595,10 @@ test/built-ins/Set/prototype/add/returns-this.js	pass
 test/built-ins/Set/prototype/add/will-not-add-duplicate-entry-initial-iterable.js	pass	
 test/built-ins/Set/prototype/add/will-not-add-duplicate-entry-normalizes-zero.js	pass	
 test/built-ins/Set/prototype/add/will-not-add-duplicate-entry.js	pass	
+test/built-ins/Set/prototype/clear/clears-all-contents-from-iterable.js	pass	
+test/built-ins/Set/prototype/clear/clears-all-contents.js	pass	
+test/built-ins/Set/prototype/clear/clears-an-empty-set.js	pass	
+test/built-ins/Set/prototype/clear/returns-undefined.js	pass	
 test/built-ins/Set/prototype/delete/delete-entry-initial-iterable.js	pass	
 test/built-ins/Set/prototype/delete/delete-entry-normalizes-zero.js	pass	
 test/built-ins/Set/prototype/delete/delete-entry.js	pass	
