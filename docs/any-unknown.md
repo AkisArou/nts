@@ -155,6 +155,50 @@ handle, or erased representation. If the selected representation does not also
 provide every operation the program performs, the program is refused. There is
 no fallback to a universal `any` value.
 
+#### The indirect call, as built (`519195e49`)
+
+For the *indirect call* case that sentence is no longer a requirement to be met
+later. A closure reached through a signature rather than through its own class now
+has a second entry, `Closure{n}#erased_call`, at a dispatch slot of its own: the
+receiver at its own class, then a fixed number of erased parameters, an erased
+result. A site holding only the signature spells that and nothing else; the entry
+unerases each parameter to what the body declared, erases the result, and answers
+`undefined` where the body returns nothing.
+
+**The requirement was not optional and the previous design was unsound about it.**
+`Hierarchy::closure_slot` justified one program-global slot on the grounds that "a
+call through the slot spells the signature it is making, so two closure types
+sharing an index cannot be confused for each other". Spelling the signature *is*
+the misread: the site spells what it declared and calls whatever closure it holds.
+Counted at the coercion, 25 of `zlib`'s 240 admitted closures disagreed with the
+slot they were admitted into, 32 of `http`'s 354, and 22 of `stream`'s 232 — in
+three faces, of which the majority (13 of zlib's 25) was a closure returning
+nothing whose slot reads a value.
+
+Two indices suffice rather than a table as long as the function-type count: one
+index is enough to *dispatch* and not enough to *agree*.
+
+**The width is per program, not universal.** A closure assigned to a signature
+declares no more parameters than that signature does, and a body reads no more than
+it writes, so the entry is as wide as the widest closure in the program. A universal
+width made `benches/cases/closure-merge` marshal nine boxed values per call where
+the direct call passed one double.
+
+**Precision is recovered rather than paid for.** Where a pass can name the closure
+— a field that can hold exactly one class, a specialised parameter — the call
+becomes direct *and the erasure is undone*: the padding dropped, each `Erase`'s
+operand taken, the result read at its own type. `benches/cases/optional-chain`
+keeps its direct call and its erased entry is pruned as unreachable; 55 of 61
+benchmark programs emit byte-identical code. The two programs that keep a uniform
+dispatch are the ones where a field genuinely holds more than one class, which is
+the case no analysis can resolve.
+
+**What it refuses, and why that is the entry existing rather than missing.** A
+closure whose parameters or result have no erased form cannot be reached this way,
+and its entry is present and aborts by name. A layout naming a function nothing
+defines is worse than an entry that cannot be reached — the same argument
+`nts_no_arm` makes for a tag switch with a hole.
+
 ### Declaration-originated `any`
 
 Native TypeScript does not modify upstream `lib.*.d.ts`, `@types/node`, or third-party declarations merely to replace `any` with `unknown`.
