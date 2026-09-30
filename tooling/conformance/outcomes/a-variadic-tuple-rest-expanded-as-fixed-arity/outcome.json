@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "invalid-hir",
+  "nts": "invalid HIR: CallArgumentCount { func: \"module#init\", callee: \"f\", expected: 2, found: 3 }",
+  "node": "exit 1; nts: uncaught Observed: three=3;one=1;fixed=2;",
+  "measured_with": "738b7002706cf40d",
+  "source": "measured"
+}

@@ -24430,6 +24430,31 @@ impl<'a> FuncBuilder<'a> {
             });
         }
 
+        // **The binding takes the representation its own type has**, and for a
+        // tuple of mixed storage widths that is a struct rather than an array.
+        //
+        // `tuple_representation` sends `[string, number]` -- a pointer beside a
+        // double -- to `Managed(Object(ty))`, because no array of one element
+        // width holds both. This function ended with an unconditional
+        // `Array(element)` whatever the type said, so the gather built an array
+        // of erased values and handed it to a constructor declaring the struct:
+        //
+        //     func Held<13>#constructor(this: managed<obj#13>, args: managed<obj#16>)
+        //     func hold<obj16x2>(args_0: managed<str>, args_1: i32)
+        //       %3 = array.new 2 : managed<[erased]>
+        //       %11 = call Held<13>#constructor(%10, %3)
+        //
+        // **One type id represented two ways**, which is this file's recurring
+        // defect and was never a hard question here: id 16 was agreed, only its
+        // width was not. `verify` said nothing because `compatible` accepts any
+        // two references, so the JVM's class loader was the only thing that
+        // noticed -- `Type 'nts/rt/NtsArrayL' is not assignable to
+        // 'nts/gen/Tuple2164'', which blocked `setImmediate` and through it
+        // seven runtime modules. On C the pointer was taken and the struct's
+        // first field read out of an array header.
+        if let Some(HirType::Managed(ManagedType::Object(tuple))) = self.type_of(name_node) {
+            return self.gather_a_rest_into_a_struct(name_node, tuple, positions, values, params);
+        }
         let element = element.unwrap_or(HirType::Erased);
         let array_ty = HirType::Managed(ManagedType::Array(Box::new(element.clone())));
         self.materialize(name_node, &array_ty)?;
@@ -24463,6 +24488,60 @@ impl<'a> FuncBuilder<'a> {
         if let Some(symbol) = self.node(name_node).symbol {
             let array = self.open_cell(symbol.0, array, name_node);
             self.bindings.insert(symbol.0, array);
+        }
+        Ok(params)
+    }
+
+    /// The struct half of [`Self::lower_positional_rest`]'s gather.
+    ///
+    /// A tuple's layout is an object whose fields are named `0`, `1`, ... in
+    /// position order -- `layout_of`'s own comment says `[string, number]` *is* a
+    /// two-field struct -- so this is the object-literal construction with the
+    /// positions as the keys, and it gets field access, escape analysis and
+    /// reference counting from that rather than from a second mechanism.
+    ///
+    /// The field's own type is what each position is coerced to, read from the
+    /// layout rather than from the position's type. Those are the same fact, and
+    /// the layout is the one the *reader* will use: a value built at one and read
+    /// at the other is the defect this function exists to remove, one level down.
+    fn gather_a_rest_into_a_struct(
+        &mut self,
+        name_node: NodeId,
+        tuple: TypeId,
+        positions: &[TypeId],
+        values: Vec<ValueId>,
+        params: Vec<Param>,
+    ) -> Result<Vec<Param>, Diagnostic> {
+        let origin = self.origin(name_node);
+        let ty = HirType::Managed(ManagedType::Object(tuple));
+        self.materialize(name_node, &ty)?;
+        // A layout with fewer fields than the tuple has positions would store
+        // some of them nowhere, and a silent partial gather is how a wrong
+        // answer looks. Resolved position by position through
+        // [`Self::tuple_field_at`], which is also what the reader uses, so a
+        // position with no field is a refusal here rather than a store that
+        // goes nowhere.
+        let mut slots = Vec::with_capacity(positions.len());
+        for at in 0..positions.len() {
+            let Some(slot) = self.tuple_field_at(name_node, tuple, at) else {
+                return Err(self.unsupported(
+                    name_node,
+                    &format!(
+                        "a rest parameter of {} position(s) whose tuple is not laid out with position {at}",
+                        positions.len()
+                    ),
+                ));
+            };
+            slots.push(slot);
+        }
+        let object = self.push(OpKind::ObjectNew { frame: false }, ty, origin.clone());
+        for (value, (field, slot)) in values.into_iter().zip(slots) {
+            let value = self.coerce(value, &slot, name_node)?;
+            self.field_set(object, field, value, &origin);
+        }
+        if let Some(symbol) = self.node(name_node).symbol {
+            let object = self.open_cell(symbol.0, object, name_node);
+            self.bindings.insert(symbol.0, object);
         }
         Ok(params)
     }
@@ -39616,6 +39695,56 @@ impl<'a> FuncBuilder<'a> {
         }
         if let Some(narrowed) = self.through_a_narrowed_class(id, value, type_id, member_name)? {
             return Ok(narrowed);
+        }
+        // **A fixed-arity tuple's `length` is its arity, folded.** There is
+        // nothing to read: the count is in the type, TypeScript gives it the
+        // literal number, and every position exists by construction.
+        //
+        // Reached only where the tuple is laid out as a **struct**, which is what
+        // `tuple_representation` gives one whose positions differ in storage
+        // width. A uniform tuple represents as an array and its `length` is
+        // answered one path earlier, by the array member -- correctly, and at run
+        // time, which this is the compile-time half of.
+        //
+        // **It is here because the struct half had no answer at all**, and that
+        // was invisible while a mixed-width *rest* was bound to an array by
+        // mistake: `(function(a, b, c, d, e, ...args) { return args.length })
+        // (1,2,3,4,5)` gathers an **empty** tuple, `shared.is_none()` sends it to
+        // `Object(ty)`, and the array representation had been supplying `length`
+        // by accident. Fixing the representation published the gap --
+        // `test/language/rest-parameters/rest-index.js` -- and a written
+        // `const pair: [string, number]` refused on `pair.length` all along,
+        // measured on the binary before that fix. So this is a hole the other
+        // change uncovered rather than one it made.
+        // **Correct today because of a check in another function, which is
+        // written down here rather than relied on.** A *variadic* tuple is
+        // indistinguishable from a fixed one in the snapshot: `nts types` shows
+        //
+        //     [string, ...number[]]   Tuple([String, Number])
+        //     [string, number]        Tuple([String, Number])
+        //
+        // -- the rest is flattened to its element type and the `...` is gone, so
+        // `fixed_arity_positions` answers 2 for both and nothing here can tell
+        // them apart. The fold is nevertheless right for every variadic tuple that
+        // *lowers*, because a tuple literal whose element count differs from the
+        // type's position count is refused (`a tuple literal of 4 element(s) where
+        // the type has 2`), which leaves only the one length the fold would give.
+        //
+        // So this is sound on a precondition owned elsewhere, and the day a
+        // variadic tuple lowers it becomes a wrong answer in a commit about
+        // something else. What it needs then is the rest marker in the schema,
+        // which is a `SCHEMA_VERSION` change and the frontend's half.
+        // `outcomes/a-variadic-tuple-rest-expanded-as-fixed-arity` records the
+        // same missing fact from the other side, where it already costs a program:
+        // the rest is expanded as that many parameters and every call of a
+        // different length is `CallArgumentCount`, measured as pre-existing.
+        if member_name == "length"
+            && let Some(positions) = self.fixed_arity_positions(type_id)
+        {
+            let origin = self.origin(id);
+            #[allow(clippy::cast_precision_loss)]
+            let count = positions.len() as f64;
+            return Ok(self.push(OpKind::ConstFloat(count), HirType::NUMBER, origin));
         }
         Err(self.absent_member(id, type_id, member_name))
     }
@@ -55141,6 +55270,24 @@ impl<'a> FuncBuilder<'a> {
         want: &HirType,
         node: NodeId,
     ) -> Result<ValueId, Diagnostic> {
+        // **A tuple has two representations and this end knew one of them.** The
+        // other end had the same gap, and the pair is why
+        // `outcomes/a-rest-tuple-stored-in-a-field-and-spread` held two arms
+        // failing two ways: `tuple_representation` sends a tuple of mixed storage
+        // widths to a struct -- `[string, number]` is a pointer beside a double,
+        // and no array of one element width holds both -- so a spread of one
+        // arrives here as `Managed(Object(ty))` and got a refusal whose sentence
+        // is about arrays.
+        //
+        // Read by **field**, because that is what the layout is: `layout_of`'s own
+        // comment says `[string, number]` *is* a two-field struct whose fields are
+        // named `0`, `1` in position order, which is exactly the index this
+        // function is given. So the position is the field and no mapping is
+        // needed -- and asking the layout rather than assuming that is what keeps
+        // this the same fact the builder writes.
+        if let HirType::Managed(ManagedType::Object(tuple)) = self.values[array.0 as usize].ty {
+            return self.read_a_struct_position(array, tuple, at, want, node);
+        }
         let HirType::Managed(ManagedType::Array(element)) = self.values[array.0 as usize].ty.clone()
         else {
             return Err(self.unsupported(node, "a spread of something that is not an array"));
@@ -55159,6 +55306,51 @@ impl<'a> FuncBuilder<'a> {
             origin.clone(),
         );
         if *element == HirType::Erased && *want != HirType::Erased {
+            return Ok(self.push(OpKind::Unerase { value: read }, want.clone(), origin));
+        }
+        Ok(read)
+    }
+
+    /// Which field of a tuple's struct holds position `at`, and what it holds.
+    ///
+    /// **One resolver for the two ends.** `gather_a_rest_into_a_struct` writes
+    /// these positions and `read_a_struct_position` reads them, and a builder and
+    /// a reader that each decide "the field index is the position" agree by
+    /// coincidence -- which holds until one of them is edited. This is that
+    /// decision, once, and it is made by *asking the layout* for the name
+    /// `tuple_layout` gives position `at`.
+    ///
+    /// `_0` and not `0`, because the name reaches C as a struct member and `v->1`
+    /// is not C. That spelling is `tuple_layout`'s and is stated in its own
+    /// comment as free to change, which is the reason not to hard-code the index
+    /// here: a tuple has no names of its own, so the only thing tying the two
+    /// ends together is this function.
+    fn tuple_field_at(&mut self, node: NodeId, tuple: TypeId, at: usize) -> Option<(u32, HirType)> {
+        let layout = self.layout_of(node, tuple).ok()?;
+        let field = layout.index_of(&format!("_{at}"))?;
+        let slot = layout.fields.get(field as usize)?.ty.clone();
+        Some((field, slot))
+    }
+
+    /// One position of a tuple laid out as a struct, for
+    /// [`Self::read_a_position`].
+    fn read_a_struct_position(
+        &mut self,
+        object: ValueId,
+        tuple: TypeId,
+        at: usize,
+        want: &HirType,
+        node: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let Some((field, slot)) = self.tuple_field_at(node, tuple, at) else {
+            return Err(self.unsupported(
+                node,
+                &format!("a spread reading position {at} of a tuple that is not laid out with it"),
+            ));
+        };
+        let origin = self.origin(node);
+        let read = self.push(OpKind::FieldGet { object, field }, slot.clone(), origin.clone());
+        if slot == HirType::Erased && *want != HirType::Erased {
             return Ok(self.push(OpKind::Unerase { value: read }, want.clone(), origin));
         }
         Ok(read)

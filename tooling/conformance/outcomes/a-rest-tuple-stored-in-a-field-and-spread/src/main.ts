@@ -7,15 +7,26 @@
 //       return new Immediate(callback, args);
 //     }
 //
-// **`uniform` is a silent wrong answer on C and the JVM.** Node answers `3`; the
-// compiled program answered `2` at `a6b5f0445` and a garbage float string after
-// the record-layout work -- both wrong, the second louder. Nothing refuses, the
-// verifier sees nothing, and `a + b` is computed on values that are not the ones
-// stored.
+// **`mixed` is FIXED and is now a guard**, and what is left is `uniform` alone.
+// The two arms turned out to be two mechanisms wearing one shape, which is why
+// the fix moved one and not the other:
 //
-// **`mixed` refuses by name**, which is the honest half of the same gap: a tuple
-// whose element storage widths differ (a pointer beside a double) represents as a
-// struct, and `NTS1001 a spread of something that is not an array` says so.
+//   mixed     the tuple's positions have different storage widths, so it
+//             represents as a **struct** -- and the gather built an array while
+//             the field declared the struct. One type id, two representations.
+//             Fixed: a fixed-arity rest takes its own type's representation, and
+//             one resolver answers "which field is position N" for the builder
+//             and the reader. `examples/a-rest-tuple-of-mixed-widths-stored-and-
+//             spread` is the guard, agreeing with node on c, llvm, jvm and rc.
+//   uniform   every position is the same width, so it represents as an **array**
+//             -- and the two ends agree, which is why nothing was invalid. What
+//             is missing is the **arity**, which an array representation does not
+//             carry. Still a silent wrong answer.
+//
+// **`uniform` is a silent wrong answer on C and the JVM.** Node answers `3`; the
+// compiled program answered `2` at `a6b5f0445`, a garbage float string after the
+// record-layout work, and a garbage float string now -- all wrong, and the later
+// ones louder. Nothing refuses and the verifier sees nothing.
 //
 // **Control, and it is the half that matters:** `notStored` gathers the same
 // uniform rest and spreads it *without* storing it in a field. It agrees. One
@@ -51,12 +62,69 @@
 // statically known. For a **tuple** it is -- `[number, number]` is two -- so the
 // fix is to expand a tuple-typed spread into that many element reads, and to refuse
 // where the length is not known rather than hand the container over as one
-// argument. The `mixed` arm refuses today for a different reason (its tuple
-// represents as a struct, so it is "not an array"), which is why only the uniform
-// case reaches the silent path.
+// argument. That paragraph was written when `mixed` refused rather than answered,
+// and the refusal was the *reader* half of the same missing agreement; both ends
+// are fixed now and only the arity question above is left.
 //
-// The plan holds this as the heterogeneous tuple, builder and reader together
-// (`tuple_representation` and `read_for_pattern`); this is the reader.
+// # Where `uniform` is, measured 2026-09-30
+//
+// **The class keeps its type parameter.** Reduced to fourteen lines, the emitted
+// HIR is
+//
+//     func Held<19>#run(this: managed<obj#19>) -> void
+//       %1 = field.get %0.0 : managed<obj#25>
+//       %3 = array.new 0 : managed<[f64]>
+//       %4 = field.get %0.1 : managed<[f64]>
+//       %5 = call.extern nts_array_concat(%3, %4) : managed<[f64]>
+//       %6 = erase %5 : erased
+//       %8 = call.closure[1] %1(%1, %6, %7) : erased
+//
+// `Held<19>` names the *declaration's* type parameter, while `hold<[f64]x2>`
+// beside it in the same program was specialised and expanded its rest into two
+// positional parameters correctly. So the function was specialised and the class
+// was not, and inside `run` the spread falls into the **rest-gathering** branch --
+// which fires before the expansion branch -- builds a fresh array, and hands the
+// callee one erased array where its uniform entry wants two values. The callee
+// unerases argument one to a `double` and gets the array's address, which is where
+// the differing-per-run float comes from. The JVM lane's `Immediate$11334$` is the
+// same unsubstituted class, and it reaches seven modules through `setImmediate`.
+//
+// **Two things read out of the source that say why, and a third that is still a
+// question.** `generics::instantiations` skips an argument that is still a type
+// parameter -- its own comment: *"a use inside another generic … and not an
+// instantiation this can emit a copy for"* -- and `new Held(args)` sits inside
+// generic `hold`, so `Held<A>` is exactly that and the class gets no copy at all.
+// And `class_copies` gives a class instantiation `Sources::default()` where a
+// function copy gets `copy.sources.clone()` -- `Sources` being the map that exists
+// *because* an array representation loses a tuple's arity, so its emptiness for a
+// class is the loss this arm records.
+//
+// **And the question that was open here is answered, by reading one function.**
+// `after_substitution` is what recovers a type id from a representation:
+//
+//     fn after_substitution(&self, ty: TypeId) -> TypeId {
+//         match self.represent(ty) {
+//             Some(HirType::Managed(ManagedType::Object(substituted))) => substituted,
+//             _ => ty,
+//         }
+//     }
+//
+// It can only do that for the **one representation that keeps an id**. A tuple of
+// mixed widths represents as `Object(16)`, so `A` resolves and the expansion fires;
+// a uniform tuple represents as `Array(f64)`, which carries no id, so `A` stays the
+// bare type parameter and there are no positions to expand. That is the same
+// sentence as "an array representation does not carry the arity", one level down
+// and in the function that would have to answer it.
+//
+// So the fix is `Sources`, the map built for exactly this -- *"the types whose
+// representation loses something the copy's identity needs … today that is a
+// tuple, whose arity an array representation does not carry"* -- and the two
+// reasons it is empty here are both in `class_copies`: a class instantiation is
+// given `Sources::default()` where a function copy gets the real one, and this
+// class has no instantiation at all because `generics::instantiations` skips an
+// argument that is still a type parameter and `new Held(args)` inside generic
+// `hold` is exactly that. Composing the enclosing copy's substitution is what
+// would make `Held<A>` into `Held<[f64, f64]>` and give it sources to carry.
 //
 // **Expected, confirmed under node:** `3 ok`, `s1 ok`, `3 ok`.
 

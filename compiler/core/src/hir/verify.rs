@@ -655,6 +655,67 @@ pub(super) fn compatible(found: &HirType, want: &HirType) -> bool {
     {
         return compatible(found, want);
     }
+    // **An array where something that is not an array is wanted**, which is the
+    // arm above asked one case wider.
+    //
+    // That arm's own argument is the whole of this one: *"an array's element
+    // width **is** its storage, so those are two different objects. The coarse
+    // answer -- both are pointers -- is being asked a question only the element
+    // type can answer, and it says yes."* An array where a **struct** is wanted
+    // is the same sentence with the second object spelled differently. An array
+    // is a header and a run of elements; a struct is named fields at fixed
+    // offsets; nothing makes one pointer stand for the other.
+    //
+    // It was not hypothetical. `tuple_representation` sends a tuple of mixed
+    // storage widths to a struct and `lower_positional_rest` built an array
+    // whatever the type said, so `setImmediate<A>` stored an `Array(Erased)`
+    // into an `Object(TypeId(2164))` -- one type id, two representations -- and
+    // this function said yes. On C the pointer was taken and the struct's first
+    // field read out of an array header; **the JVM's class loader was the only
+    // thing in the project that noticed**, as `Type 'nts/rt/NtsArrayL' is not
+    // assignable to 'nts/gen/Tuple2164'`, and through `setImmediate` it blocked
+    // seven runtime modules.
+    //
+    // **Its blast radius was measured before it landed, and it is exactly that
+    // bug**: `emit-c` over all 28 `runtime/node` modules plus `web-platform`
+    // reports this in seven -- cluster, dgram, dns, http, net, perf_hooks,
+    // process -- one site each, and in nothing else. A guard whose first run
+    // finds only the defect it was written for is the good case; `emit-c` refuses
+    // to emit from invalid HIR, so one that lit up a module it could not explain
+    // would cost more reach than it caught.
+    //
+    // **One direction, and the symmetric version was measured and withdrawn.**
+    // Rejecting an `Object` where an `Array` is wanted as well turns **16
+    // recorded test262 passes into no-verdict**, all of the
+    // `ary-ptrn-elision-exhausted` family: `method([,])` handed a generator, where
+    // the parameter's pattern makes its declared type `Array(Erased)` and the
+    // argument is the generator object. That is the same confusion with the
+    // arguments the other way round and it is **latent** -- the pattern is an
+    // elision, so nothing is ever read out of it, and a pattern that *binds*
+    // refuses one path earlier (`an object type that is not in the snapshot`), so
+    // no wrong answer is reachable through it today.
+    //
+    // A guard that turns sixteen passes into a program that does not emit, for a
+    // confusion nothing can currently observe, costs more than it catches -- and
+    // the floor those passes sit under is a ratchet. So this rejects the direction
+    // there is a fix for, and the sixteen are written down here as the witness for
+    // the direction there is not: the day an array pattern over an arbitrary
+    // iterable is lowered as an iteration, this arm becomes symmetric and they
+    // become the test.
+    //
+    // Deliberately no wider than the evidence in the other axis either.
+    // `Managed(String)` where an `Object` is wanted is arguably the same mistake,
+    // and there is no measured instance, so tightening that too would be a rule
+    // chosen for its symmetry rather than for a program it fixes.
+    if matches!(found, HirType::Managed(super::ManagedType::Array(_)))
+        && !matches!(want, HirType::Managed(super::ManagedType::Array(_)))
+        && found.may_hold_a_reference()
+        && want.may_hold_a_reference()
+        && *found != HirType::Erased
+        && *want != HirType::Erased
+    {
+        return false;
+    }
     // Two references are two pointers, however their types relate. A `Square`
     // where a `Shape` is expected is a no-op cast under base-first layout, and
     // a `Promise<void>` slot holding a `Promise<number>` is one pointer either
