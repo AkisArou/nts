@@ -283,7 +283,18 @@ fn retype_parameter(
             let Callee::Closure { slot: at } = callee else {
                 return None;
             };
-            (args.first() == Some(&param)).then_some((index, Some(*at) == erased_slot))
+            // **The ordinary uniform slot only.** Every `Callee::Closure` lowering
+            // makes names it -- `closure_callee` has no other answer for a receiver
+            // known as a signature -- except a call inside a `try`, which names the
+            // *raising* entry and whose whole point is that the body it reaches
+            // records an uncaught `throw` instead of ending the program. Redirecting
+            // one at `closure_method`'s written entry would drop that, and drop it
+            // silently: the args are the uniform ones, so the arity would not match
+            // either. Those keep their dispatch, which `fields::devirtualize` can
+            // still resolve because it reads the class's entry at the call's own
+            // slot rather than assuming the written one.
+            (args.first() == Some(&param) && Some(*at) == erased_slot)
+                .then_some((index, true))
         })
         .collect();
     for (index, uniform) in sites {

@@ -395,6 +395,30 @@ struct Hierarchy {
     /// whatever arrived. Two entries per closure rather than N, which is the
     /// distinction that doc says nobody can observe.
     erased_call_slot: Option<u32>,
+    /// The slot holding a closure's **raising** uniform entry, for a call inside a
+    /// `try` that reaches it through a function value.
+    ///
+    /// A raising copy is made of plain functions and a closure's body is not one, so
+    /// such a call had nothing to name and was refused. This is the second index the
+    /// uniform ABI needs: [`Self::erased_call_slot`]'s entry ends the program on an
+    /// uncaught `throw`, and a `try` needs the opposite, which cannot be one body --
+    /// the same argument [`FuncBuilder::raises`] makes for a plain function.
+    ///
+    /// Beside it rather than replacing it, because the ordinary path must stay free:
+    /// making every erased entry raising would put a flag load and a branch after
+    /// every closure call in the program, and A6's arity work exists to keep that
+    /// path at one `double`.
+    raising_call_slot: Option<u32>,
+    /// Whether a call inside a `try` may dispatch at [`Self::raising_call_slot`]:
+    /// every raising body this program would build can carry what it calls.
+    ///
+    /// **Here rather than on `FuncBuilder`**, which every builder already carries a
+    /// `Hierarchy` for, and which clippy counts bools in. Set by
+    /// `Shared::whole_program` on its own clone, because the answer comes from
+    /// `raising_copies` and that runs after `collect_hierarchy` -- so the field is
+    /// `false` in the hierarchy the module-scope probe uses, which asks nothing of it.
+    /// See [`every_raising_body_can_carry`].
+    closures_carry: bool,
     /// How many erased parameters the entry in [`Self::erased_call_slot`] takes:
     /// **the widest closure in the program**, and not a constant.
     ///
@@ -551,6 +575,7 @@ impl Hierarchy {
         self.slots.len()
             + usize::from(self.closure_slot.is_some())
             + usize::from(self.erased_call_slot.is_some())
+            + usize::from(self.raising_call_slot.is_some())
             + usize::from(self.generator_slot.is_some())
     }
 
@@ -1750,6 +1775,27 @@ fn collect_hierarchy(
         // with no closures carries neither.
         hierarchy.erased_call_slot = Some(u32::try_from(hierarchy.table_size()).unwrap_or(u32::MAX));
         hierarchy.erased_call_arity = widest_closure(snapshot, closures);
+        // And the raising entry beside it, on exactly the same terms. **After
+        // it**, so a program with both gives each a distinct index -- and this is
+        // the index that moves `generator_slot`, which is why a backend reads the
+        // slot from `Program` rather than deriving it.
+        //
+        // **Ungated, and it was gated for a while.** A syntactic probe for "some
+        // `try` in this program guards a call through a function value" saves a
+        // word per descriptor in a program that has none -- and it cannot be made
+        // sound once a *raising copy's own body* may hold such a call, because
+        // which functions get copies is decided in `naming`, after this. Deciding
+        // it here would be a third derivation of `raising_copies`' closure, and the
+        // two coming apart means a body naming a slot the table does not carry.
+        //
+        // So the two slots are one condition, which is also what makes
+        // `closure_callee` safe: a program that can dispatch at one can dispatch at
+        // the other, and a program that can do neither refuses at both. The cost is
+        // one null word in a static vtable, which is what A6's benchmark measured
+        // the first of these two slots at -- `awfy-nbody`, `closures` and
+        // `module-closures` each differed by exactly that and timed flat.
+        hierarchy.raising_call_slot =
+            Some(u32::try_from(hierarchy.table_size()).unwrap_or(u32::MAX));
     }
     // And one for the resumption, on the same terms: a program with no
     // generators carries no slot for one. After the closure slot, so that a
@@ -2899,6 +2945,78 @@ fn erased_call_name(index: usize) -> String {
     format!("Closure{index}#erased_call")
 }
 
+/// The name of a closure's **raising** body and erased entry, for a call inside a
+/// `try` that reaches it through a function value.
+///
+/// `RAISING_SUFFIX` is the one a plain function's raising copy already carries, so
+/// the two kinds of copy are recognisable by one string rather than by two.
+fn raising_closure_names(index: usize) -> (String, String) {
+    (
+        format!("Closure{index}#call{RAISING_SUFFIX}"),
+        format!("Closure{index}#erased_call{RAISING_SUFFIX}"),
+    )
+}
+
+/// Whether two bodies are the same program, ignoring where their ops came from.
+///
+/// **The criterion for emitting a raising copy of a closure at all.** A raising body
+/// differs from the ordinary one only where an uncaught `throw` would end the
+/// program, and measured over four runtime modules that is **2% of closures** -- 5 of
+/// 81 in `assert`, 9 of 378 in `fs`, 5 of 298 in `http`, 5 of 202 in `stream`. Every
+/// other closure's two bodies are the same program, and its ordinary entry can serve
+/// the raising slot because nothing in it ends anything.
+///
+/// So the set is found by *building both and comparing*, not by a second fixpoint
+/// over closure bodies. A predicate would be a third derivation of "can this raise"
+/// beside `Throwing::any` and `Throwing::copyable`, and it would have to answer for
+/// an inline arrow, which has no symbol for those to be keyed on.
+///
+/// Origins are excluded deliberately: they carry a span, and two bodies that run the
+/// same ops in the same order are interchangeable whatever they point at.
+/// Whether a raising copy of a body returning this could not leave by a `Return`.
+///
+/// [`FuncBuilder::raised_return`] makes a zero of the function's own return type,
+/// so the raising path keeps the signature every other caller sees. It answers
+/// `None` for four types and only **two** of them are a hole:
+///
+///   `void`     correct -- a `Return` with no operand is what `void` wants.
+///   `never`    correct too, and this predicate got it wrong. `verify`'s return
+///              rule is `(HirType::Never, _) => true` in those words, because
+///              "a function that does not come back may carry a value or not:
+///              a `throw` lowers to either shape".
+///   `bigint`   a hole: `(wanted, None) => false`, so `Invalid::ReturnType` and
+///   pointer    the whole program stops emitting rather than one function.
+///
+/// **Naming `never` here cost the one fixture written to guard this feature.**
+/// `outcomes/a-throw-through-a-try-with-only-a-finally` is a closure whose body
+/// is only a `throw`, whose return lowers to `Never`, and its record went
+/// `refused` to `aborted` -- a compile-time refusal traded for a run-time abort,
+/// which is the direction this work must not move in. Its header had said what
+/// the two outcomes mean: *"a re-land that gets it right shows FIXED (a pass,
+/// loudly); one that escapes again shows CHANGED and fails"*. It showed CHANGED,
+/// and the guard was mine rather than the mechanism's.
+///
+/// **One predicate rather than the arm reading `raised_return`'s `Option`**,
+/// because the decision is taken before the body's blocks are walked and the
+/// answer has to be the same one that function gives -- which is exactly why it
+/// must read `verify`'s rule and not `raised_return`'s `None` alone.
+fn a_raise_cannot_return(returns: &HirType) -> bool {
+    matches!(returns, HirType::BigInt | HirType::NativePointer(_))
+}
+
+fn the_same_program(left: &Func, right: &Func) -> bool {
+    left.values.len() == right.values.len()
+        && left.blocks.len() == right.blocks.len()
+        && left
+            .values
+            .iter()
+            .zip(&right.values)
+            .all(|(a, b)| a.kind == b.kind && a.ty == b.ty)
+        && left.blocks.iter().zip(&right.blocks).all(|(a, b)| {
+            a.terminator == b.terminator && a.ops == b.ops && a.params == b.params
+        })
+}
+
 /// The class name behind a synthetic closure type id.
 ///
 /// The inverse of [`closure_type`], for the passes that meet the id rather than
@@ -3520,6 +3638,15 @@ raising: rustc_hash::FxHashSet<NodeId>,
     /// Which plain functions a [raising copy](FuncBuilder::raises) is emitted
     /// for. See [`raising_copies`].
         throwing: rustc_hash::FxHashSet<u32>,
+    /// [`Throwing::bodily`] -- which `then` the thenable census calls raising. A
+    /// separate field rather than `throwing` filtered at the reader, because which
+    /// question a set answers is a property of the set.
+    raising_then: rustc_hash::FxHashSet<u32>,
+    /// Whether a call inside a `try` may dispatch at `Hierarchy::raising_call_slot`:
+    /// every raising body this program would build can carry what it calls. See
+    /// [`every_raising_body_can_carry`], which is also where the measurement that
+    /// makes it program-global lives.
+    closures_carry: bool,
     /// The emitted name, for a declaration whose plain name is taken.
     qualified: rustc_hash::FxHashMap<NodeId, String>,
     /// Declarations that cannot be told apart by anything this compiler has.
@@ -3924,7 +4051,26 @@ fn presence_keys(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> rustc_hash
 /// happen somewhere else entirely.
 /// Which symbols can raise, and which of them raise **only by themselves**.
 ///
-/// `any` is the transitive closure a `try` consults. `copyable` is the subset a
+/// `any` is the transitive closure a `try` consults; `bodily` is the same closure
+/// with a function's calls to **its own parameters** not counted. The two exist
+/// because "can this raise" has two readers asking different questions:
+///
+///   a `try`       any caller may pass any callback, so a body that invokes one of
+///                 its own parameters can raise and `any` says so. A `try` around
+///                 it needs a handler edge or a refusal.
+///   the thenable  the job is the **only** caller of a `then` through the resolve
+///   census        path and it supplies both callbacks itself -- they are this
+///                 compiler's own resolving closures, which cannot throw. So for
+///                 `then` those calls are not a way to raise, and `bodily` is the
+///                 set that says so. It is arrival precision, available at this
+///                 one site for free because the arriving closures are ours.
+///
+/// **Reading `any` there was measured and it is wrong**, not merely coarse:
+/// `examples/an-await-of-a-thenable` went from 2 refusals to 11, every one of them
+/// a `then` whose only unresolved callee is the `resolve` the job hands it. A
+/// `then` that calls a callback from somewhere *else* -- a field, a capture -- is
+/// `Elsewhere` and is in both sets, so the distinction is exactly the one the
+/// argument above licenses and no wider. `copyable` is the subset a
 /// [raising copy](FuncBuilder::raises) can be made of, and it is a **greatest**
 /// fixpoint rather than a least one:
 ///
@@ -3946,7 +4092,39 @@ fn presence_keys(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> rustc_hash
 /// which is what the greatest fixpoint gives and a least one would not.
 struct Throwing {
     any: rustc_hash::FxHashSet<u32>,
+    bodily: rustc_hash::FxHashSet<u32>,
     copyable: rustc_hash::FxHashSet<u32>,
+}
+
+/// What one call in a body reaches, as far as a raise is concerned.
+///
+/// **Three answers, because `Option<u32>` could only give two and the middle one
+/// is where a wrong answer lived.** A callee's *symbol* is not a callee's
+/// *function*: `component(props)` with `component` a parameter has a symbol, so it
+/// was recorded as resolved, and a parameter's symbol is in no throwing set --
+/// which is how a `try` around a function that invokes its callback compiled with
+/// no handler edge. See [`throwing_symbols`].
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Reached {
+    /// A callee with a body, whose own answer can be asked.
+    Body(u32),
+    /// A parameter of the declaration being walked: a callback its own caller
+    /// supplies. Unresolved, and separated because the one site that knows which
+    /// closures arrive may discount it -- see [`Throwing`].
+    OwnCallback,
+    /// Any other callee with nothing to ask: a field, a captured binding, an
+    /// element, a callee with no symbol at all.
+    Elsewhere,
+}
+
+impl Reached {
+    /// The callee whose own answer can be asked, where there is one.
+    const fn body(self) -> Option<u32> {
+        match self {
+            Self::Body(symbol) => Some(symbol),
+            Self::OwnCallback | Self::Elsewhere => None,
+        }
+    }
 }
 
 /// The function a declaration *is*, following a `const` to its initialiser.
@@ -3988,29 +4166,68 @@ fn the_function_of(probe: &FuncBuilder, declaration: NodeId) -> NodeId {
         .unwrap_or(declaration)
 }
 
-fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwing {
-    let nested = |kind: Option<u16>| {
-        matches!(
-            kind,
-            Some(
-                syntax::FUNCTION_DECLARATION
-                    | syntax::FUNCTION_EXPRESSION
-                    | syntax::ARROW_FUNCTION
-                    | syntax::METHOD_DECLARATION
-            )
+/// Whether a symbol names something with a body: the four kinds
+/// [`throwing_symbols`] walks.
+///
+/// **The same test in both directions, which is the point of it being a
+/// function.** The outer loop gives a symbol an entry only where one of its
+/// declarations is one of these, so a symbol that fails this can never be in
+/// `throws` or `calls` -- and a *callee* that fails it is therefore an unresolved
+/// callee, however firmly it wears a symbol. Asking one question in one place is
+/// what stops those two from disagreeing, which is exactly how they disagreed.
+fn names_a_body(kind: Option<u16>) -> bool {
+    matches!(
+        kind,
+        Some(
+            syntax::FUNCTION_DECLARATION
+                | syntax::FUNCTION_EXPRESSION
+                | syntax::ARROW_FUNCTION
+                | syntax::METHOD_DECLARATION
         )
-    };
+    )
+}
+
+/// Whether every declaration of this symbol is one of `own`: a callback the body
+/// being walked received as a parameter, rather than a field, a capture or an
+/// import. See [`Reached::OwnCallback`].
+///
+/// `all` rather than `any`, and non-empty: a symbol with a declaration outside the
+/// set is not one this body's caller supplies, and the whole point of the
+/// distinction is that the caller is known.
+fn a_parameter_among(
+    snapshot: &SemanticSnapshot,
+    symbol: u32,
+    own: &rustc_hash::FxHashSet<NodeId>,
+) -> bool {
+    snapshot.symbols.get(symbol as usize).is_some_and(|record| {
+        !record.declarations.is_empty() && record.declarations.iter().all(|at| own.contains(at))
+    })
+}
+
+/// Whether this symbol resolves to a body, so a call naming it is a *resolved*
+/// callee. See [`names_a_body`].
+fn a_callee_with_a_body(snapshot: &SemanticSnapshot, probe: &FuncBuilder, symbol: u32) -> bool {
+    snapshot.symbols.get(symbol as usize).is_some_and(|record| {
+        record
+            .declarations
+            .iter()
+            .any(|at| names_a_body(probe.kind_of(the_function_of(probe, *at))))
+    })
+}
+
+fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwing {
+    let nested = |kind: Option<u16>| names_a_body(kind);
     // What each symbol's declarations write: whether one throws, and which
     // symbols they call. One walk, because both are the same descent.
     let mut throws: rustc_hash::FxHashSet<u32> = rustc_hash::FxHashSet::default();
-    let mut calls: rustc_hash::FxHashMap<u32, Vec<Option<u32>>> = rustc_hash::FxHashMap::default();
+    let mut calls: rustc_hash::FxHashMap<u32, Vec<Reached>> = rustc_hash::FxHashMap::default();
     for (index, record) in snapshot.symbols.iter().enumerate() {
         let symbol = u32::try_from(index).unwrap_or(u32::MAX);
         // Every symbol is walked and only the callable ones get an entry. The
         // snapshot holds a symbol for every type, parameter and binding as
         // well, and giving each an empty vector made the fixpoint below iterate
         // tens of thousands of symbols that can never be in the set.
-        let mut reached: Vec<Option<u32>> = Vec::new();
+        let mut reached: Vec<Reached> = Vec::new();
         for declaration in &record.declarations {
             let declaration = &the_function_of(probe, *declaration);
             if !nested(probe.kind_of(*declaration)) {
@@ -4029,6 +4246,18 @@ fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwin
             {
                 continue;
             }
+            // This declaration's own parameters, so a call to one is told apart
+            // from a call to a field or a capture. See [`Reached::OwnCallback`].
+            //
+            // By **node**, matched against the callee symbol's declarations, and not
+            // by asking each parameter node for its symbol: a `PARAMETER` carries
+            // none in this encoding -- its name child does -- so that spelling
+            // collected an empty set and every callback read as `Elsewhere`, which
+            // is the answer it would have given with no code at all. Through
+            // `parameters_of`, which is the one derivation of "which children are
+            // the parameters" and is what `class_thenable` asks with.
+            let own: rustc_hash::FxHashSet<NodeId> =
+                parameters_of(probe, *declaration).into_iter().collect();
             let mut pending: Vec<NodeId> = children_that_run(probe, *declaration);
             while let Some(at) = pending.pop() {
                 let kind = probe.kind_of(at);
@@ -4040,45 +4269,77 @@ fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwin
                 }
                 if matches!(kind, Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION)) {
                     let callee = probe.children(at).first().copied();
+                    let named = callee.and_then(|callee| probe.node(callee).symbol).map(|it| it.0);
+                    // **A `new` is resolved by its type, not by a value.** Which
+                    // constructor runs is fixed by the name, so a `new X(...)` is
+                    // not a callee arriving from somewhere -- and treating it as one
+                    // made every function that constructs anything an unresolved
+                    // caller, which is most of them:
+                    // `examples/an-await-of-a-thenable` refused 6 thenables instead
+                    // of 2, on four `then`s whose bodies call their own two
+                    // callbacks and `new Error(...)`. `Error` is a provided
+                    // constructor, whose symbol declares `interface Error` and
+                    // `declare var Error`, so neither the body test nor a class test
+                    // catches it; the *construct* is what answers.
+                    //
+                    // Recorded exactly as it was before `Reached` existed -- the
+                    // named symbol, which for a class is in no throwing set because
+                    // this walk does not descend into a `CONSTRUCTOR`. That hole is
+                    // named rather than closed here: closing it is descending into
+                    // constructors, which is its own change with its own
+                    // measurement.
+                    let constructs = kind == Some(syntax::NEW_EXPRESSION);
                     reached.push(
-                        callee
-                            .and_then(|callee| probe.node(callee).symbol)
-                            .map(|called| called.0)
-                            // **A symbol is not the same as a function, and this
-                            // is where the difference escapes.** `component(props)`
-                            // with `component` a *parameter* has a symbol, so it
-                            // is recorded as a resolved callee -- and a
-                            // parameter's symbol is in no throwing set, because
-                            // that set holds functions whose body throws. So
-                            // `renderWithHooks`, which calls it, never joins; the
-                            // `try` around it compiles; and the throw escapes
-                            // **silently**. The React lane's reduction compiles
-                            // and then declines 6 of 29 cases, the negative
-                            // inputs where node answers -1.
-                            //
-                            // The arm below already has the rule -- "an
+                        match named {
+                            Some(target)
+                                if constructs || a_callee_with_a_body(snapshot, probe, target) =>
+                            {
+                                Reached::Body(target)
+                            }
+                            Some(target) if a_parameter_among(snapshot, target, &own) => {
+                                Reached::OwnCallback
+                            }
+                            _ => Reached::Elsewhere,
+                        },
+                            // **A symbol is not the same as a function, and that
+                            // is where the difference escaped.**
+                            // `component(props)` with `component` a *parameter*
+                            // has a symbol, so it was recorded as a resolved
+                            // callee -- and a parameter's symbol is in no
+                            // throwing set, because that set holds functions
+                            // whose body throws. So `renderWithHooks`, which
+                            // calls it, never joined; the `try` around it
+                            // compiled; and the throw escaped **silently**. The
+                            // React lane's reduction compiled and then declined 6
+                            // of 29 cases, the negative inputs where node answers
+                            // -1. The arm below already had the rule -- "an
                             // unresolved callee is unbounded, so its caller joins
                             // the set at once" -- and a parameter is an
                             // unresolved callee wearing a symbol.
                             //
-                            // **Filtering it here was built and measured and is
-                            // not landed**, because it is right and blunt. Over
-                            // `runtime/node`, one tree and two binaries of it:
-                            // definitions 29915 -> 29344 and `emit-c --napi`
-                            // refusals 14632 -> 15158, against `all.sh`'s ceiling
-                            // of 14750. The floor of 17500 is not in danger; the
-                            // ceiling is breached, and that file's instruction
-                            // when it trips is that the first action is **not** to
-                            // raise it -- a measurement naming the compiler as the
-                            // cause is exactly when raising it hides something.
+                            // **It was built, measured and left unlanded, and the
+                            // reason is worth keeping because it is the reason it
+                            // lands now.** On its own the rule is right and blunt:
+                            // over `runtime/node`, definitions 29915 -> 29344 and
+                            // `emit-c --napi` refusals 14632 -> 15158. It refused
+                            // every `try` whose call reaches a parameter or field
+                            // holding a closure, including those whose closures
+                            // provably cannot throw, because there was nothing for
+                            // such a call to name. The note ended *"precision
+                            // first, then the rule"*.
                             //
-                            // The rule refuses every `try` whose call reaches a
-                            // parameter or field holding a closure, including
-                            // those whose closures provably cannot throw. What
-                            // decides it is the *call sites* of the enclosing
-                            // function, which say which closures actually arrive
-                            // -- the shape `hir::interprocedural` already asks.
-                            // Precision first, then the rule.
+                            // `Hierarchy::raising_call_slot` is the precision. A
+                            // call through a function value inside a `try` now
+                            // dispatches at an entry that records the `throw` and
+                            // returns, and `a_copy_can_contain` admits such a call
+                            // into a copy, so the functions this rule newly calls
+                            // raisers get copies instead of refusals. The two
+                            // halves have to land together: this one alone is the
+                            // measured cost with none of the gain, and the other
+                            // alone leaves the escape above standing one level up
+                            // -- which is what `outcomes/a-throw-through-a-try-
+                            // with-only-a-finally` said, in the words its own
+                            // header had promised.
                     );
                 }
                 pending.extend(children_that_run(probe, at));
@@ -4088,42 +4349,55 @@ fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwin
             calls.insert(symbol, reached);
         }
     }
-    let mut set = throws;
-    // An unresolved callee is unbounded, so its caller joins the set at once.
-    for (symbol, reached) in &calls {
-        if reached.iter().any(Option::is_none) {
-            set.insert(*symbol);
-        }
-    }
-    // Fixpoint. Bounded by the number of symbols, and it converges in a handful
-    // of rounds on this corpus because the call graph is shallow.
-    loop {
-        let mut grew = false;
+    // **Twice, over one walk.** `any` counts every unresolved callee; `bodily`
+    // counts only those the body did not receive as a parameter. One walk and two
+    // closures rather than two walks, so the two sets cannot disagree about what
+    // the program says -- only about which question is being asked of it. See
+    // [`Throwing`].
+    let close = |unresolved: fn(Reached) -> bool| {
+        let mut set = throws.clone();
+        // An unresolved callee is unbounded, so its caller joins the set at once.
         for (symbol, reached) in &calls {
-            if set.contains(symbol) {
-                continue;
-            }
-            if reached.iter().flatten().any(|called| set.contains(called)) {
+            if reached.iter().copied().any(unresolved) {
                 set.insert(*symbol);
-                grew = true;
             }
         }
-        if !grew {
-            break;
+        // Fixpoint. Bounded by the number of symbols, and it converges in a handful
+        // of rounds on this corpus because the call graph is shallow.
+        loop {
+            let mut grew = false;
+            for (symbol, reached) in &calls {
+                if set.contains(symbol) {
+                    continue;
+                }
+                if reached.iter().copied().filter_map(Reached::body).any(|called| set.contains(&called)) {
+                    set.insert(*symbol);
+                    grew = true;
+                }
+            }
+            if !grew {
+                break;
+            }
         }
-    }
+        set
+    };
+    let mut set = close(|reached| !matches!(reached, Reached::Body(_)));
+    let mut bodily = close(|reached| matches!(reached, Reached::Elsewhere));
     // An imported name is its own symbol pointing at the declaring module's, and
     // the caller asks about the *local* one. Following the alias here keeps
     // `calls_compiled_code` a single lookup.
     for (index, record) in snapshot.symbols.iter().enumerate() {
-        if let Some(to) = record.aliased
-            && set.contains(&to.0)
-        {
-            set.insert(u32::try_from(index).unwrap_or(u32::MAX));
+        let Some(to) = record.aliased else { continue };
+        let index = u32::try_from(index).unwrap_or(u32::MAX);
+        if set.contains(&to.0) {
+            set.insert(index);
+        }
+        if bodily.contains(&to.0) {
+            bodily.insert(index);
         }
     }
     let copyable = copyable_symbols(snapshot, probe, &set, &calls);
-    Throwing { any: set, copyable }
+    Throwing { any: set, bodily, copyable }
 }
 
 /// The greatest fixpoint [`Throwing::copyable`] describes.
@@ -4133,11 +4407,20 @@ fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwin
 /// A function that only *passes a throw on* belongs here, provided what it
 /// passes on from does, which is why the start is `raises` rather than
 /// `throws`.
+///
+/// **An unresolved callee no longer costs the copy**, which is the same change
+/// `a_copy_can_contain` records at the node level and for the same reason: inside
+/// a raising copy a call through a function value names
+/// `Hierarchy::raising_call_slot` and is followed by the flag test, so what it
+/// reaches not being knowable is no longer a reason the copy cannot carry it. The
+/// two are one decision asked twice -- once of a symbol here, once of a call there
+/// -- and they have to give one answer or a `try` names a copy that was never
+/// made.
 fn copyable_symbols(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
     raises: &rustc_hash::FxHashSet<u32>,
-    calls: &rustc_hash::FxHashMap<u32, Vec<Option<u32>>>,
+    calls: &rustc_hash::FxHashMap<u32, Vec<Reached>>,
 ) -> rustc_hash::FxHashSet<u32> {
     let mut copyable: rustc_hash::FxHashSet<u32> = raises
         .iter()
@@ -4149,9 +4432,10 @@ fn copyable_symbols(
             .iter()
             .filter(|symbol| {
                 calls.get(*symbol).is_some_and(|reached| {
-                    reached.iter().any(|called| match called {
-                        None => true,
-                        Some(called) => raises.contains(called) && !copyable.contains(called),
+                    reached.iter().any(|called| {
+                        called
+                            .body()
+                            .is_some_and(|called| raises.contains(&called) && !copyable.contains(&called))
                     })
                 })
             })
@@ -4195,6 +4479,17 @@ fn can_be_copied(snapshot: &SemanticSnapshot, probe: &FuncBuilder, symbol: u32) 
 /// that names one takes the same path every other copy naming takes.
 const RAISING_SUFFIX: &str = "@raises";
 
+/// Why a call inside a `try` reaching a **function value** has nothing to name.
+///
+/// Named because three places need the same answer and they are in three passes:
+/// [`FuncBuilder::reason_without_a_leaf`] gives it as a refusal,
+/// [`FuncBuilder::call_within`] asks whether the raising uniform entry covers the
+/// call instead, and [`FuncBuilder::dispatches_to_a_raising_entry`] asks it again
+/// at the call to choose the slot. A second spelling would let the walk that
+/// decides which calls a `try` handles and the site that dispatches them disagree.
+const THROUGH_A_FUNCTION_VALUE: &str =
+    "through a function value, which has no raising copy to call";
+
 /// The declarations a [raising copy](FuncBuilder::raises) is emitted for.
 ///
 /// A plain function whose every `throw` is its own and which calls nothing that
@@ -4224,7 +4519,7 @@ fn raising_copies(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
     throwing: &Throwing,
-) -> rustc_hash::FxHashSet<NodeId> {
+) -> (rustc_hash::FxHashSet<NodeId>, bool) {
     // Which declarations a copy could be made of at all. By node rather than by
     // symbol, and that is not a detail: `function_copies` is keyed on the node a
     // call resolves to, and a symbol with two declarations -- an overload
@@ -4268,10 +4563,109 @@ fn raising_copies(
     }
     // Seeded by what a `try` reaches, then closed over what those reach: a copy
     // names its callees' copies, so a callee of a copy needs one too.
-    let mut copies: rustc_hash::FxHashSet<NodeId> = calls_guarded_by_a_try(snapshot, probe)
+    let (guarded, guarded_a_call) = calls_guarded_by_a_try(snapshot, probe);
+    let mut copies: rustc_hash::FxHashSet<NodeId> = guarded
         .into_iter()
         .filter(|declaration| eligible.contains(declaration))
         .collect();
+    // **And every eligible function, where this program has a `try` around a call at
+    // all.** A closure's raising variant names its callees' raising copies exactly as
+    // a plain copy does, and a closure is reached through a dispatch -- so which
+    // closures arrive, and therefore which callees need copies, is the question
+    // `erased_call` exists because nobody at the site can answer.
+    //
+    // Two narrower rules were tried and both were wrong. Seeding the *closure bodies*
+    // misses the closure lowering **synthesises** for a function used as a value,
+    // whose body is a call to that function and which is in no `ARROW_FUNCTION` node:
+    // `examples/a-callbacks-throw-inside-a-try`'s `call(thrower)` arm aborted at run
+    // time on every backend. Filtering those bodies by "can this raise" then shrank
+    // the set a *second* question was asked of, and turned the conformance lane's
+    // guard fixture from FIXED to aborted in one line.
+    //
+    // **It costs nothing that is not reached**, which is what makes the blunt rule
+    // affordable here: a `@raises` copy is named only by a raising call site, so
+    // `reachable::prune` drops every one that no such site reaches. The emitted
+    // figure is 2,900 copies across the 29 corpora, and it is the same figure the
+    // narrow rules produced -- they were choosing which copies to *offer*, and prune
+    // was already choosing which to keep.
+    if guarded_a_call {
+        // A function **used as a value** is lowered as a closure whose whole body is a
+        // call to it, and that closure is synthesised rather than written -- it is in
+        // no `ARROW_FUNCTION` node for the walk below to reach. So the function itself
+        // needs the copy: `examples/a-callbacks-throw-inside-a-try`'s `call(thrower)`
+        // arm aborted at run time on every backend without this, while its three
+        // sibling arms -- the same defect written as an arrow, an expression and a
+        // held arrow -- were fine, because those bodies *are* nodes.
+        copies.extend(functions_used_as_values(snapshot, probe, &eligible));
+    }
+    let mut pending: Vec<NodeId> = Vec::new();
+    if guarded_a_call {
+        // **And every closure body that can raise.** A closure's raising variant names
+        // its callees' raising copies exactly as a plain copy does -- `raises` is one
+        // flag and does not care which kind of body it is lowering -- and a closure is
+        // in no `copies` set for the walk below to start from.
+        //
+        // `attempt(() => { f(); })` with `f` throwing is the shape, and it **escaped
+        // the handler and ended the program** while `attempt(() => { throw … })`
+        // beside it was caught: the variant called `f` through its plain entry, so the
+        // `throw` never reached the flag the test after the dispatch was watching. The
+        // conformance lane recorded it as `outcomes/a-throw-one-call-below-a-function-
+        // value` before it was built, against test262's
+        // `classelementname-abrupt-completion`.
+        //
+        // Only bodies that can raise, because only those get a variant that *differs*
+        // -- where it does not, `declare_raising_entries` names the ordinary entry and
+        // nothing ever names a copy of what the body calls. Copying every eligible
+        // function instead was measured and is much worse: **+1,341 refusals** across
+        // the 29 corpora, because a copy is a body and each one that cannot compile
+        // reports its own cascade.
+        pending.extend(closure_bodies_that_can_raise(snapshot, probe, throwing));
+    }
+    // The closure bodies are roots for the walk without being copies themselves: a
+    // closure is not a `FUNCTION_DECLARATION` and `function_copies` is not what makes
+    // it, so what it *calls* needs a copy and it does not.
+    for root in pending {
+        for call in calls_in_the_body_of(probe, root) {
+            if let Some(callee) = snapshot.call_targets.get(&call).and_then(|it| it.callee)
+                && eligible.contains(&callee)
+            {
+                copies.insert(callee);
+            }
+        }
+    }
+    let copies = close_over_callees(snapshot, probe, &eligible, copies);
+    // **And whether every raising body this program would build can carry what it
+    // calls**, which decides whether a call inside a `try` may dispatch at the
+    // raising slot at all. See `every_raising_body_can_carry`.
+    let carry = every_raising_body_can_carry(snapshot, probe, throwing, &copies);
+    if carry {
+        return (copies, true);
+    }
+    // **Where it is off, the extra seeds are dropped with it.** They exist to serve
+    // the raising variant of a *closure*, and no closure gets one when no site can
+    // dispatch at the slot -- so keeping them would emit thousands of `@raises`
+    // copies nothing reaches. What stays is the seed a *named* callee's copy needs,
+    // which is the path that worked before any of this.
+    let narrow = calls_guarded_by_a_try(snapshot, probe)
+        .0
+        .into_iter()
+        .filter(|declaration| eligible.contains(declaration))
+        .collect();
+    (close_over_callees(snapshot, probe, &eligible, narrow), false)
+}
+
+/// Close a set of copies over what those copies call: a copy names its callees'
+/// copies, so a callee of a copy needs one too.
+///
+/// A function because [`raising_copies`] runs it twice -- once over every seed, and
+/// once over the narrow seed where the gate came out off -- and two spellings of a
+/// transitive closure is two chances to disagree about what a copy may name.
+fn close_over_callees(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    eligible: &rustc_hash::FxHashSet<NodeId>,
+    mut copies: rustc_hash::FxHashSet<NodeId>,
+) -> rustc_hash::FxHashSet<NodeId> {
     let mut pending: Vec<NodeId> = copies.iter().copied().collect();
     while let Some(declaration) = pending.pop() {
         for call in calls_in_the_body_of(probe, declaration) {
@@ -4286,6 +4680,100 @@ fn raising_copies(
     copies
 }
 
+/// Whether every body this program would lower with [`FuncBuilder::raises`] can carry
+/// the raises that cross it.
+///
+/// **Program-global, and it has to be, because a site knowing only a signature cannot
+/// know which closure arrives** -- the sentence `erased_call` exists for. So the
+/// question is asked of every closure at once and the answer gates the site.
+///
+/// Two kinds of body, and the second was missed once: an arrow or a function
+/// expression, whose calls are nodes; and the wrapper lowering **synthesises** for a
+/// function used as a value, which is in no `ARROW_FUNCTION` node and whose one call
+/// is that function. `a_copy_can_contain` answers both, asked with the copies that
+/// exist rather than with the eligible set -- "the copy it would name exists" is that
+/// predicate's own sentence, and a closure has no later fixpoint to shrink.
+///
+/// **The alternative was measured and rejected.** Letting a non-carrying closure take
+/// an entry that aborts by name gives **1,675 reachable aborts across 22 of the 29
+/// runtime corpora** -- a compile-time refusal traded for a run-time crash, at scale,
+/// which is the direction this work must not move in whatever `refuses_to_cross`'
+/// precedent says at 0. With the gate, no site dispatches where any body cannot
+/// carry, so those entries are unreachable by construction and the refusal stands.
+///
+/// What makes a body unable to carry today is almost always a **method** or an
+/// **accessor**, which have no raising copies: 1,060 and 631 occurrences of exactly
+/// that refusal across the corpora. Covering those is what turns this gate on for
+/// `runtime/node`, and it is the next piece of the same work.
+fn every_raising_body_can_carry(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    throwing: &Throwing,
+    copies: &rustc_hash::FxHashSet<NodeId>,
+) -> bool {
+    let carries = |body: NodeId| {
+        calls_in_the_body_of(probe, body)
+            .into_iter()
+            .all(|call| a_copy_can_contain(snapshot, probe, throwing, copies, call))
+    };
+    let written = snapshot
+        .nodes
+        .iter()
+        .enumerate()
+        .filter(|(_, node)| {
+            matches!(
+                node.kind,
+                NodeKind::Syntax(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION)
+            )
+        })
+        .map(|(index, _)| NodeId(u32::try_from(index).unwrap_or(u32::MAX)))
+        .all(carries);
+    // A wrapper's one call is the function it stands for, so it carries exactly when
+    // that function has a copy -- or cannot raise, which `throwing` answers through
+    // the declaration list because a declaration node carries no symbol of its own.
+    let wrapped = functions_used_as_values(snapshot, probe, &wrappable_functions(snapshot, probe))
+        .into_iter()
+        .all(|declaration| {
+            let raises = snapshot
+                .symbols
+                .iter()
+                .position(|record| record.declarations.contains(&declaration))
+                .and_then(|at| u32::try_from(at).ok())
+                .is_some_and(|symbol| throwing.any.contains(&symbol));
+            !raises || copies.contains(&declaration)
+        });
+    written && wrapped
+}
+
+/// Every declaration that lowering turns into a **wrapper** closure when it is used
+/// as a value: a named function, or a method bound to a receiver.
+///
+/// **An arrow or a function expression is not one**, and taking every function-shaped
+/// declaration instead was wrong in the direction that matters: `const mayThrow = (x)
+/// => { throw … }` used as a value *is* the closure (`ClosureSource::Authored`), so
+/// its raising variant covers it and there is no `function_copies` copy to look for --
+/// but it can raise and is never `eligible`, so the wrapped test failed and turned the
+/// gate off for two of the three examples this change exists for. They read "agreed on
+/// every case" while comparing fewer of them, which is the same trap twice in one
+/// session: see [`every_raising_body_can_carry`].
+fn wrappable_functions(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+) -> rustc_hash::FxHashSet<NodeId> {
+    snapshot
+        .nodes
+        .iter()
+        .enumerate()
+        .map(|(index, _)| NodeId(u32::try_from(index).unwrap_or(u32::MAX)))
+        .filter(|id| {
+            matches!(
+                probe.kind_of(*id),
+                Some(syntax::FUNCTION_DECLARATION | syntax::METHOD_DECLARATION)
+            )
+        })
+        .collect()
+}
+
 /// Whether a raising copy may contain this call: it cannot raise, or the copy
 /// it would name exists.
 fn a_copy_can_contain(
@@ -4295,16 +4783,28 @@ fn a_copy_can_contain(
     eligible: &rustc_hash::FxHashSet<NodeId>,
     call: NodeId,
 ) -> bool {
-    let Some(callee) = probe.children(call).first().copied() else {
-        return true;
-    };
-    // No symbol is an indirect callee -- `fns[0]()`, `this.handler()` -- and
-    // what it reaches cannot be known. `calls_compiled_code` calls that able to
-    // raise and so does this.
-    let Some(symbol) = probe.node(callee).symbol else {
-        return false;
-    };
-    if !throwing.any.contains(&symbol.0) {
+    // **An indirect callee -- `fns[0]()`, `this.handler()`, a parameter -- can be
+    // carried now, and could not be.** What it reaches cannot be known, which used
+    // to be the end of it: a copy holding such a call would dispatch at the
+    // ordinary uniform entry, whose body calls `nts_uncaught`, so the raise the
+    // copy exists to carry would end the program from inside a `try` that compiled.
+    //
+    // `Hierarchy::raising_call_slot` is what changes it. Inside a raising copy
+    // `FuncBuilder::dispatches_to_a_raising_entry` names that slot for every call
+    // through a function value and `test_for_a_raise` follows it with the flag
+    // test, so a copy holding one propagates exactly as it does for a named callee
+    // whose `@raises` it spells. The two are one decision and are documented as
+    // one.
+    //
+    // **What this unblocked, and it was recorded as a guard before it was built.**
+    // `outcomes/a-throw-through-a-try-with-only-a-finally` is
+    // `try { fn(); } finally { … }` inside `call(fn)`, with the caller catching --
+    // `AsyncResource#runInAsyncScope`'s shape, so every hook dispatch in
+    // `runtime/node`. Without this arm `call` lost the fixpoint here, got no copy,
+    // and the caller's `try` compiled with no handler edge because
+    // `throwing_symbols` does not see a parameter-held callee: the `TypeError`
+    // escaped, which is the wrong answer that record was written to catch and did.
+    if !a_call_that_can_raise(probe, throwing, call) {
         return true;
     }
     snapshot
@@ -4314,7 +4814,116 @@ fn a_copy_can_contain(
         .is_some_and(|declaration| eligible.contains(&declaration))
 }
 
-/// Every declaration a `try` body calls, anywhere in the program.
+/// Whether this call can bring a `throw` back to its caller.
+///
+/// An unresolved callee can: what it reaches is exactly what cannot be established,
+/// and it is already the reason its caller is in [`Throwing::any`]. A resolved one
+/// can only if that set says so.
+///
+/// **One predicate, two readers, and the second is why it is one.**
+/// [`a_copy_can_contain`] asks it to decide whether a copy may hold the call, and
+/// [`raising_copies`] asks it to decide whether a closure body needs a raising
+/// variant at all -- a body with no call that can raise has an identical variant, so
+/// nothing ever names its callees' copies and seeding from it is pure waste. Written
+/// twice those two would drift, and the drift is a copy named and never made.
+fn a_call_that_can_raise(probe: &FuncBuilder, throwing: &Throwing, call: NodeId) -> bool {
+    let Some(callee) = probe.children(call).first().copied() else {
+        return false;
+    };
+    probe
+        .node(callee)
+        .symbol
+        .is_none_or(|symbol| throwing.any.contains(&symbol.0))
+}
+
+/// Every eligible function this program mentions somewhere other than as a callee.
+///
+/// The functions lowering turns into a closure of its own: a name in an argument, an
+/// initialiser, a field. Read as "an identifier naming one, that is not the callee of
+/// a call", because the callee position is the one place a mention is *not* a value
+/// -- and that is the only distinction available without parents.
+fn functions_used_as_values(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    eligible: &rustc_hash::FxHashSet<NodeId>,
+) -> Vec<NodeId> {
+    // The positions where naming a function is **not** using it as a value: the
+    // callee of a call, and the declaration's own name.
+    //
+    // **Without the second, every eligible function matched** -- `function thrower()`
+    // writes an identifier bound to `thrower` that is in no callee position -- so the
+    // seed became "every eligible function" and cost **+1,341 refusals** across the
+    // 29 corpora, indistinguishable from the blunt rule it exists to avoid. The
+    // measurement is what said so: two rules with the same number are one rule.
+    let mut excluded: rustc_hash::FxHashSet<NodeId> = rustc_hash::FxHashSet::default();
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        if matches!(
+            node.kind,
+            NodeKind::Syntax(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION)
+        ) {
+            let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+            excluded.extend(probe.children(id).first().copied());
+        }
+    }
+    for declaration in eligible {
+        excluded.extend(probe.children(*declaration).first().copied());
+    }
+    let mut found = Vec::new();
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        if node.kind != NodeKind::Syntax(syntax::IDENTIFIER) {
+            continue;
+        }
+        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        if excluded.contains(&id) {
+            continue;
+        }
+        let Some(symbol) = node.symbol.and_then(|it| snapshot.symbols.get(it.0 as usize)) else {
+            continue;
+        };
+        found.extend(
+            symbol
+                .declarations
+                .iter()
+                .map(|at| the_function_of(probe, *at))
+                .filter(|declaration| eligible.contains(declaration)),
+        );
+    }
+    found
+}
+
+/// Every closure body whose raising variant would differ from its ordinary one: one
+/// that holds a call able to bring a `throw` back. See [`a_call_that_can_raise`].
+fn closure_bodies_that_can_raise(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    throwing: &Throwing,
+) -> Vec<NodeId> {
+    snapshot
+        .nodes
+        .iter()
+        .enumerate()
+        .filter(|(_, node)| {
+            matches!(
+                node.kind,
+                NodeKind::Syntax(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION)
+            )
+        })
+        .map(|(index, _)| NodeId(u32::try_from(index).unwrap_or(u32::MAX)))
+        .filter(|body| {
+            calls_in_the_body_of(probe, *body)
+                .into_iter()
+                .any(|call| a_call_that_can_raise(probe, throwing, call))
+        })
+        .collect()
+}
+
+/// Every declaration a `try` body calls, anywhere in the program, and whether any
+/// `try` guarded a call at all.
+///
+/// **Two facts from one walk**, because the second decides whether this program
+/// lowers a raising body of any kind and a second walk to ask it could answer
+/// differently. A guarded call with no resolvable callee -- a parameter, a field --
+/// contributes nothing to the set and still means yes.
 ///
 /// Deliberately coarse: a callee here only becomes a copy if it also passes
 /// `Throwing::self_contained`, and a `try` this lowering goes on to refuse for
@@ -4322,8 +4931,9 @@ fn a_copy_can_contain(
 fn calls_guarded_by_a_try(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
-) -> rustc_hash::FxHashSet<NodeId> {
+) -> (rustc_hash::FxHashSet<NodeId>, bool) {
     let mut called = rustc_hash::FxHashSet::default();
+    let mut guarded_a_call = false;
     for (index, node) in snapshot.nodes.iter().enumerate() {
         if node.kind != NodeKind::Syntax(syntax::TRY_STATEMENT) {
             continue;
@@ -4337,6 +4947,12 @@ fn calls_guarded_by_a_try(
         };
         let mut pending = vec![body];
         while let Some(at) = pending.pop() {
+            if matches!(
+                probe.kind_of(at),
+                Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION)
+            ) {
+                guarded_a_call = true;
+            }
             if let Some(callee) = snapshot
                 .call_targets
                 .get(&at)
@@ -4350,7 +4966,7 @@ fn calls_guarded_by_a_try(
             pending.extend(children_that_run(probe, at));
         }
     }
-    called
+    (called, guarded_a_call)
 }
 
 /// A token index for every class the program declares. See
@@ -4442,7 +5058,10 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
         ..Naming::default()
     };
     let throwing = throwing_symbols(snapshot, &probe);
-    naming.raising = raising_copies(snapshot, &probe, &throwing);
+    let (raising, carry) = raising_copies(snapshot, &probe, &throwing);
+    naming.raising = raising;
+    naming.closures_carry = carry;
+    naming.raising_then = throwing.bodily;
     naming.throwing = throwing.any;
     naming.presence_keys = presence_keys(snapshot, &probe);
     naming.generators = generators;
@@ -8478,9 +9097,17 @@ impl Shared {
                 .collect(),
         );
         let naming = naming(snapshot);
+        // **The hierarchy this program's bodies see says whether the raising slot may
+        // be dispatched at**, which `collect_hierarchy` could not know: the answer
+        // comes from `raising_copies`, which runs here. One fact in the place every
+        // builder already reads, rather than a fourth bool on `FuncBuilder`.
+        let mut hierarchy = hierarchy.clone();
+        hierarchy.closures_carry = naming.closures_carry;
+        let hierarchy = &hierarchy;
         // After every variant, so that none is made of these: a job and its
         // resolving functions capture nothing a copy could re-type.
-        let thenables = std::rc::Rc::new(thenables(snapshot, &probe, hierarchy, &naming.throwing, &mut closures));
+        let thenables =
+            std::rc::Rc::new(thenables(snapshot, &probe, hierarchy, &naming.raising_then, &mut closures));
         Self {
             module: module.clone(),
             hierarchy: hierarchy.clone(),
@@ -10180,31 +10807,30 @@ fn lower_wanted_closures(
     while let Some(index) = wanted.iter().copied().find(|at| !done.contains(at)) {
         done.insert(index);
         let within = closures[index].within_copy.as_ref();
-        let mut builder = shared.builder(
-            snapshot,
-            foreign,
-            Copy {
-                suffix: closures[index].within.clone().unwrap_or_default(),
-                // **Under the enclosing copy's substitution, where the
-                // closure is one of a generic's.** Without it the body reads a
-                // capture at the declaration's type while the copy stored the
-                // instantiation's, which reaches C as an assignment between two
-                // structs.
-                substitution: within.map(|copy| copy.substitution.clone()).unwrap_or_default(),
-                instance: within.and_then(|copy| copy.instance),
-                sources: within.map(|copy| copy.sources.clone()).unwrap_or_default(),
-                // And the calls this closure makes name what the enclosing
-                // copy's do, which for a generic function is keyed by the
-                // declaration and this suffix together.
-                declaration: within.and_then(ClassCopy::function),
-                ..Copy::default()
-            },
-        );
-        builder.retyped_symbols = with_const_aliases(
-            &FuncBuilder::probe(snapshot),
-            closures[index].node,
-            closures[index].retyped_captures.clone(),
-        );
+        // **One description of the copy a closure's builder gets**, because the
+        // raising variant below needs the same one with a single flag flipped and a
+        // second spelling of it would drift: the substitution, the instance, the
+        // sources and the declaration all have reasons stated here, and a copy that
+        // had four of the five would read a capture at the wrong type.
+        let copy_for = |raises: bool| Copy {
+            suffix: closures[index].within.clone().unwrap_or_default(),
+            // **Under the enclosing copy's substitution, where the closure is one of
+            // a generic's.** Without it the body reads a capture at the
+            // declaration's type while the copy stored the instantiation's, which
+            // reaches C as an assignment between two structs.
+            substitution: within.map(|copy| copy.substitution.clone()).unwrap_or_default(),
+            instance: within.and_then(|copy| copy.instance),
+            sources: within.map(|copy| copy.sources.clone()).unwrap_or_default(),
+            // And the calls this closure makes name what the enclosing copy's do,
+            // which for a generic function is keyed by the declaration and this
+            // suffix together.
+            declaration: within.and_then(ClassCopy::function),
+            raises,
+            ..Copy::default()
+        };
+        let aliases = || closure_aliases(snapshot, closures, index);
+        let mut builder = shared.builder(snapshot, foreign, copy_for(false));
+        builder.retyped_symbols = aliases();
         // A job or a resolving function has a body the compiler makes; every
         // other closure has one the program wrote.
         let made = builder.lower_made_closure(index, &closures[index]);
@@ -10219,9 +10845,36 @@ fn lower_wanted_closures(
                         erased_call_name(index),
                         &func,
                         shared.hierarchy.erased_call_arity,
+                        None,
                     )
                 {
                     lowered.program.funcs.push(adapter);
+                }
+                // **And the raising variant, where it is a different program.**
+                // A call inside a `try` that reaches a closure through a function
+                // value has nothing to name: a raising copy is made of plain
+                // functions, and a closure's body is not one. So the body is lowered
+                // a second time with `raises` set -- an uncaught `throw` then records
+                // and returns rather than ending the program -- and `erased_call`
+                // builds its entry from it exactly as it does for the ordinary one.
+                //
+                // Its own function because it is its own step, and because it is the
+                // half with three outcomes in it.
+                //
+                // **And only where a site can dispatch at the slot.** With the gate
+                // off nothing names these, and building them anyway emitted 1,675
+                // abort shells and thousands of `@raises` bodies across the corpora
+                // for a slot no call reaches. See `every_raising_body_can_carry`.
+                for produced in raising_closure(
+                    snapshot,
+                    foreign,
+                    shared,
+                    closures,
+                    index,
+                    &func,
+                    copy_for(true),
+                ) {
+                    lowered.program.funcs.push(produced);
                 }
                 lowered.program.funcs.push(func);
             }
@@ -10253,6 +10906,97 @@ fn lower_wanted_closures(
         }
         builder.harvest(wanted, &mut lowered.arrivals);
         collect_layouts(&mut lowered.program, builder.layouts);
+    }
+}
+
+/// The `const` aliases a closure's body reads, which both of its builders need.
+///
+/// One derivation, because a raising variant that read its captures at different
+/// types from the ordinary body is the mistake `Copy`'s own description exists to
+/// prevent, one field over.
+fn closure_aliases(
+    snapshot: &SemanticSnapshot,
+    closures: &[ClosureInfo],
+    index: usize,
+) -> std::collections::BTreeMap<u32, HirType> {
+    with_const_aliases(
+        &FuncBuilder::probe(snapshot),
+        closures[index].node,
+        closures[index].retyped_captures.clone(),
+    )
+}
+
+/// The raising variant of one closure, and the entry that names it -- or the entry
+/// that aborts by name where there cannot be one.
+///
+/// **Three outcomes, and they are why this is its own function.**
+///
+///   a different program   the variant, plus its own uniform entry. Measured over
+///                         four runtime modules at about 2% of closures, which is
+///                         the whole reason to build both and compare rather than
+///                         predict: see [`the_same_program`].
+///   the same program      nothing. `declare_raising_entries` then names the
+///                         *ordinary* entry in the raising slot, because a body with
+///                         nothing to raise cannot end anything.
+///   refused, or a return  the entry that aborts by name.
+///   with no zero          `FuncBuilder::a_raising_body_carries_this_call` is what
+///                         refuses -- a body calling something whose own `throw`
+///                         cannot be carried -- and `a_raise_cannot_return` the
+///                         second.
+///
+/// **The abort rather than an unfilled slot**, because the slot is filled in
+/// `declare_raising_entries` and the body is produced here: a hole would leave a
+/// table naming nothing at a site that compiled. Measured at **0 reachable entries**
+/// across all 29 runtime corpora, which is `refuses_to_cross`' standing exactly.
+fn raising_closure(
+    snapshot: &SemanticSnapshot,
+    foreign: &super::runtime::ForeignTable,
+    shared: &Shared,
+    closures: &[ClosureInfo],
+    index: usize,
+    func: &Func,
+    copy: Copy,
+) -> Vec<Func> {
+    if !shared.hierarchy.closures_carry || shared.hierarchy.raising_call_slot.is_none() {
+        return Vec::new();
+    }
+    let (raising_body, raising_entry) = raising_closure_names(index);
+    let arity = shared.hierarchy.erased_call_arity;
+    let abort = |because: String| {
+        erased_call(raising_entry.clone(), func, arity, Some(&because))
+            .into_iter()
+            .collect::<Vec<Func>>()
+    };
+    let mut second = shared.builder(snapshot, foreign, copy);
+    second.retyped_symbols = closure_aliases(snapshot, closures, index);
+    let made = second.lower_made_closure(index, &closures[index]);
+    match made.unwrap_or_else(|| second.lower_closure(index, &closures[index])) {
+        Ok(raising) if the_same_program(func, &raising) => Vec::new(),
+        Ok(raising) if a_raise_cannot_return(&raising.return_type) => abort(format!(
+            "calling `{}` from inside a `try`, whose raising copy would have to return a \
+             value of a type that has none to return",
+            func.name
+        )),
+        Ok(mut raising) => {
+            raising.name = raising_body;
+            let mut produced = erased_call(raising_entry, &raising, arity, None)
+                .into_iter()
+                .collect::<Vec<Func>>();
+            produced.push(raising);
+            produced
+        }
+        // **Refused where the ordinary body was not**, which reading the raising arm
+        // says cannot happen: it is tested *before* every fallible arm of
+        // `lower_throw` -- the `async` one refuses a thrown non-reference -- and adds
+        // no fallible step of its own. Measured at 0 of 935 closures over four
+        // runtime modules, which is the same sentence from the other side. Its own
+        // diagnostics are dropped: they are the ordinary body's cascade a second
+        // time, under a name no source wrote.
+        Err(_) => abort(format!(
+            "calling `{}` from inside a `try`, whose raising copy this compiler could \
+             not build",
+            func.name
+        )),
     }
 }
 
@@ -10292,6 +11036,7 @@ pub fn lower_with(
     // `fields::devirtualize` needs both and runs long after the hierarchy is gone.
     lowered.program.closure_slot = hierarchy.closure_slot;
     lowered.program.erased_call_slot = hierarchy.erased_call_slot;
+    lowered.program.raising_call_slot = hierarchy.raising_call_slot;
     collect_layouts(&mut lowered.program, module.layouts.clone());
     let mut wanted: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
 
@@ -10447,7 +11192,7 @@ pub fn lower_with(
     lower_wanted_closures(snapshot, foreign, &shared, &closures, &mut lowered, &mut wanted);
 
     relate_closures_to_signatures(snapshot, &closures, &hierarchy, &mut lowered.program);
-    declare_erased_entries(snapshot, &hierarchy, &mut lowered.program);
+    declare_uniform_entries(snapshot, &hierarchy, &mut lowered.program, &shared);
 
     // Stage 0: count what a fix would have to convert, before anything converts.
     // `NTS_ARRIVALS` only -- this pass changes nothing yet, and a measurement that
@@ -11359,7 +12104,7 @@ fn record_unimplemented_interfaces(hierarchy: &Hierarchy, program: &mut Program)
 /// missing ones, so a closure written at one arity and called at another is
 /// correct, and `erased-fn-arity-only` agrees on both arms. Reading "arity is free"
 /// as "parameters are free" is the mistake this function exists downstream of.
-fn erased_call(name: String, call: &Func, width: usize) -> Option<Func> {
+fn erased_call(name: String, call: &Func, width: usize, refusing: Option<&str>) -> Option<Func> {
     let origin = Origin::generated(
         call.origin.location,
         nts_semantic_schema::GeneratedReason::ClosureLowering,
@@ -11412,7 +12157,8 @@ fn erased_call(name: String, call: &Func, width: usize) -> Option<Func> {
     // arrow's entry a refusal: `an-async-arrow`'s `Closure5#call` takes a `double`
     // and an already-erased second parameter and returns a promise -- every part
     // of which crosses. The two were one fact written twice, twelve lines apart.
-    let crosses = written.len() <= width
+    let crosses = refusing.is_none()
+        && written.len() <= width
         && written
             .iter()
             .all(|param| param.ty == HirType::Erased || erasable(&param.ty))
@@ -11430,7 +12176,17 @@ fn erased_call(name: String, call: &Func, width: usize) -> Option<Func> {
     // that is.
     let mut ops = Vec::new();
     if !crosses {
-        return Some(refuses_to_cross(name, params, values, &origin, &call.name));
+        let because = refusing.map_or_else(
+            || {
+                format!(
+                    "calling `{}` through an erased receiver, whose parameters or result have \
+                     no erased form, or which writes more parameters than an erased call carries",
+                    call.name
+                )
+            },
+            str::to_owned,
+        );
+        return Some(refuses_to_cross(name, params, values, &origin, &because));
     }
     let mut args = vec![ValueId(0)];
     for (at, param) in written.iter().enumerate() {
@@ -11572,21 +12328,23 @@ fn uniform_params(
 /// The entry for a closure no site can legally reach through it: it aborts by
 /// name. See [`erased_call`], which states why it exists rather than being
 /// absent.
+///
+/// **The sentence is the caller's**, because there are two reasons a uniform
+/// entry can be a shell and they name different work: a parameter or result with
+/// no erased form (`erased_call`'s own test), and a raising variant this compiler
+/// could not build from a body it did build (`lower_wanted_closures`). One text
+/// covering both would send a reader to the wrong half.
 fn refuses_to_cross(
     name: String,
     params: Vec<Param>,
     mut values: Vec<Op>,
     origin: &Origin,
-    called: &str,
+    because: &str,
 ) -> Func {
     let mut ops = Vec::new();
     let reason = ValueId(u32::try_from(values.len()).unwrap_or(u32::MAX));
     values.push(Op {
-        kind: OpKind::ConstString(format!(
-            "calling `{called}` through an erased receiver, whose parameters or \
-             result have no erased form, or which writes more parameters than an \
-             erased call carries"
-        )),
+        kind: OpKind::ConstString(because.to_owned()),
         ty: HirType::Managed(ManagedType::String),
         origin: origin.clone(),
     });
@@ -11739,6 +12497,31 @@ fn signature_origin(
 /// receiver, [`Hierarchy::erased_call_arity`] erased parameters and an erased
 /// result **at every site by construction**. Nothing to reconstruct, so nothing
 /// to disagree about, and no shape for this to be wrong about.
+/// Both uniform entries, in the order the second one needs.
+///
+/// [`declare_raising_entries`] fills the raising slot for whatever
+/// [`declare_erased_entries`] filled the ordinary one for -- including the
+/// signature layouts that pass has just declared, whose ordinary entry is a named
+/// abort and whose raising entry is the same abort for the same reason. So the
+/// order is a precondition rather than a preference, and one function holding both
+/// calls is where a precondition of that shape cannot be reordered by someone
+/// reading only the call site.
+fn declare_uniform_entries(
+    snapshot: &SemanticSnapshot,
+    hierarchy: &Hierarchy,
+    program: &mut Program,
+    shared: &Shared,
+) {
+    let dispatches_raising = shared.hierarchy.closures_carry;
+    declare_erased_entries(snapshot, hierarchy, program);
+    // **Only where a site can dispatch at the raising slot.** Filling it otherwise
+    // names an entry nothing reaches, and `reachable::prune` cannot drop what a
+    // dispatch table holds. See `every_raising_body_can_carry`.
+    if dispatches_raising {
+        declare_raising_entries(hierarchy, program);
+    }
+}
+
 fn declare_erased_entries(
     snapshot: &SemanticSnapshot,
     hierarchy: &Hierarchy,
@@ -11879,6 +12662,95 @@ fn declare_erased_entries(
         program.funcs.push(shell);
     }
     program.signature_faces = faces;
+}
+
+/// Fill [`Hierarchy::raising_call_slot`] on every layout that fills the ordinary one.
+///
+/// **Every callable class must fill it or a call through it is an
+/// `AbstractMethodError`** — the rule `refuses_to_cross` states for the entry beside
+/// it, applied to the second slot. Two answers, and they are the two
+/// `lower_wanted_closures` leaves behind:
+///
+///   a `@raises` entry exists  name it. Either it wraps a body that records an
+///                             uncaught `throw` and returns, which is what a `try`
+///                             needs, or it is the abort made where that body could
+///                             not be — and the site that reached it is named.
+///   none at all               name the **ordinary** entry. The raising body is the
+///                             same program — measured at 98% of closures — so it
+///                             has nothing to raise and cannot end anything.
+///
+/// **Two rather than three, and that is a property of the producer.** An absent
+/// `@raises` entry used to mean either "the two are one program" or "it refused",
+/// which are opposite treatments of one absence; the abort is made where the body
+/// is, so nothing here has to tell them apart. See `lower_wanted_closures`.
+///
+/// Driven by what already fills `erased_call_slot` rather than by asking which
+/// layouts are closures, so "is this callable" keeps the single answer
+/// `declare_erased_entries` established — and a signature layout, whose ordinary
+/// entry is a named abort, gets that same abort here for the same reason.
+fn declare_raising_entries(hierarchy: &Hierarchy, program: &mut Program) {
+    let (Some(erased), Some(raising)) = (
+        hierarchy.erased_call_slot.map(|slot| slot as usize),
+        hierarchy.raising_call_slot.map(|slot| slot as usize),
+    ) else {
+        return;
+    };
+    let made: rustc_hash::FxHashMap<&str, bool> = program
+        .funcs
+        .iter()
+        .map(|func| (func.name.as_str(), func.abstract_declaration))
+        .collect();
+    let table = hierarchy.table_size();
+    let mut fill: Vec<(usize, String)> = Vec::new();
+    let mut declare: Vec<String> = Vec::new();
+    for (at, layout) in program.layouts.iter().enumerate() {
+        let Some(Some(ordinary)) = layout.methods.get(erased) else {
+            continue;
+        };
+        let with_suffix = format!("{ordinary}{RAISING_SUFFIX}");
+        if made.contains_key(with_suffix.as_str()) {
+            fill.push((at, with_suffix));
+            continue;
+        }
+        // **A declaration is declared twice, a body is named twice.** A signature
+        // layout's ordinary entry is an `abstract_declaration` -- a shape with no
+        // program in it -- and naming that one entry in both slots makes the two
+        // slots one *member* on any backend that names a slot after the layout
+        // that declares it. The JVM does, and said so: `NTS4004 `Closure0` could
+        // not be written: this class declares the method
+        // `erased_call(Lnts/rt/NtsValue;)Lnts/rt/NtsValue;` twice`, because
+        // `declared_member` walked both slots up to the same `Fn3__3#erased_call`.
+        //
+        // So a declaration gets a second declaration under the raising name, and a
+        // *body* is simply named again -- there is nothing to duplicate about a
+        // body, and a closure whose raising variant is the same program genuinely
+        // has one function serving both slots.
+        if made.get(ordinary.as_str()) == Some(&true) {
+            declare.push(ordinary.clone());
+            fill.push((at, with_suffix));
+        } else {
+            fill.push((at, ordinary.clone()));
+        }
+    }
+    // Sorted and deduplicated, so one compiler on one input emits them in one
+    // order and a layout's declaration is written once however many layouts share
+    // it.
+    declare.sort();
+    declare.dedup();
+    for name in declare {
+        let Some(shape) = program.funcs.iter().find(|func| func.name == name) else {
+            continue;
+        };
+        let mut second = shape.clone();
+        second.name = format!("{name}{RAISING_SUFFIX}");
+        program.funcs.push(second);
+    }
+    for (at, name) in fill {
+        if program.layouts[at].methods.len() < table {
+            program.layouts[at].methods.resize(table, None);
+        }
+        program.layouts[at].methods[raising] = Some(name);
+    }
 }
 
 fn relate_closures_to_signatures(
@@ -21996,38 +22868,7 @@ impl<'a> FuncBuilder<'a> {
         // re-lowering the declaration's body here would compile it twice and
         // give recursion two things to mean.
         if info.source.wraps() {
-            // The name the wrapped function is *emitted* under, which is not
-            // always the name written on it: where two modules declare the same
-            // one, `Naming` qualifies both apart, and the definition is emitted
-            // under the qualified name.
-            //
-            // Reading the identifier's text instead called a name that does not
-            // exist. Nothing said so -- the call was to a function the program
-            // does not define, the wrapper was refused for calling something
-            // refused, and the wrapper *is* the closure's only method -- so the
-            // vtable came out null and the compiled program dereferenced it.
-            // `path` has `isPosixPathSeparator` in both `posix.ts` and
-            // `win32.ts` and passes it to `normalizeString`, which is exactly
-            // this shape.
-            if forwarded.len() + 1 != params.len() {
-                return Err(self.unsupported(
-                    id,
-                    "a function used as a value whose parameters are not plain names",
-                ));
-            }
-            let (callee, args) = self.wrapped_call(id, info, forwarded)?;
-            let call = self.push(
-                OpKind::Call {
-                    callee,
-                    args,
-                    frame: None,
-                },
-                return_type.clone(),
-                origin.clone(),
-            );
-            let carried = (!matches!(return_type, HirType::Void)).then_some(call);
-            self.terminate(Terminator::Return(carried));
-            return Ok(self.finish(name, params, return_type, origin, false));
+            return self.lower_wrapper_body(index, info, forwarded, params, return_type);
         }
 
         // `x => x * 2` and `x => { return x * 2; }` are the same function, and
@@ -22494,6 +23335,139 @@ impl<'a> FuncBuilder<'a> {
     /// `self.this`; it goes in front of the forwarded parameters, exactly where
     /// the method declares it. A free function and a static method have no
     /// receiver and are called directly.
+    /// The forwarding body of a wrapper: one call to the function or method it
+    /// stands for.
+    ///
+    /// **A wrapper has no body of its own**, which keeps the wrapped function's one
+    /// definition the only one -- re-lowering the declaration's body here would
+    /// compile it twice and give recursion two things to mean. Its own function
+    /// because it is its own kind of body, and because the raise it has to carry is
+    /// a question only a *built* body raises: see
+    /// [`Self::wrapper_callee_that_raises`].
+    fn lower_wrapper_body(
+        &mut self,
+        index: usize,
+        info: &ClosureInfo,
+        forwarded: Vec<ValueId>,
+        params: Vec<Param>,
+        return_type: HirType,
+    ) -> Result<Func, Diagnostic> {
+        let id = info.node;
+        let (_, name) = closure_names(index);
+        let origin = self.origin(id);
+
+        // The name the wrapped function is *emitted* under, which is not
+        // always the name written on it: where two modules declare the same
+        // one, `Naming` qualifies both apart, and the definition is emitted
+        // under the qualified name.
+        //
+        // Reading the identifier's text instead called a name that does not
+        // exist. Nothing said so -- the call was to a function the program
+        // does not define, the wrapper was refused for calling something
+        // refused, and the wrapper *is* the closure's only method -- so the
+        // vtable came out null and the compiled program dereferenced it.
+        // `path` has `isPosixPathSeparator` in both `posix.ts` and
+        // `win32.ts` and passes it to `normalizeString`, which is exactly
+        // this shape.
+        if forwarded.len() + 1 != params.len() {
+            return Err(self.unsupported(
+                id,
+                "a function used as a value whose parameters are not plain names",
+            ));
+        }
+        let (callee, args) = self.wrapped_call(id, info, forwarded)?;
+        // **A wrapper has to carry its callee's raise too, and nothing did it.**
+        // Its body is one call *built* here rather than lowered from source, so
+        // `raising_suffix_of` and `test_for_a_raise` -- both keyed on a call node
+        // -- never see it. Inside a raising variant the wrapper called the plain
+        // function, and the `throw` sailed past the very flag test the dispatch
+        // had just set up.
+        //
+        // `examples/a-callbacks-throw-inside-a-try`'s `call(thrower)` arm is the
+        // witness, and its three sibling spellings -- an arrow at the call site,
+        // a function expression, an arrow held in a `const` -- were all fine,
+        // because those bodies *are* nodes. Four spellings of one construct and
+        // only the fourth could see it, which is why that fixture has four.
+        let callee = self.wrapper_callee_that_raises(id, info, callee)?;
+        let names_a_raising_copy =
+            matches!(&callee, Callee::Direct(name) if name.ends_with(RAISING_SUFFIX));
+        let call = self.push(
+            OpKind::Call {
+                callee,
+                args,
+                frame: None,
+            },
+            return_type.clone(),
+            origin.clone(),
+        );
+        if names_a_raising_copy {
+            // **`self.returns` is what the raise path returns a zero of**, and the
+            // wrapper path never set it: the non-wrapper body below saves and
+            // restores it, because a wrapper had no `return` of its own to type.
+            // Without this the test's no-handler branch took whatever the last body
+            // left there and emitted `Return(None)` at a `double` --
+            // `ReturnType { func: "Closure364#call@raises", expected: Float { bits:
+            // 64 }, found: None }`, 111 invalid-HIR modules across the corpora from
+            // one unset field. Saved and restored on the same terms, because
+            // closures nest.
+            let outer = std::mem::replace(&mut self.returns, return_type.clone());
+            self.emit_the_raise_test(&origin);
+            self.returns = outer;
+        }
+        let carried = (!matches!(return_type, HirType::Void)).then_some(call);
+        self.terminate(Terminator::Return(carried));
+        Ok(self.finish(name, params, return_type, origin, false))
+    }
+
+    /// The callee a wrapper's forwarding call names inside a **raising** variant:
+    /// the raising copy where one exists, and a refusal where the callee can raise
+    /// and there is none.
+    ///
+    /// The refusal is what `lower_wanted_closures` turns into the entry that aborts
+    /// by name, so a `try` reaching such a wrapper declines loudly rather than losing
+    /// the `throw`. A wrapper for a **method** is always that case: a raising copy is
+    /// made of plain functions.
+    ///
+    /// Outside a raising variant this is the identity, which is what keeps the
+    /// ordinary path exactly as it was.
+    fn wrapper_callee_that_raises(
+        &self,
+        id: NodeId,
+        info: &ClosureInfo,
+        callee: Callee,
+    ) -> Result<Callee, Diagnostic> {
+        if !self.raises {
+            return Ok(callee);
+        }
+        // **The symbol of a declaration, found through the declaration list.** A
+        // `FunctionDeclaration` node carries no symbol in this encoding -- its name
+        // child does -- so asking the node gave `None` for every wrapper, the test
+        // below answered "cannot raise", and the rename never happened. The same
+        // trap as a `Parameter` node, two functions over; `thenable_job` reads it
+        // this way for the same reason.
+        let can_raise = self
+            .snapshot
+            .symbols
+            .iter()
+            .position(|record| record.declarations.contains(&info.node))
+            .and_then(|at| u32::try_from(at).ok())
+            .is_some_and(|symbol| self.throwing.contains(&symbol));
+        if !can_raise {
+            return Ok(callee);
+        }
+        if info.source == ClosureSource::Function
+            && self.raising.contains(&info.node)
+            && let Callee::Direct(name) = callee
+        {
+            return Ok(Callee::Direct(format!("{name}{RAISING_SUFFIX}")));
+        }
+        Err(self.unsupported(
+            id,
+            "a function used as a value inside a body that carries a `throw` back to its \
+             caller, where what it forwards to has no raising copy to call",
+        ))
+    }
+
     fn wrapped_call(
         &mut self,
         id: NodeId,
@@ -46609,6 +47583,42 @@ impl<'a> FuncBuilder<'a> {
                 handled.push(node);
                 return None;
             }
+            // **Or the raising uniform entry**, which is the same handler edge
+            // through a slot instead of through a name. A raising copy is made of
+            // plain functions and a closure's body is not one, so a call reaching
+            // one through a function value had nothing to name -- the largest
+            // refused shape either test262 corpus has, 548 cases whose only root
+            // is this sentence.
+            //
+            // Decided here rather than at the call, so that the set of calls this
+            // `try` handles and the set it refuses are still one answer: the
+            // dispatch below reads `raising_calls`, and a site that decided for
+            // itself could name the raising slot in a `try` this walk had refused.
+            //
+            // The slot is the whole condition. `declare_raising_entries` fills it
+            // on every layout that fills the ordinary one, so a program that has
+            // it has an entry for every callable class -- and a program without it
+            // has no closures at all, where the call refuses anyway.
+            if self.calls_a_function_value(node) {
+                if self.hierarchy.raising_call_slot.is_some() && self.hierarchy.closures_carry {
+                    handled.push(node);
+                    return None;
+                }
+                // **A fifth answer, and it names a fifth piece of work.** The entry
+                // exists and this program may not dispatch at it, because some body
+                // it would lower with `raises` set cannot carry what *it* calls --
+                // almost always a method or an accessor, which have no raising
+                // copies. Its own sentence rather than the one above, because the
+                // two are cleared by different work and a census matching on text
+                // has to pick one. See `every_raising_body_can_carry` for why the
+                // question is asked of the whole program.
+                return Some((
+                    node,
+                    "through a function value, and some closure in this program calls something \
+                     whose own `throw` cannot be carried"
+                        .to_owned(),
+                ));
+            }
             return Some((node, self.why_no_raising_copy(node)));
         }
         // **An accessor is a call**, which is the first sentence of
@@ -46740,6 +47750,26 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// A bound has to sit on every edge of the cycle it bounds, and the cheapest
     /// way to be sure of that is for the walk to have one entry point.
+    /// Whether this call's callee arrived as a **value**: a parameter, a field, an
+    /// element, anything the checker has no body for.
+    ///
+    /// [`THROUGH_A_FUNCTION_VALUE`] read back out of `reason_without_a_leaf`
+    /// rather than the two conditions restated, because the raising uniform entry
+    /// covers exactly the calls that sentence refuses and a second derivation of
+    /// "is this a function value" is how the two would come apart. The comparison
+    /// is on the constant, so it cannot match a sentence that merely reads alike.
+    ///
+    /// **Restricted to a `CallExpression`.** A `new` through a value dispatches
+    /// through a constructor rather than through a closure entry, and a getter read
+    /// is a call `call_within` reaches by its own path; neither goes through
+    /// [`Self::closure_callee`], which is what the entry serves.
+    fn calls_a_function_value(&self, call: NodeId) -> bool {
+        self.kind_of(call) == Some(syntax::CALL_EXPRESSION)
+            && self
+                .reason_without_a_leaf(call)
+                .is_some_and(|why| std::ptr::eq(why, THROUGH_A_FUNCTION_VALUE))
+    }
+
     fn reason_without_a_leaf(&self, call: NodeId) -> Option<&'static str> {
         // **A parameter's callee has a declaration and it is not a body.** The
         // checker resolves `fn()` where `fn: () => void` to that *type*'s
@@ -46762,7 +47792,7 @@ impl<'a> FuncBuilder<'a> {
                     .any(|at| self.kind_of(*at) == Some(syntax::PARAMETER))
             })
         {
-            return Some("through a function value, which has no raising copy to call");
+            return Some(THROUGH_A_FUNCTION_VALUE);
         }
         let Some(declaration) = self
             .snapshot
@@ -46772,7 +47802,7 @@ impl<'a> FuncBuilder<'a> {
         else {
             // No declaration to copy: the callee arrived as a value. Every
             // component and every effect in a React render is one of these.
-            return Some("through a function value, which has no raising copy to call");
+            return Some(THROUGH_A_FUNCTION_VALUE);
         };
         match self.kind_of(declaration) {
             Some(syntax::METHOD_DECLARATION) => {
@@ -46944,9 +47974,96 @@ impl<'a> FuncBuilder<'a> {
     /// again: the two answering differently is a call that names a copy and
     /// does not test, or tests and does not name one.
     fn raising_suffix_of(&self, call: NodeId) -> &'static str {
-        let names_one = self.raising_calls.contains(&call)
-            || (self.raises && self.has_a_raising_copy(call));
+        // **`has_a_raising_copy` on both sides, because a suffix is a *name*.**
+        // `raising_calls` used to imply it -- `call_within` only put a call there
+        // when a copy of its callee existed -- and no longer does: a call through a
+        // function value is in that set and has no name to suffix. Asking the same
+        // question in both branches keeps this answering "is there a copy called
+        // this" rather than "is this call followed by a test", which is
+        // [`Self::tested_for_a_raise`] and is now a wider set.
+        let names_one =
+            self.has_a_raising_copy(call) && (self.raising_calls.contains(&call) || self.raises);
         if names_one { RAISING_SUFFIX } else { "" }
+    }
+
+    /// Whether this call dispatches through [`Hierarchy::raising_call_slot`]
+    /// rather than through the ordinary uniform entry.
+    ///
+    /// Two ways in, and they are the two things a handler edge can come from:
+    ///
+    ///   the `try` around it   `lower_try` recorded the call in `raising_calls`
+    ///                         before it lowered the body, so this and the walk
+    ///                         that decided the `try` handles it are one answer.
+    ///   this body raises      inside a raising copy every call that *can* raise
+    ///                         names its raising form, because the copy's contract
+    ///                         is to record and return rather than end the program
+    ///                         -- see [`Self::raises`]. Without this arm a copy
+    ///                         holding such a call would dispatch at the ordinary
+    ///                         entry, which calls `nts_uncaught`, and the raise it
+    ///                         exists to carry would end the program from inside a
+    ///                         `try` that compiled.
+    ///
+    /// The second arm is what lets `a_copy_can_contain` admit an indirect callee at
+    /// all, and those two are one decision: a copy may hold a call it cannot name
+    /// exactly because this dispatches it at an entry that can.
+    fn dispatches_to_a_raising_entry(&self, call: NodeId) -> bool {
+        self.hierarchy.raising_call_slot.is_some()
+            && (self.raising_calls.contains(&call) || self.raises)
+            && self.calls_a_function_value(call)
+    }
+
+    /// Refuse a call a raising body cannot carry, which is the whole of what makes
+    /// that body's contract true.
+    ///
+    /// A raising body records an uncaught `throw` and returns, and its caller tests
+    /// the flag -- so a call inside it that can raise and is **not** followed by that
+    /// test is a `throw` that ends the program from inside a `try` that compiled.
+    ///
+    /// **`raising_copies` guarantees this for a plain function and nothing guaranteed
+    /// it for a closure.** `a_copy_can_contain` shrinks the eligible set until every
+    /// callee of a copy can be carried; `lower_wanted_closures` builds a raising
+    /// variant of every closure it builds, with no eligibility to lose. So a closure
+    /// whose body called a **method** got a variant that called that method's plain
+    /// entry, and `outcomes/a-throw-one-call-below-a-function-value` is the record --
+    /// the conformance lane found it through test262's
+    /// `classelementname-abrupt-completion`, one call deeper than any arm I had
+    /// written. The differential cannot see it: an abort reads as "the compiled
+    /// program declined".
+    ///
+    /// **Here rather than in `test_for_a_raise`, and that mattered.** The first
+    /// version sat there and never fired, because a *method* call does not go through
+    /// `push_call` at all -- six entries in the probe, every one from another path.
+    /// `lower_call` is the single entry every `CallExpression` passes, so it sees what
+    /// the push sites individually do not.
+    ///
+    /// The refusal becomes the abort entry: `lower_wanted_closures` turns an `Err`
+    /// from the raising build into `refuses_to_cross`' shell, so a `try` reaching such
+    /// a closure aborts by name instead of losing the `throw`. Measured at **0
+    /// reachable entries** across all 29 runtime corpora.
+    fn a_raising_body_carries_this_call(&self, id: NodeId) -> Result<(), Diagnostic> {
+        if !self.raises || self.tested_for_a_raise(id) || !self.calls_compiled_code(id) {
+            return Ok(());
+        }
+        let why = self.why_no_raising_copy(id);
+        Err(self.unsupported(
+            id,
+            &format!(
+                "a call inside a body that carries a `throw` back to its caller, whose own \
+                 callee cannot carry one: {why}"
+            ),
+        ))
+    }
+
+    /// Whether this call is followed by the `nts_raising` test.
+    ///
+    /// The union of the two ways a callee can raise into this body: a *named*
+    /// callee whose raising copy this call names ([`Self::raising_suffix_of`]), and
+    /// a *value* dispatched at the raising uniform entry
+    /// ([`Self::dispatches_to_a_raising_entry`]). One predicate, because the test
+    /// and the dispatch disagreeing is a raise nobody looks for or a branch on a
+    /// flag nobody sets.
+    fn tested_for_a_raise(&self, call: NodeId) -> bool {
+        !self.raising_suffix_of(call).is_empty() || self.dispatches_to_a_raising_entry(call)
     }
 
     /// Whether this call's callee is a plain function with a raising copy.
@@ -50320,6 +51437,7 @@ impl<'a> FuncBuilder<'a> {
         if let Some(settled) = self.lower_settler_call(id)? {
             return Ok(settled);
         }
+        self.a_raising_body_carries_this_call(id)?;
         if self.is_optional_call(id) {
             return self.lower_optional_call(id);
         }
@@ -54502,10 +55620,21 @@ impl<'a> FuncBuilder<'a> {
     /// flag set for this function's own caller to find. That is reachable only
     /// inside a raising copy, whose callers all test -- see [`Self::raises`].
     fn test_for_a_raise(&mut self, id: NodeId) {
-        if self.raising_suffix_of(id).is_empty() {
+        if !self.tested_for_a_raise(id) {
             return;
         }
         let origin = self.origin(id);
+        self.emit_the_raise_test(&origin);
+    }
+
+    /// The test itself, given an origin: the half a body this compiler *builds*
+    /// needs, where there is no call node to ask about.
+    ///
+    /// See [`Self::test_for_a_raise`] for the shape and for why it goes immediately
+    /// after the call. Split out for the forwarding body of a wrapper, whose only
+    /// statement is a call it was never given a node for.
+    fn emit_the_raise_test(&mut self, origin: &Origin) {
+        let origin = origin.clone();
         let flag = self.runtime_call("nts_raising", Vec::new(), HirType::Int { bits: 32, signed: true }, origin.clone());
         let zero = self.push(OpKind::ConstInt(0), HirType::Int { bits: 32, signed: true }, origin.clone());
         let raised = self.push(
@@ -55148,9 +56277,38 @@ impl<'a> FuncBuilder<'a> {
         // receiver's descriptor, and it cannot know the callee without folding
         // the load. What is left is an indirect call per iteration where there
         // should be an inlined multiply.
+        // **A call this `try` handles names the raising entry**, which is the same
+        // uniform ABI at the next index: the entry records an uncaught `throw` and
+        // returns rather than ending the program, and `test_for_a_raise` puts the
+        // flag test after the call. Every backend already reads the slot off the
+        // callee, so this is the whole of the dispatch change.
+        //
+        // Through `dispatches_to_a_raising_entry`, which reads `raising_calls` --
+        // filled by `lower_try` before it lowered the body, so the site cannot name
+        // the raising slot inside a `try` that refused the call, and cannot fail to
+        // name it inside one that accepted it -- and also answers for a raising
+        // copy's own body, where every call that can raise names its raising form.
+        let raising = self.dispatches_to_a_raising_entry(id);
         let callee = if receiver_ty.0 >= super::SYNTHETIC_TYPE_FLOOR {
+            // **A raising call cannot arrive here**, and saying so is cheaper than
+            // being right by accident. This branch is the receiver whose static type
+            // *is* the closure class, which is what an arrow written at the site
+            // gives; `calls_a_function_value` answers only for a callee the checker
+            // has no body for -- a parameter, a field, an element -- whose type is
+            // the signature. If the two ever meet, the direct name would have to be
+            // the raising body, which exists only where it is a different program.
+            if raising {
+                return Err(self.unsupported(
+                    id,
+                    "a call inside a `try` through a function value whose closure class is known                      here, which would name a raising body that may not have been made",
+                ));
+            }
             Callee::Direct(closure_names(closure_index(receiver_ty)).1)
-        } else if let Some(slot) = self.hierarchy.erased_call_slot {
+        } else if let Some(slot) = if raising {
+            self.hierarchy.raising_call_slot
+        } else {
+            self.hierarchy.erased_call_slot
+        } {
             // **The erased entry, because this is the branch that does not know
             // the body.** The comment above states the condition exactly: where
             // the receiver's static type *is* the closure class, which body runs
@@ -55511,9 +56669,19 @@ impl<'a> FuncBuilder<'a> {
         // `coerce` rather than a hand-rolled `Erase`, because an erasure carries
         // which absence it was (`OpKind::Erase`'s `absent`) and getting that from
         // the type alone is the mistake `absence_at_excluding` exists to prevent.
+        // **Either uniform entry**, because the ABI is the one thing the two share:
+        // `erased_call` builds both from the same `uniform_params` at the same
+        // width, and the raising one differs only in what its body does with an
+        // uncaught `throw`. Asking for one slot by name left a raising call passing
+        // the *written* arguments to an entry declaring the uniform ones and
+        // reading a concrete result where it returns `erased` -- which the probe
+        // showed as `call.closure[2] %0(%0) : f64` against an entry returning
+        // `erased`, and C would have compiled.
         let erased_entry = matches!(
             callee,
-            Callee::Closure { slot } if Some(slot) == self.hierarchy.erased_call_slot
+            Callee::Closure { slot }
+                if Some(slot) == self.hierarchy.erased_call_slot
+                    || Some(slot) == self.hierarchy.raising_call_slot
         );
         if !erased_entry {
             return Ok(self.push(
@@ -55557,6 +56725,14 @@ impl<'a> FuncBuilder<'a> {
             HirType::Erased,
             origin.clone(),
         );
+        // **The flag test, before anything reads the answer.** A direct call gets
+        // this from `push_call`; a dispatch does not go through it, so the entry
+        // recorded the `throw` and the caller carried on with a value that has the
+        // right width and no meaning. `test_for_a_raise` is a no-op unless
+        // `lower_try` recorded this call, and it leaves the builder in the
+        // carry-on block -- so the read-back below is on the path where nothing
+        // was raised, which is the reason it is here and not after it.
+        self.test_for_a_raise(id);
         // The answer, read back at what this site expects.
         //
         // An explicit `Unerase` rather than `coerce`, and the difference is a

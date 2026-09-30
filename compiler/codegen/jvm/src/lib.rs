@@ -598,29 +598,48 @@ fn typed_face(
 }
 
 /// The program's callable root: `types::callable_class`, abstract, declaring
-/// the uniform entry every callable class fills. `None` where no layout is
-/// callable, so a program without closures writes no class for them.
+/// **every uniform entry** a callable class fills -- the erased one, and the
+/// raising one where a `try` guards a call through a function value
+/// (`Program::raising_call_slot`). `None` where no layout is callable, so a
+/// program without closures writes no class for them.
 ///
-/// The entry's name and descriptor are read off the first callable layout's own
-/// entry rather than rebuilt here: every one is built by the same
+/// Every one, because a call through a signature-typed value is emitted on the
+/// root (`types::reference_class`), so an entry the root does not declare is a
+/// call site nothing links: the raising entry was
+/// `NoSuchMethodError: Callable.erased_call$raises` at run time on the JVM,
+/// with C agreeing, until it was declared here too.
+///
+/// Each entry's name and descriptor are read off a callable layout's own entry
+/// at that slot rather than rebuilt: every one is built by the same
 /// `uniform_params` at one program-wide width, so any of them is all of them,
-/// and a second derivation of that shape is the thing that would drift.
+/// and a second derivation of that shape is the thing that would drift. Each
+/// slot is read from `Program` at use -- removing the unread `closure_slot`
+/// renumbers the table.
 fn callable_root(package: &str, program: &Program) -> Result<Option<Class>, Diagnostic> {
-    let Some(slot) = program.erased_call_slot else { return Ok(None) };
-    let entry = program.layouts.iter().find_map(|layout| {
-        let name = layout.methods.get(slot as usize)?.as_ref()?;
-        let func = program.funcs.iter().find(|f| &f.name == name)?;
-        let member = hierarchy::declared_member(program, layout, slot as usize)
-            .unwrap_or_else(|| hierarchy::member_name(name));
-        Some((member, instance_descriptor(package, program, func)?))
-    });
-    let Some((member, descriptor)) = entry else { return Ok(None) };
+    let entry_at = |slot: u32| {
+        program.layouts.iter().find_map(|layout| {
+            let name = layout.methods.get(slot as usize)?.as_ref()?;
+            let func = program.funcs.iter().find(|f| &f.name == name)?;
+            let member = hierarchy::declared_member(program, layout, slot as usize)
+                .unwrap_or_else(|| hierarchy::member_name(name));
+            Some((member, instance_descriptor(package, program, func)?))
+        })
+    };
+    let Some(erased) = program.erased_call_slot.and_then(entry_at) else { return Ok(None) };
+    let mut entries = vec![erased];
+    if let Some(raising) = program.raising_call_slot.and_then(entry_at)
+        && !entries.contains(&raising)
+    {
+        entries.push(raising);
+    }
     let origin = program_origin(program);
     let mut pool = Pool::new();
     let mut builder = ClassBuilder::new(types::callable_class(package), "java/lang/Object".to_owned());
     builder.access = access::PUBLIC | access::SUPER | access::ABSTRACT;
     builder.source_file = Some("nts".to_owned());
-    builder.method(access::PUBLIC | access::ABSTRACT, member, descriptor, None);
+    for (member, descriptor) in entries {
+        builder.method(access::PUBLIC | access::ABSTRACT, member, descriptor, None);
+    }
     builder.default_constructor(&origin, &mut pool).map_err(|error| {
         Diagnostic::error(
             "NTS4003",

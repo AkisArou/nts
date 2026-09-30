@@ -2557,6 +2557,22 @@ pub struct Program {
     /// all erased, which a call site takes when it knows the *signature* and not
     /// the class.
     pub erased_call_slot: Option<u32>,
+    /// See [`Program::erased_call_slot`]. The entry that **records an uncaught
+    /// `throw` and returns** rather than ending the program, which a call inside a
+    /// `try` takes when it knows the signature and not the class.
+    ///
+    /// Two indices rather than one raising entry, because the ordinary path must
+    /// stay free: a single raising entry would put a `nts_raising` load and a branch
+    /// after every closure call in the program, and the arity work behind
+    /// `erased_call_slot` exists to keep that path at one `double`.
+    ///
+    /// **A backend must read this rather than derive it**, and it is the index that
+    /// makes that concrete: it is assigned *after* `erased_call_slot` and so moves
+    /// whatever follows — today the generator's resumption slot. A JVM root that
+    /// declared only the first uniform entry would fail to link a call naming this
+    /// one, and a callable class that did not fill it would be an
+    /// `AbstractMethodError`.
+    pub raising_call_slot: Option<u32>,
     /// Each record type's single declared parent, where it has exactly one.
     ///
     /// **A declared relation the representation does not carry, kept as a fact of
