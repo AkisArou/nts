@@ -25,20 +25,21 @@
 // — now answers "which field is position N" for both ends, because a builder and
 // a reader that each decide the index is the position agree by coincidence.
 //
-// The uniform half of the same shape is **not** fixed and is recorded as a wrong
-// answer in `outcomes/a-rest-tuple-stored-in-a-field-and-spread`: an array
-// representation does not carry the arity, so the spread cannot be expanded, and
-// the class's own type parameter is what would supply it. Different mechanism,
-// which is why the two live apart.
+// The uniform half of the same shape had a **different** mechanism and is closed
+// separately: an array representation does not carry the arity, so the spread could
+// not be expanded at all, and a class instantiation's `Sources` map -- the one that
+// exists for exactly that loss -- was empty.
+// `examples/a-rest-tuple-stored-in-a-field-and-spread` is that arm, and it is where
+// a uniform arm lives; this example stays about the struct representation.
 //
-// **So there is deliberately no uniform arm here, and the first draft had one.**
-// A single-position `[number]` looks like the control this example wants -- one
-// width, nothing to disagree with -- and it is an *instance of the unfixed bug*:
-// one position is uniform by definition. The differential caught it on all four
-// backends, answering the same `6.9…e-310` the original defect answers, because
-// it is the same defect. The one-difference control for the *representation*
-// cannot live in `examples/` until the uniform case is fixed, so it lives in that
-// `outcomes` record, and the control below removes the field round trip instead.
+// **There is deliberately no uniform arm here, and the first draft had one.** A
+// single-position `[number]` looks like the control this example wants -- one
+// width, nothing to disagree with -- and one position is uniform *by definition*,
+// so at the time it was an instance of the other, unfixed defect, answering the
+// same `6.9…e-310`. The differential caught it on all four backends. The lesson
+// outlived the bug: a control has to differ in the thing under test, and "one
+// position" differs in the representation rather than in the round trip. The
+// control below removes the round trip instead, which is the variable.
 
 class Held<A extends unknown[]> {
   readonly fn: (...args: A) => void;

@@ -7385,7 +7385,8 @@ fn lower_class(
         return;
     }
     let mut com_methods = Vec::new();
-    for (copy, (instance, substitution)) in copies_of(generic, class).into_iter().enumerate() {
+    for (copy, (instance, substitution, sources)) in copies_of(generic, class).into_iter().enumerate()
+    {
         for &member in &members {
             // One function for a `static` member, however many copies the class
             // has -- see `class_name_for`, which names it without the
@@ -7399,6 +7400,13 @@ fn lower_class(
                 foreign,
                 Copy {
                     substitution: substitution.clone(),
+                    // **What a tuple's arity survives in.** Empty here until
+                    // 2026-09-30, which is why a spread of a class field typed at
+                    // a type parameter bound to a uniform tuple could not be
+                    // expanded: the array representation the substitution carries
+                    // does not say how many positions there were. See
+                    // `generics::Instantiation::sources`.
+                    sources: sources.clone(),
                     instance,
                     // The suffix its closures are keyed under, so an arrow in
                     // this body picks the variant lowered under this copy's
@@ -8243,13 +8251,25 @@ fn is_static_member(snapshot: &SemanticSnapshot, member: NodeId) -> bool {
 fn copies_of(
     generic: &rustc_hash::FxHashMap<NodeId, Vec<super::generics::Instantiation>>,
     id: NodeId,
-) -> Vec<(Option<TypeId>, Substitution)> {
+) -> Vec<(Option<TypeId>, Substitution, super::generics::Sources)> {
     generic.get(&id).map_or_else(
-        || vec![(None, Substitution::default())],
+        || {
+            vec![(
+                None,
+                Substitution::default(),
+                super::generics::Sources::default(),
+            )]
+        },
         |instances| {
             instances
                 .iter()
-                .map(|instance| (Some(instance.ty), instance.substitution.clone()))
+                .map(|instance| {
+                    (
+                        Some(instance.ty),
+                        instance.substitution.clone(),
+                        instance.sources.clone(),
+                    )
+                })
                 .collect()
         },
     )
@@ -8294,7 +8314,7 @@ fn class_copies(
                 suffix: instantiation_suffix(snapshot, instance.ty),
                 instance: Some(instance.ty),
                 substitution: instance.substitution,
-                sources: super::generics::Sources::default(),
+                sources: instance.sources,
             });
         }
     }
@@ -55272,7 +55292,7 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<ValueId, Diagnostic> {
         // **A tuple has two representations and this end knew one of them.** The
         // other end had the same gap, and the pair is why
-        // `outcomes/a-rest-tuple-stored-in-a-field-and-spread` held two arms
+        // `examples/a-rest-tuple-stored-in-a-field-and-spread` held two arms
         // failing two ways: `tuple_representation` sends a tuple of mixed storage
         // widths to a struct -- `[string, number]` is a pointer beside a double,
         // and no array of one element width holds both -- so a spread of one

@@ -105,6 +105,22 @@ pub struct Instantiation {
     pub ty: TypeId,
     /// What each of the declaration's type parameters stands for here.
     pub substitution: Substitution,
+    /// The source types behind [`Self::substitution`]. See [`Sources`].
+    ///
+    /// **`FunctionInstance` has carried this since the day a representation was
+    /// found not to name a copy, and a class instantiation did not**, which cost
+    /// the arity of every tuple bound to a class type parameter: inside
+    /// `Held<[f64, f64]>`'s methods `A` represents as an array of `f64`, the array
+    /// does not carry `2`, and `fixed_arity_positions` had nothing to recover it
+    /// from. So a spread of `this.args` could not be expanded and the callee got
+    /// one erased array where its uniform entry wanted two values --
+    /// `examples/a-rest-tuple-stored-in-a-field-and-spread`'s `uniform` arm, which
+    /// was an `outcomes` record until this line existed.
+    ///
+    /// One line beside the substitution, at the one place that holds the
+    /// parameter and the argument together, because that is where the function
+    /// side records it too.
+    pub sources: Sources,
 }
 
 /// The type each class **declaration** node has, by the symbol it declares.
@@ -214,11 +230,17 @@ pub fn instantiations(snapshot: &SemanticSnapshot) -> FxHashMap<SymbolId, Vec<In
             // another generic — `Box<T>` written in a generic function — and not
             // an instantiation this can emit a copy for.
             let mut substitution = Substitution::default();
+            let mut sources = Sources::default();
             let mut usable = true;
             for (parameter, argument) in parameters.iter().zip(&concrete) {
                 match representation(snapshot, *argument) {
                     Some(ty) if !is_parameter(snapshot, *argument) => {
                         substitution.insert(*parameter, ty);
+                        // Beside the representation and not instead of it, which
+                        // is `unify`'s own wording: the representation still
+                        // decides sharing for every type that has no arity, and
+                        // this is what a tuple's arity survives in.
+                        sources.insert(*parameter, *argument);
                     }
                     _ => usable = false,
                 }
@@ -227,7 +249,7 @@ pub fn instantiations(snapshot: &SemanticSnapshot) -> FxHashMap<SymbolId, Vec<In
                 let sigma = sigma_of_instance(snapshot, declaration, ty);
                 let substitution =
                     substitution.with_instances(&templates, Owner::Type(symbol), &sigma);
-                instances.push(Instantiation { ty, substitution });
+                instances.push(Instantiation { ty, substitution, sources });
             }
         }
         // Sorted, so one compiler on one input emits its copies in one order.
