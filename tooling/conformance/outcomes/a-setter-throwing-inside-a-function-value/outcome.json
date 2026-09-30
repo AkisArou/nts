@@ -1,8 +1,0 @@
-{
-  "run": "build",
-  "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught Error: from the setter",
-  "node": "exit 1; nts: uncaught Observed: assignment to a setter=caught;",
-  "measured_with": "87d5573779e3bbe2",
-  "source": "measured"
-}

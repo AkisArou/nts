@@ -1,3 +1,9 @@
+// **Guarding nothing since 8f18d73ba.** Its `try` around `validateObject`
+// refuses now -- constructing `ERR_INVALID_ARG_TYPE` can raise, and there is
+// no raising copy to catch it -- so the artefact observes no arm, and a
+// regression in `validateObject` would not show here. It answered as node does
+// before; that was sound by luck. It guards again when a constructor that can
+// raise has a raising copy (the compiler lane's method and accessor work).
 // **A guard on runtime internals nothing else compares.** `validateObject`
 // (runtime/node/internal/validators.ts) and the `ERR_INVALID_ARG_TYPE` message
 // it builds (internal/errors.ts, through `staticObjectName`) gave wrong answers
