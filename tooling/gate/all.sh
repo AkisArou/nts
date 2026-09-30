@@ -426,18 +426,21 @@ profile() {
     out=$("'"${NTS_BIN:-$root/target/release/nts}"'" emit-c "$m" \
             --out "'"$work"'/$name" --napi 2>&1)
     printf "%s" "$out" | grep -c "NTS1001" > "'"$work"'/$name.refusals"
-    # **And the sites, because the count above is occurrences.** One source
-    # line is reported once per generic instantiation and once per module that
-    # imports the file, and those multipliers are not spread evenly: three
-    # lines in runtime/web-platform/src/streams/fifo.ts were 882 of 17,106 on
-    # 2026-09-21, a 294x multiplier on a single construct, and they were the
-    # largest item in the census. Deduplicated the same run is ~1,741 sites.
+    # **The whole diagnostic, not just its position**, because one reader counts
+    # it: `tooling/census/node-refusals.ts --from` reads these files and reports
+    # occurrences, places and (site, cause) pairs together, and the ceiling below
+    # takes its number from that line. Deriving a count here with a `sort -u` as
+    # well would be the same fact written twice, which is the defect this
+    # repository has paid for more than any other -- and it is what the file did
+    # until 2026-09-30, when a `sort -u` over bare positions here and the richer
+    # count in the census were two answers to one question.
     #
-    # Both are printed so neither can be read as the other. The ceiling still
-    # sits on occurrences, which is what every number in the comments below
-    # was measured in; the site count is here to rank work, which occurrences
-    # cannot do. `tooling/census/node-refusals.ts` is the ranked form.
-    printf "%s" "$out" | grep -oE "^[^ ]*: NTS1001" > "'"$work"'/$name.sites"
+    # One source line is reported once per generic instantiation and once per
+    # module that imports the file, and those multipliers are not spread evenly:
+    # three lines in runtime/web-platform/src/streams/fifo.ts were 882 of 17,106
+    # on 2026-09-21, a 294x multiplier on a single construct, and the largest
+    # item in the census. That is why the ceiling is no longer on occurrences.
+    printf "%s" "$out" | grep -E "^[^ ]*: NTS1001 " > "'"$work"'/$name.sites"
     printf "%s" "$out" | grep -q "panicked at" && echo "$name" > "'"$work"'/$name.crashed"
     # **The second number, which moves differently.** A refusal count cannot
     # tell a fix that makes one *speak* from a regression that *removes* code:
@@ -503,12 +506,28 @@ profile() {
       > "'"$work"'/$name.defined" || echo 0 > "'"$work"'/$name.defined"
     exit 0
   ' _
-  refusals=$(cat "$work"/*.refusals 2>/dev/null | awk '{s+=$1} END {print s+0}')
-  sites=$(cat "$work"/*.sites 2>/dev/null | sort -u | awk 'END {print NR+0}')
+  # **Counted by the census, from the files just written.** One emission, one
+  # counting implementation, and the ranked form and the ceiling read the same
+  # bytes. `gate:` is a machine-readable line with a key per number, so a
+  # reworded sentence cannot silently change which number this reads.
+  counted=$(node "$root/tooling/census/node-refusals.ts" --from "$work" 2>&1 \
+              | awk '/^gate: /')
+  refusals=$(printf '%s' "$counted" | sed -n 's/.*occurrences=\([0-9]*\).*/\1/p')
+  places=$(printf '%s' "$counted" | sed -n 's/.*places=\([0-9]*\).*/\1/p')
+  pairs=$(printf '%s' "$counted" | sed -n 's/.*pairs=\([0-9]*\).*/\1/p')
+  # **Not measured is a failure, and an empty count is not zero.** The census
+  # exits non-zero and prints no `gate:` line when it found no `.sites` files at
+  # all -- a producer that wrote nothing -- and under a ceiling that would read
+  # as a corpus with no refusals in it and pass. The same rule `definitions.ts`
+  # states for a module that emits nothing.
+  if [ -z "$pairs" ] || [ -z "$refusals" ] || [ -z "$places" ]; then
+    echo "  no gate: line from node-refusals.ts --from -- this counted nothing, which is not zero"
+    return 1
+  fi
   defined=$(cat "$work"/*.defined 2>/dev/null | awk '{s+=$1} END {print s+0}')
   crashed=$(cat "$work"/*.crashed 2>/dev/null)
-  printf '  %s modules emitted, %s refusal(s) at %s site(s), %s definition(s)\n' \
-    "$(ls -d "$root"/runtime/node/*/tsconfig.json | wc -l)" "$refusals" "$sites" "$defined"
+  printf '  %s modules emitted, %s refusal(s) at %s place(s) over %s (site, cause) pair(s), %s definition(s)\n' \
+    "$(ls -d "$root"/runtime/node/*/tsconfig.json | wc -l)" "$refusals" "$places" "$pairs" "$defined"
   # The ceiling. Lower it when a feature earns it -- and raise it when the
   # CORPUS earns it, which is new and is now the faster of the two.
   #
@@ -733,7 +752,70 @@ profile() {
   # tree*, an uncommitted module reddens this step for every lane before its own
   # commit lands. That is what happened here, and it is why the ceiling moved
   # ahead of the module rather than with it.
-  ceiling=16650
+  #
+  # =====================================================================
+  # **2026-09-30: THE UNIT CHANGED. The ceiling is on (site, cause) pairs.**
+  #
+  # Every figure ABOVE and BELOW this block is in **occurrences** and must not be
+  # compared with the number here. They are different quantities, and one of them
+  # can move in the opposite direction to the thing it exists to watch.
+  #
+  # The step went red at 17148 against 16650 and stayed red, and rather than raise
+  # it a fifth time the two lanes measured where the 1801 since the basis had come
+  # from. The JVM lane counted the step's own way, each revision in its own
+  # checkout with its own pin:
+  #
+  #     3bd697168 (this ceiling's basis)   27 modules   15347  (no crypto in the glob)
+  #     41dd45663                          28 modules   17209
+  #     a6b5f0445                          28 modules   17257
+  #     c2e47028a (tip)                    28 modules   17148
+  #
+  # **None of it was reach going backwards.** crypto accounts for +139 and joined
+  # the glob after the basis, so there is no crypto arm to diff; of its 778 sites
+  # only **80 are in its own source**, the rest being shared web-platform and
+  # internal code other modules already carry. About seventeen modules gained a
+  # near-uniform +38 to +44, all of it between 3bd697168 and 41dd45663 -- before
+  # either lane started -- in files that did not change in that range.
+  #
+  # **And the decisive number, because the two units disagree in sign.** Over the
+  # same interval `assert` went 799 -> 839 occurrences while its distinct refusal
+  # sites went 492 -> 489, and the two stream files behind it went 118 -> 117
+  # sites. More instantiated copies of one generic repeating the same refusals:
+  # a copy is a body, so occurrences inflate while the number of places the
+  # compiler cannot compile *fell*. A ceiling whose number rises while its subject
+  # falls is not a bound, which is what the block above says in capitals about
+  # itself ("AN ABSOLUTE CEILING HAS STOPPED MEASURING WHAT IT WAS FOR") and had
+  # no unit to fix it with. `tooling/census/node-refusals.ts` had written the
+  # whole indictment down already -- a 294x multiplier on three lines of fifo.ts
+  # -- and the step printed its count beside the ceiling without ceilinging it.
+  #
+  # Reproduced here rather than taken: at `e090f74d7`, the gate's own emission,
+  #
+  #     28 modules   17148 occurrences   1398 places   1417 (site, cause) pairs
+  #
+  # and byte-identical across a compiler change measured both arms, which is the
+  # confirmation none of the four raises above ever had.
+  #
+  # **Pairs and not places.** A place deduplicates two *different* refusals that
+  # land on one line and column -- 19 positions today -- and a ceiling must not be
+  # blind to a new cause appearing at an old one. Pairs is the narrower of the two
+  # units that do not inflate, which is the whole reason for choosing between them.
+  #
+  # **Slack 40, calibrated rather than picked.** The largest *legitimate* rise in
+  # the history below is +19 sites over +6 distinct causes (the call-inside-a-`try`
+  # refusal, which made a silent construct speak), so 40 is about twice the worst
+  # honest movement on record and well under the regressions this is for -- the
+  # thousand-occurrence one three repairs shared spanned many sites. The corpus
+  # argument that raised this four times is also spent: `runtime/node` is 28
+  # modules and complete, and a 29th importing the same dependencies now adds only
+  # its own positions rather than another copy of theirs.
+  #
+  # So: when this trips, the first action is still not to raise it. Run
+  # `node tooling/census/node-refusals.ts --from target/gate-profile`, which prints
+  # the pairs **per module**, and name the module -- the remedy this file
+  # prescribes five times above and could not perform until the count moved here.
+  # =====================================================================
+  ceiling=1457
   # **A band, not a floor, and the difference is deliberate.**
   #
   # 17882 definitions at `9a9fa3a8`. A floor at that number would go red the
@@ -754,7 +836,7 @@ profile() {
 '       "$defined" "$floor"
     return 1
   fi
-  if [ "$refusals" -gt "$ceiling" ]; then
+  if [ "$pairs" -gt "$ceiling" ]; then
     # **Both numbers, because one of them cannot tell you which happened.**
     # This said "reach went backwards" and meant it as a diagnosis; the comment
     # above it says the two are for reading together, and the check was reading
@@ -766,13 +848,16 @@ profile() {
     # this file says twice above. The reader needs the definition count in the
     # same breath to tell a compiler that stopped reaching from a corpus that
     # got bigger, and now gets it.
-    printf '  ^ above the ceiling of %s, with %s definition(s)\n' "$ceiling" "$defined"
+    printf '  ^ %s (site, cause) pair(s), above the ceiling of %s, with %s definition(s)\n' \
+      "$pairs" "$ceiling" "$defined"
+    printf '  ^ which module: node tooling/census/node-refusals.ts --from %s\n' "$work"
     printf '  ^ definitions up as well means the corpus grew -- raise the ceiling\n'
     printf '  ^ definitions flat or down means reach went backwards -- do not\n'
     return 1
   fi
-  [ "$refusals" -lt $((ceiling - 400)) ] && \
-    printf '  ^ lower the ceiling in tooling/gate/all.sh toward %s\n' "$refusals"
+  # 40 rather than the old 400, which was a tenth of a number ten times larger.
+  [ "$pairs" -lt $((ceiling - 40)) ] && \
+    printf '  ^ lower the ceiling in tooling/gate/all.sh toward %s\n' "$pairs"
   if [ -n "$crashed" ]; then
     echo "  the emitter panicked on:"
     echo "$crashed" | sed 's/^/    /'
