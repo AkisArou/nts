@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught RangeError: from the getter",
+  "node": "exit 1; nts: uncaught Observed: entries of a throwing getter=RangeError;",
+  "measured_with": "1028a73c71f4e297",
+  "source": "measured"
+}
