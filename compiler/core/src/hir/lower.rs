@@ -5047,6 +5047,31 @@ fn a_copy_can_contain(
     if probe.reads_an_accessor(call) {
         return false;
     }
+    // **And a `sort` comparator, which `call_within` refuses for a `try` and this did
+    // not.** The doc above says what a copy may contain and what a `try` may contain
+    // are one rule; this was the fourth place that sentence was true of and the code
+    // was not, after the accessor here, the accessor in `throwing_symbols` and the
+    // `new`.
+    //
+    // What it cost: `eb92ee8f9` made a method copyable, so `Jar#smallest@raises`
+    // was built around `items.sort(ascending)` -- and `lower_sort_with` emits the
+    // comparator call with the comparator's **written** arguments while
+    // `closure_callee` names the *raising* slot, which holds the uniform entry. The
+    // ordinary body survives that only because `fields::devirtualize` rewrites the
+    // known class back to `Closure0#call`; it does not fire for the raising slot, so
+    // C called through an entry of the wrong ABI and the sort did not order --
+    // **5 where node answers 1**, and the JVM refused the copy outright (NTS4001, the
+    // operand-stack accounting). The JVM lane found it from `runtime/web-platform`'s
+    // `CookieJar#evict@raises` and recorded it as `outcomes/a-method-raising-copy-
+    // calling-a-function-value-it-does-not-devirtualize`.
+    //
+    // **A refusal is what it was before `eb92ee8f9`** and is what it is again. The
+    // feature behind it is a *written* raising entry for a closure: `closure_slot`
+    // holds the written `#call` and there is no slot for its `@raises`, which is a
+    // fourth table index and its own piece of work.
+    if probe.sorts_with_a_comparator(call) {
+        return false;
+    }
     // **A `new` needs no arm of its own.** `throwing_symbols` walks a class over its
     // constructor and its field initializers, so a class that can throw is in
     // `Throwing::any` and `a_call_that_can_raise` below says so -- and the callee a
@@ -7496,50 +7521,64 @@ fn children_that_run(probe: &FuncBuilder, id: NodeId) -> Vec<NodeId> {
 }
 
 fn calls_in_the_body_of(probe: &FuncBuilder, declaration: NodeId) -> Vec<NodeId> {
-    fn walk(probe: &FuncBuilder, id: NodeId, into: &mut Vec<NodeId>) {
-        match probe.kind_of(id) {
-            Some(
-                syntax::FUNCTION_DECLARATION
-                | syntax::METHOD_DECLARATION
-                | syntax::CLASS_DECLARATION
-                | syntax::CLASS_EXPRESSION,
-            ) => return,
-            // **A `new` belongs here too**, and did not: the walk yielded
-            // `CallExpression` only, so a body that constructs a class whose
-            // constructor or field initializer throws looked like a body that calls
-            // nothing. Third omission in the same shape, after the accessor in this
-            // walk and the accessor in `throwing_symbols`' -- and every one of them
-            // was found by running a program the census called compiled.
-            Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION) => into.push(id),
-            // **An accessor is a call, and an assignment to one is not a call node.**
-            // `call_within` draws exactly this line for a `try` and has since 6 of 29
-            // cases declined without it; this walk did not, so a body that writes a
-            // throwing setter looked like a body that calls nothing. `{ set y(v) {
-            // throw … } }` with `attempt(() => { x.y = 23; })` then escaped the
-            // handler on `ac1533ca4` -- loud, and a wrong answer -- because the gate
-            // counts what a body *calls* and never saw the setter. Found by the
-            // conformance lane through test262's dstr `put-prop-ref-user-err` files
-            // and recorded as `outcomes/a-setter-throwing-inside-a-function-value`.
-            //
-            // A read is the same shape, which is what their private-static-getter
-            // file shows, and `reads_an_accessor` answers for both by the member
-            // symbol's declarations rather than by the syntax around it.
-            Some(syntax::PROPERTY_ACCESS_EXPRESSION | syntax::ELEMENT_ACCESS_EXPRESSION)
-                if probe.reads_an_accessor(id) =>
-            {
-                into.push(id);
-            }
-            _ => {}
-        }
-        for child in children_that_run(probe, id) {
-            walk(probe, child, into);
-        }
-    }
     let mut calls = Vec::new();
     for child in children_that_run(probe, declaration) {
-        walk(probe, child, &mut calls);
+        calls_under(probe, child, &mut calls);
     }
     calls
+}
+
+/// The calls a **parameter default** evaluates, its own expression included.
+///
+/// [`calls_in_the_body_of`] starts *below* its argument, which is right for a
+/// declaration whose body is a block and wrong here: in `x = thrower()` the default
+/// **is** the call, so a walk that skipped the root saw nothing at all.
+fn calls_in_a_default(probe: &FuncBuilder, default: NodeId) -> Vec<NodeId> {
+    let mut calls = Vec::new();
+    calls_under(probe, default, &mut calls);
+    calls
+}
+
+/// One walk, shared, because two spellings of "which calls does this subtree make"
+/// is how the set a `try` handles and the set a copy is built from come apart.
+fn calls_under(probe: &FuncBuilder, id: NodeId, into: &mut Vec<NodeId>) {
+    match probe.kind_of(id) {
+        Some(
+            syntax::FUNCTION_DECLARATION
+            | syntax::METHOD_DECLARATION
+            | syntax::CLASS_DECLARATION
+            | syntax::CLASS_EXPRESSION,
+        ) => return,
+        // **A `new` belongs here too**, and did not: the walk yielded
+        // `CallExpression` only, so a body that constructs a class whose
+        // constructor or field initializer throws looked like a body that calls
+        // nothing. Third omission in the same shape, after the accessor in this
+        // walk and the accessor in `throwing_symbols`' -- and every one of them
+        // was found by running a program the census called compiled.
+        Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION) => into.push(id),
+        // **An accessor is a call, and an assignment to one is not a call node.**
+        // `call_within` draws exactly this line for a `try` and has since 6 of 29
+        // cases declined without it; this walk did not, so a body that writes a
+        // throwing setter looked like a body that calls nothing. `{ set y(v) {
+        // throw … } }` with `attempt(() => { x.y = 23; })` then escaped the
+        // handler on `ac1533ca4` -- loud, and a wrong answer -- because the gate
+        // counts what a body *calls* and never saw the setter. Found by the
+        // conformance lane through test262's dstr `put-prop-ref-user-err` files
+        // and recorded as `outcomes/a-setter-throwing-inside-a-function-value`.
+        //
+        // A read is the same shape, which is what their private-static-getter
+        // file shows, and `reads_an_accessor` answers for both by the member
+        // symbol's declarations rather than by the syntax around it.
+        Some(syntax::PROPERTY_ACCESS_EXPRESSION | syntax::ELEMENT_ACCESS_EXPRESSION)
+            if probe.reads_an_accessor(id) =>
+        {
+            into.push(id);
+        }
+        _ => {}
+    }
+    for child in children_that_run(probe, id) {
+    calls_under(probe, child, into);
+    }
 }
 
 /// The symbols a copy re-types, at the copy's types: its parameters by
@@ -20165,6 +20204,30 @@ impl<'a> FuncBuilder<'a> {
             });
         }
 
+        // **A generator declared as a *method*.** `begin_generator` had one
+        // caller, `lower_function`, so a `*named()` or a `*[Symbol.iterator]()`
+        // reached its body with no frame reserved and every `yield` in it said
+        // "a `yield` outside a generator" -- true of the lowering and false of
+        // the source. Not about symbol keys: a plainly named one said it too.
+        //
+        // This half was written and thrown away once, because the *call* site
+        // could not name the frame and the method compiled unreachable. It is
+        // back with `PropertyRecord::declaration`, which is the other half.
+        let generated = self.begin_generator(member)?;
+        let return_type = self.method_return_type(member, is_constructor, generated.as_ref())?;
+        // **Before the parameters, because a parameter's default can raise.** A
+        // destructured parameter's element default -- `{ x = thrower() }` -- is
+        // evaluated while the pattern is bound, which is the loop below; inside a
+        // raising copy that call is tested for a raise, and the test's "return a dummy
+        // of this function's type" reads `self.returns`. Set after the loop, it was
+        // still `Void`, so the dummy was *absent*: `ReturnType { expected: Float,
+        // found: None }`, invalid HIR, on a program `eb92ee8f9` had just started
+        // compiling. The same move `lower_function` makes, for the same reason.
+        //
+        // `begin_async` and `finish_params` stay below: the first allocates the
+        // promise before the body runs and the second needs the bound parameters.
+        self.returns = return_type.clone();
+
         let mut declared = Vec::new();
         for child in self.children(member) {
             if self.kind_of(child) != Some(syntax::PARAMETER) {
@@ -20196,20 +20259,7 @@ impl<'a> FuncBuilder<'a> {
         // that honestly as a store followed by `__builtin_unreachable()` --
         // which the C compiler reads as a licence to compute anything at all
         // in the caller.
-        // **A generator declared as a *method*.** `begin_generator` had one
-        // caller, `lower_function`, so a `*named()` or a `*[Symbol.iterator]()`
-        // reached its body with no frame reserved and every `yield` in it said
-        // "a `yield` outside a generator" -- true of the lowering and false of
-        // the source. Not about symbol keys: a plainly named one said it too.
-        //
-        // This half was written and thrown away once, because the *call* site
-        // could not name the frame and the method compiled unreachable. It is
-        // back with `PropertyRecord::declaration`, which is the other half.
-        let generated = self.begin_generator(member)?;
-        let return_type = self.method_return_type(member, is_constructor, generated.as_ref())?;
-
         let asynchronous = self.begin_async(member, &return_type)?;
-        self.returns = return_type.clone();
         let return_type = self.finish_params(&mut params, return_type, &origin)?;
         // A class with no base has no `super()`, so its own field initialisers
         // go at the top of its constructor. A derived class's go immediately
@@ -22803,14 +22853,6 @@ impl<'a> FuncBuilder<'a> {
             .emitted_function_name(id)
             .ok_or_else(|| self.unsupported(id, "an anonymous function"))?;
 
-        let mut params = Vec::new();
-        for child in &children {
-            if self.kind_of(*child) != Some(syntax::PARAMETER) {
-                continue;
-            }
-            params.extend(self.lower_param(*child, u32::try_from(params.len()).unwrap_or(0))?);
-        }
-
         // The return type comes from the annotation when there is one. Without it
         // the checker's inferred type is on the signature, not on any node, so an
         // unannotated function is refused rather than guessed at.
@@ -22837,13 +22879,33 @@ impl<'a> FuncBuilder<'a> {
             self.materialize(id, &return_type)?;
             return_type
         };
+        // **The return type before the parameters, because a parameter's default can
+        // raise.** A destructured parameter's element default -- `{ x = thrower() }`
+        // -- is evaluated while the pattern is bound, which is here; inside a raising
+        // copy that call is tested for a raise, and the test's "return a dummy of this
+        // function's type" reads `self.returns`. Set after the loop, it was still
+        // `Void`, so the dummy was *absent*: `ReturnType { expected: Float, found:
+        // None }`, invalid HIR, on a program `eb92ee8f9` had just started compiling.
+        //
+        // Moved rather than derived a second time, which is the trap this file keeps
+        // falling into -- one answer for "what does this function return", read by the
+        // body's `return`s and by the raise path alike. `begin_async` stays where it
+        // is: it allocates the promise before the body runs and nothing above needs
+        // it.
+        self.returns = return_type.clone();
+
+        let mut params = Vec::new();
+        for child in &children {
+            if self.kind_of(*child) != Some(syntax::PARAMETER) {
+                continue;
+            }
+            params.extend(self.lower_param(*child, u32::try_from(params.len()).unwrap_or(0))?);
+        }
 
         // An `async` function allocates its promise before the body runs, so
         // that every `return` has one to settle -- and so that the allocation
         // happens once rather than on each path out.
         let asynchronous = self.begin_async(id, &return_type)?;
-
-        self.returns = return_type.clone();
         self.lower_block(body)?;
 
         if let Some(result) = asynchronous {
@@ -24824,11 +24886,18 @@ impl<'a> FuncBuilder<'a> {
                     // it through `method([x = 23] = [,])`, where the census
                     // reported it as *a parameter of unrepresentable type (a
                     // tuple)*, one cause under a message naming another.
+                    // The same scoped substitution the two paragraphs above make for
+                    // `this` and for the parameters before it, for the third thing a
+                    // default inherits from the call that evaluates it.
+                    let handled = self.a_default_inherits_the_handler(call, node);
                     let want = self.parameter_representation(call, args.len());
                     let lowered = match &want {
                         Some(want) => self.lower_expecting(node, want),
                         None => self.lower_expression(node),
                     };
+                    for call in handled {
+                        self.raising_calls.remove(&call);
+                    }
                     for (symbol, before) in shadowed {
                         match before {
                             Some(value) => self.bindings.insert(symbol, value),
@@ -40964,6 +41033,46 @@ impl<'a> FuncBuilder<'a> {
     /// `slice(start = 0, end = this.length)` is `Buffer.prototype.toString`'s shape,
     /// the receiver is fully built by then, and refusing it cost real reach once
     /// before -- the paragraph beside this call site records that.
+    /// The calls a parameter default makes, handed the **raising context of the call
+    /// that evaluates it** -- the nodes added, for the caller to take back.
+    ///
+    /// A default is evaluated *here*, in the caller, which is where JavaScript
+    /// evaluates one: so a `throw` in it reaches the caller's handler, and the calls
+    /// in it have to name raising copies and be tested after.
+    ///
+    /// They were not, and it was a **wrong answer rather than a refusal**:
+    /// `call_within` walks the `try`'s own body, and a default lives in the *callee's*
+    /// declaration, where no such walk reaches it. So `try { f() } catch` over
+    /// `function f(x = thrower()) {}` emitted a plain `thrower()` whose uncaught
+    /// `throw` ended the program where node catches -- 17 of 17 cases, on a program
+    /// nothing refused. It is `ac1533ca4`'s; `eb92ee8f9` made it reachable for a
+    /// method and a static, which is how the conformance lane found it
+    /// (`outcomes/a-throwing-default-of-a-method-called-in-a-function-value`).
+    ///
+    /// **Inserted into `raising_calls` rather than answered by a second flag**,
+    /// because that set is what `raising_suffix_of`, `dispatches_to_a_raising_entry`
+    /// and `tested_for_a_raise` all read -- one fact, three readers, and a flag beside
+    /// it would be a second spelling of "this call is handled". Taken back after, for
+    /// the reason the bindings are: the same default node is lowered again at the next
+    /// call that omits the argument, and there the `try` may be a different one or
+    /// none.
+    ///
+    /// `self.raises` needs no arm: inside a raising body `raising_suffix_of` already
+    /// answers for every call the body holds.
+    fn a_default_inherits_the_handler(&mut self, call: NodeId, default: NodeId) -> Vec<NodeId> {
+        if !self.raising_calls.contains(&call) {
+            return Vec::new();
+        }
+        let inner = calls_in_a_default(self, default);
+        let mut added = Vec::new();
+        for call in inner {
+            if self.raising_calls.insert(call) {
+                added.push(call);
+            }
+        }
+        added
+    }
+
     fn a_default_the_instance_cannot_answer(
         &mut self,
         node: NodeId,
@@ -48264,9 +48373,14 @@ impl<'a> FuncBuilder<'a> {
             return Some(THROUGH_A_FUNCTION_VALUE);
         };
         match self.kind_of(declaration) {
-            Some(syntax::METHOD_DECLARATION) => {
-                Some("a method, and a raising copy is made of plain functions only")
-            },
+            // **No arm for a `MethodDeclaration` any more.** It said "a method, and a
+            // raising copy is made of plain functions only", which `eb92ee8f9` made
+            // false: a method is copied. What is left when a method has no copy is
+            // that it *lost the fixpoint*, which is its callee's reason and not the
+            // method's -- so `None`, and the walk below names the leaf, exactly as it
+            // does for a plain function. Keeping the arm described 746 occurrences
+            // with a sentence about a limitation that no longer exists, and pointed
+            // every reader at the wrong piece of work.
             Some(syntax::CONSTRUCTOR) => {
                 Some("a constructor, and a raising copy is made of plain functions only")
             },
@@ -48317,8 +48431,15 @@ impl<'a> FuncBuilder<'a> {
     /// `None` where a copy *could* be made, which is the case where the leaf is
     /// further down and the walk should keep going.
     fn why_not_copyable(&self, declaration: NodeId) -> Option<&'static str> {
-        if self.kind_of(declaration) != Some(syntax::FUNCTION_DECLARATION) {
-            return Some("which is not a plain function, and a raising copy is made of those only");
+        // **The predicate first, and the sentences only as its prose.** The doc above
+        // says a condition added to `a_copy_can_be_made_of` is one a reader here can
+        // see is missing -- and when `eb92ee8f9` added the method, this still read
+        // "which is not a plain function", so every method that merely lost the
+        // fixpoint was described as a shape that is never copied. Asking the predicate
+        // means a new kind falls through to the general sentence below instead of
+        // being lied about.
+        if a_copy_can_be_made_of(self.snapshot, self, declaration) {
+            return None;
         }
         if is_generic_function(self.snapshot, declaration) {
             return Some("a generic, whose copy suffix already names its instantiation");
@@ -48330,7 +48451,7 @@ impl<'a> FuncBuilder<'a> {
         {
             return Some("`async`, so its `throw` rejects the promise it returned rather than raising");
         }
-        None
+        Some("which is neither a plain function nor a method, and a raising copy is made of those only")
     }
 
     fn the_leaf_that_cannot_be_carried(
@@ -48368,6 +48489,25 @@ impl<'a> FuncBuilder<'a> {
             ));
         }
         for call in calls_in_the_body_of(self, declaration) {
+            // **The two shapes `a_copy_can_contain` refuses outright**, named here for
+            // the same reason they are refused there: one rule, and now three readers.
+            // `calls_compiled_code` answers *no* about `sort` -- it is a runtime
+            // helper -- so the loop skipped straight past the one call in the body
+            // that cannot be carried and the caller printed "something whose `throw`
+            // cannot be carried" with nothing named, which is the sentence this walk
+            // exists to replace.
+            if self.sorts_with_a_comparator(call) {
+                return Some((
+                    self.spelled_callee(call),
+                    "a `sort` comparator, which is called".to_owned(),
+                ));
+            }
+            if self.reads_an_accessor(call) {
+                return Some((
+                    self.spelled_callee(call),
+                    "an accessor, which is a call".to_owned(),
+                ));
+            }
             if self.has_a_raising_copy(call) || !self.calls_compiled_code(call) {
                 continue;
             }
@@ -56559,15 +56699,34 @@ impl<'a> FuncBuilder<'a> {
             .map(|declaration| self.location(declaration))
             .and_then(|at| self.foreign.get(&(at.file.0, at.span.end)))
             .map(|row| row.key.clone());
+        // **A static is a second place that names a member, and it needed the
+        // raising suffix too.** `callee_for` resolves an *instance* member and a
+        // static has no receiver to dispatch on, so it arrives here instead -- and
+        // `eb92ee8f9`, which made a method copyable, left this path calling the
+        // ordinary entry: `try { C.raises(n) } catch` ended the program on the
+        // `throw` where node catches, on 10 of 10 cases, with nothing refusing.
+        // Before that commit the call refused by name, so this is a refusal turned
+        // into a wrong answer, which is the one direction this work must never go.
+        //
+        // No virtual arm, which is the difference from `callee_for`: a static is not
+        // overridden through a slot, so there is always a name to suffix.
+        //
+        // **The fourth site that needed telling about the flag test**, after
+        // `push_call`, `finish_closure_call` and the method call in `push_call`'s
+        // neighbour. The count is the argument for asking the question in one place
+        // one day; until then each is named where it is.
+        let suffix = self.raising_suffix_of(id);
         let callee = match bound {
             Some(key) => Callee::External(key),
-            None => Callee::Direct(format!("{class_name}.{member_name}")),
+            None => Callee::Direct(format!("{class_name}.{member_name}{suffix}")),
         };
-        Ok(self.push(
+        let answer = self.push(
             OpKind::Call { callee, args, frame: None },
             ty,
             origin,
-        ))
+        );
+        self.test_for_a_raise(id);
+        Ok(answer)
     }
 
     /// `f(x)` where `f` holds a closure.

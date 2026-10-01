@@ -319,3 +319,65 @@ export function crossingAnOverloadedCallInAClosure(n: number): number {
     return -1;
   }
 }
+
+// **A static method, which is a second place that names a member.** `callee_for`
+// resolves an *instance* member; a static has no receiver to dispatch on, so it
+// arrives at `lower_static_call` instead -- and that path named the ordinary entry
+// and emitted no flag test, so the `throw` ended the program where node catches.
+// 10 of 10 cases, with nothing refusing. Before methods were copyable the call
+// refused by name, so it was a refusal turned into a wrong answer.
+class Statics {
+  static raises(n: number): number {
+    if (n > 3) {
+      throw new RangeError("too deep");
+    }
+    return n * 2;
+  }
+}
+
+/** Compiles: the static's own copy, named at the call. */
+export function crossingAStaticMethod(n: number): number {
+  try {
+    return Statics.raises(n & 7);
+  } catch {
+    return -1;
+  }
+}
+
+// **A parameter default is evaluated in the CALLER**, which is where JavaScript
+// evaluates one -- so a `throw` in it reaches the caller's handler, and the calls in
+// it have to name raising copies and be tested. They were not: `call_within` walks
+// the `try`'s own body and a default lives in the *callee's* declaration, where no
+// such walk reaches it. 17 of 17 cases ended the program.
+//
+// Two arms, because the two defaults are evaluated in different places: a
+// parameter's own default at the call, and a destructured parameter's **element**
+// default while the pattern is bound, which is inside the callee. The second is why
+// `self.returns` has to be known before the parameters are bound -- the raise test
+// there returns a dummy of the function's type, and after the loop it was still
+// `void`, which is invalid HIR rather than an escape.
+function withADefault(x: number = raises(7)): number {
+  return x;
+}
+
+function withADestructuredDefault({ x = raises(7) }: { x?: number } = {}): number {
+  return x;
+}
+
+/** Compiles: the default's call names `raises@raises` in the caller. */
+export function crossingAParameterDefault(n: number): number {
+  try {
+    return withADefault() + n;
+  } catch {
+    return -1;
+  }
+}
+
+/** Compiles: the element default is bound inside the callee's raising copy. */
+export function crossingADestructuredDefault(n: number): number {
+  try {
+    return withADestructuredDefault() + n;
+  } catch {
+    return -1;
+  }
+}

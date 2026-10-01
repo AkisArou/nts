@@ -255,3 +255,38 @@ fn a_member_shaped_callee_is_not_a_function_held_as_a_value() {
         "and so does the control, whose callee is a plain name"
     );
 }
+
+/// The three shapes that were **escapes rather than refusals** after a method became
+/// copyable, each a second place that decides something `callee_for` decides once.
+///
+///     a static method        `lower_static_call` names the member itself, so it
+///                            needed the suffix and the flag test; 10 of 10 cases
+///                            ended the program
+///     a parameter default    evaluated in the CALLER, where JavaScript evaluates
+///                            one, so a `throw` in it reaches the caller's handler --
+///                            and `call_within` walks the `try`'s own body, where a
+///                            default written in the callee's declaration is not
+///     an element default     of a destructured parameter, bound inside the callee:
+///                            the raise test there returns a dummy of the function's
+///                            type, and `self.returns` was set *after* the parameter
+///                            loop, so the dummy was absent and the copy was invalid
+///                            HIR
+///
+/// Asserted by name because each was reachable only through a different path and a
+/// single arm would have passed on two compilers that were wrong.
+#[test]
+fn a_static_and_a_parameter_default_compile() {
+    let Some(lowered) = lowered() else {
+        eprintln!("SKIP: tsgo is not built");
+        return;
+    };
+    for name in [
+        "crossingAStaticMethod",
+        "Statics.raises@raises",
+        "crossingAParameterDefault",
+        "crossingADestructuredDefault",
+        "withADestructuredDefault@raises",
+    ] {
+        assert!(compiled(&lowered, name), "{name} should be emitted");
+    }
+}
