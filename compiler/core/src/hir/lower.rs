@@ -4065,6 +4065,10 @@ fn presence_keys(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> rustc_hash
 ///                 set that says so. It is arrival precision, available at this
 ///                 one site for free because the arriving closures are ours.
 ///
+/// **`bodily` counts only [`Reached::Unnamed`] as unresolved**, which is exactly the
+/// rule the one set before the split had. A split meant to narrow one reader must not
+/// widen it anywhere, and this one did until `interop` said so.
+///
 /// **Reading `any` there was measured and it is wrong**, not merely coarse:
 /// `examples/an-await-of-a-thenable` went from 2 refusals to 11, every one of them
 /// a `then` whose only unresolved callee is the `resolve` the job hands it. A
@@ -4112,9 +4116,24 @@ enum Reached {
     /// supplies. Unresolved, and separated because the one site that knows which
     /// closures arrive may discount it -- see [`Throwing`].
     OwnCallback,
-    /// Any other callee with nothing to ask: a field, a captured binding, an
-    /// element, a callee with no symbol at all.
+    /// A callee that names something this walk cannot ask: a field, a captured
+    /// binding, an import of a value.
     Elsewhere,
+    /// A callee that names nothing at all -- `fns[0]()`, `(cond ? f : g)()`.
+    ///
+    /// **The only kind [`Throwing::bodily`] counts as unresolved**, because it is the
+    /// only kind the single set before this walk gained its third answer counted: a
+    /// callee *with* a symbol was resolved then, however little the symbol named.
+    ///
+    /// Folding it in with `Elsewhere` left `bodily` **wider** than the set it narrows,
+    /// and that turned `examples/interop/windows-winrt` red on main: the binder's
+    /// `then` for an `IAsyncOperation` reaches a bound member, so the thenable census
+    /// called it raising and refused `await operation` at two sites, cascading to
+    /// `reportAwaited` and a module-scope statement on both Windows backends. Found by
+    /// the JVM lane bisecting three main pins with the example's own `build.sh` --
+    /// `nts hir` refuses nothing there, because `nts.config.ts` compiles a different
+    /// entry surface, so no arm of mine could have seen it.
+    Unnamed,
 }
 
 impl Reached {
@@ -4122,7 +4141,7 @@ impl Reached {
     const fn body(self) -> Option<u32> {
         match self {
             Self::Body(symbol) => Some(symbol),
-            Self::OwnCallback | Self::Elsewhere => None,
+            Self::OwnCallback | Self::Elsewhere | Self::Unnamed => None,
         }
     }
 }
@@ -4374,7 +4393,8 @@ fn walk_one_declaration(
                         Some(target) if a_parameter_among(snapshot, target, &own) => {
                             Reached::OwnCallback
                         }
-                        _ => Reached::Elsewhere,
+                        Some(_) => Reached::Elsewhere,
+                        None => Reached::Unnamed,
                     },
                         // **A symbol is not the same as a function, and that
                         // is where the difference escaped.**
@@ -4512,7 +4532,7 @@ fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwin
         set
     };
     let mut set = close(|reached| !matches!(reached, Reached::Body(_)));
-    let mut bodily = close(|reached| matches!(reached, Reached::Elsewhere));
+    let mut bodily = close(|reached| matches!(reached, Reached::Unnamed));
     // An imported name is its own symbol pointing at the declaring module's, and
     // the caller asks about the *local* one. Following the alias here keeps
     // `calls_compiled_code` a single lookup.
