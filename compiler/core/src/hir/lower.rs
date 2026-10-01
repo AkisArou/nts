@@ -4600,26 +4600,50 @@ fn copyable_symbols(
     }
 }
 
-/// Whether a symbol's declaration is one `function_copies` can make a copy of.
+/// Whether a raising copy can be made of this declaration: a plain function **or a
+/// method**, not generic and not `async`.
 ///
-/// A plain `function`, not generic and not `async`. A method, a constructor and
-/// an accessor are copied by nothing -- `function_copies` is consulted for
-/// `FUNCTION_DECLARATION`s -- and a generic's suffix is already spoken for. An
-/// `async` function never raises synchronously, so it is not this question at
-/// all.
+/// A generic's suffix is already spoken for, and an `async` function never raises
+/// synchronously, so it is not this question at all.
+///
+/// **A method, which nothing copied until now**, and the reason is that it did not
+/// need a second dispatch slot: `callee_for` already makes a call on a member no
+/// subclass overrides a `Callee::Direct` by name, so the copy is reached by naming
+/// it. Where the dispatch *is* virtual there is no raising entry to name and
+/// `callee_for` refuses -- one authority for direct-or-virtual rather than a second
+/// derivation at the `try`.
+///
+/// 1,060 occurrences of "a method, and a raising copy is made of plain functions
+/// only" across the runtime corpora, and the conformance lane's 607 + 60 test262
+/// files, are what this is for.
+///
+/// A constructor and an accessor are still copied by nothing. A constructor is
+/// reached by `new`, which names no function to suffix; an accessor is reached by a
+/// read or a write, which `callee_for` is not on the path of. Both are their own
+/// piece of work and both are named where they are refused.
+fn a_copy_can_be_made_of(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    declaration: NodeId,
+) -> bool {
+    matches!(
+        probe.kind_of(declaration),
+        Some(syntax::FUNCTION_DECLARATION | syntax::METHOD_DECLARATION)
+    ) && !is_generic_function(snapshot, declaration)
+        && !probe
+            .node(declaration)
+            .modifiers
+            .contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
+}
+
+/// Whether a symbol has any declaration a copy can be made of, which is the
+/// question `function_copies` asks about a callee it has only a symbol for.
 fn can_be_copied(snapshot: &SemanticSnapshot, probe: &FuncBuilder, symbol: u32) -> bool {
     let Some(record) = snapshot.symbols.get(symbol as usize) else {
         return false;
     };
     let mut declarations = record.declarations.iter().map(|at| the_function_of(probe, *at));
-    declarations.any(|declaration| {
-        probe.kind_of(declaration) == Some(syntax::FUNCTION_DECLARATION)
-            && !is_generic_function(snapshot, declaration)
-            && !probe
-                .node(declaration)
-                .modifiers
-                .contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
-    })
+    declarations.any(|declaration| a_copy_can_be_made_of(snapshot, probe, declaration))
 }
 
 /// What a raising copy's name ends in.
@@ -4678,7 +4702,43 @@ const THROUGH_A_FUNCTION_VALUE: &str =
 /// Reachability is a syntactic question and it is answerable here: a `try`
 /// statement's body, the calls in it, the declarations those resolve to. The
 /// same question `lower_try` asks per function, asked once for the program, and
-/// the two agree because both start from `call_targets`.
+/// the two agree because both start from [`a_raising_callee_of`].
+/// Which declaration a call's raising copy is made of.
+///
+/// **`call_targets` answers with the declaration the *checker* resolved, and that is
+/// not always the one a copy is made of.** For an overloaded function it is an
+/// overload *signature*: the lowering skips those -- `has_a_body` is the test, and
+/// the comment there says "the implementation that follows is the one to lower" --
+/// so `function_copies` is only ever asked about the implementation. Keyed on the
+/// resolved node, the seed held the signature, nothing lowered a copy of it, and the
+/// site named `f@raises` anyway:
+///
+/// ```ts
+/// export function decode(rows: number): number;
+/// export function decode(rows: string): number;
+/// export function decode(rows: number | string): number { ... }
+/// try { decode(n) } catch { }
+/// ```
+///
+/// gave `` `caught` cannot be compiled because it calls `decode@raises`, which
+/// nothing in this program defines `` **even where the implementation compiles** --
+/// a cascade with no root, and a `try` lost for a reason no reader could act on. It
+/// stood on main from `ac1533ca4`; `runtime/node/fs` showed two of them once methods
+/// had copies and the surrounding bodies lowered far enough to reach them.
+///
+/// `raising_copies`' own doc warned about this family -- "a symbol with two
+/// declarations ... answers `copyable` for one of them" -- and being keyed by node
+/// is what *creates* it rather than what avoids it, because the two sides then pick
+/// different nodes. One function, so they cannot.
+fn a_raising_callee_of(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    call: NodeId,
+) -> Option<NodeId> {
+    let callee = snapshot.call_targets.get(&call).and_then(|target| target.callee)?;
+    Some(implementation_of(snapshot, probe, callee))
+}
+
 fn raising_copies(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
@@ -4696,8 +4756,13 @@ fn raising_copies(
             continue;
         };
         for declaration in &record.declarations {
-            let declaration = the_function_of(probe, *declaration);
-            if probe.kind_of(declaration) == Some(syntax::FUNCTION_DECLARATION) {
+            // Through `implementation_of` for the reason [`a_raising_callee_of`]
+            // gives: a body-less overload signature can never be *dis*qualified by
+            // the fixpoint below either, because it has no body for
+            // `calls_in_the_body_of` to walk, so it would survive as a member of
+            // this set that nothing ever lowers.
+            let declaration = implementation_of(snapshot, probe, the_function_of(probe, *declaration));
+            if a_copy_can_be_made_of(snapshot, probe, declaration) {
                 eligible.insert(declaration);
             }
         }
@@ -4790,7 +4855,7 @@ fn raising_copies(
     // it, so what it *calls* needs a copy and it does not.
     for root in pending {
         for call in calls_in_the_body_of(probe, root) {
-            if let Some(callee) = snapshot.call_targets.get(&call).and_then(|it| it.callee)
+            if let Some(callee) = a_raising_callee_of(snapshot, probe, call)
                 && eligible.contains(&callee)
             {
                 copies.insert(callee);
@@ -4833,7 +4898,7 @@ fn close_over_callees(
     let mut pending: Vec<NodeId> = copies.iter().copied().collect();
     while let Some(declaration) = pending.pop() {
         for call in calls_in_the_body_of(probe, declaration) {
-            let Some(callee) = snapshot.call_targets.get(&call).and_then(|it| it.callee) else {
+            let Some(callee) = a_raising_callee_of(snapshot, probe, call) else {
                 continue;
             };
             if eligible.contains(&callee) && copies.insert(callee) {
@@ -4947,8 +5012,6 @@ fn wrappable_functions(
         .collect()
 }
 
-/// Whether a raising copy may contain this call: it cannot raise, or the copy
-/// it would name exists.
 /// Whether this call's callee is an arrow or a function expression -- a closure, whose
 /// raising variant `lower_wanted_closures` builds.
 ///
@@ -4968,6 +5031,8 @@ fn a_closure_callee(snapshot: &SemanticSnapshot, probe: &FuncBuilder, call: Node
         })
 }
 
+/// Whether a raising copy may contain this call: it cannot raise, or the copy it
+/// would name exists.
 fn a_copy_can_contain(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
@@ -5012,10 +5077,10 @@ fn a_copy_can_contain(
     if !a_call_that_can_raise(probe, throwing, call) {
         return true;
     }
-    snapshot
-        .call_targets
-        .get(&call)
-        .and_then(|target| target.callee)
+    // [`a_raising_callee_of`], because `eligible` holds implementations: asking with
+    // the resolved node would answer "no copy" for every call to an overloaded
+    // function and take its caller out of the fixpoint.
+    a_raising_callee_of(snapshot, probe, call)
         .is_some_and(|declaration| eligible.contains(&declaration))
 }
 
@@ -5067,7 +5132,40 @@ fn functions_used_as_values(
             NodeKind::Syntax(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION)
         ) {
             let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
-            excluded.extend(probe.children(id).first().copied());
+            // **The callee's own name, which for a member call is the member.**
+            // `check.same(x)` has a property access in the callee position, so
+            // excluding the callee *node* left the identifier `same` inside it reading
+            // as a mention of a value -- and a namespaced or method-shaped callee is
+            // the commonest spelling in the test262 harness (`assert.sameValue`).
+            //
+            // It cost 71 cases of `test262-cases`, one of them a pass, and only once
+            // `copies` held implementations rather than overload signatures: before
+            // that the stray identifier answered `same`'s *signature*, which was in
+            // the set, so the over-approximation was invisible. A false member of one
+            // set hid a false member of another.
+            //
+            // **The name and not the whole callee expression**, which was the first
+            // version and under-approximates: in `f.call(x)` or `(cond ? f : g)(x)`
+            // the inner `f` genuinely *is* used as a value, and excluding every
+            // identifier under the callee would hide it. Those shapes refuse today
+            // for other reasons, which is exactly why the rule must not rest on them
+            // -- an under-approximation here is a wrapper closure with no raising
+            // body, which is a run-time escape rather than a refusal.
+            let Some(callee) = probe.children(id).first().copied() else {
+                continue;
+            };
+            match probe.kind_of(callee) {
+                Some(syntax::IDENTIFIER) => {
+                    excluded.insert(callee);
+                },
+                Some(syntax::PROPERTY_ACCESS_EXPRESSION) => {
+                    excluded.extend(probe.children(callee).last().copied());
+                },
+                // A computed callee (`fns[0]()`) names nothing, and anything else --
+                // a parenthesised expression, a call, a conditional -- holds its
+                // operands as values and is left alone.
+                _ => {},
+            }
         }
     }
     // **The declaration's name, which is not always its first child.** `export
@@ -5081,10 +5179,24 @@ fn functions_used_as_values(
     // Every identifier child, because a declaration's direct identifier children are
     // its name: parameters are `Parameter` nodes, the body is a `Block`, the return
     // annotation is a type.
-    for declaration in eligible {
+    //
+    // **Over every declaration in the program rather than over the set passed in**,
+    // because an overloaded function's *signatures* are not in that set -- `eligible`
+    // holds implementations ([`a_raising_callee_of`]) -- and a signature's own name
+    // would then read as a mention of a value, seeding a copy from a declaration
+    // nobody used as one. The filter below is what restricts the answer to the set,
+    // so excluding a name that is nobody's value costs nothing.
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        if !matches!(
+            node.kind,
+            NodeKind::Syntax(syntax::FUNCTION_DECLARATION | syntax::METHOD_DECLARATION)
+        ) {
+            continue;
+        }
+        let declaration = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
         excluded.extend(
             probe
-                .children(*declaration)
+                .children(declaration)
                 .into_iter()
                 .filter(|child| probe.kind_of(*child) == Some(syntax::IDENTIFIER)),
         );
@@ -5105,7 +5217,12 @@ fn functions_used_as_values(
             symbol
                 .declarations
                 .iter()
-                .map(|at| the_function_of(probe, *at))
+                // Through `implementation_of` for [`a_raising_callee_of`]'s reason: a
+                // set keyed on the declaration a copy is made of must be asked with
+                // that declaration, and an overloaded function's signatures are not
+                // it. Without this a genuine value-use of an overloaded function --
+                // `const f = same` -- asked for all three and got `false` for two.
+                .map(|at| implementation_of(snapshot, probe, the_function_of(probe, *at)))
                 .filter(|declaration| eligible.contains(declaration)),
         );
     }
@@ -5174,11 +5291,7 @@ fn calls_guarded_by_a_try(
             ) {
                 guarded_a_call = true;
             }
-            if let Some(callee) = snapshot
-                .call_targets
-                .get(&at)
-                .and_then(|target| target.callee)
-            {
+            if let Some(callee) = a_raising_callee_of(snapshot, probe, at) {
                 called.insert(callee);
             }
             // The same pruning, so which callees a `try` is taken to reach and
@@ -8232,6 +8345,96 @@ fn register_objc_class(
     });
 }
 
+/// The copy description a class member's builder gets.
+///
+/// **One spelling, because the raising variant needs the same one with a single flag
+/// flipped** -- the substitution, the sources and the closure suffix each have a
+/// reason stated here, and a variant that had three of the four would read a field or
+/// a capture at the wrong type. The same argument `lower_wanted_closures`' `copy_for`
+/// makes for a closure, one construct over.
+fn member_copy(
+    snapshot: &SemanticSnapshot,
+    instance: Option<TypeId>,
+    substitution: &Substitution,
+    sources: &super::generics::Sources,
+    raises: bool,
+) -> Copy {
+    Copy {
+        substitution: substitution.clone(),
+        // **What a tuple's arity survives in.** Empty here until 2026-09-30, which is
+        // why a spread of a class field typed at a type parameter bound to a uniform
+        // tuple could not be expanded: the array representation the substitution
+        // carries does not say how many positions there were. See
+        // `generics::Instantiation::sources`.
+        sources: sources.clone(),
+        instance,
+        // The suffix its closures are keyed under, so an arrow in this body picks the
+        // variant lowered under this copy's substitution. See
+        // `class_closure_variants`.
+        suffix: instance.map(|ty| instantiation_suffix(snapshot, ty)).unwrap_or_default(),
+        raises,
+        ..Copy::default()
+    }
+}
+
+/// The raising copy of one class member, where a `try` can reach it.
+///
+/// Its own function because it is its own step and because `lower_class` is a loop
+/// over copies and members already. See [`a_copy_can_be_made_of`] for why a method
+/// needs no dispatch slot of its own.
+#[allow(clippy::too_many_arguments)]
+fn raising_method(
+    snapshot: &SemanticSnapshot,
+    foreign: &super::runtime::ForeignTable,
+    shared: &Shared,
+    lowered: &mut Lowered,
+    class: NodeId,
+    member: NodeId,
+    instance: Option<TypeId>,
+    substitution: &Substitution,
+    sources: &super::generics::Sources,
+) {
+    // **And its raising copy, where a `try` can reach it.** Lowered a
+    // second time with `raises` set, named with the suffix, and
+    // emitted whether or not it differs -- the same addition-not-
+    // replacement `function_copies` makes for a plain function, and
+    // for the same reason: the call site names one or the other and
+    // cannot know which bodies happen to be identical. One nothing
+    // names is dead and `hir::dce` removes it.
+    //
+    // Renamed after the fact rather than threaded through
+    // `lower_method_of`, because the name is built from the class and
+    // the member there and a second spelling of that is how this file
+    // has gone wrong before. Nothing reads the name during lowering: a
+    // layout's method table holds the *ordinary* entry, which is what
+    // a virtual dispatch needs and what this copy is deliberately not.
+    if !shared.naming.raising.contains(&member) {
+        return;
+    }
+    let copy = member_copy(snapshot, instance, substitution, sources, true);
+    let mut second = shared.builder(snapshot, foreign, copy);
+    match second.lower_method_of(class, member, instance) {
+        Ok(mut raising) => {
+            raising.name = format!("{}{RAISING_SUFFIX}", raising.name);
+            lowered.program.funcs.push(raising);
+        }
+        // Its diagnostics are the ordinary body's a second time, under a name no
+        // source wrote. The `try` that would have named this copy then calls a
+        // function nothing defines -- which `a_raising_body_carries_this_call` cannot
+        // see, because it is about a call inside a raising body and not about the body
+        // failing to exist. So the name is recorded as uncompiled, and the cascade
+        // says so.
+        Err(diagnostic) => {
+            if let Ok((_, name)) = second.emitted_member_name(class, member, instance) {
+                lowered
+                    .program
+                    .uncompiled
+                    .push((format!("{name}{RAISING_SUFFIX}"), diagnostic.message.clone()));
+            }
+        }
+    }
+}
+
 fn lower_class(
     snapshot: &SemanticSnapshot,
     foreign: &super::runtime::ForeignTable,
@@ -8262,24 +8465,7 @@ fn lower_class(
             let mut builder = shared.builder(
                 snapshot,
                 foreign,
-                Copy {
-                    substitution: substitution.clone(),
-                    // **What a tuple's arity survives in.** Empty here until
-                    // 2026-09-30, which is why a spread of a class field typed at
-                    // a type parameter bound to a uniform tuple could not be
-                    // expanded: the array representation the substitution carries
-                    // does not say how many positions there were. See
-                    // `generics::Instantiation::sources`.
-                    sources: sources.clone(),
-                    instance,
-                    // The suffix its closures are keyed under, so an arrow in
-                    // this body picks the variant lowered under this copy's
-                    // substitution. See `class_closure_variants`.
-                    suffix: instance
-                        .map(|ty| instantiation_suffix(snapshot, ty))
-                        .unwrap_or_default(),
-                    ..Copy::default()
-                },
+                member_copy(snapshot, instance, &substitution, &sources, false),
             );
             // An overload signature declares a call shape and has no body. The
             // implementation beside it is the one member emitted, and every
@@ -8347,6 +8533,20 @@ fn lower_class(
                 collect_layouts(&mut lowered.program, builder.layouts);
                 continue;
             }
+            // **Attempted whether or not the ordinary body compiles**, because the two
+            // are independent lowerings and the *call site* names one of them without
+            // asking: `callee_for` appends the suffix when the declaration is in
+            // `naming.raising`, which is a fact about what a `try` reaches and not
+            // about what lowered. Nested inside the `Ok` arm, a member whose ordinary
+            // body refused got no raising copy and no refusal recorded for one either,
+            // so a caller's cascade read `it calls `X@raises`, which nothing in this
+            // program defines` -- a cascade with no root, which `integrity` reports
+            // and which is the weaker of two sentences about one cause. Eight of them
+            // in `outcomes/a-teed-stream-read-back`.
+            raising_method(
+                snapshot, foreign, shared, lowered, class, member, instance, &substitution,
+                &sources,
+            );
             match builder.lower_method_of(class, member, instance) {
                 Ok(func) => lowered.program.funcs.push(func),
                 // **Recorded, not only reported** -- the same omission the two
@@ -48006,11 +48206,26 @@ impl<'a> FuncBuilder<'a> {
     /// [`Hierarchy::raising_call_slot`]. So a raising body can carry all three, which
     /// is what an **IIFE inside a `try`** needed: the conformance lane counts 48
     /// test262 files whose gate nothing else holds down.
+    /// **By value, and `std::ptr::eq` here made the compiler's answer depend on the
+    /// build profile.** A `const` `&'static str` is inlined at each use, and whether
+    /// the duplicates are merged into one address is the linker's business: the
+    /// release profile (`lto = "thin"`, `codegen-units = 1`) merges them and the dev
+    /// profile does not. So this read `true` under `cargo build --release` and
+    /// `false` under `cargo test`, and `examples/an-iife-inside-a-try` compiled for
+    /// the gate and refused three of its arms for its own unit test -- one program,
+    /// two answers, decided by a flag in `Cargo.toml`.
+    ///
+    /// Found by adding an IIFE arm to a second example and watching the test
+    /// contradict `nts hir` on the same file; the two sets the gate is built from
+    /// were identical in both profiles, which is what localised it here.
+    ///
+    /// A comparison of two distinct string constants, which is what this is, cannot
+    /// have the same problem -- and the constants stay the single source of the
+    /// sentence, which is the reason they exist.
     fn calls_a_closure(&self, call: NodeId) -> bool {
         self.kind_of(call) == Some(syntax::CALL_EXPRESSION)
             && self.reason_without_a_leaf(call).is_some_and(|why| {
-                std::ptr::eq(why, THROUGH_A_FUNCTION_VALUE)
-                    || std::ptr::eq(why, A_FUNCTION_WRITTEN_AS_A_VALUE)
+                why == THROUGH_A_FUNCTION_VALUE || why == A_FUNCTION_WRITTEN_AS_A_VALUE
             })
     }
 
@@ -48317,10 +48532,11 @@ impl<'a> FuncBuilder<'a> {
     /// the declaration, which is what `raising_copies` collected and what the
     /// emitted name comes from.
     fn has_a_raising_copy(&self, call: NodeId) -> bool {
-        self.snapshot
-            .call_targets
-            .get(&call)
-            .and_then(|target| target.callee)
+        // Through [`a_raising_callee_of`], which is the one place that turns a call
+        // into the declaration a copy is made of: the set was built from the
+        // implementation and a call to an overloaded function resolves to a
+        // signature, so asking with the resolved node named a copy nobody built.
+        a_raising_callee_of(self.snapshot, self, call)
             .is_some_and(|declaration| self.raising.contains(&declaration))
     }
 
@@ -60671,6 +60887,16 @@ impl<'a> FuncBuilder<'a> {
             ty,
             origin,
         );
+        // **A method call needs the flag test too, and this is the third push that
+        // needed telling.** `push_call` has it for a plain call and
+        // `finish_closure_call` for a dispatch; a method goes through neither, so a
+        // call naming `Class#m@raises` set the flag and nobody looked -- `caught`
+        // returned the copy's dummy zero where node answers -1, on 29 of 29 cases.
+        //
+        // Three push sites and one question is the shape that keeps costing here: the
+        // first version of the net for this lived in `test_for_a_raise` and never
+        // fired for a method for exactly this reason.
+        self.test_for_a_raise(id);
         Ok(self.note_generator_call(call, reserved))
     }
 
@@ -60745,18 +60971,37 @@ impl<'a> FuncBuilder<'a> {
             Some(name) => name.clone(),
             None => self.layout_of(id, declaring)?.name,
         };
-        Ok(
-            if self.hierarchy.overridden(type_id, member_name)
-                && let Some(slot) = self.hierarchy.slot_for(type_id, member_name)
-            {
-                Callee::Virtual {
-                    slot,
-                    declared: format!("{owner}#{member_name}"),
-                }
-            } else {
-                Callee::Direct(format!("{owner}#{member_name}"))
-            },
-        )
+        // **The raising copy of a method is reached by naming it**, which is why a
+        // method needs no second dispatch slot the way a closure did: a member no
+        // subclass overrides is already a `Callee::Direct` here, and the copy is that
+        // name with the suffix.
+        //
+        // **And where the dispatch is virtual there is nothing to name**, so this
+        // refuses rather than silently calling the plain entry -- whose body ends the
+        // program on an uncaught `throw`, with the flag test the site just emitted
+        // watching a flag nothing sets. This is the one place that knows direct from
+        // virtual, so it is the one place that may answer: `call_within` admits any
+        // callee with a raising copy and leaves the distinction here, rather than
+        // deriving it a second time from the receiver's type.
+        let suffix = self.raising_suffix_of(id);
+        if self.hierarchy.overridden(type_id, member_name)
+            && let Some(slot) = self.hierarchy.slot_for(type_id, member_name)
+        {
+            if !suffix.is_empty() {
+                return Err(self.unsupported(
+                    id,
+                    &format!(
+                        "a call inside a `try` to `{member_name}`, which a subclass overrides: \
+                         the dispatch goes through a slot and a raising copy is reached by name"
+                    ),
+                ));
+            }
+            return Ok(Callee::Virtual {
+                slot,
+                declared: format!("{owner}#{member_name}"),
+            });
+        }
+        Ok(Callee::Direct(format!("{owner}#{member_name}{suffix}")))
     }
 
     /// A call into the base class, with `this` as the receiver.
@@ -64623,4 +64868,3 @@ fn bridge_strings(
 fn symbol_tagged(lowerer: &FuncBuilder<'_>, decl: NodeId) -> bool {
     lowerer.node(decl).native.as_ref().is_some_and(|n| n.symbol.is_some() || n.selector.is_some())
 }
-

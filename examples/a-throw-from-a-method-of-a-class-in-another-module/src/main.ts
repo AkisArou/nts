@@ -1,4 +1,13 @@
-// expect: NTS1001 a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `node.applyProps`, a method, and a raising copy is made of plain functions only
+// **This was `blockers/a-throw-from-a-method-of-a-class-in-another-module`, and before that a silent escape.**
+// A method now has a raising copy: `callee_for` makes a call on a member no
+// subclass overrides a `Callee::Direct` by name, so the copy is reached by
+// naming it and no dispatch slot is needed. The refusal this file pinned --
+// "a method, and a raising copy is made of plain functions only" -- is gone, so
+// what it records is a program that agrees with node.
+//
+// What still refuses is one case over: an **overridden** method, whose call is a
+// `Callee::Virtual` through a slot, and a raising copy is reached by name.
+// `examples/a-throw-that-stays-in-its-function` carries that arm.
 //
 // **This refusal replaced a silent escape.** A `throw` from a method of a class
 // declared in *another module* left the caller's `try` with no handler edge at all:
@@ -36,3 +45,15 @@ function tried(props: Props): string {
 }
 export const ok = tried({ label: "x" });
 export const bad = tried({ bogus: 1 });
+
+/**
+ * The same two arms as a function the differential can call, because a
+ * module-scope `const` has no scalar signature and `nts check` compares nothing
+ * without one -- which would make this example "compared nothing" and assert
+ * exactly as much as the blockers file it replaced did about the answer.
+ *
+ * `0` is the caught cross-module throw and `1` the arm that does not throw.
+ */
+export function caught(n: number): string {
+  return (n & 1) === 0 ? tried({ bogus: 1 }) : tried({ label: "x" });
+}

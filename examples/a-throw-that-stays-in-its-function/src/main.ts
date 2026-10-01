@@ -97,11 +97,11 @@ export async function awaitingARejection(n: number): Promise<number> {
   }
 }
 
-// Still refused: a **method** has no raising copy. `function_copies` is
-// consulted for `FUNCTION_DECLARATION`s, so a method, a constructor and an
-// accessor are all outside it -- the same boundary
-// `blockers/an-interface-reached-by-six-routes` records for the structural
-// copies, drawn by the same line of code.
+// **Compiles now, and it is the arm that changed.** A method *does* get a raising
+// copy: `callee_for` makes a call on a member no subclass overrides a
+// `Callee::Direct` by name, so the copy is reached by naming it and no dispatch
+// slot is needed. This arm was the refusal "a method, and a raising copy is made
+// of plain functions only" until methods became copyable.
 class Deeper {
   raise(n: number): number {
     if (n > 3) {
@@ -193,5 +193,129 @@ export function everyFinallyBetweenRuns(n: number): number {
     }
   } catch {
     return trace * 10 + 2;
+  }
+}
+
+// **Still refused, and now for the sentence one case over.** `Overridable#raise`
+// is overridden, so the call is a `Callee::Virtual` through a slot -- and a
+// raising copy is reached by *name*, which a slot dispatch has none of. So this
+// is where the boundary sits after methods became copyable, and it is a
+// different piece of work from the one that moved: a virtual raising entry would
+// be a second slot per method, which is a table as long as the method count.
+//
+// `callee_for` is the one place that knows direct from virtual, so it is the one
+// place that refuses -- `call_within` admits any callee with a raising copy and
+// leaves the distinction there rather than deriving it a second time from the
+// receiver's type.
+class Overridable {
+  raise(n: number): number {
+    if (n > 3) {
+      throw new RangeError("base is too deep");
+    }
+    return n * 2;
+  }
+}
+
+class Overrides extends Overridable {
+  override raise(n: number): number {
+    if (n > 3) {
+      throw new RangeError("derived is too deep");
+    }
+    return n * 3;
+  }
+}
+
+const overridable: Overridable[] = [new Overridable(), new Overrides()];
+
+/**
+ * Refused: the dispatch is virtual, so there is no name to suffix. Its value is
+ * that the refusal *arrives* and says which of the reasons it is.
+ */
+export function crossingAnOverriddenMethod(n: number): number {
+  try {
+    return overridable[n & 1].raise(n & 7);
+  } catch {
+    return -1;
+  }
+}
+
+// **Compiles, and it did not until the two sides agreed on which declaration a
+// copy is made of.** `overloaded` has two signatures and an implementation; the
+// checker resolves a call to a *signature*, and the lowering only ever lowers the
+// implementation -- so the seed held a node nothing built a copy of while the call
+// site named `overloaded@raises` regardless. This arm refused with `which nothing
+// in this program defines`, a cascade with no root, on a compiler where `crossing`
+// above was fine.
+//
+// `crossing` is its one-difference control: the same `try` around the same throw,
+// with one declaration instead of three.
+function overloaded(n: number): number;
+function overloaded(n: string): number;
+function overloaded(n: number | string): number {
+  if (typeof n === "number" && n > 3) {
+    throw new RangeError("too deep");
+  }
+  return typeof n === "number" ? n * 2 : 0;
+}
+
+/**
+ * Compiles: the raising copy is made of the implementation, which is what the
+ * call now names.
+ */
+export function crossingAnOverloadedCallee(n: number): number {
+  try {
+    return overloaded(n);
+  } catch {
+    return -1;
+  }
+}
+
+// **A member-shaped callee, which is where the gate's own precision bit.**
+// `helper.same` puts a property access in the callee position, and
+// `functions_used_as_values` excluded the callee *node* -- so the identifier `same`
+// inside it read as a mention of a value, asked for a copy of a declaration that
+// has none, and turned the program-global gate off. That cost 71 cases of
+// `test262-cases`, one of them a pass, and the shape is `assert.sameValue`, which
+// the test262 harness writes in nearly every file.
+//
+// The closure is what makes it observable at all: the gate decides something only
+// where a `try` reaches a call through one. `crossingAnOverloadedCallInAClosure`
+// below is the one-difference control -- the same program with a plain callee.
+namespace helper {
+  export function same(a: number, b: number): void;
+  export function same(a: string, b: string): void;
+  export function same(a: unknown, b: unknown): void {
+    if (a !== b) {
+      throw new RangeError("not the same");
+    }
+  }
+}
+
+/**
+ * Compiles: the member is the callee's own name, and not a value anybody holds.
+ */
+export function crossingAMemberCallInAClosure(n: number): number {
+  try {
+    return ((x: number): number => {
+      helper.same(x & 7, 7);
+      return x;
+    })(n);
+  } catch {
+    return -1;
+  }
+}
+
+/**
+ * The control for the arm above: the same shape with a plain callee, so what
+ * differs is the property access in the callee position and nothing else.
+ */
+export function crossingAnOverloadedCallInAClosure(n: number): number {
+  try {
+    return ((x: number): number => {
+      overloaded(x & 7);
+      return x;
+    })(n);
+  } catch {
+    return -1;
   }
 }

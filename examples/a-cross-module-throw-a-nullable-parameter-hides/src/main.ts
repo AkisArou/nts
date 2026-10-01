@@ -1,4 +1,13 @@
-// expect: NTS1001 a call inside a `try` whose `throw` would not reach this handler: a method, and a raising copy is made of plain functions only
+// **This was `blockers/a-cross-module-throw-a-nullable-parameter-hides`, and before that a silent escape.**
+// A method now has a raising copy: `callee_for` makes a call on a member no
+// subclass overrides a `Callee::Direct` by name, so the copy is reached by
+// naming it and no dispatch slot is needed. The refusal this file pinned --
+// "a method, and a raising copy is made of plain functions only" -- is gone, so
+// what it records is a program that agrees with node.
+//
+// What still refuses is one case over: an **overridden** method, whose call is a
+// `Callee::Virtual` through a slot, and a raising copy is reached by name.
+// `examples/a-throw-that-stays-in-its-function` carries that arm.
 //
 // **This refusal replaced a silent escape, and the escape was in the frontend.**
 // Before the fix the `try` below did not merely go un-refused -- it was **gone**:

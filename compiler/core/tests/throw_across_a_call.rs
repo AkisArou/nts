@@ -12,8 +12,13 @@
 //! here is the shape of the bound rather than the shape of the refusal:
 //!
 //!   - a plain function callee compiles, and its copy is emitted;
-//!   - a **method** callee still refuses — `function_copies` is consulted for
-//!     function declarations and a method has no copy to name;
+//!   - a **method** callee compiles too, and names the copy directly: a member no
+//!     subclass overrides is already a `Callee::Direct`, so the copy is that name
+//!     with the suffix and no dispatch slot is needed;
+//!   - an **overridden** method still refuses — the dispatch is a
+//!     `Callee::Virtual` through a slot, and a slot holds no name to suffix;
+//!   - an **overloaded** callee compiles, which took the checker's answer and the
+//!     lowering's agreeing about which declaration a copy is made of;
 //!   - a callee that merely *passes a throw on* compiles too, through a copy of
 //!     it and of what it calls — the copy set is closed over what a copy
 //!     reaches, and `Throwing::copyable` is the greatest fixpoint that makes
@@ -99,12 +104,19 @@ fn a_chain_of_callees_compiles_through_copies_of_each() {
 /// is what catches a refusal arriving from somewhere else entirely, and what
 /// catches a second one appearing when a copy stops being made.
 ///
-/// **And by which of the four reasons**, which is the half the sentence gained.
-/// "A throw would not reach this handler" is a fact about the `try`; a census
-/// needs to know whether the callee is a method, a value, or a function that
-/// calls one, because those are three different pieces of work. Pinning the
-/// classification here is what keeps the four sentences from collapsing back
-/// into one.
+/// **And by which reason**, which is the half the sentence gained. "A throw would
+/// not reach this handler" is a fact about the `try`; a census needs to know
+/// whether the callee is a method, a value, a function that calls one, or a
+/// dispatch with no name to suffix, because those are different pieces of work.
+/// Pinning the classification here is what keeps the sentences from collapsing
+/// back into one.
+///
+/// **The subject moved once already**, which is the test earning its keep: it
+/// pinned "a method, and a raising copy is made of plain functions only" until a
+/// method became copyable, and then the example refused *nothing* and this
+/// assertion was the only thing that said so. The boundary is now one case over
+/// -- an **overridden** method, whose call is a `Callee::Virtual` through a slot,
+/// and a raising copy is reached by name.
 #[test]
 fn a_callee_with_no_copy_is_still_refused() {
     let Some(lowered) = lowered() else {
@@ -118,14 +130,27 @@ fn a_callee_with_no_copy_is_still_refused() {
     assert_eq!(
         reasons,
         vec![
-            "a call inside a `try` whose `throw` would not reach this handler: a method, and a \
-             raising copy is made of plain functions only is not supported by this lowering yet"
+            "a call inside a `try` to `raise`, which a subclass overrides: the dispatch goes \
+             through a slot and a raising copy is reached by name is not supported by this \
+             lowering yet"
         ],
         "one refusal, naming the call"
     );
+    // **Both directions of the boundary that moved**, because an assertion that only
+    // says what refuses passes on a compiler that refuses everything: the direct
+    // method call compiles and names `Deeper#raise@raises`, and the overridden one
+    // does not compile at all.
     assert!(
-        !compiled(&lowered, "crossingAMethod"),
-        "a method callee has no raising copy"
+        compiled(&lowered, "crossingAMethod"),
+        "a direct method call names its raising copy"
+    );
+    assert!(
+        compiled(&lowered, "Deeper#raise@raises"),
+        "the method's raising copy is emitted"
+    );
+    assert!(
+        !compiled(&lowered, "crossingAnOverriddenMethod"),
+        "a virtual dispatch has no name to suffix"
     );
 }
 
@@ -159,4 +184,74 @@ fn awaiting_a_rejection_still_compiles() {
         return;
     };
     assert!(compiled(&lowered, "awaitingARejection"));
+}
+
+/// An **overloaded** callee: the copy is made of the implementation, and the call
+/// names it.
+///
+/// `call_targets` answers a call to an overloaded function with an overload
+/// *signature*, and the lowering only ever lowers the declaration with a body. Keyed
+/// on the resolved node the seed held the signature, nothing built a copy of it, and
+/// the site named `overloaded@raises` anyway -- so this arm refused with `` which
+/// nothing in this program defines ``, a cascade with no root, **even where the
+/// implementation compiles**. It stood from `ac1533ca4` and surfaced in
+/// `runtime/node/fs` only once methods had copies and the bodies around them lowered
+/// far enough to reach it.
+///
+/// `crossing` is the control, asserted by
+/// [`a_call_that_can_throw_compiles_through_a_raising_copy`]: the same shape with one
+/// declaration.
+#[test]
+fn an_overloaded_callee_names_the_implementations_copy() {
+    let Some(lowered) = lowered() else {
+        eprintln!("SKIP: tsgo is not built");
+        return;
+    };
+    assert!(
+        compiled(&lowered, "crossingAnOverloadedCallee"),
+        "a `try` around a call to an overloaded function compiles"
+    );
+    assert!(
+        compiled(&lowered, "overloaded@raises"),
+        "the copy is made of the implementation, under the name the call spells"
+    );
+}
+
+/// A **member-shaped callee** inside a closure, which is where the gate's own
+/// precision decided whether anything compiled.
+///
+/// `functions_used_as_values` excluded the callee *node*, so in `helper.same(x)` the
+/// identifier `same` inside the property access counted as a mention of a value and
+/// asked for a raising copy of a declaration that has none -- which turned the
+/// program-global gate off. It cost **71 cases of `test262-cases`, one of them a
+/// pass**, and the shape is `assert.sameValue`, which the harness writes in nearly
+/// every file.
+///
+/// Both arms, because the pair is the measurement: the member call and the same
+/// program with a plain callee. A compiler that refuses either has the gate off, and
+/// a compiler that refuses neither for the wrong reason is caught by the refusal
+/// count in `tooling/gate/example-refusals`, which stays at one.
+///
+/// **And this is the arm that catches a profile-dependent answer**, which is why an
+/// IIFE belongs in a test that runs under `cargo test`. `calls_a_closure` compared
+/// its reason with `std::ptr::eq` on a `const &'static str`: the release profile
+/// merges the duplicated constants into one address and the dev profile does not, so
+/// the compiler said "this is a closure call" for the gate and "it is not" for its
+/// own test suite. Every release-profile instrument -- `example-refusals`, `agree`,
+/// the censuses -- was blind to it by construction, and nothing in `examples/` had an
+/// IIFE *and* an assertion here until now.
+#[test]
+fn a_member_shaped_callee_is_not_a_function_held_as_a_value() {
+    let Some(lowered) = lowered() else {
+        eprintln!("SKIP: tsgo is not built");
+        return;
+    };
+    assert!(
+        compiled(&lowered, "crossingAMemberCallInAClosure"),
+        "a `try` reaching `helper.same` through a closure compiles"
+    );
+    assert!(
+        compiled(&lowered, "crossingAnOverloadedCallInAClosure"),
+        "and so does the control, whose callee is a plain name"
+    );
 }

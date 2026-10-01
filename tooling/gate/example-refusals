@@ -50,18 +50,20 @@ mathops-unsupported 4 the constructs the name promises
 # One of four arms. The other three are the shapes this refusal must *not*
 # take, so a count of 2 here means the refusal has grown a case it should not
 # have -- which it did twice while being written.
-a-throw-that-stays-in-its-function 1 a method callee, which has no raising copy
-# The sibling above, one indirection out: the `try` is around a call whose
-# *callee* reaches the method. Its four arms are the cycle this walk used to
-# overflow the stack on, and the one refusal is the fixture's subject -- the
-# message has to name `shared.lifecycle`, the leaf, rather than the function the
-# `try` encloses.
+a-throw-that-stays-in-its-function 1 an overridden method callee: the dispatch is virtual and a raising copy is reached by name
+# `a-try-around-a-cycle-of-calls` had a row here, one indirection out from the
+# example above: the `try` around a call whose *callee* reached a method, naming
+# `shared.lifecycle`, the leaf. **It refuses nothing now** -- a method has a
+# raising copy -- and the row is gone rather than set to 0, because the step's
+# second loop asks for exactly that: a listed name carrying no refusal prints
+# `remove it from the table` on every run, and a note printed every run is one
+# nobody reads.
 #
-# **Missing here from the commit that added the example until 2026-09-25**, which
-# is the same hazard the `array-from-unsupported` note above describes from the
-# other direction: the gate run that cleared that commit was taken before the
-# example was in the tree, and this step is the only one that would have said so.
-a-try-around-a-cycle-of-calls 1 `shared.lifecycle`, a method reached through a plain callee, which has no raising copy
+# Its own note recorded being **missing here from the commit that added the
+# example until 2026-09-25**, which is the hazard the `array-from-unsupported`
+# note above describes from the other direction: the gate run that cleared that
+# commit was taken before the example was in the tree, and this step is the only
+# one that would have said so.
 # Nine arms, and the one refusal is the **boundary** rather than a debt: `Math[k]`
 # where `k` is a variable is a member decided at run time, and reading it as the
 # name `k` would put it in the same slot as `Math["k"]`. A count of 0 here means
