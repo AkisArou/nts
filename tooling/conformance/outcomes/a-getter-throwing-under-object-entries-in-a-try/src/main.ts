@@ -7,6 +7,17 @@
 // only two recorded fails ending in an uncaught error other than
 // Test262Error. An escape erases every arm, so the control -- the same object
 // with a quiet getter -- is outcomes/object-entries-of-an-object-with-a-getter.
+//
+// **A narrow gap, and why.** Of twelve runtime helpers that run program code
+// (probed 2026-10-01, each its own program), the array ones -- map, forEach,
+// filter, find, reduce, Array.from with a map function -- catch the throw,
+// because their callbacks are lowered as call nodes. Only Object.entries and
+// Object.values escape: the runtime enumerating properties calls the accessor,
+// and no call node exists. Four more would be this same escape if they
+// compiled, and are sound only because they refuse: JSON.stringify through
+// toJSON, "abc".replace(..., fn), an object spread of a getter, and
+// Object.assign from a getter source. **The day any of them lands, it
+// inherits this item** -- the fix is the helper propagating a raise.
 const trapped = {
   get a(): number {
     throw new RangeError("from the getter");
