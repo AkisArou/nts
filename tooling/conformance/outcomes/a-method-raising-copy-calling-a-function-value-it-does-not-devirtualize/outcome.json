@@ -1,8 +1,0 @@
-{
-  "run": "build",
-  "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught Observed: inside a try=-4;inside a try, no new minimum=5;outside a try (control)=-4;",
-  "node": "exit 1; nts: uncaught Observed: inside a try=-4;inside a try, no new minimum=1;outside a try (control)=-4;",
-  "measured_with": "ef7fddb284a424bf",
-  "source": "measured"
-}
