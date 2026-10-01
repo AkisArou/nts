@@ -4769,17 +4769,29 @@ fn raising_callees_of(
     probe.accessors_run_by(node)
 }
 
-fn raising_copies(
+/// Every declaration a raising copy *can* be made of: the greatest fixpoint of "a copy of
+/// this can be built and every callee of it that can raise has one too".
+///
+/// By node rather than by symbol, and that is not a detail: `function_copies` is keyed on
+/// the node a call resolves to, and a symbol with two declarations -- an overload
+/// signature and its implementation -- answers `copyable` for one of them. A copy whose
+/// callee resolved to the other would be left calling the plain function, which ends the
+/// program from inside a `try` that compiled.
+///
+/// Shrunk over the *bodies*, which is the same greatest fixpoint [`Throwing::copyable`]
+/// runs one level up and the only one that can see what a declaration actually calls.
+/// Asked with the predicate `calls_compiled_code` uses, so that what a copy may contain
+/// and what a `try` may contain are one rule.
+///
+/// `value_held_is_carried` is [`a_copy_can_contain`]'s, and it is why this is a function
+/// rather than a block: [`raising_copies`] runs it **twice**, once optimistically and,
+/// where the program-global gate turns out to be off, once strictly.
+fn eligible_declarations(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
     throwing: &Throwing,
-) -> (rustc_hash::FxHashSet<NodeId>, bool) {
-    // Which declarations a copy could be made of at all. By node rather than by
-    // symbol, and that is not a detail: `function_copies` is keyed on the node a
-    // call resolves to, and a symbol with two declarations -- an overload
-    // signature and its implementation -- answers `copyable` for one of them.
-    // A copy whose callee resolved to the other would be left calling the plain
-    // function, which ends the program from inside a `try` that compiled.
+    value_held_is_carried: bool,
+) -> rustc_hash::FxHashSet<NodeId> {
     let mut eligible: rustc_hash::FxHashSet<NodeId> = rustc_hash::FxHashSet::default();
     for symbol in &throwing.copyable {
         let Some(record) = snapshot.symbols.get(*symbol as usize) else {
@@ -4797,29 +4809,36 @@ fn raising_copies(
             }
         }
     }
-    // And shrunk over the *bodies*, which is the same greatest fixpoint
-    // `Throwing::copyable` runs one level up and the only one that can see what
-    // a declaration actually calls. Asked with the predicate
-    // `calls_compiled_code` uses, so that what a copy may contain and what a
-    // `try` may contain are one rule: an indirect callee counts as able to
-    // raise, because what it reaches is exactly what cannot be established.
     loop {
         let losing: Vec<NodeId> = eligible
             .iter()
             .filter(|declaration| {
-                calls_in_the_body_of(probe, **declaration)
-                    .into_iter()
-                    .any(|call| !a_copy_can_contain(snapshot, probe, throwing, &eligible, call))
+                calls_in_the_body_of(probe, **declaration).into_iter().any(|call| {
+                    !a_copy_can_contain(
+                        snapshot, probe, throwing, &eligible, value_held_is_carried, call,
+                    )
+                })
             })
             .copied()
             .collect();
         if losing.is_empty() {
-            break;
+            return eligible;
         }
         for declaration in losing {
             eligible.remove(&declaration);
         }
     }
+}
+
+fn raising_copies(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    throwing: &Throwing,
+) -> (rustc_hash::FxHashSet<NodeId>, bool) {
+    // Optimistically: a call through a value is carried by the raising uniform entry,
+    // which is true wherever `every_raising_body_can_carry` is. Recomputed strictly
+    // below where it is not -- see the `carry` branch.
+    let eligible = eligible_declarations(snapshot, probe, throwing, true);
     // Seeded by what a `try` reaches, then closed over what those reach: a copy
     // names its callees' copies, so a callee of a copy needs one too.
     let (guarded, guarded_a_call) = calls_guarded_by_a_try(snapshot, probe);
@@ -4905,6 +4924,22 @@ fn raising_copies(
     // dispatch at the slot -- so keeping them would emit thousands of `@raises`
     // copies nothing reaches. What stays is the seed a *named* callee's copy needs,
     // which is the path that worked before any of this.
+    //
+    // **And the eligibility is recomputed strictly**, which is the half this branch was
+    // missing. With no raising uniform entry to dispatch at, a copy holding a call
+    // through a **value** -- a field, a parameter, a capture -- has nothing to carry the
+    // raise: it goes out at the ordinary entry, whose body calls `nts_uncaught`. That is
+    // the escape `blockers/a-callback-held-in-a-field-with-the-raising-gate-off` pins --
+    // 8 of 29 cases ending the program where node answers `-1` -- and it was silent
+    // because the optimistic answer was the only one this function ever computed. With
+    // the gate *on* the same program is
+    // `examples/a-method-that-calls-a-callback-held-in-a-field-inside-a-try` and agrees
+    // with node, which is why the two halves are two fixtures.
+    //
+    // Two passes rather than a fixpoint over the gate, because the gate is monotone in
+    // one direction only: turning it off can never make a body *more* carriable, so the
+    // strict set is a subset of the optimistic one and a third pass would find nothing.
+    let eligible = eligible_declarations(snapshot, probe, throwing, false);
     let narrow = calls_guarded_by_a_try(snapshot, probe)
         .0
         .into_iter()
@@ -4979,7 +5014,7 @@ fn every_raising_body_can_carry(
     // the gate withheld would dangle.
     let carries = |body: NodeId| {
         calls_in_the_body_of(probe, body).into_iter().all(|call| {
-            a_copy_can_contain(snapshot, probe, throwing, copies, call)
+            a_copy_can_contain(snapshot, probe, throwing, copies, true, call)
                 || a_closure_callee(snapshot, probe, call)
         })
     };
@@ -5067,6 +5102,7 @@ fn a_copy_can_contain(
     probe: &FuncBuilder,
     throwing: &Throwing,
     eligible: &rustc_hash::FxHashSet<NodeId>,
+    value_held_is_carried: bool,
     call: NodeId,
 ) -> bool {
     // **An accessor is carried when its copy exists**, which it can now: `lower_class`
@@ -5104,8 +5140,17 @@ fn a_copy_can_contain(
     // and the caller's `try` compiled with no handler edge because
     // `throwing_symbols` does not see a parameter-held callee: the `TypeError`
     // escaped, which is the wrong answer that record was written to catch and did.
-    if !a_call_that_can_raise(probe, throwing, call) {
+    if !a_call_that_can_raise(snapshot, probe, throwing, call) {
         return true;
+    }
+    // **A callee held in a value is carried by the raising uniform entry or not at
+    // all**, which is what `value_held_is_carried` answers: there is no declaration to
+    // name, so the copy cannot spell an `@raises` for it. See [`a_value_held_callee`],
+    // and [`raising_copies`] for why this is a parameter rather than a constant -- the
+    // entry it would dispatch at is one the program-global gate can withhold, and a
+    // copy naming an entry that was withheld would dangle.
+    if a_value_held_call(snapshot, probe, call) {
+        return value_held_is_carried;
     }
     // [`raising_callees_of`], because `eligible` holds implementations: asking with the
     // resolved node would answer "no copy" for every call to an overloaded function and
@@ -5127,7 +5172,12 @@ fn a_copy_can_contain(
 /// variant at all -- a body with no call that can raise has an identical variant, so
 /// nothing ever names its callees' copies and seeding from it is pure waste. Written
 /// twice those two would drift, and the drift is a copy named and never made.
-fn a_call_that_can_raise(probe: &FuncBuilder, throwing: &Throwing, call: NodeId) -> bool {
+fn a_call_that_can_raise(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    throwing: &Throwing,
+    call: NodeId,
+) -> bool {
     // **An accessor access asks about the member**, which is the last child; the first
     // is the receiver. See [`FuncBuilder::an_accessor_that_can_raise`] -- the same
     // question, asked where the builder has the set rather than the caller.
@@ -5141,10 +5191,91 @@ fn a_call_that_can_raise(probe: &FuncBuilder, throwing: &Throwing, call: NodeId)
     let Some(callee) = probe.children(call).first().copied() else {
         return false;
     };
+    // **A symbol is not a function, and asking the set about one that names no body is
+    // how this said "cannot raise" about a call to a closure.** `walk_one_declaration`
+    // classifies a callee into [`Reached`] -- a body, the walked declaration's own
+    // parameter, something *elsewhere* (a field, a capture, an import of a value), or
+    // nothing named at all -- and only the first can be asked. `throwing_symbols` is
+    // right about that and this function re-derived it from the symbol alone, so a
+    // local bound to a field closure came out resolved:
+    //
+    // ```ts
+    // run(n: number): number { const f = this.cb; if (f) { return f(n) } return n }
+    // ```
+    //
+    // `f` has a symbol, the symbol holds no `throw`, so the call read as unable to
+    // raise, `a_copy_can_contain` let `run` keep its copy, and that copy dispatched
+    // the closure at the **ordinary** uniform entry. The `throw` then left a `try`
+    // that compiled: `nts: uncaught RangeError` on 8 of 29 cases where node answers
+    // `-1`, on `runtime/node/stream`'s own `DuplexSide#release` shape. Two derivations
+    // of one fact, and the fifth instance of this family after the parameter, the
+    // accessor, the `new` and `super(…)`.
+    //
+    // **A `new` is resolved by its type rather than by a value**, exactly as that
+    // classifier says: which constructor runs is fixed by the name. Keeping that arm
+    // is not a detail -- the blunt rule, every `new` of a program class can raise,
+    // was measured at 14 working functions lost in `web-platform`.
+    //
+    // **And a callee that names a declaration with no body here cannot raise**, which
+    // is the arm that keeps this from being the blunt rule in another spelling: every
+    // `arr.push(x)` and `items.sort(cmp)` names a provided signature, and answering
+    // "can raise" for those was measured at **+32 refusals per module** (`stream`
+    // 1,037 -> 1,069) with nothing gained -- what a builtin does is the runtime's,
+    // and where it runs a callback of ours the uniform entry carries that.
+    let constructs = probe.kind_of(call) == Some(syntax::NEW_EXPRESSION);
+    match probe.node(callee).symbol.map(|it| it.0) {
+        Some(symbol) if constructs || a_callee_with_a_body(snapshot, probe, symbol) => {
+            throwing.any.contains(&symbol)
+        }
+        Some(symbol) if a_value_held_callee(snapshot, probe, symbol) => true,
+        Some(_) => false,
+        None => true,
+    }
+}
+
+/// Whether a callee's symbol names a **value** that holds a function rather than a
+/// function declaration: a variable, a parameter, a property, a destructured binding.
+///
+/// This is the distinction [`a_call_that_can_raise`] needs and the symbol alone does not
+/// make. `const f = () => { throw … }` is *not* one -- [`the_function_of`] follows a
+/// variable to its initialiser, so a function-valued `const` has a body and its own
+/// answer in [`Throwing::any`]. What is one is `const f = this.cb`, a parameter, or an
+/// interface's `cb: () => void`: a function arrives at run time and no walk can say
+/// which.
+///
+/// **Not folded into [`Reached::Elsewhere`]**, which this is otherwise the same
+/// distinction as, because that variant also holds a provided signature -- `arr.push` --
+/// and the two want opposite answers here: a builtin cannot raise anything of ours, a
+/// field can raise whatever was put in it.
+fn a_value_held_callee(snapshot: &SemanticSnapshot, probe: &FuncBuilder, symbol: u32) -> bool {
+    snapshot.symbols.get(symbol as usize).is_some_and(|record| {
+        record.declarations.iter().any(|at| {
+            matches!(
+                probe.kind_of(*at),
+                Some(
+                    syntax::VARIABLE_DECLARATION
+                        | syntax::PARAMETER
+                        | syntax::PROPERTY_DECLARATION
+                        | syntax::PROPERTY_SIGNATURE
+                        | syntax::BINDING_ELEMENT
+                )
+            )
+        })
+    })
+}
+
+/// Whether this call reaches a function held in a **value**, which is the only kind of
+/// callee a copy cannot name: there is nothing to suffix, so the raise is carried by the
+/// uniform raising entry or not at all. See [`a_value_held_callee`].
+fn a_value_held_call(snapshot: &SemanticSnapshot, probe: &FuncBuilder, call: NodeId) -> bool {
+    if probe.reads_an_accessor(call) {
+        return false;
+    }
     probe
-        .node(callee)
-        .symbol
-        .is_none_or(|symbol| throwing.any.contains(&symbol.0))
+        .children(call)
+        .first()
+        .and_then(|callee| probe.node(*callee).symbol)
+        .is_some_and(|symbol| a_value_held_callee(snapshot, probe, symbol.0))
 }
 
 /// Every eligible function this program mentions somewhere other than as a callee.
@@ -5296,7 +5427,7 @@ fn closure_bodies_that_can_raise(
         .filter(|body| {
             calls_in_the_body_of(probe, *body)
                 .into_iter()
-                .any(|call| a_call_that_can_raise(probe, throwing, call))
+                .any(|call| a_call_that_can_raise(snapshot, probe, throwing, call))
         })
         .collect()
 }
@@ -48473,26 +48604,30 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn reason_without_a_leaf(&self, call: NodeId) -> Option<&'static str> {
-        // **A parameter's callee has a declaration and it is not a body.** The
+        // **A callee held in a value has a declaration and it is not a body.** The
         // checker resolves `fn()` where `fn: () => void` to that *type*'s
         // signature, whose declaration is the function-type annotation -- a node
         // no arm below matches, so the sentence fell through to the transitive
         // one and said "something whose `throw` cannot be carried" with no leaf
         // to name. Asked of the callee expression instead, which is where the
-        // fact is: a name declaring a parameter is a value, whatever the checker
+        // fact is: a name declaring a value is a value, whatever the checker
         // found for its type. See `calls_compiled_code`, which draws the same
         // line for the same reason.
+        //
+        // **A parameter was the only kind this asked about, and that was the
+        // escape.** `const f = this.cb; f(n)` is the same fact about the same
+        // call -- a function arrives at run time and no walk can say which -- and
+        // because this said no, `calls_a_closure` said no, so
+        // `dispatches_to_a_raising_entry` left the call at the *ordinary* uniform
+        // entry inside a raising copy and the `throw` ended the program: 8 of 29
+        // cases where node answers `-1`. One predicate for it now
+        // ([`a_value_held_callee`]) with four readers, rather than one kind named
+        // here and the rest left to a lookup that cannot see them.
         if self
             .children(call)
             .first()
             .and_then(|callee| self.node(*callee).symbol)
-            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
-            .is_some_and(|record| {
-                record
-                    .declarations
-                    .iter()
-                    .any(|at| self.kind_of(*at) == Some(syntax::PARAMETER))
-            })
+            .is_some_and(|symbol| a_value_held_callee(self.snapshot, self, symbol.0))
         {
             return Some(THROUGH_A_FUNCTION_VALUE);
         }
@@ -48774,7 +48909,25 @@ impl<'a> FuncBuilder<'a> {
     /// a closure aborts by name instead of losing the `throw`. Measured at **0
     /// reachable entries** across all 29 runtime corpora.
     fn a_raising_body_carries_this_call(&self, id: NodeId) -> Result<(), Diagnostic> {
-        if !self.raises || self.tested_for_a_raise(id) || !self.calls_compiled_code(id) {
+        if !self.raises || self.tested_for_a_raise(id) {
+            return Ok(());
+        }
+        // **A call through a value is compiled code too, and `calls_compiled_code` is
+        // keyed on the callee's declaration, which a value has none of.** So a copy
+        // holding `const f = this.cb; f(n)` passed this check, dispatched at the
+        // *ordinary* uniform entry and lost the `throw`: 8 of 29 cases ending the
+        // program where node answers `-1`, pinned by
+        // `blockers/a-callback-held-in-a-field-with-the-raising-gate-off`, whose
+        // gate-on sibling in `examples/` agrees with node instead.
+        //
+        // `a_copy_can_contain` predicts which bodies are safe to copy and this verifies
+        // it at the body, which is the division that matters here: the prediction is
+        // made before lowering and has to assume the raising uniform entry will take
+        // every such call, and `dispatches_to_a_raising_entry` is what actually decides
+        // that -- per call, with `calls_a_closure` as its third condition. Where the two
+        // part company the answer must be a **refusal**, and only the verifier can give
+        // one, because only it has the lowered call.
+        if !self.calls_compiled_code(id) && !a_value_held_call(self.snapshot, self, id) {
             return Ok(());
         }
         let why = self.why_no_raising_copy(id);
