@@ -1,3 +1,4 @@
+// **Agrees since cd9d0be4a; a guard.** Until then:
 // An element default inside a destructured parameter, `{ x = thrower() } =
 // {}`, of a static method called inside a function value that a `try` calls:
 // its throw escapes the handler ("uncaught Error: from the default"), where

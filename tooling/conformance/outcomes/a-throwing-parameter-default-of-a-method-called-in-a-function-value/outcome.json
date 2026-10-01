@@ -1,8 +1,8 @@
 {
   "run": "build",
   "category": "agrees",
-  "nts": "exit 1; nts: uncaught Observed: a default that throws=caught;",
-  "node": "exit 1; nts: uncaught Observed: a default that throws=caught;",
-  "measured_with": "ef7fddb284a424bf",
+  "nts": "exit 1; nts: uncaught Observed: a default that throws=caught;an own default, in a direct try=caught;",
+  "node": "exit 1; nts: uncaught Observed: a default that throws=caught;an own default, in a direct try=caught;",
+  "measured_with": "78f11431ec6c289e",
   "source": "measured"
 }

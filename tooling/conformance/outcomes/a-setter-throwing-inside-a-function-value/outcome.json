@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: assignment to a setter=caught;",
+  "node": "exit 1; nts: uncaught Observed: assignment to a setter=caught;",
+  "measured_with": "78f11431ec6c289e",
+  "source": "measured"
+}
