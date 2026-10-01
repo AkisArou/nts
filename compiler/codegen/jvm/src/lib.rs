@@ -2326,9 +2326,11 @@ fn bridge_for(
     // **Fewer parameters than the base declares**, `class Transform { _read() }`
     // over `Readable._read(size)`. JavaScript passes the argument and the
     // override ignores it. C calls the narrower function through the base's
-    // prototype -- undefined behaviour that agrees on x86-64 SysV only because
-    // the extra argument sits in a register the callee ignores, and that
-    // `-fsanitize=function` reports (2026-10-01); the JVM names a method by its descriptor and
+    // prototype, an arity mismatch the standard leaves undefined and every ABI
+    // we target tolerates: the extra argument sits in a register the callee
+    // ignores. (`-fsanitize=function` cannot isolate it -- it flags the
+    // receiver's pointer type on every override, same arity or not.) The JVM
+    // names a method by its descriptor and
     // declined `Transform`, `DuplexSide` and `IncomingMessage` under this
     // refusal -- stream, zlib, crypto, fs and http with them (jvm-verifies
     // cause E, an-override-declaring-fewer-parameters). A bridge with the
