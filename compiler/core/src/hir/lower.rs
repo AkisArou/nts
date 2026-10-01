@@ -5047,31 +5047,6 @@ fn a_copy_can_contain(
     if probe.reads_an_accessor(call) {
         return false;
     }
-    // **And a `sort` comparator, which `call_within` refuses for a `try` and this did
-    // not.** The doc above says what a copy may contain and what a `try` may contain
-    // are one rule; this was the fourth place that sentence was true of and the code
-    // was not, after the accessor here, the accessor in `throwing_symbols` and the
-    // `new`.
-    //
-    // What it cost: `eb92ee8f9` made a method copyable, so `Jar#smallest@raises`
-    // was built around `items.sort(ascending)` -- and `lower_sort_with` emits the
-    // comparator call with the comparator's **written** arguments while
-    // `closure_callee` names the *raising* slot, which holds the uniform entry. The
-    // ordinary body survives that only because `fields::devirtualize` rewrites the
-    // known class back to `Closure0#call`; it does not fire for the raising slot, so
-    // C called through an entry of the wrong ABI and the sort did not order --
-    // **5 where node answers 1**, and the JVM refused the copy outright (NTS4001, the
-    // operand-stack accounting). The JVM lane found it from `runtime/web-platform`'s
-    // `CookieJar#evict@raises` and recorded it as `outcomes/a-method-raising-copy-
-    // calling-a-function-value-it-does-not-devirtualize`.
-    //
-    // **A refusal is what it was before `eb92ee8f9`** and is what it is again. The
-    // feature behind it is a *written* raising entry for a closure: `closure_slot`
-    // holds the written `#call` and there is no slot for its `@raises`, which is a
-    // fourth table index and its own piece of work.
-    if probe.sorts_with_a_comparator(call) {
-        return false;
-    }
     // **A `new` needs no arm of its own.** `throwing_symbols` walks a class over its
     // constructor and its field initializers, so a class that can throw is in
     // `Throwing::any` and `a_call_that_can_raise` below says so -- and the callee a
@@ -48198,6 +48173,16 @@ impl<'a> FuncBuilder<'a> {
         // and reaches the handler; `sort` *calls* its comparator
         // (`lower_sort_with`), so a `throw` in it crosses a call like any other.
         if self.sorts_with_a_comparator(node) {
+            // **A closure call in all but spelling, and it takes the same answer.**
+            // `lower_sort_with` dispatches the comparator at the uniform raising entry
+            // through `call_a_closure_entry`, which carries a `throw` exactly as a call
+            // through a function value does -- so the condition is the slot's, as it is
+            // for `calls_a_closure` above, and for the same reason: this walk decides,
+            // and the site reads `raising_calls`.
+            if self.hierarchy.raising_call_slot.is_some() && self.hierarchy.closures_carry {
+                handled.push(node);
+                return None;
+            }
             return Some((node, "a `sort` comparator, which is called".to_owned()));
         }
         // Not into a nested function: a closure written inside a `try` is not
@@ -57276,6 +57261,32 @@ impl<'a> FuncBuilder<'a> {
         // nothing until the call needed the returned signature to have a
         // class.
         self.materialize(id, &ty)?;
+        self.call_a_closure_entry(id, callee, args, &ty)
+    }
+
+    /// Emit a call to a closure entry at `ty`, honouring the **uniform ABI** where the
+    /// callee is one of the two uniform slots.
+    ///
+    /// Its own function because there were two spellings of a closure call and the
+    /// second was wrong: `lower_sort_with` built the comparator's call itself, with the
+    /// comparator's *written* arguments, while `closure_callee` had already chosen a
+    /// uniform slot for it. The ordinary body survived only because
+    /// `fields::devirtualize` rewrites a known class back to the written `#call`; the
+    /// raising slot it does not rewrite, so C called through an entry of the wrong ABI
+    /// and a sort did not order. One path, so a site cannot choose a slot and then
+    /// ignore what the slot takes.
+    ///
+    /// `ty` is passed rather than read from the node, which is the only reason this is
+    /// not simply `finish_closure_call`: a comparator's result is its own `number` and
+    /// the node it hangs off is the `sort` call, whose type is the array.
+    fn call_a_closure_entry(
+        &mut self,
+        id: NodeId,
+        callee: Callee,
+        args: Vec<ValueId>,
+        ty: &HirType,
+    ) -> Result<ValueId, Diagnostic> {
+        let ty = ty.clone();
         let origin = self.origin(id);
         // Through the erased entry, the site spells the one ABI it can: every
         // written argument erased and the answer unerased to what it reads. The
@@ -59121,7 +59132,16 @@ impl<'a> FuncBuilder<'a> {
         for (value, want) in [first, second].into_iter().zip(&comparator.parameters) {
             args.push(self.coerce(value, want, comparator.node)?);
         }
-        let answer = self.push(OpKind::Call { callee: comparator.callee.clone(), args, frame: None }, HirType::NUMBER, origin.clone());
+        // **Through [`Self::call_a_closure_entry`], because `closure_callee` may have
+        // chosen a uniform slot for this call and a uniform entry takes erased
+        // arguments.** Built by hand here it passed the comparator's *written* ones,
+        // and the ordinary body survived only because `fields::devirtualize` rewrites a
+        // known class back to the written `#call`.
+        //
+        // Keyed on `id`, the `sort` call: that is the node `closure_callee` chose the
+        // slot for and the node `call_within` records, so the slot, the flag test and
+        // the handler edge are one answer about one node.
+        let answer = self.call_a_closure_entry(id, comparator.callee.clone(), args, &HirType::NUMBER)?;
         let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
         let right_first = binary(self, BinOp::Gt, answer, zero, HirType::Bool);
         // One block per answer rather than both arms into `merged`: an edge is
