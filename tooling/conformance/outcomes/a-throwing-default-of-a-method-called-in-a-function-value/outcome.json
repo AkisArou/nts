@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Error: from the default",
+  "node": "exit 1; nts: uncaught Observed: a default that throws=caught;",
+  "measured_with": "ef7fddb284a424bf",
+  "source": "measured"
+}
