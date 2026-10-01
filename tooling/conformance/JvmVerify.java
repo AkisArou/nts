@@ -14,6 +14,8 @@
 //                                              a member ref no generated class holds
 //   SHADOWED <class> <name><descriptor>         an override whose raising copy is
 //                                              left to the ancestor's
+//   UNFILLED <class> <name><descriptor>         an abstract raising entry a concrete
+//                                              class never implements
 //
 // **UNRESOLVED is the one the verifier cannot give.** Linkage of a member is
 // lazy: `invokevirtual Callable.erased_call$raises` verifies whatever
@@ -72,6 +74,7 @@ public class JvmVerify {
     ClassLoader loader = JvmVerify.class.getClassLoader();
     int verified = 0;
     Set<String> raisingCalls = new HashSet<>();
+    Set<String> instantiated = new HashSet<>();
     List<Class<?>> loaded = new ArrayList<>();
     for (String name : names) {
       try {
@@ -79,7 +82,7 @@ public class JvmVerify {
         c.getDeclaredMethods();
         c.getDeclaredFields();
         verified += 1;
-        unresolved(root, name, names, loader, raisingCalls);
+        unresolved(root, name, names, loader, raisingCalls, instantiated);
         loaded.add(c);
       } catch (VerifyError | ClassFormatError e) {
         System.out.println("INVALID " + name + " " + e.getClass().getSimpleName() + ": " + oneLine(e.getMessage()));
@@ -87,16 +90,24 @@ public class JvmVerify {
         System.out.println("MISSING " + name + " " + e.getClass().getSimpleName() + ": " + oneLine(e.getMessage()));
       }
     }
-    for (Class<?> c : loaded) shadowed(c, raisingCalls);
+    for (Class<?> c : loaded) {
+      shadowed(c, raisingCalls);
+      if (instantiated.contains(c.getName())) unfilled(c, raisingCalls);
+    }
     System.out.println("VERIFIED " + verified + " OF " + names.size());
   }
 
   /** Print one UNRESOLVED line per member ref of `name` that no output class holds. */
-  private static void unresolved(Path root, String name, List<String> names, ClassLoader loader, Set<String> raisingCalls)
+  private static void unresolved(
+      Path root, String name, List<String> names, ClassLoader loader, Set<String> raisingCalls, Set<String> instantiated)
       throws IOException {
     Set<String> ours = new HashSet<>(names);
     for (String[] ref : memberRefs(root.resolve(name.replace('.', '/') + ".class"))) {
       String owner = ref[0].replace('/', '.');
+      if (ref[3].equals("N")) {
+        instantiated.add(owner);
+        continue;
+      }
       if (!ours.contains(owner)) continue;
       boolean method = ref[3].equals("M");
       if (method && ref[1].endsWith("$raises")) raisingCalls.add(owner + "." + ref[1] + ref[2]);
@@ -135,6 +146,35 @@ public class JvmVerify {
     }
   }
 
+  /**
+   * Print one UNFILLED line per abstract `m$raises` that concrete `c` -- one a
+   * `new` somewhere in the output instantiates -- inherits,
+   * implements nowhere in its class chain, and an instruction calls on an owner
+   * `c` is or descends from -- an `AbstractMethodError` when that call reaches a
+   * `c`, which neither the verifier nor linkage reports.
+   */
+  private static void unfilled(Class<?> c, Set<String> raisingCalls) {
+    if (c.isInterface() || Modifier.isAbstract(c.getModifiers())) return;
+    List<Class<?>> lineage = ancestry(c);
+    Set<String> seen = new HashSet<>();
+    for (Class<?> at : lineage) {
+      for (Method m : at.getDeclaredMethods()) {
+        if (!Modifier.isAbstract(m.getModifiers()) || !m.getName().endsWith("$raises")) continue;
+        String descriptor = MethodType.methodType(m.getReturnType(), m.getParameterTypes()).toMethodDescriptorString();
+        if (!seen.add(m.getName() + descriptor)) continue;
+        boolean filled = false;
+        for (Class<?> k = c; k != null && !filled; k = k.getSuperclass()) {
+          Method concrete = declared(k, m.getName(), m.getParameterTypes());
+          filled = concrete != null && !Modifier.isAbstract(concrete.getModifiers());
+        }
+        if (filled) continue;
+        String name = m.getName();
+        boolean reached = lineage.stream().anyMatch(owner -> raisingCalls.contains(owner.getName() + "." + name + descriptor));
+        if (reached) System.out.println("UNFILLED " + c.getName() + " " + name + descriptor + " declared abstract by " + at.getName());
+      }
+    }
+  }
+
   /** The instance method `at` itself declares with this name and these parameters, or null. */
   private static Method declared(Class<?> at, String name, Class<?>[] params) {
     for (Method m : at.getDeclaredMethods()) {
@@ -147,6 +187,7 @@ public class JvmVerify {
 
   /**
    * [owner, name, descriptor, "M" or "F"] for every field and method ref an
+   * instruction names, and [class, "", "", "N"] for every class a `new` names --
    * *instruction* names -- not every one in the pool. A pool keeps entries no
    * code uses (the emitter renders a function, then declines it and its
    * callers, and the entries stay), and a ref nothing executes links nothing.
@@ -209,6 +250,10 @@ public class JvmVerify {
         }
       }
       for (int i : used) {
+        if (i > 0 && i < count && member[i] == null && classAt[i] != 0) {
+          refs.add(new String[] {utf8[classAt[i]], "", "", "N"});
+          continue;
+        }
         if (i <= 0 || i >= count || member[i] == null) continue;
         String owner = utf8[classAt[member[i][0]]];
         int[] nt = nameAndType[member[i][1]];
@@ -233,7 +278,9 @@ public class JvmVerify {
       int op = code[pc] & 0xff;
       // getstatic..invokestatic (0xb2..0xb8) and invokeinterface (0xb9) name a
       // field or method ref in the two bytes after the opcode.
-      if ((op >= 0xb2 && op <= 0xb9) && pc + 2 < code.length) {
+      // `new` (0xbb) names a class ref the same way, which is how a class is
+      // known to be instantiated.
+      if (((op >= 0xb2 && op <= 0xb9) || op == 0xbb) && pc + 2 < code.length) {
         used.add(((code[pc + 1] & 0xff) << 8) | (code[pc + 2] & 0xff));
       }
       pc += width(code, pc, op);

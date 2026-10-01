@@ -294,10 +294,22 @@ pub fn member_name(func_name: &str) -> String {
 /// is the same correction `Field::declared_by` made for fields -- the class that
 /// *declares* a member is a different question from the one that implements it,
 /// and only the first decides what the JVM calls it.
+///
+/// **And an interface declares a slot too**, which the superclass walk cannot
+/// see: `Quiet implements Sink` fills `Sink`'s raising slot for `take` with its
+/// ordinary `Quiet#take`, because it cannot raise, and the walk named the
+/// forwarder `take` -- a duplicate of the ordinary one, dropped, so `Quiet`
+/// had no `take$raises` and `invokeinterface Sink.take$raises` was an
+/// `AbstractMethodError` the verifier waves through (2026-10-02, the first
+/// interface root a raising copy dispatched at). So an interface this layout
+/// implements that declares the slot names it, ahead of any class.
 #[must_use]
 pub fn declared_member(program: &Program, layout: &Layout, slot: usize) -> Option<String> {
     let mut at = layout;
     let mut name = at.methods.get(slot)?.as_ref()?;
+    if let Some(declared) = declaring_interface(program, layout, slot).and_then(|i| i.methods.get(slot)?.as_ref()) {
+        return Some(member_name(declared));
+    }
     // Up the chain while a base also declares this slot: the first declaration
     // is the one the JVM resolved against.
     while let Some(base) = jvm_base(program, at).and_then(|id| program.layouts.get(id)) {
@@ -447,6 +459,18 @@ pub fn implemented(package: &str, program: &Program, layout: &Layout) -> Vec<Str
         .filter(|at| is_interface(program, at))
         .map(|at| crate::types::class_name(package, at))
         .collect()
+}
+
+/// The interface, emitted as one, that `layout` or anything it extends
+/// implements and that declares `slot` -- the base a forwarder at that slot
+/// overrides when no superclass declares it.
+#[must_use]
+pub fn declaring_interface<'a>(program: &'a Program, layout: &Layout, slot: usize) -> Option<&'a Layout> {
+    program.layouts.iter().find(|interface| {
+        !std::ptr::eq(*interface, layout)
+            && interface.methods.get(slot).is_some_and(Option::is_some)
+            && interface.types.iter().any(|id| implements(program, layout, *id))
+    })
 }
 
 /// Does `layout`, or anything it extends, declare `id` as an interface?

@@ -2025,7 +2025,15 @@ fn dispatch_forwarders(
             continue;
         }
         forwarded.insert((member.clone(), descriptor.clone()), func_name.clone());
-        let bridge = bridge_for(package, program, layout, base, slot, &member, &descriptor, &origin)?;
+        // What this forwarder overrides: the superclass where it declares the
+        // slot, else an interface that does -- `Narrow implements Sink` takes
+        // `take()` where `Sink` declares `take(D)D`, and with only the
+        // superclass asked there was no base, no bridge and an
+        // `AbstractMethodError` at the call.
+        let overridden = base
+            .filter(|b| b.methods.get(slot).is_some_and(Option::is_some))
+            .or_else(|| hierarchy::declaring_interface(program, layout, slot));
+        let bridge = bridge_for(package, program, layout, overridden, slot, &member, &descriptor, &origin)?;
 
         // An abstract declaration gets the method with no `Code`, and the
         // verifier is what makes the absence safe: `invokevirtual` on an

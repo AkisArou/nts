@@ -27,6 +27,8 @@
 //   UNRESOLVED  an instruction naming a member no generated class holds
 //   SHADOWED    an override whose raising copy (`m$raises`) only an ancestor
 //               declares, so a raising call runs the ancestor's body
+//   UNFILLED    a concrete class inheriting an abstract `m$raises` it never
+//               implements, so a raising call reaching it is AbstractMethodError
 //
 // **UNRESOLVED is what the verifier cannot say, and it has no known list.**
 // Member linkage is lazy, so a call to a method its owner lacks loads and
@@ -193,7 +195,7 @@ function readVerify(text) {
   const summary = /^VERIFIED (\d+) OF (\d+)$/m.exec(text);
   if (!summary) return null;
   const lines = (kind) => text.split("\n").filter((l) => l.startsWith(`${kind} `)).map((l) => l.slice(kind.length + 1));
-  return { invalid: lines("INVALID"), missing: lines("MISSING"), unresolved: lines("UNRESOLVED"), shadowed: lines("SHADOWED"), verified: Number(summary[1]), total: Number(summary[2]) };
+  return { invalid: lines("INVALID"), missing: lines("MISSING"), unresolved: lines("UNRESOLVED"), shadowed: [...lines("SHADOWED"), ...lines("UNFILLED").map((l) => `unfilled ${l}`)], verified: Number(summary[1]), total: Number(summary[2]) };
 }
 
 /**
@@ -383,7 +385,7 @@ for (const { project, lines } of unresolved) {
   if (lines.length > 6) console.log(`                   ... ${lines.length - 6} more`);
 }
 for (const { project, lines } of shadowed) {
-  console.log(`  SHADOWED         ${project}: ${lines.length} override(s) whose raising copy only an ancestor declares`);
+  console.log(`  SHADOWED         ${project}: ${lines.length} raising entr(ies) an override leaves to an ancestor, or unfilled`);
   for (const l of lines.slice(0, 6)) console.log(`                   ${l.slice(0, 220)}`);
   if (lines.length > 6) console.log(`                   ... ${lines.length - 6} more`);
 }
