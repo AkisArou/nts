@@ -381,3 +381,113 @@ export function crossingADestructuredDefault(n: number): number {
     return -1;
   }
 }
+
+// **An override that cannot raise gets no copy, and its slot holds its ORDINARY
+// entry.** That fallback is `fill_raising_member_slots`', and it is the one of the
+// slot's three cases that could be an escape rather than a refusal: filling a slot
+// with a body that *can* raise would end the program while the flag test after the
+// dispatch watched a flag nothing sets. So the rule is the whole family or none of it
+// -- an override that can raise and has no copy makes the call refuse -- and this arm
+// is the sound half of it, written as an **answer** rather than as an assertion about
+// names, because the wrong dispatch here is a plausible number.
+//
+// `n + 100` is deliberately unlike both `n * 2` and `n * 3`: a compiler that resolved
+// the raising slot up to `Overridable` -- the JVM lane's `SHADOWED`, a class running
+// its ancestor's body with a happy verifier and no `NoSuchMethodError` -- would answer
+// `n * 2` here and this arm would say so.
+class Quietly extends Overridable {
+  override raise(n: number): number {
+    return n + 100;
+  }
+}
+const quietly: Overridable[] = [new Overridable(), new Quietly()];
+
+/** `0` dispatches to the base, which throws above 3; `1` to the override, which never does. */
+export function crossingAnOverrideThatCannotRaise(n: number): number {
+  try {
+    return quietly[n & 1]!.raise(n & 7);
+  } catch {
+    return -1;
+  }
+}
+
+// **A NARROWER override, which is the shape `runtime/node` actually has.**
+// `Readable#_read(size)` is overridden by `Transform#_read()` -- the base declares a
+// parameter the override does not -- and `child_process` is the one corpus module whose
+// `_read` family carries, so it is the one place a raising call is dispatched through an
+// overridden member's slot. That module does not run on the JVM (`ChildWritable` is
+// refused) and the differential only runs examples, so without this arm the corpus site
+// exists and nothing executes it. The JVM lane asked for the reduction for exactly that
+// reason.
+//
+// It is also the shape whose `-fsanitize=function` reading was retracted: a narrower
+// override is called through the base's prototype, which is benign on every ABI this
+// compiler targets and is **not** what the sanitizer objects to -- it objects to the
+// receiver pointer type, on every virtual dispatch. What was never exercised anywhere is
+// a *raising* call crossing a narrower prototype, which this does on all five backends.
+//
+// `limit + 50` is deliberately unlike the base's `n * 2`, so a slot resolved up to `Wide`
+// answers wrongly rather than quietly working.
+class Wide {
+  raise(n: number): number {
+    if (n > 3) {
+      throw new RangeError("wide is too deep");
+    }
+    return n * 2;
+  }
+}
+class Narrow extends Wide {
+  limit = 0;
+  override raise(): number {
+    if (this.limit > 3) {
+      throw new RangeError("narrow is too deep");
+    }
+    return this.limit + 50;
+  }
+}
+const narrow = new Narrow();
+const narrowing: Wide[] = [new Wide(), narrow];
+
+/** `0` dispatches to the two-parameter base, `1` to the no-parameter override. */
+export function crossingANarrowerOverride(n: number): number {
+  narrow.limit = n & 7;
+  try {
+    return narrowing[n & 1]!.raise(n & 7);
+  } catch {
+    return -1;
+  }
+}
+
+// **Still refused, and it is the last of the four.** A `new` names no function to
+// suffix: the callee it resolves to is a `Constructor`, which is never `eligible`, so
+// it comes out uncarriable exactly when construction can raise. The blunt rule --
+// refuse every `new` of a class this program declares -- was measured and cost 14
+// functions in `web-platform` that provably work, because `Http2ProtocolError`'s
+// constructor cannot throw and the rule could not tell.
+//
+// So this is the boundary now that an overridden member has a slot of its own, and it
+// is a different piece of work: a constructor is reached by `new`, and the thing a
+// raising copy would need is somewhere for `new` to put the flag test *before* the
+// instance exists.
+class Constructed {
+  readonly held: number;
+  constructor(n: number) {
+    if (n > 3) {
+      throw new RangeError("from the constructor");
+    }
+    this.held = n * 2;
+  }
+}
+
+/**
+ * Refused: `new` has no name to suffix. Its value is that the refusal *arrives* and
+ * says which of the reasons it is -- the arm that caught this message collapsing into
+ * the others twice while the four were being written.
+ */
+export function crossingAConstructor(n: number): number {
+  try {
+    return new Constructed(n & 7).held;
+  } catch {
+    return -1;
+  }
+}

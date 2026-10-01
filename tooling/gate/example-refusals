@@ -47,17 +47,18 @@ async-unsupported 3 the constructs the name promises
 # size of the progress, over the code that just changed.
 array-from-unsupported 1 the constructs the name promises
 mathops-unsupported 4 the constructs the name promises
-# One of four arms. The other three are the shapes this refusal must *not*
-# take, so a count of 2 here means the refusal has grown a case it should not
-# have -- which it did twice while being written.
-a-throw-that-stays-in-its-function 1 an overridden method callee: the dispatch is virtual and a raising copy is reached by name
-# The accessor's twin of the row above, and the last arm of the raising row. Five of
-# its six arms compile -- a getter read, a setter write, a compound assignment through
-# the pair, a `static` accessor, and a quiet getter that needs no copy at all -- so a
-# count of 2 means one of those five stopped, and a count of 0 means the virtual
-# boundary was lost. Both directions, which is why the arms are in the example rather
-# than left out of it.
-a-throwing-accessor-inside-a-try 1 an overridden accessor: the dispatch is virtual and a raising copy is reached by name
+# One arm of many, and **the last of the four reasons**. The others compile now: a
+# method's raising copy is reached by name, an overridden member's through a slot of its
+# own, and an accessor's either way. A `new` names no function to suffix at all, so this
+# is where the raising row stops.
+#
+# A count of 2 means the refusal grew a case it should not have -- which it did twice
+# while being written -- and a count of 0 means the boundary was lost. Both directions,
+# which is why every cleared shape stays in the example rather than being taken out of
+# it: `a-throwing-accessor-inside-a-try` carries the accessor's six, and this file
+# carries a direct method call, an overridden one, an overloaded callee, a static, two
+# parameter defaults and two IIFEs.
+a-throw-that-stays-in-its-function 1 a constructor callee: `new` names no function to suffix
 # `a-try-around-a-cycle-of-calls` had a row here, one indirection out from the
 # example above: the `try` around a call whose *callee* reached a method, naming
 # `shared.lifecycle`, the leaf. **It refuses nothing now** -- a method has a

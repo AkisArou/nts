@@ -15,8 +15,12 @@
 //!   - a **method** callee compiles too, and names the copy directly: a member no
 //!     subclass overrides is already a `Callee::Direct`, so the copy is that name
 //!     with the suffix and no dispatch slot is needed;
-//!   - an **overridden** method still refuses — the dispatch is a
-//!     `Callee::Virtual` through a slot, and a slot holds no name to suffix;
+//!   - an **overridden** method compiles as well, through a dispatch slot of its
+//!     own: a `Callee::Virtual` holds an index rather than a name, so the copy
+//!     needs an index, and every overrider fills it — with its own copy, or with
+//!     its ordinary entry where that override cannot raise;
+//!   - a **constructor** callee still refuses, and it is the last of them: `new`
+//!     names no function to suffix;
 //!   - an **overloaded** callee compiles, which took the checker's answer and the
 //!     lowering's agreeing about which declaration a copy is made of;
 //!   - a callee that merely *passes a throw on* compiles too, through a copy of
@@ -97,29 +101,24 @@ fn a_chain_of_callees_compiles_through_copies_of_each() {
     }
 }
 
-/// What still refuses, and for the stated reason rather than for any reason at
-/// all.
+/// What still refuses, and for the stated reason rather than for any reason at all.
 ///
-/// By message *and* by count: asserting the whole diagnostic list is one string
-/// is what catches a refusal arriving from somewhere else entirely, and what
-/// catches a second one appearing when a copy stops being made.
+/// By message *and* by count: asserting the whole diagnostic list is one string is what
+/// catches a refusal arriving from somewhere else entirely, and what catches a second
+/// one appearing when a copy stops being made. A count of 2 says the refusal grew a case
+/// it should not have -- it did twice while being written -- and a count of 0 says the
+/// boundary was lost.
 ///
-/// **And by which reason**, which is the half the sentence gained. "A throw would
-/// not reach this handler" is a fact about the `try`; a census needs to know
-/// whether the callee is a method, a value, a function that calls one, or a
-/// dispatch with no name to suffix, because those are different pieces of work.
-/// Pinning the classification here is what keeps the sentences from collapsing
-/// back into one.
-///
-/// **The subject moved once already**, which is the test earning its keep: it
-/// pinned "a method, and a raising copy is made of plain functions only" until a
-/// method became copyable, and then the example refused *nothing* and this
-/// assertion was the only thing that said so. The boundary is now one case over
-/// -- an **overridden** method, whose call is a `Callee::Virtual` through a slot,
-/// and a raising copy is reached by name.
+/// **The subject has moved three times, which is the test earning its keep.** It pinned
+/// "a method, and a raising copy is made of plain functions only" until a method became
+/// copyable; then an **overridden** method, whose dispatch goes through a slot, until
+/// that slot was numbered; and each time the example refused *nothing* and this
+/// assertion was the only thing that said so. What is left is a `new`, which names no
+/// function to suffix at all.
 #[test]
-fn a_callee_with_no_copy_is_still_refused() {
+fn the_last_callee_with_no_copy_is_a_constructor() {
     let Some(lowered) = lowered() else {
+        eprintln!("SKIP: tsgo is not built");
         return;
     };
     let reasons: Vec<&str> = lowered
@@ -130,27 +129,70 @@ fn a_callee_with_no_copy_is_still_refused() {
     assert_eq!(
         reasons,
         vec![
-            "a call inside a `try` to `raise`, which a subclass overrides: the dispatch goes \
-             through a slot and a raising copy is reached by name is not supported by this \
-             lowering yet"
+            "a call inside a `try` whose `throw` would not reach this handler: a \
+             constructor, and a raising copy is made of plain functions only is not \
+             supported by this lowering yet"
         ],
         "one refusal, naming the call"
     );
-    // **Both directions of the boundary that moved**, because an assertion that only
-    // says what refuses passes on a compiler that refuses everything: the direct
-    // method call compiles and names `Deeper#raise@raises`, and the overridden one
-    // does not compile at all.
     assert!(
-        compiled(&lowered, "crossingAMethod"),
-        "a direct method call names its raising copy"
+        !compiled(&lowered, "crossingAConstructor"),
+        "a `new` has no name to suffix"
     );
+    // **Both directions of each boundary that moved**, because an assertion that only
+    // says what refuses passes on a compiler that refuses everything. The overridden
+    // pair needs *both* copies: the base's alone leaves the override's slot filled with
+    // its ordinary entry, whose `throw` would end the program.
+    for name in [
+        "crossingAMethod",
+        "Deeper#raise@raises",
+        "crossingAnOverriddenMethod",
+        "Overridable#raise@raises",
+        "Overrides#raise@raises",
+        "crossingAnOverrideThatCannotRaise",
+        // A **narrower** override, which is `runtime/node`'s own shape:
+        // `Readable#_read(size)` against `Transform#_read()`. Its copy declares one
+        // parameter fewer than the entry the dispatch spells, and the example answers
+        // `limit + 50` where the base answers `n * 2`, so a slot resolved up to `Wide`
+        // fails the differential rather than working quietly.
+        "crossingANarrowerOverride",
+        "Wide#raise@raises",
+        "Narrow#raise@raises",
+    ] {
+        assert!(compiled(&lowered, name), "{name} should be emitted");
+    }
+    // **And an override that cannot raise gets no copy**, which is the other half of
+    // the same rule and the half that is an *answer* rather than a refusal: its slot
+    // takes its ordinary entry, which runs and never raises. Read at the index the
+    // base's own table puts its copy at, so this test does not know the number -- a
+    // test that knew it could not notice a renumbering.
     assert!(
-        compiled(&lowered, "Deeper#raise@raises"),
-        "the method's raising copy is emitted"
+        !compiled(&lowered, "Quietly#raise@raises"),
+        "`Quietly#raise` cannot raise, so no copy of it is made"
     );
-    assert!(
-        !compiled(&lowered, "crossingAnOverriddenMethod"),
-        "a virtual dispatch has no name to suffix"
+    let table = |class: &str| {
+        lowered
+            .program
+            .layouts
+            .iter()
+            .find(|layout| layout.name == class)
+            .unwrap_or_else(|| panic!("{class} should have a layout"))
+            .methods
+            .clone()
+    };
+    let slot = table("Overridable")
+        .iter()
+        .position(|held| held.as_deref() == Some("Overridable#raise@raises"))
+        .expect("`Overridable`'s table should hold its raising copy");
+    assert_eq!(
+        table("Quietly").get(slot).cloned().flatten().as_deref(),
+        Some("Quietly#raise"),
+        "`Quietly` fills that slot with its ordinary entry"
+    );
+    assert_eq!(
+        table("Overrides").get(slot).cloned().flatten().as_deref(),
+        Some("Overrides#raise@raises"),
+        "and an override that can raise fills it with its copy"
     );
 }
 

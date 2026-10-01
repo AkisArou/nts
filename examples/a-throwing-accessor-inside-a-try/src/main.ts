@@ -143,10 +143,49 @@ export function aStaticAccessor(n: number): number {
   }
 }
 
-/** Refused: the dispatch is virtual, so there is no name to suffix. */
+/**
+ * The **fallback** half of the override slot: `Derived`'s getter cannot raise, so it
+ * gets no copy and its slot holds its *ordinary* entry.
+ *
+ * `0` reads the base, which always throws, and `1` reads the override, which answers
+ * `1` -- so a compiler that resolved the override's raising slot **up** to
+ * `Base#get overridden@raises` (the JVM lane's `SHADOWED`: a class running its
+ * ancestor's body with a happy verifier and no `NoSuchMethodError`) would answer `-1`
+ * on the odd cases and this arm would say so. Asserted as an answer, because the wrong
+ * dispatch here produces a plausible number rather than a diagnostic.
+ */
 export function anOverriddenGetter(n: number): number {
   try {
     return pair[n & 1]!.overridden;
+  } catch {
+    return -1;
+  }
+}
+
+/**
+ * The **copy** half: an override that *can* raise gets a copy of its own, named at the
+ * same slot. Both bodies are reachable through one dispatch and both can throw, which
+ * is what the base's copy alone cannot pin.
+ *
+ * `bound` is set before the `try` so each case takes a different path through the
+ * override: `2` and `6` answer, `5` and `7` throw, and the base throws always.
+ */
+class Counting extends Base {
+  bound = 0;
+  override get overridden(): number {
+    if (this.bound > 3) {
+      throw new RangeError("counting is too deep");
+    }
+    return this.bound * 2;
+  }
+}
+const counting = new Counting();
+const both: Base[] = [new Base(), counting];
+
+export function anOverrideThatAlsoThrows(n: number): number {
+  counting.bound = n & 7;
+  try {
+    return both[n & 1]!.overridden;
   } catch {
     return -1;
   }

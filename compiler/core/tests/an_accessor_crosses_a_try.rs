@@ -8,6 +8,12 @@
 //! call node at all -- which is why `Place::Setter` carries the access node the callee
 //! was resolved for, and why these are asserted by *name* rather than by answer.
 //!
+//! **A seventh shape, an overridden accessor, dispatches through a slot of its own**
+//! rather than by name, and `an_overridden_accessor_dispatches_at_its_own_slot` asserts
+//! that both the base's copy and the override's are emitted. Numbering that slot is
+//! what made the base's copy reachable at all: before it, the entry existed and no
+//! table and no call named it.
+//!
 //! **The answers cannot catch two of the three defects this found.** A setter write
 //! whose flag nobody read returned the success value, which is a plausible number; and
 //! a quiet getter refused, which is a refusal rather than a wrong answer. Only the
@@ -88,29 +94,76 @@ fn a_quiet_accessor_is_not_refused_for_want_of_a_copy() {
     );
 }
 
-/// An **overridden** accessor is the boundary, and the only arm still refused.
+/// An **overridden** accessor dispatches at a raising slot of its own, and **both** the
+/// base's copy and the override's exist.
+///
+/// The slot's three cases, and the third is the one that could be an escape.
+///
+/// This asserted a refusal until the slot was numbered, and it is the second time this
+/// boundary moved: a member no subclass overrides was always a `Callee::Direct`, so the
+/// virtual case was the one left, and `raising_member_slots` is what answers it.
+///
+///   * `Base#get overridden@raises` -- the root's copy, which the dispatch names;
+///   * `Counting#get overridden@raises` -- an override that **can** raise gets one too,
+///     which `raising_member_slots` is for: `raising_copies` is seeded from the callee
+///     the *checker* resolved, and for a virtual call that is always the base;
+///   * `Derived`, whose getter cannot raise, gets **no** copy and its slot holds its
+///     **ordinary** entry. Asserted at the layout, because a slot filled with a name is
+///     the only place that fact exists -- and filling it with an ancestor's copy instead
+///     is the JVM lane's `SHADOWED`, a class running its ancestor's body with a happy
+///     verifier and no `NoSuchMethodError`.
+///
+/// `examples/a-throwing-accessor-inside-a-try` carries the same three as **answers**,
+/// which is the half this cannot do: a wrong dispatch here is a plausible number.
 #[test]
-fn an_overridden_accessor_is_still_refused() {
+fn an_overridden_accessor_dispatches_at_its_own_slot() {
     let Some(lowered) = lowered() else {
         eprintln!("SKIP: tsgo is not built");
         return;
     };
     assert!(
-        !compiled(&lowered, "anOverriddenGetter"),
-        "a virtual dispatch has no name to suffix"
+        lowered.diagnostics.is_empty(),
+        "nothing refuses now: {:?}",
+        lowered.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
     );
-    let reasons: Vec<&str> = lowered
-        .diagnostics
+    for name in [
+        "anOverriddenGetter",
+        "anOverrideThatAlsoThrows",
+        "Base#get overridden@raises",
+        "Counting#get overridden@raises",
+    ] {
+        assert!(compiled(&lowered, name), "{name} should be emitted");
+    }
+    assert!(
+        !compiled(&lowered, "Derived#get overridden@raises"),
+        "`Derived`'s getter cannot raise, so no copy of it is made"
+    );
+
+    // One table of a class, so what each fills a slot with is read rather than assumed.
+    let table = |class: &str| {
+        lowered
+            .program
+            .layouts
+            .iter()
+            .find(|layout| layout.name == class)
+            .unwrap_or_else(|| panic!("{class} should have a layout"))
+            .methods
+            .clone()
+    };
+    // The slot is the base's, taken from the base's own table: this test must not know
+    // the index, because knowing it would stop it from noticing a renumbering.
+    let slot = table("Base")
         .iter()
-        .map(|diagnostic| diagnostic.message.as_str())
-        .collect();
+        .position(|held| held.as_deref() == Some("Base#get overridden@raises"))
+        .expect("`Base`'s table should hold its raising copy");
     assert_eq!(
-        reasons,
-        vec![
-            "a `get` of `overridden` inside a `try`, which a subclass overrides: the \
-             dispatch goes through a slot and a raising copy is reached by name is not \
-             supported by this lowering yet"
-        ],
-        "one refusal, naming the accessor and why"
+        table("Derived").get(slot).cloned().flatten().as_deref(),
+        Some("Derived#get overridden"),
+        "`Derived` fills that slot with its ordinary entry, which runs and never raises"
+    );
+    assert_eq!(
+        table("Counting").get(slot).cloned().flatten().as_deref(),
+        Some("Counting#get overridden@raises"),
+        "and an override that can raise fills it with its copy"
     );
 }

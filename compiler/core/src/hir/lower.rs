@@ -570,6 +570,18 @@ impl Hierarchy {
             .is_some_and(|names| names.iter().any(|name| name == member))
     }
 
+    /// The uniform entries' indices, carried onto the program.
+    ///
+    /// Published rather than derived, because the passes that need them -- `devirtualize`
+    /// resolving a known closure class, the backends filling a null table entry -- run
+    /// long after the hierarchy is gone, and deriving an index from an entry's *name*
+    /// would be a second derivation of a table length.
+    fn publish_uniform_slots(&self, program: &mut Program) {
+        program.closure_slot = self.closure_slot;
+        program.erased_call_slot = self.erased_call_slot;
+        program.raising_call_slot = self.raising_call_slot;
+    }
+
     /// How many slots a dispatch table has.
     fn table_size(&self) -> usize {
         self.slots.len()
@@ -594,7 +606,9 @@ impl Hierarchy {
 
     /// The dispatch slot a call on `ty` would use, if it needs one.
     fn slot_for(&self, ty: TypeId, member: &str) -> Option<u32> {
-        let root = self.root_declaring(ty, member)?;
+        // A raising key resolves its root through the plain member: see
+        // [`without_the_raising_suffix`], which `layout_of` asks the same question of.
+        let root = self.root_declaring(ty, without_the_raising_suffix(member).0)?;
         self.slots.get(&(root, member.to_owned())).copied()
     }
 
@@ -1805,6 +1819,182 @@ fn collect_hierarchy(
     }
     hierarchy.com_iids = com_interface_ids(snapshot);
     hierarchy
+}
+
+/// A dispatch slot for the raising copy of an **overridden** member, and a copy for
+/// every class that fills it -- or neither, where one of them cannot carry.
+///
+/// A member no subclass overrides is a `Callee::Direct` and its copy is that name with
+/// the suffix, which is why a method needed no slot when it became copyable. Where the
+/// dispatch *is* virtual there is no name to suffix, and `callee_for` refused: the slot
+/// holds the ordinary entry, whose body ends the program on an uncaught `throw` while
+/// the flag test the site emitted watches a flag nothing sets. This is the index that
+/// makes the dispatch answerable.
+///
+/// **It is all of the family or none of it, and that is a soundness condition rather
+/// than a simplification.** The site has a static receiver type and any subclass may
+/// arrive, so `Base`'s copy being reachable at the slot means *every* overrider's is.
+/// Two things can go wrong at one of them and the second is the one that bites:
+///
+/// * it **cannot raise** -- then it needs no copy at all and
+///   [`fill_raising_member_slots`] gives its slot the ordinary entry, which runs and
+///   never raises. Sound, and the common case;
+/// * it can raise and **is not [`Naming::copyable`]** -- then no copy of it can be
+///   built, and filling the slot with its ordinary entry is an escape. So the family
+///   gets no slot, `Hierarchy::slot_for` answers `None`, and the two call sites keep
+///   refusing. `runtime/node`'s `_read` family is exactly this: `DuplexSide#_read`
+///   calls `release`, which calls a callback held in a field, and an indirect callee
+///   is carried only where [`Naming::closures_carry`] is on.
+///
+/// **The first version asked neither question** and inserted every overrider into
+/// `raising` outright. `Sub#raise@raises` was then *built* -- `function_copies` is
+/// keyed on the set, not on the fixpoint -- and its indirect call went out at the
+/// ordinary uniform entry, so the `throw` it exists to carry ended the program:
+/// `nts: uncaught RangeError` on 8 of 29 cases where node answers `-1`. The copy
+/// compiled, the `try` compiled, and nothing was refused. That is why the eligibility
+/// `raising_copies` computes is published rather than re-derived here.
+///
+/// **Appended after the uniform entries, so nothing renumbers.** `collect_hierarchy`
+/// numbers the ordinary members 0..n and then `closure_slot`, `erased_call_slot`,
+/// `raising_call_slot` and `generator_slot` from `table_size()`; inserting a key in the
+/// middle would move every index after it and the four uniform slots with them, which is
+/// the renumbering the JVM lane asked to be warned about when `raising_call_slot` moved
+/// `generator_slot`. Numbering from the current `table_size()` upward moves nothing, and
+/// `table_size()` stays correct because the new keys occupy the indices above the four.
+///
+/// **Here rather than in `raising_copies`**, for the reason `closures_carry` is here:
+/// overriding is a fact about the hierarchy and that function has none -- it runs before
+/// `collect_hierarchy`'s answer exists and is asked by things that have no hierarchy
+/// either. And as *one* function rather than two, because "this family dispatches
+/// raising" and "every member of it has a copy" are one decision: two functions that
+/// had to agree about the family is the shape this file has four defects from.
+///
+/// Sorted, so one compiler on one input numbers them one way.
+fn raising_member_slots(snapshot: &SemanticSnapshot, hierarchy: &mut Hierarchy, naming: &mut Naming) {
+    let probe = FuncBuilder::probe(snapshot);
+    // The `(root, key)` families a `try` already reaches: a member with a copy, whose
+    // dispatch is virtual. `raising_copies` seeds from the callee the *checker*
+    // resolved, which for a virtual call is always the declaration the receiver's
+    // static type names -- so this set holds the bases, never the overriders.
+    let mut families: Vec<(TypeId, String)> = Vec::new();
+    for member in &naming.raising {
+        let Some(key) = member_dispatch_key(&probe, *member) else {
+            continue;
+        };
+        let Some(ty) = probe
+            .enclosing_class(*member)
+            .and_then(|class| instance_type_of(snapshot, class))
+        else {
+            continue;
+        };
+        let Some(root) = hierarchy.root_declaring(ty, &key) else {
+            continue;
+        };
+        if hierarchy.overridden(root, &key) && !families.contains(&(root, key.clone())) {
+            families.push((root, key));
+        }
+    }
+    families.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.1.cmp(&b.1)));
+    for (root, key) in families {
+        let members = members_filling(snapshot, &probe, hierarchy, root, &key);
+        // Every one of them, or the slot is not numbered. `copyable` says a copy can be
+        // built and everything it calls has one; a member that cannot raise needs none.
+        if !members.iter().all(|member| {
+            naming.copyable.contains(member)
+                || !a_declaration_that_can_raise(snapshot, &naming.throwing, *member)
+        }) {
+            continue;
+        }
+        let raising_key = (root, format!("{key}{RAISING_SUFFIX}"));
+        if hierarchy.slots.contains_key(&raising_key) {
+            continue;
+        }
+        let at = u32::try_from(hierarchy.table_size()).unwrap_or(u32::MAX);
+        hierarchy.slots.insert(raising_key, at);
+        for member in members {
+            if naming.copyable.contains(&member) {
+                naming.raising.insert(member);
+            }
+        }
+    }
+}
+
+/// Every member declaration that would fill `root`'s `key` slot: the one each class at
+/// or below `root` declares for it.
+///
+/// By walking the class declarations rather than a reverse map, because the map from a
+/// type back to the class node is not one this file keeps and a second derivation of it
+/// would be a third place that answers "which class is this".
+fn members_filling(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    hierarchy: &Hierarchy,
+    root: TypeId,
+    key: &str,
+) -> Vec<NodeId> {
+    let mut found = Vec::new();
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        let NodeKind::Syntax(kind) = node.kind else {
+            continue;
+        };
+        if !declares_a_class(kind) {
+            continue;
+        }
+        let class = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        let Some(ty) = instance_type_of(snapshot, class) else {
+            continue;
+        };
+        if !hierarchy.descends_from(ty, root) {
+            continue;
+        }
+        for member in probe.children(class) {
+            if member_dispatch_key(probe, member).as_deref() == Some(key) {
+                // Normalised the way `raising_copies` normalises what it puts in
+                // `Naming::copyable`, because the caller asks that set about these nodes.
+                // An **overloaded** member declares several nodes for one dispatch key and
+                // only the implementation is ever in the set, so comparing the raw nodes
+                // would reject every such family -- conservative, and a second spelling of
+                // one normalisation, which is the defect this file has had four of.
+                found.push(implementation_of(snapshot, probe, the_function_of(probe, member)));
+            }
+        }
+    }
+    found
+}
+
+/// Whether a declaration can raise, which [`Throwing::any`] answers **by symbol**
+/// because a declaration node carries none of its own.
+///
+/// One spelling, two readers: this and [`every_raising_body_can_carry`]'s wrapper arm,
+/// which asked the same question of the same set with the same scan written out.
+fn a_declaration_that_can_raise(
+    snapshot: &SemanticSnapshot,
+    raises: &rustc_hash::FxHashSet<u32>,
+    declaration: NodeId,
+) -> bool {
+    snapshot
+        .symbols
+        .iter()
+        .position(|record| record.declarations.contains(&declaration))
+        .and_then(|at| u32::try_from(at).ok())
+        .is_some_and(|symbol| raises.contains(&symbol))
+}
+
+/// The key a member is dispatched under: its name, with `get `/`set ` where it is an
+/// accessor, which is the spelling `accessor_callee` and `hierarchy.declares` both use.
+fn member_dispatch_key(probe: &FuncBuilder, member: NodeId) -> Option<String> {
+    let prefix = match probe.kind_of(member)? {
+        syntax::METHOD_DECLARATION => "",
+        syntax::GET_ACCESSOR => "get ",
+        syntax::SET_ACCESSOR => "set ",
+        _ => return None,
+    };
+    let name = probe
+        .children(member)
+        .into_iter()
+        .find(|child| probe.kind_of(*child) == Some(syntax::IDENTIFIER))
+        .and_then(|child| probe.node(child).text.clone())?;
+    Some(format!("{prefix}{name}"))
 }
 
 /// One arrow function, and what its body reads from the scope around it.
@@ -3620,7 +3810,22 @@ const RECEIVER_IS_NOT_BOUND: &str =
 
 /// What each function declaration is emitted as, and which cannot be.
 #[derive(Default)]
+#[derive(Clone)]
 struct Naming {
+    /// Which declarations a [raising copy](FuncBuilder::raises) is emitted for.
+    /// See [`raising_copies`].
+    raising: rustc_hash::FxHashSet<NodeId>,
+    /// Which declarations a raising copy *could* be made of: [`raising_copies`]'
+    /// `eligible`, the greatest fixpoint of "a copy of this can be built and every
+    /// callee of it that can raise has one too".
+    ///
+    /// Published rather than kept local, because [`raising_member_slots`] has to ask
+    /// it of an **overrider** -- which `raising_copies` never sees, since the callee a
+    /// virtual call resolves to is always the declaration the receiver's static type
+    /// names -- and that function needs the hierarchy, which `raising_copies` has
+    /// none of. Re-deriving the fixpoint there would be a second answer to the one
+    /// question whose wrong answer is a copy that compiles and drops a `throw`.
+    copyable: rustc_hash::FxHashSet<NodeId>,
     /// Symbols whose functions can raise a `throw`, directly or through a call.
     ///
     /// What a `try` needs to know about a call it contains: a `throw` reaches
@@ -3634,10 +3839,7 @@ struct Naming {
     /// in the set: `fns[0]()` reaches what cannot be known here, and the
     /// alternative is to assume the very thing this exists because the compiler
     /// cannot establish.
-raising: rustc_hash::FxHashSet<NodeId>,
-    /// Which plain functions a [raising copy](FuncBuilder::raises) is emitted
-    /// for. See [`raising_copies`].
-        throwing: rustc_hash::FxHashSet<u32>,
+    throwing: rustc_hash::FxHashSet<u32>,
     /// [`Throwing::bodily`] -- which `then` the thenable census calls raising. A
     /// separate field rather than `throwing` filtered at the reader, because which
     /// question a set answers is a property of the set.
@@ -4600,27 +4802,31 @@ fn copyable_symbols(
     }
 }
 
-/// Whether a raising copy can be made of this declaration: a plain function **or a
-/// method**, not generic and not `async`.
+/// Whether a raising copy can be made of this declaration: a plain function, a
+/// **method** or an **accessor**, not generic and not `async`.
 ///
 /// A generic's suffix is already spoken for, and an `async` function never raises
 /// synchronously, so it is not this question at all.
 ///
-/// **A method, which nothing copied until now**, and the reason is that it did not
-/// need a second dispatch slot: `callee_for` already makes a call on a member no
-/// subclass overrides a `Callee::Direct` by name, so the copy is reached by naming
-/// it. Where the dispatch *is* virtual there is no raising entry to name and
-/// `callee_for` refuses -- one authority for direct-or-virtual rather than a second
-/// derivation at the `try`.
+/// **How the copy is reached depends on the dispatch, and both answers exist.** A
+/// member no subclass overrides is already a `Callee::Direct`, so the copy is that
+/// name with the suffix -- which is why a method needed no table index when it became
+/// copyable. Where the dispatch *is* virtual the copy has a slot of its own, numbered
+/// by [`number_raising_member_slots`] and filled per class by
+/// [`fill_raising_member_slots`]. [`FuncBuilder::callee_for`] and
+/// [`FuncBuilder::accessor_callee`] are the two places that know direct from virtual,
+/// so they are the two places that choose -- rather than a second derivation at the
+/// `try`.
 ///
 /// 1,060 occurrences of "a method, and a raising copy is made of plain functions
-/// only" across the runtime corpora, and the conformance lane's 607 + 60 test262
-/// files, are what this is for.
+/// only" and 705 of "an accessor, which is a call", across the runtime corpora, are
+/// what this is for.
 ///
-/// A constructor and an accessor are still copied by nothing. A constructor is
-/// reached by `new`, which names no function to suffix; an accessor is reached by a
-/// read or a write, which `callee_for` is not on the path of. Both are their own
-/// piece of work and both are named where they are refused.
+/// **A constructor is still copied by nothing**, and it is the last of them: it is
+/// reached by `new`, which names no function to suffix, and the callee `new` resolves
+/// to is a `Constructor`, which is never eligible here. It is its own piece of work,
+/// named where it is refused and pinned by
+/// `examples/a-throw-that-stays-in-its-function`.
 fn a_copy_can_be_made_of(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
@@ -4657,6 +4863,23 @@ fn can_be_copied(snapshot: &SemanticSnapshot, probe: &FuncBuilder, symbol: u32) 
 /// structural copy's suffix is composed, through `generic_calls`, so a call
 /// that names one takes the same path every other copy naming takes.
 const RAISING_SUFFIX: &str = "@raises";
+
+/// A dispatch key split into the member the program declared and the suffix, if any:
+/// `("get closed", "@raises")` for `get closed@raises`, and `("read", "")` for `read`.
+///
+/// **One rule with two readers**, because a raising slot is keyed under the suffixed
+/// name while every answer about the member itself -- which class declares it, which
+/// classes override it -- is keyed under the name the program wrote.
+/// [`Hierarchy::slot_for`] strips it to find the root and [`FuncBuilder::layout_of`]
+/// strips it to fill the slot and then puts it back on the emitted name. Two spellings
+/// of that strip is a site naming an index the table does not carry, which is the
+/// defect this file has had four of in a week.
+fn without_the_raising_suffix(member: &str) -> (&str, &str) {
+    match member.strip_suffix(RAISING_SUFFIX) {
+        Some(plain) => (plain, RAISING_SUFFIX),
+        None => (member, ""),
+    }
+}
 
 /// Why a call inside a `try` reaching a **function value** has nothing to name.
 ///
@@ -4830,11 +5053,36 @@ fn eligible_declarations(
     }
 }
 
+/// What [`raising_copies`] answers: which copies to emit, which declarations one
+/// *could* be made of, and whether a site may dispatch at the closure raising slot.
+///
+/// A struct rather than a tuple because the second field exists to be asked a question
+/// the first cannot answer -- `copies` is what a `try` reached, `eligible` is what the
+/// fixpoint allows -- and a tuple of two sets of `NodeId` is two chances to read the
+/// wrong one.
+struct RaisingCopies {
+    /// The copies to emit: `eligible` members a `try` reaches, closed over callees.
+    copies: rustc_hash::FxHashSet<NodeId>,
+    /// Every declaration a copy *can* be made of, whether or not one is wanted. See
+    /// [`Naming::copyable`], whose doc says who reads it and why it is published.
+    ///
+    /// **The set the copies were actually built from**, which matters because
+    /// [`eligible_declarations`] is run twice: optimistically, and again strictly where
+    /// the program-global gate turns out to be off. Publishing the optimistic one there
+    /// would tell `raising_member_slots` that an overrider has a copy when none was
+    /// built -- the escape `blockers/a-callback-held-in-a-field-with-the-raising-gate-off`
+    /// pins, arriving by a second route. Both arms of `raising_copies` return the
+    /// `eligible` in scope at their own `return`, which is the strict one in the second.
+    eligible: rustc_hash::FxHashSet<NodeId>,
+    /// [`Naming::closures_carry`].
+    closures_carry: bool,
+}
+
 fn raising_copies(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
     throwing: &Throwing,
-) -> (rustc_hash::FxHashSet<NodeId>, bool) {
+) -> RaisingCopies {
     // Optimistically: a call through a value is carried by the raising uniform entry,
     // which is true wherever `every_raising_body_can_carry` is. Recomputed strictly
     // below where it is not -- see the `carry` branch.
@@ -4917,7 +5165,7 @@ fn raising_copies(
     // raising slot at all. See `every_raising_body_can_carry`.
     let carry = every_raising_body_can_carry(snapshot, probe, throwing, &copies);
     if carry {
-        return (copies, true);
+        return RaisingCopies { copies, eligible, closures_carry: true };
     }
     // **Where it is off, the extra seeds are dropped with it.** They exist to serve
     // the raising variant of a *closure*, and no closure gets one when no site can
@@ -4945,7 +5193,8 @@ fn raising_copies(
         .into_iter()
         .filter(|declaration| eligible.contains(declaration))
         .collect();
-    (close_over_callees(snapshot, probe, &eligible, narrow), false)
+    let copies = close_over_callees(snapshot, probe, &eligible, narrow);
+    RaisingCopies { copies, eligible, closures_carry: false }
 }
 
 /// Close a set of copies over what those copies call: a copy names its callees'
@@ -5567,9 +5816,10 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
         ..Naming::default()
     };
     let throwing = throwing_symbols(snapshot, &probe);
-    let (raising, carry) = raising_copies(snapshot, &probe, &throwing);
-    naming.raising = raising;
-    naming.closures_carry = carry;
+    let raising = raising_copies(snapshot, &probe, &throwing);
+    naming.raising = raising.copies;
+    naming.copyable = raising.eligible;
+    naming.closures_carry = raising.closures_carry;
     naming.raising_then = throwing.bodily;
     naming.throwing = throwing.any;
     naming.presence_keys = presence_keys(snapshot, &probe);
@@ -9742,11 +9992,21 @@ impl Shared {
     /// What every function's lowering needs and none of them computes: the
     /// module scope, the class hierarchy, the closures, the qualified names,
     /// and which generic functions were instantiated at what.
+    /// `naming` is passed rather than computed, because **a slot it decides has to be
+    /// in the hierarchy every reader sees**. `closures_carry` was a bool and patching a
+    /// local clone here was enough; `number_raising_member_slots` adds an *index*, and a
+    /// clone that has it while `lower`'s own hierarchy does not gives two tables of
+    /// different lengths -- the layouts a builder fills are one longer than the one
+    /// `declare_uniform_entries` reads, so the entry is written and then never found.
+    /// That cost an afternoon: the call was `call.virtual[1] Base#raise@raises`, the
+    /// copy was in `funcs`, and `reachable::prune` dropped it because the *layout* it
+    /// was supposed to be in belonged to the other hierarchy.
     fn whole_program(
         snapshot: &SemanticSnapshot,
         module: &ModuleScope,
         hierarchy: &Hierarchy,
         closures: &[ClosureInfo],
+        naming: Naming,
     ) -> Self {
         let structural = structural_instantiations(snapshot, hierarchy);
         let probe = FuncBuilder::probe(snapshot);
@@ -9763,14 +10023,13 @@ impl Shared {
                 .map(|instance| (instance.ty, instance.substitution))
                 .collect(),
         );
-        let naming = naming(snapshot);
-        // **The hierarchy this program's bodies see says whether the raising slot may
-        // be dispatched at**, which `collect_hierarchy` could not know: the answer
-        // comes from `raising_copies`, which runs here. One fact in the place every
-        // builder already reads, rather than a fourth bool on `FuncBuilder`.
-        let mut hierarchy = hierarchy.clone();
-        hierarchy.closures_carry = naming.closures_carry;
-        let hierarchy = &hierarchy;
+        // **The hierarchy this program's bodies see is the caller's**, which already
+        // carries what `collect_hierarchy` could not know -- `closures_carry` and the
+        // raising member slots, both of which come from `raising_copies` -- because
+        // `hierarchy_and_naming` patched it there, with the same `naming` this is given.
+        // It used to be cloned here so `closures_carry` could be set on the copy; that
+        // clone is gone, because one hierarchy is the whole point and a second one is
+        // how a layout's table and the slot a site names came to be different lengths.
         // After every variant, so that none is made of these: a job and its
         // resolving functions capture nothing a copy could re-type.
         let thenables =
@@ -10214,9 +10473,10 @@ fn mark_refused_initializers(
     module: &mut ModuleScope,
     hierarchy: &Hierarchy,
     closures: &[ClosureInfo],
+    naming: Naming,
     lowered: &mut Lowered,
 ) -> rustc_hash::FxHashSet<u32> {
-    let probing = Shared::whole_program(snapshot, module, hierarchy, closures);
+    let probing = Shared::whole_program(snapshot, module, hierarchy, closures, naming);
     let refused = refused_initializers(snapshot, &probing, lowered);
     drop(probing);
     for symbol in &refused {
@@ -11667,6 +11927,37 @@ fn raising_closure(
     }
 }
 
+/// The hierarchy and the naming, each knowing what the other decided.
+///
+/// They are built together because two of the hierarchy's fields are **not** facts
+/// `collect_hierarchy` can reach: both come from `raising_copies`, which needs no
+/// hierarchy and runs inside [`naming`] -- whether a closure's raising entry may be
+/// dispatched at ([`Hierarchy::closures_carry`]), and a dispatch slot for the raising
+/// copy of each overridden member that has one ([`number_raising_member_slots`]). And
+/// [`copy_every_override`] then needs the hierarchy to answer which members override
+/// one of those, so the naming is not finished until the hierarchy exists either.
+///
+/// **Patched here, before anything reads either, so that one hierarchy is the only
+/// one.** A slot is a table *length*: `whole_program` clones the hierarchy to patch
+/// `closures_carry`, which a bool survives and an index does not -- layouts came out one
+/// entry longer than the table `declare_uniform_entries` read, and `Base#raise@raises`
+/// went into `funcs` where `reachable::prune` removed it.
+///
+/// The qualifying map before the hierarchy, because the hierarchy is what names an
+/// instance method and two classes of one name must not name one. `qualified_names`
+/// reads only the snapshot, so it can come first.
+fn hierarchy_and_naming(
+    snapshot: &SemanticSnapshot, foreign: &super::runtime::ForeignTable,
+    closures: &[ClosureInfo],
+) -> (Hierarchy, Naming) {
+    let mut hierarchy =
+        collect_hierarchy(snapshot, foreign, closures, &qualified_names(snapshot).0);
+    let mut naming = naming(snapshot);
+    hierarchy.closures_carry = naming.closures_carry;
+    raising_member_slots(snapshot, &mut hierarchy, &mut naming);
+    (hierarchy, naming)
+}
+
 /// As [`lower`], told which source files the project named as its roots.
 ///
 /// `entry` is `SourceFile::uri` values -- `nts-workspace:///src/main.ts` -- and
@@ -11688,29 +11979,22 @@ pub fn lower_with(
     // closure's layout is decided here. `collect_closures` reads only the
     // snapshot, so the order is free.
     let closures = collect_closures(snapshot);
-    // The hierarchy before the module scope, because the module scope's probe
-    // lays out classes and a layout built without the hierarchy is a different
-    // layout. `collect_hierarchy` reads the snapshot and the closures and
-    // nothing else, so it can come first; the reverse is not true.
-    // The qualifying map before the hierarchy, because the hierarchy is what
-    // names an instance method and two classes of one name must not name one.
-    // `qualified_names` reads only the snapshot, so it can come first.
-    let hierarchy = collect_hierarchy(snapshot, foreign, &closures, &qualified_names(snapshot).0);
+    // The hierarchy and the naming before the module scope, because the module scope's
+    // probe lays out classes and a layout built without the hierarchy is a different
+    // layout. See `hierarchy_and_naming` for why the two are built together.
+    let (hierarchy, naming) = hierarchy_and_naming(snapshot, foreign, &closures);
     let mut module = collect_module_scope(snapshot, foreign, &closures, &hierarchy);
     lowered.diagnostics.extend(module.refusals.iter().cloned());
     lowered.program.globals.clone_from(&module.globals);
-    // The dispatch table's two closure entries, carried onto the program because
-    // `fields::devirtualize` needs both and runs long after the hierarchy is gone.
-    lowered.program.closure_slot = hierarchy.closure_slot;
-    lowered.program.erased_call_slot = hierarchy.erased_call_slot;
-    lowered.program.raising_call_slot = hierarchy.raising_call_slot;
+    hierarchy.publish_uniform_slots(&mut lowered.program);
     collect_layouts(&mut lowered.program, module.layouts.clone());
     let mut wanted: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
 
     let generic = generic_classes(snapshot);
-    let refused =
-        mark_refused_initializers(snapshot, &mut module, &hierarchy, &closures, &mut lowered);
-    let shared = Shared::whole_program(snapshot, &module, &hierarchy, &closures);
+    let refused = mark_refused_initializers(
+        snapshot, &mut module, &hierarchy, &closures, naming.clone(), &mut lowered,
+    );
+    let shared = Shared::whole_program(snapshot, &module, &hierarchy, &closures, naming);
     // With the variants `Shared` added: every walk below that asks which
     // closures exist, and the loop that lowers them, sees the same list the
     // builders do.
@@ -13186,6 +13470,50 @@ fn declare_uniform_entries(
     // dispatch table holds. See `every_raising_body_can_carry`.
     if dispatches_raising {
         declare_raising_entries(hierarchy, program);
+    }
+    // Unconditionally, which is the difference from the uniform entry above: a member's
+    // raising slot is reached by *name* through `Callee::Virtual`'s `declared`, not by a
+    // program-global decision, so a program that allocated one has a site that names it.
+    fill_raising_member_slots(hierarchy, program);
+}
+
+/// Every **member** raising slot, filled with the copy where one exists and with the
+/// ordinary entry where it does not.
+///
+/// `layout_of` writes `{owner}#{member}@raises` into the slot while lowering, because
+/// that is where a layout is demanded -- and at that moment the copies are not all built.
+/// An override that *cannot* raise gets no copy, so its slot would name a function
+/// nothing defines, and the JVM lane's `SHADOWED` check reports exactly that: a class
+/// inheriting its ancestor's copy runs **the ancestor's body** with no
+/// `NoSuchMethodError` and a happy verifier, and C calls through a null entry.
+///
+/// So the fallback is the ordinary entry, on the same argument
+/// [`declare_raising_entries`] makes for a closure whose variant is the same program: a
+/// body with nothing to raise cannot end anything, so running it is right and the flag
+/// the caller tests is simply never set.
+fn fill_raising_member_slots(hierarchy: &Hierarchy, program: &mut Program) {
+    let made: rustc_hash::FxHashSet<&str> =
+        program.funcs.iter().map(|func| func.name.as_str()).collect();
+    let mut ordinary: Vec<(usize, usize, String)> = Vec::new();
+    for (at, layout) in program.layouts.iter().enumerate() {
+        for ((_, member), slot) in &hierarchy.slots {
+            if !member.ends_with(RAISING_SUFFIX) {
+                continue;
+            }
+            let slot = *slot as usize;
+            let Some(Some(named)) = layout.methods.get(slot) else {
+                continue;
+            };
+            if made.contains(named.as_str()) {
+                continue;
+            }
+            if let Some(plain) = named.strip_suffix(RAISING_SUFFIX) {
+                ordinary.push((at, slot, plain.to_owned()));
+            }
+        }
+    }
+    for (at, slot, plain) in ordinary {
+        program.layouts[at].methods[slot] = Some(plain);
     }
 }
 
@@ -41205,25 +41533,34 @@ impl<'a> FuncBuilder<'a> {
         // `has_a_raising_copy` requires *every* accessor the member declares to have a
         // copy, so a read and a write cannot disagree about whether the name carries it.
         //
-        // **And where the dispatch is virtual there is nothing to name**, so this
-        // refuses rather than calling the plain entry, whose body ends the program on an
-        // uncaught `throw` while the flag test the site emitted watches a flag nothing
-        // sets. The same answer `callee_for` gives one construct over, in the one place
-        // that knows direct from virtual.
+        // **And where the dispatch is virtual the copy has a slot of its own**, which
+        // this refused for want of: naming the plain entry instead would run a body that
+        // ends the program on an uncaught `throw` while the flag test the site emitted
+        // watched a flag nothing sets. The same answer `callee_for` gives one construct
+        // over, in the one place that knows direct from virtual.
         let suffix = self.raising_suffix_of(id);
         if self.hierarchy.overridden(ty, &key)
             && let Some(slot) = self.hierarchy.slot_for(ty, &key)
         {
+            // The same answer `callee_for` gives a method one construct over: the
+            // raising copy of an overridden accessor has a slot of its own.
             if !suffix.is_empty() {
-                return Err(self.unsupported(
-                    id,
-                    &format!(
-                        "a `{kind}` of `{member}` inside a `try`, which a subclass \
-                         overrides: the dispatch goes through a slot and a raising copy \
-                         is reached by name",
-                        kind = kind.trim()
-                    ),
-                ));
+                let raising = format!("{key}{RAISING_SUFFIX}");
+                let Some(slot) = self.hierarchy.slot_for(ty, &raising) else {
+                    return Err(self.unsupported(
+                        id,
+                        &format!(
+                            "a `{kind}` of `{member}` inside a `try`, which a subclass \
+                             overrides: an override of it can raise and no copy of that \
+                             override can be made, so the slot has no raising entry",
+                            kind = kind.trim()
+                        ),
+                    ));
+                };
+                return Ok(Some(Callee::Virtual {
+                    slot,
+                    declared: format!("{name}{RAISING_SUFFIX}"),
+                }));
             }
             return Ok(Some(Callee::Virtual {
                 slot,
@@ -42700,6 +43037,40 @@ impl<'a> FuncBuilder<'a> {
             })
     }
 
+    /// What `ty` does at each dispatch slot: the function that slot's member resolves
+    /// to for this class, and `None` at every slot this class takes no part in -- which
+    /// is all of them for most classes, since nothing in their hierarchy is overridden.
+    ///
+    /// **A raising slot is looked up by the member it copies.** `hierarchy.declares`
+    /// holds the names the program wrote, so the suffixed key resolves through the plain
+    /// one ([`without_the_raising_suffix`], which [`Hierarchy::slot_for`] reads too) and
+    /// the suffix goes back on the emitted name. Where that copy does not exist -- an
+    /// override that cannot raise gets none -- [`fill_raising_member_slots`] replaces it
+    /// with the ordinary entry afterwards, which runs and never raises. It cannot be
+    /// decided here: a layout is demanded while lowering and the copies are not all
+    /// built yet, which is the ordering [`declare_raising_entries`] has for the uniform
+    /// entries.
+    ///
+    /// Split out of [`Self::layout_of`] for the reason [`Self::foreign_owner`] was: that
+    /// function's line limit, and "what does this class put in the table" is its own
+    /// question.
+    fn overridden_entries(&self, ty: TypeId) -> Vec<Option<String>> {
+        let mut methods = vec![None; self.hierarchy.table_size()];
+        for ((root, member), slot) in &self.hierarchy.slots {
+            if !self.hierarchy.descends_from(ty, *root) {
+                continue;
+            }
+            let (plain, suffix) = without_the_raising_suffix(member);
+            let Some(owner) = self.hierarchy.declaring(ty, plain) else {
+                continue;
+            };
+            if let Some(name) = self.hierarchy.name.get(&owner) {
+                methods[*slot as usize] = Some(format!("{name}#{plain}{suffix}"));
+            }
+        }
+        methods
+    }
+
     fn layout_of(&mut self, id: NodeId, ty: TypeId) -> Result<Layout, Diagnostic> {
         // Before the lookup below, so `this` and its class share one layout:
         // see [`Self::class_behind`].
@@ -42871,20 +43242,7 @@ impl<'a> FuncBuilder<'a> {
         let name = bound.unwrap_or_else(|| {
             format!("{name}{}", instantiation_suffix(self.snapshot, ty))
         });
-        // What this class does for each dispatch slot. Empty where nothing in
-        // the hierarchy is overridden, which is most classes.
-        let mut methods = vec![None; self.hierarchy.table_size()];
-        for ((root, member), slot) in &self.hierarchy.slots {
-            if !self.hierarchy.descends_from(ty, *root) {
-                continue;
-            }
-            let Some(owner) = self.hierarchy.declaring(ty, member) else {
-                continue;
-            };
-            if let Some(name) = self.hierarchy.name.get(&owner) {
-                methods[*slot as usize] = Some(format!("{name}#{member}"));
-            }
-        }
+        let methods = self.overridden_entries(ty);
 
         // Structural, so a type whose shape is already laid out joins that
         // layout rather than getting one of its own. The first name wins, which
@@ -61482,30 +61840,49 @@ impl<'a> FuncBuilder<'a> {
             Some(name) => name.clone(),
             None => self.layout_of(id, declaring)?.name,
         };
-        // **The raising copy of a method is reached by naming it**, which is why a
-        // method needs no second dispatch slot the way a closure did: a member no
-        // subclass overrides is already a `Callee::Direct` here, and the copy is that
-        // name with the suffix.
+        // **The raising copy of a method is reached by naming it** where the dispatch is
+        // direct: a member no subclass overrides is already a `Callee::Direct` here, and
+        // the copy is that name with the suffix -- which is why a method needed no table
+        // index the way a closure did.
         //
-        // **And where the dispatch is virtual there is nothing to name**, so this
-        // refuses rather than silently calling the plain entry -- whose body ends the
-        // program on an uncaught `throw`, with the flag test the site just emitted
-        // watching a flag nothing sets. This is the one place that knows direct from
-        // virtual, so it is the one place that may answer: `call_within` admits any
-        // callee with a raising copy and leaves the distinction here, rather than
-        // deriving it a second time from the receiver's type.
+        // **And where the dispatch is virtual the copy has its own slot**, which this
+        // refused for want of until `number_raising_member_slots` allocated one. Naming
+        // the plain entry instead would run a body that ends the program on an uncaught
+        // `throw`, with the flag test the site just emitted watching a flag nothing sets.
+        // This is the one place that knows direct from virtual, so it is the one place
+        // that chooses: `call_within` admits any callee with a raising copy and leaves
+        // the distinction here, rather than deriving it a second time from the
+        // receiver's type.
         let suffix = self.raising_suffix_of(id);
         if self.hierarchy.overridden(type_id, member_name)
             && let Some(slot) = self.hierarchy.slot_for(type_id, member_name)
         {
+            // **And the raising copy has a slot of its own now**, which this refused
+            // for want of. A member no subclass overrides is a `Callee::Direct` and its
+            // copy is that name with the suffix; a virtual one had no name to suffix, so
+            // the call named the ordinary entry -- whose body ends the program on an
+            // uncaught `throw` while the flag test the site emitted watched a flag
+            // nothing sets -- and refusing was the only honest answer.
+            //
+            // `number_raising_member_slots` allocates the index and
+            // `fill_raising_member_slots` fills it per class, with the copy or, for an
+            // override that cannot raise, with the ordinary entry.
             if !suffix.is_empty() {
-                return Err(self.unsupported(
-                    id,
-                    &format!(
-                        "a call inside a `try` to `{member_name}`, which a subclass overrides: \
-                         the dispatch goes through a slot and a raising copy is reached by name"
-                    ),
-                ));
+                let raising = format!("{member_name}{RAISING_SUFFIX}");
+                let Some(slot) = self.hierarchy.slot_for(type_id, &raising) else {
+                    return Err(self.unsupported(
+                        id,
+                        &format!(
+                            "a call inside a `try` to `{member_name}`, which a subclass \
+                             overrides: an override of it can raise and no copy of that \
+                             override can be made, so the slot has no raising entry"
+                        ),
+                    ));
+                };
+                return Ok(Callee::Virtual {
+                    slot,
+                    declared: format!("{owner}#{member_name}{RAISING_SUFFIX}"),
+                });
             }
             return Ok(Callee::Virtual {
                 slot,
