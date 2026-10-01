@@ -25,6 +25,8 @@
 //   INVALID   VerifyError, ClassFormatError: bytecode the JVM rejects
 //   MISSING   a reference that does not resolve (a class or member absent)
 //   UNRESOLVED  an instruction naming a member no generated class holds
+//   SHADOWED    an override whose raising copy (`m$raises`) only an ancestor
+//               declares, so a raising call runs the ancestor's body
 //
 // **UNRESOLVED is what the verifier cannot say, and it has no known list.**
 // Member linkage is lazy, so a call to a method its owner lacks loads and
@@ -191,7 +193,7 @@ function readVerify(text) {
   const summary = /^VERIFIED (\d+) OF (\d+)$/m.exec(text);
   if (!summary) return null;
   const lines = (kind) => text.split("\n").filter((l) => l.startsWith(`${kind} `)).map((l) => l.slice(kind.length + 1));
-  return { invalid: lines("INVALID"), missing: lines("MISSING"), unresolved: lines("UNRESOLVED"), verified: Number(summary[1]), total: Number(summary[2]) };
+  return { invalid: lines("INVALID"), missing: lines("MISSING"), unresolved: lines("UNRESOLVED"), shadowed: lines("SHADOWED"), verified: Number(summary[1]), total: Number(summary[2]) };
 }
 
 /**
@@ -316,6 +318,7 @@ const declines = new Map();
 
 const failed = [];
 const unresolved = [];
+const shadowed = [];
 const unmeasured = [];
 const invalidHir = [];
 let classes = 0;
@@ -354,6 +357,7 @@ async function check(project, slot) {
   verified += read.verified;
   if (read.invalid.length + read.missing.length > 0) failed.push({ project, ...read });
   if (read.unresolved.length > 0) unresolved.push({ project, lines: read.unresolved });
+  if (read.shadowed.length > 0) shadowed.push({ project, lines: read.shadowed });
 }
 
 const started = Date.now();
@@ -378,6 +382,11 @@ for (const { project, lines } of unresolved) {
   for (const l of lines.slice(0, 6)) console.log(`                   ${l.slice(0, 220)}`);
   if (lines.length > 6) console.log(`                   ... ${lines.length - 6} more`);
 }
+for (const { project, lines } of shadowed) {
+  console.log(`  SHADOWED         ${project}: ${lines.length} override(s) whose raising copy only an ancestor declares`);
+  for (const l of lines.slice(0, 6)) console.log(`                   ${l.slice(0, 220)}`);
+  if (lines.length > 6) console.log(`                   ... ${lines.length - 6} more`);
+}
 if (invalidHir.length > 0) console.log(`  invalid HIR, so nothing to verify (outcomes records it): ${invalidHir.length} -- ${invalidHir.map((p) => p.split("/").pop()).join(", ")}`);
 for (const u of unmeasured.sort()) console.log(`  NOT MEASURED     ${u}`);
 // Every NTS4009 is a dispatch C and LLVM perform without checking, so each
@@ -394,7 +403,7 @@ if (declines.size > 0) {
   for (const k of [...declines.keys()].filter((k) => declinesKnown.get(k)?.verdict === "live-on-c")) console.log(`    live on C  ${k.slice(0, 110)} -- ${declinesKnown.get(k).why}`);
   for (const k of unclassified) console.log(`    UNCLASSIFIED  ${k.slice(0, 150)}  (${[...declines.get(k)].slice(0, 3).join(", ")})`);
 }
-const ok = fresh.length === 0 && pinned.length === 0 && unresolved.length === 0 && unmeasured.length === 0 && classes > 0 && unclassified.length === 0;
+const ok = fresh.length === 0 && pinned.length === 0 && unresolved.length === 0 && shadowed.length === 0 && unmeasured.length === 0 && classes > 0 && unclassified.length === 0;
 const pinsHeld = held.filter((f) => known.get(f.project).pin).length;
-console.log(ok ? `  every module verifies, or is known not to (${held.length}, ${pinsHeld} pinned and holding); every NTS4009 decline classified` : `  ${fresh.length} new failure(s), ${pinned.length} broken pin(s), ${unresolved.length} with unresolved refs, ${unmeasured.length} not measured, ${unclassified.length} unclassified decline shape(s)`);
+console.log(ok ? `  every module verifies, or is known not to (${held.length}, ${pinsHeld} pinned and holding); every NTS4009 decline classified` : `  ${fresh.length} new failure(s), ${pinned.length} broken pin(s), ${unresolved.length} with unresolved refs, ${shadowed.length} with shadowed raising copies, ${unmeasured.length} not measured, ${unclassified.length} unclassified decline shape(s)`);
 process.exit(ok ? 0 : 1);

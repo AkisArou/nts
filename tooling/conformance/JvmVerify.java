@@ -12,6 +12,8 @@
 //   MISSING <class> <throwable>: <message>     a reference that does not resolve
 //   UNRESOLVED <class> <owner>.<name><descriptor>
 //                                              a member ref no generated class holds
+//   SHADOWED <class> <name><descriptor>         an override whose raising copy is
+//                                              left to the ancestor's
 //
 // **UNRESOLVED is the one the verifier cannot give.** Linkage of a member is
 // lazy: `invokevirtual Callable.erased_call$raises` verifies whatever
@@ -22,12 +24,32 @@
 // same output is resolved by name and descriptor up that owner's superclasses
 // and interfaces. Refs to classes outside the output (the runtime jar, the
 // JDK) are left to the JVM, whose own classes do not drift under a compiler.
+//
+// **SHADOWED is the one linkage cannot give either.** A raising copy is an
+// ordinary virtual method, `m$raises`, and the JVM dispatches it by name and
+// descriptor like any other. A class that overrides `m` and does not override
+// `m$raises` at the same descriptor resolves the raising call to the
+// ancestor's copy -- it links, verifies and runs the wrong body. TypeScript's
+// arity-tolerant overriding makes the gap easy to open: `Transform`'s `_read()`
+// is an overload of `Readable#_read(D)V`, not an override, and only the bridge
+// beside it overrides. So each class's own `m` that overrides an ancestor's,
+// where that ancestor also declares a concrete `m$raises` with the same
+// parameters, must declare its own `m$raises` too -- once some instruction in
+// the output calls `m$raises` on that ancestor or below. Before then it is a
+// copy nothing dispatches to (on 2026-10-01 `Readable#_read$raises`, overridden
+// by `Transform`, `DuplexSide` and `IncomingMessage` and called by nobody,
+// since the one virtual site refuses), and a hazard nothing reaches is not yet
+// a failure. An *abstract* inherited copy is not this: it is the raising entry
+// `Callable` declares and a closure that cannot raise leaves unfilled, which
+// a call reaching it reports as AbstractMethodError rather than a wrong body.
 //   VERIFIED <n> OF <m>
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
@@ -49,29 +71,35 @@ public class JvmVerify {
     }
     ClassLoader loader = JvmVerify.class.getClassLoader();
     int verified = 0;
+    Set<String> raisingCalls = new HashSet<>();
+    List<Class<?>> loaded = new ArrayList<>();
     for (String name : names) {
       try {
         Class<?> c = Class.forName(name, false, loader);
         c.getDeclaredMethods();
         c.getDeclaredFields();
         verified += 1;
-        unresolved(root, name, names, loader);
+        unresolved(root, name, names, loader, raisingCalls);
+        loaded.add(c);
       } catch (VerifyError | ClassFormatError e) {
         System.out.println("INVALID " + name + " " + e.getClass().getSimpleName() + ": " + oneLine(e.getMessage()));
       } catch (LinkageError | ClassNotFoundException e) {
         System.out.println("MISSING " + name + " " + e.getClass().getSimpleName() + ": " + oneLine(e.getMessage()));
       }
     }
+    for (Class<?> c : loaded) shadowed(c, raisingCalls);
     System.out.println("VERIFIED " + verified + " OF " + names.size());
   }
 
   /** Print one UNRESOLVED line per member ref of `name` that no output class holds. */
-  private static void unresolved(Path root, String name, List<String> names, ClassLoader loader) throws IOException {
+  private static void unresolved(Path root, String name, List<String> names, ClassLoader loader, Set<String> raisingCalls)
+      throws IOException {
     Set<String> ours = new HashSet<>(names);
     for (String[] ref : memberRefs(root.resolve(name.replace('.', '/') + ".class"))) {
       String owner = ref[0].replace('/', '.');
       if (!ours.contains(owner)) continue;
       boolean method = ref[3].equals("M");
+      if (method && ref[1].endsWith("$raises")) raisingCalls.add(owner + "." + ref[1] + ref[2]);
       try {
         Class<?> c = Class.forName(owner, false, loader);
         if (!(method ? hasMethod(c, ref[1], ref[2]) : hasField(c, ref[1], ref[2]))) {
@@ -81,6 +109,40 @@ public class JvmVerify {
         // The owner itself does not load; it is reported as MISSING or INVALID on its own line.
       }
     }
+  }
+
+  /**
+   * Print one SHADOWED line per override of `c` whose raising copy only an
+   * ancestor declares concretely, where an instruction calls that copy on an
+   * owner `c` is or descends from.
+   */
+  private static void shadowed(Class<?> c, Set<String> raisingCalls) {
+    List<Class<?>> lineage = ancestry(c);
+    for (Method m : c.getDeclaredMethods()) {
+      if (Modifier.isStatic(m.getModifiers()) || m.getName().endsWith("$raises")) continue;
+      String copy = m.getName() + "$raises";
+      Class<?>[] params = m.getParameterTypes();
+      if (declared(c, copy, params) != null) continue;
+      for (Class<?> at : lineage) {
+        if (at == c) continue;
+        Method inherited = declared(at, copy, params);
+        if (inherited == null || Modifier.isAbstract(inherited.getModifiers()) || declared(at, m.getName(), params) == null) continue;
+        String descriptor = MethodType.methodType(inherited.getReturnType(), params).toMethodDescriptorString();
+        boolean reached = lineage.stream().anyMatch(owner -> raisingCalls.contains(owner.getName() + "." + copy + descriptor));
+        if (reached) System.out.println("SHADOWED " + c.getName() + " " + copy + descriptor + " runs " + at.getName() + "'s");
+        break;
+      }
+    }
+  }
+
+  /** The instance method `at` itself declares with this name and these parameters, or null. */
+  private static Method declared(Class<?> at, String name, Class<?>[] params) {
+    for (Method m : at.getDeclaredMethods()) {
+      if (!Modifier.isStatic(m.getModifiers()) && m.getName().equals(name) && Arrays.equals(m.getParameterTypes(), params)) {
+        return m;
+      }
+    }
+    return null;
   }
 
   /**
