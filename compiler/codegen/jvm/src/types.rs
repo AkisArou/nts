@@ -140,6 +140,26 @@ pub fn reference_class(package: &str, program: &nts_core::hir::Program, layout: 
     }
 }
 
+/// The class `new` allocates for a layout: its own, except for one this backend
+/// emits as a JVM **interface**, which has no constructor.
+///
+/// Structural typing can put an object literal into an interface's layout --
+/// web-platform's `private readonly owner = {}` shares `EventTargetLike`'s,
+/// empty either way -- and `new nts/gen/EventTargetLike` is an
+/// `InstantiationError` at run time that the verifier waves through
+/// (`JvmVerify`'s UNRESOLVED found it as `EventTargetLike.<init>()V` in nine
+/// modules). Such a layout gets a final `X$Object implements X` with a default
+/// constructor, and only allocation names it: every descriptor, cast and
+/// `instanceof` still names the interface, which it is an instance of.
+#[must_use]
+pub fn instance_class(package: &str, program: &nts_core::hir::Program, layout: &Layout) -> String {
+    if crate::hierarchy::is_interface(program, layout) {
+        format!("{}$Object", class_name(package, layout))
+    } else {
+        class_name(package, layout)
+    }
+}
+
 /// The binary name of the empty subclass one class gets when it shares a
 /// layout with another.
 ///

@@ -2526,7 +2526,19 @@ impl Emitter<'_> {
         ty: &HirType,
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
-        let class = self.object_class(ty)?;
+        // The class to allocate, which is the interface's `X$Object` where the
+        // layout is emitted as an interface; see `types::instance_class`.
+        let class = match ty {
+            HirType::Managed(ManagedType::Object(id))
+                if self.program.layout(*id).is_some_and(|l| crate::hierarchy::is_interface(self.program, l)) =>
+            {
+                self.program
+                    .layout(*id)
+                    .map(|layout| types::instance_class(self.shape.package, self.program, layout))
+                    .unwrap_or_default()
+            }
+            _ => self.object_class(ty)?,
+        };
         code.new_object(origin, pool, &class);
         code.dup(origin);
         code.invoke_special(origin, pool, &class, "<init>", "()V");
@@ -5643,12 +5655,17 @@ impl Emitter<'_> {
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
         let name = match callee {
+            // Named with the function it declines, as `refuse` names every
+            // other: without the `(in X)` this was the one decline that did not
+            // say which function it cost -- 107 of them in crypto alone -- so a
+            // caller left pointing at the missing method could not be traced to
+            // it. Kept at the call's own location, which is the useful one.
             Callee::Native(target) => {
                 return Err(Diagnostic::error(
                     "NTS4001",
                     format!(
-                        "native C function `{}` cannot be called by the JVM backend",
-                        target.name
+                        "native C function `{}` cannot be called by the JVM backend (in `{}`)",
+                        target.name, self.func.name
                     ),
                     origin.location,
                 ));

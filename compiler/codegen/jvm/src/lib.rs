@@ -251,6 +251,7 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
     // through it are widened together or not at all. See `widen`.
 
     let plan = widen::plan(package, program);
+    let mut declined: Vec<(&nts_core::hir::Func, Diagnostic)> = Vec::new();
 
     for func in &program.funcs {
         // An abstract declaration is carried in `program.funcs` so that a call
@@ -291,7 +292,7 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
                 let access = access::PUBLIC | access::STATIC | synthetic;
                 publish(package, &mut builder, program, func, access, &name, &signature, rendered);
             }
-            Err(diagnostic) => diagnostics.push(diagnostic),
+            Err(diagnostic) => declined.push((func, diagnostic)),
         }
     }
 
@@ -334,6 +335,7 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
     classes.extend(adapters);
     diagnostics.extend(complaints);
 
+    finish_classes(package, program, declined, &mut classes, &mut diagnostics, &mut builder, &mut pool);
     match builder.build(pool) {
         Ok(class) => {
             classes.push(class);
@@ -595,6 +597,128 @@ fn typed_face(
     })?;
     builder.method(access::PUBLIC, "call".to_owned(), face.typed, Some(body));
     Ok(())
+}
+
+/// A declined function's stub: the method its callers name, whose body is a
+/// named refusal.
+///
+/// **A declined function used to be omitted, and every reference to it left
+/// pointing at nothing.** The verifier does not check that -- member linkage
+/// is lazy -- so the module loaded, verified, and aborted with
+/// `NoSuchMethodError` the first time a call reached one: 1069 references
+/// across the runtime at ac1533ca4, from `Program` and from every class that
+/// forwards to it, found by `JvmVerify`'s UNRESOLVED check.
+///
+/// The entry exists; its body refuses by name (`NtsRuntime.refused`, "nts:
+/// refused: at run time: ..."), which the differential reads as a decline
+/// rather than a wrong answer. A stub rather than a cascade to every caller:
+/// declining callers would also decline the ones that reach this function only
+/// on a path they never take, which costs compiled code for nothing, and it
+/// could not reach the forwarders, bridges and closure entries that name a
+/// `Program` static from another class.
+///
+/// **Not where the descriptor names a class that was not written.** A stub
+/// taking a declined `ChildWritable` put that class in `Program`'s own method
+/// table, and then `Program` itself failed to link in `child_process` and `cluster`
+/// -- a whole module lost for one stub. Its callers name the missing class
+/// already, so skipping the stub loses nothing, which is why the stubs are
+/// added last, against `written`. Nor where the signature has no
+/// representation: then no caller can name it either.
+fn declined_stub(
+    package: &str,
+    program: &Program,
+    func: &nts_core::hir::Func,
+    why: &str,
+    written: &rustc_hash::FxHashSet<&str>,
+    builder: &mut ClassBuilder,
+    pool: &mut Pool,
+) {
+    let Some(signature) = body::signature(package, program, func) else { return };
+    let ours = format!("{package}/");
+    let mut rest = signature.as_str();
+    while let Some(at) = rest.find('L') {
+        let Some(end) = rest[at..].find(';') else { break };
+        let class = &rest[at + 1..at + end];
+        if class.starts_with(&ours) && !written.contains(class) {
+            return;
+        }
+        rest = &rest[at + end + 1..];
+    }
+    let name = body::method_name(&func.name);
+    if builder.methods.iter().any(|m| m.name == name && m.descriptor == signature) {
+        return;
+    }
+    let shape = types::Shape::packaged(program, package);
+    let Some(locals) = func.params.iter().map(|p| types::vtype(shape, &p.ty)).collect::<Option<Vec<_>>>() else {
+        return;
+    };
+    let slots: u16 = locals.iter().map(VType::slots).sum();
+    let origin = func.origin.clone();
+    let mut code = Code::new(locals, slots);
+    code.const_string(&origin, pool, &format!("`{}` was declined: {why}", func.name));
+    code.invoke_static(&origin, pool, body::RUNTIME, "refused", "(Ljava/lang/String;)V");
+    code.const_null(&origin);
+    code.athrow(&origin);
+    if let Ok(stub) = code.finish(pool) {
+        builder.method(access::PUBLIC | access::STATIC | access::SYNTHETIC, name, signature, Some(stub));
+    }
+}
+
+/// The classes that depend on every other one being known: an instance class
+/// for each interface something allocates, then a stub in `Program` for each
+/// declined function whose descriptor names only classes that were written --
+/// and then each decline is reported, in the order the functions were rendered.
+#[allow(clippy::too_many_arguments)]
+fn finish_classes(
+    package: &str,
+    program: &Program,
+    declined: Vec<(&nts_core::hir::Func, Diagnostic)>,
+    classes: &mut Vec<Class>,
+    diagnostics: &mut Vec<Diagnostic>,
+    builder: &mut ClassBuilder,
+    pool: &mut Pool,
+) {
+    for layout in constructed_interfaces(program) {
+        collect(classes, diagnostics, interface_instance(package, program, layout).map(Some));
+    }
+    let written: rustc_hash::FxHashSet<&str> = classes.iter().map(|class| class.binary_name.as_str()).collect();
+    for (func, diagnostic) in declined {
+        declined_stub(package, program, func, &diagnostic.message, &written, builder, pool);
+        diagnostics.push(diagnostic);
+    }
+}
+
+/// Layouts this backend emits as interfaces that some operation allocates; see
+/// `types::instance_class`.
+fn constructed_interfaces(program: &Program) -> Vec<&nts_core::hir::Layout> {
+    program
+        .layouts
+        .iter()
+        .filter(|layout| hierarchy::is_interface(program, layout))
+        .filter(|layout| {
+            program.funcs.iter().flat_map(|func| &func.values).any(|op| {
+                matches!(op.kind, nts_core::hir::OpKind::ObjectNew { .. })
+                    && matches!(&op.ty, nts_core::hir::HirType::Managed(nts_core::hir::ManagedType::Object(id)) if layout.types.contains(id))
+            })
+        })
+        .collect()
+}
+
+/// `X$Object`: the final class implementing interface `X` that `new` allocates.
+fn interface_instance(package: &str, program: &Program, layout: &nts_core::hir::Layout) -> Result<Class, Diagnostic> {
+    let origin = program_origin(program);
+    let mut pool = Pool::new();
+    let mut builder =
+        ClassBuilder::new(types::instance_class(package, program, layout), "java/lang/Object".to_owned());
+    builder.access = access::PUBLIC | access::SUPER | access::FINAL;
+    builder.source_file = Some("nts".to_owned());
+    builder.interfaces.push(types::class_name(package, layout));
+    builder.default_constructor(&origin, &mut pool).map_err(|error| {
+        Diagnostic::error("NTS4003", format!("`{}`'s instance class: {error}", layout.name), origin.location)
+    })?;
+    builder.build(pool).map_err(|error| {
+        Diagnostic::error("NTS4004", format!("`{}`'s instance class: {error}", layout.name), origin.location)
+    })
 }
 
 /// The program's callable root: `types::callable_class`, abstract, declaring

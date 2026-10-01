@@ -24,6 +24,17 @@
 //
 //   INVALID   VerifyError, ClassFormatError: bytecode the JVM rejects
 //   MISSING   a reference that does not resolve (a class or member absent)
+//   UNRESOLVED  an instruction naming a member no generated class holds
+//
+// **UNRESOLVED is what the verifier cannot say, and it has no known list.**
+// Member linkage is lazy, so a call to a method its owner lacks loads and
+// verifies and aborts with NoSuchMethodError only when reached -- the raising
+// entry's first cut (Callable.erased_call$raises) and, on the first run of this
+// check, 1069 calls into functions emit-jvm had declined (fixed by declining
+// them into stubs that refuse by name). JvmVerify resolves every field and
+// method ref an instruction in a generated class names; any that no class in
+// the output holds fails the run, in a known module or not, because the count
+// is zero and one appearing is news.
 //
 // A verifier reason is read before it is named: url's "Bad local variable
 // type ... locals[238] is top" looked like a read no path initialises, and is
@@ -180,7 +191,7 @@ function readVerify(text) {
   const summary = /^VERIFIED (\d+) OF (\d+)$/m.exec(text);
   if (!summary) return null;
   const lines = (kind) => text.split("\n").filter((l) => l.startsWith(`${kind} `)).map((l) => l.slice(kind.length + 1));
-  return { invalid: lines("INVALID"), missing: lines("MISSING"), verified: Number(summary[1]), total: Number(summary[2]) };
+  return { invalid: lines("INVALID"), missing: lines("MISSING"), unresolved: lines("UNRESOLVED"), verified: Number(summary[1]), total: Number(summary[2]) };
 }
 
 /**
@@ -304,6 +315,7 @@ const declinesKnown = new Map(
 const declines = new Map();
 
 const failed = [];
+const unresolved = [];
 const unmeasured = [];
 const invalidHir = [];
 let classes = 0;
@@ -341,6 +353,7 @@ async function check(project, slot) {
   classes += read.total;
   verified += read.verified;
   if (read.invalid.length + read.missing.length > 0) failed.push({ project, ...read });
+  if (read.unresolved.length > 0) unresolved.push({ project, lines: read.unresolved });
 }
 
 const started = Date.now();
@@ -360,6 +373,11 @@ for (const f of fresh) {
 for (const f of held) console.log(`  known            ${f.project}: ${f.invalid.length} invalid, ${f.missing.length} missing -- ${known.get(f.project).why}`);
 for (const p of expired) console.log(`  ^ ${p} verifies now: remove it from tooling/conformance/jvm-verifies.known`);
 for (const { project, reason } of pinned) console.log(`  PIN BROKEN       ${project}: ${reason}`);
+for (const { project, lines } of unresolved) {
+  console.log(`  UNRESOLVED       ${project}: ${lines.length} member ref(s) no generated class holds`);
+  for (const l of lines.slice(0, 6)) console.log(`                   ${l.slice(0, 220)}`);
+  if (lines.length > 6) console.log(`                   ... ${lines.length - 6} more`);
+}
 if (invalidHir.length > 0) console.log(`  invalid HIR, so nothing to verify (outcomes records it): ${invalidHir.length} -- ${invalidHir.map((p) => p.split("/").pop()).join(", ")}`);
 for (const u of unmeasured.sort()) console.log(`  NOT MEASURED     ${u}`);
 // Every NTS4009 is a dispatch C and LLVM perform without checking, so each
@@ -376,7 +394,7 @@ if (declines.size > 0) {
   for (const k of [...declines.keys()].filter((k) => declinesKnown.get(k)?.verdict === "live-on-c")) console.log(`    live on C  ${k.slice(0, 110)} -- ${declinesKnown.get(k).why}`);
   for (const k of unclassified) console.log(`    UNCLASSIFIED  ${k.slice(0, 150)}  (${[...declines.get(k)].slice(0, 3).join(", ")})`);
 }
-const ok = fresh.length === 0 && pinned.length === 0 && unmeasured.length === 0 && classes > 0 && unclassified.length === 0;
+const ok = fresh.length === 0 && pinned.length === 0 && unresolved.length === 0 && unmeasured.length === 0 && classes > 0 && unclassified.length === 0;
 const pinsHeld = held.filter((f) => known.get(f.project).pin).length;
-console.log(ok ? `  every module verifies, or is known not to (${held.length}, ${pinsHeld} pinned and holding); every NTS4009 decline classified` : `  ${fresh.length} new failure(s), ${pinned.length} broken pin(s), ${unmeasured.length} not measured, ${unclassified.length} unclassified decline shape(s)`);
+console.log(ok ? `  every module verifies, or is known not to (${held.length}, ${pinsHeld} pinned and holding); every NTS4009 decline classified` : `  ${fresh.length} new failure(s), ${pinned.length} broken pin(s), ${unresolved.length} with unresolved refs, ${unmeasured.length} not measured, ${unclassified.length} unclassified decline shape(s)`);
 process.exit(ok ? 0 : 1);
