@@ -1,6 +1,9 @@
-// **A silent escape, and the sixth of its family.** A `try` around a call on a receiver
-// typed at an **interface** this program declares loses the `throw`: the handler compiles,
-// the raise test is never emitted, and the program ends where node catches.
+// expect: declared on an interface, so the bodies that would carry it belong to the implementors
+//
+// **This refusal replaced a silent escape, and it was recorded as one first.** A `try`
+// around a call on a receiver typed at an **interface** this program declares used to lose
+// the `throw`: the handler compiled, the raise test was never emitted, and the program
+// ended where node catches.
 //
 //     nts   throughTheInterface 24   nts: uncaught RangeError: sink
 //     node  throughTheInterface 24   -1                       10 of 29 cases
@@ -61,6 +64,30 @@
 // same escape if it compiled, so each inherits this item on the day it lands -- the shape
 // `examples/delete`'s header has, where a refusal elsewhere is what makes a rule sound
 // here rather than a check anybody wrote.
+// # The corpus witness, and it is worse than a lost `catch`
+//
+// `runtime/node/timers`' `processImmediate` holds a `try` around `immediate.invoke()`,
+// whose interface `ImmediateHandle` has one implementor -- `Immediate#invoke`, which is
+// `callback.apply(this, args)` on the user's `setImmediate` callback. So it raises whenever
+// user code throws, and nothing between it and `processImmediate` catches.
+//
+// **Every handler around that call is a `finally`, and the node-port lane read what each
+// one does on a throw**: `outstandingQueue.head = immediate._idleNext` keeps the rest of the
+// queue findable, `emitDestroy`/`emitAfter` keep async_hooks balanced,
+// `AsyncContextFrame.setCurrent(priorFrame)` restores the context, and the outer
+// `draining = false` plus re-`arm()` makes the queue run again. An escape skips all of them
+// -- so `draining` sticks at `true`, the queue's tail is dropped, and a program with an
+// `uncaughtException` listener carries on with a **corrupt immediate queue**. A lost `catch`
+// is the smaller half of this defect.
+//
+// **And there is a second site that this does not reach, which is worth more than the one
+// it does.** `timeout.ts:605` is the same shape -- `timer.invoke()` inside a `try`/`finally`,
+// interface `TimerHandle`, implementor `Timeout#invoke` -- and it is **not** newly refused,
+// because `listOnTimeout`, the function holding it, is emitted on neither arm: it is already
+// refused for an unrelated reason. So there is no escape there today, and there will be one
+// the day that refusal clears. [[a-precondition-can-be-falsified-from-elsewhere]], written
+// down here because nothing else would notice.
+//
 interface Sink {
   take(n: number): number;
 }
@@ -75,15 +102,26 @@ class Throwing implements Sink {
 }
 
 const asInterface: Sink = new Throwing();
+const asClass = new Throwing();
 
-function throughTheInterface(n: number): string {
+/** Refused: the call reaches an implementor whose copy nothing offers. */
+export function throughTheInterface(n: number): number {
   try {
-    return String(asInterface.take(n));
+    return asInterface.take(n & 7);
   } catch {
-    return "caught";
+    return -1;
   }
 }
 
-observe("below the bound, so nothing throws", throughTheInterface(1));
-observe("above it, where node catches", throughTheInterface(7));
-done();
+/**
+ * The control, and it is the whole diagnosis: the **same call at the class type** compiles
+ * and agrees with node on every case. So the variable is the receiver's declared type and
+ * nothing else -- not the `throw`, not the `try`, not the method.
+ */
+export function throughTheClass(n: number): number {
+  try {
+    return asClass.take(n & 7);
+  } catch {
+    return -1;
+  }
+}

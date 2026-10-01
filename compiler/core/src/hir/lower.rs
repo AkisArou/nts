@@ -49078,6 +49078,23 @@ impl<'a> FuncBuilder<'a> {
         {
             return Some("`async`, so its `throw` rejects the promise it returned rather than raising");
         }
+        // **An interface's member is not "neither": it is a method whose bodies belong to
+        // somebody else.** The general sentence below described it as a shape that is
+        // never copied, which is the mistake this function's own doc records `eb92ee8f9`
+        // making about a method -- one kind further out. What is true is that the call
+        // reaches the *implementors*, each of which is an ordinary method with an ordinary
+        // copy, and that nothing offers those copies: `raising_copies` is seeded from the
+        // callee the checker resolved, and for this call that is the body-less signature.
+        //
+        // `blockers/a-try-around-a-call-on-an-interface-typed-receiver` is the record, and
+        // its header names the three things carrying it needs. Saying so here is the
+        // difference between a refusal that names the work and one that denies it exists.
+        if self.kind_of(declaration) == Some(syntax::METHOD_SIGNATURE) {
+            return Some(
+                "declared on an interface, so the bodies that would carry it belong to the \
+                 implementors and nothing offers their copies",
+            );
+        }
         Some("which is neither a plain function nor a method, and a raising copy is made of those only")
     }
 
@@ -49530,11 +49547,68 @@ impl<'a> FuncBuilder<'a> {
         {
             return true;
         }
+        // **An interface's member signature has no body, so it is in no throwing set --
+        // and the implementors are what the call reaches.** See
+        // [`Self::an_interface_member_that_can_raise`]: without it, a `try` around a call
+        // on an interface-typed receiver compiled with no handler edge and no diagnostic.
+        if self.an_interface_member_that_can_raise(call) {
+            return true;
+        }
         // Not merely "compiled", but **can raise**. `bounded(n)` inside a `try`
         // is a compiled call and a pure one, and refusing it would take a
         // working example away to fix a defect it does not have --
         // `examples/array-buffer` is exactly that shape and caught this.
         !record.declarations.is_empty() && self.throwing.contains(&symbol.0)
+    }
+
+    /// Whether this call reaches a member declared on an **interface**, which some class
+    /// in this program implements with a body that can raise.
+    ///
+    /// `sink.take(n)` where `sink: Sink` resolves to `Sink.take`, a `MethodSignature`
+    /// with no body -- so it is in no [`Throwing`] set, [`Self::calls_compiled_code`]
+    /// answered "not compiled code", and the `try` around it compiled with **no handler
+    /// edge and no diagnostic**: `nts: uncaught RangeError` on 10 of 29 cases where node
+    /// answers `-1`. `outcomes/a-try-around-a-call-on-an-interface-typed-receiver` is the
+    /// record, with the same call at the *class* type as its measured control.
+    ///
+    /// **Asked of the implementors rather than of the signature**, which is the only
+    /// honest reading: a body-less declaration says nothing about what runs. The
+    /// alternative -- treating any callee with no body here as able to raise -- is the
+    /// blunt rule, and it was measured at **+32 refusals per module** because that is
+    /// also what `arr.push` looks like.
+    ///
+    /// It needs no test for whether the program *declared* the interface:
+    /// [`members_filling`] finds the classes that both descend from it (which
+    /// [`Hierarchy::descends_from`] answers through `implements_transitively`) and declare
+    /// the member, and a frontend-carried face like `Array` has none in this program.
+    /// One fewer question asked, and the one asked is the one that matters.
+    ///
+    /// The two helpers are [`raising_member_slots`]', unchanged: *which declarations fill
+    /// this root's key*, and *can this declaration raise*. A dispatch root is a base class
+    /// or an interface and the slot machinery never cared which, so neither does this.
+    fn an_interface_member_that_can_raise(&self, call: NodeId) -> bool {
+        let Some(callee) = self.children(call).first().copied() else {
+            return false;
+        };
+        let children = self.children(callee);
+        let (Some(receiver), Some(member)) = (children.first(), children.last()) else {
+            return false;
+        };
+        if receiver == member {
+            return false;
+        }
+        let Some(ty) = self.snapshot.node_types.get(receiver).copied() else {
+            return false;
+        };
+        if !self.hierarchy.faces.contains(&ty) {
+            return false;
+        }
+        let Some(key) = self.node(*member).text.clone() else {
+            return false;
+        };
+        members_filling(self.snapshot, self, &self.hierarchy, ty, &key)
+            .into_iter()
+            .any(|at| a_declaration_that_can_raise(self.snapshot, &self.throwing, at))
     }
 
     /// `-x`, `+x`, `!x`.

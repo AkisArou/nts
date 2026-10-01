@@ -1,8 +1,0 @@
-{
-  "run": "build",
-  "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught RangeError: sink",
-  "node": "exit 1; nts: uncaught Observed: below the bound, so nothing throws=2;above it, where node catches=caught;",
-  "measured_with": "1028a73c71f4e297",
-  "source": "measured"
-}
