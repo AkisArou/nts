@@ -1894,6 +1894,31 @@ fn raising_member_slots(snapshot: &SemanticSnapshot, hierarchy: &mut Hierarchy, 
             families.push((root, key));
         }
     }
+    // **And the families a `try` reaches through an INTERFACE**, which the loop above
+    // cannot find: `raising_copies` seeds from the callee the checker resolved, and for
+    // `sink.take(n)` that is a body-less `MethodSignature` -- so no member of the family
+    // is in `naming.raising` and there is nothing to work back from. The receiver's type
+    // is what names the root ([`interface_member_of`]), and the implementors are what the
+    // call reaches.
+    //
+    // An interface member is a dispatch root exactly as a base class's member is, and the
+    // rest of this function never asked which: the carry condition, the numbering and the
+    // per-class fill are the same three answers. So this is a second **seed**, not a
+    // second mechanism -- which is why it is six lines rather than a sibling of
+    // `raising_member_slots`.
+    //
+    // `blockers/a-try-around-a-call-on-an-interface-typed-receiver` is the witness, and
+    // `runtime/node/timers`' `processImmediate` is why it matters: `9bd3eb1fc` made that
+    // `try` refuse rather than lose a `throw`, and refusing it means the immediate queue
+    // does not run compiled at all.
+    for call in &naming.guarded_calls {
+        let Some((root, key)) = interface_member_of(snapshot, &probe, hierarchy, *call) else {
+            continue;
+        };
+        if hierarchy.overridden(root, &key) && !families.contains(&(root, key.clone())) {
+            families.push((root, key));
+        }
+    }
     families.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.1.cmp(&b.1)));
     for (root, key) in families {
         let members = members_filling(snapshot, &probe, hierarchy, root, &key);
@@ -1917,6 +1942,37 @@ fn raising_member_slots(snapshot: &SemanticSnapshot, hierarchy: &mut Hierarchy, 
             }
         }
     }
+}
+
+/// The `(interface, member)` a call dispatches through, where its receiver is typed at a
+/// face this hierarchy knows.
+///
+/// **One spelling, two readers**, which is the whole reason it is a function:
+/// [`FuncBuilder::an_interface_member_that_can_raise`] asks it to decide whether a `try`
+/// must do something about the call, and [`raising_member_slots`] asks it to decide which
+/// family to number a raising slot for. Those two disagreeing is a site that dispatches at
+/// a slot nobody numbered, or a slot numbered for a site that refuses anyway.
+///
+/// The receiver's type comes from `node_types` rather than from the checker's callee,
+/// because the callee is the *signature* -- which is the whole defect
+/// `blockers/a-try-around-a-call-on-an-interface-typed-receiver` records.
+fn interface_member_of(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    hierarchy: &Hierarchy,
+    call: NodeId,
+) -> Option<(TypeId, String)> {
+    let callee = probe.children(call).first().copied()?;
+    let children = probe.children(callee);
+    let (receiver, member) = (children.first()?, children.last()?);
+    if receiver == member {
+        return None;
+    }
+    let ty = snapshot.node_types.get(receiver).copied()?;
+    if !hierarchy.faces.contains(&ty) {
+        return None;
+    }
+    Some((ty, probe.node(*member).text.clone()?))
 }
 
 /// Every member declaration that would fill `root`'s `key` slot: the one each class at
@@ -3844,6 +3900,15 @@ struct Naming {
     /// separate field rather than `throwing` filtered at the reader, because which
     /// question a set answers is a property of the set.
     raising_then: rustc_hash::FxHashSet<u32>,
+    /// Every call node a `try` in this program guards.
+    ///
+    /// Published because [`raising_member_slots`] needs it and has the hierarchy, which
+    /// [`raising_copies`] does not: a call on an interface-typed receiver resolves to a
+    /// body-less `MethodSignature`, so the declarations that would carry its `throw` are
+    /// the **implementors**, and only the hierarchy can name those. Collected by the walk
+    /// that already visits every guarded node rather than by a second one, because "which
+    /// calls does a `try` guard" is a question this file must answer once.
+    guarded_calls: rustc_hash::FxHashSet<NodeId>,
     /// Whether a call inside a `try` may dispatch at `Hierarchy::raising_call_slot`:
     /// every raising body this program would build can carry what it calls. See
     /// [`every_raising_body_can_carry`], which is also where the measurement that
@@ -5076,6 +5141,8 @@ struct RaisingCopies {
     eligible: rustc_hash::FxHashSet<NodeId>,
     /// [`Naming::closures_carry`].
     closures_carry: bool,
+    /// [`Naming::guarded_calls`].
+    guarded_calls: rustc_hash::FxHashSet<NodeId>,
 }
 
 fn raising_copies(
@@ -5089,7 +5156,7 @@ fn raising_copies(
     let eligible = eligible_declarations(snapshot, probe, throwing, true);
     // Seeded by what a `try` reaches, then closed over what those reach: a copy
     // names its callees' copies, so a callee of a copy needs one too.
-    let (guarded, guarded_a_call) = calls_guarded_by_a_try(snapshot, probe);
+    let (guarded, guarded_a_call, guarded_calls) = calls_guarded_by_a_try(snapshot, probe);
     let mut copies: rustc_hash::FxHashSet<NodeId> = guarded
         .into_iter()
         .filter(|declaration| eligible.contains(declaration))
@@ -5165,7 +5232,7 @@ fn raising_copies(
     // raising slot at all. See `every_raising_body_can_carry`.
     let carry = every_raising_body_can_carry(snapshot, probe, throwing, &copies);
     if carry {
-        return RaisingCopies { copies, eligible, closures_carry: true };
+        return RaisingCopies { copies, eligible, closures_carry: true, guarded_calls };
     }
     // **Where it is off, the extra seeds are dropped with it.** They exist to serve
     // the raising variant of a *closure*, and no closure gets one when no site can
@@ -5194,7 +5261,7 @@ fn raising_copies(
         .filter(|declaration| eligible.contains(declaration))
         .collect();
     let copies = close_over_callees(snapshot, probe, &eligible, narrow);
-    RaisingCopies { copies, eligible, closures_carry: false }
+    RaisingCopies { copies, eligible, closures_carry: false, guarded_calls }
 }
 
 /// Close a set of copies over what those copies call: a copy names its callees'
@@ -5695,9 +5762,16 @@ fn closure_bodies_that_can_raise(
 fn calls_guarded_by_a_try(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
-) -> (rustc_hash::FxHashSet<NodeId>, bool) {
+) -> (rustc_hash::FxHashSet<NodeId>, bool, rustc_hash::FxHashSet<NodeId>) {
     let mut called = rustc_hash::FxHashSet::default();
     let mut guarded_a_call = false;
+    // **The call NODES as well as the callees they resolve to**, because a callee is not
+    // always a body: a call on an interface-typed receiver resolves to a `MethodSignature`,
+    // and the declarations that would carry its `throw` are the *implementors*, which only
+    // the hierarchy can name. This walk already visits the nodes, so publishing them costs
+    // nothing and spares a second walk over every `try` in the program -- which would be
+    // two answers to "which calls does a `try` guard" and they would drift.
+    let mut guarded_calls = rustc_hash::FxHashSet::default();
     for (index, node) in snapshot.nodes.iter().enumerate() {
         if node.kind != NodeKind::Syntax(syntax::TRY_STATEMENT) {
             continue;
@@ -5716,6 +5790,7 @@ fn calls_guarded_by_a_try(
                 Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION)
             ) {
                 guarded_a_call = true;
+                guarded_calls.insert(at);
             }
             called.extend(raising_callees_of(snapshot, probe, at));
             // The same pruning, so which callees a `try` is taken to reach and
@@ -5724,7 +5799,7 @@ fn calls_guarded_by_a_try(
             pending.extend(children_that_run(probe, at));
         }
     }
-    (called, guarded_a_call)
+    (called, guarded_a_call, guarded_calls)
 }
 
 /// A token index for every class the program declares. See
@@ -5819,6 +5894,7 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
     let raising = raising_copies(snapshot, &probe, &throwing);
     naming.raising = raising.copies;
     naming.copyable = raising.eligible;
+    naming.guarded_calls = raising.guarded_calls;
     naming.closures_carry = raising.closures_carry;
     naming.raising_then = throwing.bodily;
     naming.throwing = throwing.any;
@@ -12160,6 +12236,14 @@ pub fn lower_with(
         }
     }
     declare_interface_methods(&hierarchy, &mut lowered.program);
+    // **After the interface declarations, and the order is the whole of it.** A member's
+    // raising slot is filled from each layout's own ordinary entry, and for an *interface*
+    // root that entry is a declaration this pass has only just made -- so filling first
+    // found no `Sink#take` to suffix, fell back to the ordinary name, and left
+    // `Sink#take@raises` reachable from nothing for `reachable::prune` to remove. The
+    // backend then said `NTS2006 no declaration for `Sink#take@raises` to take a signature
+    // from`, which is the sentence `declare_interface_methods` exists to prevent.
+    fill_raising_member_slots(&hierarchy, &mut lowered.program);
 
     publish_surface(&mut lowered, snapshot, &shared.naming, &module, entry);
 
@@ -13471,10 +13555,6 @@ fn declare_uniform_entries(
     if dispatches_raising {
         declare_raising_entries(hierarchy, program);
     }
-    // Unconditionally, which is the difference from the uniform entry above: a member's
-    // raising slot is reached by *name* through `Callee::Virtual`'s `declared`, not by a
-    // program-global decision, so a program that allocated one has a site that names it.
-    fill_raising_member_slots(hierarchy, program);
 }
 
 /// Every **member** raising slot, filled with the copy where one exists and with the
@@ -13492,28 +13572,93 @@ fn declare_uniform_entries(
 /// body with nothing to raise cannot end anything, so running it is right and the flag
 /// the caller tests is simply never set.
 fn fill_raising_member_slots(hierarchy: &Hierarchy, program: &mut Program) {
-    let made: rustc_hash::FxHashSet<&str> =
-        program.funcs.iter().map(|func| func.name.as_str()).collect();
-    let mut ordinary: Vec<(usize, usize, String)> = Vec::new();
+    // **Derived from each layout's own ORDINARY entry, which is how
+    // `declare_raising_entries` does it for the closure slot.** Three cases, and they are
+    // that function's three:
+    //
+    //   the suffixed name is a body       fill the raising slot with it
+    //   the ordinary entry is a           declare a *second* declaration under the
+    //     declaration with no body          suffixed name and fill with that -- an
+    //                                       interface root, whose bodies are its
+    //                                       implementors'
+    //   neither                           fill with the ORDINARY entry, which runs and
+    //                                       never raises: right for an override that
+    //                                       cannot raise
+    //
+    // The first draft of this read the name out of `declaring()` in `layout_of` and
+    // patched it here, which is a second derivation of "whose body answers for this class"
+    // -- and it failed in the way that defect always does: the root's own entry was
+    // downgraded to the ordinary name, so the declaration was reachable from nothing,
+    // `prune` removed it, and the backend said `NTS2006 no declaration for
+    // `Sink#take@raises` to take a signature from`. Reading the layout's own entry is one
+    // derivation, and it is the one the closure path has had since `ac1533ca4`.
+    let raising: Vec<(usize, usize)> = hierarchy
+        .slots
+        .iter()
+        .filter_map(|((root, member), slot)| {
+            let plain = member.strip_suffix(RAISING_SUFFIX)?;
+            Some((*slot as usize, *hierarchy.slots.get(&(*root, plain.to_owned()))? as usize))
+        })
+        .collect();
+    if raising.is_empty() {
+        return;
+    }
+    let made: rustc_hash::FxHashMap<&str, bool> = program
+        .funcs
+        .iter()
+        .map(|func| (func.name.as_str(), func.abstract_declaration))
+        .collect();
+    let mut fill: Vec<(usize, usize, String)> = Vec::new();
+    let mut declare: Vec<String> = Vec::new();
     for (at, layout) in program.layouts.iter().enumerate() {
-        for ((_, member), slot) in &hierarchy.slots {
-            if !member.ends_with(RAISING_SUFFIX) {
-                continue;
-            }
-            let slot = *slot as usize;
-            let Some(Some(named)) = layout.methods.get(slot) else {
+        for (slot, ordinary_slot) in &raising {
+            let Some(Some(ordinary)) = layout.methods.get(*ordinary_slot) else {
                 continue;
             };
-            if made.contains(named.as_str()) {
-                continue;
-            }
-            if let Some(plain) = named.strip_suffix(RAISING_SUFFIX) {
-                ordinary.push((at, slot, plain.to_owned()));
+            let with_suffix = format!("{ordinary}{RAISING_SUFFIX}");
+            match made.get(with_suffix.as_str()) {
+                Some(_) => fill.push((at, *slot, with_suffix)),
+                None if made.get(ordinary.as_str()) == Some(&true) => {
+                    declare.push(with_suffix.clone());
+                    fill.push((at, *slot, with_suffix));
+                }
+                None => fill.push((at, *slot, ordinary.clone())),
             }
         }
     }
-    for (at, slot, plain) in ordinary {
-        program.layouts[at].methods[slot] = Some(plain);
+    for (at, slot, name) in fill {
+        if let Some(entry) = program.layouts[at].methods.get_mut(slot) {
+            *entry = Some(name);
+        }
+    }
+    // Sorted and deduplicated, so one compiler on one input declares them in one order.
+    declare.sort();
+    declare.dedup();
+    for name in declare {
+        let Some(from) = name.strip_suffix(RAISING_SUFFIX) else {
+            continue;
+        };
+        let Some(ordinary) = program.funcs.iter().find(|func| func.name == from) else {
+            continue;
+        };
+        // **Cloned and renamed, and nothing else touched** -- which is exactly what
+        // `declare_raising_entries` does for the closure slot, and the reason is the
+        // raising row's invariant since `ac1533ca4`: a raising copy has the same ABI as
+        // the original. Deriving the signature again here would be a second answer to a
+        // question the ordinary declaration already gives.
+        //
+        // **Clearing `blocks` and `values` is what a first draft did, and it panicked
+        // `verify` in seventeen of the twenty-nine corpora**: that walk starts at
+        // `func.blocks[BlockId(0)]` unconditionally, so a function with no blocks is
+        // `index out of bounds: the len is 0 but the index is 0`. An abstract declaration
+        // is not a function with its body removed -- it is a function whose body was never
+        // there, and whichever shape that is, the original already has it. `refusal-diff`
+        // is what said so, as `NOT MEASURED ... printed no prepared listing` for every one
+        // of those modules, while the refusal counts and `messages` read like small
+        // improvements: a module that emits nothing has no refusals to count.
+        let mut copy = ordinary.clone();
+        copy.name = name;
+        program.funcs.push(copy);
     }
 }
 
@@ -49345,6 +49490,26 @@ impl<'a> FuncBuilder<'a> {
         // `a_copy_can_contain` says no with it -- one rule, so the name a site spells
         // and the carrying a copy is admitted on cannot disagree. For a call the list
         // is at most one and this is the sentence it always was.
+        // **An interface member answers through its slot instead**, because
+        // `raising_callees_of` cannot answer for it: it has no hierarchy, and neither do
+        // two of its three callers -- the copy sets are computed before
+        // `collect_hierarchy` runs. So the question "does this site have a raising copy
+        // to name" is asked of the one artefact that already encodes the whole answer:
+        // the slot. [`raising_member_slots`] numbers it only where **every** class filling
+        // it has a copy or cannot raise, which is exactly the condition this needs, and it
+        // runs with the hierarchy because that is where the implementors can be named.
+        //
+        // The symmetric half is [`Self::callee_for`], which dispatches at that slot. Both
+        // read the slot rather than re-deriving the family, so a site that names an index
+        // and a table that fills one cannot disagree.
+        if let Some((root, key)) = interface_member_of(self.snapshot, self, &self.hierarchy, call)
+            && self
+                .hierarchy
+                .slot_for(root, &format!("{key}{RAISING_SUFFIX}"))
+                .is_some()
+        {
+            return true;
+        }
         let callees = raising_callees_of(self.snapshot, self, call);
         !callees.is_empty() && callees.iter().all(|at| self.raising.contains(at))
     }
@@ -49587,23 +49752,8 @@ impl<'a> FuncBuilder<'a> {
     /// this root's key*, and *can this declaration raise*. A dispatch root is a base class
     /// or an interface and the slot machinery never cared which, so neither does this.
     fn an_interface_member_that_can_raise(&self, call: NodeId) -> bool {
-        let Some(callee) = self.children(call).first().copied() else {
-            return false;
-        };
-        let children = self.children(callee);
-        let (Some(receiver), Some(member)) = (children.first(), children.last()) else {
-            return false;
-        };
-        if receiver == member {
-            return false;
-        }
-        let Some(ty) = self.snapshot.node_types.get(receiver).copied() else {
-            return false;
-        };
-        if !self.hierarchy.faces.contains(&ty) {
-            return false;
-        }
-        let Some(key) = self.node(*member).text.clone() else {
+        let Some((ty, key)) = interface_member_of(self.snapshot, self, &self.hierarchy, call)
+        else {
             return false;
         };
         members_filling(self.snapshot, self, &self.hierarchy, ty, &key)
