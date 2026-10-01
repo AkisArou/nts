@@ -4628,7 +4628,12 @@ fn a_copy_can_be_made_of(
 ) -> bool {
     matches!(
         probe.kind_of(declaration),
-        Some(syntax::FUNCTION_DECLARATION | syntax::METHOD_DECLARATION)
+        Some(
+            syntax::FUNCTION_DECLARATION
+                | syntax::METHOD_DECLARATION
+                | syntax::GET_ACCESSOR
+                | syntax::SET_ACCESSOR
+        )
     ) && !is_generic_function(snapshot, declaration)
         && !probe
             .node(declaration)
@@ -4737,6 +4742,31 @@ fn a_raising_callee_of(
 ) -> Option<NodeId> {
     let callee = snapshot.call_targets.get(&call).and_then(|target| target.callee)?;
     Some(implementation_of(snapshot, probe, callee))
+}
+
+/// Which declarations a site's raising copies belong to: one for a call, and the
+/// **accessor or accessors** a member access runs.
+///
+/// [`a_raising_callee_of`] answers for a call, which has at most one callee. An access
+/// is the other shape: `c.checked` runs a `get` and `c.checked = v` runs a `set`, and
+/// nothing in the syntax of the access says which of the two the member declares -- so
+/// a set keyed on "the declaration a copy belongs to" has to hold both, and is asked
+/// about both. `accessor_callee` is the one place that knows which kind a *given* site
+/// runs, because it is the place that spells `"get "` or `"set "`, and it asks about
+/// that one alone.
+///
+/// Over-approximating here is the safe direction and the cheap one: a copy is named
+/// only by a site that reaches it, so an accessor whose other half nobody runs is a
+/// body `reachable::prune` drops.
+fn raising_callees_of(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    node: NodeId,
+) -> Vec<NodeId> {
+    if let Some(callee) = a_raising_callee_of(snapshot, probe, node) {
+        return vec![callee];
+    }
+    probe.accessors_run_by(node)
 }
 
 fn raising_copies(
@@ -4855,10 +4885,10 @@ fn raising_copies(
     // it, so what it *calls* needs a copy and it does not.
     for root in pending {
         for call in calls_in_the_body_of(probe, root) {
-            if let Some(callee) = a_raising_callee_of(snapshot, probe, call)
-                && eligible.contains(&callee)
-            {
-                copies.insert(callee);
+            for callee in raising_callees_of(snapshot, probe, call) {
+                if eligible.contains(&callee) {
+                    copies.insert(callee);
+                }
             }
         }
     }
@@ -4898,11 +4928,10 @@ fn close_over_callees(
     let mut pending: Vec<NodeId> = copies.iter().copied().collect();
     while let Some(declaration) = pending.pop() {
         for call in calls_in_the_body_of(probe, declaration) {
-            let Some(callee) = a_raising_callee_of(snapshot, probe, call) else {
-                continue;
-            };
-            if eligible.contains(&callee) && copies.insert(callee) {
-                pending.push(callee);
+            for callee in raising_callees_of(snapshot, probe, call) {
+                if eligible.contains(&callee) && copies.insert(callee) {
+                    pending.push(callee);
+                }
             }
         }
     }
@@ -5040,13 +5069,14 @@ fn a_copy_can_contain(
     eligible: &rustc_hash::FxHashSet<NodeId>,
     call: NodeId,
 ) -> bool {
-    // **An accessor can never be carried**, because a raising copy is made of plain
-    // functions and `function_copies` is consulted for `FunctionDeclaration`s only --
-    // the same sentence `call_within` refuses a `try` around one with. It reaches here
-    // because the walk above now yields accessor accesses beside calls.
-    if probe.reads_an_accessor(call) {
-        return false;
-    }
+    // **An accessor is carried when its copy exists**, which it can now: `lower_class`
+    // builds one for a `get` or a `set` exactly as it does for a method, and
+    // `accessor_callee` names it. Until then this returned `false` outright, with the
+    // sentence `call_within` refuses a `try` around one with.
+    //
+    // Both of them where the member declares both, which is what `raising_callees_of`
+    // answers: the access alone does not say whether it is a read or a write, so a copy
+    // holding one has to be able to reach either.
     // **A `new` needs no arm of its own.** `throwing_symbols` walks a class over its
     // constructor and its field initializers, so a class that can throw is in
     // `Throwing::any` and `a_call_that_can_raise` below says so -- and the callee a
@@ -5077,11 +5107,12 @@ fn a_copy_can_contain(
     if !a_call_that_can_raise(probe, throwing, call) {
         return true;
     }
-    // [`a_raising_callee_of`], because `eligible` holds implementations: asking with
-    // the resolved node would answer "no copy" for every call to an overloaded
-    // function and take its caller out of the fixpoint.
-    a_raising_callee_of(snapshot, probe, call)
-        .is_some_and(|declaration| eligible.contains(&declaration))
+    // [`raising_callees_of`], because `eligible` holds implementations: asking with the
+    // resolved node would answer "no copy" for every call to an overloaded function and
+    // take its caller out of the fixpoint. **Non-empty and all of them**, since an
+    // access running two accessors needs a copy of each.
+    let callees = raising_callees_of(snapshot, probe, call);
+    !callees.is_empty() && callees.iter().all(|declaration| eligible.contains(declaration))
 }
 
 /// Whether this call can bring a `throw` back to its caller.
@@ -5097,6 +5128,16 @@ fn a_copy_can_contain(
 /// nothing ever names its callees' copies and seeding from it is pure waste. Written
 /// twice those two would drift, and the drift is a copy named and never made.
 fn a_call_that_can_raise(probe: &FuncBuilder, throwing: &Throwing, call: NodeId) -> bool {
+    // **An accessor access asks about the member**, which is the last child; the first
+    // is the receiver. See [`FuncBuilder::an_accessor_that_can_raise`] -- the same
+    // question, asked where the builder has the set rather than the caller.
+    if probe.reads_an_accessor(call) {
+        return probe
+            .children(call)
+            .last()
+            .and_then(|member| probe.node(*member).symbol)
+            .is_none_or(|symbol| throwing.any.contains(&symbol.0));
+    }
     let Some(callee) = probe.children(call).first().copied() else {
         return false;
     };
@@ -5189,7 +5230,12 @@ fn functions_used_as_values(
     for (index, node) in snapshot.nodes.iter().enumerate() {
         if !matches!(
             node.kind,
-            NodeKind::Syntax(syntax::FUNCTION_DECLARATION | syntax::METHOD_DECLARATION)
+            NodeKind::Syntax(
+                syntax::FUNCTION_DECLARATION
+                    | syntax::METHOD_DECLARATION
+                    | syntax::GET_ACCESSOR
+                    | syntax::SET_ACCESSOR
+            )
         ) {
             continue;
         }
@@ -5291,9 +5337,7 @@ fn calls_guarded_by_a_try(
             ) {
                 guarded_a_call = true;
             }
-            if let Some(callee) = a_raising_callee_of(snapshot, probe, at) {
-                called.insert(callee);
-            }
+            called.extend(raising_callees_of(snapshot, probe, at));
             // The same pruning, so which callees a `try` is taken to reach and
             // which it is refused for are one answer. A copy made for a callee
             // only a dead branch reaches is a body lowered for nothing.
@@ -8198,6 +8242,29 @@ fn lower_object_literal_members(
     };
     for member in members_of(snapshot, foreign, literal) {
         let mut builder = shared.builder(snapshot, foreign, Copy::default());
+        // **A literal's accessor gets a raising copy too**, and the omission showed up
+        // as a cascade with no root: `Closure0#call@raises` blaming `Type1#set y@raises`
+        // in the conformance lane's `blockers/a-setter-throwing-inside-a-function-value`,
+        // whose own header says it "moves back to a passing example when an accessor has
+        // a raising copy". A literal is where the shape test262 uses lives -- `{ set y(v)
+        // { throw … } }` with `attempt(() => { x.y = 23 })` -- so leaving it out would
+        // have cleared the refusal for classes and left the files that actually need it
+        // naming a function nothing defines.
+        //
+        // Before the `members_of` filter below and before `lower_method_of`, for the
+        // reason `lower_class` gives: the call site names the copy from `naming.raising`
+        // whether or not the ordinary body lowered.
+        raising_method(
+            snapshot,
+            foreign,
+            shared,
+            lowered,
+            literal,
+            member,
+            Some(instance),
+            &Substitution::default(),
+            &super::generics::Sources::default(),
+        );
         // A member the type lays out as storage is a closure, emitted through
         // `used_closures` from the literal that builds it like every other;
         // there is no `T#read` to define, and so nothing for a second literal
@@ -8430,7 +8497,17 @@ fn raising_method(
     match second.lower_method_of(class, member, instance) {
         Ok(mut raising) => {
             raising.name = format!("{}{RAISING_SUFFIX}", raising.name);
-            lowered.program.funcs.push(raising);
+            // **Unless that name is taken**, which only an *object literal* can do: two
+            // literals built at one named type each declaring the member are two
+            // implementations with one name, and the ordinary member is refused by name
+            // for exactly that (`blockers/two-literals-at-one-interface`). Pushing the
+            // copy anyway would make the program invalid HIR, which `emit-c` reports by
+            // writing nothing and exiting 0 -- the worst of the failure modes. Nothing
+            // is recorded here because the ordinary member's refusal already names the
+            // cause, and a second sentence about one cause is the weaker of the two.
+            if !lowered.program.funcs.iter().any(|known| known.name == raising.name) {
+                lowered.program.funcs.push(raising);
+            }
         }
         // Its diagnostics are the ordinary body's a second time, under a name no
         // source wrote. The `try` that would have named this copy then calls a
@@ -28369,7 +28446,7 @@ impl<'a> FuncBuilder<'a> {
                 // The same call a property read makes, which is what a getter
                 // *is*. `Object.values` runs them, in the order it reports them.
                 Enumerated::Getter => {
-                    let Some(callee) = self.accessor_callee(argument, owner, &name, "get ") else {
+                    let Some(callee) = self.accessor_callee(argument, owner, &name, "get ")? else {
                         // Set-only. The name is enumerable and its value is
                         // `undefined`, which this array's element has no width
                         // for -- so it is refused by name rather than answered
@@ -28386,15 +28463,7 @@ impl<'a> FuncBuilder<'a> {
                         .declared_type_of(owner, &name)
                         .and_then(|declared| self.represent(declared))
                         .unwrap_or_else(|| element.clone());
-                    self.push(
-                        OpKind::Call {
-                            callee,
-                            args: vec![object],
-                            frame: None,
-                        },
-                        returns,
-                        origin.clone(),
-                    )
+                    self.push_an_accessor_call(argument, callee, vec![object], returns, origin.clone())
                 }
             };
             let value = if pairs {
@@ -36710,8 +36779,8 @@ impl<'a> FuncBuilder<'a> {
                 .or_else(|| Self::symbol_keyed(&layout, &name))
             else {
                 // A setter, for the same reason.
-                if let Some(callee) = self.accessor_callee(target, type_id, &name, "set ") {
-                    let getter = self.accessor_callee(target, type_id, &name, "get ");
+                if let Some(callee) = self.accessor_callee(target, type_id, &name, "set ")? {
+                    let getter = self.accessor_callee(target, type_id, &name, "get ")?;
                     let wants = self
                         .declared_type_of(type_id, &name)
                         .and_then(|declared| self.represent(declared));
@@ -36720,6 +36789,7 @@ impl<'a> FuncBuilder<'a> {
                         callee,
                         getter,
                         wants,
+                        at: target,
                     });
                 }
                 return Err(self.absent_member(target, type_id, &name));
@@ -36982,6 +37052,7 @@ impl<'a> FuncBuilder<'a> {
                 object,
                 getter: Some(ref getter),
                 ref wants,
+                at,
                 ..
             } => {
                 let getter = getter.clone();
@@ -37015,15 +37086,8 @@ impl<'a> FuncBuilder<'a> {
                         "a compound assignment through an accessor whose value is erased",
                     ));
                 }
-                let read = self.push(
-                    OpKind::Call {
-                        callee: getter,
-                        args: object.into_iter().collect(),
-                        frame: None,
-                    },
-                    ty,
-                    origin,
-                );
+                let args = object.into_iter().collect();
+                let read = self.push_an_accessor_call(at, getter, args, ty, origin);
                 self.narrowed(id, read)?
             }
             // A **write-only** accessor: `set x(v)` with no `get x`, which
@@ -38093,17 +38157,12 @@ impl<'a> FuncBuilder<'a> {
             Place::Setter {
                 object,
                 ref callee,
+                at,
                 ..
             } => {
-                self.push(
-                    OpKind::Call {
-                        callee: callee.clone(),
-                        args: object.into_iter().chain([value]).collect(),
-                        frame: None,
-                    },
-                    HirType::Void,
-                    origin,
-                );
+                let callee = callee.clone();
+                let args = object.into_iter().chain([value]).collect();
+                self.push_an_accessor_call(at, callee, args, HirType::Void, origin);
             }
             Place::NativeAccessor { receiver, ty, ref setter, .. } => {
                 self.lower_accessor_on(id, receiver, ty, setter, Some(value))?;
@@ -40329,22 +40388,15 @@ impl<'a> FuncBuilder<'a> {
             if copied.contains(&target) {
                 continue;
             }
-            let Some(callee) = self.accessor_callee(source, from_type, &want.name, "get ") else {
+            let Some(callee) = self.accessor_callee(source, from_type, &want.name, "get ")? else {
                 continue;
             };
             let returns = self
                 .declared_type_of(from_type, &want.name)
                 .and_then(|declared| self.represent(declared))
                 .unwrap_or_else(|| want.ty.clone());
-            let read = self.push(
-                OpKind::Call {
-                    callee,
-                    args: vec![value],
-                    frame: None,
-                },
-                returns,
-                origin.clone(),
-            );
+            let read =
+                self.push_an_accessor_call(source, callee, vec![value], returns, origin.clone());
             let read = self.coerce(read, &want.ty.clone(), property)?;
             self.field_set(object, target, read, origin);
         }
@@ -40949,9 +41001,56 @@ impl<'a> FuncBuilder<'a> {
     /// once here rather than at each of the two sites for the reason the
     /// hierarchy's own comment gives about the base: two places that must agree
     /// is how this goes wrong.
-    fn accessor_callee(&mut self, id: NodeId, ty: TypeId, member: &str, kind: &str) -> Option<Callee> {
+    /// Push a call to an accessor, and **test for a raise after it**.
+    ///
+    /// One helper rather than a `test_for_a_raise` at each of the six places that emit
+    /// an accessor call, because the count is the argument: the method work needed
+    /// telling at three push sites and found the third only when 29 of 29 cases answered
+    /// a copy's dummy zero. A getter read and a setter write are reached from a read, a
+    /// write, a compound assignment, a spread, a destructuring and an object-literal
+    /// column, and none of them goes through `push_call`.
+    ///
+    /// `test_for_a_raise` is a no-op unless this site names a raising copy, so every
+    /// caller may use it unconditionally -- which is the point of there being one.
+    fn push_an_accessor_call(
+        &mut self,
+        site: NodeId,
+        callee: Callee,
+        args: Vec<ValueId>,
+        ty: HirType,
+        origin: Origin,
+    ) -> ValueId {
+        let answer = self.push(
+            OpKind::Call {
+                callee,
+                args,
+                frame: None,
+            },
+            ty,
+            origin,
+        );
+        self.test_for_a_raise(site);
+        answer
+    }
+
+    /// **`Result<Option<_>>` because this is the one place that knows direct from
+    /// virtual**, and a virtual accessor inside a `try` has to refuse rather than be
+    /// answered with the plain entry. `None` still means "this member is not an
+    /// accessor", which every caller reads as "try the next shape"; an `Err` is a
+    /// refusal about a site that *is* one. Collapsing the two would make a refusal look
+    /// like an absent member, which is the sentence `absent_member` gives and is about
+    /// a field.
+    fn accessor_callee(
+        &mut self,
+        id: NodeId,
+        ty: TypeId,
+        member: &str,
+        kind: &str,
+    ) -> Result<Option<Callee>, Diagnostic> {
         let key = format!("{kind}{member}");
-        let declaring = self.hierarchy.declaring(ty, &key)?;
+        let Some(declaring) = self.hierarchy.declaring(ty, &key) else {
+            return Ok(None);
+        };
         // **The layout's name where the hierarchy has none**, which is what
         // `callee_for` has always done for a method. Only a *declared* type gets
         // a `hierarchy.name`, so an object literal's accessor resolved its
@@ -40960,21 +41059,47 @@ impl<'a> FuncBuilder<'a> {
         // field for something that is not one.
         let owner = match self.hierarchy.name.get(&declaring) {
             Some(name) => name.clone(),
-            None => self.layout_of(id, declaring).ok()?.name,
+            None => match self.layout_of(id, declaring) {
+                Ok(layout) => layout.name,
+                Err(_) => return Ok(None),
+            },
         };
         let name = format!("{owner}#{key}");
-        Some(
-            if self.hierarchy.overridden(ty, &key)
-                && let Some(slot) = self.hierarchy.slot_for(ty, &key)
-            {
-                Callee::Virtual {
-                    slot,
-                    declared: name,
-                }
-            } else {
-                Callee::Direct(name)
-            },
-        )
+        // **An accessor's raising copy is reached by naming it**, exactly as a method's
+        // is: a member no subclass overrides is already a `Callee::Direct` here, and the
+        // copy is that name with the suffix. The 705 occurrences of "an accessor, which
+        // is a call" are what this is for.
+        //
+        // The suffix rather than a second decision about which kind this site runs:
+        // `has_a_raising_copy` requires *every* accessor the member declares to have a
+        // copy, so a read and a write cannot disagree about whether the name carries it.
+        //
+        // **And where the dispatch is virtual there is nothing to name**, so this
+        // refuses rather than calling the plain entry, whose body ends the program on an
+        // uncaught `throw` while the flag test the site emitted watches a flag nothing
+        // sets. The same answer `callee_for` gives one construct over, in the one place
+        // that knows direct from virtual.
+        let suffix = self.raising_suffix_of(id);
+        if self.hierarchy.overridden(ty, &key)
+            && let Some(slot) = self.hierarchy.slot_for(ty, &key)
+        {
+            if !suffix.is_empty() {
+                return Err(self.unsupported(
+                    id,
+                    &format!(
+                        "a `{kind}` of `{member}` inside a `try`, which a subclass \
+                         overrides: the dispatch goes through a slot and a raising copy \
+                         is reached by name",
+                        kind = kind.trim()
+                    ),
+                ));
+            }
+            return Ok(Some(Callee::Virtual {
+                slot,
+                declared: name,
+            }));
+        }
+        Ok(Some(Callee::Direct(format!("{name}{suffix}"))))
     }
 
     /// **A constructor's parameter default cannot read `this`, because the instance
@@ -41277,20 +41402,12 @@ impl<'a> FuncBuilder<'a> {
         if let Some(answer) = self.function_name(id, type_id, member_name) {
             return Ok(answer);
         }
-        if let Some(callee) = self.accessor_callee(id, type_id, member_name, "get ") {
+        if let Some(callee) = self.accessor_callee(id, type_id, member_name, "get ")? {
             let ty = self
                 .type_of(id)
                 .ok_or_else(|| self.unrepresentable(id, "a getter"))?;
             let origin = self.origin(id);
-            return Ok(self.push(
-                OpKind::Call {
-                    callee,
-                    args: vec![value],
-                    frame: None,
-                },
-                ty,
-                origin,
-            ));
+            return Ok(self.push_an_accessor_call(id, callee, vec![value], ty, origin));
         }
         if let Some(bound) = self.bound_method(id, value, member_name)? {
             return Ok(bound);
@@ -45789,11 +45906,18 @@ impl<'a> FuncBuilder<'a> {
             .declarations
             .iter()
             .any(|at| self.kind_of(*at) == Some(syntax::GET_ACCESSOR));
+        // **The suffix here too**, because this is a third place that names an accessor
+        // and `accessor_callee` is not on its path: a `static` one is addressed by the
+        // class. The static *method* call was exactly this hole one construct over --
+        // `lower_static_call` named the ordinary entry and 10 of 10 cases ended the
+        // program -- so it is closed here before it can ship rather than after.
+        let access = self.node(member).parent.unwrap_or(member);
+        let suffix = self.raising_suffix_of(access);
         Some(Place::Setter {
             object: None,
-            callee: Callee::Direct(format!("{owner}.set {name}")),
+            callee: Callee::Direct(format!("{owner}.set {name}{suffix}")),
             getter: declares_a_getter
-                .then(|| Callee::Direct(format!("{owner}.get {name}"))),
+                .then(|| Callee::Direct(format!("{owner}.get {name}{suffix}"))),
             // **The setter's own parameter, and only then the member's type.**
             //
             // A setter is a call, so what the write must convert to is the
@@ -45815,6 +45939,7 @@ impl<'a> FuncBuilder<'a> {
             wants: self
                 .accessor_parameter_type(declaration)
                 .or_else(|| self.type_of(member)),
+            at: access,
         })
     }
 
@@ -45852,6 +45977,12 @@ impl<'a> FuncBuilder<'a> {
             callee,
             getter,
             wants,
+            // `super.x = v` reaches the base's implementation by name, and
+            // `super_accessor` built that name -- so the access node is only what the
+            // raise is tested at. A raising copy is not named here: a `super` accessor
+            // is the one shape where the implementation is chosen by the *base*, and
+            // `call_within` refuses a `try` over it for want of a copy to name.
+            at: self.node(member).parent.unwrap_or(member),
         })
     }
 
@@ -48166,6 +48297,24 @@ impl<'a> FuncBuilder<'a> {
         // would read whatever happens to sit at that offset". The guard made
         // the same mistake about control flow rather than about storage.
         if self.reads_an_accessor(node) {
+            // **An accessor that cannot raise is nothing for this `try` to do**, and it
+            // is not pushed: nothing to name and nothing to test, which is the same
+            // answer `calls_compiled_code` gives a pure call in the arm above. Without
+            // it `return box.plain` was refused beside the throwing getter, because a
+            // quiet accessor is in no `copyable` set and so has no copy to find.
+            if !self.an_accessor_that_can_raise(node) {
+                return None;
+            }
+            // **Handled where the accessor has a copy**, which it can now:
+            // `lower_class` builds one for a `get` or a `set` as it does for a method,
+            // `accessor_callee` names it, and the flag test follows the call. Decided
+            // here for the reason the call arm above gives -- this walk fills
+            // `raising_calls` and the site reads it, so a site cannot name a copy
+            // inside a `try` this walk refused.
+            if self.has_a_raising_copy(node) {
+                handled.push(node);
+                return None;
+            }
             return Some((node, "an accessor, which is a call".to_owned()));
         }
         // **So is a comparator**, where every other array callback is not:
@@ -48657,44 +48806,82 @@ impl<'a> FuncBuilder<'a> {
     /// the declaration, which is what `raising_copies` collected and what the
     /// emitted name comes from.
     fn has_a_raising_copy(&self, call: NodeId) -> bool {
-        // Through [`a_raising_callee_of`], which is the one place that turns a call
-        // into the declaration a copy is made of: the set was built from the
-        // implementation and a call to an overloaded function resolves to a
-        // signature, so asking with the resolved node named a copy nobody built.
-        a_raising_callee_of(self.snapshot, self, call)
-            .is_some_and(|declaration| self.raising.contains(&declaration))
+        // Through [`raising_callees_of`], which is the one place that turns a site into
+        // the declarations a copy belongs to: the set was built from the
+        // implementation, and a call to an overloaded function resolves to a
+        // *signature*, so asking with the resolved node named a copy nobody built.
+        //
+        // **All of them, which only matters for an accessor**: an access runs a `get`
+        // or a `set` and the syntax does not say which, so a site may name a copy only
+        // where both halves have one. Where only one does, this says no and
+        // `a_copy_can_contain` says no with it -- one rule, so the name a site spells
+        // and the carrying a copy is admitted on cannot disagree. For a call the list
+        // is at most one and this is the sentence it always was.
+        let callees = raising_callees_of(self.snapshot, self, call);
+        !callees.is_empty() && callees.iter().all(|at| self.raising.contains(at))
     }
 
-    /// Whether a member access runs an **accessor**, and is therefore a call.
+    /// The **accessor declarations** a member access runs: a `get`, a `set`, or both
+    /// where the member declares both.
     ///
-    /// By the member symbol's declarations rather than by the node's shape,
-    /// because nothing in the syntax of `c.checked` says whether `checked` is a
-    /// field or a `get`. Covers `set` as well: an assignment to one is a call
-    /// with the same boundary.
-    fn reads_an_accessor(&self, node: NodeId) -> bool {
+    /// By the member symbol's declarations rather than by the node's shape, because
+    /// nothing in the syntax of `c.checked` says whether `checked` is a field or a
+    /// `get`. A `set` counts: an assignment to one is a call with the same boundary.
+    ///
+    /// **The declarations and not a boolean**, because an accessor has a raising copy
+    /// now and every set keyed on "the declaration a copy belongs to" has to be able
+    /// to name it -- which is [`a_raising_callee_of`]'s sentence, one construct over.
+    /// [`Self::reads_an_accessor`] is this asked as a question.
+    fn accessors_run_by(&self, node: NodeId) -> Vec<NodeId> {
         if !matches!(
             self.kind_of(node),
             Some(syntax::PROPERTY_ACCESS_EXPRESSION | syntax::ELEMENT_ACCESS_EXPRESSION)
         ) {
-            return false;
+            return Vec::new();
         }
         let Some(&member) = self.children(node).last() else {
-            return false;
+            return Vec::new();
         };
         let Some(symbol) = self.node(member).symbol else {
-            return false;
+            return Vec::new();
         };
         self.snapshot
             .symbols
             .get(symbol.0 as usize)
-            .is_some_and(|symbol| {
-                symbol.declarations.iter().any(|at| {
-                    matches!(
-                        self.kind_of(*at),
-                        Some(syntax::GET_ACCESSOR | syntax::SET_ACCESSOR)
-                    ) && !self.an_objective_c_accessor(*at)
-                })
+            .map(|symbol| {
+                symbol
+                    .declarations
+                    .iter()
+                    .copied()
+                    .filter(|at| {
+                        matches!(
+                            self.kind_of(*at),
+                            Some(syntax::GET_ACCESSOR | syntax::SET_ACCESSOR)
+                        ) && !self.an_objective_c_accessor(*at)
+                    })
+                    .collect()
             })
+            .unwrap_or_default()
+    }
+
+    /// Whether a member access runs an **accessor**, and is therefore a call.
+    fn reads_an_accessor(&self, node: NodeId) -> bool {
+        !self.accessors_run_by(node).is_empty()
+    }
+
+    /// Whether the accessor a member access runs can raise.
+    ///
+    /// **The member's symbol, not the receiver's.** [`a_call_that_can_raise`] reads
+    /// `children(call).first()`, which for a call is the callee and for an access is the
+    /// *object* -- so an access answered about whatever `box` happens to be, which was
+    /// harmless only while an accessor was refused before anything asked. A getter that
+    /// cannot throw needs no copy and no flag test, and saying otherwise refused
+    /// `return box.plain` beside the throwing one.
+    fn an_accessor_that_can_raise(&self, access: NodeId) -> bool {
+        self.children(access)
+            .last()
+            .and_then(|member| self.node(*member).symbol)
+            .is_none_or(|symbol| self.throwing.contains(&symbol.0))
     }
 
     /// Whether an accessor is a binding's for an Objective-C property or a
@@ -49506,21 +49693,13 @@ impl<'a> FuncBuilder<'a> {
                 //
                 // Only after the layout has been asked, so a plain field keeps
                 // its `FieldGet` and nothing about the ordinary path changes.
-                if let Some(callee) = self.accessor_callee(element, type_id, &name, "get ") {
+                if let Some(callee) = self.accessor_callee(element, type_id, &name, "get ")? {
                     self.refuse_unguarded_iterator_value(element, value, &name)?;
                     let returns = self
                         .declared_type_of(type_id, &name)
                         .and_then(|declared| self.represent(declared))
                         .ok_or_else(|| self.absent_member(element, type_id, &name))?;
-                    return Ok(self.push(
-                        OpKind::Call {
-                            callee,
-                            args: vec![value],
-                            frame: None,
-                        },
-                        returns,
-                        origin,
-                    ));
+                    return Ok(self.push_an_accessor_call(element, callee, vec![value], returns, origin));
                 }
                 return Err(self.absent_member(element, type_id, &name));
             };
@@ -60942,7 +61121,7 @@ impl<'a> FuncBuilder<'a> {
         // getter read is resolved for every other reader, so it decides this
         // one too.
         if self
-            .accessor_callee(member, type_id, &member_name, "get ")
+            .accessor_callee(member, type_id, &member_name, "get ")?
             .is_some()
         {
             let access = self.node(member).parent.unwrap_or(member);
@@ -63920,6 +64099,18 @@ enum Place {
         /// verifier said so as `CallArgumentType { expected: Erased, found:
         /// Float }` rather than the program being wrong at run time.
         wants: Option<HirType>,
+        /// The **access node** the two callees were resolved for -- `o.x` in
+        /// `o.x = v` -- and therefore the node whose raise is tested after the call.
+        ///
+        /// Carried rather than taken from the assignment, because they are different
+        /// nodes and `raising_calls` holds this one: `lower_try` records what the
+        /// `try`'s body *reaches*, which is the access. Testing the assignment's node
+        /// instead asked a question nothing had answered, so the call named
+        /// `Owner#set x@raises` and **nothing looked at the flag** -- 16 of 32 cases,
+        /// with the `try` compiled and the `throw` recorded and dropped. The field is
+        /// here so that the callee and the node it was chosen for travel together,
+        /// which is `MethodArm`'s argument one enum along.
+        at: NodeId,
     },
     /// A native handle's property read before it is written -- GJS's
     /// `page.badge_number -= 1` -- through the methods its `@ntsGet` and
