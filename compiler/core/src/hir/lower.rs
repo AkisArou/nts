@@ -1924,10 +1924,29 @@ fn raising_member_slots(snapshot: &SemanticSnapshot, hierarchy: &mut Hierarchy, 
         let members = members_filling(snapshot, &probe, hierarchy, root, &key);
         // Every one of them, or the slot is not numbered. `copyable` says a copy can be
         // built and everything it calls has one; a member that cannot raise needs none.
-        if !members.iter().all(|member| {
-            naming.copyable.contains(member)
-                || !a_declaration_that_can_raise(snapshot, &naming.throwing, *member)
-        }) {
+        let withholders: Vec<String> = members
+            .iter()
+            .filter(|member| {
+                !naming.copyable.contains(member)
+                    && a_declaration_that_can_raise(snapshot, &naming.throwing, **member)
+            })
+            .map(|member| {
+                let owner = probe
+                    .enclosing_class(*member)
+                    .and_then(|class| instance_type_of(snapshot, class))
+                    .and_then(|ty| hierarchy.name.get(&ty).cloned())
+                    .unwrap_or_else(|| "an unnamed class".to_owned());
+                format!("{owner}#{key}")
+            })
+            .collect();
+        // **Which members withheld it**, so the refusal at the call site can say so --
+        // `filter` rather than `all` for exactly that, over the same predicate.
+        //
+        // **All of them counted, not just the first.** Naming one of three would send a reader
+        // to fix it and leave the slot withheld, which is a sentence that is true and
+        // misleading at once. See [`Naming::withheld`].
+        if !withholders.is_empty() {
+            naming.withheld.insert((root, key.clone()), withholders);
             continue;
         }
         let raising_key = (root, format!("{key}{RAISING_SUFFIX}"));
@@ -4029,6 +4048,28 @@ struct Naming {
     /// the arm that pushes it. Assigning only to the used ones would mean
     /// finding them first, which is the same walk with a way to be wrong.
     class_tokens: rustc_hash::FxHashMap<u32, usize>,
+
+    /// For a `(root, member)` family whose raising slot [`raising_member_slots`] did
+    /// **not** number: the member that withheld it, as the name a reader can look up.
+    ///
+    /// The slot is withheld where one implementation can raise and no copy of it can be
+    /// made -- all of the family or none, which is a soundness condition rather than a
+    /// tidiness one. The *refusal* for that lands much later, in
+    /// [`FuncBuilder::callee_for`] and [`FuncBuilder::accessor_callee`], which know only
+    /// that `slot_for` answered `None`. So the sentence said *"an override of it can
+    /// raise and no copy of that override can be made"* without saying **which** -- and
+    /// `_read`'s said "which a subclass overrides" without naming `DuplexSide`.
+    ///
+    /// The JVM lane asked for this and their argument is the one that settles it: a
+    /// withheld slot cannot be declined by a backend, because lowering never emits the
+    /// index, so there is nothing for the backend to report. Only lowering can name the
+    /// withholder, and a census of the sentence then ranks by it -- which is the number
+    /// to act on, rather than a count of sites that share one cause.
+    ///
+    /// Published rather than re-derived at the site for the reason `copyable` is: the
+    /// site has no `members_filling` and no fixpoint, and a second answer to "which
+    /// member withheld this" would be a sentence that names the wrong one.
+    withheld: rustc_hash::FxHashMap<(TypeId, String), Vec<String>>,
 }
 
 /// The emitted name of every function and class declaration whose plain name is
@@ -10326,6 +10367,7 @@ fn wire_naming(builder: &mut FuncBuilder, naming: &Naming) {
     builder.generators.clone_from(&naming.generators);
     builder.throwing.clone_from(&naming.throwing);
     builder.raising.clone_from(&naming.raising);
+    builder.withheld.clone_from(&naming.withheld);
     builder.presence_keys.clone_from(&naming.presence_keys);
     builder.written_order.clone_from(&naming.written_order);
     builder.class_tokens.clone_from(&naming.class_tokens);
@@ -17018,6 +17060,10 @@ struct FuncBuilder<'a> {
     throwing: rustc_hash::FxHashSet<u32>,
     /// The declarations a raising copy exists for. See [`raising_copies`].
     raising: rustc_hash::FxHashSet<NodeId>,
+    /// For a `(root, member)` family whose raising slot was **withheld**: the member
+    /// that withheld it. [`Naming::withheld`] carries why it is published rather than
+    /// derived here, and the two refusal sites below are its readers.
+    withheld: rustc_hash::FxHashMap<(TypeId, String), Vec<String>>,
     /// The calls in this body that name a raising copy, and so are followed by
     /// a test. Written by [`Self::lower_try`] and by the raising walk; read by
     /// [`Self::push_call`], which is the one place a plain call is emitted.
@@ -17152,6 +17198,7 @@ impl<'a> FuncBuilder<'a> {
             foreign,
             raises: false,
             raising: rustc_hash::FxHashSet::default(),
+            withheld: rustc_hash::FxHashMap::default(),
             raising_calls: rustc_hash::FxHashSet::default(),
             boxed: Vec::new(),
             guarded: Vec::new(),
@@ -41911,12 +41958,12 @@ impl<'a> FuncBuilder<'a> {
             if !suffix.is_empty() {
                 let raising = format!("{key}{RAISING_SUFFIX}");
                 let Some(slot) = self.hierarchy.slot_for(ty, &raising) else {
+                    let why = self.why_the_raising_slot_is_missing(ty, &key);
                     return Err(self.unsupported(
                         id,
                         &format!(
                             "a `{kind}` of `{member}` inside a `try`, which a subclass \
-                             overrides: an override of it can raise and no copy of that \
-                             override can be made, so the slot has no raising entry",
+                             overrides: {why}",
                             kind = kind.trim()
                         ),
                     ));
@@ -49751,6 +49798,39 @@ impl<'a> FuncBuilder<'a> {
         }
         let callees = raising_callees_of(self.snapshot, self, call);
         !callees.is_empty() && callees.iter().all(|at| self.raising.contains(at))
+    }
+
+    /// The sentence a withheld raising slot refuses with, naming the member that withheld it.
+    ///
+    /// One phrase with two readers -- [`Self::callee_for`] for a method and
+    /// [`Self::accessor_callee`] for a `get`/`set` -- because the two said the same thing in
+    /// two spellings and neither said **which** member was the cause. `_read`'s read *"which a
+    /// subclass overrides"*, and the subclass it meant was `DuplexSide`.
+    ///
+    /// Falling back to the unnamed form rather than refusing to refuse: the map is filled by
+    /// [`raising_member_slots`] for a family it skipped, and a site can reach here for a family
+    /// that was never a candidate at all -- a member nothing overrides, where the slot is absent
+    /// because there was nothing to number. Those are different facts and only one has a
+    /// withholder.
+    fn why_the_raising_slot_is_missing(&self, root: TypeId, key: &str) -> String {
+        match self.withheld.get(&(root, key.to_owned())) {
+            Some(withholders) => {
+                let first = withholders.first().map_or("", String::as_str);
+                let (named, them) = match withholders.len() {
+                    1 => (format!("`{first}`"), "it"),
+                    2 => (format!("`{first}` and one other"), "them"),
+                    many => (format!("`{first}` and {} others", many - 1), "them"),
+                };
+                format!(
+                    "{named} can raise and no copy can be made of {them}, so the whole family's \
+                     raising slot is withheld -- it is all of them or none, because any of them \
+                     may arrive at this site"
+                )
+            }
+            None => "an override of it can raise and no copy of that override can be made, so \
+                     the slot has no raising entry"
+                .to_owned(),
+        }
     }
 
     /// The **accessor declarations** a member access runs: a `get`, a `set`, or both
@@ -62432,12 +62512,12 @@ impl<'a> FuncBuilder<'a> {
             if !suffix.is_empty() {
                 let raising = format!("{member_name}{RAISING_SUFFIX}");
                 let Some(slot) = self.hierarchy.slot_for(type_id, &raising) else {
+                    let why = self.why_the_raising_slot_is_missing(type_id, member_name);
                     return Err(self.unsupported(
                         id,
                         &format!(
                             "a call inside a `try` to `{member_name}`, which a subclass \
-                             overrides: an override of it can raise and no copy of that \
-                             override can be made, so the slot has no raising entry"
+                             overrides: {why}"
                         ),
                     ));
                 };
