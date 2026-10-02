@@ -44,12 +44,20 @@ public final class RejectTest {
                 + "`rejectValue` exists to avoid");
         check("boom".equals(NtsPromise.value(stringly).ref), "the reason itself did not survive");
 
-        // The contrast, so the assertion above is about the tag and not about
-        // rejection in general: `reject` takes an Object and tags it OBJECT.
+        // `reject` takes a bare reference and tags it by what it is, as
+        // `runtime/c`'s `nts_tag_of_reference` does. This used to assert it
+        // tagged *every* reference OBJECT -- the contrast with `rejectValue`
+        // -- which was the bug itself: `Promise.reject("text")` then caught a
+        // value whose `typeof` was "object" (2026-10-02). A string is a string
+        // through either door; an object is still an object.
         NtsPromise objectly = NtsPromise.newPromise();
         NtsPromise.reject(objectly, "boom");
-        check(NtsPromise.value(objectly).tag == NtsValue.OBJECT,
-            "`reject` did not tag its reference OBJECT, so these two are the same call");
+        check(NtsPromise.value(objectly).tag == NtsValue.STRING,
+            "`reject` tagged a string reference " + NtsValue.tagName(NtsPromise.value(objectly).tag));
+        NtsPromise plain = NtsPromise.newPromise();
+        NtsPromise.reject(plain, new Object());
+        check(NtsPromise.value(plain).tag == NtsValue.OBJECT,
+            "`reject` did not tag an object reference OBJECT");
 
         // A number that reached a rejection keeps being a number.
         NtsPromise numeric = NtsPromise.newPromise();

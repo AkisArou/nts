@@ -151,7 +151,7 @@ fn a_rejection_keeps_the_tag_it_arrived_with() {
         "the reject test failed:\n{said}\n{}",
         String::from_utf8_lossy(&ran.stderr)
     );
-    assert!(said.ends_with("9 checks, 0 failures"), "{said}");
+    assert!(said.ends_with("10 checks, 0 failures"), "{said}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

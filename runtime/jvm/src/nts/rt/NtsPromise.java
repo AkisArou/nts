@@ -65,7 +65,7 @@ public final class NtsPromise {
         if (promise.state == PENDING) { settle(promise, FULFILLED, NtsValue.ofNumber(value)); }
     }
     public static void fulfillReference(NtsPromise promise, Object value) {
-        if (promise.state == PENDING) { settle(promise, FULFILLED, NtsValue.ofObject(value)); }
+        if (promise.state == PENDING) { settle(promise, FULFILLED, NtsValue.ofReference(value)); }
     }
     public static void fulfillTagged(NtsPromise promise, Object value, int tag) {
         if (promise.state == PENDING) { settle(promise, FULFILLED, NtsValue.ofTagged(tag, value)); }
@@ -85,7 +85,7 @@ public final class NtsPromise {
         fulfillValue(promise, value);
     }
     public static void reject(NtsPromise promise, Object reason) {
-        if (promise.state == PENDING) { settle(promise, REJECTED, NtsValue.ofObject(reason)); }
+        if (promise.state == PENDING) { settle(promise, REJECTED, NtsValue.ofReference(reason)); }
     }
     /**
      * Reject with a reason that arrives already erased.

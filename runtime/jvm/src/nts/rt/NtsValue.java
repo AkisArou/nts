@@ -43,6 +43,22 @@ public final class NtsValue {
         return value == null ? NULL_VALUE : new NtsValue(OBJECT, 0.0, value);
     }
     /**
+     * A reference arriving with no tag, tagged by what it is: `runtime/c`'s
+     * `nts_tag_of_reference`. A string is `STRING` and a symbol `SYMBOL`;
+     * anything else is `OBJECT`, as there.
+     *
+     * <p>For the promise helpers that take a bare reference. `reject` used
+     * {@link #ofObject}, so `Promise.reject("text")` rejected with an object
+     * that happened to hold a string: `typeof e` in the `catch` answered
+     * `"object"` where node and C answer `"string"`, and an unhandled one was
+     * reported as `nts: uncaught String` (2026-10-02).
+     */
+    public static NtsValue ofReference(Object value) {
+        if (value instanceof String) { return new NtsValue(STRING, 0.0, value); }
+        if (value instanceof NtsSymbol) { return new NtsValue(SYMBOL, 0.0, value); }
+        return ofObject(value);
+    }
+    /**
      * A reference that may be absent, where absent means `undefined`.
      *
      * <p>`ofObject` answers `null` for a null reference, which is right for
