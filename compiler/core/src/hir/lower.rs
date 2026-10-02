@@ -61296,28 +61296,31 @@ impl<'a> FuncBuilder<'a> {
     /// and keeps the function's signature the one every other caller sees,
     /// where an erased `undefined` would change it.
     ///
-    /// `None` for a `void` function, which is a `Return` with no operand.
+    /// `None` for a `void` function, which is a `Return` with no operand, and
+    /// for a `never` one, which does not return.
     ///
-    /// A `void` return is a `Return` with no operand, and so is a type with no
-    /// constant to make -- a native pointer, a `bigint`. Neither is reachable:
-    /// `raising_copies` only copies a plain function, and the one that returned
-    /// a `bigint` would produce a `Return` with nothing in it, which `verify`
-    /// rejects. Stated here rather than assumed, because the arm is shared.
+    /// **Every other type has a constant, and needs one.** This used to answer
+    /// `None` for a native pointer and a `bigint` too, under a comment calling
+    /// both unreachable because `raising_copies` only copies a plain function.
+    /// A plain function returns a native pointer as readily as anything: the
+    /// GTK corpus harness's recursive `firstButton(widget): GtkButton | null`,
+    /// reached from a signal handler, was a raising copy with a bare `ret` on
+    /// its raised path -- `ReturnType { found: None }`, invalid HIR in 56 of
+    /// the corpus's 59 programs.
     fn raised_return(&mut self, origin: &Origin) -> Option<ValueId> {
         let returns = self.returns.clone();
         let kind = match &returns {
             HirType::Bool => OpKind::ConstBool(false),
-            HirType::Int { .. } => OpKind::ConstInt(0),
+            // A `bigint` zero is spelled `ConstInt` at its own type, as
+            // `lower_absent` spells one.
+            HirType::Int { .. } | HirType::BigInt => OpKind::ConstInt(0),
             HirType::Float { .. } => OpKind::ConstFloat(0.0),
             HirType::Erased => OpKind::ConstUndefined,
             // A null reference, which is what `nts_uncaught`'s own `detail`
             // argument uses for "no string here": the slot has the right width
-            // and nothing reads it.
-            HirType::Managed(_) => OpKind::ConstNull,
-            HirType::Void
-            | HirType::Never
-            | HirType::BigInt
-            | HirType::NativePointer(_) => return None,
+            // and nothing reads it. A native pointer's null is the same word.
+            HirType::Managed(_) | HirType::NativePointer(_) => OpKind::ConstNull,
+            HirType::Void | HirType::Never => return None,
         };
         Some(self.push(kind, returns, origin.clone()))
     }
