@@ -6,7 +6,7 @@
 //
 // A call through a value is carried by `Hierarchy::raising_call_slot` or not at all, and
 // that slot may only be dispatched at where *every* raising body this program would build
-// can carry what it calls -- `every_raising_body_can_carry`, which is program-global
+// can carry what it calls -- `what_holds_the_gate_off`, which is program-global
 // because which closure arrives at a signature is what nobody at the site can know. So
 // the two halves cannot be arms of one file: the gate is a property of the whole program,
 // and a file holding both would have it off for all of it.

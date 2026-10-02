@@ -423,8 +423,11 @@ struct Hierarchy {
     /// `Shared::whole_program` on its own clone, because the answer comes from
     /// `raising_copies` and that runs after `collect_hierarchy` -- so the field is
     /// `false` in the hierarchy the module-scope probe uses, which asks nothing of it.
-    /// See [`every_raising_body_can_carry`].
+    /// See [`what_holds_the_gate_off`].
     closures_carry: bool,
+    /// Where [`Self::closures_carry`] is off, which closure holds it off and the
+    /// call that does: [`Naming::gate_holder`], carried here for the refusal.
+    gate_holder: Option<std::sync::Arc<str>>,
     /// How many erased parameters the entry in [`Self::erased_call_slot`] takes:
     /// **the widest closure in the program**, and not a constant.
     ///
@@ -2075,7 +2078,7 @@ fn members_filling(
 /// Whether a declaration can raise, which [`Throwing::any`] answers **by symbol**
 /// because a declaration node carries none of its own.
 ///
-/// One spelling, two readers: this and [`every_raising_body_can_carry`]'s wrapper arm,
+/// One spelling, two readers: this and [`what_holds_the_gate_off`]'s wrapper arm,
 /// which asked the same question of the same set with the same scan written out.
 fn a_declaration_that_can_raise(
     snapshot: &SemanticSnapshot,
@@ -4176,9 +4179,14 @@ struct Naming {
     guarded_calls: rustc_hash::FxHashSet<NodeId>,
     /// Whether a call inside a `try` may dispatch at `Hierarchy::raising_call_slot`:
     /// every raising body this program would build can carry what it calls. See
-    /// [`every_raising_body_can_carry`], which is also where the measurement that
+    /// [`what_holds_the_gate_off`], which is also where the measurement that
     /// makes it program-global lives.
     closures_carry: bool,
+    /// Where `closures_carry` is off, a sentence naming the first closure that
+    /// cannot carry what it calls, and that call -- so the refusal it causes at
+    /// every call through a function value inside a `try` names its cause
+    /// rather than "some closure in this program". See [`describe_gate_holder`].
+    gate_holder: Option<String>,
     /// The emitted name, for a declaration whose plain name is taken.
     qualified: rustc_hash::FxHashMap<NodeId, String>,
     /// Declarations that cannot be told apart by anything this compiler has.
@@ -5545,6 +5553,8 @@ struct RaisingCopies {
     eligible: rustc_hash::FxHashSet<NodeId>,
     /// [`Naming::closures_carry`].
     closures_carry: bool,
+    /// [`Naming::gate_holder`].
+    gate_holder: Option<String>,
     /// [`Naming::guarded_calls`].
     guarded_calls: rustc_hash::FxHashSet<NodeId>,
 }
@@ -5555,7 +5565,7 @@ fn raising_copies(
     throwing: &Throwing,
 ) -> RaisingCopies {
     // Optimistically: a call through a value is carried by the raising uniform entry,
-    // which is true wherever `every_raising_body_can_carry` is. Recomputed strictly
+    // which is true wherever `what_holds_the_gate_off` is. Recomputed strictly
     // below where it is not -- see the `carry` branch.
     let eligible = eligible_declarations(snapshot, probe, throwing, true);
     // Seeded by what a `try` reaches, then closed over what those reach: a copy
@@ -5633,11 +5643,11 @@ fn raising_copies(
     let copies = close_over_callees(snapshot, probe, &eligible, copies);
     // **And whether every raising body this program would build can carry what it
     // calls**, which decides whether a call inside a `try` may dispatch at the
-    // raising slot at all. See `every_raising_body_can_carry`.
-    let carry = every_raising_body_can_carry(snapshot, probe, throwing, &copies);
-    if carry {
-        return RaisingCopies { copies, eligible, closures_carry: true, guarded_calls };
-    }
+    // raising slot at all. See `what_holds_the_gate_off`.
+    let Some((holder, call)) = what_holds_the_gate_off(snapshot, probe, throwing, &copies) else {
+        return RaisingCopies { copies, eligible, closures_carry: true, gate_holder: None, guarded_calls };
+    };
+    let gate_holder = Some(describe_gate_holder(probe, holder, call));
     // **Where it is off, the extra seeds are dropped with it.** They exist to serve
     // the raising variant of a *closure*, and no closure gets one when no site can
     // dispatch at the slot -- so keeping them would emit thousands of `@raises`
@@ -5665,7 +5675,7 @@ fn raising_copies(
         .filter(|declaration| eligible.contains(declaration))
         .collect();
     let copies = close_over_callees(snapshot, probe, &eligible, narrow);
-    RaisingCopies { copies, eligible, closures_carry: false, guarded_calls }
+    RaisingCopies { copies, eligible, closures_carry: false, gate_holder, guarded_calls }
 }
 
 /// Close a set of copies over what those copies call: a copy names its callees'
@@ -5718,12 +5728,12 @@ fn close_over_callees(
 /// **accessor**, which have no raising copies: 1,060 and 631 occurrences of exactly
 /// that refusal across the corpora. Covering those is what turns this gate on for
 /// `runtime/node`, and it is the next piece of the same work.
-fn every_raising_body_can_carry(
+fn what_holds_the_gate_off(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
     throwing: &Throwing,
     copies: &rustc_hash::FxHashSet<NodeId>,
-) -> bool {
+) -> Option<(NodeId, NodeId)> {
     // **A closure callee is carried by the closure it names**, which is why this is a
     // different predicate from the one `eligible` is shrunk with. Every closure body
     // in the program is in the conjunction below, so accepting one here discharges
@@ -5732,10 +5742,12 @@ fn every_raising_body_can_carry(
     // not have this arm -- `a_copy_can_contain` stays strict there, because a plain
     // function is eligible whether or not the gate is on and a copy naming an entry
     // the gate withheld would dangle.
-    let carries = |body: NodeId| {
-        calls_in_the_body_of(probe, body).into_iter().all(|call| {
-            a_copy_can_contain(snapshot, probe, throwing, copies, true, call)
-                || a_closure_callee(snapshot, probe, call)
+    // The first call a body cannot carry, rather than whether there is one: the
+    // answer is also the refusal's cause, and a lane reducing it needs its name.
+    let uncarried = |body: NodeId| {
+        calls_in_the_body_of(probe, body).into_iter().find(|call| {
+            !a_copy_can_contain(snapshot, probe, throwing, copies, true, *call)
+                && !a_closure_callee(snapshot, probe, *call)
         })
     };
     let written = snapshot
@@ -5749,22 +5761,54 @@ fn every_raising_body_can_carry(
             )
         })
         .map(|(index, _)| NodeId(u32::try_from(index).unwrap_or(u32::MAX)))
-        .all(carries);
+        .find_map(|body| uncarried(body).map(|call| (body, call)));
+    if written.is_some() {
+        return written;
+    }
     // A wrapper's one call is the function it stands for, so it carries exactly when
     // that function has a copy -- or cannot raise, which `throwing` answers through
     // the declaration list because a declaration node carries no symbol of its own.
-    let wrapped = functions_used_as_values(snapshot, probe, &wrappable_functions(snapshot, probe))
+    functions_used_as_values(snapshot, probe, &wrappable_functions(snapshot, probe))
         .into_iter()
-        .all(|declaration| {
+        .find(|declaration| {
             let raises = snapshot
                 .symbols
                 .iter()
-                .position(|record| record.declarations.contains(&declaration))
+                .position(|record| record.declarations.contains(declaration))
                 .and_then(|at| u32::try_from(at).ok())
                 .is_some_and(|symbol| throwing.any.contains(&symbol));
-            !raises || copies.contains(&declaration)
-        });
-    written && wrapped
+            raises && !copies.contains(declaration)
+        })
+        .map(|declaration| (declaration, declaration))
+}
+
+/// The sentence a refusal gives for a program whose raising gate is off: which
+/// closure holds it off, and the call that does -- the names in backticks, so a
+/// census grouping by message still sees one row. A closure has no name of its
+/// own, so it is named by the function it is written in; a function used as a
+/// value whose copy was not made (`holder == call`) is named itself.
+fn describe_gate_holder(probe: &FuncBuilder, holder: NodeId, call: NodeId) -> String {
+    let named = |at: NodeId| {
+        probe
+            .children(at)
+            .into_iter()
+            .find(|child| probe.kind_of(*child) == Some(syntax::IDENTIFIER))
+            .and_then(|name| probe.node(name).text.clone())
+    };
+    if holder == call {
+        let name = named(holder).unwrap_or_else(|| "a function".to_owned());
+        return format!("`{name}` is used as a value and can throw, and has no raising copy");
+    }
+    let within = std::iter::successors(probe.node(holder).parent, |at| probe.node(*at).parent)
+        .filter(|at| names_a_body(probe.kind_of(*at)) || probe.kind_of(*at) == Some(syntax::CONSTRUCTOR))
+        .find_map(named)
+        .map_or_else(|| "module scope".to_owned(), |name| format!("`{name}`"));
+    let callee = probe
+        .children(call)
+        .first()
+        .and_then(|callee| probe.node(*callee).text.clone().or_else(|| probe.children(*callee).last().and_then(|last| probe.node(*last).text.clone())))
+        .unwrap_or_else(|| "a function value".to_owned());
+    format!("a closure in {within} calls `{callee}`, whose own `throw` cannot be carried")
 }
 
 /// Every declaration that lowering turns into a **wrapper** closure when it is used
@@ -5777,7 +5821,7 @@ fn every_raising_body_can_carry(
 /// but it can raise and is never `eligible`, so the wrapped test failed and turned the
 /// gate off for two of the three examples this change exists for. They read "agreed on
 /// every case" while comparing fewer of them, which is the same trap twice in one
-/// session: see [`every_raising_body_can_carry`].
+/// session: see [`what_holds_the_gate_off`].
 fn wrappable_functions(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
@@ -6300,6 +6344,7 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
     naming.copyable = raising.eligible;
     naming.guarded_calls = raising.guarded_calls;
     naming.closures_carry = raising.closures_carry;
+    naming.gate_holder = raising.gate_holder;
     naming.raising_then = throwing.bodily;
     naming.throwing = throwing.any;
     naming.presence_keys = presence_keys(snapshot, &probe);
@@ -12677,7 +12722,7 @@ fn lower_wanted_closures(
                 // **And only where a site can dispatch at the slot.** With the gate
                 // off nothing names these, and building them anyway emitted 1,675
                 // abort shells and thousands of `@raises` bodies across the corpora
-                // for a slot no call reaches. See `every_raising_body_can_carry`.
+                // for a slot no call reaches. See `what_holds_the_gate_off`.
                 for produced in raising_closure(
                     snapshot,
                     foreign,
@@ -12843,6 +12888,7 @@ fn hierarchy_and_naming(
         collect_hierarchy(snapshot, foreign, closures, &qualified_names(snapshot).0);
     let mut naming = naming(snapshot);
     hierarchy.closures_carry = naming.closures_carry;
+    hierarchy.gate_holder = naming.gate_holder.as_deref().map(std::sync::Arc::from);
     raising_member_slots(snapshot, &mut hierarchy, &mut naming);
     (hierarchy, naming)
 }
@@ -14390,7 +14436,7 @@ fn declare_uniform_entries(
     declare_erased_entries(snapshot, hierarchy, program);
     // **Only where a site can dispatch at the raising slot.** Filling it otherwise
     // names an entry nothing reaches, and `reachable::prune` cannot drop what a
-    // dispatch table holds. See `every_raising_body_can_carry`.
+    // dispatch table holds. See `what_holds_the_gate_off`.
     if dispatches_raising {
         declare_raising_entries(hierarchy, program);
     }
@@ -51042,14 +51088,14 @@ impl<'a> FuncBuilder<'a> {
                 // almost always a method or an accessor, which have no raising
                 // copies. Its own sentence rather than the one above, because the
                 // two are cleared by different work and a census matching on text
-                // has to pick one. See `every_raising_body_can_carry` for why the
+                // has to pick one. See `what_holds_the_gate_off` for why the
                 // question is asked of the whole program.
-                return Some((
-                    node,
-                    "through a closure, and some closure in this program calls something whose \
-                     own `throw` cannot be carried"
-                        .to_owned(),
-                ));
+                let holder = self
+                    .hierarchy
+                    .gate_holder
+                    .as_deref()
+                    .unwrap_or("some closure in this program calls something whose own `throw` cannot be carried");
+                return Some((node, format!("through a closure, and {holder}")));
             }
             return Some((node, self.why_no_raising_copy(node)));
         }
