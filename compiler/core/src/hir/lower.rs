@@ -14538,21 +14538,33 @@ fn holds_only_absences(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
 /// pattern, anywhere but directly inside an **array** pattern.
 ///
 /// Step 1 of `BindingInitialization` says every object pattern does, and this stops one case
-/// short of that for a reason measured rather than argued. A nested pattern's source is a
-/// *read*: inside an object pattern it is a **property** read, which cannot fail on a
-/// present object; inside an array pattern it is an **element** read, and reading past the
-/// end is a run-time decline in this compiler today -- `const [a, b] = [1]` stops the
-/// program where node answers `undefined`. `function f([{ x }]) {}` called `f([])` leaves
-/// that read dead because `x` is unused, and asking about it makes it live: the test262 cases
-/// `ary-ptrn-elem-obj-val-{null,undef}.js` went from a wrong answer to a **crash**, 6 of
-/// them, which is worse -- an abort erases every observation in its program.
+/// short of that for a reason measured rather than argued -- **four** measurements now, the
+/// last of which says the exclusion is not about nesting at all.
 ///
-/// Measured both ways on the recorded language set: without the array exclusion **51 FIXED,
-/// 6 REGRESSED, 6 CHANGED**; excluding every nested pattern, **31 FIXED, 0 REGRESSED** -- and
-/// the 20 in between are all `obj-ptrn-prop-obj-value-null`, nested inside an *object*
-/// pattern, which is what says the line belongs between the two kinds of nesting rather than
-/// at the root. The remaining 12 arrive with *"a pattern element past the end of its array is
-/// `undefined`"*, which is its own item with its own cost -- a bounds test per element.
+/// A nested pattern's source is a *read*: inside an object pattern a **property** read, which
+/// cannot fail on a present object; inside an array pattern an **element** read. All four, on
+/// the recorded language set:
+///
+/// ```text
+/// every object pattern                        51 FIXED, 6 REGRESSED, 6 CHANGED
+/// the root of a binding only                  31 FIXED, 0 REGRESSED
+/// not inside an array pattern                 51 FIXED, 0 REGRESSED  <- this
+/// every object pattern, with a past-the-end
+///   element answering `undefined`             57 FIXED, 6 REGRESSED
+/// ```
+///
+/// The 20 between the second and third are all `obj-ptrn-prop-obj-value-null`, nested inside an
+/// *object* pattern, which is why the line sits between the two kinds of nesting rather than at
+/// the root. And the fourth is the one that corrects the story: making a past-the-end element
+/// `undefined` did **not** release the array case, because the element type of
+/// `function f([{ x }]) {}` is a **reference** (`managed<[managed<obj#49>]>`), not erased, and
+/// an absence at a reference element is the same lie at the type that a `number[]`'s is -- the
+/// `-undef` cases still decline, and they are the same 6.
+///
+/// So what the array case waits on is not the read answering `undefined`; it is a **reference
+/// element able to carry an absence**, which is a representation question with its own hazard:
+/// a null past the end is silently produced rather than declined, and anything that reads it
+/// without an object pattern's check faults. That is its own item.
 ///
 /// **One predicate, two readers**, because the two run at different times and disagreeing is
 /// a throw with no handler path: [`FuncBuilder::require_object_coercible`] asks it of the
@@ -50492,14 +50504,25 @@ impl<'a> FuncBuilder<'a> {
         position: usize,
         default: Option<NodeId>,
     ) -> Result<Option<ValueId>, Diagnostic> {
-        let Some(default) = default else {
-            return Ok(None);
-        };
         let HirType::Managed(ManagedType::Array(element_ty)) =
             self.values[value.0 as usize].ty.clone()
         else {
             return Ok(None);
         };
+        // **With no default, this still answers for an erased element**, and that is a
+        // run-time decline closed rather than a conformance row gained: `const [a, b] = [1]`
+        // stops the program -- *"an index its `!` promised was in range and was not"* -- where
+        // node answers `undefined`. The machinery for it is the first branch below, built for
+        // the default case and asking exactly the right question.
+        //
+        // **Only where the element has room for one.** A `number[]`'s element is a double and
+        // `const [a, b]: number[]` declares `b: number`, so answering `undefined` there would
+        // be a lie at the type the program wrote -- the decline is the honest answer and stays.
+        // Which also means this costs nothing in the runtime corpora, whose arrays are typed,
+        // and everything in test262, whose arrays are JavaScript's and erase.
+        if default.is_none() && *element_ty != HirType::Erased {
+            return Ok(None);
+        }
         let origin = self.origin(element);
         #[allow(clippy::cast_precision_loss)]
         let at = position as f64;
@@ -50521,7 +50544,8 @@ impl<'a> FuncBuilder<'a> {
         // larger claim. Growth cannot intervene either, because the reads a
         // pattern emits follow the literal immediately and nothing is lowered
         // between them.
-        if let OpKind::ArrayNew { length, .. } = self.values[value.0 as usize].kind
+        if let Some(default) = default
+            && let OpKind::ArrayNew { length, .. } = self.values[value.0 as usize].kind
             && let OpKind::ConstFloat(allocated) = self.values[length.0 as usize].kind
             && allocated <= at
         {
@@ -50577,6 +50601,13 @@ impl<'a> FuncBuilder<'a> {
                     ty: HirType::Erased,
                 },
             )?;
+            // **No default means the read is the answer**, which is the whole of the
+            // no-default case: an element that is there, `undefined` where the array ended.
+            // The second branch below is what a default adds, and there is nothing for it to
+            // choose between.
+            let Some(default) = default else {
+                return Ok(Some(read));
+            };
             let Some(absent) = self.defaulted_when(element, property, read)? else {
                 return Ok(Some(read));
             };
@@ -50595,6 +50626,9 @@ impl<'a> FuncBuilder<'a> {
         // The binding's node, not the element's, for the reason the ordinary
         // path gives: its type is the one the default has already been folded
         // into, and both arms have to produce it.
+        let Some(default) = default else {
+            unreachable!("a concrete element with no default returned above")
+        };
         self.lower_branching_value(
             binding,
             exhausted,

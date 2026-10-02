@@ -32,6 +32,14 @@
 # roughly the same time. `build` is in none of them: a slice measures a binary
 # that already exists, which is what makes `NTS_BIN=<pin>` the normal way to
 # call this.
+#
+# **`tests` and `clippy` read the TREE, not `NTS_BIN`**, because they compile it --
+# so the slice holding them is the one that cannot overlap with editing. On
+# 2026-10-02 a run reported `FAILED: tests` for a doc comment written *after* it
+# started: an indented measurement table in a `///` block is a Rust code block to
+# rustdoc, and the doctest it became did not parse. The failure was real and its
+# subject was not the pin. Finish editing, then run the slices -- or run the
+# `conformance` profile, which holds neither.
 set -u
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$root"
