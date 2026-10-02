@@ -26999,7 +26999,9 @@ impl<'a> FuncBuilder<'a> {
                         .represent(*position)
                         .ok_or_else(|| self.unrepresentable(operand, "a spread position"))?;
                     let value = self.read_a_position(array, offset, &want, operand)?;
-                    args.push(self.coerce_to_parameter(call, args.len(), value, operand)?);
+                    let value = self.coerce_to_parameter(call, args.len(), value, operand)?;
+                    let value = self.unless_undefined(call, operand, Some(*position), value, &args, receiver)?;
+                    args.push(value);
                 }
                 continue;
             }
@@ -27028,10 +27030,13 @@ impl<'a> FuncBuilder<'a> {
                 Some(want) => self.lower_expecting(*argument, want)?,
                 None => self.lower_expression(*argument)?,
             };
-            args.push(match &want {
+            let value = match &want {
                 Some(want) => self.coerce(value, want, *argument)?,
                 None => value,
-            });
+            };
+            let argument_ty = self.snapshot.node_types.get(argument).copied();
+            let value = self.unless_undefined(call, *argument, argument_ty, value, &args, receiver)?;
+            args.push(value);
         }
         // A rest the call gave nothing to still takes an array, an empty one.
         // `f()` and `f(1)` reach the same function and it reads `xs.length`.
@@ -27042,85 +27047,7 @@ impl<'a> FuncBuilder<'a> {
         }
         for omitted in self.omitted_after(call, arguments.len()) {
             let value = match omitted {
-                Omitted::Default(node, callee) => {
-                    self.a_default_the_instance_cannot_answer(node, callee)?;
-                    // The parameters before this one, bound to what the call
-                    // already computed for them.
-                    //
-                    // `f(a, b = a + 1)` called as `f(2)` has to evaluate `a + 1`
-                    // with `a` meaning *the callee's* `a`, which is the value
-                    // sitting in `args[0]`. This used to be refused as "a
-                    // parameter default that reads `a`, another parameter",
-                    // which is 77 distinct sites in `runtime/node` -- and the
-                    // caller had the value the whole time.
-                    //
-                    // Saved and restored rather than inserted and dropped,
-                    // because a *recursive* call is the one case where the
-                    // caller has its own binding for the same symbol: `f`
-                    // calling `f(2)` would otherwise leave its own `a` pointing
-                    // at the argument it just passed.
-                    // **And `this` is the receiver of *this* call.**
-                    //
-                    // The same argument one paragraph up, for the other name a
-                    // default can read. JavaScript evaluates a default in the
-                    // callee's scope, where `this` is whatever the call was
-                    // made on; evaluating it here left `self.this` holding the
-                    // *caller's* receiver, which for a free function is
-                    // nothing at all. So `Buffer.prototype.toString(encoding?,
-                    // start = 0, end = this.length)` refused with ``this`
-                    // outside a method` -- a sentence about the source, which
-                    // says `this` inside a method -- at every call that omits
-                    // `end` from a function with no receiver of its own.
-                    //
-                    // 35 occurrences in `fs` alone, and `displayBytePath` is
-                    // one of them: eleven `fs` exports are behind that call.
-                    let outer_this = receiver.map(|receiver| self.this.replace(receiver));
-                    let names = self.parameter_symbols(callee);
-                    let mut shadowed = Vec::new();
-                    for (at, symbol) in names.iter().enumerate().take(args.len()) {
-                        let Some(symbol) = symbol else { continue };
-                        shadowed.push((*symbol, self.bindings.get(symbol).copied()));
-                        self.bindings.insert(*symbol, args[at]);
-                    }
-                    // **At the parameter's representation**, which is the
-                    // lesson the *argument* loop above already carries and this
-                    // one did not: "an array literal decides its own element
-                    // width when it is built, and `coerce` can only reject the
-                    // result". A default is an argument the caller did not
-                    // write, so the same thing decides its type.
-                    //
-                    // `function f(p: number[] = [])` refused with ``an array
-                    // literal that is not an array``: `[]` is typed `never[]`,
-                    // the checker saying the literal decides nothing and the
-                    // slot does -- and nothing was telling it what the slot is.
-                    // 36 files of the slice-1 `test/language` population reach
-                    // it through `method([x = 23] = [,])`, where the census
-                    // reported it as *a parameter of unrepresentable type (a
-                    // tuple)*, one cause under a message naming another.
-                    // The same scoped substitution the two paragraphs above make for
-                    // `this` and for the parameters before it, for the third thing a
-                    // default inherits from the call that evaluates it.
-                    let handled = self.a_default_inherits_the_handler(call, node);
-                    let want = self.parameter_representation(call, args.len());
-                    let lowered = match &want {
-                        Some(want) => self.lower_expecting(node, want),
-                        None => self.lower_expression(node),
-                    };
-                    for call in handled {
-                        self.raising_calls.remove(&call);
-                    }
-                    for (symbol, before) in shadowed {
-                        match before {
-                            Some(value) => self.bindings.insert(symbol, value),
-                            None => self.bindings.remove(&symbol),
-                        };
-                    }
-                    if let Some(outer) = outer_this {
-                        self.this = outer;
-                    }
-                    let value = lowered?;
-                    self.coerce_to_parameter(call, args.len(), value, node)?
-                }
+                Omitted::Default(node, callee) => self.lower_parameter_default(call, node, callee, &args, receiver)?,
                 Omitted::Absent => self.absent_argument(call, args.len())?,
             };
             args.push(value);
@@ -27141,6 +27068,202 @@ impl<'a> FuncBuilder<'a> {
             args.push(gathered);
         }
         Ok(args)
+    }
+
+    /// The argument a call passes for a parameter with a default: `value`, or
+    /// the default where `value` is `undefined` -- which a passed argument can
+    /// be as well as an omitted one, and JavaScript does not tell them apart.
+    ///
+    /// The default was evaluated only for an argument the call *omits*, so
+    /// `function g(x = 5)` called `g(undefined)` -- in a `.js` file, where `x`
+    /// is erased -- ran with `x` undefined. A value whose representation has no
+    /// `undefined` (a number, a non-optional string) cannot be one, and is
+    /// passed with no test.
+    fn unless_undefined(
+        &mut self,
+        call: NodeId,
+        argument: NodeId,
+        argument_ty: Option<TypeId>,
+        value: ValueId,
+        before: &[ValueId],
+        receiver: Option<ValueId>,
+    ) -> Result<ValueId, Diagnostic> {
+        let Some((default, callee)) = self.declared_default(call, before.len()) else {
+            return Ok(value);
+        };
+        // The argument's *type* first: a `number` passed to `id: number | null =
+        // null` is erased to fit the parameter, and a test of its tag would ask
+        // what the checker already answered.
+        if !self.admits_undefined(argument_ty) || self.is_the_undefined_literal(default) {
+            return Ok(value);
+        }
+        let ty = self.values[value.0 as usize].ty.clone();
+        let undefined = match ty {
+            HirType::Erased => self.defaulted_when(argument, argument, value)?,
+            // One null pointer stands for both absences, so the argument's
+            // *type* has to say which: only `undefined` takes the default, and
+            // a `null` the language keeps cannot be told from it.
+            HirType::Managed(_) => {
+                let absent = |kind: Absence| {
+                    argument_ty.is_some_and(|ty| {
+                        let parts = match self.snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
+                            Some(TypeKind::Union(parts)) => parts.clone(),
+                            _ => vec![ty],
+                        };
+                        parts.iter().any(|part| absence_of_member(self.snapshot, *part) == Some(kind))
+                    })
+                };
+                match (absent(Absence::Undefined), absent(Absence::Null)) {
+                    (true, true) => {
+                        return Err(self.unsupported(
+                            argument,
+                            "an argument that can be `null` or `undefined`, passed to a parameter with a default",
+                        ));
+                    }
+                    (true, false) => self.absence_of(argument, value),
+                    _ => None,
+                }
+            }
+            _ => None,
+        };
+        let Some(undefined) = undefined else {
+            return Ok(value);
+        };
+        let branch = Branch::ParameterDefault { call, default, callee, before: before.to_vec(), receiver };
+        self.lower_branching_value_at(argument, ty, undefined, branch, Branch::Value(value))
+    }
+
+    /// Whether `node` is the identifier `undefined` naming the value -- `x =
+    /// undefined`, a default that gives back the value it replaces, so testing
+    /// for it is work with no effect. The type as well as the spelling, because
+    /// a function scope may declare a binding of its own called `undefined`.
+    fn is_the_undefined_literal(&self, node: NodeId) -> bool {
+        self.kind_of(node) == Some(syntax::IDENTIFIER)
+            && self.node(node).text.as_deref() == Some("undefined")
+            && self
+                .snapshot
+                .node_types
+                .get(&node)
+                .and_then(|ty| self.snapshot.types.get(ty.0 as usize))
+                .is_some_and(|record| matches!(record.kind, TypeKind::Undefined))
+    }
+
+    /// Whether a value of type `ty` can be `undefined`: a union with
+    /// `undefined` or `void` in it, or a type that says nothing about it --
+    /// `any`, `unknown`, a type parameter. A type the snapshot does not have is
+    /// answered yes, the conservative side.
+    fn admits_undefined(&self, ty: Option<TypeId>) -> bool {
+        let kind = |ty: TypeId| self.snapshot.types.get(ty.0 as usize).map(|record| &record.kind);
+        let Some(ty) = ty else { return true };
+        let parts = match kind(ty) {
+            Some(TypeKind::Union(parts)) => parts.as_slice(),
+            _ => std::slice::from_ref(&ty),
+        };
+        parts.iter().any(|part| {
+            matches!(
+                kind(*part),
+                None | Some(
+                    TypeKind::Any
+                        | TypeKind::Unknown
+                        | TypeKind::Evolving
+                        | TypeKind::TypeParameter { .. }
+                        | TypeKind::Undefined
+                        | TypeKind::Void
+                )
+            )
+        })
+    }
+
+    /// A parameter's default, evaluated at `call` for the argument at
+    /// `args.len()`: in the callee's scope, with the parameters before it
+    /// bound to `args` and `this` to `receiver`, and at the parameter's
+    /// representation. For an argument the call omits, and for one it passes
+    /// that is `undefined` (see [`Self::unless_undefined`]).
+    fn lower_parameter_default(
+        &mut self,
+        call: NodeId,
+        node: NodeId,
+        callee: NodeId,
+        args: &[ValueId],
+        receiver: Option<ValueId>,
+    ) -> Result<ValueId, Diagnostic> {
+        self.a_default_the_instance_cannot_answer(node, callee)?;
+        // The parameters before this one, bound to what the call
+        // already computed for them.
+        //
+        // `f(a, b = a + 1)` called as `f(2)` has to evaluate `a + 1`
+        // with `a` meaning *the callee's* `a`, which is the value
+        // sitting in `args[0]`. This used to be refused as "a
+        // parameter default that reads `a`, another parameter",
+        // which is 77 distinct sites in `runtime/node` -- and the
+        // caller had the value the whole time.
+        //
+        // Saved and restored rather than inserted and dropped,
+        // because a *recursive* call is the one case where the
+        // caller has its own binding for the same symbol: `f`
+        // calling `f(2)` would otherwise leave its own `a` pointing
+        // at the argument it just passed.
+        // **And `this` is the receiver of *this* call.**
+        //
+        // The same argument one paragraph up, for the other name a
+        // default can read. JavaScript evaluates a default in the
+        // callee's scope, where `this` is whatever the call was
+        // made on; evaluating it here left `self.this` holding the
+        // *caller's* receiver, which for a free function is
+        // nothing at all. So `Buffer.prototype.toString(encoding?,
+        // start = 0, end = this.length)` refused with ``this`
+        // outside a method` -- a sentence about the source, which
+        // says `this` inside a method -- at every call that omits
+        // `end` from a function with no receiver of its own.
+        //
+        // 35 occurrences in `fs` alone, and `displayBytePath` is
+        // one of them: eleven `fs` exports are behind that call.
+        let outer_this = receiver.map(|receiver| self.this.replace(receiver));
+        let names = self.parameter_symbols(callee);
+        let mut shadowed = Vec::new();
+        for (at, symbol) in names.iter().enumerate().take(args.len()) {
+            let Some(symbol) = symbol else { continue };
+            shadowed.push((*symbol, self.bindings.get(symbol).copied()));
+            self.bindings.insert(*symbol, args[at]);
+        }
+        // **At the parameter's representation**, which is the
+        // lesson the *argument* loop above already carries and this
+        // one did not: "an array literal decides its own element
+        // width when it is built, and `coerce` can only reject the
+        // result". A default is an argument the caller did not
+        // write, so the same thing decides its type.
+        //
+        // `function f(p: number[] = [])` refused with ``an array
+        // literal that is not an array``: `[]` is typed `never[]`,
+        // the checker saying the literal decides nothing and the
+        // slot does -- and nothing was telling it what the slot is.
+        // 36 files of the slice-1 `test/language` population reach
+        // it through `method([x = 23] = [,])`, where the census
+        // reported it as *a parameter of unrepresentable type (a
+        // tuple)*, one cause under a message naming another.
+        // The same scoped substitution the two paragraphs above make for
+        // `this` and for the parameters before it, for the third thing a
+        // default inherits from the call that evaluates it.
+        let handled = self.a_default_inherits_the_handler(call, node);
+        let want = self.parameter_representation(call, args.len());
+        let lowered = match &want {
+            Some(want) => self.lower_expecting(node, want),
+            None => self.lower_expression(node),
+        };
+        for call in handled {
+            self.raising_calls.remove(&call);
+        }
+        for (symbol, before) in shadowed {
+            match before {
+                Some(value) => self.bindings.insert(symbol, value),
+                None => self.bindings.remove(&symbol),
+            };
+        }
+        if let Some(outer) = outer_this {
+            self.this = outer;
+        }
+        let value = lowered?;
+        self.coerce_to_parameter(call, args.len(), value, node)
     }
 
     /// The trailing arguments of a call, as the array its callee declared.
@@ -27668,6 +27791,20 @@ impl<'a> FuncBuilder<'a> {
     /// call would otherwise fail here on the *parameter name*, reporting `a` as
     /// a name from an enclosing scope, which is true of the expression as this
     /// site sees it and says nothing about the cause.
+    /// The default the callee declares for its parameter at `at`, and the
+    /// callee: read from the implementation's parameter list, for the reason
+    /// [`Self::omitted_after`] gives. The one answer both an omitted argument
+    /// and a passed `undefined` take their default from.
+    fn declared_default(&self, call: NodeId, at: usize) -> Option<(NodeId, NodeId)> {
+        let callee = self.snapshot.call_targets.get(&call)?.callee?;
+        let parameter = self
+            .children(self.implementation_of(callee))
+            .into_iter()
+            .filter(|child| self.kind_of(*child) == Some(syntax::PARAMETER))
+            .nth(at)?;
+        Some((self.default_of(parameter)?, callee))
+    }
+
     fn omitted_after(&self, call: NodeId, provided: usize) -> Vec<Omitted> {
         let Some(target) = self.snapshot.call_targets.get(&call) else {
             return Vec::new();
@@ -27709,8 +27846,7 @@ impl<'a> FuncBuilder<'a> {
                 break;
             }
             let declaration = declared.get(at).copied();
-            if let Some(default) = declaration.and_then(|param| self.default_of(param)) {
-                let callee = target.callee.unwrap_or(call);
+            if let Some((default, callee)) = self.declared_default(call, at) {
                 omitted.push(Omitted::Default(default, callee));
                 continue;
             }
@@ -49938,6 +50074,9 @@ impl<'a> FuncBuilder<'a> {
         match branch {
             Branch::Expression(node) => self.lower_expression(node),
             Branch::Value(value) => Ok(value),
+            Branch::ParameterDefault { call, default, callee, before, receiver } => {
+                self.lower_parameter_default(call, default, callee, &before, receiver)
+            }
             Branch::Absent => {
                 let ty = self
                     .type_of(id)
@@ -67355,6 +67494,11 @@ enum Native {
 enum Branch {
     Expression(NodeId),
     Value(ValueId),
+    /// A parameter's default, in the arm where the argument a call passed for
+    /// it is `undefined`: see [`FuncBuilder::lower_parameter_default`], whose
+    /// arguments these are -- the call, the default, the callee, the arguments
+    /// before it and the receiver.
+    ParameterDefault { call: NodeId, default: NodeId, callee: NodeId, before: Vec<ValueId>, receiver: Option<ValueId> },
     /// A logical assignment's right operand, evaluated *and written* here.
     ///
     /// Inside the arm rather than before it, for two reasons that happen to
