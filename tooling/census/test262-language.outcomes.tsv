@@ -5899,7 +5899,7 @@ test/language/statements/class/subclass/builtin-objects/NativeError/URIError-nam
 test/language/statements/class/subclass/builtin-objects/NativeError/URIError-super.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/class/subclass/builtin-objects/Proxy/no-prototype-throws.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/class/subclass/builtin-objects/Symbol/symbol-valid-as-extends-value.js	pass	
-test/language/statements/class/subclass/class-definition-null-proto-this.js	fail	nts: uncaught Test262Error: throws: a different constructor was thrown
+test/language/statements/class/subclass/class-definition-null-proto-this.js	pass	
 test/language/statements/class/subclass/derived-class-return-override-catch-finally.js	pass	
 test/language/statements/class/subclass/derived-class-return-override-catch-super.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/class/subclass/derived-class-return-override-catch.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
