@@ -148,3 +148,33 @@ fn diagnostics_cost_two_exchanges_a_file() {
     // the exchanges are nearly free (`docs/records/0345`), the check is not.
     assert_eq!(stats.round_trips, 3 + 7 * u64::from(stats.files));
 }
+
+/// A plain-JS file's early errors beyond TypeScript's own `plainJSErrors` reach the
+/// snapshot: `f() = 1` is a `SyntaxError` in JavaScript and TS2364 to the checker,
+/// which drops it for a `.js` file with `checkJs` unset unless asked through the
+/// carried patch `typescript-go-plain-js-unfiltered`. This is the binary half of
+/// that patch's guard: a stale `target/tsgo` without it answers nothing here.
+#[test]
+fn a_plain_javascript_early_error_is_reported() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
+    let dir = Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("plain-js-early-error");
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("tsconfig.json"),
+        r#"{ "compilerOptions": { "allowJs": true, "module": "esnext", "target": "es2022", "noEmit": true }, "include": ["src"] }"#,
+    )
+    .unwrap();
+    std::fs::write(dir.join("src/main.js"), "function f() { return 1; }\nf() = 1;\n").unwrap();
+    let snapshot = TsgoApi::new(tsgo)
+        .snapshot(&dir.join("tsconfig.json"))
+        .expect("a snapshot is produced even for a broken program");
+    assert!(
+        snapshot.diagnostics.iter().any(|d| d.code == "TS2364" && d.severity == Severity::Error),
+        "TS2364 is not reported for a plain-JS file: target/tsgo lacks the carried \
+         patch (run `sh tooling/bootstrap/bootstrap.sh`), or `EARLY_ERRORS` lost it. \
+         Got: {:?}",
+        snapshot.diagnostics.iter().map(|d| d.code.as_str()).collect::<Vec<_>>()
+    );
+}

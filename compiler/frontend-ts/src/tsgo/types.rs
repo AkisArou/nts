@@ -547,6 +547,41 @@ mod tests {
     /// 243 recorded test262 passes. So this asserts the *invariant* rather than the
     /// patch's text, both so a cosmetic upstream edit does not fail it and so the
     /// day upstream takes the change it keeps passing on its own.
+    /// The carried patch `typescript-go-plain-js-unfiltered`: `getSemanticDiagnostics`
+    /// can answer a plain-JS file's diagnostics before `plainJSErrors` filters them,
+    /// which is where `EARLY_ERRORS` (in `tsgo/mod.rs`) comes from. The same hazard
+    /// and the same discipline as the test below: assert the invariant, so a bump
+    /// that drops the patch is red here and not a silently accepted early error.
+    #[test]
+    fn the_pin_serves_plain_js_diagnostics_unfiltered() {
+        let program = pinned("internal/compiler/program.go");
+        assert!(
+            program.contains("func (p *Program) GetPlainJSDiagnosticsUnfiltered("),
+            "the pin has no unfiltered plain-JS diagnostics. Apply \
+             third_party/patches/typescript-go-plain-js-unfiltered.patch \
+             (`sh tooling/bootstrap/bootstrap.sh` does it) and rebuild target/tsgo."
+        );
+        let proto = pinned("internal/api/proto.go");
+        assert!(
+            proto.contains("`json:\"plainJsUnfiltered,omitempty\"`"),
+            "`GetDiagnosticsParams` has no `plainJsUnfiltered` field under the name \
+             `proto.rs` sends, so the request is ignored -- the patch's header says \
+             what invariant to restore"
+        );
+        let session = pinned("internal/api/session.go");
+        let handler = session
+            .split_once("func (s *Session) handleGetSemanticDiagnostics(")
+            .expect("`handleGetSemanticDiagnostics` is not in the pin any more")
+            .1;
+        let handler = handler.split_once("\nfunc ").map_or(handler, |(body, _)| body);
+        assert!(
+            handler.contains("params.PlainJSUnfiltered") && handler.contains("GetPlainJSDiagnosticsUnfiltered"),
+            "`handleGetSemanticDiagnostics` does not honour `PlainJSUnfiltered`: the \
+             carried patch has been dropped, most likely by a submodule bump. \
+             `sh tooling/bootstrap/bootstrap.sh` re-applies it and rebuilds target/tsgo."
+        );
+    }
+
     #[test]
     fn the_pin_reports_object_flags_for_every_type() {
         let source = pinned("internal/api/proto.go");

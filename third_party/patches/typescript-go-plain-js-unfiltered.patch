@@ -1,0 +1,110 @@
+Answer a plain-JS file's diagnostics without the plainJSErrors filter, on request.
+
+    Applies to: third_party/typescript-go, from its own root, after
+                typescript-go-objectflags-on-every-type.patch (both touch
+                internal/api/proto.go, in different hunks).
+    Apply:      git -C third_party/typescript-go apply ../patches/<this file>
+    Then:       (cd third_party/typescript-go && go build -o ../../target/tsgo ./cmd/tsgo)
+
+`tooling/bootstrap/bootstrap.sh` does both, applying the patches here in name
+order, and rebuilds `target/tsgo` whenever a file in this directory is newer than
+it. `types.rs`'s `the_pin_serves_plain_js_diagnostics_unfiltered` makes the
+source half loud if a submodule bump drops this; `diagnostics.rs`'s
+`a_plain_javascript_early_error_is_reported` is the binary half.
+
+WHY
+
+A JavaScript file with `checkJs` unset is *plain JS*. tsgo checks it fully --
+`getBindAndCheckDiagnosticsWithChecker` collects the bind and checker
+diagnostics -- and then keeps only `plainJSErrors`, TypeScript's list of errors
+it is sure JavaScript has. test262 requires more of them: `f() = 1` is a
+`SyntaxError`, TS2364 to the checker, computed and dropped. Native TypeScript
+accepts such a program where the language rejects it, and test262 counts every
+one as an accepted negative.
+
+So `GetDiagnosticsParams` gains `plainJsUnfiltered`, and `getSemanticDiagnostics`
+answers a plain-JS file's diagnostics *before* the filter when it is set, through
+a new `Program.GetPlainJSDiagnosticsUnfiltered`. The consumer keeps its own
+allowlist: the frontend's `EARLY_ERRORS`, each code measured by
+`tooling/census/semantic-codes.ts` as drawn by no valid test262 program.
+
+WHY A FORK PATCH AND NOT A RULE OF OUR OWN
+
+The checker already computes these, with TypeScript's own spans and messages; a
+rule of ours would re-derive each early error from syntax, a second derivation
+of what the checker knows. And the option that would surface them without a
+patch -- `checkJs: true` -- is the program's to set, not ours: it reports every
+type error in every JavaScript file, and an explicit `checkJs: false` must keep
+meaning no checking at all, which this preserves (`IsPlainJSFile` is false then,
+and the flag is ignored).
+
+ADDITIVE
+
+A new optional field, `omitempty`, and a new method. A request without the field
+answers exactly as before; a file that is not plain JS ignores it.
+
+ON A REBASE
+
+Restore: `GetDiagnosticsParams.PlainJSUnfiltered` under the JSON name
+`plainJsUnfiltered`; `handleGetSemanticDiagnostics` answering
+`GetPlainJSDiagnosticsUnfiltered` for a plain-JS file when it is set; and that
+method returning `BindDiagnostics()` plus the checker's `GetDiagnostics` for the
+file, unfiltered, through `collectCheckerDiagnostics` (which skips a file the
+checker skips).
+
+UPSTREAM
+
+Not sent: it serves a consumer applying its own allowlist, which upstream has no
+use for.
+
+diff --git a/internal/api/proto.go b/internal/api/proto.go
+index b86b19e..d9f34a0 100644
+--- a/internal/api/proto.go
++++ b/internal/api/proto.go
+@@ -1128,6 +1128,10 @@ type GetDiagnosticsParams struct {
+ 	Snapshot SnapshotID          `json:"snapshot"`
+ 	Project  ProjectID           `json:"project"`
+ 	File     *DocumentIdentifier `json:"file,omitempty"`
++	// PlainJSUnfiltered asks getSemanticDiagnostics for a plain-JS file's bind and
++	// checker diagnostics without the plainJSErrors filter. Carried patch (nts):
++	// the consumer applies an allowlist of its own. Ignored for any other file.
++	PlainJSUnfiltered bool `json:"plainJsUnfiltered,omitempty"`
+ }
+ 
+ // GetProjectDiagnosticsParams are parameters for project-wide diagnostic methods.
+diff --git a/internal/api/session.go b/internal/api/session.go
+index 7e29c44..3cc7eee 100644
+--- a/internal/api/session.go
++++ b/internal/api/session.go
+@@ -2996,6 +2996,9 @@ func (s *Session) handleGetSemanticDiagnostics(ctx context.Context, params *GetD
+ 	}
+ 
+ 	diags := program.GetSemanticDiagnostics(ctx, sourceFile)
++	if params.PlainJSUnfiltered && sourceFile != nil && ast.IsPlainJSFile(sourceFile, program.Options().CheckJs) {
++		diags = program.GetPlainJSDiagnosticsUnfiltered(ctx, sourceFile)
++	}
+ 	return NewDiagnosticResponses(diags), nil
+ }
+ 
+diff --git a/internal/compiler/program.go b/internal/compiler/program.go
+index 74b2504..16cc30c 100644
+--- a/internal/compiler/program.go
++++ b/internal/compiler/program.go
+@@ -660,6 +660,17 @@ func (p *Program) GetSemanticDiagnostics(ctx context.Context, sourceFile *ast.So
+ 	return p.collectCheckerDiagnostics(ctx, sourceFile, p.getSemanticDiagnosticsWithChecker)
+ }
+ 
++// GetPlainJSDiagnosticsUnfiltered returns a plain-JS file's bind and checker
++// diagnostics without the plainJSErrors filter: everything the checker computes
++// for the file, which GetSemanticDiagnostics narrows to that list. Carried patch
++// (nts), for a consumer that applies an allowlist of its own. Nil for a file the
++// checker skips.
++func (p *Program) GetPlainJSDiagnosticsUnfiltered(ctx context.Context, sourceFile *ast.SourceFile) []*ast.Diagnostic {
++	return p.collectCheckerDiagnostics(ctx, sourceFile, func(ctx context.Context, c *checker.Checker, file *ast.SourceFile) []*ast.Diagnostic {
++		return slices.Concat(file.BindDiagnostics(), c.GetDiagnostics(ctx, file))
++	})
++}
++
+ func (p *Program) GetSemanticDiagnosticsWithoutNoEmitFiltering(ctx context.Context, sourceFiles []*ast.SourceFile) map[*ast.SourceFile][]*ast.Diagnostic {
+ 	allDiags := p.collectCheckerDiagnosticsFromFiles(ctx, sourceFiles, p.getBindAndCheckDiagnosticsWithChecker)
+ 	result := make(map[*ast.SourceFile][]*ast.Diagnostic, len(sourceFiles))

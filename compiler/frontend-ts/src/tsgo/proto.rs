@@ -467,6 +467,11 @@ pub struct GetDiagnosticsParams {
     pub project: ProjectHandle,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file: Option<DocumentIdentifier>,
+    /// A plain-JS file's diagnostics without tsgo's `plainJSErrors` filter --
+    /// the carried patch `typescript-go-plain-js-unfiltered`. Ignored for any
+    /// other file, and by a tsgo without the patch.
+    #[serde(rename = "plainJsUnfiltered", skip_serializing_if = "std::ops::Not::not")]
+    pub plain_js_unfiltered: bool,
 }
 
 /// `diagnostics.Category`, an `int32` on the wire.
