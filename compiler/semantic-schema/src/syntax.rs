@@ -284,6 +284,9 @@ pub const TYPE_LITERAL: u16 = 188;
 /// `...values` in a call or an array literal.
 pub const SPREAD_ELEMENT: u16 = 231;
 pub const HERITAGE_CLAUSE: u16 = 299;
+/// `catch (e) { ... }`: the parameter's declaration, then the block. Beside
+/// `HeritageClause` in the checker's enum, as the name table below has it.
+pub const CATCH_CLAUSE: u16 = 300;
 pub const ENUM_MEMBER: u16 = 306;
 pub const SOURCE_FILE: u16 = 307;
 /// `import ... from "..."`. Read off real output: a file with exactly two

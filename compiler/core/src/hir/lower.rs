@@ -3671,11 +3671,25 @@ fn settler_symbols(
 fn assigned_anywhere(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Vec<u32> {
     let mut assigned = Vec::new();
     for (index, node) in snapshot.nodes.iter().enumerate() {
+        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
         if node.kind == NodeKind::Syntax(syntax::SOURCE_FILE) {
-            probe.assigned_symbols(
-                NodeId(u32::try_from(index).unwrap_or(u32::MAX)),
-                &mut assigned,
-            );
+            probe.assigned_symbols(id, &mut assigned);
+        }
+        // **A `var` declared a second time is written by the second
+        // declaration**: `var x = 'a'; ... { var x = 'b'; }` is one binding,
+        // and the second initializer stores into it. A closure capturing `x`
+        // by value between the two kept `'a'` where node reads `'b'`
+        // (`outcomes/a-var-redeclared-in-a-block-under-a-closure-global`, the
+        // function-scope half). Not in `assigned_symbols`, which a loop's carry
+        // analysis also reads and which this does not mean to widen.
+        if node.kind == NodeKind::Syntax(syntax::VARIABLE_DECLARATION)
+            && let [name, .., initializer] = probe.children(id).as_slice()
+            && initializer != name
+            && probe.kind_of(*name) == Some(syntax::IDENTIFIER)
+            && let Some(symbol) = probe.node(*name).symbol
+            && snapshot.symbols.get(symbol.0 as usize).is_some_and(|record| record.declarations.len() > 1)
+        {
+            assigned.push(symbol.0);
         }
     }
     assigned
@@ -52112,10 +52126,11 @@ impl<'a> FuncBuilder<'a> {
                     "a `using` declaration, whose scope-exit disposal",
                 ));
             }
+            let existing = self.binding_a_var_writes(declared_kind, declaration, name)?;
             if initializer.is_none()
                 && declared_kind == nts_semantic_schema::VariableKind::Var
                 && let Some(symbol) = self.node(name).symbol
-                && self.bindings.contains_key(&symbol.0)
+                && (self.bindings.contains_key(&symbol.0) || existing.is_some())
             {
                 continue;
             }
@@ -52224,6 +52239,10 @@ impl<'a> FuncBuilder<'a> {
                 self.bind_pattern(name, value)?;
                 continue;
             }
+            if let Some(place) = existing {
+                self.write_place(name, &place, value)?;
+                continue;
+            }
             let symbol = self
                 .node(name)
                 .symbol
@@ -52255,6 +52274,64 @@ impl<'a> FuncBuilder<'a> {
             self.bindings.insert(symbol.0, value);
         }
         Ok(())
+    }
+
+    /// The binding a `var` declaration writes when it is not a new one -- its
+    /// initializer is then a store, and with none it writes nothing.
+    ///
+    /// **A `var` has no block scope.** `{ var x = 'inside'; }` at module scope
+    /// declares the module's own `x` a second time, so its initializer stores to
+    /// that global. It was bound as a fresh local instead: a later read in the
+    /// same function saw it, and a closure reading the global saw the old value
+    /// (`outcomes/a-var-redeclared-in-a-block-under-a-closure-global`).
+    ///
+    /// **Unless a `catch` parameter of that name stands between**: Annex B.3.5
+    /// makes `catch (foo) { var foo = 1; }` assign the *parameter* -- the binding
+    /// `foo` names there -- while the `var` is hoisted outward with nothing
+    /// written to it. The checker gives the declaration the outer symbol, so
+    /// without this the initializer wrote the module global (annexB
+    /// `catch-redeclared-var-statement-captured.js`).
+    fn binding_a_var_writes(
+        &mut self,
+        kind: nts_semantic_schema::VariableKind,
+        declaration: NodeId,
+        name: NodeId,
+    ) -> Result<Option<Place>, Diagnostic> {
+        if kind != nts_semantic_schema::VariableKind::Var {
+            return Ok(None);
+        }
+        if let Some(parameter) = self.catch_parameter_named(declaration, name) {
+            return self.place_for_symbol(name, parameter).map(Some);
+        }
+        Ok(self
+            .node(name)
+            .symbol
+            .filter(|symbol| !self.bindings.contains_key(&symbol.0))
+            .and_then(|symbol| self.module.variables.get(&symbol.0).copied())
+            .map(Place::Global))
+    }
+
+    /// The symbol of the `catch` parameter a `var` declaration's initializer
+    /// assigns: an enclosing `catch (name)` with the same plain name, and no
+    /// function between them (Annex B.3.5). `None` for a destructured
+    /// parameter, which the annex leaves an early error.
+    fn catch_parameter_named(&self, declaration: NodeId, name: NodeId) -> Option<nts_semantic_schema::SymbolId> {
+        let written = self.node(name).text.as_deref()?;
+        for at in std::iter::successors(self.node(declaration).parent, |at| self.node(*at).parent) {
+            let kind = self.kind_of(at);
+            if names_a_body(kind) || kind == Some(syntax::CONSTRUCTOR) {
+                return None;
+            }
+            if kind != Some(syntax::CATCH_CLAUSE) {
+                continue;
+            }
+            let parameter = self.children(at).into_iter().find(|child| self.kind_of(*child) == Some(syntax::VARIABLE_DECLARATION))?;
+            let bound = self.children(parameter).into_iter().next()?;
+            if self.kind_of(bound) == Some(syntax::IDENTIFIER) && self.node(bound).text.as_deref() == Some(written) {
+                return self.node(bound).symbol.or(self.node(parameter).symbol);
+            }
+        }
+        None
     }
 
     /// What a name holds between its declaration and its first assignment.
