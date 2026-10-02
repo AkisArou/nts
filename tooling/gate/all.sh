@@ -1901,7 +1901,7 @@ test262() {
 # The gap worth knowing: a stale record hides passes indefinitely and nothing goes
 # red while it does, so this floor moves when somebody needs a full run for an
 # unrelated reason rather than when the work lands.
-TEST262_LANGUAGE_PASS_FLOOR=5677
+TEST262_LANGUAGE_PASS_FLOOR=5704
 TEST262_LANGUAGE_NEGATIVES_ACCEPTED_CEILING=1635
 # One recorded test262 directory, re-run and held to its record, its floor and
 # its ceiling: `test262_recorded <dir> <record> <floor> <floor variable name>
@@ -1995,7 +1995,7 @@ test262_builtins_cases() {
 # stand-in's own entries. A few seconds.
 TEST262_ANNEXB_PASS_FLOOR=7
 TEST262_ANNEXB_NEGATIVES_ACCEPTED_CEILING=1
-TEST262_STAGING_PASS_FLOOR=43
+TEST262_STAGING_PASS_FLOOR=45
 TEST262_STAGING_NEGATIVES_ACCEPTED_CEILING=4
 TEST262_HARNESS_PASS_FLOOR=12
 TEST262_HARNESS_NEGATIVES_ACCEPTED_CEILING=0

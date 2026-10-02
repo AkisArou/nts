@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 313fc08cf70df398, commit 583894c1cfca1578d531e99b2979cf8ec2aecee0, harness d6442dbc09f91ad0; machine at start: 14.2 GB available, swap 7.7/20 GB, load 18/17.7 (1m/5m), 32 cores; 8 worker(s)
+# compiler d7a6a96cfc4b7615, commit b664c4f2663c1009ccecca9615975d1ed839dd67, harness d6442dbc09f91ad0; machine at start: 20.5 GB available, swap 7.9/20 GB, load 7.5/11.3 (1m/5m), 32 cores; 8 worker(s)
 test/language/arguments-object/10.5-1gs.js	pass	
 test/language/asi/S7.9.2_A1_T1.js	pass	
 test/language/asi/S7.9.2_A1_T2.js	pass	
@@ -111,6 +111,7 @@ test/language/block-scope/leave/x-after-break-to-label.js	pass
 test/language/block-scope/leave/x-before-continue.js	pass	
 test/language/block-scope/return-from/block-const.js	pass	
 test/language/block-scope/return-from/block-let.js	pass	
+test/language/block-scope/shadowing/catch-parameter-shadowing-catch-parameter.js	pass	
 test/language/block-scope/shadowing/catch-parameter-shadowing-function-parameter-name.js	pass	
 test/language/block-scope/shadowing/catch-parameter-shadowing-let-declaration.js	pass	
 test/language/block-scope/shadowing/catch-parameter-shadowing-var-variable.js	pass	
@@ -2715,42 +2716,61 @@ test/language/expressions/dynamic-import/syntax/invalid/top-level-typeof-import-
 test/language/expressions/dynamic-import/syntax/invalid/top-level-typeof-import-source.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/top-level-typeof-import.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-arrow-assignment-expression-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-arrow-assignment-expression-import-attributes-trailing-comma-second.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-arrow-assignment-expression-script-code-valid.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-arrow-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-arrow-import-attributes-trailing-comma-second.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-arrow-script-code-valid.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-async-arrow-function-await-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-async-arrow-function-await-import-attributes-trailing-comma-second.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-async-arrow-function-await-script-code-valid.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-async-arrow-function-return-await-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-async-arrow-function-return-await-import-attributes-trailing-comma-second.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-async-arrow-function-return-await-script-code-valid.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-async-function-await-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-async-function-await-import-attributes-trailing-comma-second.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-async-function-await-script-code-valid.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-async-function-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-async-function-import-attributes-trailing-comma-second.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-async-function-return-await-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-async-function-return-await-import-attributes-trailing-comma-second.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-async-function-return-await-script-code-valid.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-async-function-script-code-valid.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-async-gen-await-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-async-gen-await-import-attributes-trailing-comma-second.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-async-gen-await-script-code-valid.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-block-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-block-import-attributes-trailing-comma-second.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-block-labeled-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-block-labeled-import-attributes-trailing-comma-second.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-block-labeled-script-code-valid.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-block-script-code-valid.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-do-while-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-do-while-import-attributes-trailing-comma-second.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-do-while-script-code-valid.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-else-braceless-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-else-braceless-import-attributes-trailing-comma-second.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-else-braceless-script-code-valid.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-else-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-else-import-attributes-trailing-comma-second.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-else-script-code-valid.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-function-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-function-import-attributes-trailing-comma-second.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-function-return-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-function-return-import-attributes-trailing-comma-second.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-function-return-script-code-valid.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-function-script-code-valid.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-if-braceless-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-if-braceless-import-attributes-trailing-comma-second.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-if-braceless-script-code-valid.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-if-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-if-import-attributes-trailing-comma-second.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-if-script-code-valid.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-while-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-while-import-attributes-trailing-comma-second.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/nested-while-script-code-valid.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/top-level-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/top-level-import-attributes-trailing-comma-second.js	pass	
 test/language/expressions/dynamic-import/syntax/valid/top-level-script-code-valid.js	pass	
 test/language/expressions/dynamic-import/usage/nested-arrow-assignment-expression-eval-script-code-host-resolves-module-code.js	pass	
 test/language/expressions/dynamic-import/usage/nested-arrow-assignment-expression-returns-thenable.js	pass	
@@ -6256,18 +6276,19 @@ test/language/statements/class/subclass-builtins/subclass-Uint16Array.js	fail	nt
 test/language/statements/class/subclass-builtins/subclass-Uint32Array.js	fail	nts: uncaught Test262Error: assert
 test/language/statements/class/subclass-builtins/subclass-Uint8Array.js	fail	nts: uncaught Test262Error: assert
 test/language/statements/class/subclass/builtin-objects/Error/regular-subclassing.js	pass	
+test/language/statements/class/subclass/builtin-objects/Error/super-must-be-called.js	pass	
 test/language/statements/class/subclass/builtin-objects/NativeError/EvalError-name.js	pass	
-test/language/statements/class/subclass/builtin-objects/NativeError/EvalError-super.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/class/subclass/builtin-objects/NativeError/EvalError-super.js	pass	
 test/language/statements/class/subclass/builtin-objects/NativeError/RangeError-name.js	pass	
-test/language/statements/class/subclass/builtin-objects/NativeError/RangeError-super.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/class/subclass/builtin-objects/NativeError/RangeError-super.js	pass	
 test/language/statements/class/subclass/builtin-objects/NativeError/ReferenceError-name.js	pass	
-test/language/statements/class/subclass/builtin-objects/NativeError/ReferenceError-super.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/class/subclass/builtin-objects/NativeError/ReferenceError-super.js	pass	
 test/language/statements/class/subclass/builtin-objects/NativeError/SyntaxError-name.js	pass	
-test/language/statements/class/subclass/builtin-objects/NativeError/SyntaxError-super.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/class/subclass/builtin-objects/NativeError/SyntaxError-super.js	pass	
 test/language/statements/class/subclass/builtin-objects/NativeError/TypeError-name.js	pass	
-test/language/statements/class/subclass/builtin-objects/NativeError/TypeError-super.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/class/subclass/builtin-objects/NativeError/TypeError-super.js	pass	
 test/language/statements/class/subclass/builtin-objects/NativeError/URIError-name.js	pass	
-test/language/statements/class/subclass/builtin-objects/NativeError/URIError-super.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/class/subclass/builtin-objects/NativeError/URIError-super.js	pass	
 test/language/statements/class/subclass/builtin-objects/Proxy/no-prototype-throws.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/class/subclass/builtin-objects/Symbol/symbol-valid-as-extends-value.js	pass	
 test/language/statements/class/subclass/class-definition-null-proto-this.js	pass	
