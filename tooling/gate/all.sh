@@ -2135,15 +2135,23 @@ types_check() {
 # `emit-jvm`, then each class loaded without initialising and linked under
 # `-Xverify:all`. tooling/conformance/jvm-verifies.known is the ratchet: a
 # module leaving it is the signal. About 95 s. See jvm-verifies.ts.
+#
+# **And the outcomes fixtures, every time.** They were a flag a person typed,
+# so an outcomes fixture could land JVM-red with this step green: 24388bf17
+# did, a VerifyError on `--outcomes` from the moment it landed, and the
+# compiler lane had landed four fixtures that week without running it either.
+# About 25 s more.
 jvm_verifies() {
   if ! command -v java > /dev/null 2>&1 && [ ! -x "${JAVA_HOME-}/bin/java" ]; then
     echo "  no JDK on PATH or at JAVA_HOME -- this step cannot verify anything"
     return 1
   fi
-  out=$(node tooling/conformance/jvm-verifies.ts 2>&1)
-  status=$?
-  # One line per known module is the ratchet's content, not news.
-  printf '%s\n' "$out" | awk '!/^$/ && !/^  known /'
+  status=0
+  for corpus in "" --outcomes; do
+    out=$(node tooling/conformance/jvm-verifies.ts $corpus 2>&1) || status=1
+    # One line per known module is the ratchet's content, not news.
+    printf '%s\n' "$out" | awk '!/^$/ && !/^  known /'
+  done
   return $status
 }
 
