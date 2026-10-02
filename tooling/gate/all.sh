@@ -1902,7 +1902,7 @@ test262() {
 # red while it does, so this floor moves when somebody needs a full run for an
 # unrelated reason rather than when the work lands.
 TEST262_LANGUAGE_PASS_FLOOR=6029
-TEST262_LANGUAGE_NEGATIVES_ACCEPTED_CEILING=1635
+TEST262_LANGUAGE_NEGATIVES_ACCEPTED_CEILING=1353
 # One recorded test262 directory, re-run and held to its record, its floor and
 # its ceiling: `test262_recorded <dir> <record> <floor> <floor variable name>
 # <ceiling> <ceiling variable name>`. Shared by test262-cases and
@@ -1996,7 +1996,7 @@ test262_builtins_cases() {
 TEST262_ANNEXB_PASS_FLOOR=7
 TEST262_ANNEXB_NEGATIVES_ACCEPTED_CEILING=1
 TEST262_STAGING_PASS_FLOOR=46
-TEST262_STAGING_NEGATIVES_ACCEPTED_CEILING=4
+TEST262_STAGING_NEGATIVES_ACCEPTED_CEILING=3
 TEST262_HARNESS_PASS_FLOOR=12
 TEST262_HARNESS_NEGATIVES_ACCEPTED_CEILING=0
 test262_rest_cases() {
