@@ -1,3 +1,12 @@
+// **FIXED by `85c062fc9` and kept as a guard.** Neither design below exactly:
+// the test is a run-time one, so it is right for a variable holding `undefined`
+// as well as a written one, but it stays at the call, where a default is
+// already evaluated -- a passed argument whose type admits `undefined` is
+// tested there, and the default runs in the arm where it is. No call whose
+// argument's type rules `undefined` out changes. `explicit undefined` now
+// answers 15, as the omitted control does; the record is `agrees`, and what it
+// guards is that the two arms stay one answer.
+//
 // **An explicit `undefined` at a parameter with a default is ignored, where
 // JavaScript says it triggers the default.** `f(a, undefined)` and `f(a)` are the
 // same call in the language -- `undefined` is exactly the value a defaulted

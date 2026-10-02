@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught Observed: explicit undefined=9;omitted=15;concrete, omitted=15;",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: explicit undefined=15;omitted=15;concrete, omitted=15;",
   "node": "exit 1; nts: uncaught Observed: explicit undefined=15;omitted=15;concrete, omitted=15;",
-  "measured_with": "5d17240b5f129432",
+  "measured_with": "6de8459ad9df5b62",
   "source": "measured"
 }
