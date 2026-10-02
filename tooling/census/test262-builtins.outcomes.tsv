@@ -1,8 +1,9 @@
 # Test262 test/built-ins cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 1028a73c71f4e297, commit 8ebd2db87937ffd63e8bf0dc0fbe13f48b6e92e2, harness 3b36e94947c1b127; machine at start: 20 GB available, swap 6/20 GB, load 8.7/9.6 (1m/5m), 32 cores; 8 worker(s)
+# compiler d3923f20acbfff48, commit 48edee74fa93e0c92b3b994a9a09250eb7574f47, harness 3b36e94947c1b127; machine at start: 16.7 GB available, swap 7.4/20 GB, load 18.4/15.9 (1m/5m), 32 cores; 8 worker(s)
 test/built-ins/AggregateError/errors-iterabletolist-failures.js	fail	nts: uncaught Test262Error: get Symbol.iterator
 test/built-ins/Array/S15.4.2.1_A1.3_T1.js	pass	
+test/built-ins/Array/from/from-array.js	pass	
 test/built-ins/Array/from/from-string.js	pass	
 test/built-ins/Array/isArray/15.4.3.2-0-4.js	pass	
 test/built-ins/Array/isArray/15.4.3.2-0-7.js	pass	
@@ -458,7 +459,15 @@ test/built-ins/Object/prototype/hasOwnProperty/8.12.1-1_20.js	pass
 test/built-ins/Object/prototype/hasOwnProperty/8.12.1-1_21.js	pass	
 test/built-ins/Object/prototype/hasOwnProperty/8.12.1-1_22.js	pass	
 test/built-ins/Object/values/exception-during-enumeration.js	fail	nts: uncaught RangeError: This error should be re-thrown
+test/built-ins/Promise/all/S25.4.4.1_A7.1_T1.js	pass	
+test/built-ins/Promise/prototype/catch/S25.4.5.1_A3.1_T1.js	pass	
+test/built-ins/Promise/prototype/catch/S25.4.5.1_A3.1_T2.js	pass	
+test/built-ins/Promise/prototype/then/S25.4.5.3_A4.1_T1.js	pass	
+test/built-ins/Promise/prototype/then/S25.4.5.3_A4.1_T2.js	pass	
 test/built-ins/Promise/resolve/S25.4.4.5_A2.1_T1.js	fail	nts: uncaught Test262Error: The value of p1 is expected to equal the value of p2
+test/built-ins/Promise/resolve/arg-non-thenable.js	pass	
+test/built-ins/Promise/resolve/resolve-non-obj.js	pass	
+test/built-ins/Promise/resolve/resolve-non-thenable.js	pass	
 test/built-ins/RegExp/15.10.4.1-4.js	pass	
 test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_F-negated.js	fail	accepted: was refused later (lowering)
 test/built-ins/RegExp/property-escapes/binary-property-with-value-ASCII_-_F.js	fail	accepted: was refused later (lowering)

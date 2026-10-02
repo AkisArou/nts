@@ -1978,7 +1978,7 @@ test262_cases() {
 # so all ten accumulated since `9968f2c9bd045c64` and none is the commit that
 # raised the floor. The two `Object/{entries,values}/getter-removing-future-key`
 # rows that change left the record, as a case that refuses does.
-TEST262_BUILTINS_PASS_FLOOR=767
+TEST262_BUILTINS_PASS_FLOOR=776
 TEST262_BUILTINS_NEGATIVES_ACCEPTED_CEILING=185
 test262_builtins_cases() {
   test262_recorded test/built-ins tooling/census/test262-builtins.outcomes.tsv \
@@ -1995,9 +1995,9 @@ test262_builtins_cases() {
 # stand-in's own entries. A few seconds.
 TEST262_ANNEXB_PASS_FLOOR=7
 TEST262_ANNEXB_NEGATIVES_ACCEPTED_CEILING=1
-TEST262_STAGING_PASS_FLOOR=34
+TEST262_STAGING_PASS_FLOOR=36
 TEST262_STAGING_NEGATIVES_ACCEPTED_CEILING=0
-TEST262_HARNESS_PASS_FLOOR=11
+TEST262_HARNESS_PASS_FLOOR=12
 TEST262_HARNESS_NEGATIVES_ACCEPTED_CEILING=0
 test262_rest_cases() {
   test262_recorded test/annexB tooling/census/test262-annexb.outcomes.tsv \

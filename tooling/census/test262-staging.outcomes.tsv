@@ -1,6 +1,6 @@
 # Test262 test/staging cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 06491c196e396873, harness 1206fb95a71de6c1; machine at start: 19.8 GB available, swap 3.7/20 GB, load 14/12.7 (1m/5m), 32 cores; 4 worker(s)
+# compiler d3923f20acbfff48, commit 48edee74fa93e0c92b3b994a9a09250eb7574f47, harness 3b36e94947c1b127; machine at start: 19 GB available, swap 7.4/20 GB, load 28.1/25.6 (1m/5m), 32 cores; 8 worker(s)
 test/staging/sm/ArrayBuffer/bug1777413.js	pass	
 test/staging/sm/Math/cbrt-exact.js	pass	
 test/staging/sm/Math/cosh-exact.js	pass	
@@ -17,16 +17,24 @@ test/staging/sm/PrivateName/parse-utf8-non-ascii-identifier.js	pass
 test/staging/sm/String/15.5.4.7.js	pass	
 test/staging/sm/String/string-space-trim.js	pass	
 test/staging/sm/String/two-length-nonlatin-indexOf.js	pass	
+test/staging/sm/TypedArray/constructor_bad-args.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/staging/sm/class/derivedConstructorInlining.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/staging/sm/class/derivedConstructorTDZExplicitThis.js	fail	nts: uncaught Test262Error: throws: a different constructor was thrown
+test/staging/sm/class/derivedConstructorTDZOffEdge.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/staging/sm/class/derivedConstructorTDZReturnTry.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/staging/sm/class/newTargetProxyNative.js	pass	
+test/staging/sm/expressions/destructuring-array-lexical.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/staging/sm/expressions/object-literal-accessor-property-name.js	pass	
 test/staging/sm/extensions/regress-591450.js	pass	
 test/staging/sm/extensions/typedarray-subarray-of-subarray.js	pass	
+test/staging/sm/global/bug660612.js	pass	
 test/staging/sm/global/decodeURI-decodes-FFFE-FFFF.js	pass	
 test/staging/sm/global/parseFloat-01.js	pass	
 test/staging/sm/misc/error-undefined-message.js	pass	
 test/staging/sm/misc/redeclare-var-non-writable-property.js	pass	
 test/staging/sm/object/regress-459405.js	pass	
 test/staging/sm/regress/regress-452498-079.js	pass	
+test/staging/sm/regress/regress-559402-2.js	pass	
 test/staging/sm/regress/regress-561031.js	pass	
 test/staging/sm/regress/regress-600067.js	pass	
 test/staging/sm/regress/regress-619003-2.js	pass	
