@@ -310,7 +310,8 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
         //
         // Loud rather than silent, so it is not the worst kind of defect. It
         // is still a class this compiler had no business writing.
-        if nts_core::hir::runtime::is_foreign_layout_name(&layout.name) {
+        // A layout no value can have is not written either; see `shadowed_layout`.
+        if nts_core::hir::runtime::is_foreign_layout_name(&layout.name) || shadowed_layout(program, layout) {
             continue;
         }
         collect(&mut classes, &mut diagnostics, object_class(package, program, layout, &plan, &handed_to));
@@ -662,6 +663,27 @@ fn declined_stub(
     if let Ok(stub) = code.finish(pool) {
         builder.method(access::PUBLIC | access::STATIC | access::SYNTHETIC, name, signature, Some(stub));
     }
+}
+
+/// A layout no value can have: every type id it carries resolves, through
+/// `Program::layout`, to an *earlier* layout, so every descriptor, `new` and
+/// `checkcast` that names one of its types names that other class instead.
+///
+/// Lowering builds one for a generator's raising copy -- `upTo@raises` gets an
+/// `upTo@raises` frame layout carrying `generator#0`, the type `upTo`'s own frame
+/// already has, and both copies allocate `generator#0`. The second class was
+/// written anyway, with a `resume()` forwarding itself to a static that takes
+/// `upTo$frame`, and the verifier rejected it (2026-10-02,
+/// outcomes/a-generator-passed-in-and-stepped-inside-a-try-ends-the-program).
+/// Nothing loads it, so nothing ran wrongly; but a class nothing can name is
+/// only a liability, and C keeps its struct and emits no descriptor for it.
+///
+/// On the runtime corpora it drops 6 to 9 classes per module: generator and
+/// iterator frames, and `ReadableStreamDefaultReader<N>` instantiations whose
+/// ids an earlier layout holds. None is named by any class that remains.
+fn shadowed_layout(program: &Program, layout: &nts_core::hir::Layout) -> bool {
+    !layout.types.is_empty()
+        && layout.types.iter().all(|id| program.layout(*id).is_some_and(|owner| !std::ptr::eq(owner, layout)))
 }
 
 /// The classes that depend on every other one being known: an instance class
