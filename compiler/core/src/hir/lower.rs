@@ -14,7 +14,7 @@
 
 use nts_diagnostics::{Diagnostic, Location};
 use nts_semantic_schema::{
-    DeclarationModifiers, LiteralValue, MemberKind, NodeData, NodeId, NodeKind, Origin,
+    DeclarationModifiers, HeritageKind, LiteralValue, MemberKind, NodeData, NodeId, NodeKind, Origin,
     PropertyRecord, SemanticSnapshot, SymbolFlags, SymbolId, SymbolRecord, TypeId, TypeKind,
     TypeRecord, syntax,
 };
@@ -4886,9 +4886,10 @@ fn walk_one_declaration(
         {
             throws.insert(symbol);
         }
-        // **And an `extends null` class's construction always throws**, from no
-        // `throw` the source wrote: its constructor's `this` is never bound, so it
-        // throws a `ReferenceError` at a `this` or on the way out
+        // **And a construction whose `this` is never bound always throws**, from no
+        // `throw` the source wrote -- `extends null`, or a derived constructor that
+        // calls `super()` nowhere ([`FuncBuilder::never_binds_this`]): it throws a
+        // `ReferenceError` at a `this` or on the way out
         // ([`FuncBuilder::this_is_never_bound`]). An empty `constructor() {}` was
         // the case that showed it -- the throw was emitted, nothing counted it, so a
         // `new` inside a `try` called the ordinary body and the program ended where
@@ -4909,7 +4910,7 @@ fn walk_one_declaration(
                 .find(|at| probe.kind_of(*at).is_some_and(declares_a_class)),
             _ => None,
         };
-        if class.is_some_and(|class| probe.extends_null(class)) {
+        if class.is_some_and(|class| probe.never_binds_this(class)) {
             throws.insert(symbol);
         }
         let own: rustc_hash::FxHashSet<NodeId> =
@@ -21726,16 +21727,16 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// Whether `this` at `id` -- or a constructor ending at `id` -- belongs to a
-    /// binding no `super()` can initialise: the constructor of a class that
-    /// `extends null`.
+    /// binding no `super()` initialises: see [`Self::never_binds_this`] for
+    /// which constructors those are.
     ///
     /// A derived constructor's `this` is uninitialised until `super()` returns,
-    /// and with a `null` heritage `super()` itself throws (`null` is not a
-    /// constructor), so the binding never is: every read of `this`, and leaving
-    /// the constructor without returning an object -- falling off its end, or a
-    /// bare `return` -- is a `ReferenceError`. This compiler allocates the instance
-    /// before the constructor runs, so `this` was simply the object, and four
-    /// recorded test262 cases answered "nothing was thrown" or the next `throw`.
+    /// so where nothing calls it the binding never is: every read of `this`, and
+    /// leaving the constructor without returning an object -- falling off its
+    /// end, or a bare `return` -- is a `ReferenceError`. This compiler allocates
+    /// the instance before the constructor runs, so `this` was simply the object,
+    /// and four recorded test262 cases answered "nothing was thrown" or the next
+    /// `throw`.
     ///
     /// **Read off the syntax**, because it is a fact about where the `this` is
     /// written and not about any value: up from `id`, through arrows (which
@@ -21761,7 +21762,37 @@ impl<'a> FuncBuilder<'a> {
         std::iter::successors(self.node(constructor).parent, |at| self.node(*at).parent)
             .take(3)
             .find(|at| matches!(self.kind_of(*at), Some(syntax::CLASS_DECLARATION | syntax::CLASS_EXPRESSION)))
-            .is_some_and(|class| self.extends_null(class))
+            .is_some_and(|class| self.never_binds_this(class))
+    }
+
+    /// Whether the constructor `class` declares can never bind its `this`: the
+    /// class `extends null`, whose `super()` itself throws (`null` is not a
+    /// constructor) -- or it extends a class and its constructor calls `super()`
+    /// nowhere, arrows included, which a `.js` file may write (TypeScript's
+    /// TS2377 refuses it in a `.ts` one). `false` for a class with no `extends`,
+    /// whose `this` is bound on entry, and for one with no constructor written,
+    /// whose default constructor calls `super(...args)`.
+    ///
+    /// Only *whether* a call is written: a `super()` behind an `if` not taken
+    /// leaves `this` unbound too, and that is a question about what runs.
+    fn never_binds_this(&self, class: NodeId) -> bool {
+        if self.extends_null(class) {
+            return true;
+        }
+        let derived = self
+            .children(class)
+            .into_iter()
+            .filter(|child| self.kind_of(*child) == Some(syntax::HERITAGE_CLAUSE))
+            .any(|clause| HeritageKind::from_data(self.node(clause).data) == HeritageKind::Extends);
+        let Some(constructor) = the_constructor_declared_by(self, class).filter(|_| derived) else {
+            return false;
+        };
+        let mut subtree = Vec::new();
+        self.subtree(constructor, &mut subtree);
+        !subtree.iter().any(|node| {
+            self.kind_of(*node) == Some(syntax::CALL_EXPRESSION)
+                && self.children(*node).first().is_some_and(|callee| self.kind_of(*callee) == Some(syntax::SUPER_KEYWORD))
+        })
     }
 
     /// Whether a class's heritage is the literal `null` -- `extends null`, the one
