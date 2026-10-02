@@ -1,6 +1,6 @@
 # Test262 test/staging cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler d3923f20acbfff48, commit 48edee74fa93e0c92b3b994a9a09250eb7574f47, harness 3b36e94947c1b127; machine at start: 19 GB available, swap 7.4/20 GB, load 28.1/25.6 (1m/5m), 32 cores; 8 worker(s)
+# compiler 313fc08cf70df398, commit 583894c1cfca1578d531e99b2979cf8ec2aecee0, harness d6442dbc09f91ad0; machine at start: 18.5 GB available, swap 7.8/20 GB, load 22.2/22.5 (1m/5m), 32 cores; 8 worker(s)
 test/staging/sm/ArrayBuffer/bug1777413.js	pass	
 test/staging/sm/Math/cbrt-exact.js	pass	
 test/staging/sm/Math/cosh-exact.js	pass	
@@ -18,6 +18,7 @@ test/staging/sm/String/15.5.4.7.js	pass
 test/staging/sm/String/string-space-trim.js	pass	
 test/staging/sm/String/two-length-nonlatin-indexOf.js	pass	
 test/staging/sm/TypedArray/constructor_bad-args.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/staging/sm/async-functions/async-contains-unicode-escape-module.js	pass	
 test/staging/sm/class/derivedConstructorInlining.js	pass	
 test/staging/sm/class/derivedConstructorTDZExplicitThis.js	pass	
 test/staging/sm/class/derivedConstructorTDZOffEdge.js	pass	
@@ -27,11 +28,18 @@ test/staging/sm/expressions/destructuring-array-lexical.js	fail	nts: uncaught Te
 test/staging/sm/expressions/object-literal-accessor-property-name.js	pass	
 test/staging/sm/extensions/regress-591450.js	pass	
 test/staging/sm/extensions/typedarray-subarray-of-subarray.js	pass	
+test/staging/sm/fields/await-identifier-module-1.js	pass	
+test/staging/sm/fields/await-identifier-module-2.js	fail	accepted: was refused later (lowering)
+test/staging/sm/fields/await-identifier-module-3.js	pass	
 test/staging/sm/global/bug660612.js	pass	
 test/staging/sm/global/decodeURI-decodes-FFFE-FFFF.js	pass	
 test/staging/sm/global/parseFloat-01.js	pass	
 test/staging/sm/misc/error-undefined-message.js	pass	
 test/staging/sm/misc/redeclare-var-non-writable-property.js	pass	
+test/staging/sm/module/await-restricted-nested.js	fail	accepted: was refused later (lowering)
+test/staging/sm/module/bug1488117.js	pass	
+test/staging/sm/module/duplicate-exported-names-in-single-export-declaration.js	fail	accepted: ran and threw Test262Error
+test/staging/sm/module/duplicate-exported-names-in-single-export-var-declaration.js	fail	accepted: ran and threw Test262Error
 test/staging/sm/object/regress-459405.js	pass	
 test/staging/sm/regress/regress-452498-079.js	pass	
 test/staging/sm/regress/regress-559402-2.js	pass	

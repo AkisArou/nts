@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 313fc08cf70df398, commit 583894c1cfca1578d531e99b2979cf8ec2aecee0, harness c4dfc394ff30b222; machine at start: 20 GB available, swap 7.9/20 GB, load 7.7/15.6 (1m/5m), 32 cores; 8 worker(s)
+# compiler 313fc08cf70df398, commit 583894c1cfca1578d531e99b2979cf8ec2aecee0, harness d6442dbc09f91ad0; machine at start: 14.2 GB available, swap 7.7/20 GB, load 18/17.7 (1m/5m), 32 cores; 8 worker(s)
 test/language/arguments-object/10.5-1gs.js	pass	
 test/language/asi/S7.9.2_A1_T1.js	pass	
 test/language/asi/S7.9.2_A1_T2.js	pass	
@@ -279,6 +279,9 @@ test/language/destructuring/binding/syntax/object-pattern-with-no-property-list.
 test/language/destructuring/binding/syntax/property-list-followed-by-a-single-comma.js	pass	
 test/language/destructuring/binding/syntax/property-list-single-name-bindings.js	pass	
 test/language/destructuring/binding/syntax/property-list-with-property-list.js	pass	
+test/language/export/escaped-as-export-specifier.js	pass	
+test/language/export/escaped-default.js	pass	
+test/language/export/escaped-from.js	pass	
 test/language/expressions/addition/S11.6.1_A2.4_T1.js	pass	
 test/language/expressions/addition/S11.6.1_A4_T1.js	pass	
 test/language/expressions/addition/S11.6.1_A4_T2.js	pass	
@@ -679,6 +682,9 @@ test/language/expressions/assignmenttargettype/direct-expression-comma-assignmen
 test/language/expressions/assignmenttargettype/direct-identifierreference-arguments-strict.js	pass	
 test/language/expressions/assignmenttargettype/direct-identifierreference-eval-strict.js	pass	
 test/language/expressions/assignmenttargettype/direct-import.meta.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/assignmenttargettype/direct-importcall-defer.js	fail	accepted: was refused later (lowering)
+test/language/expressions/assignmenttargettype/direct-importcall-source.js	fail	accepted: was refused later (lowering)
+test/language/expressions/assignmenttargettype/direct-importcall.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-assignment-assignmentexpression-0.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-assignment-assignmentexpression-1.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-assignment-assignmentexpression-2.js	fail	accepted: was refused later (lowering)
@@ -831,6 +837,9 @@ test/language/expressions/assignmenttargettype/parenthesized-expression-comma-as
 test/language/expressions/assignmenttargettype/parenthesized-identifierreference-arguments-strict.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignmenttargettype/parenthesized-identifierreference-eval-strict.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/assignmenttargettype/parenthesized-import.meta.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/assignmenttargettype/parenthesized-importcall-defer.js	fail	accepted: was refused later (lowering)
+test/language/expressions/assignmenttargettype/parenthesized-importcall-source.js	fail	accepted: was refused later (lowering)
+test/language/expressions/assignmenttargettype/parenthesized-importcall.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-assignment-assignmentexpression-0.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-assignment-assignmentexpression-1.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-assignment-assignmentexpression-2.js	fail	accepted: was refused later (lowering)
@@ -1167,7 +1176,9 @@ test/language/expressions/class/async-method/dflt-params-rest.js	pass
 test/language/expressions/class/async-method/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/async-method/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/async-method/rest-params-trailing-comma-early-error.js	pass	
+test/language/expressions/class/class-name-ident-await-escaped-module.js	pass	
 test/language/expressions/class/class-name-ident-await-escaped.js	pass	
+test/language/expressions/class/class-name-ident-await-module.js	pass	
 test/language/expressions/class/class-name-ident-await.js	pass	
 test/language/expressions/class/class-name-ident-let-escaped.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/class-name-ident-let.js	fail	accepted: ran and threw Test262Error
@@ -3019,7 +3030,18 @@ test/language/expressions/greater-than/bigint-and-non-finite.js	pass
 test/language/expressions/greater-than/bigint-and-number.js	pass	
 test/language/expressions/greater-than/bigint-and-symbol.js	fail	nts: uncaught Test262Error: 3n > Symbol("2") throws TypeError
 test/language/expressions/grouping/S11.1.6_A3_T4.js	pass	
+test/language/expressions/import.meta/syntax/escape-sequence-import.js	pass	
+test/language/expressions/import.meta/syntax/escape-sequence-meta.js	fail	accepted: was refused later (lowering)
 test/language/expressions/import.meta/syntax/goal-script.js	fail	accepted: was refused later (lowering)
+test/language/expressions/import.meta/syntax/invalid-assignment-target-array-destructuring-expr.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/import.meta/syntax/invalid-assignment-target-array-rest-destructuring-expr.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/import.meta/syntax/invalid-assignment-target-assignment-expr.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/import.meta/syntax/invalid-assignment-target-for-await-of-loop.js	fail	accepted: was refused later (lowering)
+test/language/expressions/import.meta/syntax/invalid-assignment-target-for-in-loop.js	fail	accepted: was refused later (lowering)
+test/language/expressions/import.meta/syntax/invalid-assignment-target-for-of-loop.js	fail	accepted: was refused later (lowering)
+test/language/expressions/import.meta/syntax/invalid-assignment-target-object-destructuring-expr.js	fail	accepted: was refused later (lowering)
+test/language/expressions/import.meta/syntax/invalid-assignment-target-object-rest-destructuring-expr.js	fail	accepted: was refused later (lowering)
+test/language/expressions/import.meta/syntax/invalid-assignment-target-update-expr.js	fail	accepted: was refused later (lowering)
 test/language/expressions/in/S8.12.6_A1.js	pass	
 test/language/expressions/in/S8.12.6_A2_T1.js	fail	nts: uncaught Test262Error: #1: var __obj={}; "valueOf" in __obj
 test/language/expressions/in/private-field-in-nested.js	pass	
@@ -4091,12 +4113,21 @@ test/language/identifiers/vertical-tilde-continue-escaped.js	pass
 test/language/identifiers/vertical-tilde-continue.js	pass	
 test/language/identifiers/vertical-tilde-start-escaped.js	pass	
 test/language/identifiers/vertical-tilde-start.js	pass	
+test/language/import/dup-bound-names.js	fail	accepted: ran and threw Test262Error
+test/language/import/escaped-as-import-specifier.js	pass	
+test/language/import/escaped-as-namespace-import.js	pass	
+test/language/import/escaped-from.js	pass	
+test/language/import/import-attributes/json-invalid.js	fail	accepted: ran and threw Test262Error
+test/language/import/import-attributes/json-named-bindings.js	fail	accepted: ran and threw Test262Error
+test/language/import/import-defer/errors/syntax-error/import-defer-of-syntax-error-fails.js	pass	
+test/language/import/import-defer/syntax/import-attributes.js	pass	
 test/language/import/import-defer/syntax/invalid-default-and-defer-namespace.js	fail	accepted: ran and threw Test262Error
 test/language/import/import-defer/syntax/invalid-defer-as-with-no-asterisk.js	pass	
 test/language/import/import-defer/syntax/invalid-defer-default-and-namespace.js	pass	
 test/language/import/import-defer/syntax/invalid-defer-default.js	fail	accepted: ran and threw Test262Error
 test/language/import/import-defer/syntax/invalid-defer-named.js	fail	accepted: ran and threw Test262Error
 test/language/import/import-defer/syntax/invalid-export-defer-namespace.js	pass	
+test/language/import/import-defer/syntax/valid-defer-namespace.js	pass	
 test/language/keywords/ident-ref-break.js	pass	
 test/language/keywords/ident-ref-catch.js	pass	
 test/language/keywords/ident-ref-continue.js	pass	
@@ -4581,7 +4612,260 @@ test/language/literals/string/unicode-escape-nls-err-double.js	pass
 test/language/literals/string/unicode-escape-nls-err-single.js	pass	
 test/language/literals/string/unicode-escape-no-hex-err-double.js	pass	
 test/language/literals/string/unicode-escape-no-hex-err-single.js	pass	
+test/language/module-code/ambiguous-export-bindings/error-export-from-named-as.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/ambiguous-export-bindings/error-export-from-named.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/ambiguous-export-bindings/error-import-named-as.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/ambiguous-export-bindings/error-import-named.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/comment-multi-line-html-close.js	pass	
+test/language/module-code/comment-single-line-html-close.js	pass	
+test/language/module-code/comment-single-line-html-open.js	pass	
+test/language/module-code/early-dup-export-as-star-as.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/early-dup-export-decl.js	fail	accepted: was refused later (lowering)
+test/language/module-code/early-dup-export-dflt-id.js	pass	
+test/language/module-code/early-dup-export-dflt.js	pass	
+test/language/module-code/early-dup-export-id-as.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/early-dup-export-id.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/early-dup-export-star-as-dflt.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/early-dup-lables.js	pass	
+test/language/module-code/early-dup-lex.js	pass	
+test/language/module-code/early-dup-top-function-async-generator.js	fail	accepted: was refused later (lowering)
+test/language/module-code/early-dup-top-function-async.js	fail	accepted: was refused later (lowering)
+test/language/module-code/early-dup-top-function-generator.js	fail	accepted: was refused later (lowering)
+test/language/module-code/early-dup-top-function.js	fail	accepted: was refused later (lowering)
+test/language/module-code/early-export-global.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/early-export-ill-formed-string.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/early-export-unresolvable.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/early-import-arguments.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/early-import-as-arguments.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/early-import-as-eval.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/early-import-eval.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/early-lex-and-var.js	pass	
+test/language/module-code/early-new-target.js	fail	accepted: was refused later (lowering)
+test/language/module-code/early-strict-mode.js	pass	
+test/language/module-code/early-super.js	pass	
+test/language/module-code/early-undef-break.js	pass	
+test/language/module-code/early-undef-continue.js	pass	
+test/language/module-code/eval-export-cls-semi.js	pass	
+test/language/module-code/eval-export-dflt-cls-anon-semi.js	pass	
+test/language/module-code/eval-export-dflt-cls-named-semi.js	pass	
+test/language/module-code/eval-export-dflt-expr-err-get-value.js	fail	completed
+test/language/module-code/eval-export-dflt-fun-named-semi.js	pass	
+test/language/module-code/eval-export-dflt-gen-named-semi.js	pass	
+test/language/module-code/eval-export-fun-semi.js	pass	
+test/language/module-code/eval-export-gen-semi.js	pass	
+test/language/module-code/eval-gtbndng-indirect-trlng-comma.js	pass	
+test/language/module-code/eval-gtbndng-local-bndng-cls.js	fail	nts: uncaught Test262Error: sameValue
+test/language/module-code/eval-gtbndng-local-bndng-const.js	pass	
+test/language/module-code/eval-gtbndng-local-bndng-let.js	pass	
+test/language/module-code/eval-gtbndng-local-bndng-var.js	pass	
+test/language/module-code/eval-rqstd-abrupt.js	pass	
+test/language/module-code/eval-self-abrupt.js	pass	
+test/language/module-code/export-default-asyncfunction-declaration-binding-exists.js	fail	accepted: was refused later (lowering)
+test/language/module-code/export-default-asyncgenerator-declaration-binding-exists.js	fail	accepted: was refused later (lowering)
+test/language/module-code/export-default-function-declaration-binding-exists.js	fail	accepted: was refused later (lowering)
+test/language/module-code/export-default-generator-declaration-binding-exists.js	fail	accepted: was refused later (lowering)
+test/language/module-code/export-expname-from-as-unpaired-surrogate.js	fail	accepted: was refused later (lowering)
+test/language/module-code/export-expname-from-star-unpaired-surrogate.js	pass	
+test/language/module-code/export-expname-from-unpaired-surrogate.js	fail	accepted: was refused later (lowering)
+test/language/module-code/export-expname-import-unpaired-surrogate.js	fail	accepted: was refused later (lowering)
+test/language/module-code/export-expname-string-binding.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/export-expname-unpaired-surrogate.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/import-attributes/early-dup-attribute-key-export.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/import-attributes/early-dup-attribute-key-import-nobinding.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/import-attributes/early-dup-attribute-key-import-withbinding.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/import-attributes/import-attribute-key-identifiername.js	fail	accepted: was refused later (lowering)
+test/language/module-code/import-attributes/import-attribute-key-string-double.js	fail	accepted: was refused later (lowering)
+test/language/module-code/import-attributes/import-attribute-key-string-single.js	fail	accepted: was refused later (lowering)
+test/language/module-code/import-attributes/import-attribute-many.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/import-attributes/import-attribute-newlines.js	fail	accepted: was refused later (lowering)
+test/language/module-code/import-attributes/import-attribute-trlng-comma.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/import-attributes/import-attribute-value-string-double.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/import-attributes/import-attribute-value-string-single.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/instn-iee-err-circular-as.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/instn-iee-err-circular.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/instn-iee-err-dflt-thru-star-as.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/instn-iee-err-dflt-thru-star.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/instn-iee-err-not-found-as.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/instn-iee-err-not-found.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/instn-iee-iee-cycle.js	pass	
+test/language/module-code/instn-local-bndng-for-dup.js	pass	
+test/language/module-code/instn-local-bndng-var-dup.js	pass	
+test/language/module-code/instn-named-err-dflt-thru-star-as.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/instn-named-err-dflt-thru-star-dflt.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/instn-named-err-not-found-as.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/instn-named-err-not-found-dflt.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/instn-named-err-not-found.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/instn-named-star-cycle.js	pass	
+test/language/module-code/instn-once.js	pass	
+test/language/module-code/instn-resolve-empty-export.js	fail	accepted: was refused later (lowering)
+test/language/module-code/instn-resolve-empty-import.js	fail	accepted: was refused later (lowering)
+test/language/module-code/instn-resolve-err-syntax-1.js	pass	
+test/language/module-code/instn-resolve-err-syntax-2.js	fail	accepted: was refused later (lowering)
+test/language/module-code/instn-resolve-order-depth.js	pass	
+test/language/module-code/instn-resolve-order-src.js	pass	
+test/language/module-code/instn-star-err-not-found.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/instn-star-star-cycle.js	pass	
+test/language/module-code/invalid-private-names-call-expression-bad-reference.js	fail	accepted: was refused later (lowering)
+test/language/module-code/invalid-private-names-call-expression-this.js	pass	
+test/language/module-code/invalid-private-names-member-expression-bad-reference.js	pass	
+test/language/module-code/invalid-private-names-member-expression-this.js	pass	
+test/language/module-code/parse-err-decl-pos-export-arrow-function.js	pass	
+test/language/module-code/parse-err-decl-pos-export-block-stmt-list.js	pass	
+test/language/module-code/parse-err-decl-pos-export-block-stmt.js	pass	
+test/language/module-code/parse-err-decl-pos-export-class-decl-meth-static.js	pass	
+test/language/module-code/parse-err-decl-pos-export-class-decl-meth.js	pass	
+test/language/module-code/parse-err-decl-pos-export-class-decl-method-gen-static.js	pass	
+test/language/module-code/parse-err-decl-pos-export-class-decl-method-gen.js	pass	
+test/language/module-code/parse-err-decl-pos-export-class-expr-meth-gen-static.js	pass	
+test/language/module-code/parse-err-decl-pos-export-class-expr-meth-gen.js	pass	
+test/language/module-code/parse-err-decl-pos-export-class-expr-meth-static.js	pass	
+test/language/module-code/parse-err-decl-pos-export-class-expr-meth.js	pass	
+test/language/module-code/parse-err-decl-pos-export-do-while.js	pass	
+test/language/module-code/parse-err-decl-pos-export-for-const.js	pass	
+test/language/module-code/parse-err-decl-pos-export-for-in-const.js	pass	
+test/language/module-code/parse-err-decl-pos-export-for-in-let.js	pass	
+test/language/module-code/parse-err-decl-pos-export-for-in-lhs.js	pass	
+test/language/module-code/parse-err-decl-pos-export-for-in-var.js	pass	
+test/language/module-code/parse-err-decl-pos-export-for-let.js	pass	
+test/language/module-code/parse-err-decl-pos-export-for-lhs.js	pass	
+test/language/module-code/parse-err-decl-pos-export-for-of-const.js	pass	
+test/language/module-code/parse-err-decl-pos-export-for-of-let.js	pass	
+test/language/module-code/parse-err-decl-pos-export-for-of-lhs.js	pass	
+test/language/module-code/parse-err-decl-pos-export-for-of-var.js	pass	
+test/language/module-code/parse-err-decl-pos-export-for-var.js	pass	
+test/language/module-code/parse-err-decl-pos-export-function-decl.js	pass	
+test/language/module-code/parse-err-decl-pos-export-function-expr.js	pass	
+test/language/module-code/parse-err-decl-pos-export-generator-decl.js	pass	
+test/language/module-code/parse-err-decl-pos-export-generator-expr.js	pass	
+test/language/module-code/parse-err-decl-pos-export-if-else.js	pass	
+test/language/module-code/parse-err-decl-pos-export-if-if.js	pass	
+test/language/module-code/parse-err-decl-pos-export-labeled.js	pass	
+test/language/module-code/parse-err-decl-pos-export-object-gen-method.js	pass	
+test/language/module-code/parse-err-decl-pos-export-object-getter.js	pass	
+test/language/module-code/parse-err-decl-pos-export-object-method.js	pass	
+test/language/module-code/parse-err-decl-pos-export-object-setter.js	pass	
+test/language/module-code/parse-err-decl-pos-export-switch-case-dflt.js	pass	
+test/language/module-code/parse-err-decl-pos-export-switch-case.js	pass	
+test/language/module-code/parse-err-decl-pos-export-switch-dftl.js	pass	
+test/language/module-code/parse-err-decl-pos-export-try-catch-finally.js	pass	
+test/language/module-code/parse-err-decl-pos-export-try-catch.js	pass	
+test/language/module-code/parse-err-decl-pos-export-try-finally.js	pass	
+test/language/module-code/parse-err-decl-pos-export-try-try.js	pass	
+test/language/module-code/parse-err-decl-pos-export-while.js	pass	
+test/language/module-code/parse-err-decl-pos-import-arrow-function.js	pass	
+test/language/module-code/parse-err-decl-pos-import-block-stmt-list.js	pass	
+test/language/module-code/parse-err-decl-pos-import-block-stmt.js	pass	
+test/language/module-code/parse-err-decl-pos-import-class-decl-meth-static.js	pass	
+test/language/module-code/parse-err-decl-pos-import-class-decl-meth.js	pass	
+test/language/module-code/parse-err-decl-pos-import-class-decl-method-gen-static.js	pass	
+test/language/module-code/parse-err-decl-pos-import-class-decl-method-gen.js	pass	
+test/language/module-code/parse-err-decl-pos-import-class-expr-meth-gen-static.js	pass	
+test/language/module-code/parse-err-decl-pos-import-class-expr-meth-gen.js	pass	
+test/language/module-code/parse-err-decl-pos-import-class-expr-meth-static.js	pass	
+test/language/module-code/parse-err-decl-pos-import-class-expr-meth.js	pass	
+test/language/module-code/parse-err-decl-pos-import-do-while.js	pass	
+test/language/module-code/parse-err-decl-pos-import-for-const.js	pass	
+test/language/module-code/parse-err-decl-pos-import-for-in-const.js	pass	
+test/language/module-code/parse-err-decl-pos-import-for-in-let.js	pass	
+test/language/module-code/parse-err-decl-pos-import-for-in-lhs.js	pass	
+test/language/module-code/parse-err-decl-pos-import-for-in-var.js	pass	
+test/language/module-code/parse-err-decl-pos-import-for-let.js	pass	
+test/language/module-code/parse-err-decl-pos-import-for-lhs.js	pass	
+test/language/module-code/parse-err-decl-pos-import-for-of-const.js	pass	
+test/language/module-code/parse-err-decl-pos-import-for-of-let.js	pass	
+test/language/module-code/parse-err-decl-pos-import-for-of-lhs.js	pass	
+test/language/module-code/parse-err-decl-pos-import-for-of-var.js	pass	
+test/language/module-code/parse-err-decl-pos-import-for-var.js	pass	
+test/language/module-code/parse-err-decl-pos-import-function-decl.js	pass	
+test/language/module-code/parse-err-decl-pos-import-function-expr.js	pass	
+test/language/module-code/parse-err-decl-pos-import-generator-decl.js	pass	
+test/language/module-code/parse-err-decl-pos-import-generator-expr.js	pass	
+test/language/module-code/parse-err-decl-pos-import-if-else.js	pass	
+test/language/module-code/parse-err-decl-pos-import-if-if.js	pass	
+test/language/module-code/parse-err-decl-pos-import-labeled.js	pass	
+test/language/module-code/parse-err-decl-pos-import-object-gen-method.js	pass	
+test/language/module-code/parse-err-decl-pos-import-object-getter.js	pass	
+test/language/module-code/parse-err-decl-pos-import-object-method.js	pass	
+test/language/module-code/parse-err-decl-pos-import-object-setter.js	pass	
+test/language/module-code/parse-err-decl-pos-import-switch-case-dflt.js	pass	
+test/language/module-code/parse-err-decl-pos-import-switch-case.js	pass	
+test/language/module-code/parse-err-decl-pos-import-switch-dftl.js	pass	
+test/language/module-code/parse-err-decl-pos-import-try-catch-finally.js	pass	
+test/language/module-code/parse-err-decl-pos-import-try-catch.js	pass	
+test/language/module-code/parse-err-decl-pos-import-try-finally.js	pass	
+test/language/module-code/parse-err-decl-pos-import-try-try.js	pass	
+test/language/module-code/parse-err-decl-pos-import-while.js	pass	
+test/language/module-code/parse-err-export-dflt-const.js	pass	
+test/language/module-code/parse-err-export-dflt-expr.js	pass	
+test/language/module-code/parse-err-export-dflt-let.js	pass	
+test/language/module-code/parse-err-export-dflt-var.js	pass	
+test/language/module-code/parse-err-hoist-lex-fun.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/parse-err-hoist-lex-gen.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/parse-err-invoke-anon-fun-decl.js	pass	
+test/language/module-code/parse-err-invoke-anon-gen-decl.js	pass	
+test/language/module-code/parse-err-return.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/parse-err-semi-dflt-expr.js	pass	
+test/language/module-code/parse-err-semi-export-star.js	pass	
+test/language/module-code/parse-err-semi-name-space-export.js	pass	
+test/language/module-code/parse-err-semi-named-export-from.js	pass	
+test/language/module-code/parse-err-semi-named-export.js	pass	
+test/language/module-code/parse-err-syntax-2.js	fail	accepted: was refused later (lowering)
+test/language/module-code/parse-err-yield.js	pass	
+test/language/module-code/parse-export-empty.js	pass	
+test/language/module-code/private-identifiers-not-empty.js	fail	accepted: was refused later (lowering)
+test/language/module-code/privatename-not-valid-earlyerr-module-5.js	pass	
+test/language/module-code/privatename-not-valid-earlyerr-module-6.js	fail	accepted: was refused later (lowering)
+test/language/module-code/privatename-not-valid-earlyerr-module-7.js	pass	
+test/language/module-code/privatename-not-valid-earlyerr-module-8.js	pass	
+test/language/module-code/top-level-await/early-errors-await-not-simple-assignment-target.js	fail	accepted: was refused later (lowering)
 test/language/module-code/top-level-await/new-await-script-code.js	pass	
+test/language/module-code/top-level-await/new-await.js	pass	
+test/language/module-code/top-level-await/no-operand.js	pass	
+test/language/module-code/top-level-await/syntax/catch-parameter.js	pass	
+test/language/module-code/top-level-await/syntax/early-does-not-propagate-to-fn-declaration-body.js	pass	
+test/language/module-code/top-level-await/syntax/early-does-not-propagate-to-fn-declaration-params.js	pass	
+test/language/module-code/top-level-await/syntax/early-does-not-propagate-to-fn-expr-body.js	pass	
+test/language/module-code/top-level-await/syntax/early-does-not-propagate-to-fn-expr-params.js	pass	
+test/language/module-code/top-level-await/syntax/early-no-escaped-await.js	pass	
+test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-array-literal.js	pass	
+test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-func-expression.js	pass	
+test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-identifier.js	pass	
+test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-literal-number.js	pass	
+test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-literal-string.js	pass	
+test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-nested.js	pass	
+test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-new-expr.js	pass	
+test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-null.js	pass	
+test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-obj-literal.js	pass	
+test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-regexp.js	pass	
+test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-template-literal.js	pass	
+test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-this.js	pass	
+test/language/module-code/top-level-await/syntax/export-dflt-assign-expr-await-expr-array-literal.js	pass	
+test/language/module-code/top-level-await/syntax/export-dflt-assign-expr-await-expr-identifier.js	pass	
+test/language/module-code/top-level-await/syntax/export-dflt-assign-expr-await-expr-literal-number.js	pass	
+test/language/module-code/top-level-await/syntax/export-dflt-assign-expr-await-expr-literal-string.js	pass	
+test/language/module-code/top-level-await/syntax/export-dflt-assign-expr-await-expr-nested.js	pass	
+test/language/module-code/top-level-await/syntax/export-dflt-assign-expr-await-expr-null.js	pass	
+test/language/module-code/top-level-await/syntax/export-dflt-assign-expr-await-expr-regexp.js	pass	
+test/language/module-code/top-level-await/syntax/export-dflt-assign-expr-await-expr-template-literal.js	pass	
+test/language/module-code/top-level-await/syntax/export-dflt-assign-expr-await-expr-this.js	pass	
+test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-array-literal.js	pass	
+test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-func-expression.js	pass	
+test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-identifier.js	pass	
+test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-literal-number.js	pass	
+test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-literal-string.js	pass	
+test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-nested.js	pass	
+test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-new-expr.js	pass	
+test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-null.js	pass	
+test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-obj-literal.js	pass	
+test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-regexp.js	pass	
+test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-template-literal.js	pass	
+test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-this.js	pass	
+test/language/module-code/top-level-await/syntax/export-lex-decl-await-expr-func-expression.js	pass	
+test/language/module-code/top-level-await/syntax/export-lex-decl-await-expr-null.js	pass	
+test/language/module-code/top-level-await/syntax/export-lex-decl-await-expr-regexp.js	pass	
+test/language/module-code/top-level-await/syntax/export-var-await-expr-func-expression.js	pass	
+test/language/module-code/top-level-await/syntax/export-var-await-expr-null.js	pass	
+test/language/module-code/top-level-await/syntax/export-var-await-expr-regexp.js	pass	
 test/language/punctuators/S7.7_A2_T1.js	pass	
 test/language/punctuators/S7.7_A2_T10.js	pass	
 test/language/punctuators/S7.7_A2_T2.js	pass	
@@ -4592,6 +4876,7 @@ test/language/punctuators/S7.7_A2_T6.js	pass
 test/language/punctuators/S7.7_A2_T7.js	pass	
 test/language/punctuators/S7.7_A2_T8.js	pass	
 test/language/punctuators/S7.7_A2_T9.js	pass	
+test/language/reserved-words/await-module.js	pass	
 test/language/reserved-words/await-script.js	pass	
 test/language/reserved-words/ident-reference-false-escaped.js	pass	
 test/language/reserved-words/ident-reference-false.js	pass	
@@ -4856,7 +5141,9 @@ test/language/statements/class/async-method/dflt-params-rest.js	pass
 test/language/statements/class/async-method/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/async-method/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/async-method/rest-params-trailing-comma-early-error.js	pass	
+test/language/statements/class/class-name-ident-await-escaped-module.js	pass	
 test/language/statements/class/class-name-ident-await-escaped.js	pass	
+test/language/statements/class/class-name-ident-await-module.js	pass	
 test/language/statements/class/class-name-ident-await.js	pass	
 test/language/statements/class/class-name-ident-let-escaped.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/class-name-ident-let.js	fail	accepted: ran and threw Test262Error
@@ -6512,6 +6799,7 @@ test/language/statements/for-of/dstr/var-obj-ptrn-prop-obj-value-null.js	pass
 test/language/statements/for-of/escaped-of.js	pass	
 test/language/statements/for-of/generator-next-error.js	pass	
 test/language/statements/for-of/generator.js	pass	
+test/language/statements/for-of/head-await-using-bound-names-in-stmt.js	fail	accepted: ran and threw Test262Error
 test/language/statements/for-of/head-await-using-init.js	pass	
 test/language/statements/for-of/head-const-bound-names-dup.js	pass	
 test/language/statements/for-of/head-const-bound-names-in-stmt.js	fail	accepted: ran and threw Test262Error
@@ -6968,6 +7256,8 @@ test/language/statements/if/if-stmt-else-gen.js	fail	accepted: ran and threw Tes
 test/language/statements/if/if-stmt-else-let.js	pass	
 test/language/statements/labeled/continue.js	pass	
 test/language/statements/labeled/static-init-invalid-await.js	pass	
+test/language/statements/labeled/value-await-module-escaped.js	pass	
+test/language/statements/labeled/value-await-module.js	pass	
 test/language/statements/labeled/value-await-non-module-escaped.js	pass	
 test/language/statements/labeled/value-await-non-module.js	pass	
 test/language/statements/labeled/value-yield-strict-escaped.js	fail	accepted: ran and threw Test262Error
