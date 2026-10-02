@@ -2798,6 +2798,8 @@ pub struct Program {
     /// question the provider does not answer. Without this field the backend
     /// could not tell the two cases apart.
     pub provider: Provider,
+    /// [`Options::callbacks_checkpoint`], for the passes that read it.
+    pub callbacks_checkpoint: bool,
     /// The program's public surface: `(emitted name, name it is published as)`.
     ///
     /// The exports of the *entry* modules -- those nothing in this program
@@ -4005,6 +4007,13 @@ pub enum Provider {
 pub struct Options<'a> {
     /// The memory discipline. See [`Provider`].
     pub provider: Provider,
+    /// Whether a callback returning to the program's foreign loop is a
+    /// checkpoint: `nts_checkpoint_after_callbacks`, which the entry point of
+    /// a program whose loop is `GLib`'s turns on. Decided once, by the loop
+    /// host the build chose (`LoopHost::checkpoints_after_callbacks`), and
+    /// read by [`native_callback::check`]: where it holds, a bridged `async`
+    /// body may suspend, since its continuation runs at that checkpoint.
+    pub callbacks_checkpoint: bool,
     /// Whether to prove numbers into integers. Off is not a supported way to
     /// build anything — it is how the benchmarks measure what the analysis is
     /// worth, by compiling one program both ways.
@@ -4032,6 +4041,9 @@ impl Default for Options<'_> {
     fn default() -> Self {
         Self {
             provider: Provider::NoGc,
+            // No loop is known to checkpoint after a callback until a build
+            // says whose loop the program runs.
+            callbacks_checkpoint: false,
             specialize_numbers: true,
             // The safe choice when the product is unknown: a library may have
             // any export called from outside. An executable keeps more than it
@@ -5479,6 +5491,8 @@ fn provide(program: &mut Program, provider: Provider) -> rc::Report {
 pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) -> Prepared {
     let specialize_numbers = options.specialize_numbers;
     let mut lowered = lower::lower_with(snapshot, options.entry_files, options.foreign);
+    // Before `settle`, whose callback check reads it.
+    lowered.program.callbacks_checkpoint = options.callbacks_checkpoint;
     // Re-keyed by the foreign key as lowering finishes: same rows, indexed for
     // the reader that comes next. See `Program::foreign`.
     lowered.program.foreign = options

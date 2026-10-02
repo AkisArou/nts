@@ -155,6 +155,18 @@ impl LoopHost {
         }
     }
 
+    /// Whether a callback returning to this host's loop is a checkpoint
+    /// (`nts_checkpoint_after_callbacks`, which `main_for` turns on with the
+    /// adapter): the fact lowering reads as `callbacks_checkpoint`, decided
+    /// here and nowhere else. `GLib` and Win32 attach for every program.
+    /// CoreFoundation answers no: whether a program keeps it is decided after
+    /// lowering, from what it calls (`for_program`), and a program that does
+    /// not runs libuv's loop, which no callback returns to.
+    #[must_use]
+    pub const fn checkpoints_after_callbacks(self) -> bool {
+        matches!(self, Self::Glib | Self::Win32)
+    }
+
     /// The adapter's prefix: `nts_glib_host` or `nts_cf_host`.
     const fn prefix(self) -> Option<&'static str> {
         match self {

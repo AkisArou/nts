@@ -7281,6 +7281,7 @@ fn emit_options<'a>(
     entry_files: &'a [String],
     foreign: &'a hir::runtime::ForeignTable,
     configured: Option<hir::reachable::Roots<'a>>,
+    callbacks_checkpoint: bool,
 ) -> hir::Options<'a> {
     // **`!entry.is_empty()` was never false.** This read the flags itself and
     // asked `entry.is_empty()`, and the entry list always held at least
@@ -7307,6 +7308,7 @@ fn emit_options<'a>(
         // `files` array gives an empty slice and the old inference stands.
         entry_files,
         foreign,
+        callbacks_checkpoint,
         ..hir::Options::default()
     }
 }
@@ -7326,7 +7328,7 @@ fn emit_llvm(tsconfig: &Utf8Path, emission: Emission, platform: nts_codegen_llvm
     };
     let prepared = match hir::prepare_with(
         &snapshot,
-        &emit_options(entry.as_deref(), &entry_files, &foreign_tables(&snapshot), configured),
+        &emit_options(entry.as_deref(), &entry_files, &foreign_tables(&snapshot), configured, emission.host.checkpoints_after_callbacks()),
     ) {
         Ok(prepared) => prepared,
         Err(problems) => {
@@ -7381,7 +7383,7 @@ fn emit_jvm(
     };
     let prepared = match hir::prepare_with(
         &snapshot,
-        &emit_options(entry.as_deref(), &entry_files, &foreign_tables(&snapshot), configured),
+        &emit_options(entry.as_deref(), &entry_files, &foreign_tables(&snapshot), configured, false),
     ) {
         Ok(prepared) => prepared,
         Err(problems) => {
@@ -7568,7 +7570,7 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
     };
     let prepared = match hir::prepare_with(
         &snapshot,
-        &emit_options(entry.as_deref(), &entry_files, &foreign_tables(&snapshot), configured),
+        &emit_options(entry.as_deref(), &entry_files, &foreign_tables(&snapshot), configured, emission.host.checkpoints_after_callbacks()),
     ) {
         Ok(prepared) => prepared,
         Err(problems) => {

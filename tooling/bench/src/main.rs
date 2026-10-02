@@ -2261,6 +2261,9 @@ fn prepared_program(
             // measuring the program they measured yesterday.
             foreign: &hir::runtime::ForeignTable::default(),
             entry_files: &[],
+            // A benchmark is a standalone program on libuv's loop, which no
+            // callback returns to.
+            callbacks_checkpoint: false,
         },
     ) {
         Ok(prepared) => prepared,

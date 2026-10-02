@@ -45,6 +45,36 @@ fn prepare_with_files(name: &str, source: &str, provider: hir::Provider, declara
     Some((dir, hir::prepare_with(&snapshot, &hir::Options { provider, ..hir::Options::default() }).unwrap()))
 }
 
+/// An `async` callback is bridged only where the program's loop checkpoints
+/// after a callback (`Options::callbacks_checkpoint`, a `GLib`-hosted
+/// program's): there its continuation runs when the callback returns to the
+/// loop. Anywhere else nothing would resume it, and it is refused by name --
+/// the same program, prepared both ways.
+#[test]
+fn an_async_callback_is_bridged_only_where_callbacks_checkpoint() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else { return };
+    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").canonicalize_utf8().unwrap();
+    let dir = root.join(format!("target/native-llvm-tests/{}-async-callback", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("closures.d.ts"), include_str!("../../../../examples/interop/native-closure/types/closures.d.ts")).unwrap();
+    std::fs::write(dir.join("tsconfig.json"), format!(
+        r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","{root}/runtime/native/libc.d.ts","closures.d.ts"]}}"#
+    )).unwrap();
+    std::fs::write(
+        dir.join("main.ts"),
+        "import { each_upto } from \"c:closures\";\nimport type { c_int } from \"c:types\";\nlet seen = 0;\nexport function count(): number {\n  each_upto(async (n) => {\n    await 0;\n    seen += n;\n  }, 3 as c_int);\n  return seen;\n}\n",
+    )
+    .unwrap();
+    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&dir.join("tsconfig.json")).unwrap();
+    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+    let refused = |callbacks_checkpoint: bool| {
+        let prepared = hir::prepare_with(&snapshot, &hir::Options { callbacks_checkpoint, ..hir::Options::default() }).unwrap();
+        prepared.diagnostics.iter().any(|d| d.code == "NTS2006" && d.message.contains("an `async` callback cannot be bridged to C"))
+    };
+    assert!(refused(false), "an async callback was bridged where nothing resumes it");
+    assert!(!refused(true), "an async callback was refused where the loop checkpoints after it");
+}
+
 /// What the checker says of `source`, for an arm whose refusal is the
 /// checker's rather than lowering's -- which `prepare` asserts never happens.
 fn checker_messages(name: &str, source: &str) -> Option<Vec<String>> {

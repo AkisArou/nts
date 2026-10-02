@@ -44,6 +44,7 @@
     "gtk-values/nts.config.ts",
     "gtk-gettext/nts.config.ts",
     "gtk-gi/nts.config.ts",
+    "gtk-async/nts.config.ts",
     "gtk-notes/nts.config.ts",
     "adw-hello/nts.config.ts",
     "gtk-iter-lifetime/nts.config.ts",
