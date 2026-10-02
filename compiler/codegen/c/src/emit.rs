@@ -3019,12 +3019,16 @@ fn escapes_uncalled(
                 OpKind::Erase { value, .. } => is_one(*value),
                 _ => is_one(value),
             };
-            live.iter().any(|value| match &func.values[value.0 as usize].kind {
-                // Every argument, because any of them can be the callback.
-                OpKind::Call { callee: Callee::External(_), args, .. } => {
-                    args.iter().copied().any(carries)
-                }
-                _ => false,
+            // Every operand the runtime is handed, because any of them can be the
+            // callback -- and asked of `hir::reachable`, which is the one place that
+            // knows what the runtime calls back. This had its own copy of that
+            // question, external calls only, and a `.then` reaction was invisible
+            // to it.
+            live.iter().any(|value| {
+                nts_core::hir::reachable::called_back(&func.values[value.0 as usize].kind)
+                    .iter()
+                    .copied()
+                    .any(carries)
             })
         })
 }
@@ -5118,6 +5122,28 @@ fn emit_op(
             erased_conversion(func, op, &name, &op.kind, context)?
         }
         OpKind::TagOf { value: at } => format!("{name} = nts_value_tag({});", value_name(*at)),
+        // **The two calls nested, because `NtsTask` is a struct by value and this
+        // IR models none.** The same shape `suspension` writes for an `await`,
+        // which builds its task as a compound literal in the same argument
+        // position -- so the nesting is the established form here rather than a
+        // new one.
+        //
+        // `repeating` is **false**, and `nts_callback_task`'s own documentation
+        // says why it is the part not to get wrong: a task the host runs again
+        // and again gives its reference back at `drop`, and releasing on every
+        // round "frees the callback under the timer that is about to call it,
+        // which is a use-after-free that leaves the trace right, the totals
+        // balanced, and AddressSanitizer silent". A reaction runs once.
+        OpKind::PromiseSubscribe {
+            promise,
+            reaction,
+            slot,
+        } => format!(
+            "nts_promise_subscribe({}, nts_callback_task((NtsHeader *){}, {}, false));",
+            value_name(*promise),
+            value_name(*reaction),
+            slot
+        ),
         OpKind::InstanceOf { value: at, classes } => instance_of(&name, *at, classes, context),
         // The absent reference. Typed, because C distinguishes a null
         // `NtsString *` from a null `NtsObj_Point *` even though the address is

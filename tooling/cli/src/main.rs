@@ -2660,6 +2660,9 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         OpKind::ObjcSelector { name } => format!("%{index} = objc.selector {name} : {ty}"),
         OpKind::NativeMalloc { bytes } => format!("%{index} = native.malloc %{} : {ty}", bytes.0),
         OpKind::NativeFree { pointer } => format!("native.free %{}", pointer.0),
+        OpKind::PromiseSubscribe { promise, reaction, slot } => {
+            format!("promise.subscribe %{} <- %{}[{slot}]", promise.0, reaction.0)
+        }
         OpKind::NativeCopy { destination, source } => {
             format!("native.copy %{} <- %{}", destination.0, source.0)
         }

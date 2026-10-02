@@ -165,7 +165,10 @@ fn has_effects(kind: &OpKind) -> bool {
         | OpKind::GlobalSet { .. }
         | OpKind::Retain(_)
         | OpKind::Release(_)
-        | OpKind::Suspend { .. } => true,
+        | OpKind::Suspend { .. }
+        // Subscribing *is* the operation: it produces no value, so nothing can
+        // read it and nothing but this list can keep it.
+        | OpKind::PromiseSubscribe { .. } => true,
         // Everything else computes a value and does nothing else, so it is
         // worth exactly what reads it. `Await` is here because it does not
         // survive `super::suspend` -- if one reaches this pass the program is

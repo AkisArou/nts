@@ -1633,6 +1633,28 @@ fn rejection_exit(build: &mut Build, frame: ValueId, mode: Mode) -> super::Block
     }
 }
 
+/// The runtime helper that reads a fulfilled promise of `payload`, or `None` for
+/// one that holds nothing.
+///
+/// One answer for every reader of a settled promise: an `await` here, and a
+/// promise reaction in lowering. Two choices of reader for one payload is two
+/// opinions of what the promise holds, and the runtime asserts the tag.
+pub(super) fn settled_reader(payload: &HirType) -> Option<&'static str> {
+    Some(match payload {
+        HirType::Void => return None,
+        HirType::Managed(_) => "nts_promise_reference",
+        // A C handle, from the promise's slot for one.
+        HirType::NativePointer(_) => "nts_promise_pointer",
+        // `await x` with `x: unknown`, which the tag describes and no reader
+        // chosen from a type can. It fell to the number arm, so every such
+        // `await` read its value as a double: a number agreed by coincidence,
+        // a string aborted with "read a number from a promise holding
+        // something else" in C and was `typeof` "number" on the JVM.
+        HirType::Erased => "nts_promise_value",
+        _ => "nts_promise_number",
+    })
+}
+
 fn read_settled(
     build: &mut Build,
     frame: ValueId,
@@ -1685,17 +1707,8 @@ fn read_settled(
         }
         return;
     }
-    let reader = match payload {
-        HirType::Managed(_) => "nts_promise_reference",
-        // A C handle, from the promise's slot for one.
-        HirType::NativePointer(_) => "nts_promise_pointer",
-        // `await x` with `x: unknown`, which the tag describes and no reader
-        // chosen from a type can. It fell to the number arm, so every such
-        // `await` read its value as a double: a number agreed by coincidence,
-        // a string aborted with "read a number from a promise holding
-        // something else" in C and was `typeof` "number" on the JVM.
-        HirType::Erased => "nts_promise_value",
-        _ => "nts_promise_number",
+    let Some(reader) = settled_reader(payload) else {
+        unreachable!("a `void` payload returned above");
     };
     let value = build.push(
         OpKind::Call {

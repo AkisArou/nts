@@ -299,7 +299,7 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
     // Which bound interfaces each closure is handed to; see
     // `closure_interfaces`. Computed once rather than per layout, because it
     // is a walk of every operation in the program.
-    let (handed_to, mut classes) = (closure_interfaces(program), Vec::new());
+    let (handed_to, reactions, mut classes) = (closure_interfaces(program), reaction_types(program), Vec::new());
     for layout in &program.layouts {
         // **A bound class is in somebody's jar and we must not write one.**
         // Emitting `com/conv/Conv.class` beside the real one puts a stub with
@@ -314,7 +314,7 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
         if nts_core::hir::runtime::is_foreign_layout_name(&layout.name) || shadowed_layout(program, layout) {
             continue;
         }
-        collect(&mut classes, &mut diagnostics, object_class(package, program, layout, &plan, &handed_to));
+        collect(&mut classes, &mut diagnostics, object_class(package, program, layout, &plan, &handed_to, &reactions));
         // One empty subclass per class sharing this layout; see
         // `hierarchy::identities`. The fields stay on the layout's own class,
         // so an object is not a byte larger and a parameter declared as either
@@ -798,6 +798,88 @@ fn callable_root(package: &str, program: &Program) -> Result<Option<Class>, Diag
     })
 }
 
+/// The types a promise reaction is posted at: each `PromiseSubscribe`'s
+/// reaction operand, by the object type it holds. Their classes become
+/// `NtsResumable`; see `reaction_resume`.
+fn reaction_types(program: &Program) -> rustc_hash::FxHashSet<nts_semantic_schema::TypeId> {
+    let mut found = rustc_hash::FxHashSet::default();
+    for func in &program.funcs {
+        for op in &func.values {
+            let nts_core::hir::OpKind::PromiseSubscribe { reaction, .. } = op.kind else { continue };
+            if let Some(held) = func.values.get(reaction.0 as usize)
+                && let nts_core::hir::HirType::Managed(nts_core::hir::ManagedType::Object(id)) = held.ty
+            {
+                found.insert(id);
+            }
+        }
+    }
+    found
+}
+
+/// A reaction's `resume()`: the contract C's `nts_callback_call` keeps -- the
+/// receiver alone, nothing in, nothing out -- spelled as the `NtsResumable`
+/// `NtsPromise.subscribe` takes, so the runtime needs nothing new.
+///
+/// The written `call` where it takes no parameter (what `.finally(f)` and a
+/// `.then` handler declaring none are), else the uniform erased entry with
+/// every argument `undefined`; the answer is dropped either way. **Per class,
+/// not on the callable root**, which was the first cut: a closure nothing
+/// calls through the uniform entry has no root to inherit from -- a
+/// `(): void => {}` is `Closure0 implements NtsCallback` and nothing more.
+fn reaction_resume(
+    package: &str,
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+    builder: &mut ClassBuilder,
+    pool: &mut Pool,
+    origin: &nts_semantic_schema::Origin,
+) -> Result<(), Diagnostic> {
+    let entry = |slot: Option<u32>| {
+        let slot = slot? as usize;
+        let name = layout.methods.get(slot)?.as_ref()?;
+        let func = program.funcs.iter().find(|f| &f.name == name)?;
+        let member = hierarchy::declared_member(program, layout, slot).unwrap_or_else(|| hierarchy::member_name(name));
+        Some((member, instance_descriptor(package, program, func)?, func.params.len()))
+    };
+    let (member, descriptor, padding) = if let Some((member, descriptor, _)) =
+        entry(program.closure_slot).filter(|(_, _, params)| *params == 1)
+    {
+        (member, descriptor, 0)
+    } else if let Some((member, descriptor, _)) = entry(program.erased_call_slot) {
+        let width = nts_jvm_emitter::descriptor::parameters(&descriptor).map_or(0, |list| list.len());
+        (member, descriptor, width)
+    } else {
+        return Err(Diagnostic::error(
+            "NTS4009",
+            format!("`{}` is posted as a promise reaction and has no entry a reaction can call", layout.name),
+            origin.location,
+        ));
+    };
+    let class = types::class_name(package, layout);
+    let mut code = Code::new(vec![VType::Object(class.clone())], 1);
+    code.load(origin, Kind::Ref, 0);
+    for _ in 0..padding {
+        code.get_static(origin, pool, types::VALUE, "UNDEFINED_VALUE", types::VALUE_DESCRIPTOR);
+    }
+    code.invoke_virtual(origin, pool, &class, &member, &descriptor);
+    match descriptor.rsplit_once(')').map(|(_, result)| result) {
+        Some("V") | None => {}
+        Some("D" | "J") => code.pop(origin, 2),
+        Some(_) => code.pop(origin, 1),
+    }
+    code.ret(origin, None);
+    let body = code.finish(pool).map_err(|error| {
+        Diagnostic::error(
+            "NTS4008",
+            format!("the reaction `resume()` for `{}` could not be written: {error}", layout.name),
+            origin.location,
+        )
+    })?;
+    builder.interfaces.push(types::RESUMABLE.to_owned());
+    builder.method(access::PUBLIC, "resume", "()V", Some(body));
+    Ok(())
+}
+
 /// Which **bound Java interfaces** a closure is handed to.
 ///
 /// A closure class is emitted once and which interface it should implement
@@ -871,6 +953,7 @@ fn object_class(
     layout: &nts_core::hir::Layout,
     plan: &widen::Plan,
     handed_to: &FxHashMap<nts_semantic_schema::TypeId, Vec<String>>,
+    reactions: &rustc_hash::FxHashSet<nts_semantic_schema::TypeId>,
 ) -> Result<Option<Class>, Diagnostic> {
     let origin = program_origin(program);
     let mut pool = Pool::new();
@@ -978,6 +1061,8 @@ fn object_class(
             )
         })?;
         builder.method(access::PUBLIC, "resume", "()V", Some(rendered));
+    } else if layout.types.iter().any(|id| reactions.contains(id)) {
+        reaction_resume(package, program, layout, &mut builder, &mut pool, &origin)?;
     }
 
     // **Dispatch first, and the order is load-bearing rather than tidy.**

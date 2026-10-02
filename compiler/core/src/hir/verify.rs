@@ -290,6 +290,14 @@ pub enum Invalid {
     /// provided `Error` emitted `E#toString` because nothing declared the
     /// method and the receiver's own type was used as a fallback.
     MissingCallee { func: String, callee: String },
+    /// A promise reaction subscribed where its object has no `call` entry.
+    ///
+    /// The runtime calls `methods[slot]` with no check, so a subscription naming a
+    /// slot other than the program's closure slot, or one whose table holds
+    /// nothing there, links, loads and calls through a null the first time the
+    /// promise settles. `nts_closure_call_slot`'s own documentation says why
+    /// guessing is silent; this is the guess being checked instead.
+    UnfilledReaction { func: String, slot: u32, reaction: HirType },
     /// Two functions in one program share a name.
     ///
     /// The emitted C would define one of them twice, and a call naming it
@@ -318,10 +326,33 @@ pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
         problems.push(Invalid::NativeStorage { func: program.funcs[at].name.clone(), reason });
     }
     check_layouts(program, &mut problems);
+    check_subscriptions(program, &mut problems);
     if problems.is_empty() {
         Ok(())
     } else {
         Err(problems)
+    }
+}
+
+/// Every subscribed reaction names the closure slot, and its table fills it.
+fn check_subscriptions(program: &Program, problems: &mut Vec<Invalid>) {
+    for func in &program.funcs {
+        for op in func.blocks.iter().flat_map(|block| &block.ops).filter_map(|value| func.values.get(value.0 as usize)) {
+            let OpKind::PromiseSubscribe { reaction, slot, .. } = op.kind else {
+                continue;
+            };
+            let held = &func.values[reaction.0 as usize].ty;
+            let filled = program.closure_slot == Some(slot)
+                && matches!(held, HirType::Managed(super::ManagedType::Object(ty)) if program
+                    .layouts
+                    .iter()
+                    .find(|layout| layout.types.contains(ty))
+                    .and_then(|layout| layout.methods.get(slot as usize))
+                    .is_some_and(Option::is_some));
+            if !filled {
+                problems.push(Invalid::UnfilledReaction { func: func.name.clone(), slot, reaction: held.clone() });
+            }
+        }
     }
 }
 
@@ -1670,6 +1701,7 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         }
         OpKind::CellReady { cell, .. } => vec![*cell],
         OpKind::Suspend { promise, frame, .. } => vec![*promise, *frame],
+        OpKind::PromiseSubscribe { promise, reaction, .. } => vec![*promise, *reaction],
         OpKind::Param(_)
         | OpKind::BlockParam(_)
         | OpKind::ConstInt(_)
@@ -1970,6 +2002,60 @@ mod tests {
                 .any(|p| matches!(p, Invalid::StoreType { what: "a field read", .. })),
             "the read must be reported against the layout: {problems:#?}"
         );
+    }
+
+    /// A reaction must be subscribed at the closure slot, and its table must fill
+    /// it: the runtime calls `methods[slot]` unchecked, so either mistake is a
+    /// null call the first time the promise settles. The control is the same
+    /// program with both right, so the two arms each differ from it in one thing.
+    #[test]
+    fn a_reaction_is_subscribed_where_its_table_has_a_call() {
+        use crate::hir::{Layout, ManagedType};
+        use nts_semantic_schema::TypeId;
+
+        let program = |slot: u32, filled: bool| {
+            let values = vec![
+                Op {
+                    kind: OpKind::Call { callee: Callee::External("nts_promise_new".to_owned()), args: Vec::new(), frame: None },
+                    ty: HirType::Managed(ManagedType::Promise(Box::new(HirType::Void))),
+                    origin: origin(),
+                },
+                Op {
+                    kind: OpKind::ObjectNew { frame: false },
+                    ty: HirType::Managed(ManagedType::Object(TypeId(1))),
+                    origin: origin(),
+                },
+                Op {
+                    kind: OpKind::PromiseSubscribe { promise: ValueId(0), reaction: ValueId(1), slot },
+                    ty: HirType::Void,
+                    origin: origin(),
+                },
+            ];
+            let mut program = func(
+                values,
+                vec![block(Vec::new(), vec![ValueId(0), ValueId(1), ValueId(2)], Terminator::Return(None))],
+            );
+            program.closure_slot = Some(0);
+            program.layouts = vec![Layout {
+                types: vec![TypeId(1)],
+                name: "Closure0".to_owned(),
+                interfaces: Vec::new(),
+                fields: Vec::new(),
+                methods: vec![filled.then(|| "f".to_owned())],
+                base: None,
+            }];
+            program
+        };
+        let unfilled = |program: &Program| {
+            verify(program)
+                .err()
+                .unwrap_or_default()
+                .iter()
+                .any(|problem| matches!(problem, Invalid::UnfilledReaction { .. }))
+        };
+        assert!(!unfilled(&program(0, true)), "the control must verify");
+        assert!(unfilled(&program(1, true)), "a slot other than the closure slot must be caught");
+        assert!(unfilled(&program(0, false)), "a table with nothing at the slot must be caught");
     }
 
     /// An open read's arms may disagree about *where* and never about *what*.

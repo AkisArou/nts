@@ -1419,6 +1419,33 @@ pub enum OpKind {
         frame: ValueId,
         resume: String,
     },
+    /// Subscribe a **reaction closure** to a promise: `p.then(f)` and its
+    /// siblings. Produces nothing.
+    ///
+    /// One operation for the same reason [`Self::Suspend`] is one, plus a second:
+    /// the runtime takes an `NtsTask` **by value**, and this IR models no struct
+    /// values -- so `nts_promise_subscribe(p, nts_callback_task(r, slot, false))`
+    /// cannot be two ops with a temporary between them. Each backend writes the
+    /// nested pair, which is the shape `Suspend` already emits (a compound
+    /// literal in the argument position).
+    ///
+    /// **The reaction takes nothing and returns nothing**, which is not a
+    /// simplification but the runtime's actual contract:
+    /// `nts_callback_call` spells the callee
+    /// `((void (*)(NtsHeader *))methods[slot])(callback)` -- the receiver alone.
+    /// So a reaction that needs the settled value **captures the promise** and
+    /// reads it, exactly as a suspended frame does, rather than being handed it.
+    ///
+    /// `slot` is the reaction's own `call` index, carried because the runtime
+    /// dispatches through it and guessing is silent: `nts_closure_call_slot`'s
+    /// own documentation warns that guessing 0 "does not fail to link and does
+    /// not fail to load; it calls through a null entry the first time the task
+    /// runs".
+    PromiseSubscribe {
+        promise: ValueId,
+        reaction: ValueId,
+        slot: u32,
+    },
     /// `array[index] = value`. Produces nothing.
     ///
     /// A `checked` store may also **grow the array by one**, where the index is

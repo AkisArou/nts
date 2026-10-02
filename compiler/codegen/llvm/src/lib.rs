@@ -1078,6 +1078,44 @@ fn suspension(
         ),
     ]
     .join("\n  "),
+    // **The task is filled by the runtime, not rebuilt here.** `nts_callback_task`
+    // allocates the callback entry and takes the reference, which its own
+    // documentation calls ownership-critical code where "a second copy of it that
+    // has to stay in step is worse than a function". So this allocas the struct and
+    // lets the helper write it, which is what its `sret` parameter is for -- and then
+    // passes it exactly as the `Suspend` arm above does, by the table's spelling
+    // rather than by a guess about this platform's ABI.
+    //
+    // `repeating` is **false**: a reaction runs once and gives its reference back by
+    // running. The same doc warns that releasing on every round "frees the callback
+    // under the timer that is about to call it, which is a use-after-free that leaves
+    // the trace right, the totals balanced, and AddressSanitizer silent".
+    OpKind::PromiseSubscribe {
+        promise,
+        reaction,
+        slot,
+    } => {
+        let made = signatures::signature_on("nts_callback_task", platform)
+            .ok_or_else(|| refuse(func, "`nts_callback_task` is missing from this platform's table"))?;
+        let returned = made
+            .params
+            .first()
+            .ok_or_else(|| refuse(func, "`nts_callback_task` with no result parameter"))?;
+        let taken = signatures::signature_on("nts_promise_subscribe", platform)
+            .and_then(|known| known.params.get(1).copied())
+            .ok_or_else(|| refuse(func, "`nts_promise_subscribe` is missing from this platform's table"))?;
+        [
+            format!(
+                "call void @nts_callback_task({returned} {out}.task, ptr {}, double {slot}.0, i1 zeroext false)",
+                name(*reaction)
+            ),
+            format!(
+                "call void @nts_promise_subscribe(ptr {}, {taken} {out}.task)",
+                name(*promise)
+            ),
+        ]
+        .join("\n  ")
+    }
         other => {
             return Err(refuse(
                 func,
@@ -1889,6 +1927,9 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_check_or_grow_fn",
     "nts_slot_or_grow_fn",
     "nts_concat",
+    // A reaction's task, filled through `sret` by the raw IR `PromiseSubscribe`
+    // writes -- so no `OpKind::Call` names it and `externals` never would.
+    "nts_callback_task",
     "nts_promise_subscribe",
     "nts_index_fn",
     "nts_is_class",
@@ -2062,6 +2103,11 @@ fn frame_storage(program: &Program, func: &Func) -> Vec<String> {
                 } => Some(one_frame(&out, units)),
                 // A block's frame slot: see `OpKind::NativeBlock`.
                 OpKind::NativeBlock { .. } => Some(format!("{out}.block = alloca %nts.block, align 8")),
+                // A reaction's task, which `nts_callback_task` fills and
+                // `nts_promise_subscribe` copies out of before it returns -- so one
+                // slot per site is enough, and a `.then` in a loop does not take
+                // another 24 bytes of stack every iteration.
+                OpKind::PromiseSubscribe { .. } => Some(format!("{out}.task = alloca %struct.NtsTask, align 8")),
                 OpKind::ObjectNew { frame: true } => {
                     let placed = object_placement(program, &op.ty)?;
                     Some(format!(
@@ -3030,7 +3076,10 @@ fn allocation(
                 static_closure_name(layout)
             )
         }
-        OpKind::CellReady { .. } | OpKind::Await { .. } | OpKind::Suspend { .. } => {
+        OpKind::CellReady { .. }
+        | OpKind::Await { .. }
+        | OpKind::Suspend { .. }
+        | OpKind::PromiseSubscribe { .. } => {
             return suspension(program, func, value, &out, platform);
         }
         OpKind::ObjectNew { frame } => {
@@ -4030,7 +4079,11 @@ fn memory_operation(
         // An implementation nothing routes to reads exactly like one that was
         // never written.
         | OpKind::CellReady { .. }
-        | OpKind::Suspend { .. } => {
+        | OpKind::Suspend { .. }
+        // Routed here as well, and the comment above is why it is said twice: an
+        // implementation nothing routes to reads exactly like one that was never
+        // written, and this file has had that happen with `Suspend` itself.
+        | OpKind::PromiseSubscribe { .. } => {
             return allocation(program, func, value, &out, platform);
         }
         OpKind::ArrayGet { .. } | OpKind::ArraySet { .. } => {

@@ -613,9 +613,17 @@ fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
                 // local. Nothing failed loudly: the promise stayed pending,
                 // because the resumption was writing through a dangling
                 // pointer.
-                OpKind::Suspend { promise, frame, .. } => {
+                //
+                // **And a subscribed reaction is a frame by another name**: the
+                // runtime keeps it in the promise's reaction list and calls it after
+                // this function has returned. It reached the catch-all below when
+                // the operation was added, exactly as `Suspend` once did, and the
+                // first `.then` put its reaction -- and the handler stored in it --
+                // in the C stack frame, which segfaulted when the microtask ran.
+                OpKind::Suspend { promise, frame: handed, .. }
+                | OpKind::PromiseSubscribe { promise, reaction: handed, .. } => {
                     escaped(&mut escapes, func, *promise);
-                    escaped(&mut escapes, func, *frame);
+                    escaped(&mut escapes, func, *handed);
                 }
                 _ => {}
             }

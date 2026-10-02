@@ -137,6 +137,34 @@ fn callback_targets<'p>(
         .collect()
 }
 
+/// The values an operation hands to the runtime, which calls their methods back
+/// later: an external call's arguments, a bridge's closure, a subscribed reaction.
+///
+/// **One answer for the three readers that need it.** `prune` keeps what the
+/// runtime calls, or the body goes and its table entry is emitted as a null;
+/// [`callback_names`] makes it an `outward` edge for `interprocedural`, or a
+/// function whose only caller is the runtime has no callers, and its facts are
+/// folded from none; and the C backend's `escapes_uncalled` refuses a closure the
+/// runtime will call through a table with nothing in it. Each reader used to ask
+/// its own question: `prune` knew about the bridge and the other two did not, and
+/// none knew about a reaction -- so the first `.then` emitted its reaction's table
+/// pointing at nothing, and the microtask that called through it segfaulted.
+///
+/// Without this the body was pruned, and because the layout's entry went with it
+/// the table was emitted as a null pointer. Nothing failed the first time:
+/// `examples/timers` cancels every timer before it can fire, so the call through
+/// the null was never made -- which is what a rule with no case that executes it
+/// looks like from the outside.
+#[must_use]
+pub fn called_back(kind: &OpKind) -> &[super::ValueId] {
+    match kind {
+        OpKind::Call { callee: Callee::External(_) | Callee::Native(_), args, .. } => args,
+        OpKind::NativeBridge { closure, .. } => std::slice::from_ref(closure),
+        OpKind::PromiseSubscribe { reaction, .. } => std::slice::from_ref(reaction),
+        _ => &[],
+    }
+}
+
 /// The layout list read as a tree, once, for a walk that asks of it per call.
 ///
 /// Both questions below are searches over the whole list -- which layout holds
@@ -198,15 +226,11 @@ pub fn callback_names(program: &Program) -> Vec<&str> {
     let mut found = Vec::new();
     for func in &program.funcs {
         for op in &func.values {
-            let OpKind::Call {
-                callee: Callee::External(_) | Callee::Native(_),
-                args,
-                ..
-            } = &op.kind
-            else {
+            let handed = called_back(&op.kind);
+            if handed.is_empty() {
                 continue;
-            };
-            for name in callback_targets(program, &hierarchy, func, args) {
+            }
+            for name in callback_targets(program, &hierarchy, func, handed) {
                 if !found.contains(&name) {
                     found.push(name);
                 }
@@ -408,64 +432,27 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
             continue;
         };
         for op in &func.values {
-            // A bridge holds a closure that C will call and this program never
-            // does, so nothing here is a caller and the body would be pruned.
-            // The vtable slot is then emitted as a null and the bridge calls
-            // nothing -- which is what happened the first time, and reported as
-            // "a closure publishes no function" from the backend rather than
-            // from here.
-            //
-            // The closure was previously a direct argument of the call, so
-            // `callback_targets` below saw it. It is an operand of the bridge
-            // now, and this walk matches on `Call` rather than exhaustively, so
-            // the compiler does not ask about a new operation that reaches a
-            // function without calling it.
-            if let OpKind::NativeBridge { closure, .. } = &op.kind {
-                let bridged = std::slice::from_ref(closure);
-                for target in callback_targets(program, &hierarchy, func, bridged) {
-                    if let Some(callee) = by_name.get(target).map(|at| &program.funcs[*at])
-                        && reached.insert(callee.name.as_str())
-                    {
-                        pending.push(callee.name.as_str());
-                    }
-                }
-            }
-            let OpKind::Call { callee, args, .. } = &op.kind else {
-                continue;
-            };
+            // What the runtime calls back is reached, whether or not anything here
+            // calls it: see [`called_back`].
+            let handed = called_back(&op.kind);
+            let mut targets =
+                if handed.is_empty() { Vec::new() } else { callback_targets(program, &hierarchy, func, handed) };
             // A virtual call reaches *every* implementation of its slot, because
             // which one runs is decided by a receiver this cannot see. Keeping
             // only the one the static type names would prune an override that a
             // table still points at, and a table entry the linker cannot resolve
             // is a link error at best.
-            let targets: Vec<&str> = match callee {
-                Callee::Direct(target) => vec![target.as_str()],
-                // An external callee is not in this program and the linker
-                // supplies it -- but a *closure* handed to one is called back
-                // through its method table, which is what `setTimeout` does
-                // with its callback. So the methods of whatever object was
-                // passed are reachable.
-                //
-                // Without this the body was pruned, and because the layout's
-                // entry went with it the table was emitted as a null pointer.
-                // Nothing failed: `examples/timers` cancels every timer before
-                // it can fire, so the call through the null was never made --
-                // which is what a rule with no case that executes it looks
-                // like from the outside.
-                // An external callee is not in this program and the linker
-                // supplies it -- but a *closure* handed to one is called back
-                // through its method table, which is what `setTimeout` does
-                // with its callback.
-                Callee::External(_) | Callee::Native(_) => {
-                    callback_targets(program, &hierarchy, func, args)
-                }
-                Callee::Virtual { slot, .. } | Callee::Closure { slot } => program
-                    .layouts
-                    .iter()
-                    .filter_map(|layout| layout.methods.get(*slot as usize))
-                    .filter_map(|method| method.as_deref())
-                    .collect(),
-            };
+            match &op.kind {
+                OpKind::Call { callee: Callee::Direct(target), .. } => targets.push(target.as_str()),
+                OpKind::Call { callee: Callee::Virtual { slot, .. } | Callee::Closure { slot }, .. } => targets.extend(
+                    program
+                        .layouts
+                        .iter()
+                        .filter_map(|layout| layout.methods.get(*slot as usize))
+                        .filter_map(|method| method.as_deref()),
+                ),
+                _ => {}
+            }
             for target in targets {
                 if let Some(callee) = by_name.get(target).map(|at| &program.funcs[*at])
                     && reached.insert(callee.name.as_str())

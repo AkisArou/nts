@@ -1472,6 +1472,7 @@ impl Emitter<'_> {
             OpKind::Suspend { promise, frame, .. } => {
                 self.suspend(code, pool, *promise, *frame, &origin)?
             }
+            OpKind::PromiseSubscribe { promise, reaction, .. } => self.promise_subscribe(code, pool, *promise, *reaction, &origin)?,
             OpKind::InstanceOf { value, classes } if classes.len() != 1 => {
                 self.instance_of_any(code, pool, *value, classes, &origin)?
             }
@@ -2562,6 +2563,34 @@ impl Emitter<'_> {
     ) -> Result<Placed, Diagnostic> {
         self.load(code, pool, promise)?;
         self.load(code, pool, frame)?;
+        code.invoke_static(
+            origin,
+            pool,
+            types::PROMISE,
+            "subscribe",
+            "(Lnts/rt/NtsPromise;Lnts/rt/NtsResumable;)V",
+        );
+        Ok(Placed::Stored)
+    }
+
+    /// Post a reaction on a promise: the closure runs once, as a microtask, when
+    /// the promise settles -- or at the next checkpoint if it already has.
+    ///
+    /// C posts `nts_callback_task(r, slot)`, which calls `methods[slot]` with the
+    /// receiver alone. Here the same contract is `NtsResumable.resume()`, which
+    /// each class a reaction is posted at implements (`reaction_resume` in
+    /// lib.rs), so `slot` -- a C table index -- has no JVM reading.
+    fn promise_subscribe(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        promise: ValueId,
+        reaction: ValueId,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        self.load(code, pool, promise)?;
+        self.load(code, pool, reaction)?;
+        code.check_cast(origin, pool, types::RESUMABLE);
         code.invoke_static(
             origin,
             pool,

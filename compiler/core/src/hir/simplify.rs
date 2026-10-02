@@ -225,6 +225,11 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
             frame: second,
             ..
         }
+        | OpKind::PromiseSubscribe {
+            promise: first,
+            reaction: second,
+            ..
+        }
         | OpKind::NativeBlock {
             invoke: first,
             context: second,
