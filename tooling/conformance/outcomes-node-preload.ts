@@ -59,7 +59,15 @@ registerHooks({
 });
 
 const report = (error) => {
-  const name = error?.constructor?.name;
+  // **Of an object only.** A primitive has a constructor too -- `"x".constructor`
+  // is `String`, through the wrapper a property read makes -- so asking every
+  // value printed a rejected string as `String: ` and dropped its text, where nts
+  // prints the string. The paragraph above said a non-object prints as its
+  // String(); the code did not ask whether it had one.
+  // (Found by `a-rejection-passed-through-a-then-is-reported`.)
+  const name = (typeof error === "object" && error !== null) || typeof error === "function"
+    ? error.constructor?.name
+    : undefined;
   const message = error?.message;
   process.stderr.write(
     name === undefined ? `nts: uncaught ${String(error)}\n` : `nts: uncaught ${name}: ${message ?? ""}\n`,
