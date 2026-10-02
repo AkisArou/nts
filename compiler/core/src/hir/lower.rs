@@ -4624,6 +4624,24 @@ fn walk_one_declaration(
         {
             reached.push(Reached::Body(base));
         }
+        // **An object binding pattern in the parameter list throws before the body runs.**
+        // `function fn({}) {}` called `fn(null)` must throw a `TypeError`
+        // (`RequireObjectCoercible`), and that throw is in `fn`'s own frame -- so `fn` can
+        // raise, and a `try` around a call to it needs `fn`'s raising copy.
+        //
+        // **A synthesised throw is in no `THROW_STATEMENT`**, which is the whole reason
+        // this arm exists: the walk below looks for the keyword, and
+        // [`FuncBuilder::require_object_coercible`] emits a throw the source never wrote.
+        // Without it the guard turns a silent wrong answer into an **abort** -- the
+        // TypeError reaches `nts_uncaught` while `assert.throws`' handler watches nothing --
+        // and an abort erases every observation in its program, so that is the worse of the
+        // two. The same shape as the class-with-a-throwing-field-initialiser arm above.
+        if parameters_of(probe, declaration)
+            .iter()
+            .any(|parameter| a_parameter_pattern_can_throw(probe, *parameter))
+        {
+            throws.insert(symbol);
+        }
         let own: rustc_hash::FxHashSet<NodeId> =
             parameters_of(probe, declaration).into_iter().collect();
         let mut pending: Vec<NodeId> = children_that_run(probe, declaration);
@@ -14514,6 +14532,65 @@ fn holds_only_absences(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
         && members
             .iter()
             .all(|member| absence_of_member(snapshot, *member).is_some())
+}
+
+/// Whether this binding pattern runs `RequireObjectCoercible` on its own source: an object
+/// pattern, anywhere but directly inside an **array** pattern.
+///
+/// Step 1 of `BindingInitialization` says every object pattern does, and this stops one case
+/// short of that for a reason measured rather than argued. A nested pattern's source is a
+/// *read*: inside an object pattern it is a **property** read, which cannot fail on a
+/// present object; inside an array pattern it is an **element** read, and reading past the
+/// end is a run-time decline in this compiler today -- `const [a, b] = [1]` stops the
+/// program where node answers `undefined`. `function f([{ x }]) {}` called `f([])` leaves
+/// that read dead because `x` is unused, and asking about it makes it live: the test262 cases
+/// `ary-ptrn-elem-obj-val-{null,undef}.js` went from a wrong answer to a **crash**, 6 of
+/// them, which is worse -- an abort erases every observation in its program.
+///
+/// Measured both ways on the recorded language set: without the array exclusion **51 FIXED,
+/// 6 REGRESSED, 6 CHANGED**; excluding every nested pattern, **31 FIXED, 0 REGRESSED** -- and
+/// the 20 in between are all `obj-ptrn-prop-obj-value-null`, nested inside an *object*
+/// pattern, which is what says the line belongs between the two kinds of nesting rather than
+/// at the root. The remaining 12 arrive with *"a pattern element past the end of its array is
+/// `undefined`"*, which is its own item with its own cost -- a bounds test per element.
+///
+/// **One predicate, two readers**, because the two run at different times and disagreeing is
+/// a throw with no handler path: [`FuncBuilder::require_object_coercible`] asks it of the
+/// pattern it is binding, and [`a_parameter_pattern_can_throw`] asks whether any pattern in a
+/// parameter satisfies it -- which is what makes the declaration a raiser.
+fn a_pattern_that_requires_coercion(probe: &FuncBuilder, pattern: NodeId) -> bool {
+    probe.kind_of(pattern) == Some(syntax::OBJECT_BINDING_PATTERN)
+        && !probe.syntactic_parent(pattern).is_some_and(|element| {
+            probe
+                .syntactic_parent(element)
+                .is_some_and(|outer| probe.kind_of(outer) == Some(syntax::ARRAY_BINDING_PATTERN))
+        })
+}
+
+/// Whether any pattern in this parameter can throw, which is what puts its function in
+/// `Throwing::any`.
+///
+/// Over the whole pattern tree rather than the parameter's own name, because
+/// `function f({ w: { x } }) {}` throws from the *inner* pattern when `w` is null -- 20 of
+/// the recorded cases are exactly that shape.
+fn a_parameter_pattern_can_throw(probe: &FuncBuilder, parameter: NodeId) -> bool {
+    let mut pending = probe.children(parameter);
+    while let Some(at) = pending.pop() {
+        if a_pattern_that_requires_coercion(probe, at) {
+            return true;
+        }
+        if matches!(
+            probe.kind_of(at),
+            Some(
+                syntax::OBJECT_BINDING_PATTERN
+                    | syntax::ARRAY_BINDING_PATTERN
+                    | syntax::BINDING_ELEMENT
+            )
+        ) {
+            pending.extend(probe.children(at));
+        }
+    }
+    false
 }
 
 fn absence_of_member(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Absence> {
@@ -50636,8 +50713,85 @@ impl<'a> FuncBuilder<'a> {
         Ok(read)
     }
 
+    /// `RequireObjectCoercible(value)`, which an object binding pattern runs **before** it
+    /// reads anything: step 1 of `BindingInitialization` for an `ObjectBindingPattern`.
+    ///
+    /// `function fn({}) {}` called as `fn(null)` must throw a `TypeError`. This compiler
+    /// bound nothing and went on -- `outcomes/a-parameter-pattern-given-null`, and most of
+    /// test262's 147 `assert.throws: nothing was thrown` cases.
+    ///
+    /// **The check cannot live at the property read, which is why it is here.** A pattern
+    /// with elements reads one, and a read of an erased value is already refused by name;
+    /// the shape that *compiles and answers wrongly* is the **empty** pattern, which reads
+    /// nothing at all. Measured on the materialised case: `fn({})` lowers to
+    /// `func fn(arg0: erased)` with a body of `ret`, while `fn({ a })` refuses at the
+    /// argument. So the silent half is exactly the half no read can guard.
+    ///
+    /// **Keyed on [`a_type_that_can_be_absent`] rather than on [`Self::absence_of`]**, and
+    /// the difference is load-bearing: that one answers a *representation* question and says
+    /// yes to every reference, so a guard keyed on it would throw inside a function
+    /// [`walk_one_declaration`] never called a raiser. One predicate, two readers. The
+    /// representation is consulted only to *build* the test, which is what `absence_of` is
+    /// for -- a tag pair for an erased value, a null pointer for a reference.
+    ///
+    /// The block shape is [`Self::guard_code_point`]'s and the throw is
+    /// [`Self::throw_provided_error`] -- the entry point that exists for *"a check the
+    /// language specifies and a runtime helper cannot make"*, because a `TypeError` is laid
+    /// out by the program rather than by the runtime.
+    ///
+    /// **An array pattern is a different step and is not this.** The specification runs
+    /// `GetIterator` there and node says `null is not iterable`; over a null the argument is
+    /// already refused as *"an erased value where a concrete representation is wanted"* -- a
+    /// refusal rather than a wrong answer, so it belongs to the iterator item.
+    fn require_object_coercible(
+        &mut self,
+        pattern: NodeId,
+        value: ValueId,
+    ) -> Result<(), Diagnostic> {
+        if !a_pattern_that_requires_coercion(self, pattern) {
+            return Ok(());
+        }
+        let Some(absent) = self.absence_of(pattern, value) else {
+            return Ok(());
+        };
+        let throwing = self.new_block();
+        let carry_on = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: absent,
+            then_target: throwing,
+            then_args: Vec::new(),
+            else_target: carry_on,
+            else_args: Vec::new(),
+        });
+        self.switch_to(throwing);
+        // Node's text is value-dependent -- `Cannot destructure 'object null' as it is
+        // null.` for a parameter, `Cannot destructure property 'a' of 'undefined' as it is
+        // undefined.` for a named one -- and test262 asserts the *type* alone. One sentence
+        // naming the operation is the honest answer; a fixture printing the message would
+        // diverge on wording nobody specified.
+        self.throw_provided_error(
+            pattern,
+            "TypeError",
+            "Cannot destructure a null or undefined value",
+        )?;
+        if !self.is_terminated() {
+            self.terminate(Terminator::Jump {
+                target: carry_on,
+                args: Vec::new(),
+            });
+        }
+        self.switch_to(carry_on);
+        Ok(())
+    }
+
     fn bind_pattern(&mut self, pattern: NodeId, value: ValueId) -> Result<(), Diagnostic> {
         let object = self.kind_of(pattern) == Some(syntax::OBJECT_BINDING_PATTERN);
+        // **Step 1, before any element is read.** An object pattern over `null` or
+        // `undefined` throws a `TypeError`, and an *empty* one reads nothing -- so this is
+        // the only place the check can be. See [`Self::require_object_coercible`].
+        if object {
+            self.require_object_coercible(pattern, value)?;
+        }
         for (position, element) in self.children(pattern).into_iter().enumerate() {
             if self.kind_of(element) != Some(syntax::BINDING_ELEMENT) {
                 return Err(self.unsupported(element, "a binding of unexpected shape"));
