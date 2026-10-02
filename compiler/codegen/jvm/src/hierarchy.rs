@@ -484,12 +484,16 @@ pub fn implemented(package: &str, program: &Program, layout: &Layout) -> Vec<Str
 #[must_use]
 pub fn uniform_member(program: &Program, slot: usize) -> Option<String> {
     let erased = program.erased_call_slot? as usize;
+    let raising_slot = program.raising_call_slot.map(|slot| slot as usize);
+    // The ordinary entry's member, from a layout that fills it -- or, where every
+    // callable fills only the raising one, from that body's name less its
+    // suffix: the two are one member and its raising variant.
     let ordinary = || {
-        program
-            .layouts
-            .iter()
-            .find_map(|layout| layout.methods.get(erased)?.as_ref())
-            .map(|name| member_name(name))
+        let filled = |slot: usize| program.layouts.iter().find_map(|layout| layout.methods.get(slot)?.as_ref());
+        filled(erased).map(|name| member_name(name)).or_else(|| {
+            let name = filled(raising_slot?)?;
+            Some(member_name(name.strip_suffix("@raises").unwrap_or(name)))
+        })
     };
     if slot == erased {
         return ordinary();

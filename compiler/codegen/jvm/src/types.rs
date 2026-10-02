@@ -112,10 +112,15 @@ pub fn callable_class(package: &str) -> String {
 /// `closure_slot` would renumber the table.
 #[must_use]
 pub fn is_callable(program: &nts_core::hir::Program, layout: &Layout) -> bool {
-    program
-        .erased_call_slot
-        .and_then(|slot| layout.methods.get(slot as usize))
-        .is_some_and(Option::is_some)
+    // Either uniform entry. A closure every call to which is inside a `try`
+    // keeps only its raising entry -- the ordinary one is a different program
+    // and prune drops what nothing calls -- and asking only the erased slot
+    // made it not callable: no `Callable` root, so storing it where its
+    // signature is declared was refused (2026-10-02, `run(() => fail())`).
+    [program.erased_call_slot, program.raising_call_slot]
+        .into_iter()
+        .flatten()
+        .any(|slot| layout.methods.get(slot as usize).is_some_and(Option::is_some))
 }
 
 /// Whether a layout is a *signature*: callable at the entry, and no closure's

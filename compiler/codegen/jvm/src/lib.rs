@@ -771,12 +771,17 @@ fn callable_root(package: &str, program: &Program) -> Result<Option<Class>, Diag
             Some((member, instance_descriptor(package, program, func)?))
         })
     };
-    let Some(erased) = program.erased_call_slot.and_then(entry_at) else { return Ok(None) };
-    let mut entries = vec![erased];
-    if let Some(raising) = program.raising_call_slot.and_then(entry_at)
-        && !entries.contains(&raising)
-    {
-        entries.push(raising);
+    // Either uniform entry makes a program need the root: a closure every call
+    // to which is inside a `try` fills only the raising one, and is callable
+    // all the same (`types::is_callable`).
+    let mut entries = Vec::new();
+    for entry in [program.erased_call_slot, program.raising_call_slot].into_iter().flatten().filter_map(entry_at) {
+        if !entries.contains(&entry) {
+            entries.push(entry);
+        }
+    }
+    if entries.is_empty() {
+        return Ok(None);
     }
     let origin = program_origin(program);
     let mut pool = Pool::new();
