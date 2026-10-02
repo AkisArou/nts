@@ -361,7 +361,7 @@ pub fn fold_comparisons(func: &mut super::Func) -> usize {
 #[cfg(test)]
 mod representation {
     use super::super::native::{Family, Handle, Pointee};
-    use super::{handle_tag, of_representation};
+    use super::{FUNCTION, OBJECT, handle_tag, of_reference, of_representation};
     use crate::hir::HirType;
 
     fn handle(family: Family) -> HirType {
@@ -385,6 +385,16 @@ mod representation {
     /// Written over the families rather than over one of them because the arm
     /// that was missing was missing for all three, and a test naming `GObject`
     /// alone would have let the next one through.
+    #[test]
+    fn a_provided_errors_instance_is_an_object_and_its_class_a_function() {
+        // `typeof new RangeError()` and `typeof RangeError`: the instance and the
+        // class used as a value, both in the provided classes' bands above
+        // `SYNTHETIC_CLOSURES`, and only the class is a function.
+        use crate::hir::{ManagedType, constructor_token, provided_error_type};
+        assert_eq!(of_reference(&ManagedType::Object(provided_error_type(0))), OBJECT);
+        assert_eq!(of_reference(&ManagedType::Object(constructor_token(0))), FUNCTION);
+    }
+
     #[test]
     fn a_handles_representation_tag_is_its_familys() {
         for family in [Family::GObject, Family::Objc, Family::Com] {

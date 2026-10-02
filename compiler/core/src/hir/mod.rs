@@ -2212,9 +2212,29 @@ pub fn generator_frame(index: usize) -> TypeId {
 /// `"function"` in JavaScript, and the tag a value carries is decided by this
 /// question -- so a class used as a value is a closure's class here for the
 /// same reason a named function used as a value is one.
+///
+/// **A provided error's *instance* answers no**, and answered yes until
+/// 2026-10-02 only because its band ([`PROVIDED_ERRORS`]) sits above
+/// `SYNTHETIC_CLOSURES`. An instance of `RangeError` is an object: `typeof` it
+/// is `"object"`. Every backend picks an erased value's tag by asking this --
+/// `tags::of_reference`, the C and LLVM erase -- so a provided error erased
+/// before it was handed on carried `FUNCTION`; C answered `typeof` from the
+/// runtime descriptor and hid it, and the JVM, which trusts the tag, answered
+/// "function" for a dynamic `import()`'s rejection reason. `fields` and
+/// `monomorphize` asked it too, and would have taken an error object for a
+/// closure. The JVM lane found the band; one predicate, so every reader is fixed
+/// by one line.
 #[must_use]
 pub const fn is_closure_type(ty: TypeId) -> bool {
-    ty.0 >= SYNTHETIC_CLOSURES
+    ty.0 >= SYNTHETIC_CLOSURES && !is_provided_error_type(ty)
+}
+
+/// Whether a type id names an *instance* of a class this compiler provides --
+/// [`provided_error_type`], the object `"x".repeat(-1)` throws -- rather than
+/// the class used as a value, which is a [`constructor_token`].
+#[must_use]
+pub const fn is_provided_error_type(ty: TypeId) -> bool {
+    ty.0 >= PROVIDED_ERRORS && ty.0 < CONSTRUCTOR_TOKENS
 }
 
 /// Whether a type id names a closure that has a body of its own.
