@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler d3923f20acbfff48, commit 861730566357f62155c4316567460992f4e417b0, harness 3b36e94947c1b127; machine at start: 19.8 GB available, swap 7.6/20 GB, load 5.8/3.8 (1m/5m), 32 cores; 8 worker(s)
+# compiler 285fa440f02c74b3, commit 6899373a5a852710b94b85c27a8187fbca74661b, harness c4dfc394ff30b222; machine at start: 19.5 GB available, swap 7.5/20 GB, load 11.5/11.8 (1m/5m), 32 cores; 8 worker(s)
 test/language/arguments-object/10.5-1gs.js	pass	
 test/language/asi/S7.9.2_A1_T1.js	pass	
 test/language/asi/S7.9.2_A1_T2.js	pass	
@@ -2347,6 +2347,8 @@ test/language/expressions/does-not-equals/S11.9.2_A6.2_T2.js	pass
 test/language/expressions/does-not-equals/bigint-and-bigint.js	pass	
 test/language/expressions/dynamic-import/escape-sequence-import.js	pass	
 test/language/expressions/dynamic-import/import-attributes/2nd-param-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/reuse-namespace-object-from-script.js	pass	
+test/language/expressions/dynamic-import/reuse-namespace-object.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/invalid-assignmenttargettype-syntax-error-1-update-expression.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/invalid-assignmenttargettype-syntax-error-10-lhs-assignment-operator-assignment-expression.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/invalid-assignmenttargettype-syntax-error-11-lhs-assignment-operator-assignment-expression.js	fail	accepted: was refused later (lowering)
@@ -2687,6 +2689,76 @@ test/language/expressions/dynamic-import/syntax/invalid/top-level-not-extensible
 test/language/expressions/dynamic-import/syntax/invalid/top-level-typeof-import-call-source-property.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/top-level-typeof-import-source.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/top-level-typeof-import.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-arrow-assignment-expression-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-arrow-assignment-expression-script-code-valid.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-arrow-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-arrow-script-code-valid.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-async-arrow-function-await-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-async-arrow-function-await-script-code-valid.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-async-arrow-function-return-await-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-async-arrow-function-return-await-script-code-valid.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-async-function-await-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-async-function-await-script-code-valid.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-async-function-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-async-function-return-await-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-async-function-return-await-script-code-valid.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-async-function-script-code-valid.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-async-gen-await-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-async-gen-await-script-code-valid.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-block-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-block-labeled-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-block-labeled-script-code-valid.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-block-script-code-valid.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-do-while-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-do-while-script-code-valid.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-else-braceless-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-else-braceless-script-code-valid.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-else-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-else-script-code-valid.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-function-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-function-return-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-function-return-script-code-valid.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-function-script-code-valid.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-if-braceless-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-if-braceless-script-code-valid.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-if-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-if-script-code-valid.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-while-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/nested-while-script-code-valid.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/top-level-import-attributes-trailing-comma-first.js	pass	
+test/language/expressions/dynamic-import/syntax/valid/top-level-script-code-valid.js	pass	
+test/language/expressions/dynamic-import/usage/nested-arrow-assignment-expression-eval-script-code-host-resolves-module-code.js	pass	
+test/language/expressions/dynamic-import/usage/nested-arrow-assignment-expression-returns-thenable.js	pass	
+test/language/expressions/dynamic-import/usage/nested-arrow-import-then-eval-script-code-host-resolves-module-code.js	pass	
+test/language/expressions/dynamic-import/usage/nested-arrow-import-then-returns-thenable.js	pass	
+test/language/expressions/dynamic-import/usage/nested-async-arrow-function-await-eval-script-code-host-resolves-module-code.js	pass	
+test/language/expressions/dynamic-import/usage/nested-async-arrow-function-await-returns-thenable.js	pass	
+test/language/expressions/dynamic-import/usage/nested-async-arrow-function-return-await-eval-script-code-host-resolves-module-code.js	pass	
+test/language/expressions/dynamic-import/usage/nested-async-arrow-function-return-await-returns-thenable.js	pass	
+test/language/expressions/dynamic-import/usage/nested-async-function-await-eval-script-code-host-resolves-module-code.js	pass	
+test/language/expressions/dynamic-import/usage/nested-async-function-await-returns-thenable.js	pass	
+test/language/expressions/dynamic-import/usage/nested-async-function-eval-script-code-host-resolves-module-code.js	pass	
+test/language/expressions/dynamic-import/usage/nested-async-function-return-await-eval-script-code-host-resolves-module-code.js	pass	
+test/language/expressions/dynamic-import/usage/nested-async-function-return-await-returns-thenable.js	pass	
+test/language/expressions/dynamic-import/usage/nested-async-function-returns-thenable.js	pass	
+test/language/expressions/dynamic-import/usage/nested-block-import-then-eval-script-code-host-resolves-module-code.js	pass	
+test/language/expressions/dynamic-import/usage/nested-block-import-then-returns-thenable.js	pass	
+test/language/expressions/dynamic-import/usage/nested-do-while-eval-script-code-host-resolves-module-code.js	pass	
+test/language/expressions/dynamic-import/usage/nested-do-while-returns-thenable.js	pass	
+test/language/expressions/dynamic-import/usage/nested-else-import-then-eval-script-code-host-resolves-module-code.js	pass	
+test/language/expressions/dynamic-import/usage/nested-else-import-then-returns-thenable.js	pass	
+test/language/expressions/dynamic-import/usage/nested-function-import-then-eval-script-code-host-resolves-module-code.js	pass	
+test/language/expressions/dynamic-import/usage/nested-function-import-then-returns-thenable.js	pass	
+test/language/expressions/dynamic-import/usage/nested-if-braceless-eval-script-code-host-resolves-module-code.js	pass	
+test/language/expressions/dynamic-import/usage/nested-if-braceless-returns-thenable.js	pass	
+test/language/expressions/dynamic-import/usage/nested-if-import-then-eval-script-code-host-resolves-module-code.js	pass	
+test/language/expressions/dynamic-import/usage/nested-if-import-then-returns-thenable.js	pass	
+test/language/expressions/dynamic-import/usage/nested-while-import-then-eval-script-code-host-resolves-module-code.js	pass	
+test/language/expressions/dynamic-import/usage/nested-while-import-then-returns-thenable.js	pass	
+test/language/expressions/dynamic-import/usage/syntax-nested-block-labeled-eval-script-code-host-resolves-module-code.js	pass	
+test/language/expressions/dynamic-import/usage/syntax-nested-block-labeled-returns-thenable.js	pass	
+test/language/expressions/dynamic-import/usage/top-level-import-then-eval-script-code-host-resolves-module-code.js	pass	
+test/language/expressions/dynamic-import/usage/top-level-import-then-returns-thenable.js	pass	
 test/language/expressions/equals/S11.9.1_A2.4_T1.js	pass	
 test/language/expressions/equals/S11.9.1_A3.1.js	pass	
 test/language/expressions/equals/S11.9.1_A4.2.js	pass	
