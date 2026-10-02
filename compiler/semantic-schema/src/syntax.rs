@@ -97,6 +97,10 @@ pub const EXPORT_KEYWORD: u16 = 94;
 /// documentation gives a different number.
 pub const NULL_KEYWORD: u16 = 105;
 pub const SUPER_KEYWORD: u16 = 107;
+/// The callee of a dynamic `import(...)`: a call whose callee is the keyword.
+/// Pinned by `dynamic_import_calls_the_import_keyword` against a real encoded
+/// program, not only by the name table.
+pub const IMPORT_KEYWORD: u16 = 101;
 /// Also determined empirically.
 /// `function (…) { … }` as a value, named or not.
 ///

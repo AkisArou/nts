@@ -261,6 +261,12 @@ struct ModuleScope {
     /// built for it by anybody, and the backend failed with `an object type
     /// with no layout` on a program the lowering had called clean.
     layouts: Vec<Layout>,
+    /// Which modules run at startup and which only when `import()` first reaches
+    /// them. See [`module_roles`].
+    roles: ModuleRoles,
+    /// By module index, for each lazy module: the globals its evaluation keeps --
+    /// whether it has run, and what it threw. See [`LazyModule`].
+    evaluated: Vec<Option<LazyModule>>,
     /// Declarations refused on sight rather than on use.
     ///
     /// The laziness above is right for *data* — a constant nothing reads is not
@@ -2205,6 +2211,10 @@ enum ClosureSource {
     /// the specification's `PromiseReaction` pair and the `NewPromiseReactionJob`
     /// that runs it, as one closure. The node is the call. See [`reactions`].
     Reaction,
+    /// The job an `import()` of one module queues: evaluate it if it has not
+    /// run, then settle the import's promise with its namespace or its error. The
+    /// node is the module's root. See [`module_jobs`].
+    ModuleJob { module: usize },
 }
 
 /// Which `then` a [`ClosureSource::Job`] calls.
@@ -2322,6 +2332,11 @@ fn thenable_job_fields(thenable: HirType) -> Vec<Field> {
     ]
 }
 
+/// A module job's one field: the import's promise.
+fn module_job_fields(promise: HirType) -> Vec<Field> {
+    vec![Field { name: "promise".to_owned(), ty: promise, readonly: true, declared_by: None }]
+}
+
 /// A resolving function's fields: the promise, and which pair it is.
 fn resolving_function_fields() -> Vec<Field> {
     vec![
@@ -2381,6 +2396,20 @@ fn reactions(probe: &FuncBuilder, closures: &mut Vec<ClosureInfo>) {
             refusal: generic.then_some(A_REACTION_IN_A_GENERIC),
             ..ClosureInfo::as_written(site)
         });
+    }
+}
+
+/// One job per module an `import()` names: see [`ClosureSource::ModuleJob`].
+/// Per module rather than per site, because what a job does depends only on the
+/// module -- every `import()` of it settles with the same namespace or error.
+fn module_jobs(snapshot: &SemanticSnapshot, roles: &ModuleRoles, closures: &mut Vec<ClosureInfo>) {
+    for (module, namespace) in roles.namespace.iter().enumerate() {
+        if namespace.is_some() {
+            closures.push(ClosureInfo {
+                source: ClosureSource::ModuleJob { module },
+                ..ClosureInfo::as_written(snapshot.modules[module].root)
+            });
+        }
     }
 }
 
@@ -6937,6 +6966,10 @@ fn collect_module_scope(
     // What materializing the globals' types produced. Nothing else collects
     // from this walk, which is why they were missing.
     scope.layouts = probe.layouts;
+    // Which modules run at startup and which only when `import()` reaches them,
+    // and the globals each lazy one keeps: part of the scope, because every
+    // builder reads it and a global must exist before a function names it.
+    add_lazy_modules(snapshot, &mut scope);
     scope
 }
 
@@ -10472,6 +10505,7 @@ impl Shared {
             std::rc::Rc::new(thenables(snapshot, &probe, hierarchy, &naming.raising_then, &mut closures));
         // And for the same reason: a reaction captures nothing a copy could re-type.
         reactions(&probe, &mut closures);
+        module_jobs(snapshot, &module.roles, &mut closures);
         Self {
             module: module.clone(),
             hierarchy: hierarchy.clone(),
@@ -10708,7 +10742,10 @@ fn evaluated_reads(probe: &FuncBuilder, id: NodeId, visit: &mut impl FnMut(NodeI
     }
 }
 
-#[must_use]
+/// The eager modules' statements in evaluation order, for `module#init`; and
+/// each lazy module's own, for its `#evaluate`.
+type ModuleStatements = (Option<(NodeId, Vec<NodeId>)>, Vec<(usize, Vec<NodeId>)>, Vec<Diagnostic>);
+
 /// Every top-level statement in the program, in the order they must run.
 ///
 /// Within a file that is source order. *Across* files it is the module graph,
@@ -10722,9 +10759,8 @@ fn evaluated_reads(probe: &FuncBuilder, id: NodeId, visit: &mut impl FnMut(NodeI
 /// -- describing a state the function below has not been in for some time.
 /// `examples/module-order` is four files with top-level statements in each,
 /// written to pin the order against node, and it has been green throughout.
-fn module_statements(
-    snapshot: &SemanticSnapshot,
-) -> (Option<(NodeId, Vec<NodeId>)>, Vec<Diagnostic>) {
+#[must_use]
+fn module_statements(snapshot: &SemanticSnapshot, lazy: &[bool]) -> ModuleStatements {
     let probe = FuncBuilder::probe(snapshot);
     let mut refusals = Vec::new();
 
@@ -10752,7 +10788,7 @@ fn module_statements(
         }
     }
 
-    let (order, cycles) = evaluation_order(snapshot);
+    let (order, cycles) = evaluation_order(snapshot, lazy);
 
     // Cycles are *evaluated*, not refused. ES modules specify them, node runs
     // them, and the post-order walk above already handles one the way
@@ -10782,7 +10818,13 @@ fn module_statements(
         }
         statements.extend(per_module[at].iter().copied());
     }
-    (anchor.map(|file| (file, statements)), refusals)
+    // A lazy module keeps its statements to itself: they run when `import()`
+    // first reaches it, by its `#evaluate`, and not in the order above.
+    let deferred = (0..snapshot.modules.len())
+        .filter(|at| lazy.get(*at).copied().unwrap_or(false))
+        .map(|at| (at, std::mem::take(&mut per_module[at])))
+        .collect();
+    (anchor.map(|file| (file, statements)), deferred, refusals)
 }
 
 /// Evaluation order, and any cycles found on the way.
@@ -10823,14 +10865,171 @@ fn module_statements(
 /// executable may evaluate a module nothing imports, which node would not; the
 /// alternative is not evaluating a library's modules at all.
 #[must_use]
-fn evaluation_order(snapshot: &SemanticSnapshot) -> (Vec<usize>, Vec<Vec<usize>>) {
+/// Which modules are evaluated at startup, and which only when an `import()`
+/// first reaches them.
+#[derive(Clone, Debug, Default)]
+struct ModuleRoles {
+    /// By module index: reached only through `import()` -- and through the static
+    /// imports of modules that are -- so evaluated by its own `#evaluate` the first
+    /// time a dynamic import asks, and never by `module#init`.
+    lazy: Vec<bool>,
+    /// By module index: the namespace an `import()` naming it resolves with -- the
+    /// checker's type for it, which is `Promise<namespace>`'s argument.
+    namespace: Vec<Option<TypeId>>,
+}
+
+/// The two globals a lazy module's evaluation keeps.
+#[derive(Clone, Copy, Debug)]
+struct LazyModule {
+    /// [`EVALUATING`], [`EVALUATED`] or [`FAILED`] once it has started; zero
+    /// before.
+    state: u32,
+    /// What its evaluation threw, which every later `import()` of it rejects with:
+    /// a module is evaluated once, and so fails once.
+    error: u32,
+}
+
+/// A lazy module's states, held in its [`LazyModule::state`] global.
+const EVALUATING: i128 = 1;
+const EVALUATED: i128 = 2;
+const FAILED: i128 = 3;
+
+/// The roles of every module: see [`ModuleRoles`].
+///
+/// **A dynamic import is an edge `link_modules` does not record** -- the module
+/// graph holds static imports and re-exports only -- so a module reached only by
+/// `import()` used to look like one nothing imports: a *root*, evaluated first,
+/// at startup. The edge comes from the checker's type for the call,
+/// `Promise<namespace>`, whose namespace's symbol is the imported module's root
+/// symbol: the key `link_modules` resolves a static import by, so the two edges
+/// cannot disagree about which module a specifier names.
+///
+/// Eager is the static closure of the static roots -- modules no static import
+/// and no `import()` names. Lazy is what an `import()` target reaches through
+/// static imports and the eager set does not. A module in neither (a component
+/// with nothing outside it) stays as it was: evaluated at startup.
+fn module_roles(snapshot: &SemanticSnapshot) -> ModuleRoles {
+    let probe = FuncBuilder::probe(snapshot);
+    let count = snapshot.modules.len();
+    let mut namespace: Vec<Option<TypeId>> = vec![None; count];
+    for at in 0..snapshot.nodes.len() {
+        let call = NodeId(u32::try_from(at).unwrap_or(u32::MAX));
+        if !is_a_dynamic_import(&probe, call) {
+            continue;
+        }
+        if let Some(target) = dynamic_import_namespace(snapshot, call)
+            && let Some(module) = module_of_namespace(snapshot, target)
+        {
+            namespace[module].get_or_insert(target);
+        }
+    }
+    let mut imported = vec![false; count];
+    for module in &snapshot.modules {
+        for target in &module.imports {
+            if let Some(flag) = imported.get_mut(target.0 as usize) {
+                *flag = true;
+            }
+        }
+    }
+    let closure_from = |starts: Vec<usize>, stop: &[bool]| {
+        let mut reached = vec![false; count];
+        let mut queue = starts;
+        while let Some(at) = queue.pop() {
+            if reached[at] || stop.get(at).copied().unwrap_or(false) {
+                continue;
+            }
+            reached[at] = true;
+            queue.extend(snapshot.modules[at].imports.iter().map(|target| target.0 as usize));
+        }
+        reached
+    };
+    let eager = closure_from((0..count).filter(|at| !imported[*at] && namespace[*at].is_none()).collect(), &[]);
+    let lazy = closure_from((0..count).filter(|at| namespace[*at].is_some()).collect(), &eager);
+    ModuleRoles { lazy, namespace }
+}
+
+/// The name a lazy module's evaluation is emitted under. By index, because two
+/// modules may share a file name and `#` cannot appear in a declared one.
+fn module_evaluate_name(at: usize) -> String {
+    format!("module{at}#evaluate")
+}
+
+/// Whether a function is module evaluation: `module#init`, or a lazy module's
+/// `#evaluate` ([`module_evaluate_name`]). The question a pass asks when it means
+/// "the code that writes module-scope bindings", which since dynamic `import()`
+/// is no longer one function.
+#[must_use]
+pub fn evaluates_module_scope(name: &str) -> bool {
+    name == MODULE_INIT
+        || name
+            .strip_prefix("module")
+            .and_then(|rest| rest.strip_suffix("#evaluate"))
+            .is_some_and(|index| !index.is_empty() && index.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// Whether a node is `import(...)`: a call whose callee is the keyword.
+fn is_a_dynamic_import(probe: &FuncBuilder, id: NodeId) -> bool {
+    probe.kind_of(id) == Some(syntax::CALL_EXPRESSION)
+        && probe.children(id).first().is_some_and(|callee| probe.kind_of(*callee) == Some(syntax::IMPORT_KEYWORD))
+}
+
+/// The namespace type an `import(...)` resolves with: the argument of the
+/// `Promise` the checker types the call as.
+fn dynamic_import_namespace(snapshot: &SemanticSnapshot, call: NodeId) -> Option<TypeId> {
+    let promise = snapshot.node_types.get(&call)?;
+    snapshot.type_arguments.get(promise)?.first().copied()
+}
+
+/// The module whose namespace `ty` is, by module index: an object type whose
+/// symbol is a module's root symbol.
+fn module_of_namespace(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<usize> {
+    let record = snapshot.types.get(ty.0 as usize)?;
+    if !matches!(record.kind, TypeKind::Object { .. }) {
+        return None;
+    }
+    let symbol = record.symbol?;
+    snapshot
+        .modules
+        .iter()
+        .position(|module| snapshot.nodes.get(module.root.0 as usize).and_then(|root| root.symbol) == Some(symbol))
+}
+
+/// The two globals of every lazy module, appended to the module scope: see
+/// [`LazyModule`]. At collection time, because every builder reads the scope and
+/// a global has to exist before a function names it.
+fn add_lazy_modules(snapshot: &SemanticSnapshot, module: &mut ModuleScope) {
+    let probe = FuncBuilder::probe(snapshot);
+    module.roles = module_roles(snapshot);
+    module.evaluated = vec![None; snapshot.modules.len()];
+    for (at, lazy) in module.roles.lazy.iter().enumerate() {
+        if !*lazy {
+            continue;
+        }
+        let origin = probe.origin(snapshot.modules[at].root);
+        let mut global = |name: String, ty: HirType| {
+            let index = u32::try_from(module.globals.len()).unwrap_or(u32::MAX);
+            module.globals.push(super::Global { name, ty: ty.clone(), initial: 0.0, exported: false, deferred: false, origin: origin.clone() });
+            module.types.push(ty);
+            index
+        };
+        let state = global(format!("module{at}#state"), HirType::Int { bits: 32, signed: true });
+        let error = global(format!("module{at}#error"), HirType::Erased);
+        module.evaluated[at] = Some(LazyModule { state, error });
+    }
+}
+
+fn evaluation_order(snapshot: &SemanticSnapshot, lazy: &[bool]) -> (Vec<usize>, Vec<Vec<usize>>) {
     #[derive(Clone, Copy, PartialEq)]
     enum Mark {
         Unseen,
         OnStack,
         Done,
     }
-    let mut marks = vec![Mark::Unseen; snapshot.modules.len()];
+    // A lazy module is evaluated by its own `#evaluate`, not here: marked done
+    // before the walk, so it is neither a root nor a step of anyone's order.
+    let mut marks: Vec<Mark> = (0..snapshot.modules.len())
+        .map(|at| if lazy.get(at).copied().unwrap_or(false) { Mark::Done } else { Mark::Unseen })
+        .collect();
     let mut order = Vec::new();
     let mut cycles = Vec::new();
     let mut path: Vec<usize> = Vec::new();
@@ -10995,7 +11194,7 @@ fn lower_module_initializer(
     // the program compiled, ran, and answered as though the line were not
     // there. Lowered *after* the declarations so that a closure it allocates
     // joins the worklist below rather than missing it.
-    let (initializer, refusals) = module_statements(snapshot);
+    let (initializer, deferred, refusals) = module_statements(snapshot, &shared.module.roles.lazy);
     lowered.diagnostics.extend(refusals);
 
     if let Some((file, mut statements)) = initializer {
@@ -11017,80 +11216,7 @@ fn lower_module_initializer(
         // statement reads and writes *globals*, never a local of the
         // initializer, because a module-scope binding is a global. A block
         // that declares its own local also consumes it.
-        let mut lost = Vec::new();
-        statements.retain(|statement| {
-            let mut probe = shared.builder(snapshot, NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default), Copy::default());
-            let attempt = if probe.kind_of(*statement) == Some(syntax::VARIABLE_STATEMENT) {
-                probe.lower_module_binding(*statement, refused)
-            } else if probe.kind_of(*statement) == Some(syntax::CLASS_DECLARATION) {
-                // A class declaration evaluates its `static` initializers and
-                // nothing else. `lower_statement` does nothing for one -- the
-                // methods are lowered by their own walk -- so a static field
-                // whose initializer is not a constant was never written, and
-                // reading it reported "whose initializer was not compiled --
-                // see the refusal above that says which" with no refusal above.
-                probe.lower_static_fields(*statement)
-            } else {
-                probe.lower_statement(*statement)
-            };
-            match attempt {
-                Ok(()) => true,
-                Err(diagnostic) => {
-                    // The *statement's* span, not the cause's. The message
-                    // below says "this statement" and pointed at the
-                    // expression inside it, which is a different claim -- and
-                    // it also left every function declared in the statement
-                    // looking unaccounted for, because `super::unaccounted`
-                    // asks whether a refusal covers one. Fifty-one object
-                    // literal methods in the node profile were reported as
-                    // functions outside every walk for exactly that reason.
-                    // **And which names it leaves unwritten.** A reader of one
-                    // is told "whose initializer was not compiled -- see the
-                    // refusal above that says which", and nothing above named
-                    // it: the line below says "this statement" and the reader
-                    // has a *global* in hand. `console`'s `stdout` and six
-                    // `stderr` reads are that, pointing at one of thirty-seven
-                    // statement lines in the module with no way to tell which.
-                    //
-                    // Syntax answers it here and nothing else has to: a
-                    // variable statement's declarations are its children, and
-                    // the global a later pass finds unwritten is one of them.
-                    let names: Vec<String> = probe
-                        .children(*statement)
-                        .into_iter()
-                        .flat_map(|child| probe.children(child))
-                        .filter(|at| probe.kind_of(*at) == Some(syntax::VARIABLE_DECLARATION))
-                        .filter_map(|at| probe.declared_name(at))
-                        .map(|name| format!("`{name}`"))
-                        .collect();
-                    lost.push((probe.origin(*statement).location, diagnostic, names));
-                    false
-                }
-            }
-        });
-        for (statement, diagnostic, names) in lost {
-            lowered.diagnostics.push(diagnostic);
-            // A *consequence*, and coded as one. The cause is the diagnostic
-            // pushed just above; this says what losing the statement costs.
-            // Sharing `NTS1001` with the causes made it the largest row in the
-            // corpus histogram -- 37 of 184 files -- which read as a feature
-            // thirty-seven programs were waiting on and was a tally of how
-            // often anything at all went wrong at module scope.
-            let leaving = if names.is_empty() {
-                String::new()
-            } else {
-                format!(", leaving {} unwritten", names.join(", "))
-            };
-            lowered.diagnostics.push(Diagnostic::error(
-                "NTS1005",
-                format!(
-                    "this statement, which module evaluation therefore skips{leaving}; the \
-                     rest of the module's evaluation still runs, and every value this line \
-                     would have computed keeps whatever it held before it"
-                ),
-                statement,
-            ));
-        }
+        drop_the_unlowerable(snapshot, shared, &mut statements, refused, lowered);
 
         let mut builder = shared.builder(snapshot, NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default), Copy::default());
         match builder.lower_module_init(file, &statements, refused) {
@@ -11122,6 +11248,113 @@ fn lower_module_initializer(
         }
         builder.harvest(wanted, &mut lowered.arrivals);
         collect_layouts(&mut lowered.program, builder.layouts);
+    }
+
+    // Each lazy module's evaluation, as a function of its own: see
+    // `FuncBuilder::lower_module_evaluate`. A refusal there is the module's, so
+    // it is recorded under the module's name and a call to it is refused by the
+    // usual cascade rather than calling a function that is not there.
+    for (at, mut statements) in deferred {
+        drop_the_unlowerable(snapshot, shared, &mut statements, refused, lowered);
+        let mut builder = shared.builder(snapshot, NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default), Copy::default());
+        match builder.lower_module_evaluate(at, &statements, refused) {
+            Ok(func) => lowered.program.funcs.push(func),
+            Err(diagnostic) => {
+                lowered.program.uncompiled.push((module_evaluate_name(at), diagnostic.message.clone()));
+                lowered.diagnostics.push(diagnostic);
+            }
+        }
+        builder.harvest(wanted, &mut lowered.arrivals);
+        collect_layouts(&mut lowered.program, builder.layouts);
+    }
+}
+
+/// Keep the module-scope statements that lower, and refuse the rest one by one.
+///
+/// Each statement is tried alone, and one that cannot lower is dropped and named
+/// rather than taking every other statement of the program with it. Asked of the
+/// eager modules' statements for `module#init` and of each lazy module's for its
+/// `#evaluate`: one filter, so the two cannot keep different statements.
+fn drop_the_unlowerable(
+    snapshot: &SemanticSnapshot,
+    shared: &Shared,
+    statements: &mut Vec<NodeId>,
+    refused: &rustc_hash::FxHashSet<u32>,
+    lowered: &mut Lowered,
+) {
+    let mut lost = Vec::new();
+    statements.retain(|statement| {
+        let mut probe = shared.builder(snapshot, NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default), Copy::default());
+        let attempt = if probe.kind_of(*statement) == Some(syntax::VARIABLE_STATEMENT) {
+            probe.lower_module_binding(*statement, refused)
+        } else if probe.kind_of(*statement) == Some(syntax::CLASS_DECLARATION) {
+            // A class declaration evaluates its `static` initializers and
+            // nothing else. `lower_statement` does nothing for one -- the
+            // methods are lowered by their own walk -- so a static field
+            // whose initializer is not a constant was never written, and
+            // reading it reported "whose initializer was not compiled --
+            // see the refusal above that says which" with no refusal above.
+            probe.lower_static_fields(*statement)
+        } else {
+            probe.lower_statement(*statement)
+        };
+        match attempt {
+            Ok(()) => true,
+            Err(diagnostic) => {
+                // The *statement's* span, not the cause's. The message
+                // below says "this statement" and pointed at the
+                // expression inside it, which is a different claim -- and
+                // it also left every function declared in the statement
+                // looking unaccounted for, because `super::unaccounted`
+                // asks whether a refusal covers one. Fifty-one object
+                // literal methods in the node profile were reported as
+                // functions outside every walk for exactly that reason.
+                // **And which names it leaves unwritten.** A reader of one
+                // is told "whose initializer was not compiled -- see the
+                // refusal above that says which", and nothing above named
+                // it: the line below says "this statement" and the reader
+                // has a *global* in hand. `console`'s `stdout` and six
+                // `stderr` reads are that, pointing at one of thirty-seven
+                // statement lines in the module with no way to tell which.
+                //
+                // Syntax answers it here and nothing else has to: a
+                // variable statement's declarations are its children, and
+                // the global a later pass finds unwritten is one of them.
+                let names: Vec<String> = probe
+                    .children(*statement)
+                    .into_iter()
+                    .flat_map(|child| probe.children(child))
+                    .filter(|at| probe.kind_of(*at) == Some(syntax::VARIABLE_DECLARATION))
+                    .filter_map(|at| probe.declared_name(at))
+                    .map(|name| format!("`{name}`"))
+                    .collect();
+                lost.push((probe.origin(*statement).location, diagnostic, names));
+                false
+            }
+        }
+    });
+    for (statement, diagnostic, names) in lost {
+        lowered.diagnostics.push(diagnostic);
+        // A *consequence*, and coded as one. The cause is the diagnostic
+        // pushed just above; this says what losing the statement costs.
+        // Sharing `NTS1001` with the causes made it the largest row in the
+        // corpus histogram -- 37 of 184 files -- which read as a feature
+        // thirty-seven programs were waiting on and was a tally of how
+        // often anything at all went wrong at module scope.
+        let leaving = if names.is_empty() {
+            String::new()
+        } else {
+            format!(", leaving {} unwritten", names.join(", "))
+        };
+        lowered.diagnostics.push(Diagnostic::error(
+            "NTS1005",
+            format!(
+                "this statement, which module evaluation therefore skips{leaving}; the \
+                 rest of the module's evaluation still runs, and every value this line \
+                 would have computed keeps whatever it held before it"
+            ),
+            statement,
+        ));
     }
 }
 
@@ -22209,6 +22442,22 @@ impl<'a> FuncBuilder<'a> {
         self.node(described).text.clone()
     }
 
+    /// Whether `object` names a module and reading it does nothing: a namespace
+    /// import (`C`), or a namespace value held in a name (`ns`). Either way a
+    /// member of it is the export, and nothing about the receiver needs running.
+    fn names_a_module_without_effects(&self, object: NodeId) -> bool {
+        self.denotes_a_module(object) || (self.kind_of(object) == Some(syntax::IDENTIFIER) && self.holds_a_namespace(object))
+    }
+
+    /// Whether an expression's value is a module namespace: its checker type is
+    /// one, as `await import("./m")` and anything it is stored in are.
+    fn holds_a_namespace(&self, id: NodeId) -> bool {
+        self.snapshot
+            .node_types
+            .get(&id)
+            .is_some_and(|ty| module_of_namespace(self.snapshot, *ty).is_some())
+    }
+
     /// Whether an expression names a module rather than a value.
     ///
     /// `import * as C from "./m"` binds `C` to the module itself. `C.x` is a
@@ -22386,8 +22635,15 @@ impl<'a> FuncBuilder<'a> {
             // through it is a plain call and an access is a plain name. Saying
             // so here is what lets `C.scale(n)` reach the direct-callee path,
             // which resolves it from the checker's target like any other.
+            //
+            // And a namespace *value* held in a name -- `ns.bump()` after `const ns
+            // = await import("./m")` -- for the same reason: the checker resolves
+            // the member to the export, and the call is a plain one. Only a name,
+            // because the direct-callee path does not evaluate the receiver, and a
+            // receiver with effects (`(await import("./m")).f()`) must run; that
+            // shape stays a method call and refuses by name.
             Some(syntax::PROPERTY_ACCESS_EXPRESSION) => match self.children(id).as_slice() {
-                [object, _] => !self.denotes_a_module(*object),
+                [object, _] => !self.names_a_module_without_effects(*object),
                 _ => true,
             },
             // **The index's *type*, not its text.**
@@ -23938,6 +24194,272 @@ impl<'a> FuncBuilder<'a> {
     /// function queues is drained at the checkpoint after it rather than
     /// interleaved with it -- which is why it is an ordinary function the
     /// embedder calls, and not something the runtime runs implicitly.
+    /// One module-scope statement, as module evaluation runs it -- `module#init`'s
+    /// and a lazy module's `#evaluate` alike.
+    fn lower_module_statement(&mut self, statement: NodeId, refused: &rustc_hash::FxHashSet<u32>) -> Result<(), Diagnostic> {
+        if self.kind_of(statement) == Some(syntax::VARIABLE_STATEMENT) {
+            return self.lower_module_binding(statement, refused);
+        }
+        // A class evaluates its `static` initializers here and nothing
+        // else; `lower_statement` has no arm for one and refuses. The
+        // `retain` pre-pass has the same branch, and having it in only one of
+        // the two is why the first attempt reported "a `class declaration` is
+        // not supported" from the emitter it had not been added to.
+        if self.kind_of(statement) == Some(syntax::CLASS_DECLARATION) {
+            return self.lower_static_fields(statement);
+        }
+        self.lower_statement(statement)
+    }
+
+    /// A lazy module's evaluation: `module{at}#evaluate`, answering whether it
+    /// succeeded.
+    ///
+    /// ```text
+    /// state != 0      -> answer state != FAILED      already run, or running (a cycle)
+    /// state = EVALUATING
+    /// each lazy static import, in order: if !its #evaluate() -> take its error, FAILED, false
+    /// the statements, in a handler: a throw -> error = thrown, FAILED, false
+    /// state = EVALUATED, true
+    /// ```
+    ///
+    /// **An answer rather than a raise**, because its callers are made by this
+    /// compiler -- `import()`'s job and another lazy module's `#evaluate` -- and a
+    /// raise reaches a caller only through a raising copy, which the copies'
+    /// census makes from what a `try` written in the source reaches. The error
+    /// lives in the module's own global, which is also what makes every later
+    /// `import()` reject with the same one: a module is evaluated once, and so
+    /// fails once.
+    ///
+    /// A call in a statement that can throw is carried to the handler where a
+    /// raising copy of it exists, as `lower_try` carries one, and refused by name
+    /// where none does -- an evaluation that ended the program on a throw node
+    /// turns into a rejection would be a wrong answer, not a gap.
+    fn lower_module_evaluate(
+        &mut self,
+        at: usize,
+        statements: &[NodeId],
+        refused: &rustc_hash::FxHashSet<u32>,
+    ) -> Result<Func, Diagnostic> {
+        let root = self.snapshot.modules[at].root;
+        let origin = self.origin(root);
+        let Some(lazy) = self.module.evaluated.get(at).copied().flatten() else {
+            return Err(self.unsupported(root, "a lazily evaluated module with no evaluation state"));
+        };
+        let int = HirType::Int { bits: 32, signed: true };
+        let constant = |builder: &mut Self, value: i128| builder.push(OpKind::ConstInt(value), int.clone(), origin.clone());
+        let state = self.push(OpKind::GlobalGet(lazy.state), int.clone(), origin.clone());
+        let zero = constant(self, 0);
+        let fresh = self.push(OpKind::Binary { op: BinOp::Eq, lhs: state, rhs: zero }, HirType::Bool, origin.clone());
+        let run = self.new_block();
+        let settled = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: fresh,
+            then_target: run,
+            then_args: Vec::new(),
+            else_target: settled,
+            else_args: Vec::new(),
+        });
+        self.switch_to(settled);
+        let failed = constant(self, FAILED);
+        let succeeded = self.push(OpKind::Binary { op: BinOp::Ne, lhs: state, rhs: failed }, HirType::Bool, origin.clone());
+        self.terminate(Terminator::Return(Some(succeeded)));
+
+        self.switch_to(run);
+        let evaluating = constant(self, EVALUATING);
+        self.push(OpKind::GlobalSet { global: lazy.state, value: evaluating }, HirType::Void, origin.clone());
+        // Its lazy static imports first, in the order it writes them -- which is
+        // the order `evaluation_order` gives an eager module's.
+        let imports: Vec<usize> = self.snapshot.modules[at].imports.iter().map(|target| target.0 as usize).collect();
+        for dependency in imports {
+            let Some(depended) = self.module.evaluated.get(dependency).copied().flatten() else {
+                // Eager: it ran at startup, before anything could import this.
+                continue;
+            };
+            let ok = self.push(
+                OpKind::Call { callee: Callee::Direct(module_evaluate_name(dependency)), args: Vec::new(), frame: None },
+                HirType::Bool,
+                origin.clone(),
+            );
+            let next = self.new_block();
+            let inherited = self.new_block();
+            self.terminate(Terminator::Branch {
+                cond: ok,
+                then_target: next,
+                then_args: Vec::new(),
+                else_target: inherited,
+                else_args: Vec::new(),
+            });
+            self.switch_to(inherited);
+            let thrown = self.push(OpKind::GlobalGet(depended.error), HirType::Erased, origin.clone());
+            self.fail_module_evaluation(lazy, thrown, &origin);
+            self.switch_to(next);
+        }
+
+        // The statements, with a handler: a `throw` in one -- or in a call that
+        // can carry it -- ends the evaluation with that error, not the program.
+        let mut handled = Vec::new();
+        for statement in statements {
+            if let Some((call, why)) = self.call_within(*statement, &mut handled) {
+                return Err(self.unsupported(
+                    call,
+                    &format!(
+                        "a call in a dynamically imported module's evaluation whose `throw` would not reach the \
+                         rejection: {why}"
+                    ),
+                ));
+            }
+        }
+        self.raising_calls.extend(handled);
+        let entry = self.bindings.clone();
+        self.exits.push(Exit::Handler(Handler { block: None, edges: Vec::new(), rejections: Vec::new() }));
+        let mut lowered = Ok(());
+        for statement in statements {
+            if self.is_terminated() {
+                break;
+            }
+            lowered = self.lower_module_statement(*statement, refused);
+            if lowered.is_err() {
+                break;
+            }
+        }
+        let Some(Exit::Handler(frame)) = self.exits.pop() else {
+            unreachable!("pushed immediately above")
+        };
+        lowered?;
+        if !self.is_terminated() {
+            let done = constant(self, EVALUATED);
+            self.push(OpKind::GlobalSet { global: lazy.state, value: done }, HirType::Void, origin.clone());
+            let yes = self.push(OpKind::ConstBool(true), HirType::Bool, origin.clone());
+            self.terminate(Terminator::Return(Some(yes)));
+        }
+        if let Some(caught) = frame.block {
+            let thrown = self.open_handler(caught, &frame, &entry, &origin);
+            self.switch_to(caught);
+            self.fail_module_evaluation(lazy, thrown, &origin);
+        }
+        Ok(self.finish(module_evaluate_name(at), Vec::new(), HirType::Bool, origin, false))
+    }
+
+    /// `import(specifier)`: a promise of the module's namespace, settled by the
+    /// module's job (see [`Self::lower_module_job`]) once it has been evaluated.
+    ///
+    /// The specifier must be a string the checker resolved to a module this
+    /// program contains; anything else refuses by name, because the program is
+    /// closed and a specifier computed at run time names a module only a
+    /// run-time resolver could find. Import attributes (a second argument) refuse
+    /// too: they are validated before anything loads, which is its own work.
+    fn lower_dynamic_import(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let arguments = self.arguments_of(id);
+        if arguments.len() > 1 {
+            return Err(self.unsupported(id, "a dynamic `import()` with import attributes"));
+        }
+        let Some(&specifier) = arguments.first() else {
+            return Err(self.unsupported(id, "a dynamic `import()` with no specifier"));
+        };
+        if !matches!(self.kind_of(specifier), Some(syntax::STRING_LITERAL | syntax::NO_SUBSTITUTION_TEMPLATE_LITERAL)) {
+            return Err(self.unsupported(
+                specifier,
+                "a dynamic `import()` whose specifier is computed, which names a module only a run-time resolver could find",
+            ));
+        }
+        let Some(module) = dynamic_import_namespace(self.snapshot, id).and_then(|ty| module_of_namespace(self.snapshot, ty))
+        else {
+            return Err(self.unsupported(specifier, "a dynamic `import()` of a module this program does not contain"));
+        };
+        let Some(index) = self
+            .closures
+            .iter()
+            .position(|closure| closure.source == ClosureSource::ModuleJob { module })
+        else {
+            return Err(self.unsupported(id, "a dynamic `import()` whose module has no job"));
+        };
+        let Some(slot) = self.hierarchy.closure_slot else {
+            return Err(self.unsupported(id, "a dynamic `import()` in a program with no closure slot"));
+        };
+        let origin = self.origin(id);
+        let promise_ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unrepresentable(id, "the promise a dynamic `import()` hands back"))?;
+        self.materialize(id, &promise_ty)?;
+        let promise = self.runtime_call("nts_promise_new", Vec::new(), promise_ty.clone(), origin.clone());
+        let job = self.push(
+            OpKind::ObjectNew { frame: false },
+            HirType::Managed(ManagedType::Object(closure_type(index))),
+            origin.clone(),
+        );
+        self.field_set(job, 0, promise, &origin);
+        self.layouts.push(self.closure_layout(index, module_job_fields(promise_ty)));
+        self.used_closures.push(index);
+        let slot = self.push(OpKind::ConstFloat(f64::from(slot)), HirType::NUMBER, origin.clone());
+        self.runtime_call("nts_enqueue_job", vec![job, slot], HirType::Void, origin);
+        Ok(promise)
+    }
+
+    /// An `import()`'s job: evaluate the module if it is lazy, then fulfil the
+    /// import's promise with its namespace -- or reject it with what evaluation
+    /// threw, which is the same error for every import of a module that failed.
+    ///
+    /// A job rather than evaluating at the call: `import()` returns before the
+    /// module runs, and code after the call sees it not yet evaluated, as node
+    /// does.
+    fn lower_module_job(&mut self, index: usize, module: usize) -> Result<Func, Diagnostic> {
+        let (_, name) = closure_names(index);
+        let root = self.snapshot.modules[module].root;
+        let origin = self.origin(root);
+        let receiver_ty = HirType::Managed(ManagedType::Object(closure_type(index)));
+        let receiver = self.push(OpKind::Param(0), receiver_ty.clone(), origin.clone());
+        let params = vec![Param {
+            name: "this".to_owned(),
+            shape: ParamShape::Ordinary,
+            ty: receiver_ty,
+            origin: origin.clone(),
+            known: Facts::TOP,
+        }];
+        let Some(namespace) = self.module.roles.namespace.get(module).copied().flatten() else {
+            return Err(self.unsupported(root, "a module job for a module nothing imports dynamically"));
+        };
+        let payload = HirType::Managed(ManagedType::Object(namespace));
+        let promise_ty = HirType::Managed(ManagedType::Promise(Box::new(payload.clone())));
+        self.materialize(root, &promise_ty)?;
+        self.layouts.push(self.closure_layout(index, module_job_fields(promise_ty.clone())));
+        let promise = self.push(OpKind::FieldGet { object: receiver, field: 0 }, promise_ty, origin.clone());
+        if let Some(lazy) = self.module.evaluated.get(module).copied().flatten() {
+            let ok = self.push(
+                OpKind::Call { callee: Callee::Direct(module_evaluate_name(module)), args: Vec::new(), frame: None },
+                HirType::Bool,
+                origin.clone(),
+            );
+            let fulfils = self.new_block();
+            let rejects = self.new_block();
+            self.terminate(Terminator::Branch {
+                cond: ok,
+                then_target: fulfils,
+                then_args: Vec::new(),
+                else_target: rejects,
+                else_args: Vec::new(),
+            });
+            self.switch_to(rejects);
+            let thrown = self.push(OpKind::GlobalGet(lazy.error), HirType::Erased, origin.clone());
+            self.runtime_call("nts_promise_reject_value", vec![promise, thrown], HirType::Void, origin.clone());
+            self.terminate(Terminator::Return(None));
+            self.switch_to(fulfils);
+        }
+        let value = self.push(OpKind::ClosureStatic, payload.clone(), origin.clone());
+        self.fulfil(root, &AsyncResult { promise, payload }, Some(value))?;
+        self.terminate(Terminator::Return(None));
+        Ok(self.finish(name, params, HirType::Void, origin, false))
+    }
+
+    /// Record a lazy module's evaluation as failed with `thrown`, and answer
+    /// `false` from its `#evaluate`.
+    fn fail_module_evaluation(&mut self, lazy: LazyModule, thrown: ValueId, origin: &Origin) {
+        self.push(OpKind::GlobalSet { global: lazy.error, value: thrown }, HirType::Void, origin.clone());
+        let failed = self.push(OpKind::ConstInt(FAILED), HirType::Int { bits: 32, signed: true }, origin.clone());
+        self.push(OpKind::GlobalSet { global: lazy.state, value: failed }, HirType::Void, origin.clone());
+        let no = self.push(OpKind::ConstBool(false), HirType::Bool, origin.clone());
+        self.terminate(Terminator::Return(Some(no)));
+    }
+
     fn lower_module_init(
         &mut self,
         file: NodeId,
@@ -23946,21 +24468,7 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<Func, Diagnostic> {
         let origin = self.origin(file);
         for statement in statements {
-            if self.kind_of(*statement) == Some(syntax::VARIABLE_STATEMENT) {
-                self.lower_module_binding(*statement, refused)?;
-                continue;
-            }
-            // A class evaluates its `static` initializers here and nothing
-            // else; `lower_statement` has no arm for one and refuses. The
-            // `retain` pre-pass above has the same branch, and having it in
-            // only one of the two is why the first attempt reported "a `class
-            // declaration` is not supported" from the emitter it had not been
-            // added to.
-            if self.kind_of(*statement) == Some(syntax::CLASS_DECLARATION) {
-                self.lower_static_fields(*statement)?;
-                continue;
-            }
-            self.lower_statement(*statement)?;
+            self.lower_module_statement(*statement, refused)?;
         }
         self.terminate(Terminator::Return(None));
         Ok(self.finish(
@@ -24664,6 +25172,7 @@ impl<'a> FuncBuilder<'a> {
             }
             ClosureSource::Resolving { rejects } => Some(self.lower_resolving_function(index, info.node, rejects)),
             ClosureSource::Reaction => Some(self.lower_reaction(index, info)),
+            ClosureSource::ModuleJob { module } => Some(self.lower_module_job(index, module)),
             ClosureSource::Authored | ClosureSource::Function | ClosureSource::Method => None,
         }
     }
@@ -38427,6 +38936,20 @@ impl<'a> FuncBuilder<'a> {
         {
             return self.place_of(inner);
         }
+        // **A namespace's members are read-only**: assigning one is a `TypeError`
+        // in the module namespace's own `[[Set]]`. Asked before `names_a_property`,
+        // which answers "not a property" for `ns.x` and `C.x` so that a *read*
+        // goes to the export -- and a write would then go there too, silently,
+        // where the language throws. Refused by name rather than thrown, for now.
+        if self.kind_of(target) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
+            && let Some(object) = self.children(target).first().copied()
+            && (self.denotes_a_module(object) || self.holds_a_namespace(object))
+        {
+            return Err(self.unsupported(
+                target,
+                "an assignment to a member of a module namespace, which is read-only and throws a `TypeError`",
+            ));
+        }
         if self.names_a_property(target) {
             return self.property_place(target);
         }
@@ -38493,6 +39016,27 @@ impl<'a> FuncBuilder<'a> {
         }
         if self.module.constants.contains_key(&symbol.0) {
             return Err(self.unsupported(target, "assigning to a `const`"));
+        }
+        // **A function declaration's own name.** Every read of it is the one
+        // function (`ClosureStatic`), so a write had nowhere a read would see:
+        // it went to a `Binding` no reader consults, and `export default function
+        // fn() { fn = 2 }` read back the function where node reads `2` -- a wrong
+        // answer `import()` made reachable from sixteen test262 files.
+        // TypeScript rejects the assignment (TS2630); plain JavaScript is where it
+        // arrives, and it is refused by name until a function binding can be one.
+        if !self.bindings.contains_key(&symbol.0)
+            && self.snapshot.symbols.get(symbol.0 as usize).is_some_and(|record| {
+                record
+                    .declarations
+                    .iter()
+                    .any(|declaration| self.kind_of(*declaration) == Some(syntax::FUNCTION_DECLARATION))
+            })
+        {
+            return Err(self.unsupported(
+                target,
+                "an assignment to a function declaration's own name, which every read of it answers with the \
+                 function",
+            ));
         }
         // From the target, which is where the checker gives the *declared*
         // type: the left of an assignment is not narrowed by what came before
@@ -44202,6 +44746,25 @@ impl<'a> FuncBuilder<'a> {
             self.layouts.push(layout.clone());
             return Ok(layout);
         }
+        // **A module's namespace has no fields either.** Its properties are the
+        // module's exports, and a read of one goes to the export itself, through
+        // the type (`holds_a_namespace`) -- a field per export would be a second
+        // copy of each, stale the moment a `let` export was reassigned, and live
+        // bindings are what the language promises. So a namespace value is the
+        // module's one static instance (`ClosureStatic`), the same object on
+        // every `import()`, and nothing in it is read.
+        if let Some(module) = module_of_namespace(self.snapshot, ty) {
+            let layout = Layout {
+                types: vec![ty],
+                name: format!("module{module}#namespace"),
+                interfaces: Vec::new(),
+                fields: Vec::new(),
+                methods: Vec::new(),
+                base: None,
+            };
+            self.layouts.push(layout.clone());
+            return Ok(layout);
+        }
         // A tuple is a fixed-length heterogeneous sequence, which is what an
         // object with positional fields already is. Naming the fields `0`, `1`
         // is not a trick to make it fit: `[string, number]` *is* a two-field
@@ -47763,6 +48326,14 @@ impl<'a> FuncBuilder<'a> {
         // export's own symbol, so this is a name and lowers as one -- through
         // the same alias-following path `import { x }` already takes.
         if self.denotes_a_module(*object) {
+            return self.lower_identifier(*member);
+        }
+        // And `ns.x` where `ns` is a namespace *value* -- what `import()`
+        // resolves with. The checker resolves the member to the export's own
+        // symbol exactly as it does for `C.x`, so it lowers the same way; the
+        // receiver is still evaluated, as any receiver is.
+        if self.holds_a_namespace(*object) {
+            self.lower_expression(*object)?;
             return self.lower_identifier(*member);
         }
         // **In an index position, the name is the type's value, not the node's
@@ -54146,6 +54717,12 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn lower_call(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        // `import(...)`: a call whose callee is the keyword, which nothing below
+        // can name -- it read as "a computed callee", which is what 624 of the
+        // 704 test262 files under that message were.
+        if is_a_dynamic_import(self, id) {
+            return self.lower_dynamic_import(id);
+        }
         // Before the target lookup, because `resolve` is a parameter rather
         // than a function: the frontend has nothing to resolve it to, and the
         // call is not a call at all once the executor is inlined.

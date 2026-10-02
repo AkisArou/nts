@@ -138,3 +138,65 @@ fn syntax_kinds_still_match_the_pinned_tsgo() {
     assert!(has(syntax::PARAMETER), "PARAMETER");
     assert!(has(syntax::RETURN_STATEMENT), "RETURN_STATEMENT");
 }
+
+/// `import("./lazy.ts")`: a call whose callee is the `import` keyword, typed by
+/// the checker as `Promise<namespace>` -- and the namespace's symbol is the
+/// imported module's root symbol, the same key `link_modules` resolves a static
+/// import by. Dynamic import is lowered on exactly those two facts, so they are
+/// asserted against a real encoded program rather than assumed.
+#[test]
+fn dynamic_import_calls_the_import_keyword() {
+    use nts_frontend_ts::tsgo::types::syntax;
+    use nts_semantic_schema::NodeKind::Syntax;
+
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else { return };
+    let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/a-dynamic-import/tsconfig.json")
+        .canonicalize_utf8()
+        .expect("examples/a-dynamic-import fixture is checked in");
+    // Decomposed and call-resolved, as a build takes it: a bare snapshot leaves
+    // the promise's type arguments out, and lowering never sees that one.
+    let snapshot = TsgoApi::new(tsgo)
+        .with_decomposition(Budget::DEFAULT)
+        .with_call_resolution(Budget::DEFAULT)
+        .snapshot(&tsconfig)
+        .expect("snapshot should succeed");
+
+    let calls: Vec<NodeId> = (0..snapshot.nodes.len())
+        .map(|at| NodeId(u32::try_from(at).unwrap()))
+        .filter(|id| snapshot.nodes[id.0 as usize].kind == Syntax(syntax::CALL_EXPRESSION))
+        .filter(|id| {
+            snapshot.nodes[id.0 as usize]
+                .children
+                .first()
+                .is_some_and(|callee| snapshot.nodes[callee.0 as usize].kind == Syntax(syntax::IMPORT_KEYWORD))
+        })
+        .collect();
+    assert!(calls.len() >= 6, "the fixture writes at least six `import(...)` calls, found {}", calls.len());
+
+    let lazy = snapshot
+        .modules
+        .iter()
+        .find(|module| snapshot.sources[module.file.0 as usize].uri.ends_with("/lazy.ts"))
+        .expect("the fixture has a `lazy` module");
+    let lazy_symbol = snapshot.nodes[lazy.root.0 as usize].symbol.expect("a module's root carries its symbol");
+    let reaches_lazy = calls.iter().any(|call| {
+        let Some(promise) = snapshot.node_types.get(call) else { return false };
+        let Some(namespace) = snapshot.type_arguments.get(promise).and_then(|args| args.first()) else {
+            return false;
+        };
+        snapshot.types[namespace.0 as usize].symbol == Some(lazy_symbol)
+    });
+    if !reaches_lazy {
+        for call in &calls {
+            let promise = snapshot.node_types.get(call);
+            let args = promise.and_then(|p| snapshot.type_arguments.get(p));
+            eprintln!(
+                "call {call:?}: type {promise:?} {:?} args {args:?} -> {:?}; lazy root symbol {lazy_symbol:?}",
+                promise.map(|p| &snapshot.types[p.0 as usize]),
+                args.and_then(|a| a.first()).map(|t| (&snapshot.types[t.0 as usize].symbol, &snapshot.types[t.0 as usize].kind)),
+            );
+        }
+    }
+    assert!(reaches_lazy, "an `import(\"./lazy.ts\")` is typed Promise<namespace of `lazy`>");
+}

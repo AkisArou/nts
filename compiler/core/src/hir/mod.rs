@@ -4134,12 +4134,18 @@ fn drop_readers_of_unwritten_globals(lowered: &mut lower::Lowered) {
     // The two old behaviours are still the two ends of this: no initializer
     // means nothing is written and every deferred global is unwritten, and a
     // complete one writes them all and leaves this empty.
+    //
+    // **Every function that is module evaluation**, not `module#init` alone: a
+    // module only `import()` reaches is evaluated by its own `#evaluate`, which
+    // writes its globals as `module#init` writes the eager ones. Asked of
+    // `module#init` only, every read of a lazy module's `const` was refused as a
+    // read of a global nothing writes.
     let written: rustc_hash::FxHashSet<u32> = lowered
         .program
         .funcs
         .iter()
-        .find(|func| func.name == lower::MODULE_INIT)
-        .map(|func| {
+        .filter(|func| lower::evaluates_module_scope(&func.name))
+        .flat_map(|func| {
             func.blocks
                 .iter()
                 .flat_map(|block| block.ops.iter())
@@ -4147,9 +4153,8 @@ fn drop_readers_of_unwritten_globals(lowered: &mut lower::Lowered) {
                     OpKind::GlobalSet { global, .. } => Some(global),
                     _ => None,
                 })
-                .collect()
         })
-        .unwrap_or_default();
+        .collect();
     let unwritten: Vec<u32> = lowered
         .program
         .globals
