@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught RangeError: reached",
+  "node": "exit 1; nts: uncaught Observed: created, reached (control)=-1;created, not reached (control)=15;passed in, not reached=15;passed in, reached=-1;",
+  "measured_with": "e60a2d94630f091b",
+  "source": "measured"
+}
