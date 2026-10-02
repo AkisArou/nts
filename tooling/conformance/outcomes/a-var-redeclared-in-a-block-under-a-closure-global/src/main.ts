@@ -1,5 +1,9 @@
 // run: check
 //
+// **FIXED by `7ba421b8f` and kept as a guard.** The block's `var x = 'inside'`
+// now stores to the module global, as an assignment does, so the closure and
+// the direct read answer `'inside'` alike; the record is `agrees`.
+//
 // **A closure held by a module-scope `var` reads a stale value of a `var` that
 // a block declares a second time.** `var x` in a block is the same binding as
 // the module's `var x` -- a `var` has no block scope -- so the block's

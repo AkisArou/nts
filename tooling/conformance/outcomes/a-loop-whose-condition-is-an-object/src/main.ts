@@ -1,3 +1,8 @@
+// **FIXED by `7ba421b8f` and kept as a guard.** The body's `var` now writes the
+// module global rather than binding a local that only the loop's own block
+// defined, so the read after the loop has a value every path reaches; the
+// record is `agrees`.
+//
 // invalid HIR: `NotDominated { func: "module#init", ... }`. A `while` whose
 // condition is an object literal -- always truthy -- declares a `var` in its
 // body and breaks; the read after the loop uses a value no dominating block

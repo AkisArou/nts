@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "invalid-hir",
-  "nts": "invalid HIR: NotDominated { func: \"module#init\", value: ValueId(5), used_in: BlockId(3) }",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: seen=1;",
   "node": "exit 1; nts: uncaught Observed: seen=1;",
-  "measured_with": "6aa52e0cc112812d",
+  "measured_with": "8db9860c741baf87",
   "source": "measured"
 }
