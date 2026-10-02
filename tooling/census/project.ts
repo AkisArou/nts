@@ -195,7 +195,12 @@ export function materialise(dir, body, origin?) {
   }
   writeFileSync(join(dir, HARNESS_FILE), `"use strict";\n${harnessFor(body)}`);
   for (const include of includesOf(body).filter((name) => !PROVIDED_INCLUDES.has(name))) {
-    writeFileSync(join(dir, `${INCLUDE_PREFIX}${include}`), `"use strict";\n${bodyOf(readFileSync(join(SUITE_HARNESS, include), "utf8"))}`);
+    // **An include can live in a subdirectory of harness/** (`sm/non262-*.js`,
+    // staging's), and its name was written as a path under src/ whose directory
+    // nothing made: every staging test including one was an
+    // infrastructure-error, never measured, until 2026-10-02. Flattened into
+    // the file name, it is one more `include-*` root like the rest.
+    writeFileSync(join(dir, `${INCLUDE_PREFIX}${include.replaceAll("/", "--")}`), `"use strict";\n${bodyOf(readFileSync(join(SUITE_HARNESS, include), "utf8"))}`);
   }
   // A `module` test is module code (in the lane since 2026-10-02): parsed as
   // one even when it has no `import` or `export` -- its module-goal early
