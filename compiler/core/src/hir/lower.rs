@@ -6449,10 +6449,19 @@ fn closure_typed_global(
             // f = b`. It was also refusing `let f = a` on its own, where the
             // initializer builds the one object that can ever be in the slot.
             //
-            // `var` is left out rather than forgotten: it hoists, so the global
-            // is readable before the initializer runs, and what it holds until
-            // then is a question this does not answer.
             nts_semantic_schema::VariableKind::Let => !reassigned_anywhere(probe, name_node),
+            // **A `var` hoists**, so its global is readable before the initializer
+            // runs, and a slot typed by a closure has no `undefined` to hold until
+            // then. So it is taken only where nothing *can* read it then: one
+            // declaration, nothing writing it again, and nothing that runs before
+            // its statement -- see `nothing_runs_before`. That is test262's
+            // `var f = async function* () {}` followed by calls to `f`, which is
+            // most of the 766 rows this sentence's refusal stood first in.
+            nts_semantic_schema::VariableKind::Var => {
+                declared_once(probe, name_node)
+                    && !reassigned_anywhere(probe, name_node)
+                    && nothing_runs_before(probe, name_node)
+            }
             _ => false,
         })
         // Through a conditional the checker has already decided, for the same
@@ -6481,6 +6490,144 @@ fn closure_typed_global(
         .iter()
         .position(|closure| closure.node == node && closure.refusal.is_none())?;
     Some(HirType::Managed(ManagedType::Object(closure_type(index))))
+}
+
+/// Whether a name has exactly one declaration: `var f = a; var f = b` is two,
+/// and the second is a write no reference shows.
+fn declared_once(probe: &FuncBuilder, name_node: NodeId) -> bool {
+    probe
+        .node(name_node)
+        .symbol
+        .and_then(|symbol| probe.snapshot.symbols.get(symbol.0 as usize))
+        .is_some_and(|record| record.declarations.len() == 1)
+}
+
+/// Whether nothing the program wrote can run before the module-scope statement
+/// declaring `name_node` has run -- so nothing can read the binding while it
+/// holds no value yet.
+///
+/// Every earlier statement of the module, and the declaring statement itself
+/// (`var a = f(), g = () => 1` runs `f` before `g` is set), must be one
+/// [`may_run_code`] answers no for. And the module must be in no import cycle:
+/// a module that imports this one before it has evaluated could call into it.
+/// Reads from the module's own functions need nothing more, because none of
+/// them can have been called yet.
+fn nothing_runs_before(probe: &FuncBuilder, name_node: NodeId) -> bool {
+    let modules = &probe.snapshot.modules;
+    let ancestors: Vec<NodeId> = std::iter::successors(Some(name_node), |at| probe.node(*at).parent).collect();
+    let Some(module) = modules.iter().position(|module| ancestors.contains(&module.root)) else {
+        return false;
+    };
+    // Asked only of a `var` holding a closure, so the order is computed here
+    // rather than threaded through every module-scope binding.
+    if evaluation_order(probe.snapshot, &[]).1.iter().any(|cycle| cycle.contains(&module)) {
+        return false;
+    }
+    // The module's statements as `children` gives them -- the list node between
+    // them and the root is flattened -- and the one of them this name is in.
+    let statements = probe.children(modules[module].root);
+    let Some(own) = statements.iter().position(|at| ancestors.contains(at)) else {
+        return false;
+    };
+    !statements[..=own].iter().any(|at| may_run_code(probe, *at))
+}
+
+/// Whether evaluating `node` at module scope can run code the program wrote: a
+/// call, a getter, an iterator, `valueOf` -- anything that could read a binding
+/// before its declaration has run. A deferred body (a function, an arrow, a
+/// method) runs when it is called, not here, so it is not entered.
+///
+/// **What runs no code is listed, and everything else is answered yes**, because
+/// the cost of a wrong yes is a refusal that stays and the cost of a wrong no
+/// is a read of an empty slot. A node with no children -- a name, a literal, a
+/// keyword, an operator -- runs nothing.
+fn may_run_code(probe: &FuncBuilder, node: NodeId) -> bool {
+    let children = probe.children(node);
+    let Some(kind) = probe.kind_of(node) else {
+        // A `NodeList`: an argument or declaration list.
+        return children.iter().any(|child| may_run_code(probe, *child));
+    };
+    if children.is_empty() || syntax::is_type_node(kind) {
+        return false;
+    }
+    let any = |nodes: &[NodeId]| nodes.iter().any(|child| may_run_code(probe, *child));
+    // A primitive operand has no `valueOf` to call; an object one may.
+    let primitive = |at: NodeId| {
+        probe
+            .snapshot
+            .node_types
+            .get(&at)
+            .and_then(|ty| probe.snapshot.types.get(ty.0 as usize))
+            .is_some_and(|record| {
+                matches!(
+                    record.kind,
+                    TypeKind::Boolean
+                        | TypeKind::Number
+                        | TypeKind::BigInt
+                        | TypeKind::String
+                        | TypeKind::Literal(_)
+                        | TypeKind::Undefined
+                        | TypeKind::Null
+                        | TypeKind::Void
+                )
+            })
+    };
+    match kind {
+        syntax::FUNCTION_EXPRESSION
+        | syntax::ARROW_FUNCTION
+        | syntax::FUNCTION_DECLARATION
+        | syntax::INTERFACE_DECLARATION
+        | syntax::TYPE_ALIAS_DECLARATION
+        | syntax::IMPORT_DECLARATION => false,
+        // A method's body is deferred; its *name* is evaluated now, and a
+        // computed one can be any expression.
+        syntax::METHOD_DECLARATION | syntax::GET_ACCESSOR | syntax::SET_ACCESSOR => children
+            .iter()
+            .any(|child| probe.kind_of(*child) == Some(syntax::COMPUTED_PROPERTY_NAME) && may_run_code(probe, *child)),
+        syntax::VARIABLE_STATEMENT
+        | syntax::VARIABLE_DECLARATION_LIST
+        | syntax::VARIABLE_DECLARATION
+        | syntax::EXPRESSION_STATEMENT
+        | syntax::PARENTHESIZED_EXPRESSION
+        | syntax::OBJECT_LITERAL_EXPRESSION
+        | syntax::ARRAY_LITERAL_EXPRESSION
+        | syntax::PROPERTY_ASSIGNMENT
+        | syntax::SHORTHAND_PROPERTY_ASSIGNMENT
+        | syntax::COMPUTED_PROPERTY_NAME
+        | syntax::CONDITIONAL_EXPRESSION
+        | syntax::TYPE_OF_EXPRESSION
+        | syntax::VOID_EXPRESSION => any(&children),
+        // `!x` converts to a boolean, which calls nothing; `-x`, `+x` and `~x`
+        // convert to a number, which calls `valueOf` on an object.
+        syntax::PREFIX_UNARY_EXPRESSION => {
+            let converts = !matches!(
+                probe.node(node).data,
+                NodeData::Children { small, .. } if small & syntax::prefix_operator::MASK == syntax::prefix_operator::EXCLAMATION
+            );
+            (converts && !children.last().is_some_and(|operand| primitive(*operand))) || any(&children)
+        }
+        // An assignment to a *name*, an identity comparison and a logical
+        // operator convert nothing; every other operator may.
+        syntax::BINARY_EXPRESSION => {
+            let [left, operator, right] = children.as_slice() else {
+                return true;
+            };
+            let converts = !matches!(
+                probe.kind_of(*operator),
+                Some(
+                    syntax::EQUALS_EQUALS_EQUALS_TOKEN
+                        | syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN
+                        | syntax::AMPERSAND_AMPERSAND_TOKEN
+                        | syntax::BAR_BAR_TOKEN
+                        | syntax::QUESTION_QUESTION_TOKEN
+                        | syntax::COMMA_TOKEN
+                        | syntax::EQUALS_TOKEN
+                )
+            );
+            (converts && !(primitive(*left) && primitive(*right))) || any(&children)
+        }
+        _ => true,
+    }
 }
 
 /// Whether anything but its own declaration can write this name.
@@ -29172,11 +29319,23 @@ impl<'a> FuncBuilder<'a> {
                 Some(syntax::PREFIX_UNARY_EXPRESSION | syntax::POSTFIX_UNARY_EXPRESSION) => {
                     return true;
                 }
-                // A head writes its target once per iteration. Which child that
-                // is goes unasked on purpose: being wrong about the position
-                // would miss a write, and being indifferent only keeps a
-                // refusal for `for (const k in f)`, where `f` is merely read.
-                Some(syntax::FOR_IN_STATEMENT | syntax::FOR_OF_STATEMENT) => return true,
+                // A head writes its target once per iteration: the statement's
+                // first child after `for await`'s keyword (`ForOfStatement` is
+                // `awaitModifier?, initializer, expression, statement`). Only
+                // that one -- the iterated expression and the body are read,
+                // and answering yes for them kept every closure-typed `let` and
+                // `var` a loop calls, `for (const v of upTo(n))`, out of a
+                // global. A pattern target (`for ([f] of pairs)`) reaches here
+                // through its literal, which *is* the first child.
+                Some(syntax::FOR_IN_STATEMENT | syntax::FOR_OF_STATEMENT) => {
+                    let head = self
+                        .children(parent)
+                        .into_iter()
+                        .find(|part| self.kind_of(*part) != Some(syntax::AWAIT_KEYWORD));
+                    if head == Some(child) {
+                        return true;
+                    }
+                }
                 // A second declaration of one symbol is `var`, which this is
                 // not reached for -- but a name that acquires one later is a
                 // name with two initializers, so it counts.
