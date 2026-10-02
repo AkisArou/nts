@@ -92,6 +92,9 @@ public final class NtsEnv {
     // ArrayDeque stores references without allocating a node per enqueue.
     private final ArrayDeque<NtsResumable> microtasks = new ArrayDeque<NtsResumable>();
     private final ArrayDeque<NtsResumable> ticks = new ArrayDeque<NtsResumable>();
+    /** Promises rejected with nothing listening, reported after the turn; see {@link #checkpoint}. */
+    private final java.util.ArrayList<NtsPromise> rejected = new java.util.ArrayList<NtsPromise>();
+    private boolean checkpointing;
     private int depth;
 
     private Timer[] heap = EMPTY_TIMERS;
@@ -450,12 +453,40 @@ public final class NtsEnv {
 
     public static void tick(NtsEnv env, NtsResumable task) { env.ticks.addLast(task); }
 
+    static void rejectionCandidate(NtsEnv env, NtsPromise promise) { env.rejected.add(promise); }
+
+    /**
+     * Drain the ticks and microtasks, then report every rejection still
+     * unhandled -- node's `processTicksAndRejections`, and `runtime/c`'s
+     * function of that name, which this mirrors.
+     *
+     * <p>After the drain, because a handler attached during the turn handles
+     * the rejection and one attached later does not. Only the outermost
+     * checkpoint reports: a nested one has not finished the turn. The report
+     * is {@link NtsRuntime#uncaught} with no detail, exactly as C's is, so the
+     * line reads `nts: uncaught RangeError` on both lanes and the status is 1.
+     */
     private static void checkpoint(NtsEnv env) {
-        do {
-            NtsResumable task;
-            while ((task = env.ticks.pollFirst()) != null) { task.resume(); }
-            while ((task = env.microtasks.pollFirst()) != null) { task.resume(); }
-        } while (!env.ticks.isEmpty());
+        boolean previous = env.checkpointing;
+        env.checkpointing = true;
+        try {
+            do {
+                NtsResumable task;
+                while ((task = env.ticks.pollFirst()) != null) { task.resume(); }
+                while ((task = env.microtasks.pollFirst()) != null) { task.resume(); }
+            } while (!env.ticks.isEmpty());
+        } finally {
+            env.checkpointing = previous;
+        }
+        if (previous) { return; }
+        for (int at = 0; at < env.rejected.size(); at++) {
+            NtsPromise promise = env.rejected.get(at);
+            if (NtsPromise.unhandled(promise)) {
+                env.rejected.clear();
+                NtsRuntime.uncaught(NtsPromise.reason(promise), null);
+            }
+        }
+        env.rejected.clear();
     }
 
     /** One unit of progress: a queued task, a due timer, or a completion. */

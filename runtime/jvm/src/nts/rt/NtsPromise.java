@@ -15,6 +15,16 @@ public final class NtsPromise {
     private NtsResumable first;
     private NtsResumable[] more;
     private int waitingCount;
+    /**
+     * Whether anything ever subscribed to it, which is how an unhandled
+     * rejection is told from a handled one -- `runtime/c`'s field of the same
+     * name, set the same way: by {@link #subscribe}, whether the promise is
+     * pending or already settled. Until 2026-10-02 this lane had neither the
+     * field nor the report, so an `async` function that threw with nobody
+     * listening exited 0 where node and C exit 1 -- measured the day
+     * {@code NtsMain} first ran a program whole.
+     */
+    private boolean handled;
 
     private NtsPromise() {}
     public static NtsPromise newPromise() { return new NtsPromise(); }
@@ -24,6 +34,11 @@ public final class NtsPromise {
         promise.state = state;
         promise.settled = value;
         int n = promise.waitingCount;
+        // Asked before the waiters are queued, as `nts_promise_reject` asks
+        // before settling consumes its list.
+        if (state == REJECTED && n == 0 && !promise.handled) {
+            NtsEnv.rejectionCandidate(NtsEnv.current(), promise);
+        }
         // One lookup for the whole settlement rather than one per waiter. The
         // hidden-parameter calling convention would remove even this; until it
         // is built and measured, hoisting is the honest version of the same
@@ -171,6 +186,8 @@ public final class NtsPromise {
         return true;
     }
     public static boolean isRejected(NtsPromise promise) { return promise.state == REJECTED; }
+    /** Rejected, and nothing ever subscribed: what the checkpoint reports. */
+    static boolean unhandled(NtsPromise promise) { return promise.state == REJECTED && !promise.handled; }
     public static boolean isSettled(NtsPromise promise) { return promise.state != PENDING; }
     public static double number(NtsPromise promise) { return promise.settled.num; }
     public static Object reference(NtsPromise promise) { return promise.settled.ref; }
@@ -197,6 +214,10 @@ public final class NtsPromise {
 
     public static void subscribe(NtsPromise promise, NtsResumable frame) {
         if (frame == null) { throw new NullPointerException("resumable frame"); }
+        // Before the settled test: subscribing to an *already rejected*
+        // promise handles it -- the `p.catch(...)` written on the line after
+        // the rejection, inside the same turn.
+        promise.handled = true;
         if (promise.state != PENDING) {
             NtsEnv.microtask(NtsEnv.current(), frame);
             return;

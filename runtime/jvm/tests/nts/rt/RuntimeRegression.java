@@ -374,6 +374,10 @@ public final class RuntimeRegression {
         equal(Arrays.toString(refs), "[a, b]", "all references input order");
         a = NtsPromise.newPromise(); b = NtsPromise.newPromise();
         NtsPromise race = NtsPromise.race(new NtsPromise[] {a, b});
+        // Handled, as `race(...).catch(() => {})` would be: a rejected race
+        // nothing subscribes to is an unhandled rejection, which the
+        // checkpoint now reports and ends the process for, as node does.
+        NtsPromise.subscribe(race, new NtsResumable() { public void resume() {} });
         NtsPromise.reject(b, "failure"); NtsPromise.fulfillVoid(a); NtsEnv.drain(NtsEnv.current());
         check(NtsPromise.isRejected(race), "race first rejection");
         check(NtsPromise.isSettled(NtsPromise.all(new NtsPromise[0], new double[0])), "empty all fulfilled");

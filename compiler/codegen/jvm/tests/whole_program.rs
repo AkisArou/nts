@@ -108,3 +108,36 @@ fn a_run_time_refusal_exits_as_c_aborts() {
         "the line C prints, naming the declined function: {stderr}"
     );
 }
+
+/// The first divergence the launcher measured: an unhandled rejection exited 0
+/// here where node and C exit 1, because `NtsPromise` tracked nothing. It is
+/// reported after the turn now, through the same `uncaught` line C prints.
+#[test]
+fn an_unhandled_rejection_is_reported_after_the_turn() {
+    let Some((status, stdout, stderr)) = run_whole(
+        "unhandled",
+        "async function fail(): Promise<number> {\n  throw new RangeError(\"nobody handles this\");\n}\n\
+         fail();\nconsole.log(\"after\");\n",
+    ) else {
+        return;
+    };
+    assert_eq!(status, 1, "node and C exit 1: {stderr}");
+    assert_eq!(stdout, "after\n", "reported after the module, not at the throw");
+    assert_eq!(stderr.trim(), "nts: uncaught RangeError");
+}
+
+/// The control: the same rejection awaited inside a `try` later in the turn is
+/// handled, so nothing is reported and the run is clean.
+#[test]
+fn a_rejection_awaited_in_the_same_turn_is_handled() {
+    let Some((status, stdout, stderr)) = run_whole(
+        "handled",
+        "async function fail(): Promise<number> {\n  throw new RangeError(\"late\");\n}\n\
+         const p = fail();\nasync function later(): Promise<void> {\n  try { await p; } catch { console.log(\"caught late\"); }\n}\n\
+         later();\nconsole.log(\"after\");\n",
+    ) else {
+        return;
+    };
+    assert_eq!(status, 0, "{stderr}");
+    assert_eq!(stdout, "after\ncaught late\n");
+}
