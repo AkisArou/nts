@@ -50952,6 +50952,69 @@ impl<'a> FuncBuilder<'a> {
         Ok(())
     }
 
+    /// An array pattern over a **generator**: each element is one step of the iterator.
+    ///
+    /// `const [,] = iter` must *step* `iter` -- an elision is `IteratorStep` with the value
+    /// discarded, which is `IteratorDestructuringAssignmentEvaluation`'s first clause -- and this
+    /// compiler emitted **nothing**: `bind_pattern`'s `[] => continue` skips a hole, and for a
+    /// source that is not an array no element is ever read, so the generator was never asked for
+    /// anything. A generator whose body throws therefore threw nothing, which is **56 recorded
+    /// test262 cases**, every one of them `*elision-step-err*` or `*elision-next-err*`.
+    ///
+    /// **Only a generator source, and only elisions, and both limits are measured.**
+    ///
+    /// An *array* source keeps its indexed read: `build_array_from`'s own comment prices a walk
+    /// against `slice` at **8.7x** -- 462.77 us against 53.07 us over 256 elements -- and an
+    /// array's steps have no observable side effect, so skipping an elision over one is
+    /// observationally sound and free. A `Set`, a `Map` and a string are walkable too and are not
+    /// here because nothing measured asks for them; they keep today's refusal, which names the
+    /// source rather than guessing.
+    ///
+    /// A **binding** element in a walk refuses, and the sentence is the gap rather than the
+    /// symptom: the element would have to be `undefined` where the step answered `done`, and a
+    /// `Generator<number>`'s element is a double with no room for one -- the same wall the
+    /// past-the-end item stops at for a concrete element type (`965962c4f`). Before this it refused as *"an object type that is not in the snapshot"*,
+    /// which is true of a frame's synthetic id and says nothing about the program.
+    ///
+    /// A **rest** element refuses too, and that one is a feature with a plan entry of its own:
+    /// `[...x]` over something iterable needs `collect_a_walk` extracted out of
+    /// `build_array_from`, 190 recorded cases, and a step-per-element loop is not it.
+    fn bind_array_pattern_by_stepping(
+        &mut self,
+        pattern: NodeId,
+        value: ValueId,
+    ) -> Result<(), Diagnostic> {
+        let walk = self.walk_of(pattern, value, None, 1)?;
+        let origin = self.origin(pattern);
+        for element in self.children(pattern) {
+            if self.kind_of(element) != Some(syntax::BINDING_ELEMENT) {
+                return Err(self.unsupported(element, "a binding of unexpected shape"));
+            }
+            let parts = self.children(element);
+            if parts
+                .iter()
+                .any(|part| self.kind_of(*part) == Some(syntax::DOT_DOT_DOT_TOKEN))
+            {
+                return Err(self.unsupported(
+                    element,
+                    "a rest element in a pattern over a generator, which needs the remaining                      elements collected through the iterator",
+                ));
+            }
+            // **The step comes first and happens for every element**, which is the whole of what
+            // an elision means here: the specification steps the iterator and throws the value
+            // away, and the body's `throw` is what that step is for.
+            let (_cursor, _done) = self.protocol_step(pattern, &walk, &origin)?;
+            if parts.is_empty() {
+                continue;
+            }
+            return Err(self.unsupported(
+                element,
+                "a name bound from a pattern over a generator, whose element would have to be                  `undefined` where the iterator is done and has no room for one",
+            ));
+        }
+        Ok(())
+    }
+
     fn bind_pattern(&mut self, pattern: NodeId, value: ValueId) -> Result<(), Diagnostic> {
         let object = self.kind_of(pattern) == Some(syntax::OBJECT_BINDING_PATTERN);
         // **Step 1, before any element is read.** An object pattern over `null` or
@@ -50959,6 +51022,17 @@ impl<'a> FuncBuilder<'a> {
         // the only place the check can be. See [`Self::require_object_coercible`].
         if object {
             self.require_object_coercible(pattern, value)?;
+        }
+        // **An array pattern over a generator is a step per element**, elisions included,
+        // because a hole still asks the iterator for one. See
+        // [`Self::bind_array_pattern_by_stepping`] -- including why an *array* source does not
+        // come here.
+        if !object
+            && let HirType::Managed(ManagedType::Object(ty)) = self.values[value.0 as usize].ty
+            && (self.generator_declared(ty).is_some()
+                || abstract_generator_kind(self.snapshot, ty).is_some())
+        {
+            return self.bind_array_pattern_by_stepping(pattern, value);
         }
         for (position, element) in self.children(pattern).into_iter().enumerate() {
             if self.kind_of(element) != Some(syntax::BINDING_ELEMENT) {
