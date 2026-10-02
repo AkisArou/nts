@@ -267,9 +267,9 @@ export function asyncVerdict(printed, objects) {
 }
 
 /** Compile, link and run one program body. Never reads an exit status alone. */
-export function attempt(dir, body, tools) {
+export function attempt(dir, body, tools, origin?) {
   const { nts, cc } = tools;
-  materialise(dir, body);
+  materialise(dir, body, origin);
   const out = join(dir, "out");
 
   // **`spawnSync`, because both streams have to be read on success.**

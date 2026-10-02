@@ -7,8 +7,8 @@
 // different programs while reporting the same corpus.
 
 import { createHash } from "node:crypto";
-import { chmodSync, copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -67,7 +67,7 @@ const TEST_PRELUDE = '"use strict";\n';
  * stand-in laid out two ways -- are two runs even under one compiler. Derived
  * here, beside the list, so a member added is a member hashed.
  */
-const LAYOUT = `${HARNESS_FILE} + ${INCLUDE_PREFIX}*.js verbatim + ${TEST_FILE} (allowJs, checkJs unset), test prelude ${JSON.stringify(TEST_PRELUDE)}`;
+const LAYOUT = `${HARNESS_FILE} + ${INCLUDE_PREFIX}*.js verbatim + ${TEST_FILE} (allowJs, checkJs unset), test prelude ${JSON.stringify(TEST_PRELUDE)}, ./*_FIXTURE.js modules beside it and outside the roots`;
 export const HARNESS_HASH = [LAYOUT, HARNESS, ...GLOBALS.map((g) => g.source), ...MEMBERS.map((m) => m.source)]
   .reduce((hash, source) => hash.update(source), createHash("sha256"))
   .digest("hex")
@@ -149,7 +149,14 @@ export function workspace(dir) {
           // requires.
           allowJs: true,
         },
-        include: ["src"],
+        // **The roots are the harness, its includes and the test -- not every
+        // file under src/.** A test's `_FIXTURE.js` modules are written beside
+        // it and enter the program only by being imported, as test262 has it:
+        // a fixture is a module the test loads, and one listed as a root would
+        // be evaluated whether or not anything loads it, so "evaluated lazily,
+        // once" could not be seen, and a test checking a fixture has not run
+        // yet would pass for the wrong reason.
+        include: [HARNESS_FILE, `${INCLUDE_PREFIX}*`, TEST_FILE],
       },
       null,
       2,
@@ -176,14 +183,49 @@ export function workspace(dir) {
  * include's top-level statements (`tcoHelper.js`'s `$MAX_ITERATIONS`) are
  * done before the test's first line.
  */
-export function materialise(dir, body) {
+export function materialise(dir, body, origin?) {
   const src = join(dir, "src");
   for (const stale of readdirSync(src).filter((f) => `src/${f}`.startsWith(INCLUDE_PREFIX))) rmSync(join(src, stale));
+  for (const stale of readdirSync(src, { recursive: true }).map(String).filter((f) => f.endsWith("_FIXTURE.js"))) rmSync(join(src, stale), { force: true });
+  if (origin) {
+    for (const [relative, source] of fixturesOf(origin, body)) {
+      mkdirSync(dirname(join(src, relative)), { recursive: true });
+      writeFileSync(join(src, relative), source);
+    }
+  }
   writeFileSync(join(dir, HARNESS_FILE), `"use strict";\n${harnessFor(body)}`);
   for (const include of includesOf(body).filter((name) => !PROVIDED_INCLUDES.has(name))) {
     writeFileSync(join(dir, `${INCLUDE_PREFIX}${include}`), `"use strict";\n${bodyOf(readFileSync(join(SUITE_HARNESS, include), "utf8"))}`);
   }
   writeFileSync(join(dir, TEST_FILE), `${TEST_PRELUDE}${body}`);
+}
+
+/** A `./..._FIXTURE.js` specifier in a test or a fixture. */
+const FIXTURE_REFERENCE = /(["'])(\.\/[^"'\n]*_FIXTURE\.js)\1/g;
+
+/**
+ * The fixture modules a test names, **transitively**, as relative path ->
+ * source, the path relative to the test's own directory. test262 writes every
+ * one `./`-relative (1,335 references, none `../`), and 120 of the dynamic-
+ * import fixtures import another fixture, so a test's program is the closure,
+ * not its own references. A reference whose file does not exist is left to
+ * the compiler to report, as it would be for any program.
+ */
+export function fixturesOf(origin, body) {
+  const found = new Map();
+  const visit = (text, from) => {
+    for (const m of text.matchAll(FIXTURE_REFERENCE)) {
+      const relative = normalize(join(from, m[2]));
+      if (relative.startsWith("..") || found.has(relative)) continue;
+      const file = join(dirname(origin), relative);
+      if (!existsSync(file)) continue;
+      const source = readFileSync(file, "utf8");
+      found.set(relative, source);
+      visit(source, dirname(relative));
+    }
+  };
+  visit(body, ".");
+  return found;
 }
 
 /**

@@ -36,6 +36,6 @@ if (!existsSync(file)) {
 const dir = resolve(out);
 mkdirSync(dir, { recursive: true });
 workspace(dir);
-materialise(dir, readFileSync(file, "utf8"));
+materialise(dir, readFileSync(file, "utf8"), file);
 console.log(`  ${test} -> ${dir}`);
 console.log(`  nts emit-c ${join(dir, "tsconfig.json")} --out ${join(dir, "out")} --main`);

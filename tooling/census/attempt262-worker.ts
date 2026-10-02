@@ -29,7 +29,7 @@ for await (const path of lines) {
   if (path === "") continue;
   let outcome;
   try {
-    outcome = attempt(dir, readFileSync(join(suite, path), "utf8"), tools);
+    outcome = attempt(dir, readFileSync(join(suite, path), "utf8"), tools, join(suite, path));
   } catch (error) {
     // A throw out of `attempt` is this instrument failing, not the test: it is
     // reported as such, never dropped, so the orchestrator's reconciliation
