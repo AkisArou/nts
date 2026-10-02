@@ -478,6 +478,9 @@ pub fn implemented(package: &str, program: &Program, layout: &Layout) -> Vec<Str
 /// collapsed into the ordinary method, and left the root's abstract
 /// `erased_call$raises` unimplemented: UNFILLED in `buffer` and `string_decoder`
 /// on 1cf6a7ebe, the day `.then` let their module initializers compile.
+///
+/// The raising slot is named only in a program where some callable has a
+/// raising body there; see the comment at that branch.
 #[must_use]
 pub fn uniform_member(program: &Program, slot: usize) -> Option<String> {
     let erased = program.erased_call_slot? as usize;
@@ -492,7 +495,17 @@ pub fn uniform_member(program: &Program, slot: usize) -> Option<String> {
         return ordinary();
     }
     if program.raising_call_slot.is_some_and(|raising| raising as usize == slot) {
-        return ordinary().map(|name| format!("{name}$raises"));
+        // Only where some callable fills it with a raising body. A program
+        // whose every raising entry is the ordinary one makes no raising call,
+        // and naming the slot anyway published `erased_call$raises` on every
+        // closure and on the root -- a Java-visible API change in
+        // interop/ts-from-java for an entry nothing can reach (c58629073). The
+        // slot then collapses into the ordinary method, as before.
+        let raises = program
+            .layouts
+            .iter()
+            .any(|layout| layout.methods.get(slot).and_then(Option::as_ref).is_some_and(|name| name.ends_with("@raises")));
+        return if raises { ordinary().map(|name| format!("{name}$raises")) } else { None };
     }
     None
 }
