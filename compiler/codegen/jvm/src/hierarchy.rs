@@ -307,6 +307,9 @@ pub fn member_name(func_name: &str) -> String {
 pub fn declared_member(program: &Program, layout: &Layout, slot: usize) -> Option<String> {
     let mut at = layout;
     let mut name = at.methods.get(slot)?.as_ref()?;
+    if let Some(uniform) = uniform_member(program, slot) {
+        return Some(uniform);
+    }
     if let Some(declared) = declaring_interface(program, layout, slot).and_then(|i| i.methods.get(slot)?.as_ref()) {
         return Some(member_name(declared));
     }
@@ -459,6 +462,39 @@ pub fn implemented(package: &str, program: &Program, layout: &Layout) -> Vec<Str
         .filter(|at| is_interface(program, at))
         .map(|at| crate::types::class_name(package, at))
         .collect()
+}
+
+/// The JVM name of a **uniform** slot -- the erased entry and its raising
+/// variant -- which the callable root declares and every callable fills, so it
+/// is a fact about the program and not about any one layout's chain.
+///
+/// Derived from one place rather than from whatever fills the slot. Lowering
+/// fills a callable's raising slot with its *ordinary* erased entry wherever no
+/// raising body exists (`declare_raising_entries`), so the function there is
+/// `Closure2#erased_call`; with a signature base the walk above found the
+/// base's declaration and named it `erased_call$raises`, but a base-less
+/// closure -- a module-scope IIFE, called directly, which nothing relates to a
+/// signature -- fell through to the function's own name, `erased_call`,
+/// collapsed into the ordinary method, and left the root's abstract
+/// `erased_call$raises` unimplemented: UNFILLED in `buffer` and `string_decoder`
+/// on 1cf6a7ebe, the day `.then` let their module initializers compile.
+#[must_use]
+pub fn uniform_member(program: &Program, slot: usize) -> Option<String> {
+    let erased = program.erased_call_slot? as usize;
+    let ordinary = || {
+        program
+            .layouts
+            .iter()
+            .find_map(|layout| layout.methods.get(erased)?.as_ref())
+            .map(|name| member_name(name))
+    };
+    if slot == erased {
+        return ordinary();
+    }
+    if program.raising_call_slot.is_some_and(|raising| raising as usize == slot) {
+        return ordinary().map(|name| format!("{name}$raises"));
+    }
+    None
 }
 
 /// The interface, emitted as one, that `layout` or anything it extends
