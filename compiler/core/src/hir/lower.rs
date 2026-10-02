@@ -26991,6 +26991,15 @@ impl<'a> FuncBuilder<'a> {
             Some(_) => (None, rest),
             None => (rest, None),
         };
+        // **An argument past the last parameter is evaluated and dropped**, as
+        // JavaScript does: `function f() {}` called `f(1)` -- which a `.js` file
+        // may write -- evaluates `1` and the callee never sees it. Passed along,
+        // it was a call with more arguments than the function takes, and invalid
+        // HIR rather than either an answer or a refusal.
+        let arity = match tail {
+            Some(_) => None,
+            None => self.fixed_arity(call),
+        };
 
         let mut args = Vec::new();
         for (at, argument) in arguments.iter().enumerate() {
@@ -26998,6 +27007,10 @@ impl<'a> FuncBuilder<'a> {
                 let gathered = self.gather_rest(call, at, &arguments[at..])?;
                 args.push(gathered);
                 return Ok(args);
+            }
+            if arity.is_some_and(|arity| args.len() >= arity) {
+                self.lower_for_its_effects(*argument)?;
+                continue;
             }
             // **A spread of a fixed-arity tuple is that many arguments.**
             // `cb(...args)` inside a generic rest forwards to a callback whose
@@ -27025,7 +27038,10 @@ impl<'a> FuncBuilder<'a> {
                     .and_then(|ty| self.fixed_arity_positions(ty))
             {
                 let array = self.lower_expression(operand)?;
-                for (offset, position) in positions.iter().enumerate() {
+                // A position past the last parameter is dropped like any other
+                // excess argument; reading it has no effect to keep.
+                let taken = arity.map_or(positions.len(), |arity| arity.saturating_sub(args.len()));
+                for (offset, position) in positions.iter().enumerate().take(taken) {
                     let want = self
                         .represent(*position)
                         .ok_or_else(|| self.unrepresentable(operand, "a spread position"))?;
@@ -27803,6 +27819,29 @@ impl<'a> FuncBuilder<'a> {
             .into_iter()
             .map(|(_, optional, rest)| (optional, rest))
             .collect()
+    }
+
+    /// How many arguments a call's callee takes, where the call resolves to one
+    /// that declares no rest: its parameters. `None` for a callee nothing
+    /// resolved -- where no parameters is not known to mean none -- and for
+    /// **any** rest, including one typed as a tuple that
+    /// [`Self::effective_parameters`] expands position by position.
+    ///
+    /// The tuple case is why this reads the *declared* list. A variadic tuple,
+    /// `...args: [string, ...number[]]`, reaches the snapshot without its rest
+    /// marker, the same record as `[string, number]`
+    /// (`outcomes/a-variadic-tuple-rest-expanded-as-fixed-arity`), so its
+    /// expansion counts two. Answering two here would drop the arguments past
+    /// it: `f("a", 1, 2)` compiled, answering a length of 2 where node answers 3,
+    /// instead of the invalid HIR that record pins.
+    fn fixed_arity(&self, call: NodeId) -> Option<usize> {
+        if self.overriding_signature(call).is_none() && !self.snapshot.call_targets.contains_key(&call) {
+            return None;
+        }
+        if self.declared_parameters(call).iter().any(|(_, _, rest)| *rest) {
+            return None;
+        }
+        Some(self.parameter_shapes(call).len())
     }
 
     fn parameter_type_id(&self, call: NodeId, at: usize) -> Option<TypeId> {
