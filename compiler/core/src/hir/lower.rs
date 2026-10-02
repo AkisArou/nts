@@ -10979,6 +10979,45 @@ fn dynamic_import_target(snapshot: &SemanticSnapshot, call: NodeId) -> Option<(u
     Some((module_of_namespace(snapshot, namespace)?, namespace))
 }
 
+/// What an `import()`'s second argument asks of the import, where the compiler
+/// can see it: nothing, or a rejection because it is not an object.
+///
+/// Import attributes -- a `with` object naming any key -- are not here: node
+/// supports `type` only, and which module types it accepts is its own work.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ImportOptions {
+    /// `undefined`, or an object asking for no attributes: the import as if
+    /// there were no second argument.
+    None,
+    /// A primitive, which `import()` rejects with a `TypeError` before it loads
+    /// anything.
+    NotAnObject,
+}
+
+/// [`ImportOptions`] from an options value's type, where every value of it
+/// answers the same: all `undefined`, or all a primitive other than it. `None`
+/// for anything that could be an object, or could be either.
+fn import_options_of_type(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<ImportOptions> {
+    let kind = |ty: TypeId| snapshot.types.get(ty.0 as usize).map(|record| &record.kind);
+    let parts = match kind(ty)? {
+        TypeKind::Union(parts) => parts.as_slice(),
+        _ => std::slice::from_ref(&ty),
+    };
+    let answer = |part: TypeId| match kind(part)? {
+        TypeKind::Undefined | TypeKind::Void => Some(ImportOptions::None),
+        TypeKind::Null
+        | TypeKind::Boolean
+        | TypeKind::Number
+        | TypeKind::BigInt
+        | TypeKind::String
+        | TypeKind::Symbol
+        | TypeKind::Literal(_) => Some(ImportOptions::NotAnObject),
+        _ => None,
+    };
+    let first = answer(*parts.first()?)?;
+    parts.iter().all(|part| answer(*part) == Some(first)).then_some(first)
+}
+
 /// Whether an `import(...)` the checker did not resolve names a file that *is* in
 /// the program anyway -- the importer's directory joined with a relative
 /// specifier, exactly.
@@ -24395,21 +24434,28 @@ impl<'a> FuncBuilder<'a> {
     /// The specifier must be a string the checker resolved to a module this
     /// program contains; anything else refuses by name, because the program is
     /// closed and a specifier computed at run time names a module only a
-    /// run-time resolver could find. Import attributes (a second argument) refuse
-    /// too: they are validated before anything loads, which is its own work.
+    /// run-time resolver could find. A second argument, the options, is
+    /// evaluated and validated before anything loads (see
+    /// [`Self::import_options`]).
     fn lower_dynamic_import(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
-        let arguments = self.arguments_of(id);
-        if arguments.len() > 1 {
-            return Err(self.unsupported(id, "a dynamic `import()` with import attributes"));
-        }
-        let Some(&specifier) = arguments.first() else {
-            return Err(self.unsupported(id, "a dynamic `import()` with no specifier"));
+        let (specifier, options) = match self.arguments_of(id)[..] {
+            [] => return Err(self.unsupported(id, "a dynamic `import()` with no specifier")),
+            [specifier] => (specifier, None),
+            [specifier, options] => (specifier, Some(options)),
+            _ => return Err(self.unsupported(id, "a dynamic `import()` with more than a specifier and options")),
         };
         if !matches!(self.kind_of(specifier), Some(syntax::STRING_LITERAL | syntax::NO_SUBSTITUTION_TEMPLATE_LITERAL)) {
             return Err(self.unsupported(
                 specifier,
                 "a dynamic `import()` whose specifier is computed, which names a module only a run-time resolver could find",
             ));
+        }
+        // After the specifier, which is a constant and so has no effect to order
+        // against; before the module is looked for, as node validates them.
+        if let Some(options) = options
+            && self.import_options(options)? == ImportOptions::NotAnObject
+        {
+            return self.rejected_import(id, "TypeError", "The second argument to import() must be an object".to_owned());
         }
         let Some((module, namespace)) = dynamic_import_target(self.snapshot, id) else {
             return self.import_of_nothing(id, specifier);
@@ -24449,7 +24495,6 @@ impl<'a> FuncBuilder<'a> {
     /// rejection is what a program observes, and only when it asks. Where it names
     /// a file the program *does* contain, see [`names_a_file_of_the_program`].
     fn import_of_nothing(&mut self, id: NodeId, specifier: NodeId) -> Result<ValueId, Diagnostic> {
-        let origin = self.origin(id);
         let written = self.literal_name(specifier).unwrap_or_default();
         // **Only a relative path is known to name nothing.** `''` is a URL that
         // resolves to the importer itself -- node loads the importing file, it
@@ -24470,22 +24515,85 @@ impl<'a> FuncBuilder<'a> {
                 "a dynamic `import()` of a file this program contains that the checker did not resolve as a module",
             ));
         }
+        self.rejected_import(id, "Error", format!("Cannot find module '{written}'"))
+    }
+
+    /// An `import()` that fails before it loads anything: a promise rejected
+    /// with a provided `class` of error saying `message`.
+    fn rejected_import(&mut self, id: NodeId, class: &str, message: String) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
         let promise_ty = self
             .type_of(id)
             .ok_or_else(|| self.unrepresentable(id, "the promise a dynamic `import()` hands back"))?;
         self.materialize(id, &promise_ty)?;
         let promise = self.runtime_call("nts_promise_new", Vec::new(), promise_ty, origin.clone());
-        let message = self.push(
-            OpKind::ConstString(format!("Cannot find module '{written}'")),
-            HirType::Managed(ManagedType::String),
-            origin.clone(),
-        );
+        let message = self.push(OpKind::ConstString(message), HirType::Managed(ManagedType::String), origin);
         // Through `reject_with`, the one rejection path, which hands the runtime a
         // reference: a reason erased here first answered `typeof` "function" on
         // the JVM where C and node answer "object".
-        let (error, _) = self.provided_error(id, "Error", message)?;
+        let (error, _) = self.provided_error(id, class, message)?;
         self.reject_with(id, promise, Some(error))?;
         Ok(promise)
+    }
+
+    /// Evaluates an `import()`'s options for their effects and answers what they
+    /// ask of the import. Decided from what the compiler can see: an object
+    /// literal member by member, anything else by its type
+    /// ([`import_options_of_type`]); everything else refuses by name.
+    ///
+    /// An object literal is read rather than built, because building it is not
+    /// observable and reading `with` from it is: each data member's value is
+    /// evaluated in order, and `with` must be `undefined` or `{}` -- no
+    /// attributes. A getter, a method, a spread or a computed key could each run
+    /// code or name `with` where the compiler cannot see it, so each refuses.
+    fn import_options(&mut self, options: NodeId) -> Result<ImportOptions, Diagnostic> {
+        let literal = self.through_parentheses(options);
+        if self.kind_of(literal) != Some(syntax::OBJECT_LITERAL_EXPRESSION) {
+            let decided = self
+                .snapshot
+                .node_types
+                .get(&options)
+                .and_then(|ty| import_options_of_type(self.snapshot, *ty))
+                .ok_or_else(|| {
+                    self.unsupported(options, "a dynamic `import()` whose options could be an object, read at run time")
+                })?;
+            self.lower_for_its_effects(options)?;
+            return Ok(decided);
+        }
+        for member in self.children(literal) {
+            let parts = self.children(member);
+            let (Some(syntax::PROPERTY_ASSIGNMENT), [key, .., value]) = (self.kind_of(member), parts.as_slice()) else {
+                return Err(self.unsupported(member, "an `import()` options member other than `name: value`"));
+            };
+            if self.kind_of(*key) == Some(syntax::COMPUTED_PROPERTY_NAME) {
+                return Err(self.unsupported(member, "an `import()` options member with a computed name"));
+            }
+            if self.literal_name(*key).as_deref() == Some("with") {
+                let attributes = self.through_parentheses(*value);
+                if self.kind_of(attributes) == Some(syntax::OBJECT_LITERAL_EXPRESSION) && self.children(attributes).is_empty() {
+                    continue;
+                }
+                let no_attributes = self
+                    .snapshot
+                    .node_types
+                    .get(value)
+                    .and_then(|ty| import_options_of_type(self.snapshot, *ty))
+                    == Some(ImportOptions::None);
+                if !no_attributes {
+                    return Err(self.unsupported(*value, "a dynamic `import()` with import attributes"));
+                }
+            }
+            self.lower_for_its_effects(*value)?;
+        }
+        Ok(ImportOptions::None)
+    }
+
+    /// An expression evaluated for its effects, its value discarded. Expecting
+    /// an erased value, because a discarded value may be any representation and
+    /// `undefined` and `null` -- options' commonest values -- have one only where
+    /// something expects it.
+    fn lower_for_its_effects(&mut self, id: NodeId) -> Result<(), Diagnostic> {
+        self.lower_expecting(id, &HirType::Erased).map(drop)
     }
 
     /// An `import()`'s job: evaluate the module if it is lazy, then fulfil the
