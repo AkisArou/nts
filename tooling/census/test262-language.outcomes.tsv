@@ -2899,7 +2899,6 @@ test/language/expressions/function/param-dflt-yield-strict.js	fail	accepted: was
 test/language/expressions/function/param-duplicated-strict-1.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/function/param-duplicated-strict-2.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/function/param-duplicated-strict-3.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/function/params-dflt-ref-arguments.js	fail	nts: uncaught Test262Error: first parameter
 test/language/expressions/function/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/function/rest-params-trailing-comma-early-error.js	pass	
 test/language/expressions/function/static-init-await-reference.js	pass	
@@ -2976,7 +2975,6 @@ test/language/expressions/generators/named-yield-identifier-spread-strict.js	fai
 test/language/expressions/generators/named-yield-identifier-strict.js	fail	accepted: was refused later (lowering)
 test/language/expressions/generators/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/generators/param-dflt-yield.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/generators/params-dflt-ref-arguments.js	fail	nts: uncaught Test262Error: first parameter
 test/language/expressions/generators/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/generators/rest-params-trailing-comma-early-error.js	pass	
 test/language/expressions/generators/static-init-await-reference.js	pass	
