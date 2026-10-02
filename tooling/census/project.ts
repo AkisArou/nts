@@ -67,7 +67,7 @@ const TEST_PRELUDE = '"use strict";\n';
  * stand-in laid out two ways -- are two runs even under one compiler. Derived
  * here, beside the list, so a member added is a member hashed.
  */
-const LAYOUT = `${HARNESS_FILE} + ${INCLUDE_PREFIX}*.js verbatim + ${TEST_FILE} (allowJs, checkJs unset), test prelude ${JSON.stringify(TEST_PRELUDE)}, ./*_FIXTURE.js modules beside it and outside the roots`;
+const LAYOUT = `${HARNESS_FILE} + ${INCLUDE_PREFIX}*.js verbatim + ${TEST_FILE} (allowJs, checkJs unset), test prelude ${JSON.stringify(TEST_PRELUDE)}, ./*_FIXTURE.js modules beside it and outside the roots, each a module`;
 export const HARNESS_HASH = [LAYOUT, HARNESS, ...GLOBALS.map((g) => g.source), ...MEMBERS.map((m) => m.source)]
   .reduce((hash, source) => hash.update(source), createHash("sha256"))
   .digest("hex")
@@ -190,7 +190,7 @@ export function materialise(dir, body, origin?) {
   if (origin) {
     for (const [relative, source] of fixturesOf(origin, body)) {
       mkdirSync(dirname(join(src, relative)), { recursive: true });
-      writeFileSync(join(src, relative), source);
+      writeFileSync(join(src, relative), asModule(source));
     }
   }
   writeFileSync(join(dir, HARNESS_FILE), `"use strict";\n${harnessFor(body)}`);
@@ -198,6 +198,21 @@ export function materialise(dir, body, origin?) {
     writeFileSync(join(dir, `${INCLUDE_PREFIX}${include}`), `"use strict";\n${bodyOf(readFileSync(join(SUITE_HARNESS, include), "utf8"))}`);
   }
   writeFileSync(join(dir, TEST_FILE), `${TEST_PRELUDE}${body}`);
+}
+
+/**
+ * **A fixture is a module, whatever it contains.** test262 loads every
+ * `_FIXTURE.js` as a module (INTERPRETING.md), but TypeScript decides from the
+ * text: a file with no top-level `import` or `export` is a *script*, and a
+ * script is no `import()` target. On 2026-10-02, 48 dynamic-import tests named
+ * `./empty_FIXTURE.js` -- comments only -- and read "a dynamic `import()` of a
+ * module this program does not contain". So such a fixture gets `export {};`
+ * appended: the same program as a module, with no binding added. Not
+ * `moduleDetection: "force"`, which would make the harness and the test
+ * modules too, and change their script semantics.
+ */
+function asModule(source) {
+  return /^\s*(import|export)\b/m.test(source) ? source : `${source}\nexport {};\n`;
 }
 
 /** A `./..._FIXTURE.js` specifier in a test or a fixture. */
