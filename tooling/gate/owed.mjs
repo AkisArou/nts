@@ -81,6 +81,7 @@ export const ASKS = {
   "llvm-rc": ["answers", "the same on LLVM with reference counting"],
   jvm: ["answers", "the same on the JVM, whose verifier types what C (`T *`) and LLVM (`ptr`) agree on by construction"],
   dex: ["valid", "does d8 accept what the JVM backend emits"],
+  "jvm-verifies": ["valid", "does the runtime's and the outcomes' JVM output load, verify and link -- the jvm step runs examples only"],
   rc: ["answers", "the same on C with reference counting, where a lifetime error shows"],
   outcomes: ["answers", "does each pinned defect still do exactly what it did"],
   integrity: ["valid", "is every refusal, cut and location honest, over examples, blockers and outcomes"],
@@ -156,7 +157,14 @@ export const RULES = [
     // and a pattern that binds no names skipped its initializer. Each dropped
     // effects silently; two of them had made recorded passes hollow (21 rows
     // for `typeof`, 6 for the pattern).
-    steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "outcomes", "integrity", "integrity-runtime", "definitions", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "benches"],
+    //
+    // **And `jvm-verifies`, because a change that compiles more code publishes
+    // the JVM's latent defects in it.** 1cf6a7ebe (`.then`) was green on every
+    // step this rule listed and turned `jvm-verifies` red on main: buffer's
+    // `module#init` stopped refusing, so two module-scope IIFEs compiled for the
+    // first time, and the JVM left their `erased_call$raises` abstract. The `jvm`
+    // step runs examples only; the runtime corpus is what `jvm-verifies` reads.
+    steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "outcomes", "integrity", "integrity-runtime", "definitions", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "benches", "jvm-verifies"],
     arms: [
       ...COMPARE,
       { if: "a type rule", kind: "answers", asks: "a generic class with two live instantiations appears in the corpus, never in a hand-written fixture", run: "the emitted-diff --axis above, and a full census per-case diff (conformance262.ts --rows, both binaries)" },
