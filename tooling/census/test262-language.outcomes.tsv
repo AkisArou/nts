@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 6fa410e1da57d5a6, commit 1cc41dd039ccef8c561ac080f37b95ee99858f68, harness d6442dbc09f91ad0; machine at start: 18.2 GB available, swap 8/20 GB, load 7.5/9.9 (1m/5m), 32 cores; 8 worker(s)
+# compiler 54e16e588b167c3a, commit 5947cbbda10534c8f54923d32d3ad1fb64e84d80, harness d6442dbc09f91ad0; machine at start: 18.6 GB available, swap 7.5/20 GB, load 4.4/11.9 (1m/5m), 32 cores; 8 worker(s)
 test/language/arguments-object/10.5-1gs.js	pass	
 test/language/asi/S7.9.2_A1_T1.js	pass	
 test/language/asi/S7.9.2_A1_T2.js	pass	
@@ -474,7 +474,7 @@ test/language/expressions/assignment/S11.13.1_A4_T1.js	pass
 test/language/expressions/assignment/S8.12.5_A1.js	pass	
 test/language/expressions/assignment/dstr/array-elem-init-let.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/assignment/dstr/array-elem-init-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignment/dstr/array-elem-nested-array-invalid.js	fail	accepted: was refused later (lowering)
+test/language/expressions/assignment/dstr/array-elem-nested-array-invalid.js	pass	
 test/language/expressions/assignment/dstr/array-elem-nested-array-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignment/dstr/array-elem-nested-array.js	pass	
 test/language/expressions/assignment/dstr/array-elem-nested-memberexpr-optchain-prop-ref-init.js	fail	accepted: was refused later (lowering)
@@ -507,7 +507,7 @@ test/language/expressions/assignment/dstr/array-rest-before-elision.js	pass
 test/language/expressions/assignment/dstr/array-rest-before-rest.js	pass	
 test/language/expressions/assignment/dstr/array-rest-elision.js	pass	
 test/language/expressions/assignment/dstr/array-rest-init.js	pass	
-test/language/expressions/assignment/dstr/array-rest-nested-array-invalid.js	fail	accepted: was refused later (lowering)
+test/language/expressions/assignment/dstr/array-rest-nested-array-invalid.js	pass	
 test/language/expressions/assignment/dstr/array-rest-nested-array-undefined-hole.js	pass	
 test/language/expressions/assignment/dstr/array-rest-nested-array-undefined-own.js	pass	
 test/language/expressions/assignment/dstr/array-rest-nested-array-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
@@ -539,7 +539,7 @@ test/language/expressions/assignment/dstr/obj-prop-elem-target-obj-literal-optch
 test/language/expressions/assignment/dstr/obj-prop-elem-target-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignment/dstr/obj-prop-identifier-resolution-lone.js	pass	
 test/language/expressions/assignment/dstr/obj-prop-identifier-resolution-trlng.js	pass	
-test/language/expressions/assignment/dstr/obj-prop-nested-array-invalid.js	fail	accepted: was refused later (lowering)
+test/language/expressions/assignment/dstr/obj-prop-nested-array-invalid.js	pass	
 test/language/expressions/assignment/dstr/obj-prop-nested-array-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignment/dstr/obj-prop-nested-array.js	pass	
 test/language/expressions/assignment/dstr/obj-prop-nested-obj-invalid.js	fail	accepted: was refused later (lowering)
@@ -643,17 +643,17 @@ test/language/expressions/assignment/member-expr-ident-name-var-escaped.js	pass
 test/language/expressions/assignment/member-expr-ident-name-void-escaped.js	pass	
 test/language/expressions/assignment/member-expr-ident-name-while-escaped.js	pass	
 test/language/expressions/assignment/member-expr-ident-name-with-escaped.js	pass	
-test/language/expressions/assignment/non-simple-target.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignment/target-assignment-inside-function.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignment/target-assignment.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignment/target-boolean.js	fail	accepted: was refused later (lowering)
+test/language/expressions/assignment/non-simple-target.js	pass	
+test/language/expressions/assignment/target-assignment-inside-function.js	pass	
+test/language/expressions/assignment/target-assignment.js	pass	
+test/language/expressions/assignment/target-boolean.js	pass	
 test/language/expressions/assignment/target-cover-id.js	pass	
-test/language/expressions/assignment/target-cover-newtarget.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignment/target-cover-yieldexpr.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignment/target-newtarget.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignment/target-null.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignment/target-number.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignment/target-string.js	fail	accepted: was refused later (lowering)
+test/language/expressions/assignment/target-cover-newtarget.js	pass	
+test/language/expressions/assignment/target-cover-yieldexpr.js	pass	
+test/language/expressions/assignment/target-newtarget.js	pass	
+test/language/expressions/assignment/target-null.js	pass	
+test/language/expressions/assignment/target-number.js	pass	
+test/language/expressions/assignment/target-string.js	pass	
 test/language/expressions/assignment/white-space.js	pass	
 test/language/expressions/assignmenttargettype/direct-additiveexpression-minus-multiplicativeexpression-0.js	pass	
 test/language/expressions/assignmenttargettype/direct-additiveexpression-minus-multiplicativeexpression-1.js	pass	
@@ -662,19 +662,19 @@ test/language/expressions/assignmenttargettype/direct-additiveexpression-plus-mu
 test/language/expressions/assignmenttargettype/direct-additiveexpression-plus-multiplicativeexpression-1.js	pass	
 test/language/expressions/assignmenttargettype/direct-additiveexpression-plus-multiplicativeexpression-2.js	pass	
 test/language/expressions/assignmenttargettype/direct-arrowfunction-0.js	pass	
-test/language/expressions/assignmenttargettype/direct-arrowfunction-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-arrowfunction-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-arrowfunction-3.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-arrowfunction-4.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-arrowfunction-5.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-arrowfunction-6.js	fail	accepted: was refused later (lowering)
+test/language/expressions/assignmenttargettype/direct-arrowfunction-1.js	pass	
+test/language/expressions/assignmenttargettype/direct-arrowfunction-2.js	pass	
+test/language/expressions/assignmenttargettype/direct-arrowfunction-3.js	pass	
+test/language/expressions/assignmenttargettype/direct-arrowfunction-4.js	pass	
+test/language/expressions/assignmenttargettype/direct-arrowfunction-5.js	pass	
+test/language/expressions/assignmenttargettype/direct-arrowfunction-6.js	pass	
 test/language/expressions/assignmenttargettype/direct-asyncarrowfunction-0.js	pass	
-test/language/expressions/assignmenttargettype/direct-asyncarrowfunction-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-asyncarrowfunction-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-asyncarrowfunction-3.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-asyncarrowfunction-4.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-asyncarrowfunction-5.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-asyncarrowfunction-6.js	fail	accepted: was refused later (lowering)
+test/language/expressions/assignmenttargettype/direct-asyncarrowfunction-1.js	pass	
+test/language/expressions/assignmenttargettype/direct-asyncarrowfunction-2.js	pass	
+test/language/expressions/assignmenttargettype/direct-asyncarrowfunction-3.js	pass	
+test/language/expressions/assignmenttargettype/direct-asyncarrowfunction-4.js	pass	
+test/language/expressions/assignmenttargettype/direct-asyncarrowfunction-5.js	pass	
+test/language/expressions/assignmenttargettype/direct-asyncarrowfunction-6.js	pass	
 test/language/expressions/assignmenttargettype/direct-bitwiseandexpression-bitwise-and-equalityexpression-0.js	pass	
 test/language/expressions/assignmenttargettype/direct-bitwiseandexpression-bitwise-and-equalityexpression-1.js	pass	
 test/language/expressions/assignmenttargettype/direct-bitwiseandexpression-bitwise-and-equalityexpression-2.js	pass	
@@ -685,13 +685,13 @@ test/language/expressions/assignmenttargettype/direct-bitwisexorexpression-bitwi
 test/language/expressions/assignmenttargettype/direct-bitwisexorexpression-bitwise-xor-bitwiseandexpression-1.js	pass	
 test/language/expressions/assignmenttargettype/direct-bitwisexorexpression-bitwise-xor-bitwiseandexpression-2.js	pass	
 test/language/expressions/assignmenttargettype/direct-callexpression-as-for-in-lhs.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-callexpression-as-for-of-lhs.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-callexpression-in-compound-assignment.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-callexpression-in-logical-assignment.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-callexpression-in-postfix-update.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-callexpression-in-prefix-update.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-callexpression-templateliteral.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-callexpression.js	fail	accepted: was refused later (lowering)
+test/language/expressions/assignmenttargettype/direct-callexpression-as-for-of-lhs.js	pass	
+test/language/expressions/assignmenttargettype/direct-callexpression-in-compound-assignment.js	pass	
+test/language/expressions/assignmenttargettype/direct-callexpression-in-logical-assignment.js	pass	
+test/language/expressions/assignmenttargettype/direct-callexpression-in-postfix-update.js	pass	
+test/language/expressions/assignmenttargettype/direct-callexpression-in-prefix-update.js	pass	
+test/language/expressions/assignmenttargettype/direct-callexpression-templateliteral.js	pass	
+test/language/expressions/assignmenttargettype/direct-callexpression.js	pass	
 test/language/expressions/assignmenttargettype/direct-coalesceexpressionhead-coalesce-bitwiseorexpression-0.js	pass	
 test/language/expressions/assignmenttargettype/direct-coalesceexpressionhead-coalesce-bitwiseorexpression-1.js	pass	
 test/language/expressions/assignmenttargettype/direct-coalesceexpressionhead-coalesce-bitwiseorexpression-2.js	pass	
@@ -707,27 +707,27 @@ test/language/expressions/assignmenttargettype/direct-equalityexpression-strict-
 test/language/expressions/assignmenttargettype/direct-equalityexpression-strict-not-equal-relationalexpression-0.js	pass	
 test/language/expressions/assignmenttargettype/direct-equalityexpression-strict-not-equal-relationalexpression-1.js	pass	
 test/language/expressions/assignmenttargettype/direct-equalityexpression-strict-not-equal-relationalexpression-2.js	pass	
-test/language/expressions/assignmenttargettype/direct-expression-comma-assignmentexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-expression-comma-assignmentexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-expression-comma-assignmentexpression-2.js	fail	accepted: was refused later (lowering)
+test/language/expressions/assignmenttargettype/direct-expression-comma-assignmentexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/direct-expression-comma-assignmentexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/direct-expression-comma-assignmentexpression-2.js	pass	
 test/language/expressions/assignmenttargettype/direct-identifierreference-arguments-strict.js	pass	
 test/language/expressions/assignmenttargettype/direct-identifierreference-eval-strict.js	pass	
-test/language/expressions/assignmenttargettype/direct-import.meta.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/assignmenttargettype/direct-importcall-defer.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-importcall-source.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-importcall.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-assignment-assignmentexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-assignment-assignmentexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-assignment-assignmentexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-coalesce-assignment-assignmentexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-coalesce-assignment-assignmentexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-coalesce-assignment-assignmentexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-logical-and-assignment-assignmentexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-logical-and-assignment-assignmentexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-logical-and-assignment-assignmentexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-logical-or-assignment-assignmentexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-logical-or-assignment-assignmentexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-logical-or-assignment-assignmentexpression-2.js	fail	accepted: was refused later (lowering)
+test/language/expressions/assignmenttargettype/direct-import.meta.js	pass	
+test/language/expressions/assignmenttargettype/direct-importcall-defer.js	pass	
+test/language/expressions/assignmenttargettype/direct-importcall-source.js	pass	
+test/language/expressions/assignmenttargettype/direct-importcall.js	pass	
+test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-assignment-assignmentexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-assignment-assignmentexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-assignment-assignmentexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-coalesce-assignment-assignmentexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-coalesce-assignment-assignmentexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-coalesce-assignment-assignmentexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-logical-and-assignment-assignmentexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-logical-and-assignment-assignmentexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-logical-and-assignment-assignmentexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-logical-or-assignment-assignmentexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-logical-or-assignment-assignmentexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-logical-or-assignment-assignmentexpression-2.js	pass	
 test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-minus-minus.js	pass	
 test/language/expressions/assignmenttargettype/direct-lefthandsideexpression-plus-plus.js	pass	
 test/language/expressions/assignmenttargettype/direct-logicalandexpression-logical-and-bitwiseorexpression-0.js	pass	
@@ -736,7 +736,7 @@ test/language/expressions/assignmenttargettype/direct-logicalandexpression-logic
 test/language/expressions/assignmenttargettype/direct-logicalorexpression-logical-or-logicalandexpression-0.js	pass	
 test/language/expressions/assignmenttargettype/direct-logicalorexpression-logical-or-logicalandexpression-1.js	pass	
 test/language/expressions/assignmenttargettype/direct-logicalorexpression-logical-or-logicalandexpression-2.js	pass	
-test/language/expressions/assignmenttargettype/direct-memberexpression-templateliteral.js	fail	accepted: was refused later (lowering)
+test/language/expressions/assignmenttargettype/direct-memberexpression-templateliteral.js	pass	
 test/language/expressions/assignmenttargettype/direct-minus-minus-unaryexpression.js	pass	
 test/language/expressions/assignmenttargettype/direct-multiplicativeexpression-multiplicativeoperator-exponentiationexpression-0.js	pass	
 test/language/expressions/assignmenttargettype/direct-multiplicativeexpression-multiplicativeoperator-exponentiationexpression-1.js	pass	
@@ -744,22 +744,22 @@ test/language/expressions/assignmenttargettype/direct-multiplicativeexpression-m
 test/language/expressions/assignmenttargettype/direct-multiplicativeexpression-multiplicativeoperator-exponentiationexpression-3.js	pass	
 test/language/expressions/assignmenttargettype/direct-multiplicativeexpression-multiplicativeoperator-exponentiationexpression-4.js	pass	
 test/language/expressions/assignmenttargettype/direct-multiplicativeexpression-multiplicativeoperator-exponentiationexpression-5.js	pass	
-test/language/expressions/assignmenttargettype/direct-new-memberexpression-arguments.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-new-newexpression.js	fail	accepted: was refused later (lowering)
+test/language/expressions/assignmenttargettype/direct-new-memberexpression-arguments.js	pass	
+test/language/expressions/assignmenttargettype/direct-new-newexpression.js	pass	
 test/language/expressions/assignmenttargettype/direct-optionalexpression.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignmenttargettype/direct-plus-plus-unaryexpression.js	pass	
 test/language/expressions/assignmenttargettype/direct-primaryexpression-asyncfunctionexpression.js	pass	
 test/language/expressions/assignmenttargettype/direct-primaryexpression-asyncgeneratorexpression.js	pass	
 test/language/expressions/assignmenttargettype/direct-primaryexpression-functionexpression.js	pass	
 test/language/expressions/assignmenttargettype/direct-primaryexpression-generatorexpression.js	pass	
-test/language/expressions/assignmenttargettype/direct-primaryexpression-literal-boolean.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-primaryexpression-literal-null.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-primaryexpression-literal-numeric.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-primaryexpression-literal-string.js	fail	accepted: was refused later (lowering)
+test/language/expressions/assignmenttargettype/direct-primaryexpression-literal-boolean.js	pass	
+test/language/expressions/assignmenttargettype/direct-primaryexpression-literal-null.js	pass	
+test/language/expressions/assignmenttargettype/direct-primaryexpression-literal-numeric.js	pass	
+test/language/expressions/assignmenttargettype/direct-primaryexpression-literal-string.js	pass	
 test/language/expressions/assignmenttargettype/direct-primaryexpression-objectliteral.js	pass	
-test/language/expressions/assignmenttargettype/direct-primaryexpression-regularexpressionliteral.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-primaryexpression-templateliteral.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-primaryexpression-this.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/assignmenttargettype/direct-primaryexpression-regularexpressionliteral.js	pass	
+test/language/expressions/assignmenttargettype/direct-primaryexpression-templateliteral.js	pass	
+test/language/expressions/assignmenttargettype/direct-primaryexpression-this.js	pass	
 test/language/expressions/assignmenttargettype/direct-relationalexpression-greater-than-or-equal-to-shiftexpression-0.js	pass	
 test/language/expressions/assignmenttargettype/direct-relationalexpression-greater-than-or-equal-to-shiftexpression-1.js	pass	
 test/language/expressions/assignmenttargettype/direct-relationalexpression-greater-than-or-equal-to-shiftexpression-2.js	pass	
@@ -787,9 +787,9 @@ test/language/expressions/assignmenttargettype/direct-shiftexpression-bitwise-ri
 test/language/expressions/assignmenttargettype/direct-shiftexpression-unsigned-bitwise-right-additiveexpression-0.js	pass	
 test/language/expressions/assignmenttargettype/direct-shiftexpression-unsigned-bitwise-right-additiveexpression-1.js	pass	
 test/language/expressions/assignmenttargettype/direct-shiftexpression-unsigned-bitwise-right-additiveexpression-2.js	pass	
-test/language/expressions/assignmenttargettype/direct-shortcircuitexpression-question-assignmentexpression-else-assignmentexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-shortcircuitexpression-question-assignmentexpression-else-assignmentexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/direct-shortcircuitexpression-question-assignmentexpression-else-assignmentexpression-2.js	fail	accepted: was refused later (lowering)
+test/language/expressions/assignmenttargettype/direct-shortcircuitexpression-question-assignmentexpression-else-assignmentexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/direct-shortcircuitexpression-question-assignmentexpression-else-assignmentexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/direct-shortcircuitexpression-question-assignmentexpression-else-assignmentexpression-2.js	pass	
 test/language/expressions/assignmenttargettype/direct-unaryexpression-delete-unaryexpression.js	pass	
 test/language/expressions/assignmenttargettype/direct-unaryexpression-exclamation-unaryexpression-0.js	pass	
 test/language/expressions/assignmenttargettype/direct-unaryexpression-exclamation-unaryexpression-1.js	pass	
@@ -814,162 +814,162 @@ test/language/expressions/assignmenttargettype/direct-updateexpression-star-star
 test/language/expressions/assignmenttargettype/direct-updateexpression-star-star-exponentiationexpression-2.js	pass	
 test/language/expressions/assignmenttargettype/direct-yieldexpression-0.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignmenttargettype/direct-yieldexpression-1.js	pass	
-test/language/expressions/assignmenttargettype/parenthesized-additiveexpression-minus-multiplicativeexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-additiveexpression-minus-multiplicativeexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-additiveexpression-minus-multiplicativeexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-additiveexpression-plus-multiplicativeexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-additiveexpression-plus-multiplicativeexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-additiveexpression-plus-multiplicativeexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-arrowfunction-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-arrowfunction-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-arrowfunction-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-arrowfunction-3.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-arrowfunction-4.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-arrowfunction-5.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-arrowfunction-6.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-asyncarrowfunction-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-asyncarrowfunction-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-asyncarrowfunction-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-asyncarrowfunction-3.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-asyncarrowfunction-4.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-asyncarrowfunction-5.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-asyncarrowfunction-6.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-bitwiseandexpression-bitwise-and-equalityexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-bitwiseandexpression-bitwise-and-equalityexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-bitwiseandexpression-bitwise-and-equalityexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-bitwiseorexpression-bitwise-or-bitwisexorexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-bitwiseorexpression-bitwise-or-bitwisexorexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-bitwiseorexpression-bitwise-or-bitwisexorexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-bitwisexorexpression-bitwise-xor-bitwiseandexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-bitwisexorexpression-bitwise-xor-bitwiseandexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-bitwisexorexpression-bitwise-xor-bitwiseandexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-callexpression-in-compound-assignment.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-callexpression-in-logical-assignment.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-callexpression-templateliteral.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-callexpression.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-coalesceexpressionhead-coalesce-bitwiseorexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-coalesceexpressionhead-coalesce-bitwiseorexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-coalesceexpressionhead-coalesce-bitwiseorexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-abstract-equal-relationalexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-abstract-equal-relationalexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-abstract-equal-relationalexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-abstract-not-equal-relationalexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-abstract-not-equal-relationalexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-abstract-not-equal-relationalexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-strict-equal-relationalexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-strict-equal-relationalexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-strict-equal-relationalexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-strict-not-equal-relationalexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-strict-not-equal-relationalexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-strict-not-equal-relationalexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-expression-comma-assignmentexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-expression-comma-assignmentexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-expression-comma-assignmentexpression-2.js	fail	accepted: was refused later (lowering)
+test/language/expressions/assignmenttargettype/parenthesized-additiveexpression-minus-multiplicativeexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-additiveexpression-minus-multiplicativeexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-additiveexpression-minus-multiplicativeexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-additiveexpression-plus-multiplicativeexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-additiveexpression-plus-multiplicativeexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-additiveexpression-plus-multiplicativeexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-arrowfunction-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-arrowfunction-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-arrowfunction-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-arrowfunction-3.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-arrowfunction-4.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-arrowfunction-5.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-arrowfunction-6.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-asyncarrowfunction-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-asyncarrowfunction-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-asyncarrowfunction-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-asyncarrowfunction-3.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-asyncarrowfunction-4.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-asyncarrowfunction-5.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-asyncarrowfunction-6.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-bitwiseandexpression-bitwise-and-equalityexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-bitwiseandexpression-bitwise-and-equalityexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-bitwiseandexpression-bitwise-and-equalityexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-bitwiseorexpression-bitwise-or-bitwisexorexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-bitwiseorexpression-bitwise-or-bitwisexorexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-bitwiseorexpression-bitwise-or-bitwisexorexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-bitwisexorexpression-bitwise-xor-bitwiseandexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-bitwisexorexpression-bitwise-xor-bitwiseandexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-bitwisexorexpression-bitwise-xor-bitwiseandexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-callexpression-in-compound-assignment.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-callexpression-in-logical-assignment.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-callexpression-templateliteral.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-callexpression.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-coalesceexpressionhead-coalesce-bitwiseorexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-coalesceexpressionhead-coalesce-bitwiseorexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-coalesceexpressionhead-coalesce-bitwiseorexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-abstract-equal-relationalexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-abstract-equal-relationalexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-abstract-equal-relationalexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-abstract-not-equal-relationalexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-abstract-not-equal-relationalexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-abstract-not-equal-relationalexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-strict-equal-relationalexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-strict-equal-relationalexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-strict-equal-relationalexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-strict-not-equal-relationalexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-strict-not-equal-relationalexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-equalityexpression-strict-not-equal-relationalexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-expression-comma-assignmentexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-expression-comma-assignmentexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-expression-comma-assignmentexpression-2.js	pass	
 test/language/expressions/assignmenttargettype/parenthesized-identifierreference-arguments-strict.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignmenttargettype/parenthesized-identifierreference-eval-strict.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/assignmenttargettype/parenthesized-import.meta.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/assignmenttargettype/parenthesized-importcall-defer.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-importcall-source.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-importcall.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-assignment-assignmentexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-assignment-assignmentexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-assignment-assignmentexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-coalesce-assignment-assignmentexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-coalesce-assignment-assignmentexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-coalesce-assignment-assignmentexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-logical-and-assignment-assignmentexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-logical-and-assignment-assignmentexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-logical-and-assignment-assignmentexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-logical-or-assignment-assignmentexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-logical-or-assignment-assignmentexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-logical-or-assignment-assignmentexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-minus-minus.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-plus-plus.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-logicalandexpression-logical-and-bitwiseorexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-logicalandexpression-logical-and-bitwiseorexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-logicalandexpression-logical-and-bitwiseorexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-logicalorexpression-logical-or-logicalandexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-logicalorexpression-logical-or-logicalandexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-logicalorexpression-logical-or-logicalandexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-memberexpression-templateliteral.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-minus-minus-unaryexpression.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-multiplicativeexpression-multiplicativeoperator-exponentiationexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-multiplicativeexpression-multiplicativeoperator-exponentiationexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-multiplicativeexpression-multiplicativeoperator-exponentiationexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-multiplicativeexpression-multiplicativeoperator-exponentiationexpression-3.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-multiplicativeexpression-multiplicativeoperator-exponentiationexpression-4.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-multiplicativeexpression-multiplicativeoperator-exponentiationexpression-5.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-new-memberexpression-arguments.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-new-newexpression.js	fail	accepted: was refused later (lowering)
+test/language/expressions/assignmenttargettype/parenthesized-import.meta.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-importcall-defer.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-importcall-source.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-importcall.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-assignment-assignmentexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-assignment-assignmentexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-assignment-assignmentexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-coalesce-assignment-assignmentexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-coalesce-assignment-assignmentexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-coalesce-assignment-assignmentexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-logical-and-assignment-assignmentexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-logical-and-assignment-assignmentexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-logical-and-assignment-assignmentexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-logical-or-assignment-assignmentexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-logical-or-assignment-assignmentexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-logical-or-assignment-assignmentexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-minus-minus.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-lefthandsideexpression-plus-plus.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-logicalandexpression-logical-and-bitwiseorexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-logicalandexpression-logical-and-bitwiseorexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-logicalandexpression-logical-and-bitwiseorexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-logicalorexpression-logical-or-logicalandexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-logicalorexpression-logical-or-logicalandexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-logicalorexpression-logical-or-logicalandexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-memberexpression-templateliteral.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-minus-minus-unaryexpression.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-multiplicativeexpression-multiplicativeoperator-exponentiationexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-multiplicativeexpression-multiplicativeoperator-exponentiationexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-multiplicativeexpression-multiplicativeoperator-exponentiationexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-multiplicativeexpression-multiplicativeoperator-exponentiationexpression-3.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-multiplicativeexpression-multiplicativeoperator-exponentiationexpression-4.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-multiplicativeexpression-multiplicativeoperator-exponentiationexpression-5.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-new-memberexpression-arguments.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-new-newexpression.js	pass	
 test/language/expressions/assignmenttargettype/parenthesized-optionalexpression.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-plus-plus-unaryexpression.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-asyncfunctionexpression.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-asyncgeneratorexpression.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-classexpression.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-functionexpression.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-generatorexpression.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-literal-boolean.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-literal-null.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-literal-numeric.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-literal-string.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-objectliteral.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-regularexpressionliteral.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-templateliteral.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-this.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-greater-than-or-equal-to-shiftexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-greater-than-or-equal-to-shiftexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-greater-than-or-equal-to-shiftexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-greater-than-shiftexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-greater-than-shiftexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-greater-than-shiftexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-in-shiftexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-in-shiftexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-in-shiftexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-instanceof-shiftexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-instanceof-shiftexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-instanceof-shiftexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-less-than-or-equal-to-shiftexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-less-than-or-equal-to-shiftexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-less-than-or-equal-to-shiftexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-less-than-shiftexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-less-than-shiftexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-less-than-shiftexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-shiftexpression-bitwise-left-additiveexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-shiftexpression-bitwise-left-additiveexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-shiftexpression-bitwise-left-additiveexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-shiftexpression-bitwise-right-additiveexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-shiftexpression-bitwise-right-additiveexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-shiftexpression-bitwise-right-additiveexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-shiftexpression-unsigned-bitwise-right-additiveexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-shiftexpression-unsigned-bitwise-right-additiveexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-shiftexpression-unsigned-bitwise-right-additiveexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-shortcircuitexpression-question-assignmentexpression-else-assignmentexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-shortcircuitexpression-question-assignmentexpression-else-assignmentexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-shortcircuitexpression-question-assignmentexpression-else-assignmentexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-delete-unaryexpression.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-exclamation-unaryexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-exclamation-unaryexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-exclamation-unaryexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-minus-unaryexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-minus-unaryexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-minus-unaryexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-plus-unaryexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-plus-unaryexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-plus-unaryexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-tilde-unaryexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-tilde-unaryexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-tilde-unaryexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-typeof-unaryexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-typeof-unaryexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-typeof-unaryexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-void-unaryexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-void-unaryexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-void-unaryexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-updateexpression-star-star-exponentiationexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-updateexpression-star-star-exponentiationexpression-1.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-updateexpression-star-star-exponentiationexpression-2.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-yieldexpression-0.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignmenttargettype/parenthesized-yieldexpression-1.js	fail	accepted: was refused later (lowering)
+test/language/expressions/assignmenttargettype/parenthesized-plus-plus-unaryexpression.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-asyncfunctionexpression.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-asyncgeneratorexpression.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-classexpression.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-functionexpression.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-generatorexpression.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-literal-boolean.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-literal-null.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-literal-numeric.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-literal-string.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-objectliteral.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-regularexpressionliteral.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-templateliteral.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-primaryexpression-this.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-greater-than-or-equal-to-shiftexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-greater-than-or-equal-to-shiftexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-greater-than-or-equal-to-shiftexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-greater-than-shiftexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-greater-than-shiftexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-greater-than-shiftexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-in-shiftexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-in-shiftexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-in-shiftexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-instanceof-shiftexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-instanceof-shiftexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-instanceof-shiftexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-less-than-or-equal-to-shiftexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-less-than-or-equal-to-shiftexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-less-than-or-equal-to-shiftexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-less-than-shiftexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-less-than-shiftexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-relationalexpression-less-than-shiftexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-shiftexpression-bitwise-left-additiveexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-shiftexpression-bitwise-left-additiveexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-shiftexpression-bitwise-left-additiveexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-shiftexpression-bitwise-right-additiveexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-shiftexpression-bitwise-right-additiveexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-shiftexpression-bitwise-right-additiveexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-shiftexpression-unsigned-bitwise-right-additiveexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-shiftexpression-unsigned-bitwise-right-additiveexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-shiftexpression-unsigned-bitwise-right-additiveexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-shortcircuitexpression-question-assignmentexpression-else-assignmentexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-shortcircuitexpression-question-assignmentexpression-else-assignmentexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-shortcircuitexpression-question-assignmentexpression-else-assignmentexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-delete-unaryexpression.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-exclamation-unaryexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-exclamation-unaryexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-exclamation-unaryexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-minus-unaryexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-minus-unaryexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-minus-unaryexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-plus-unaryexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-plus-unaryexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-plus-unaryexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-tilde-unaryexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-tilde-unaryexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-tilde-unaryexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-typeof-unaryexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-typeof-unaryexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-typeof-unaryexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-void-unaryexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-void-unaryexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-unaryexpression-void-unaryexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-updateexpression-star-star-exponentiationexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-updateexpression-star-star-exponentiationexpression-1.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-updateexpression-star-star-exponentiationexpression-2.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-yieldexpression-0.js	pass	
+test/language/expressions/assignmenttargettype/parenthesized-yieldexpression-1.js	pass	
 test/language/expressions/assignmenttargettype/simple-basic-identifierreference-await.js	pass	
 test/language/expressions/async-arrow-function/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-arrow-function/await-as-identifier-reference-escaped.js	pass	
@@ -1127,7 +1127,7 @@ test/language/expressions/await/await-in-function.js	pass
 test/language/expressions/await/await-in-global.js	pass	
 test/language/expressions/await/await-in-nested-function.js	pass	
 test/language/expressions/await/await-in-nested-generator.js	pass	
-test/language/expressions/await/early-errors-await-not-simple-assignment-target.js	fail	accepted: was refused later (lowering)
+test/language/expressions/await/early-errors-await-not-simple-assignment-target.js	pass	
 test/language/expressions/await/no-operand.js	pass	
 test/language/expressions/bitwise-and/S11.10.1_A2.4_T1.js	pass	
 test/language/expressions/bitwise-not/S9.5_A2.1_T2.js	pass	
@@ -2300,17 +2300,17 @@ test/language/expressions/compound-assignment/S11.13.2_A3.2_T8.js	pass
 test/language/expressions/compound-assignment/S11.13.2_A3.2_T9.js	pass	
 test/language/expressions/compound-assignment/add-arguments-strict.js	pass	
 test/language/expressions/compound-assignment/add-eval-strict.js	pass	
-test/language/expressions/compound-assignment/add-non-simple.js	fail	accepted: was refused later (lowering)
+test/language/expressions/compound-assignment/add-non-simple.js	pass	
 test/language/expressions/compound-assignment/add-whitespace.js	pass	
 test/language/expressions/compound-assignment/and-arguments-strict.js	pass	
 test/language/expressions/compound-assignment/and-eval-strict.js	pass	
 test/language/expressions/compound-assignment/and-whitespace.js	pass	
-test/language/expressions/compound-assignment/btws-and-non-simple.js	fail	accepted: was refused later (lowering)
-test/language/expressions/compound-assignment/btws-or-non-simple.js	fail	accepted: was refused later (lowering)
-test/language/expressions/compound-assignment/btws-xor-non-simple.js	fail	accepted: was refused later (lowering)
+test/language/expressions/compound-assignment/btws-and-non-simple.js	pass	
+test/language/expressions/compound-assignment/btws-or-non-simple.js	pass	
+test/language/expressions/compound-assignment/btws-xor-non-simple.js	pass	
 test/language/expressions/compound-assignment/div-arguments-strict.js	pass	
 test/language/expressions/compound-assignment/div-eval-strict.js	pass	
-test/language/expressions/compound-assignment/div-non-simple.js	fail	accepted: was refused later (lowering)
+test/language/expressions/compound-assignment/div-non-simple.js	pass	
 test/language/expressions/compound-assignment/div-whitespace.js	pass	
 test/language/expressions/compound-assignment/left-hand-side-private-reference-accessor-property-add.js	pass	
 test/language/expressions/compound-assignment/left-hand-side-private-reference-accessor-property-bitand.js	pass	
@@ -2336,30 +2336,30 @@ test/language/expressions/compound-assignment/left-hand-side-private-reference-d
 test/language/expressions/compound-assignment/left-hand-side-private-reference-data-property-rshift.js	pass	
 test/language/expressions/compound-assignment/left-hand-side-private-reference-data-property-srshift.js	pass	
 test/language/expressions/compound-assignment/left-hand-side-private-reference-data-property-sub.js	pass	
-test/language/expressions/compound-assignment/left-shift-non-simple.js	fail	accepted: was refused later (lowering)
+test/language/expressions/compound-assignment/left-shift-non-simple.js	pass	
 test/language/expressions/compound-assignment/lshift-arguments-strict.js	pass	
 test/language/expressions/compound-assignment/lshift-eval-strict.js	pass	
 test/language/expressions/compound-assignment/lshift-whitespace.js	pass	
 test/language/expressions/compound-assignment/mod-arguments-strict.js	pass	
-test/language/expressions/compound-assignment/mod-div-non-simple.js	fail	accepted: was refused later (lowering)
+test/language/expressions/compound-assignment/mod-div-non-simple.js	pass	
 test/language/expressions/compound-assignment/mod-eval-strict.js	pass	
 test/language/expressions/compound-assignment/mod-whitespace.js	pass	
 test/language/expressions/compound-assignment/mult-arguments-strict.js	pass	
 test/language/expressions/compound-assignment/mult-eval-strict.js	pass	
-test/language/expressions/compound-assignment/mult-non-simple.js	fail	accepted: was refused later (lowering)
+test/language/expressions/compound-assignment/mult-non-simple.js	pass	
 test/language/expressions/compound-assignment/mult-whitespace.js	pass	
 test/language/expressions/compound-assignment/or-arguments-strict.js	pass	
 test/language/expressions/compound-assignment/or-eval-strict.js	pass	
 test/language/expressions/compound-assignment/or-whitespace.js	pass	
-test/language/expressions/compound-assignment/right-shift-non-simple.js	fail	accepted: was refused later (lowering)
+test/language/expressions/compound-assignment/right-shift-non-simple.js	pass	
 test/language/expressions/compound-assignment/srshift-arguments-strict.js	pass	
 test/language/expressions/compound-assignment/srshift-eval-strict.js	pass	
 test/language/expressions/compound-assignment/srshift-whitespace.js	pass	
 test/language/expressions/compound-assignment/sub-arguments-strict.js	pass	
 test/language/expressions/compound-assignment/sub-eval-strict.js	pass	
 test/language/expressions/compound-assignment/sub-whitespace.js	pass	
-test/language/expressions/compound-assignment/subtract-non-simple.js	fail	accepted: was refused later (lowering)
-test/language/expressions/compound-assignment/u-right-shift-non-simple.js	fail	accepted: was refused later (lowering)
+test/language/expressions/compound-assignment/subtract-non-simple.js	pass	
+test/language/expressions/compound-assignment/u-right-shift-non-simple.js	pass	
 test/language/expressions/compound-assignment/urshift-arguments-strict.js	pass	
 test/language/expressions/compound-assignment/urshift-eval-strict.js	pass	
 test/language/expressions/compound-assignment/urshift-whitespace.js	pass	
@@ -2430,7 +2430,7 @@ test/language/expressions/dynamic-import/syntax/invalid/invalid-assignmenttarget
 test/language/expressions/dynamic-import/syntax/invalid/invalid-assignmenttargettype-syntax-error-2-update-expression.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/invalid-assignmenttargettype-syntax-error-3-update-expression.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/invalid-assignmenttargettype-syntax-error-4-update-expression.js	fail	accepted: was refused later (lowering)
-test/language/expressions/dynamic-import/syntax/invalid/invalid-assignmenttargettype-syntax-error-5-lhs-equals-assignment-expression.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/invalid-assignmenttargettype-syntax-error-5-lhs-equals-assignment-expression.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/invalid-assignmenttargettype-syntax-error-6-lhs-assignment-operator-assignment-expression.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/invalid-assignmenttargettype-syntax-error-7-lhs-assignment-operator-assignment-expression.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/invalid-assignmenttargettype-syntax-error-8-lhs-assignment-operator-assignment-expression.js	fail	accepted: was refused later (lowering)
@@ -3124,14 +3124,14 @@ test/language/expressions/grouping/S11.1.6_A3_T4.js	pass
 test/language/expressions/import.meta/syntax/escape-sequence-import.js	pass	
 test/language/expressions/import.meta/syntax/escape-sequence-meta.js	fail	accepted: was refused later (lowering)
 test/language/expressions/import.meta/syntax/goal-script.js	fail	accepted: was refused later (lowering)
-test/language/expressions/import.meta/syntax/invalid-assignment-target-array-destructuring-expr.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/import.meta/syntax/invalid-assignment-target-array-rest-destructuring-expr.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/import.meta/syntax/invalid-assignment-target-assignment-expr.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/import.meta/syntax/invalid-assignment-target-for-await-of-loop.js	fail	accepted: was refused later (lowering)
+test/language/expressions/import.meta/syntax/invalid-assignment-target-array-destructuring-expr.js	pass	
+test/language/expressions/import.meta/syntax/invalid-assignment-target-array-rest-destructuring-expr.js	pass	
+test/language/expressions/import.meta/syntax/invalid-assignment-target-assignment-expr.js	pass	
+test/language/expressions/import.meta/syntax/invalid-assignment-target-for-await-of-loop.js	pass	
 test/language/expressions/import.meta/syntax/invalid-assignment-target-for-in-loop.js	fail	accepted: was refused later (lowering)
-test/language/expressions/import.meta/syntax/invalid-assignment-target-for-of-loop.js	fail	accepted: was refused later (lowering)
-test/language/expressions/import.meta/syntax/invalid-assignment-target-object-destructuring-expr.js	fail	accepted: was refused later (lowering)
-test/language/expressions/import.meta/syntax/invalid-assignment-target-object-rest-destructuring-expr.js	fail	accepted: was refused later (lowering)
+test/language/expressions/import.meta/syntax/invalid-assignment-target-for-of-loop.js	pass	
+test/language/expressions/import.meta/syntax/invalid-assignment-target-object-destructuring-expr.js	pass	
+test/language/expressions/import.meta/syntax/invalid-assignment-target-object-rest-destructuring-expr.js	pass	
 test/language/expressions/import.meta/syntax/invalid-assignment-target-update-expr.js	fail	accepted: was refused later (lowering)
 test/language/expressions/in/S8.12.6_A1.js	pass	
 test/language/expressions/in/S8.12.6_A2_T1.js	fail	nts: uncaught Test262Error: #1: var __obj={}; "valueOf" in __obj
@@ -3204,19 +3204,19 @@ test/language/expressions/logical-assignment/left-hand-side-private-reference-da
 test/language/expressions/logical-assignment/left-hand-side-private-reference-data-property-or.js	pass	
 test/language/expressions/logical-assignment/left-hand-side-private-reference-data-property-short-circuit-nullish.js	pass	
 test/language/expressions/logical-assignment/lgcl-and-arguments-strict.js	pass	
-test/language/expressions/logical-assignment/lgcl-and-assignment-operator-non-simple-lhs.js	fail	accepted: was refused later (lowering)
+test/language/expressions/logical-assignment/lgcl-and-assignment-operator-non-simple-lhs.js	pass	
 test/language/expressions/logical-assignment/lgcl-and-eval-strict.js	pass	
-test/language/expressions/logical-assignment/lgcl-and-non-simple.js	fail	accepted: was refused later (lowering)
+test/language/expressions/logical-assignment/lgcl-and-non-simple.js	pass	
 test/language/expressions/logical-assignment/lgcl-and-whitespace.js	pass	
 test/language/expressions/logical-assignment/lgcl-nullish-arguments-strict.js	pass	
-test/language/expressions/logical-assignment/lgcl-nullish-assignment-operator-non-simple-lhs.js	fail	accepted: was refused later (lowering)
+test/language/expressions/logical-assignment/lgcl-nullish-assignment-operator-non-simple-lhs.js	pass	
 test/language/expressions/logical-assignment/lgcl-nullish-assignment-operator-unresolved-rhs.js	pass	
 test/language/expressions/logical-assignment/lgcl-nullish-eval-strict.js	pass	
-test/language/expressions/logical-assignment/lgcl-nullish-non-simple.js	fail	accepted: was refused later (lowering)
+test/language/expressions/logical-assignment/lgcl-nullish-non-simple.js	pass	
 test/language/expressions/logical-assignment/lgcl-or-arguments-strict.js	pass	
-test/language/expressions/logical-assignment/lgcl-or-assignment-operator-non-simple-lhs.js	fail	accepted: was refused later (lowering)
+test/language/expressions/logical-assignment/lgcl-or-assignment-operator-non-simple-lhs.js	pass	
 test/language/expressions/logical-assignment/lgcl-or-eval-strict.js	pass	
-test/language/expressions/logical-assignment/lgcl-or-non-simple.js	fail	accepted: was refused later (lowering)
+test/language/expressions/logical-assignment/lgcl-or-non-simple.js	pass	
 test/language/expressions/logical-assignment/lgcl-or-whitespace.js	pass	
 test/language/expressions/logical-not/S11.4.9_A3_T5.js	pass	
 test/language/expressions/logical-not/S9.2_A3_T2.js	pass	
@@ -3736,7 +3736,7 @@ test/language/expressions/postfix-decrement/line-terminator-line-separator.js	pa
 test/language/expressions/postfix-decrement/line-terminator-paragraph-separator.js	pass	
 test/language/expressions/postfix-decrement/target-cover-id.js	pass	
 test/language/expressions/postfix-decrement/target-cover-newtarget.js	fail	accepted: was refused later (lowering)
-test/language/expressions/postfix-decrement/target-cover-yieldexpr.js	fail	accepted: was refused later (lowering)
+test/language/expressions/postfix-decrement/target-cover-yieldexpr.js	pass	
 test/language/expressions/postfix-decrement/target-newtarget.js	fail	accepted: was refused later (lowering)
 test/language/expressions/postfix-decrement/this.js	fail	accepted: was refused later (lowering)
 test/language/expressions/postfix-decrement/whitespace.js	pass	
@@ -3751,7 +3751,7 @@ test/language/expressions/postfix-increment/line-terminator-line-separator.js	pa
 test/language/expressions/postfix-increment/line-terminator-paragraph-separator.js	pass	
 test/language/expressions/postfix-increment/target-cover-id.js	pass	
 test/language/expressions/postfix-increment/target-cover-newtarget.js	fail	accepted: was refused later (lowering)
-test/language/expressions/postfix-increment/target-cover-yieldexpr.js	fail	accepted: was refused later (lowering)
+test/language/expressions/postfix-increment/target-cover-yieldexpr.js	pass	
 test/language/expressions/postfix-increment/target-newtarget.js	fail	accepted: was refused later (lowering)
 test/language/expressions/postfix-increment/this.js	fail	accepted: was refused later (lowering)
 test/language/expressions/postfix-increment/whitespace.js	pass	
@@ -3763,7 +3763,7 @@ test/language/expressions/prefix-decrement/arguments.js	pass
 test/language/expressions/prefix-decrement/eval.js	pass	
 test/language/expressions/prefix-decrement/target-cover-id.js	pass	
 test/language/expressions/prefix-decrement/target-cover-newtarget.js	fail	accepted: was refused later (lowering)
-test/language/expressions/prefix-decrement/target-cover-yieldexpr.js	fail	accepted: was refused later (lowering)
+test/language/expressions/prefix-decrement/target-cover-yieldexpr.js	pass	
 test/language/expressions/prefix-decrement/target-newtarget.js	fail	accepted: was refused later (lowering)
 test/language/expressions/prefix-decrement/this.js	fail	accepted: was refused later (lowering)
 test/language/expressions/prefix-decrement/whitespace.js	pass	
@@ -3774,7 +3774,7 @@ test/language/expressions/prefix-increment/arguments.js	pass
 test/language/expressions/prefix-increment/eval.js	pass	
 test/language/expressions/prefix-increment/target-cover-id.js	pass	
 test/language/expressions/prefix-increment/target-cover-newtarget.js	fail	accepted: was refused later (lowering)
-test/language/expressions/prefix-increment/target-cover-yieldexpr.js	fail	accepted: was refused later (lowering)
+test/language/expressions/prefix-increment/target-cover-yieldexpr.js	pass	
 test/language/expressions/prefix-increment/target-newtarget.js	fail	accepted: was refused later (lowering)
 test/language/expressions/prefix-increment/this.js	fail	accepted: was refused later (lowering)
 test/language/expressions/prefix-increment/whitespace.js	pass	
@@ -3848,7 +3848,7 @@ test/language/expressions/template-literal/mongolian-vowel-separator.js	pass
 test/language/expressions/template-literal/no-sub.js	pass	
 test/language/expressions/template-literal/unicode-escape-nls-err.js	pass	
 test/language/expressions/template-literal/unicode-escape-no-hex-err.js	pass	
-test/language/expressions/this/S11.1.1_A1.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/this/S11.1.1_A1.js	pass	
 test/language/expressions/typeof/boolean.js	pass	
 test/language/expressions/typeof/number.js	pass	
 test/language/expressions/typeof/undefined.js	pass	
@@ -3941,7 +3941,7 @@ test/language/global-code/invalid-private-names-member-expression-bad-reference.
 test/language/global-code/invalid-private-names-member-expression-this.js	fail	accepted: was refused later (lowering)
 test/language/global-code/new.target-arrow.js	fail	accepted: was refused later (lowering)
 test/language/global-code/new.target.js	fail	accepted: was refused later (lowering)
-test/language/global-code/return.js	fail	accepted: ran and threw Test262Error
+test/language/global-code/return.js	pass	
 test/language/global-code/super-call-arrow.js	fail	accepted: was refused later (lowering)
 test/language/global-code/super-call.js	fail	accepted: was refused later (lowering)
 test/language/global-code/super-prop-arrow.js	fail	accepted: was refused later (lowering)
@@ -4711,7 +4711,7 @@ test/language/module-code/comment-multi-line-html-close.js	pass
 test/language/module-code/comment-single-line-html-close.js	pass	
 test/language/module-code/comment-single-line-html-open.js	pass	
 test/language/module-code/early-dup-export-as-star-as.js	fail	accepted: ran and threw Test262Error
-test/language/module-code/early-dup-export-decl.js	fail	accepted: was refused later (lowering)
+test/language/module-code/early-dup-export-decl.js	pass	
 test/language/module-code/early-dup-export-dflt-id.js	pass	
 test/language/module-code/early-dup-export-dflt.js	pass	
 test/language/module-code/early-dup-export-id-as.js	fail	accepted: ran and threw Test262Error
@@ -4723,7 +4723,7 @@ test/language/module-code/early-dup-top-function-async-generator.js	fail	accepte
 test/language/module-code/early-dup-top-function-async.js	fail	accepted: was refused later (lowering)
 test/language/module-code/early-dup-top-function-generator.js	fail	accepted: was refused later (lowering)
 test/language/module-code/early-dup-top-function.js	fail	accepted: was refused later (lowering)
-test/language/module-code/early-export-global.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/early-export-global.js	pass	
 test/language/module-code/early-export-ill-formed-string.js	fail	accepted: ran and threw Test262Error
 test/language/module-code/early-export-unresolvable.js	fail	accepted: ran and threw Test262Error
 test/language/module-code/early-import-arguments.js	fail	accepted: ran and threw Test262Error
@@ -4751,10 +4751,10 @@ test/language/module-code/eval-gtbndng-local-bndng-let.js	pass
 test/language/module-code/eval-gtbndng-local-bndng-var.js	pass	
 test/language/module-code/eval-rqstd-abrupt.js	pass	
 test/language/module-code/eval-self-abrupt.js	pass	
-test/language/module-code/export-default-asyncfunction-declaration-binding-exists.js	fail	accepted: was refused later (lowering)
-test/language/module-code/export-default-asyncgenerator-declaration-binding-exists.js	fail	accepted: was refused later (lowering)
-test/language/module-code/export-default-function-declaration-binding-exists.js	fail	accepted: was refused later (lowering)
-test/language/module-code/export-default-generator-declaration-binding-exists.js	fail	accepted: was refused later (lowering)
+test/language/module-code/export-default-asyncfunction-declaration-binding-exists.js	pass	
+test/language/module-code/export-default-asyncgenerator-declaration-binding-exists.js	pass	
+test/language/module-code/export-default-function-declaration-binding-exists.js	pass	
+test/language/module-code/export-default-generator-declaration-binding-exists.js	pass	
 test/language/module-code/export-expname-from-as-unpaired-surrogate.js	fail	accepted: was refused later (lowering)
 test/language/module-code/export-expname-from-star-unpaired-surrogate.js	pass	
 test/language/module-code/export-expname-from-unpaired-surrogate.js	fail	accepted: was refused later (lowering)
@@ -4788,10 +4788,10 @@ test/language/module-code/instn-named-err-not-found-dflt.js	fail	accepted: ran a
 test/language/module-code/instn-named-err-not-found.js	fail	accepted: ran and threw Test262Error
 test/language/module-code/instn-named-star-cycle.js	pass	
 test/language/module-code/instn-once.js	pass	
-test/language/module-code/instn-resolve-empty-export.js	fail	accepted: was refused later (lowering)
-test/language/module-code/instn-resolve-empty-import.js	fail	accepted: was refused later (lowering)
+test/language/module-code/instn-resolve-empty-export.js	pass	
+test/language/module-code/instn-resolve-empty-import.js	pass	
 test/language/module-code/instn-resolve-err-syntax-1.js	pass	
-test/language/module-code/instn-resolve-err-syntax-2.js	fail	accepted: was refused later (lowering)
+test/language/module-code/instn-resolve-err-syntax-2.js	pass	
 test/language/module-code/instn-resolve-order-depth.js	pass	
 test/language/module-code/instn-resolve-order-src.js	pass	
 test/language/module-code/instn-star-err-not-found.js	fail	accepted: ran and threw Test262Error
@@ -4894,13 +4894,13 @@ test/language/module-code/parse-err-hoist-lex-fun.js	fail	accepted: ran and thre
 test/language/module-code/parse-err-hoist-lex-gen.js	fail	accepted: ran and threw Test262Error
 test/language/module-code/parse-err-invoke-anon-fun-decl.js	pass	
 test/language/module-code/parse-err-invoke-anon-gen-decl.js	pass	
-test/language/module-code/parse-err-return.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/parse-err-return.js	pass	
 test/language/module-code/parse-err-semi-dflt-expr.js	pass	
 test/language/module-code/parse-err-semi-export-star.js	pass	
 test/language/module-code/parse-err-semi-name-space-export.js	pass	
 test/language/module-code/parse-err-semi-named-export-from.js	pass	
 test/language/module-code/parse-err-semi-named-export.js	pass	
-test/language/module-code/parse-err-syntax-2.js	fail	accepted: was refused later (lowering)
+test/language/module-code/parse-err-syntax-2.js	pass	
 test/language/module-code/parse-err-yield.js	pass	
 test/language/module-code/parse-export-empty.js	pass	
 test/language/module-code/private-identifiers-not-empty.js	fail	accepted: was refused later (lowering)
@@ -4908,7 +4908,7 @@ test/language/module-code/privatename-not-valid-earlyerr-module-5.js	pass
 test/language/module-code/privatename-not-valid-earlyerr-module-6.js	fail	accepted: was refused later (lowering)
 test/language/module-code/privatename-not-valid-earlyerr-module-7.js	pass	
 test/language/module-code/privatename-not-valid-earlyerr-module-8.js	pass	
-test/language/module-code/top-level-await/early-errors-await-not-simple-assignment-target.js	fail	accepted: was refused later (lowering)
+test/language/module-code/top-level-await/early-errors-await-not-simple-assignment-target.js	pass	
 test/language/module-code/top-level-await/new-await-script-code.js	pass	
 test/language/module-code/top-level-await/new-await.js	pass	
 test/language/module-code/top-level-await/no-operand.js	pass	
@@ -6489,7 +6489,7 @@ test/language/statements/do-while/decl-let.js	pass
 test/language/statements/empty/S12.3_A1.js	pass	
 test/language/statements/expression/S12.4_A1.js	pass	
 test/language/statements/for-await-of/async-func-decl-dstr-array-elem-init-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
-test/language/statements/for-await-of/async-func-decl-dstr-array-elem-nested-array-invalid.js	fail	accepted: was refused later (lowering)
+test/language/statements/for-await-of/async-func-decl-dstr-array-elem-nested-array-invalid.js	pass	
 test/language/statements/for-await-of/async-func-decl-dstr-array-elem-nested-array-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
 test/language/statements/for-await-of/async-func-decl-dstr-array-elem-nested-obj-invalid.js	fail	accepted: was refused later (lowering)
 test/language/statements/for-await-of/async-func-decl-dstr-array-elem-nested-obj-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
@@ -6718,7 +6718,7 @@ test/language/statements/for-of/decl-fun.js	fail	accepted: ran and threw Test262
 test/language/statements/for-of/decl-gen.js	fail	accepted: ran and threw Test262Error
 test/language/statements/for-of/decl-let.js	pass	
 test/language/statements/for-of/dstr/array-elem-init-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
-test/language/statements/for-of/dstr/array-elem-nested-array-invalid.js	fail	accepted: was refused later (lowering)
+test/language/statements/for-of/dstr/array-elem-nested-array-invalid.js	pass	
 test/language/statements/for-of/dstr/array-elem-nested-array-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
 test/language/statements/for-of/dstr/array-elem-nested-array.js	pass	
 test/language/statements/for-of/dstr/array-elem-nested-memberexpr-optchain-prop-ref-init.js	fail	accepted: was refused later (lowering)
@@ -6749,7 +6749,7 @@ test/language/statements/for-of/dstr/array-rest-before-elision.js	pass
 test/language/statements/for-of/dstr/array-rest-before-rest.js	pass	
 test/language/statements/for-of/dstr/array-rest-elision.js	pass	
 test/language/statements/for-of/dstr/array-rest-init.js	pass	
-test/language/statements/for-of/dstr/array-rest-nested-array-invalid.js	fail	accepted: was refused later (lowering)
+test/language/statements/for-of/dstr/array-rest-nested-array-invalid.js	pass	
 test/language/statements/for-of/dstr/array-rest-nested-array-undefined-hole.js	pass	
 test/language/statements/for-of/dstr/array-rest-nested-array-undefined-own.js	pass	
 test/language/statements/for-of/dstr/array-rest-nested-array-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
@@ -6846,7 +6846,7 @@ test/language/statements/for-of/dstr/obj-prop-elem-target-obj-literal-prop-ref.j
 test/language/statements/for-of/dstr/obj-prop-elem-target-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
 test/language/statements/for-of/dstr/obj-prop-identifier-resolution-lone.js	pass	
 test/language/statements/for-of/dstr/obj-prop-identifier-resolution-trlng.js	pass	
-test/language/statements/for-of/dstr/obj-prop-nested-array-invalid.js	fail	accepted: was refused later (lowering)
+test/language/statements/for-of/dstr/obj-prop-nested-array-invalid.js	pass	
 test/language/statements/for-of/dstr/obj-prop-nested-array-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
 test/language/statements/for-of/dstr/obj-prop-nested-array.js	pass	
 test/language/statements/for-of/dstr/obj-prop-nested-obj-invalid.js	fail	accepted: was refused later (lowering)
@@ -6904,12 +6904,12 @@ test/language/statements/for-of/head-let-bound-names-in-stmt.js	fail	accepted: r
 test/language/statements/for-of/head-let-init.js	pass	
 test/language/statements/for-of/head-lhs-async-dot.js	pass	
 test/language/statements/for-of/head-lhs-async-parens.js	pass	
-test/language/statements/for-of/head-lhs-cover-non-asnmt-trgt.js	fail	accepted: ran and threw Test262Error
+test/language/statements/for-of/head-lhs-cover-non-asnmt-trgt.js	pass	
 test/language/statements/for-of/head-lhs-cover.js	pass	
-test/language/statements/for-of/head-lhs-invalid-asnmt-ptrn-ary.js	fail	accepted: was refused later (lowering)
+test/language/statements/for-of/head-lhs-invalid-asnmt-ptrn-ary.js	pass	
 test/language/statements/for-of/head-lhs-invalid-asnmt-ptrn-obj.js	fail	accepted: was refused later (lowering)
 test/language/statements/for-of/head-lhs-let.js	pass	
-test/language/statements/for-of/head-lhs-non-asnmt-trgt.js	fail	accepted: ran and threw Test262Error
+test/language/statements/for-of/head-lhs-non-asnmt-trgt.js	pass	
 test/language/statements/for-of/head-using-bound-names-in-stmt.js	fail	accepted: ran and threw Test262Error
 test/language/statements/for-of/head-using-init.js	pass	
 test/language/statements/for-of/head-var-bound-names-dup.js	pass	
@@ -7418,16 +7418,16 @@ test/language/statements/let/syntax/without-initialisers-in-statement-positions-
 test/language/statements/let/syntax/without-initialisers-in-statement-positions-if-expression-statement.js	pass	
 test/language/statements/let/syntax/without-initialisers-in-statement-positions-while-expression-statement.js	pass	
 test/language/statements/return/12.9-1.js	pass	
-test/language/statements/return/S12.9_A1_T1.js	fail	accepted: ran and threw Test262Error
-test/language/statements/return/S12.9_A1_T10.js	fail	accepted: ran and threw Test262Error
-test/language/statements/return/S12.9_A1_T2.js	fail	accepted: ran and threw Test262Error
-test/language/statements/return/S12.9_A1_T3.js	fail	accepted: ran and threw Test262Error
-test/language/statements/return/S12.9_A1_T4.js	fail	accepted: ran and threw Test262Error
-test/language/statements/return/S12.9_A1_T5.js	fail	accepted: ran and threw Test262Error
-test/language/statements/return/S12.9_A1_T6.js	fail	accepted: ran and threw Test262Error
-test/language/statements/return/S12.9_A1_T7.js	fail	accepted: ran and threw Test262Error
-test/language/statements/return/S12.9_A1_T8.js	fail	accepted: ran and threw Test262Error
-test/language/statements/return/S12.9_A1_T9.js	fail	accepted: ran and threw Test262Error
+test/language/statements/return/S12.9_A1_T1.js	pass	
+test/language/statements/return/S12.9_A1_T10.js	pass	
+test/language/statements/return/S12.9_A1_T2.js	pass	
+test/language/statements/return/S12.9_A1_T3.js	pass	
+test/language/statements/return/S12.9_A1_T4.js	pass	
+test/language/statements/return/S12.9_A1_T5.js	pass	
+test/language/statements/return/S12.9_A1_T6.js	pass	
+test/language/statements/return/S12.9_A1_T7.js	pass	
+test/language/statements/return/S12.9_A1_T8.js	pass	
+test/language/statements/return/S12.9_A1_T9.js	pass	
 test/language/statements/return/S12.9_A3.js	pass	
 test/language/statements/return/S12.9_A5.js	pass	
 test/language/statements/return/line-terminators.js	pass	
@@ -7681,8 +7681,8 @@ test/language/statements/with/strict-fn-method.js	pass
 test/language/statements/with/strict-script.js	pass	
 test/language/types/boolean/S8.3_A1_T1.js	fail	nts: uncaught Test262Error: #0 x !== undefined, but actual is true
 test/language/types/boolean/S8.3_A1_T2.js	pass	
-test/language/types/boolean/S8.3_A2.1.js	fail	accepted: was refused later (lowering)
-test/language/types/boolean/S8.3_A2.2.js	fail	accepted: was refused later (lowering)
+test/language/types/boolean/S8.3_A2.1.js	pass	
+test/language/types/boolean/S8.3_A2.2.js	pass	
 test/language/types/boolean/S8.3_A3.js	pass	
 test/language/types/null/S8.2_A1_T1.js	pass	
 test/language/types/null/S8.2_A1_T2.js	pass	
@@ -7708,8 +7708,8 @@ test/language/types/reference/8.7.2-2-s.js	pass
 test/language/types/reference/8.7.2-3-1-s.js	pass	
 test/language/types/reference/8.7.2-3-a-2gs.js	pass	
 test/language/types/reference/8.7.2-8-s.js	pass	
-test/language/types/reference/S8.7.2_A1_T1.js	fail	accepted: was refused later (lowering)
-test/language/types/reference/S8.7.2_A1_T2.js	fail	accepted: was refused later (lowering)
+test/language/types/reference/S8.7.2_A1_T1.js	pass	
+test/language/types/reference/S8.7.2_A1_T2.js	pass	
 test/language/types/reference/S8.7_A6.js	pass	
 test/language/types/string/S8.4_A1.js	pass	
 test/language/types/string/S8.4_A10.js	pass	
