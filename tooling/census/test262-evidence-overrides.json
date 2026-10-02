@@ -32,9 +32,10 @@
     {
       "code": "TS1109",
       "tsgo_pin": "7.0.2",
-      "reason": "tsgo treats `await` as reserved at the top level of a script, where it is an ordinary identifier (`var await;`). 399 negatives draw TS1109 (Expression expected).",
+      "reason": "tsgo parse gaps on valid JavaScript: `await` treated as reserved at the top level of a script, where it is an ordinary identifier (`var await;`); and, since module tests entered the lane on 2026-10-02, `new import.meta()` -- a NewExpression of import.meta, valid syntax that throws a TypeError at run time -- rejected at parse. 399 negatives draw TS1109 (Expression expected).",
       "positives": [
-        "test/language/expressions/await/await-BindingIdentifier-in-global.js"
+        "test/language/expressions/await/await-BindingIdentifier-in-global.js",
+        "test/language/expressions/import.meta/import-meta-is-an-ordinary-object.js"
       ]
     },
     {

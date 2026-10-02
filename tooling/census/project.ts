@@ -235,6 +235,13 @@ export function fixturesOf(origin, body) {
   const found = new Map();
   const visit = (text, from) => {
     for (const m of text.matchAll(FIXTURE_REFERENCE)) {
+      // **A fixture imported as text, bytes or JSON is not a JavaScript
+      // module**, and compiling it as one parses data as code: on 2026-10-02
+      // import-text's fixtures drew TS1005 and TS1434 as *positives*, which
+      // withheld an evidence override and took 487 negative passes with it.
+      // Such an import names no module of the program, and refuses as that.
+      const after = text.slice(m.index + m[0].length, m.index + m[0].length + 80);
+      if (/^\s*,?\s*(with|assert)\s*\{\s*type\s*:\s*["'](text|bytes|json)["']/.test(after)) continue;
       const relative = normalize(join(from, m[2]));
       if (relative.startsWith("..") || found.has(relative)) continue;
       const file = join(dirname(origin), relative);
