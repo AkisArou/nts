@@ -2559,6 +2559,34 @@ fn binding_thenables(
     found
 }
 
+/// Whether a declaration of this kind binds its own `this`, so a `this` inside it
+/// is not about the scope around it.
+///
+/// `ARROW_FUNCTION` is deliberately absent: an arrow inherits. One list for the
+/// walks that ask -- down a subtree for the first `this` that belongs to it
+/// (`first_this`, `mentions_this`) and up from a `this` to the declaration whose
+/// binding it reads (`this_is_never_bound`) -- because two copies of it were
+/// already written out when the third was about to be.
+const fn binds_its_own_this(kind: u16) -> bool {
+    matches!(
+        kind,
+        syntax::FUNCTION_EXPRESSION
+            | syntax::FUNCTION_DECLARATION
+            | syntax::METHOD_DECLARATION
+            | syntax::CONSTRUCTOR
+            | syntax::GET_ACCESSOR
+            | syntax::SET_ACCESSOR
+            | syntax::CLASS_DECLARATION
+    )
+}
+
+/// What a `this` that a derived constructor reads before its `super()` throws.
+///
+/// The words are V8's, which is what node prints and what a program comparing
+/// messages would see; the class is the specification's.
+const UNBOUND_THIS: &str =
+    "Must call super constructor in derived class before accessing 'this' or returning from derived constructor";
+
 /// A declaration's parameters, in order.
 fn parameters_of(probe: &FuncBuilder, declaration: NodeId) -> Vec<NodeId> {
     probe
@@ -4827,6 +4855,32 @@ fn walk_one_declaration(
             .iter()
             .any(|parameter| a_parameter_pattern_can_throw(probe, *parameter))
         {
+            throws.insert(symbol);
+        }
+        // **And an `extends null` class's construction always throws**, from no
+        // `throw` the source wrote: its constructor's `this` is never bound, so it
+        // throws a `ReferenceError` at a `this` or on the way out
+        // ([`FuncBuilder::this_is_never_bound`]). An empty `constructor() {}` was
+        // the case that showed it -- the throw was emitted, nothing counted it, so a
+        // `new` inside a `try` called the ordinary body and the program ended where
+        // node's handler runs.
+        //
+        // **Only where a constructor is written**, because that is where the throws
+        // are emitted. A class with the default constructor has no body to throw
+        // from here -- the specification's default `super(...args)` would throw a
+        // `TypeError`, which this compiler does not model -- and counting it as a
+        // raiser with nothing to carry the raise made `closures_carry` false for the
+        // whole program: every `try` around a call through a closure refused.
+        let class = match probe.kind_of(declaration) {
+            Some(kind) if declares_a_class(kind) && the_constructor_declared_by(probe, declaration).is_some() => {
+                Some(declaration)
+            }
+            Some(syntax::CONSTRUCTOR) => std::iter::successors(probe.node(declaration).parent, |at| probe.node(*at).parent)
+                .take(3)
+                .find(|at| probe.kind_of(*at).is_some_and(declares_a_class)),
+            _ => None,
+        };
+        if class.is_some_and(|class| probe.extends_null(class)) {
             throws.insert(symbol);
         }
         let own: rustc_hash::FxHashSet<NodeId> =
@@ -21307,6 +21361,11 @@ impl<'a> FuncBuilder<'a> {
         }
         if let Some(body) = body {
             self.lower_block(body)?;
+            // Falling off the end of an `extends null` constructor returns a
+            // `this` that was never bound: see `this_is_never_bound`.
+            if is_constructor && !self.is_terminated() && self.this_is_never_bound(body) {
+                self.throw_unbound_this(member)?;
+            }
             if generated.is_some() {
                 // Falling off the end is the end of the walk, and `return e` is
                 // the `TReturn` a `for...of` discards, so both are one exit.
@@ -21333,6 +21392,79 @@ impl<'a> FuncBuilder<'a> {
         // method is `abstract`, which `method_body` is the only decider of.
         func.abstract_declaration = body.is_none();
         Ok(func)
+    }
+
+    /// `this`: the receiver -- after a check where the receiver is one the
+    /// language says was never bound.
+    fn lower_this(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let this = self.this.ok_or_else(|| self.unsupported(id, "`this` outside a method"))?;
+        if self.this_is_never_bound(id) {
+            self.throw_unbound_this(id)?;
+        }
+        Ok(this)
+    }
+
+    /// Whether `this` at `id` -- or a constructor ending at `id` -- belongs to a
+    /// binding no `super()` can initialise: the constructor of a class that
+    /// `extends null`.
+    ///
+    /// A derived constructor's `this` is uninitialised until `super()` returns,
+    /// and with a `null` heritage `super()` itself throws (`null` is not a
+    /// constructor), so the binding never is: every read of `this`, and leaving
+    /// the constructor without returning an object -- falling off its end, or a
+    /// bare `return` -- is a `ReferenceError`. This compiler allocates the instance
+    /// before the constructor runs, so `this` was simply the object, and four
+    /// recorded test262 cases answered "nothing was thrown" or the next `throw`.
+    ///
+    /// **Read off the syntax**, because it is a fact about where the `this` is
+    /// written and not about any value: up from `id`, through arrows (which
+    /// inherit), to the first declaration that binds its own `this` -- or a field
+    /// initialiser or static block, whose `this` is the instance or the class.
+    /// TypeScript's own check (TS17009) rejects a `this` written before `super()`
+    /// in an ordinary derived constructor; it does not reject one in an
+    /// `extends null` constructor, which has no `super()` to have called.
+    ///
+    /// **Not covered, and recorded:** an arrow that reads `this` called before
+    /// `super()` in a constructor whose base is a class. That is a question
+    /// about the order things run in, which no syntax can answer.
+    fn this_is_never_bound(&self, id: NodeId) -> bool {
+        let owner = std::iter::successors(self.node(id).parent, |at| self.node(*at).parent).find(|at| {
+            self.kind_of(*at).is_some_and(|kind| {
+                binds_its_own_this(kind) || matches!(kind, syntax::PROPERTY_DECLARATION | syntax::CLASS_STATIC_BLOCK)
+            })
+        });
+        let Some(constructor) = owner.filter(|at| self.kind_of(*at) == Some(syntax::CONSTRUCTOR)) else {
+            return false;
+        };
+        // A member is in a list, so its class is a parent or two up.
+        std::iter::successors(self.node(constructor).parent, |at| self.node(*at).parent)
+            .take(3)
+            .find(|at| matches!(self.kind_of(*at), Some(syntax::CLASS_DECLARATION | syntax::CLASS_EXPRESSION)))
+            .is_some_and(|class| self.extends_null(class))
+    }
+
+    /// Whether a class's heritage is the literal `null` -- `extends null`, the one
+    /// heritage that is not a class. Only the target itself: `extends Base<null>`
+    /// names `null` as a type argument, deeper in the clause.
+    fn extends_null(&self, class: NodeId) -> bool {
+        self.children(class)
+            .into_iter()
+            .filter(|child| self.kind_of(*child) == Some(syntax::HERITAGE_CLAUSE))
+            .flat_map(|clause| self.children(clause))
+            .any(|target| {
+                let expression =
+                    if self.kind_of(target) == Some(syntax::NULL_KEYWORD) { Some(target) } else { self.children(target).first().copied() };
+                expression.is_some_and(|expression| self.kind_of(expression) == Some(syntax::NULL_KEYWORD))
+            })
+    }
+
+    /// Throw [`UNBOUND_THIS`]'s `ReferenceError` from here, leaving the builder in
+    /// a block nothing reaches -- so the expression that asked still has its value,
+    /// and `fold::decided_branches` removes the dead edge before anything reads it.
+    fn throw_unbound_this(&mut self, id: NodeId) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let always = self.push(OpKind::ConstBool(true), HirType::Bool, origin);
+        self.refuse_when(id, always, "ReferenceError", UNBOUND_THIS)
     }
 
     /// Whether a `function` expression could have been an arrow, and why not.
@@ -21459,15 +21591,7 @@ impl<'a> FuncBuilder<'a> {
     fn first_this(&self, id: NodeId) -> Option<NodeId> {
         match self.kind_of(id) {
             Some(syntax::THIS_KEYWORD) => return Some(id),
-            Some(
-                syntax::FUNCTION_EXPRESSION
-                | syntax::FUNCTION_DECLARATION
-                | syntax::METHOD_DECLARATION
-                | syntax::CONSTRUCTOR
-                | syntax::GET_ACCESSOR
-                | syntax::SET_ACCESSOR
-                | syntax::CLASS_DECLARATION,
-            ) => return None,
+            Some(kind) if binds_its_own_this(kind) => return None,
             _ => {}
         }
         self.node(id)
@@ -21487,16 +21611,7 @@ impl<'a> FuncBuilder<'a> {
                 return;
             }
             // Binds its own `this`, so anything inside is not about ours.
-            // `ARROW_FUNCTION` is deliberately absent: an arrow inherits.
-            Some(
-                syntax::FUNCTION_EXPRESSION
-                | syntax::FUNCTION_DECLARATION
-                | syntax::METHOD_DECLARATION
-                | syntax::CONSTRUCTOR
-                | syntax::GET_ACCESSOR
-                | syntax::SET_ACCESSOR
-                | syntax::CLASS_DECLARATION,
-            ) => return,
+            Some(kind) if binds_its_own_this(kind) => return,
             _ => {}
         }
         for child in &self.node(id).children {
@@ -27837,6 +27952,20 @@ impl<'a> FuncBuilder<'a> {
                     "a constructor returning an object, which replaces the instance \
                      `new` would have answered",
                 ));
+            }
+            // And `return;` in an `extends null` constructor returns the `this`
+            // no `super()` bound -- the same `ReferenceError` as falling off the
+            // end. `return undefined` is the same return; its operand still runs.
+            if self.in_constructor
+                && self.this_is_never_bound(id)
+                && expression.is_none_or(|expression| self.type_of(expression) == Some(HirType::Void))
+            {
+                if let Some(expression) = expression {
+                    self.lower_expression(expression)?;
+                }
+                self.throw_unbound_this(id)?;
+                self.terminate(Terminator::Unreachable);
+                return Ok(());
             }
             let value = match (expression, &want) {
                 (Some(expression), Some(want)) => {
@@ -40594,9 +40723,7 @@ impl<'a> FuncBuilder<'a> {
             Some(syntax::NULL_KEYWORD) => self.lower_absent(id),
             // `this` is parameter zero of a method. Outside one there is no
             // receiver to name.
-            Some(syntax::THIS_KEYWORD) => self
-                .this
-                .ok_or_else(|| self.unsupported(id, "`this` outside a method")),
+            Some(syntax::THIS_KEYWORD) => self.lower_this(id),
             Some(syntax::ELEMENT_ACCESS_EXPRESSION) => self.lower_element_access(id),
             Some(syntax::AWAIT_EXPRESSION) => self.lower_await(id),
             Some(syntax::YIELD_EXPRESSION) => self.lower_yield(id),
