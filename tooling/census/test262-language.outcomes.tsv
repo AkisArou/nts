@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 54e16e588b167c3a, commit 5947cbbda10534c8f54923d32d3ad1fb64e84d80, harness d6442dbc09f91ad0; machine at start: 18.6 GB available, swap 7.5/20 GB, load 4.4/11.9 (1m/5m), 32 cores; 8 worker(s)
+# compiler 8db9860c741baf87, commit fa77038611f45b670f86c08a2dd2f33dd62e769b, harness d6442dbc09f91ad0; machine at start: 19 GB available, swap 7.4/20 GB, load 7.4/11.2 (1m/5m), 32 cores; 8 worker(s)
 test/language/arguments-object/10.5-1gs.js	pass	
 test/language/asi/S7.9.2_A1_T1.js	pass	
 test/language/asi/S7.9.2_A1_T2.js	pass	
@@ -5139,7 +5139,7 @@ test/language/statements/block/early-errors/invalid-names-call-expression-this.j
 test/language/statements/block/early-errors/invalid-names-member-expression-bad-reference.js	pass	
 test/language/statements/block/early-errors/invalid-names-member-expression-this.js	fail	accepted: was refused later (lowering)
 test/language/statements/block/labeled-continue.js	pass	
-test/language/statements/block/scope-var-none.js	fail	nts: uncaught Test262Error: reference preceding statement
+test/language/statements/block/scope-var-none.js	pass	
 test/language/statements/break/12.8-1.js	pass	
 test/language/statements/break/S12.8_A1_T1.js	pass	
 test/language/statements/break/S12.8_A1_T2.js	pass	
@@ -6457,6 +6457,7 @@ test/language/statements/continue/S12.7_A8_T2.js	pass
 test/language/statements/continue/S12.7_A9_T1.js	pass	
 test/language/statements/continue/S12.7_A9_T2.js	pass	
 test/language/statements/continue/labeled-continue.js	pass	
+test/language/statements/continue/line-terminators.js	pass	
 test/language/statements/continue/nested-let-bound-for-loops-inner-continue.js	pass	
 test/language/statements/continue/nested-let-bound-for-loops-labeled-continue.js	pass	
 test/language/statements/continue/nested-let-bound-for-loops-outer-continue.js	pass	
@@ -6630,6 +6631,7 @@ test/language/statements/for-await-of/head-const-init.js	pass
 test/language/statements/for-await-of/head-let-init.js	pass	
 test/language/statements/for-await-of/head-using-init.js	pass	
 test/language/statements/for-await-of/head-var-init.js	pass	
+test/language/statements/for-in/S12.6.4_A14_T2.js	pass	
 test/language/statements/for-in/S12.6.4_A15.js	pass	
 test/language/statements/for-in/decl-async-fun.js	fail	accepted: was refused later (lowering)
 test/language/statements/for-in/decl-async-gen.js	fail	accepted: was refused later (lowering)
@@ -6963,6 +6965,7 @@ test/language/statements/for/S12.6.3_A2.2.js	pass
 test/language/statements/for/S12.6.3_A4.1.js	pass	
 test/language/statements/for/S12.6.3_A4_T1.js	pass	
 test/language/statements/for/S12.6.3_A4_T2.js	pass	
+test/language/statements/for/S12.6.3_A6.js	pass	
 test/language/statements/for/S12.6.3_A7.1_T1.js	pass	
 test/language/statements/for/S12.6.3_A7.1_T2.js	pass	
 test/language/statements/for/S12.6.3_A7_T1.js	pass	
@@ -7552,7 +7555,7 @@ test/language/statements/try/optional-catch-binding-finally.js	pass
 test/language/statements/try/optional-catch-binding-parens.js	pass	
 test/language/statements/try/optional-catch-binding-throws.js	pass	
 test/language/statements/try/optional-catch-binding.js	pass	
-test/language/statements/try/scope-catch-block-var-none.js	fail	nts: uncaught Test262Error: reference preceding statement
+test/language/statements/try/scope-catch-block-var-none.js	pass	
 test/language/statements/try/static-init-await-binding-valid.js	pass	
 test/language/statements/using/syntax/block-scope-syntax-using-declarations-mixed-with-without-initializer.js	pass	
 test/language/statements/using/syntax/block-scope-syntax-using-declarations-mixed-without-with-initializer.js	pass	
@@ -7659,6 +7662,9 @@ test/language/statements/variable/eval-strict-single.js	pass
 test/language/statements/variable/id-arguments-strict.js	pass	
 test/language/statements/variable/id-eval-strict.js	pass	
 test/language/statements/variable/static-init-await-binding-valid.js	pass	
+test/language/statements/while/S12.6.2_A11.js	pass	
+test/language/statements/while/S12.6.2_A14_T1.js	pass	
+test/language/statements/while/S12.6.2_A14_T2.js	pass	
 test/language/statements/while/S12.6.2_A15.js	pass	
 test/language/statements/while/S12.6.2_A4_T5.js	pass	
 test/language/statements/while/S12.6.2_A6_T1.js	pass	
