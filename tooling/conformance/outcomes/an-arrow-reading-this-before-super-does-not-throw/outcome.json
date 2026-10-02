@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Observed: before super (defect)=none;after super (control)=none;",
+  "node": "exit 1; nts: uncaught Observed: before super (defect)=ReferenceError;after super (control)=none;",
+  "measured_with": "4ddb80582d9a7cef",
+  "source": "measured"
+}
