@@ -16,6 +16,8 @@
 //   ordering       `import()` returns before the module runs: the line after
 //                  the call sees it not yet evaluated, the line after the
 //                  `await` sees it evaluated
+//   missing        a specifier naming no module rejects -- with an object, so
+//                  that a reason of `undefined` could not pass for one
 //
 // Every export answers the same whichever order and however often it is
 // called, because the differential calls each across a pool of arguments in
@@ -25,7 +27,7 @@
 // answer both times:
 //
 //     kind "object3"      live 4      loadsEverything 3      notYet "[]3"
-//     once "true,1,3"     ordering 33      reads "hello3"
+//     missing "object,3"  once "true,1,3"     ordering 33      reads "hello3"
 //     rejects "thrower failed,true,3"
 import { events } from "./log.ts";
 import { flags } from "./flags.ts";
@@ -109,4 +111,15 @@ export async function ordering(n: number): Promise<number> {
     observed = (atTheCall ? 0 : 1) + (flags.lateRan ? 2 : 0);
   }
   return observed * 10 + n;
+}
+
+export async function missing(n: number): Promise<string> {
+  try {
+    // TypeScript says no such module exists, which is the point.
+    // @ts-expect-error TS2307
+    await import("./no-such-module.ts");
+    return "resolved," + n;
+  } catch (e) {
+    return typeof e + "," + n;
+  }
 }

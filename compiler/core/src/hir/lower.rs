@@ -10917,9 +10917,7 @@ fn module_roles(snapshot: &SemanticSnapshot) -> ModuleRoles {
         if !is_a_dynamic_import(&probe, call) {
             continue;
         }
-        if let Some(target) = dynamic_import_namespace(snapshot, call)
-            && let Some(module) = module_of_namespace(snapshot, target)
-        {
+        if let Some((module, target)) = dynamic_import_target(snapshot, call) {
             namespace[module].get_or_insert(target);
         }
     }
@@ -10971,6 +10969,57 @@ pub fn evaluates_module_scope(name: &str) -> bool {
 fn is_a_dynamic_import(probe: &FuncBuilder, id: NodeId) -> bool {
     probe.kind_of(id) == Some(syntax::CALL_EXPRESSION)
         && probe.children(id).first().is_some_and(|callee| probe.kind_of(*callee) == Some(syntax::IMPORT_KEYWORD))
+}
+
+/// The module an `import(...)` names, and its namespace type: the checker's
+/// resolution, through `Promise<namespace>` -- the key a static import is
+/// resolved by. `None` where the checker resolved nothing.
+fn dynamic_import_target(snapshot: &SemanticSnapshot, call: NodeId) -> Option<(usize, TypeId)> {
+    let namespace = dynamic_import_namespace(snapshot, call)?;
+    Some((module_of_namespace(snapshot, namespace)?, namespace))
+}
+
+/// Whether an `import(...)` the checker did not resolve names a file that *is* in
+/// the program anyway -- the importer's directory joined with a relative
+/// specifier, exactly.
+///
+/// **A guard, not a resolver.** It decides only which way an unresolved import
+/// fails: a specifier that names nothing at all compiles to the rejection node
+/// gives it, and one that names a file the checker declined to resolve -- a test
+/// importing itself, a file TypeScript reads as a script -- is refused by name,
+/// because rejecting it would be a wrong answer where node loads the file.
+fn names_a_file_of_the_program(snapshot: &SemanticSnapshot, probe: &FuncBuilder, call: NodeId, written: &str) -> bool {
+    if !(written.starts_with("./") || written.starts_with("../")) {
+        return false;
+    }
+    let Some(importer) = std::iter::successors(Some(call), |at| probe.node(*at).parent)
+        .find_map(|at| snapshot.modules.iter().position(|module| module.root == at))
+    else {
+        return false;
+    };
+    let Some(from) = snapshot.sources.get(snapshot.modules[importer].file.0 as usize).map(|source| source.uri.as_str()) else {
+        return false;
+    };
+    join_relative(from, written).is_some_and(|resolved| snapshot.sources.iter().any(|source| source.uri == resolved))
+}
+
+/// `specifier`, relative to the directory of the file at `uri`: `.` and `..`
+/// segments resolved, nothing else -- no extension added and no index file
+/// looked for, because the guard it serves asks only about a file named exactly.
+fn join_relative(uri: &str, specifier: &str) -> Option<String> {
+    let (scheme, path) = uri.split_once(":///")?;
+    let mut segments: Vec<&str> = path.split('/').collect();
+    segments.pop();
+    for segment in specifier.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => {
+                segments.pop()?;
+            }
+            name => segments.push(name),
+        }
+    }
+    Some(format!("{scheme}:///{}", segments.join("/")))
 }
 
 /// The namespace type an `import(...)` resolves with: the argument of the
@@ -24362,9 +24411,8 @@ impl<'a> FuncBuilder<'a> {
                 "a dynamic `import()` whose specifier is computed, which names a module only a run-time resolver could find",
             ));
         }
-        let Some(module) = dynamic_import_namespace(self.snapshot, id).and_then(|ty| module_of_namespace(self.snapshot, ty))
-        else {
-            return Err(self.unsupported(specifier, "a dynamic `import()` of a module this program does not contain"));
+        let Some((module, namespace)) = dynamic_import_target(self.snapshot, id) else {
+            return self.import_of_nothing(id, specifier);
         };
         let Some(index) = self
             .closures
@@ -24377,9 +24425,9 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, "a dynamic `import()` in a program with no closure slot"));
         };
         let origin = self.origin(id);
-        let promise_ty = self
-            .type_of(id)
-            .ok_or_else(|| self.unrepresentable(id, "the promise a dynamic `import()` hands back"))?;
+        // The job's promise type, which every import of this module shares; the
+        // site's own type is the checker's for the same promise.
+        let promise_ty = HirType::Managed(ManagedType::Promise(Box::new(HirType::Managed(ManagedType::Object(namespace)))));
         self.materialize(id, &promise_ty)?;
         let promise = self.runtime_call("nts_promise_new", Vec::new(), promise_ty.clone(), origin.clone());
         let job = self.push(
@@ -24392,6 +24440,51 @@ impl<'a> FuncBuilder<'a> {
         self.used_closures.push(index);
         let slot = self.push(OpKind::ConstFloat(f64::from(slot)), HirType::NUMBER, origin.clone());
         self.runtime_call("nts_enqueue_job", vec![job, slot], HirType::Void, origin);
+        Ok(promise)
+    }
+
+    /// `import()` of a relative specifier that names nothing this program contains
+    /// -- a missing file: a promise rejected with an `Error` saying so, as node
+    /// rejects one. The specifier is a constant, so this is decided here; the
+    /// rejection is what a program observes, and only when it asks. Where it names
+    /// a file the program *does* contain, see [`names_a_file_of_the_program`].
+    fn import_of_nothing(&mut self, id: NodeId, specifier: NodeId) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let written = self.literal_name(specifier).unwrap_or_default();
+        // **Only a relative path is known to name nothing.** `''` is a URL that
+        // resolves to the importer itself -- node loads the importing file, it
+        // does not reject -- and a bare specifier is a package lookup this
+        // compiler does not model; rejecting either was a wrong answer (nine
+        // syntax/valid tests ended on an unhandled rejection node never makes).
+        // Both refuse by name, as an unresolved file the program does contain does.
+        if !(written.starts_with("./") || written.starts_with("../")) {
+            return Err(self.unsupported(
+                specifier,
+                "a dynamic `import()` whose specifier is not a relative path the checker resolved -- `''` is the \
+                 importing module itself, and a bare specifier a package lookup",
+            ));
+        }
+        if names_a_file_of_the_program(self.snapshot, self, id, &written) {
+            return Err(self.unsupported(
+                specifier,
+                "a dynamic `import()` of a file this program contains that the checker did not resolve as a module",
+            ));
+        }
+        let promise_ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unrepresentable(id, "the promise a dynamic `import()` hands back"))?;
+        self.materialize(id, &promise_ty)?;
+        let promise = self.runtime_call("nts_promise_new", Vec::new(), promise_ty, origin.clone());
+        let message = self.push(
+            OpKind::ConstString(format!("Cannot find module '{written}'")),
+            HirType::Managed(ManagedType::String),
+            origin.clone(),
+        );
+        // Through `reject_with`, the one rejection path, which hands the runtime a
+        // reference: a reason erased here first answered `typeof` "function" on
+        // the JVM where C and node answer "object".
+        let (error, _) = self.provided_error(id, "Error", message)?;
+        self.reject_with(id, promise, Some(error))?;
         Ok(promise)
     }
 
@@ -24444,10 +24537,27 @@ impl<'a> FuncBuilder<'a> {
             self.terminate(Terminator::Return(None));
             self.switch_to(fulfils);
         }
+        // The module's one namespace object.
         let value = self.push(OpKind::ClosureStatic, payload.clone(), origin.clone());
         self.fulfil(root, &AsyncResult { promise, payload }, Some(value))?;
         self.terminate(Terminator::Return(None));
         Ok(self.finish(name, params, HirType::Void, origin, false))
+    }
+
+    /// A module namespace's layout: no fields, because a read of one goes to the
+    /// export through the type. One for a checker's namespace type and for the
+    /// compiler's own ([`super::namespace_type`]) alike.
+    fn namespace_layout(&mut self, module: usize, ty: TypeId) -> Layout {
+        let layout = Layout {
+            types: vec![ty],
+            name: format!("module{module}#namespace"),
+            interfaces: Vec::new(),
+            fields: Vec::new(),
+            methods: Vec::new(),
+            base: None,
+        };
+        self.layouts.push(layout.clone());
+        layout
     }
 
     /// Record a lazy module's evaluation as failed with `thrown`, and answer
@@ -42968,6 +43078,22 @@ impl<'a> FuncBuilder<'a> {
         class: &str,
         message: ValueId,
     ) -> Result<(), Diagnostic> {
+        let (error, object) = self.provided_error(id, class, message)?;
+        let origin = self.origin(id);
+        let erased = self.push(OpKind::Erase { value: error, absent: Absent::Impossible }, HirType::Erased, origin);
+        self.throw_erased(id, error, erased, &object)
+    }
+
+    /// One of the provided error classes, built with `message`: the value, and
+    /// its type. Thrown by [`Self::throw_provided_error_text`]; a rejection that
+    /// is not a throw -- an `import()` of a module this program does not contain
+    /// -- takes the value itself.
+    fn provided_error(
+        &mut self,
+        id: NodeId,
+        class: &str,
+        message: ValueId,
+    ) -> Result<(ValueId, HirType), Diagnostic> {
         // The snapshot's type where the program named the class, and a
         // synthetic one where it did not.
         //
@@ -43025,8 +43151,7 @@ impl<'a> FuncBuilder<'a> {
             };
             self.field_set(error, at, value, &origin);
         }
-        let erased = self.push(OpKind::Erase { value: error , absent: Absent::Impossible }, HirType::Erased, origin);
-        self.throw_erased(id, error, erased, &object)
+        Ok((error, object))
     }
 
     /// The layout of a class this compiler provides, if `ty` names one.
@@ -44754,16 +44879,7 @@ impl<'a> FuncBuilder<'a> {
         // module's one static instance (`ClosureStatic`), the same object on
         // every `import()`, and nothing in it is read.
         if let Some(module) = module_of_namespace(self.snapshot, ty) {
-            let layout = Layout {
-                types: vec![ty],
-                name: format!("module{module}#namespace"),
-                interfaces: Vec::new(),
-                fields: Vec::new(),
-                methods: Vec::new(),
-                base: None,
-            };
-            self.layouts.push(layout.clone());
-            return Ok(layout);
+            return Ok(self.namespace_layout(module, ty));
         }
         // A tuple is a fixed-length heterogeneous sequence, which is what an
         // object with positional fields already is. Naming the fields `0`, `1`
