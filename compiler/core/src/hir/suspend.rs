@@ -340,7 +340,43 @@ pub fn transform(program: &mut Program) -> Vec<Diagnostic> {
                 }
                 program.funcs[index] = entry;
                 added.push(resume);
-                layouts.push(layout);
+                // **One type id, one layout.** A raising copy of a generator is a second *body*
+                // over the same suspended state: `upTo` and `upTo@raises` are both lowered with
+                // the same reserved frame index, so `func.frame` is `managed<generator#0>` in
+                // both and this pass would build `upTo#frame` and `upTo@raises#frame` -- two
+                // layouts claiming one id.
+                //
+                // `collect_layouts`' merge keeps whichever arrives first and discards the other
+                // **silently**, which is the shape `5ce8d7388` added `Invalid::DisputedLayout`
+                // for after `url` shipped `inspectDefaultOptions.colors` true from it. In C the
+                // second struct is dead; the JVM lane wrote the class anyway and its `resume()`
+                // passed itself to a static taking the *first* frame -- a `VerifyError`, which
+                // nothing loaded, so nothing ran wrongly and only their verifier could see it.
+                // 130 such layouts across the corpora.
+                //
+                // **Sharing is also the right answer and not just the cheap one.** The frame is
+                // one object: either body may allocate it, `upTo@raises__resume(frame)` takes
+                // the one the original's prologue made, and the fields come from the same
+                // declaration so they are the same fields at the same offsets. Giving the copy
+                // an id of its own would be the converse mistake -- making a representation
+                // carry identity, which `canonicalize_objects`' own comment records a wrong
+                // answer from (`new B() instanceof A` answering `true`).
+                //
+                // And the copy loses nothing by it. The layout's table holds its own resumption
+                // at the generator slot, which is what `generator_dispatch` reads -- the
+                // *ordinary* one, deliberately, because a frame that arrived from elsewhere has
+                // no raising entry to dispatch at (`610befc3c`). A raising resumption is reached
+                // by **name**, so it needs no slot and no table of its own.
+                //
+                // Keyed on the id rather than on the name's suffix, because that is the
+                // invariant being kept; `function_copies` puts the plain copy first, so the
+                // layout that wins is the original's and the choice is deterministic.
+                let claimed = |existing: &Layout| {
+                    existing.types.iter().any(|ty| layout.types.contains(ty))
+                };
+                if !layouts.iter().any(claimed) && !program.layouts.iter().any(claimed) {
+                    layouts.push(layout);
+                }
             }
             Err(diagnostic) => {
                 refusals.push(diagnostic);
