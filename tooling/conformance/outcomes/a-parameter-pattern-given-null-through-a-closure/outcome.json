@@ -1,8 +1,0 @@
-{
-  "run": "build",
-  "category": "aborted",
-  "nts": "SIGSEGV",
-  "node": "exit 1; nts: uncaught Observed: named pattern, null, through a closure=TypeError;",
-  "measured_with": "1028a73c71f4e297",
-  "source": "measured"
-}
