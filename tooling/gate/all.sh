@@ -1311,7 +1311,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
   # so the ratchet's remaining slack could only absorb the next wrong answer.
   # Exact at 346 alone would go red the day the leak is fixed, so the leak is
   # named instead, and nothing else is allowed.
-  backend_examples 346 "through the LLVM backend, counting" exact 10 "this-in-a-field-initializer" ); }
+  backend_examples 392 "through the LLVM backend, counting" exact 10 "this-in-a-field-initializer" ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -1363,7 +1363,7 @@ llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
   # green run. "Left ratcheting" above was right while this lane was climbing;
   # it has arrived, and a new example that disagrees now fails the day it
   # lands, as it does on the JVM.
-  backend_examples 347 "through the LLVM backend" exact 10 ); }
+  backend_examples 393 "through the LLVM backend" exact 10 ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -1640,7 +1640,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # agree here on the day it landed.
   #
   # 322 -> 323, the same example.
-  backend_examples 327 "through the JVM backend" exact 10 ); }
+  backend_examples 393 "through the JVM backend" exact 10 ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
@@ -1901,7 +1901,7 @@ test262() {
 # The gap worth knowing: a stale record hides passes indefinitely and nothing goes
 # red while it does, so this floor moves when somebody needs a full run for an
 # unrelated reason rather than when the work lands.
-TEST262_LANGUAGE_PASS_FLOOR=5218
+TEST262_LANGUAGE_PASS_FLOOR=5386
 TEST262_LANGUAGE_NEGATIVES_ACCEPTED_CEILING=1551
 # One recorded test262 directory, re-run and held to its record, its floor and
 # its ceiling: `test262_recorded <dir> <record> <floor> <floor variable name>
