@@ -58340,6 +58340,19 @@ impl<'a> FuncBuilder<'a> {
         }
         let origin = self.origin(id);
         self.emit_the_raise_test(&origin);
+        // **A call that cannot return comes back only by raising**, so the
+        // not-raised branch is unreachable and says so. It used to carry on, and
+        // whatever the caller did next with the `never` value -- `ret %1` for
+        // `() => fail()`, a `convert` for `c ? fail() : n` -- reached every
+        // backend, which refuses to materialise one (C NTS2002, the JVM NTS4001),
+        // and the closure's raising copy was declined. The rest of the
+        // expression is lowered into a block nothing enters, which
+        // `prune_unreachable_blocks` removes before a backend sees it.
+        if self.type_of(id) == Some(HirType::Never) {
+            self.terminate(Terminator::Unreachable);
+            let after = self.new_block();
+            self.switch_to(after);
+        }
     }
 
     /// Whether a `throw` raised here would reach a handler **in this function**.
