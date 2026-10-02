@@ -32124,6 +32124,34 @@ impl<'a> FuncBuilder<'a> {
             // returned one. The frame knows which body to resume even though
             // this call site does not, so the slot the abstract generator
             // declares answers it.
+            //
+            // **And that slot holds the ordinary resumption, so a guarded step through it
+            // cannot carry a `throw`.** The frame's body ends the program on an uncaught one
+            // where the handler here would have caught it:
+            // `outcomes/a-generator-passed-in-and-stepped-inside-a-try-ends-the-program`, the
+            // JVM lane's, whose `sumOf(upTo(limit))` crosses a parameter. Refused by name
+            // rather than left to end the program, which is the raising row's own rule where a
+            // raise cannot be carried.
+            //
+            // **A raising resume slot is the fix and is deliberately not built**, measured
+            // rather than argued: the slot would be a *fifth* uniform index -- a word per
+            // descriptor in every program, on `raising_call_slot`'s terms, and ungated for the
+            // same reason its doc gives (a syntactic probe cannot be sound here, because which
+            // bodies get copies is decided in `naming`, after this). And `runtime/node` makes
+            // **zero** indirect generator steps: `stream`, `fs`, `readline` and `util` emit no
+            // `call.virtual[..] Generator*#resume` and no `@raises__resume` at all. So the slot
+            // would be width paid for a dispatch the corpora never make, and the refusal costs
+            // them nothing. The JVM lane cleared the design and it is in the plan; what it
+            // waits on is a population that dispatches there.
+            None if self.a_handler_in_this_function_would_catch() => {
+                return Err(self.unsupported(
+                    sequence,
+                    "a `for...of` inside a `try` over a generator this site did not make -- it \
+                     arrived as a parameter, a field or another call's result, so the step \
+                     dispatches at the resumption slot, which holds the ordinary body, and a \
+                     `throw` from it would end the program rather than reach this handler",
+                ));
+            }
             None => self.generator_dispatch(sequence, frame)?,
         };
         let Some(layout) = self.generator_element(frame) else {
@@ -57542,6 +57570,30 @@ impl<'a> FuncBuilder<'a> {
         }
         let origin = self.origin(id);
         self.emit_the_raise_test(&origin);
+    }
+
+    /// Whether a `throw` raised here would reach a handler **in this function**.
+    ///
+    /// The same walk [`Self::emit_the_raise_test`] makes over `exits`, asked *before* anything
+    /// is emitted -- so a site that cannot carry a raise can refuse instead of emitting a step
+    /// that drops one.
+    ///
+    /// **`self.raises` is deliberately not part of it, and the measurement is why.** A raising
+    /// copy carries a raise to its caller, so by that reasoning a guarded step inside one should
+    /// refuse too -- and a refusal inside a *closure's* raising variant is not a compile-time
+    /// refusal at all: `lower_wanted_closures` turns it into `refuses_to_cross`' abort shell, so
+    /// a `try` reaching that closure stops the program **at run time**. Measured at two recorded
+    /// test262 cases, one of which was a **pass**
+    /// (`for-of/generator-next-error.js`, `pass -> no-verdict (crash)`).
+    ///
+    /// So a refusal inside a raising body is not free the way one at a site is: it trades a
+    /// wrong answer for a crash, which is the worse direction. The copy case stays recorded
+    /// rather than refused -- `outcomes/a-generator-passed-in-and-stepped-inside-a-try-ends-the-
+    /// program` is it -- and what closes it is a raising resumption slot, not a refusal.
+    fn a_handler_in_this_function_would_catch(&self) -> bool {
+        self.exits
+            .iter()
+            .any(|exit| matches!(exit, Exit::Handler(_)))
     }
 
     /// The test itself, given an origin: the half a body this compiler *builds*
