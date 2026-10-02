@@ -28969,75 +28969,53 @@ impl<'a> FuncBuilder<'a> {
         self.build_array_from(id, argument, false)
     }
 
-    /// The walk that builds the array, whose element type has two sources.
+    /// Walk a sequence and collect every element into a new array.
     ///
-    /// Without a callback it is the *expression's* type: `Array.from(xs)` is
-    /// declared to produce exactly what it walks. With one it cannot be, and
-    /// that is the whole of `mapped`: `Array.from("abc", (c) => c.length)` has
-    /// expression type `number[]` while the walk produces strings, so taking
-    /// the element from the expression coerced a string into a double and said
-    /// so -- `a value of type Managed(String) where Float { bits: 64 } is
-    /// wanted`, from the one arm of four that changed the element's type.
+    /// The core of [`Self::build_array_from`], extracted so that a **rest element** can use it
+    /// too: `const [...x] = iter` has to collect what the iterator yields, and before this it
+    /// refused with a sentence naming this very feature -- *"a rest element over a value that is
+    /// not an array, which needs it collected through its iterator first"*. 190 recorded test262
+    /// cases, every one of them with the rest at position 0.
     ///
-    /// So where a callback follows, the element comes from the **walk**, which
-    /// is what is actually going into the array this builds.
-    fn build_array_from(
+    /// **Why it takes a `ValueId` and a built `Walk`.** `Array.from(xs)` has its argument as a
+    /// *node* and can lower it itself; a rest element's source is already lowered -- `bind_rest`
+    /// receives a value -- so a shared core cannot start from an expression. And the `Walk` comes
+    /// from the caller because the two reach it differently: `Array.from` reads a method name off
+    /// `sequence_source` (`values()`, `keys()`, `entries()`) and a pattern never has one.
+    ///
+    /// Everything in here was measured where it stands and the comments are the measurements:
+    /// the sizing branch is worth four allocations rather than any time, the `ArraySet` is checked
+    /// because `hir::bounds` is what should prove it rather than this lowering asserting it, and
+    /// `filled` is a second counter because a table's cursor is an entry index whose holes are not
+    /// elements.
+    fn collect_a_walk(
         &mut self,
         id: NodeId,
-        argument: NodeId,
-        mapped: bool,
+        sequence: NodeId,
+        sequence_value: ValueId,
+        walk: Walk,
+        element_ty: &HirType,
+        ty: &HirType,
     ) -> Result<ValueId, Diagnostic> {
-        // An array source keeps its `slice`, and the reason is measured rather
-        // than assumed. 256 elements copied two thousand times, against a C++
-        // reference at 41.65 us:
-        //
-        //     walked   462.77 us   12.18x C++   3.80x node
-        //     sliced    53.07 us    1.27x C++   0.45x node
-        //
-        // **8.7x**, and sliced it beats node. A `slice` is a memcpy of one run
-        // of memory whose length is known before it starts; the walk is a
-        // bounds check, a load and a store per element.
-        //
-        // This comment said 1.34x for a while, from a benchmark run under a
-        // provider that never frees -- so both variants were measuring page
-        // faults and the difference between them nearly vanished. Record 0102
-        // is about that.
-        //
-        // Every other shape has no run of memory to copy: a `Set` with holes, a
-        // string by code point, a generator. So this is one specialization with
-        // a number on it rather than two paths kept in step.
-        //
-        // Exactly the two element widths `slice` reads -- a double and a
-        // pointer. A **typed** array is `Array` too and is neither, and routing
-        // one here refused it by name: `slice` moves eight bytes or a word, and
-        // a `Uint8Array` holds one. That was a regression this file's own
-        // example caught within the hour, and it is why the test asks for the
-        // typed source rather than for "an array".
-        if matches!(
-            self.type_of(argument),
-            Some(HirType::Managed(ManagedType::Array(element)))
-                if matches!(*element, HirType::Float { bits: 64 } | HirType::Managed(_))
-        ) && let Some(ty) = self.type_of(id)
-        {
-            let origin = self.origin(id);
-            return self.lower_array_copy(argument, &ty, &origin);
-        }
-        let (sequence, forced) = self.sequence_source(argument);
-        let sequence_value = self.lower_expression(sequence)?;
-        let walk = self.walk_of(sequence, sequence_value, forced, 1)?;
-
         let origin = self.origin(id);
-        let ty = self.array_from_type(id, &walk, mapped)?;
-        let HirType::Managed(ManagedType::Array(element_ty)) = ty.clone() else {
-            return Err(self.unsupported(id, "an `Array.from` that does not build an array"));
-        };
         let append = match *element_ty {
             ref counted if holds_counted(counted) => "nts_array_push_ref",
             HirType::Float { bits: 64 } => "nts_array_push",
-            // A narrower element is a *typed* array being built, which
-            // `Array.from` does not do -- `Uint8Array.from` does, and is its
-            // own question.
-            _ => return Err(self.unsupported(id, "an `Array.from` building a typed array")),
+            // **An erased element**, which is what a rest element's tail usually has: `[...x]`
+            // in JavaScript collects values of no particular type, and `[...[x, y, z]]` gives
+            // the tail a pattern rather than a declared array. `nts_array_push_value` is the
+            // push for one and has been in the runtime since arrays of tagged values existed;
+            // this arm was missing only because `Array.from`'s own result type is rarely erased.
+            HirType::Erased => "nts_array_push_value",
+            // A narrower element is a *typed* array being built, which `Array.from` does not do
+            // -- `Uint8Array.from` does, and is its own question.
+            _ => {
+                return Err(self.unsupported(
+                    id,
+                    "a walk collected into a typed array, whose elements are narrower than a \
+                     double and are pushed one width at a time",
+                ))
+            }
         };
 
         // How many elements are coming, where that is known before the walk
@@ -29105,7 +29083,7 @@ impl<'a> FuncBuilder<'a> {
         self.switch_to(record.body);
 
         let element = self.walk_element(&walk, sequence_value, at, stepped, &origin)?;
-        let element = self.coerce(element, &element_ty, sequence)?;
+        let element = self.coerce(element, element_ty, sequence)?;
         if counted {
             let position = self.bindings[&filled];
             self.push(
@@ -29149,6 +29127,69 @@ impl<'a> FuncBuilder<'a> {
         self.end_loop(&record, step)?;
         self.unlend_walked(lent, &origin);
         Ok(out)
+    }
+
+    /// The walk that builds the array, whose element type has two sources.
+    ///
+    /// Without a callback it is the *expression's* type: `Array.from(xs)` is
+    /// declared to produce exactly what it walks. With one it cannot be, and
+    /// that is the whole of `mapped`: `Array.from("abc", (c) => c.length)` has
+    /// expression type `number[]` while the walk produces strings, so taking
+    /// the element from the expression coerced a string into a double and said
+    /// so -- `a value of type Managed(String) where Float { bits: 64 } is
+    /// wanted`, from the one arm of four that changed the element's type.
+    ///
+    /// So where a callback follows, the element comes from the **walk**, which
+    /// is what is actually going into the array this builds.
+    fn build_array_from(
+        &mut self,
+        id: NodeId,
+        argument: NodeId,
+        mapped: bool,
+    ) -> Result<ValueId, Diagnostic> {
+        // An array source keeps its `slice`, and the reason is measured rather
+        // than assumed. 256 elements copied two thousand times, against a C++
+        // reference at 41.65 us:
+        //
+        //     walked   462.77 us   12.18x C++   3.80x node
+        //     sliced    53.07 us    1.27x C++   0.45x node
+        //
+        // **8.7x**, and sliced it beats node. A `slice` is a memcpy of one run
+        // of memory whose length is known before it starts; the walk is a
+        // bounds check, a load and a store per element.
+        //
+        // This comment said 1.34x for a while, from a benchmark run under a
+        // provider that never frees -- so both variants were measuring page
+        // faults and the difference between them nearly vanished. Record 0102
+        // is about that.
+        //
+        // Every other shape has no run of memory to copy: a `Set` with holes, a
+        // string by code point, a generator. So this is one specialization with
+        // a number on it rather than two paths kept in step.
+        //
+        // Exactly the two element widths `slice` reads -- a double and a
+        // pointer. A **typed** array is `Array` too and is neither, and routing
+        // one here refused it by name: `slice` moves eight bytes or a word, and
+        // a `Uint8Array` holds one. That was a regression this file's own
+        // example caught within the hour, and it is why the test asks for the
+        // typed source rather than for "an array".
+        if matches!(
+            self.type_of(argument),
+            Some(HirType::Managed(ManagedType::Array(element)))
+                if matches!(*element, HirType::Float { bits: 64 } | HirType::Managed(_))
+        ) && let Some(ty) = self.type_of(id)
+        {
+            let origin = self.origin(id);
+            return self.lower_array_copy(argument, &ty, &origin);
+        }
+        let (sequence, forced) = self.sequence_source(argument);
+        let sequence_value = self.lower_expression(sequence)?;
+        let walk = self.walk_of(sequence, sequence_value, forced, 1)?;
+        let ty = self.array_from_type(id, &walk, mapped)?;
+        let HirType::Managed(ManagedType::Array(element_ty)) = ty.clone() else {
+            return Err(self.unsupported(id, "an `Array.from` that does not build an array"));
+        };
+        self.collect_a_walk(id, sequence, sequence_value, walk, &element_ty, &ty)
     }
 
     /// The one value a walk hands the body, whichever kind of walk it is.
@@ -50995,10 +51036,11 @@ impl<'a> FuncBuilder<'a> {
                 .iter()
                 .any(|part| self.kind_of(*part) == Some(syntax::DOT_DOT_DOT_TOKEN))
             {
-                return Err(self.unsupported(
-                    element,
-                    "a rest element in a pattern over a generator, which needs the remaining                      elements collected through the iterator",
-                ));
+                // **A rest element collects what is left**, through the same `collect_a_walk` a
+                // `[...x]` over an `Iterable` uses -- and with the same walk this loop has been
+                // stepping, which is what makes a rest after an elision correct: the iterator
+                // has already advanced past the holes before it.
+                return self.bind_rest(element, value, 0);
             }
             // **The step comes first and happens for every element**, which is the whole of what
             // an elision means here: the specification steps the iterator and throws the value
@@ -51408,11 +51450,48 @@ impl<'a> FuncBuilder<'a> {
         // already refused as "`length`, which `Iterable` does not declare", so
         // the sentences agree about the same program.
         if !super::carries_a_length(&ty) {
-            return Err(self.unsupported(
-                element,
-                "a rest element over a value that is not an array, which needs it collected \
-                 through its iterator first",
-            ));
+            // **Collected through its iterator, which is what that sentence named.** The
+            // refusal here said *"needs it collected through its iterator first"* and the
+            // machinery it pointed at is `collect_a_walk`, extracted out of
+            // `build_array_from` for exactly this: `Array.from(xs)` and `[...x]` are one
+            // operation reached two ways, one from a node and one from a value.
+            //
+            // **The array to build is the TARGET's type, not the source's.** Everywhere else
+            // in this function the two agree -- a slice of an array is an array of the same
+            // element -- and here they cannot: the source is an `Iterable` or a generator and
+            // the tail is whatever the binding declares.
+            //
+            // **No position check, and the reason is a refusal elsewhere rather than a rule
+            // here.** A rest at position 1 over an iterator would have to consume element 0
+            // first, and `pattern_element_read` refuses a non-array read before this is
+            // reached -- so `[...x]` is the only shape that arrives, which is also what the
+            // census found: every one of the 190 cases has the rest at position 0. Stated
+            // rather than enforced, because enforcing it twice is how two rules come apart.
+            let Some(target) = self.children(element).into_iter().find(|part| {
+                matches!(
+                    self.kind_of(*part),
+                    Some(
+                        syntax::IDENTIFIER
+                            | syntax::ARRAY_BINDING_PATTERN
+                            | syntax::OBJECT_BINDING_PATTERN
+                    )
+                )
+            }) else {
+                return Err(self.unsupported(element, "a rest element with no name or pattern"));
+            };
+            let Some(built @ HirType::Managed(ManagedType::Array(_))) = self.type_of(target)
+            else {
+                return Err(self.unsupported(
+                    element,
+                    "a rest element over a value that is not an array, whose own type is not \
+                     an array either, so there is nothing to collect the iterator into",
+                ));
+            };
+            let HirType::Managed(ManagedType::Array(element_ty)) = built.clone() else {
+                unreachable!("matched an array just above")
+            };
+            let walk = self.walk_of(element, value, None, 1)?;
+            return self.collect_a_walk(element, element, value, walk, &element_ty, &built);
         }
         let origin = self.origin(element);
         #[allow(clippy::cast_precision_loss)]
