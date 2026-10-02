@@ -31882,8 +31882,8 @@ impl<'a> FuncBuilder<'a> {
         {
             return self.async_generator_step(id, *frame, resume.clone(), origin);
         }
-        if let Walk::Generator { frame, resume, .. } = walk {
-            let (frame, resume) = (*frame, resume.clone());
+        if let Walk::Generator { frame, resume, raises, .. } = walk {
+            let (frame, resume, raises) = (*frame, resume.clone(), *raises);
             // The frame is the state and the resumption is the step, so this is
             // one call and no loads. It answers `done`; the element it left
             // behind is read in the body, off the same frame.
@@ -31896,6 +31896,19 @@ impl<'a> FuncBuilder<'a> {
                 HirType::Bool,
                 origin.clone(),
             );
+            // **A raising resumption records the `throw` and answers `done`**, so a step that
+            // does not test the flag reads the raise as the end of the sequence: the loop
+            // exits normally, the handler never runs, and the flag stays set for the next
+            // `nts_raising()` anywhere in the program to misread.
+            //
+            // Here rather than at the loop that calls this, because every walk's step comes
+            // through this function and the test belongs immediately after the call that may
+            // set the flag -- the same placement `test_for_a_raise` has after an ordinary
+            // call, and the same reason: between the call and anything that branches on its
+            // result.
+            if raises {
+                self.emit_the_raise_test(origin);
+            }
             return Ok((frame, answered));
         }
         let Walk::Protocol {
@@ -32026,6 +32039,18 @@ impl<'a> FuncBuilder<'a> {
             } if self.generator_calls.contains(&value) => Some(name.clone()),
             _ => None,
         };
+        // **Whether the resumption this names is a raising one**, through the one strip
+        // [`without_the_raising_suffix`] exists to be.
+        //
+        // The creating call carries `@raises` exactly where [`Self::raising_suffix_of`] put
+        // it: the generator function has a raising copy *and* this site is guarded or sits
+        // in a raising body. Creating a frame cannot itself raise -- the body has not run --
+        // so the suffix there is harmless, and it is also the only thing at this point that
+        // knows both of those facts. So the resumption inherits it, deliberately now rather
+        // than by accident, and the **step** is what tests the flag.
+        let raises = made_here
+            .as_deref()
+            .is_some_and(|name| !without_the_raising_suffix(name).1.is_empty());
         let resume = match made_here {
             // Made **here**, so the resumption is known and the call is direct.
             //
@@ -32073,6 +32098,7 @@ impl<'a> FuncBuilder<'a> {
             resume,
             element: layout,
             asynchronous,
+            raises,
         })
     }
 
@@ -65399,6 +65425,19 @@ enum Walk {
         /// and a second variant would have meant an arm in each of the ten
         /// matches that only ever said "the same as a generator".
         asynchronous: bool,
+        /// Whether `resume` is a **raising** resumption, so the step has to test
+        /// the flag it may set.
+        ///
+        /// A field rather than a test of `resume`'s spelling, for the reason
+        /// [`FuncBuilder::tested_for_a_raise`] is one predicate: the site that
+        /// *names* the resumption and the site that *tests* after it are
+        /// different functions, and two derivations of "is this one raising"
+        /// disagreeing is a `throw` nobody looks for. `outcomes/a-generator-
+        /// that-throws-stepped-inside-a-try` is what that looked like -- the
+        /// loop read `done`, exited normally, and the flag it left set was read
+        /// by an unrelated call, so two arms of one program reported each
+        /// other's outcome.
+        raises: bool,
     },
     /// The code points of a string, which are one or two units wide.
     ///
