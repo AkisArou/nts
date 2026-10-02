@@ -79,7 +79,7 @@ pub(crate) fn search_path() -> Vec<Utf8PathBuf> {
 /// and is left to `bind-c`.
 pub(crate) fn namespace_of(module: &str, search: &[Utf8PathBuf]) -> Option<String> {
     if let Some(name) = module.strip_prefix("gi:") {
-        return newest(name, search);
+        return newest(name, None, search);
     }
     let spec = module.strip_prefix("c:")?;
     let (name, version) = spec.split_once('-')?;
@@ -91,9 +91,10 @@ pub(crate) fn namespace_of(module: &str, search: &[Utf8PathBuf]) -> Option<Strin
     (plausible && known).then(|| spec.to_owned())
 }
 
-/// The newest version of the namespace `gi:` names in lowercase (`gtk`), among
-/// the GIR files of `search`: `Gtk-4.0` where `Gtk-3.0` is installed beside it.
-fn newest(name: &str, search: &[Utf8PathBuf]) -> Option<String> {
+/// The namespace `gi:` names in lowercase (`gtk`), among the GIR files of
+/// `search`: at `pinned`, the version `nts.config.ts` gives it, or else the
+/// newest -- `Gtk-4.0` where `Gtk-3.0` is installed beside it.
+pub(crate) fn newest(name: &str, pinned: Option<&str>, search: &[Utf8PathBuf]) -> Option<String> {
     if name == "cairo" {
         return Some("cairo-1.0".to_owned());
     }
@@ -105,7 +106,8 @@ fn newest(name: &str, search: &[Utf8PathBuf]) -> Option<String> {
         .filter_map(|file| {
             let stem = file.strip_suffix(".gir")?;
             let (namespace, at) = stem.split_once('-')?;
-            (namespace.to_ascii_lowercase() == name).then(|| Some((version(at)?, stem.to_owned())))?
+            let wanted = namespace.to_ascii_lowercase() == name && pinned.is_none_or(|pinned| pinned == at);
+            wanted.then(|| Some((version(at)?, stem.to_owned())))?
         })
         .collect();
     found.sort();

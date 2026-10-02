@@ -285,6 +285,11 @@ pub struct Resolved {
     /// written -- and JSX, which nts does not compile, is refused.
     #[serde(default)]
     pub react: Option<ReactSettings>,
+    /// The version of each GIR namespace a `gi:` import names, by the name the
+    /// import spells it (`{ gtk: "4.0" }`). One absent is the newest
+    /// installed: `gi:gtk` is `Gtk-4.0` where `Gtk-3.0` is installed beside it.
+    #[serde(default)]
+    pub gi: BTreeMap<String, String>,
 }
 
 /// `react` in `nts.config.ts`.
@@ -486,6 +491,7 @@ mod tests {
             manifests: Vec::new(),
             targets: None,
             react: None,
+            gi: BTreeMap::new(),
             products: names
                 .iter()
                 .map(|name| {

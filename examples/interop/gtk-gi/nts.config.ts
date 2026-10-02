@@ -10,4 +10,6 @@ export default defineConfig({
   dependencies: {
     "linux-gnu": { from: "pkg-config", packages: ["gtk4"] },
   },
+  // What `gi:gtk` is: the newest installed when absent.
+  gi: { gtk: "4.0" },
 });

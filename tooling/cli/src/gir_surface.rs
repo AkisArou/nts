@@ -181,6 +181,26 @@ impl Binder for GirPlatform {
 pub(crate) struct GirBindings {
     /// Whether the first round has been answered.
     decided: bool,
+    /// `nts.config.ts`'s `gi`: the version of each namespace a `gi:` import
+    /// names, where it pins one.
+    pins: std::collections::BTreeMap<String, String>,
+}
+
+impl GirBindings {
+    pub(crate) fn new(pins: std::collections::BTreeMap<String, String>) -> Self {
+        Self { decided: false, pins }
+    }
+
+    /// The namespace `module` names: a `gi:` one at its pin, if the config
+    /// gives one, which must be installed.
+    fn namespace(&self, module: &str, search: &[Utf8PathBuf]) -> Result<Option<String>, String> {
+        let Some(name) = module.strip_prefix("gi:") else { return Ok(bind_gir::namespace_of(module, search)) };
+        let pinned = self.pins.get(name).map(String::as_str);
+        match (bind_gir::newest(name, pinned, search), pinned) {
+            (None, Some(version)) => Err(format!("nts.config.ts pins `{module}` to {version}, and no GIR file of that version is installed")),
+            (found, _) => Ok(found),
+        }
+    }
 }
 
 impl Generated for GirBindings {
@@ -206,7 +226,10 @@ impl Generated for GirBindings {
         }
         let search = bind_gir::search_path();
         let missing: Vec<&str> = complaints.iter().filter_map(missing_module).collect();
-        let modules: BTreeSet<String> = missing.iter().filter_map(|module| bind_gir::namespace_of(module, &search)).collect();
+        let mut modules = BTreeSet::new();
+        for module in &missing {
+            modules.extend(self.namespace(module, &search)?);
+        }
         if modules.is_empty() {
             return Ok(None);
         }

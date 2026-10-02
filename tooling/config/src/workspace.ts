@@ -109,6 +109,13 @@ export interface Config {
   /** Build-system hooks to emit for a brownfield consumer. */
   readonly integrate?: readonly Integration[];
 
+  /**
+   * The version of each GIR namespace a `gi:` import names, keyed as the
+   * import spells it: `{ gtk: "4.0" }` for `import { Box } from "gi:gtk"`.
+   * One absent is the newest this machine has installed.
+   */
+  readonly gi?: Readonly<Record<string, string>>;
+
   readonly build?: {
     readonly cache?: { readonly local?: boolean; readonly directory?: string };
   };

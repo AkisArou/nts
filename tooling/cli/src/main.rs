@@ -1276,7 +1276,7 @@ fn for_project(mut source: TsgoApi, tsconfig: &Utf8Path) -> Result<TsgoApi> {
     source = if windows {
         source.with_generated(Box::new(windows_surface::WindowsBindings::default()))
     } else if apple.is_empty() {
-        source.with_generated(Box::new(gir_surface::GirBindings::default()))
+        source.with_generated(Box::new(gir_surface::GirBindings::new(resolved.gi.clone())))
     } else {
         let package = config.parent().unwrap_or_else(|| Utf8Path::new("."));
         let native = resolved.native.iter().map(|entry| package.join(&entry.dir)).collect();
