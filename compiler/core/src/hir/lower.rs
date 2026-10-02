@@ -1944,6 +1944,35 @@ fn raising_member_slots(snapshot: &SemanticSnapshot, hierarchy: &mut Hierarchy, 
     }
 }
 
+/// The constructor a class declaration writes, where it writes one.
+///
+/// A class's *symbol* declares the class, and `throwing_symbols` gives it an entry whose
+/// meaning is construction -- so every set keyed on "the declaration a raising copy belongs
+/// to" has to be able to get from the one to the other. `lower_new` names
+/// `{owner}#constructor` and `raising_method` builds the copy from this node, so this is
+/// the only spelling of that step.
+///
+/// `None` for a class with no constructor of its own: there is no body to copy, and
+/// construction then runs field initialisers that `walk_one_declaration` already attributes
+/// to the class.
+///
+/// **Through [`FuncBuilder::implementation_of`], because the first `constructor` child of
+/// an overloaded one is a signature.** `Blob` writes four of them above its body;
+/// `lower_class` skips a signature and lowers the implementation, so a set keyed on the
+/// first child is a set of nodes nothing builds -- and the fixpoint cannot disqualify one
+/// either, since a signature has no body to walk. That is `eb92ee8f9`'s body-less-signature
+/// defect at the one construct whose name is a keyword.
+fn the_constructor_declared_by(probe: &FuncBuilder, class: NodeId) -> Option<NodeId> {
+    if !probe.kind_of(class).is_some_and(declares_a_class) {
+        return None;
+    }
+    probe
+        .children(class)
+        .into_iter()
+        .find(|member| probe.kind_of(*member) == Some(syntax::CONSTRUCTOR))
+        .map(|at| probe.implementation_of(at))
+}
+
 /// The `(interface, member)` a call dispatches through, where its receiver is typed at a
 /// face this hierarchy knows.
 ///
@@ -2011,7 +2040,7 @@ fn members_filling(
                 // only the implementation is ever in the set, so comparing the raw nodes
                 // would reject every such family -- conservative, and a second spelling of
                 // one normalisation, which is the defect this file has had four of.
-                found.push(implementation_of(snapshot, probe, the_function_of(probe, member)));
+                found.push(probe.implementation_of(the_function_of(probe, member)));
             }
         }
     }
@@ -4578,6 +4607,23 @@ fn walk_one_declaration(
         // is the answer it would have given with no code at all. Through
         // `parameters_of`, which is the one derivation of "which children are
         // the parameters" and is what `class_thenable` asks with.
+        // **A class with no constructor of its own constructs through its base's**, and
+        // this walk has nothing else to find in it: no constructor to descend into and, in
+        // the shape that matters, no field initialiser either. So `class Inherits extends
+        // Base {}` was in no throwing set, `new Inherits(n)` inside a `try` read as a call
+        // that cannot raise, and the base constructor's `throw` left a handler that had
+        // compiled -- 9 of 29 cases answering `nts: uncaught RangeError` where node answers
+        // `-1`.
+        //
+        // The `super(…)` arm below records exactly this for a class that writes its
+        // constructor out; an **implicit** `super(...args)` is the same statement with no
+        // node to stand on, which is why it is recorded here rather than found there.
+        if probe.kind_of(declaration).is_some_and(declares_a_class)
+            && the_constructor_declared_by(probe, declaration).is_none()
+            && let Some(base) = base
+        {
+            reached.push(Reached::Body(base));
+        }
         let own: rustc_hash::FxHashSet<NodeId> =
             parameters_of(probe, declaration).into_iter().collect();
         let mut pending: Vec<NodeId> = children_that_run(probe, declaration);
@@ -4887,11 +4933,14 @@ fn copyable_symbols(
 /// only" and 705 of "an accessor, which is a call", across the runtime corpora, are
 /// what this is for.
 ///
-/// **A constructor is still copied by nothing**, and it is the last of them: it is
-/// reached by `new`, which names no function to suffix, and the callee `new` resolves
-/// to is a `Constructor`, which is never eligible here. It is its own piece of work,
-/// named where it is refused and pinned by
-/// `examples/a-throw-that-stays-in-its-function`.
+/// **And a constructor, which was the last of them.** The sentence that stood here --
+/// *"it is reached by `new`, which names no function to suffix"* -- was false:
+/// `lower_new` has always spelled `Callee::Direct("{owner}#constructor")`. What was
+/// missing is that a class's *symbol* declares the **class**, so both sets that ask
+/// what a copy can be made of were handed a `ClassDeclaration`;
+/// [`the_constructor_declared_by`] is the one mapping from the one to the other, and
+/// it resolves through [`FuncBuilder::implementation_of`] because the first
+/// `constructor` child of an overloaded one is a signature `lower_class` skips.
 fn a_copy_can_be_made_of(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
@@ -4904,6 +4953,7 @@ fn a_copy_can_be_made_of(
                 | syntax::METHOD_DECLARATION
                 | syntax::GET_ACCESSOR
                 | syntax::SET_ACCESSOR
+                | syntax::CONSTRUCTOR
         )
     ) && !is_generic_function(snapshot, declaration)
         && !probe
@@ -4918,8 +4968,20 @@ fn can_be_copied(snapshot: &SemanticSnapshot, probe: &FuncBuilder, symbol: u32) 
     let Some(record) = snapshot.symbols.get(symbol as usize) else {
         return false;
     };
-    let mut declarations = record.declarations.iter().map(|at| the_function_of(probe, *at));
-    declarations.any(|declaration| a_copy_can_be_made_of(snapshot, probe, declaration))
+    // **A class's declaration is the class, and what a copy is made of is its
+    // constructor** -- see [`the_constructor_declared_by`]. `throwing_symbols` gives a
+    // class an entry whose meaning is construction, so a class that can raise arrives here
+    // with a `ClassDeclaration` to be asked about, and asking that said no: `Constructed`
+    // came out `any = true, copyable = false`, so `new Constructed(n)` inside a `try` was
+    // refused however plainly its constructor threw. One mapping, two readers -- this and
+    // [`eligible_declarations`] -- because the two disagreeing is a symbol the fixpoint
+    // admits and the node set has no member for.
+    record.declarations.iter().any(|at| {
+        let declaration = the_function_of(probe, *at);
+        a_copy_can_be_made_of(snapshot, probe, declaration)
+            || the_constructor_declared_by(probe, declaration)
+                .is_some_and(|ctor| a_copy_can_be_made_of(snapshot, probe, ctor))
+    })
 }
 
 /// What a raising copy's name ends in.
@@ -5028,8 +5090,35 @@ fn a_raising_callee_of(
     probe: &FuncBuilder,
     call: NodeId,
 ) -> Option<NodeId> {
+    // **A `super(…)` names no symbol, so the checker resolves it to nothing** -- and this
+    // is the one resolver every reader asks, so answering here is answering for all of
+    // them. The declaration it runs is the base class's constructor, which is what
+    // `throwing_symbols`' own `super` arm records (as a *symbol*, for a different
+    // question) and what `lower_new` would spell for a direct construction.
+    //
+    // Without it, a raising copy of a subclass constructor called the base's **ordinary**
+    // entry: `func Calls#constructor@raises { %2 = call Base#constructor(%0, %1) }`, with
+    // no flag test, so the base's `throw` left a `try` that compiled -- 10 of 29 cases.
+    // `raising_suffix_of` asks `has_a_raising_copy`, which asks this, so a `None` here is
+    // silently an unsuffixed name rather than a refusal.
+    if probe
+        .children(call)
+        .first()
+        .is_some_and(|callee| probe.kind_of(*callee) == Some(syntax::SUPER_KEYWORD))
+    {
+        return probe
+            .enclosing_class(call)
+            .and_then(|class| declared_base_class(snapshot, probe, class))
+            .and_then(|base| snapshot.symbols.get(base as usize))
+            .and_then(|record| {
+                record
+                    .declarations
+                    .iter()
+                    .find_map(|at| the_constructor_declared_by(probe, *at))
+            });
+    }
     let callee = snapshot.call_targets.get(&call).and_then(|target| target.callee)?;
-    Some(implementation_of(snapshot, probe, callee))
+    Some(probe.implementation_of(callee))
 }
 
 /// Which declarations a site's raising copies belong to: one for a call, and the
@@ -5091,9 +5180,21 @@ fn eligible_declarations(
             // the fixpoint below either, because it has no body for
             // `calls_in_the_body_of` to walk, so it would survive as a member of
             // this set that nothing ever lowers.
-            let declaration = implementation_of(snapshot, probe, the_function_of(probe, *declaration));
+            let declaration = probe.implementation_of(the_function_of(probe, *declaration));
             if a_copy_can_be_made_of(snapshot, probe, declaration) {
                 eligible.insert(declaration);
+            }
+            // **A class's symbol declares the CLASS, and the body a copy is made of is
+            // its constructor.** `throwing_symbols` gives a class an entry whose meaning
+            // is its *construction* -- that is how `new X()` can raise at all -- so the
+            // symbol that reaches this loop is the class's, and `a_copy_can_be_made_of`
+            // asked about a `ClassDeclaration` and said no. The constructor is the
+            // declaration `new` names (`lower_new` spells `{owner}#constructor`) and the
+            // one `raising_method` builds a copy of, so it is the one this set owes.
+            if let Some(constructor) = the_constructor_declared_by(probe, declaration)
+                && a_copy_can_be_made_of(snapshot, probe, constructor)
+            {
+                eligible.insert(constructor);
             }
         }
     }
@@ -5715,7 +5816,7 @@ fn functions_used_as_values(
                 // that declaration, and an overloaded function's signatures are not
                 // it. Without this a genuine value-use of an overloaded function --
                 // `const f = same` -- asked for all three and got `false` for two.
-                .map(|at| implementation_of(snapshot, probe, the_function_of(probe, *at)))
+                .map(|at| probe.implementation_of(the_function_of(probe, *at)))
                 .filter(|declaration| eligible.contains(declaration)),
         );
     }
@@ -11330,42 +11431,6 @@ fn opaque_signature(snapshot: &SemanticSnapshot, declaration: NodeId) -> bool {
 /// Scalars only. A union of two scalars plus `undefined` is not one of these and
 /// is left alone, because the check has one type to name in its message and
 /// naming the wrong one is worse than the generic text this replaces.
-/// The declaration that carries the body, where a symbol has several.
-///
-/// An overload signature has no body; the implementation does. Asking for the
-/// body rather than for "the last declaration" is what makes this right for a
-/// symbol declared once -- there is no body-less sibling to pass over, and the
-/// answer is the argument unchanged.
-fn implementation_of(
-    snapshot: &SemanticSnapshot,
-    probe: &FuncBuilder,
-    declaration: NodeId,
-) -> NodeId {
-    let has_a_body = |node: NodeId| {
-        probe
-            .children(node)
-            .into_iter()
-            .any(|child| probe.kind_of(child) == Some(syntax::BLOCK))
-    };
-    if has_a_body(declaration) {
-        return declaration;
-    }
-    probe
-        .children(declaration)
-        .into_iter()
-        .find(|child| probe.kind_of(*child) == Some(syntax::IDENTIFIER))
-        .and_then(|name| probe.node(name).symbol)
-        .and_then(|symbol| snapshot.symbols.get(symbol.0 as usize))
-        .and_then(|record| {
-            record
-                .declarations
-                .iter()
-                .copied()
-                .find(|other| has_a_body(*other))
-        })
-        .unwrap_or(declaration)
-}
-
 fn optional_scalars(snapshot: &SemanticSnapshot, declaration: NodeId) -> Vec<(u32, HirType)> {
     let probe = FuncBuilder::probe(snapshot);
     // **The declaration with a body, which for an overloaded function is not
@@ -11394,7 +11459,7 @@ fn optional_scalars(snapshot: &SemanticSnapshot, declaration: NodeId) -> Vec<(u3
     // node answers `ERR_INVALID_ARG_TYPE`, because the module's own
     // `typeof value !== "number"` is folded away inside a compiled program and
     // the boundary is what has to stand in for it.
-    let declaration = implementation_of(snapshot, &probe, declaration);
+    let declaration = probe.implementation_of(declaration);
     let mut found = Vec::new();
     let mut at = 0u32;
     for child in probe.children(declaration) {
@@ -13092,22 +13157,48 @@ fn declare_interface_methods(hierarchy: &Hierarchy, program: &mut Program) {
 /// reason, which `drop_callers_of_refused` reads to say what happened instead
 /// of asserting a refusal that did not occur.
 fn record_unimplemented_interfaces(hierarchy: &Hierarchy, program: &mut Program) {
+    // **Which members this program holds a raising copy of**, because a call inside a
+    // `try` names the suffixed spelling by the same route it names the plain one.
+    // `has_a_raising_copy` asks about the *implementation* the checker resolved -- and
+    // for `stream[kStreamAttachBYOB](this)` in `runtime/web-platform` that is
+    // `ReadableStream`'s method, which has a copy -- while `callee_for` spells the name
+    // of the type that **declares** the member. So the site emits
+    // `ReadableStreamBYOBHost#__@kStreamAttachBYOB@1167@raises`, an interface nothing
+    // implements has no body under either spelling, and the plain one was the only one
+    // this loop answered for: `integrity` reported the cascade through the copy as one
+    // with no root, which is the weaker of two sentences about one cause.
+    //
+    // By member key rather than for every declared member, because an entry for a name
+    // nothing can ask about is noise in a list fourteen readers scan -- 423 of them in
+    // `web-platform` alone.
+    let copied: rustc_hash::FxHashSet<String> = program
+        .funcs
+        .iter()
+        .filter_map(|func| func.name.strip_suffix(RAISING_SUFFIX))
+        .filter_map(|name| name.split_once('#').map(|(_, member)| member.to_owned()))
+        .collect();
     for face in &hierarchy.faces {
         let Some(owner) = hierarchy.name.get(face) else {
             continue;
         };
         for member in hierarchy.declares.get(face).into_iter().flatten() {
-            let declared = format!("{owner}#{member}");
-            if program.funcs.iter().any(|func| func.name == declared)
-                || program.uncompiled.iter().any(|(name, _)| *name == declared)
-            {
-                continue;
+            let spellings = if copied.contains(member) {
+                vec![format!("{owner}#{member}"), format!("{owner}#{member}{RAISING_SUFFIX}")]
+            } else {
+                vec![format!("{owner}#{member}")]
+            };
+            for declared in spellings {
+                if program.funcs.iter().any(|func| func.name == declared)
+                    || program.uncompiled.iter().any(|(name, _)| *name == declared)
+                {
+                    continue;
+                }
+                program.uncompiled.push((
+                    declared,
+                    "no class in this program implements it, so its method has no body to declare"
+                        .to_owned(),
+                ));
             }
-            program.uncompiled.push((
-                declared,
-                "no class in this program implements it, so its method has no body to declare"
-                    .to_owned(),
-            ));
         }
     }
     // Sorted, so one compiler on one input records them in one order.
@@ -25881,6 +25972,19 @@ impl<'a> FuncBuilder<'a> {
     /// relation `is_an_overload` reads. A declaration that already has a body
     /// is its own implementation and returns unchanged, so this is the identity
     /// for every call that is not to an overload.
+    ///
+    /// **And the sibling relation is the one that matters, which is why this is now
+    /// the only spelling.** There was a second `implementation_of` beside it,
+    /// resolving the name's *symbol* and reading its declarations -- and a
+    /// constructor is named by its keyword, so that one had no identifier to resolve
+    /// and handed back the **signature**. The raising row is where the two parted
+    /// company: `raising_copies` keyed its set on the signature of `Blob`'s
+    /// four-overload constructor while `lower_class` skips a signature by
+    /// `is_an_overload_signature` -- the sibling relation -- so the copy was never
+    /// built, every `new Blob()` inside a raising body named
+    /// `Blob#constructor@raises`, and `integrity` reported a cascade with no root.
+    /// One relation, so "this node is skipped as a signature" and "this node is the
+    /// implementation" cannot disagree.
     fn implementation_of(&self, callee: NodeId) -> NodeId {
         let has_body = |node: NodeId| {
             self.children(node)
@@ -44573,15 +44677,28 @@ impl<'a> FuncBuilder<'a> {
             self.initialize_fields(id, object, type_id, owed)?;
             return Ok(object);
         }
+        // **A `new` names its constructor directly, so its raising copy is reached by
+        // naming it** -- exactly as a method's is where no subclass overrides it. The
+        // sentence this boundary carried for a week, *"`new` names no function to
+        // suffix"*, was false the whole time: the line below has always spelled
+        // `{owner}#constructor`, and I repeated the claim in four commit messages
+        // without reading it.
+        //
+        // The flag test goes *after* the call, where `lower_static_call` puts it. The
+        // instance is already allocated -- `new` allocates, then calls -- so there is no
+        // ordering problem to solve, which is the other half of what that sentence
+        // asserted.
+        let suffix = self.raising_suffix_of(id);
         self.push(
             OpKind::Call {
-                callee: Callee::Direct(format!("{owner}#constructor")),
+                callee: Callee::Direct(format!("{owner}#constructor{suffix}")),
                 args,
                 frame: None,
             },
             HirType::Void,
             origin,
         );
+        self.test_for_a_raise(id);
         // And the classes below it, which declare no constructor of their own.
         // After the call, because an implicit constructor is `super(...args)`
         // followed by this class's initialisers -- so they see what the
@@ -49153,9 +49270,16 @@ impl<'a> FuncBuilder<'a> {
             // does for a plain function. Keeping the arm described 746 occurrences
             // with a sentence about a limitation that no longer exists, and pointed
             // every reader at the wrong piece of work.
-            Some(syntax::CONSTRUCTOR) => {
-                Some("a constructor, and a raising copy is made of plain functions only")
-            },
+            // **And no arm for a `Constructor` any more either**, for the reason the
+            // paragraph above gives about a method -- one construct over and a week
+            // later. A `new` names `{owner}#constructor` directly, so its raising copy
+            // is reached by naming it, and what is left when a constructor has no copy
+            // is that it *lost the fixpoint*: its callee's reason, which the walk below
+            // names. The old sentence described a limitation that never existed in the
+            // form it claimed, and it stood at 21 occurrences in `stream`, 35 in `fs`,
+            // 21 in `web-platform` and 14 in `assert`, pointing every reader at a
+            // "`new` has no name to suffix" problem that `lower_new` disproves on the
+            // line that spells the name.
             Some(syntax::GET_ACCESSOR | syntax::SET_ACCESSOR) => {
                 Some("an accessor, and a raising copy is made of plain functions only")
             },
@@ -62116,6 +62240,40 @@ impl<'a> FuncBuilder<'a> {
         Ok(Callee::Direct(format!("{owner}#{member_name}{suffix}")))
     }
 
+    /// A `static` member's `super`, which has no receiver to find a base type from.
+    ///
+    /// Static dispatch has no slot and nothing to override, so the base's name is the whole
+    /// answer: a direct call, which is exactly what the source means. Writing `Base.make()`
+    /// instead would say the same thing and stop saying it the moment the class is renamed,
+    /// which is why the language has the word.
+    ///
+    /// Split out of [`Self::lower_super`] for that function's line limit, the reason
+    /// [`Self::foreign_owner`] was split out of [`Self::layout_of`] -- and because "a
+    /// `super` with no receiver" is its own question, answered before any of the base-type
+    /// machinery below it runs.
+    fn lower_static_super(
+        &mut self,
+        id: NodeId,
+        base: &str,
+        member: &str,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let args = self.lower_arguments(id, arguments)?;
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unrepresentable(id, "a `super` call in a static member"))?;
+        let origin = self.origin(id);
+        Ok(self.push(
+            OpKind::Call {
+                callee: Callee::Direct(format!("{base}.{member}")),
+                args,
+                frame: None,
+            },
+            ty,
+            origin,
+        ))
+    }
+
     /// A call into the base class, with `this` as the receiver.
     fn lower_super(
         &mut self,
@@ -62138,27 +62296,8 @@ impl<'a> FuncBuilder<'a> {
             .base
             .clone()
             .ok_or_else(|| self.unsupported(id, "`super` outside a derived class"))?;
-        // **A `static` member's `super`, which has no receiver to find a base
-        // type from.** Static dispatch has no slot and nothing to override, so
-        // the base's name is the whole answer: a direct call, which is exactly
-        // what the source means. Writing `Base.make()` instead would say the
-        // same thing and stop saying it the moment the class is renamed, which
-        // is why the language has the word.
         if self.this.is_none() {
-            let args = self.lower_arguments(id, arguments)?;
-            let ty = self
-                .type_of(id)
-                .ok_or_else(|| self.unrepresentable(id, "a `super` call in a static member"))?;
-            let origin = self.origin(id);
-            return Ok(self.push(
-                OpKind::Call {
-                    callee: Callee::Direct(format!("{base}.{member}")),
-                    args,
-                    frame: None,
-                },
-                ty,
-                origin,
-            ));
+            return self.lower_static_super(id, &base, member, arguments);
         }
         let receiver = self
             .this
@@ -62276,15 +62415,36 @@ impl<'a> FuncBuilder<'a> {
         } else {
             self.type_of(id).unwrap_or(HirType::Void)
         };
+        // **A `super(…)` names the base's raising copy, like every other direct call.**
+        // This is the fourth site to need the suffix after `lower_static_call`, `lower_new`
+        // and the accessor pair, and it went unnoticed because a `super` call carries no
+        // symbol: `a_raising_callee_of` answered `None`, so `raising_suffix_of` answered
+        // `""` -- silently an unsuffixed name rather than a refusal -- and
+        // `a_raising_body_carries_this_call` could not object either, since
+        // `calls_compiled_code` asks a symbol this call does not have.
+        //
+        // The result was a raising copy that called the base's **ordinary** constructor:
+        // `func Calls#constructor@raises { %2 = call Base#constructor(%0, %1) }`, so the
+        // base's `throw` ended the program from inside a `try` that had compiled. 10 of 29
+        // cases, and `examples/a-throw-that-stays-in-its-function` carries both arms now --
+        // an inherited constructor and an explicit `super`.
+        let suffix = self.raising_suffix_of(id);
         let call = self.push(
             OpKind::Call {
-                callee: Callee::Direct(format!("{base}#{member}")),
+                callee: Callee::Direct(format!("{base}#{member}{suffix}")),
                 args,
                 frame: None,
             },
             ty,
             origin,
         );
+        // **Before this class's own initialisers**, because a `super()` that raised did not
+        // finish building the base and the fields below it must not run on a half-built
+        // object. The test branches to the handler, so the initialisers are simply not
+        // reached -- which is the ordering `initialize_own_fields`' own doc describes as
+        // "immediately after `super()` returns", with the raise being the case where it
+        // does not return.
+        self.test_for_a_raise(id);
         if member == "constructor" {
             self.initialize_own_fields(id, receiver)?;
         }

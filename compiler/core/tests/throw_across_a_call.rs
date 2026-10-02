@@ -19,8 +19,9 @@
 //!     own: a `Callee::Virtual` holds an index rather than a name, so the copy
 //!     needs an index, and every overrider fills it — with its own copy, or with
 //!     its ordinary entry where that override cannot raise;
-//!   - a **constructor** callee still refuses, and it is the last of them: `new`
-//!     names no function to suffix;
+//!   - a **constructor** callee compiles, including an **overloaded** one, whose
+//!     first `constructor` child is a signature the lowering skips — so the copy
+//!     set has to be keyed on the implementation or it names a body nothing builds;
 //!   - an **overloaded** callee compiles, which took the checker's answer and the
 //!     lowering's agreeing about which declaration a copy is made of;
 //!   - a callee that merely *passes a throw on* compiles too, through a copy of
@@ -116,28 +117,25 @@ fn a_chain_of_callees_compiles_through_copies_of_each() {
 /// assertion was the only thing that said so. What is left is a `new`, which names no
 /// function to suffix at all.
 #[test]
-fn the_last_callee_with_no_copy_is_a_constructor() {
+fn every_callee_this_try_reaches_now_has_a_raising_copy() {
     let Some(lowered) = lowered() else {
         eprintln!("SKIP: tsgo is not built");
         return;
     };
-    let reasons: Vec<&str> = lowered
-        .diagnostics
-        .iter()
-        .map(|diagnostic| diagnostic.message.as_str())
-        .collect();
+    // **Nothing refuses, and that is the raising row closed.** This asserted one refusal
+    // per boundary as each was built -- a plain function, a method, an overridden member,
+    // an accessor, a `sort` comparator, a constructor -- and each assertion went red
+    // exactly when its boundary moved, which is what they were for. The constructor was
+    // the last, and `agree` over this example's 24 functions is the stronger statement
+    // now: a count of expected refusals cannot fail when an *answer* changes.
     assert_eq!(
-        reasons,
-        vec![
-            "a call inside a `try` whose `throw` would not reach this handler: a \
-             constructor, and a raising copy is made of plain functions only is not \
-             supported by this lowering yet"
-        ],
-        "one refusal, naming the call"
-    );
-    assert!(
-        !compiled(&lowered, "crossingAConstructor"),
-        "a `new` has no name to suffix"
+        lowered
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.message.as_str())
+            .collect::<Vec<_>>(),
+        Vec::<&str>::new(),
+        "every callee this example's `try` statements reach has a raising copy"
     );
     // **Both directions of each boundary that moved**, because an assertion that only
     // says what refuses passes on a compiler that refuses everything. The overridden
@@ -158,6 +156,22 @@ fn the_last_callee_with_no_copy_is_a_constructor() {
         "crossingANarrowerOverride",
         "Wide#raise@raises",
         "Narrow#raise@raises",
+        // The last boundary: a `new` names `{owner}#constructor`, so its copy is that
+        // name with the suffix. What was missing was never a name -- it was that a
+        // class's symbol declares the *class*, and both sets that ask what a copy can be
+        // made of were handed a `ClassDeclaration`.
+        "crossingAConstructor",
+        "Constructed#constructor@raises",
+        // And an **overloaded** constructor, which is the one shape of it `runtime/`
+        // actually writes: `Blob` declares four signatures above its body. The first
+        // `constructor` child of such a class is a signature, `lower_class` skips a
+        // signature, and the set that decides what a copy is made of was keyed on that
+        // first child -- so no copy was built while every `new Overloaded(...)` inside a
+        // raising body named one. Both arities, because the checker resolves each call to
+        // a different signature and both must reach the one implementation.
+        "crossingAnOverloadedConstructor",
+        "crossingAnOverloadedConstructorAtItsOtherArity",
+        "Overloaded#constructor@raises",
     ] {
         assert!(compiled(&lowered, name), "{name} should be emitted");
     }

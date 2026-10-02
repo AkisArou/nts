@@ -11,9 +11,17 @@
 // the two halves cannot be arms of one file: the gate is a property of the whole program,
 // and a file holding both would have it off for all of it.
 //
-// What turns it off here is the closure's own body: `new Thing(n)` constructs a class this
-// program declares whose constructor can throw, and a `new` resolves to a `Constructor`,
-// which is never eligible for a raising copy. One such closure is enough.
+// What turns it off here is the closure's own body: it calls `pick`, a **generic**
+// function that can throw, and `a_copy_can_be_made_of` excludes a generic declaration --
+// a copy is a body lowered again, and a generic has no body until it is instantiated. One
+// such closure is enough.
+//
+// **The trigger is the perishable part of this file, and it has already expired once.** It
+// was `new Thing(n)` on the argument that a `new` resolves to a `Constructor`, which was
+// never eligible; the constructor boundary landed and this fixture went FIXED while the
+// branch it exists to cover was untouched. So: the trigger is any callee
+// `a_copy_can_be_made_of` says no to, that list is the one to read when this expires
+// again, and what the file is *for* is the branch below -- not the particular callee.
 //
 // **Why this file exists at all.** Without the gate, this program was a *silent* wrong
 // answer -- `nts: uncaught RangeError` on 8 of 29 cases where node answers `-1` -- and the
@@ -26,14 +34,11 @@
 // `try` is refused when the gate is off": a callee that is a **declaration** has a copy to
 // name, gate or no gate.
 
-class Thing {
-  readonly n: number;
-  constructor(n: number) {
-    if (n > 5) {
-      throw new RangeError("thing");
-    }
-    this.n = n;
+function pick<T>(value: T, deep: boolean): T {
+  if (deep) {
+    throw new RangeError("generic");
   }
+  return value;
 }
 
 class Holder {
@@ -48,8 +53,8 @@ class Holder {
 }
 
 const held = new Holder();
-// The closure that turns the gate off: it constructs a program class that can throw.
-held.cb = (n: number): number => new Thing(n).n;
+// The closure that turns the gate off: it calls a generic that can throw.
+held.cb = (n: number): number => pick(n, n > 5);
 
 /** Refused: `run` calls a closure held in a field and no entry can carry its `throw`. */
 export function guarded(n: number): number {

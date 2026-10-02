@@ -18,12 +18,22 @@
 //
 // # The arms, and why they are in one file
 //
-// One still refuses, and it is here rather than in `blockers/` because what
-// makes it refuse is the *absence* of a copy, and the arms that do get one are
-// the only thing that shows the difference is the copy rather than the `try`.
-// Three of the compiling arms are the ones two successive versions of the old
-// refusal broke; record 0300 is about that, and they are asserted by name in
-// `compiler/core/tests/throw_across_a_call.rs`.
+// **None of them refuses any more**, and that is the stronger statement: this
+// file's `example-refusals` row is deleted, so the differential -- which fails
+// when an *answer* changes -- is the whole of what holds the feature, rather
+// than a count of expected declines that cannot tell a lost `catch` from a
+// refusal. Every boundary a raise can cross is an arm here: a plain function, a
+// method, an override, a narrower override, an accessor, a static, a parameter
+// default, a closure, a constructor, an inherited constructor, a `super(...)`
+// and an overloaded constructor. Three of them are the ones two successive
+// versions of the old refusal broke; record 0300 is about that, and they are
+// asserted by name in `compiler/core/tests/throw_across_a_call.rs`.
+//
+// **Each arm that is a family has more than one member**, which is the lesson
+// this file cost twice: an override that *can* raise beside one that cannot, a
+// narrower override beside a same-arity one, an overload signature beside its
+// implementation. A fixture with one of anything cannot test a rule about
+// families, and each of those singletons hid a real escape.
 //
 // **Unbounded recursion is deliberately not an arm.** `countdown(n)` that
 // throws at the bottom compiles now, and a large `n` overflows the C stack and
@@ -458,17 +468,24 @@ export function crossingANarrowerOverride(n: number): number {
   }
 }
 
-// **Still refused, and it is the last of the four.** A `new` names no function to
-// suffix: the callee it resolves to is a `Constructor`, which is never `eligible`, so
-// it comes out uncarriable exactly when construction can raise. The blunt rule --
-// refuse every `new` of a class this program declares -- was measured and cost 14
-// functions in `web-platform` that provably work, because `Http2ProtocolError`'s
-// constructor cannot throw and the rule could not tell.
+// **And the last of the four, which closes the raising row.** A `new` reaches its
+// constructor's raising copy by **naming** it, exactly as a direct method call does -- and
+// the sentence this boundary carried for a week said the opposite: *"`new` names no function
+// to suffix"*. `lower_new` has always spelled `Callee::Direct("{owner}#constructor")`, on the
+// line that makes the call. I wrote that claim into four commit messages and a plan entry
+// without reading it, and 21 occurrences in `stream`, 35 in `fs`, 21 in `web-platform` and
+// 14 in `assert` pointed every reader at a problem that did not exist.
 //
-// So this is the boundary now that an overridden member has a slot of its own, and it
-// is a different piece of work: a constructor is reached by `new`, and the thing a
-// raising copy would need is somewhere for `new` to put the flag test *before* the
-// instance exists.
+// What was actually missing is one mapping, in two places that each ask "what can a copy be
+// made of": **a class's symbol declares the class, and the body a copy is made of is its
+// constructor.** `throwing_symbols` gives a class an entry whose meaning is its
+// *construction* -- that is how `new X()` can raise at all -- so both `can_be_copied` and
+// `eligible_declarations` were handed a `ClassDeclaration` and said no. `Constructed` came
+// out `any = true, copyable = false`: able to raise, and nothing could carry it.
+//
+// The flag test goes *after* the call, where a static call's goes. `new` allocates and then
+// calls, so the instance already exists when the constructor raises -- which is the other
+// half of what that sentence asserted.
 class Constructed {
   readonly held: number;
   constructor(n: number) {
@@ -480,13 +497,135 @@ class Constructed {
 }
 
 /**
- * Refused: `new` has no name to suffix. Its value is that the refusal *arrives* and
- * says which of the reasons it is -- the arm that caught this message collapsing into
- * the others twice while the four were being written.
+ * `0` constructs above the bound and the constructor throws; `1` is below it and the
+ * instance answers `n * 2`. A compiler that dropped the raise would answer the garbage the
+ * half-built instance holds rather than `-1`.
  */
 export function crossingAConstructor(n: number): number {
   try {
     return new Constructed(n & 7).held;
+  } catch {
+    return -1;
+  }
+}
+
+// **And the three shapes a single class cannot exercise**, which is the whole reason this
+// arm exists. The JVM lane found the matching gap in the *interface* work an hour after it
+// landed -- my fixture there had one implementor, and a quiet one plus a narrower one
+// aborted 16 of 29 cases on their verifier. So before landing a constructor I probed the
+// hierarchy, and two of these three escaped:
+//
+//     inherited     a subclass with NO constructor of its own. `throwing_symbols` had
+//                   nothing to walk in it -- no constructor, no field initialiser -- so the
+//                   class was in no raising set and `new Inherits(n)` read as a call that
+//                   cannot raise. An implicit `super(...args)` is the statement with no node
+//                   to stand on, so it is recorded from the class rather than found in a body
+//     throughSuper  an explicit `super(n)`, whose call carries **no symbol** -- so
+//                   `a_raising_callee_of` answered `None`, `raising_suffix_of` answered `""`,
+//                   and the raising copy of the subclass constructor called the base's
+//                   ORDINARY entry: `%2 = call Base#constructor(%0, %1)` with no flag test.
+//                   The fourth site in this family to need the suffix after a static call, a
+//                   `new` and the accessor pair
+//     quiet         the control: a constructor that cannot raise, which must keep compiling
+//                   with no copy and no test
+//
+// `limit + 50` and `n + 100` are deliberately unlike the base's `n * 2`, so a dispatch that
+// ran the wrong body answers wrongly rather than working by coincidence.
+class Inheritable {
+  readonly held: number;
+  constructor(n: number) {
+    if (n > 3) {
+      throw new RangeError("inheritable is too deep");
+    }
+    this.held = n * 2;
+  }
+}
+
+/** No constructor of its own: construction runs `Inheritable`'s. */
+class Inherits extends Inheritable {}
+
+/** Its own, which calls `super` where the base can throw, then reads what it wrote. */
+class CallsSuper extends Inheritable {
+  readonly twice: number;
+  constructor(n: number) {
+    super(n);
+    this.twice = this.held * 2;
+  }
+}
+
+/** A constructor that cannot raise at all. */
+class QuietlyConstructed {
+  readonly held: number;
+  constructor(n: number) {
+    this.held = n + 100;
+  }
+}
+
+/** The base's `throw` crossing a constructor the subclass never wrote. */
+export function crossingAnInheritedConstructor(n: number): number {
+  try {
+    return new Inherits(n & 7).held;
+  } catch {
+    return -1;
+  }
+}
+
+/** The base's `throw` crossing an explicit `super(…)`. */
+export function crossingASuperCall(n: number): number {
+  try {
+    return new CallsSuper(n & 7).twice;
+  } catch {
+    return -1;
+  }
+}
+
+/** The control: a `try` around a construction that cannot raise. */
+export function crossingAQuietConstructor(n: number): number {
+  try {
+    return new QuietlyConstructed(n & 7).held;
+  } catch {
+    return -1;
+  }
+}
+
+// **An overloaded constructor, whose first `constructor` child is a signature.**
+//
+// `the_constructor_declared_by` answered with that first child, and
+// `lower_class` skips an overload signature -- so the copy was never built while
+// every `new Overloaded(...)` inside a raising body named
+// `Overloaded#constructor@raises`. `runtime/web-platform` is where that showed:
+// `Blob` writes four signatures above its body, and `integrity` reported
+// `Blob.#fromParts@raises` blaming a name nothing in the program defines. The
+// census could not: a cascade with no root is not a wrong answer and not a
+// refusal anyone counted.
+//
+// Two arms, because the checker resolves each call to a *different* signature and
+// both have to reach the one implementation.
+class Overloaded {
+  readonly held: number;
+  constructor(n: number);
+  constructor(n: number, scale: number);
+  constructor(n: number, scale = 3) {
+    if (n > 3) {
+      throw new RangeError("from an overloaded constructor");
+    }
+    this.held = n * scale;
+  }
+}
+
+/** The one-argument overload, which is the signature declared first. */
+export function crossingAnOverloadedConstructor(n: number): number {
+  try {
+    return new Overloaded(n & 7).held;
+  } catch {
+    return -1;
+  }
+}
+
+/** And the two-argument one, so the arm is not one resolution by coincidence. */
+export function crossingAnOverloadedConstructorAtItsOtherArity(n: number): number {
+  try {
+    return new Overloaded(n & 7, 5).held;
   } catch {
     return -1;
   }
