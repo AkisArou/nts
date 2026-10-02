@@ -262,6 +262,7 @@ mod tests {
                 count += 1;
             }
         }
-        assert_eq!(count, 46_663);
+        // 46,663 strict scripts and, since 2026-10-02, 841 module tests.
+        assert_eq!(count, 47_504);
     }
 }

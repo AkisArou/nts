@@ -364,9 +364,9 @@ for (const entry of exclusions) {
 
 function harnessGap(record, source) {
   if (record.schedule !== "planned") return `scope:${record.reason ?? record.schedule}`;
-  // Parse and runtime negatives are judged (see `judgeNegative`); resolution is
-  // module loading, and modules are out of this lane.
-  if (record.negative?.phase === "resolution") return "negative:resolution (module loading is not in this lane)";
+  // Every negative is judged (see `judgeNegative`): parse and resolution by
+  // the checker's evidence, runtime by what was thrown. Resolution is module
+  // loading, in the lane with module tests since 2026-10-02.
   // An include is not a gap: `materialise` compiles it as test262 wrote it,
   // and one nts cannot compile refuses like any other source, ranked.
   // An `async` test is attempted: the stand-in has `$DONE`, and `attempt`
@@ -609,7 +609,7 @@ function judgeNegative(row, negative) {
       : `was refused later (${row.why ?? row.bucket})`;
     return {
       outcome: "fail",
-      cause: `negative:parse accepted -- ${how}`,
+      cause: `negative:${negative.phase} accepted -- ${how}`,
       detail: `accepted: ${how}`,
     };
   }
@@ -720,7 +720,9 @@ const summed = OUTCOMES.reduce((sum, o) => sum + tally[o], 0);
 // own -- `all.sh` holds it to a ceiling -- and because a pass count cannot show
 // it: these were once 1,600 *passes*, rejected by TypeScript type errors that
 // happened to fire on them, until the census compiled JavaScript as JavaScript.
-const negativesAccepted = cases.filter((c) => c.outcome === "fail" && c.cause?.startsWith("negative:parse accepted")).length;
+// A program that must not parse, or must not resolve, and compiled.
+const acceptedNegative = (c) => c.outcome === "fail" && /^negative:(parse|resolution) accepted/.test(c.cause ?? "");
+const negativesAccepted = cases.filter(acceptedNegative).length;
 const excludedCases = cases.filter((c) => c.excluded.length > 0);
 const inScope = cases.filter((c) => c.excluded.length === 0);
 const inScopePass = inScope.filter((c) => c.outcome === "pass").length;
@@ -944,7 +946,7 @@ table("names quoted by NTS roots (builtins, members), by cases:", rankNamed);
 // The early-error pass's work list: which rule each accepted negative needed.
 table(
   "negatives accepted, by the spec section that makes each an early error (esid) -- the rules nts does not yet check:",
-  count(cases.filter((c) => c.outcome === "fail" && c.cause?.startsWith("negative:parse accepted")), (c) => c.esid),
+  count(cases.filter(acceptedNegative), (c) => c.esid),
 );
 say();
 say(`  exclusions: ${exclusions.length} entr(ies), ${audit.withoutReason.length} without a reason or authority, ` +

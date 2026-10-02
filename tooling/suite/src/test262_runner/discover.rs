@@ -114,16 +114,14 @@ pub fn discover_suite(
             inventory.ecma262 += 1;
             inventory.ecma262_variants += full_variants;
             match schedule_strict_script(&record) {
+                ScheduleOutcome::Planned { .. } if record.flags.contains("module") => {
+                    inventory.module += 1;
+                }
                 ScheduleOutcome::Planned { .. } => inventory.strict_script += 1,
                 ScheduleOutcome::ScopeExcluded { ref reason }
                     if reason == "initial-lane:no-strict" =>
                 {
                     inventory.no_strict += 1;
-                }
-                ScheduleOutcome::ScopeExcluded { ref reason }
-                    if reason == "initial-lane:module" =>
-                {
-                    inventory.module += 1;
                 }
                 ScheduleOutcome::ScopeExcluded { ref reason } if reason == "initial-lane:raw" => {
                     inventory.raw += 1;
@@ -243,8 +241,10 @@ mod tests {
         assert_eq!(inventory.ecma262_variants, 96_208);
         assert_eq!(inventory.strict_script, 46_663);
         assert_eq!(inventory.no_strict, 2_687);
-        assert_eq!(inventory.module, 843);
-        assert_eq!(inventory.raw, 30);
+        // Module tests are planned since 2026-10-02 (the owner's decision);
+        // the 2 also flagged `raw` stay raw, which is still out of the lane.
+        assert_eq!(inventory.module, 841);
+        assert_eq!(inventory.raw, 32);
         assert_eq!(inventory.unsupported_metadata, 0);
     }
 

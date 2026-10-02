@@ -13,11 +13,10 @@ const KNOWN_FLAGS: &[&str] = &[
     "raw",
 ];
 
-/// Schedule the one strict global-script variant `NativeTS` initially targets.
+/// Schedule the one variant `NativeTS` targets: strict global script, or module.
 ///
 /// Parsing and scheduling are intentionally separate: every file is parsed,
-/// while `noStrict`, module, and raw files remain visible as reasoned scope
-/// exclusions.
+/// while `noStrict` and raw files remain visible as reasoned scope exclusions.
 #[must_use]
 pub fn schedule_strict_script(record: &TestRecord) -> ScheduleOutcome {
     if record.path.starts_with("test/intl402/") {
@@ -49,11 +48,6 @@ pub fn schedule_strict_script(record: &TestRecord) -> ScheduleOutcome {
             reason: "initial-lane:no-strict".to_owned(),
         };
     }
-    if record.flags.contains("module") {
-        return ScheduleOutcome::ScopeExcluded {
-            reason: "initial-lane:module".to_owned(),
-        };
-    }
     if record.flags.contains("raw") {
         return ScheduleOutcome::ScopeExcluded {
             reason: "initial-lane:raw".to_owned(),
@@ -71,11 +65,16 @@ pub fn schedule_strict_script(record: &TestRecord) -> ScheduleOutcome {
         required_capabilities.insert(RequiredCapability::CanBlockTrue);
     }
 
+    // **A module test is in the lane** (the project owner's decision,
+    // 2026-10-02). It runs once, as a module, which is strict by definition:
+    // INTERPRETING.md runs a `module` file only as module code, never as a
+    // script, so there is no strict-script variant of it to plan.
+    let module = record.flags.contains("module");
     ScheduleOutcome::Planned {
         plan: VariantPlan {
-            id: format!("{}#strict", record.path),
+            id: format!("{}#{}", record.path, if module { "module" } else { "strict" }),
             test_path: record.path.clone(),
-            strict_prefix: "\"use strict\";\n".to_owned(),
+            strict_prefix: if module { String::new() } else { "\"use strict\";\n".to_owned() },
             includes: record.includes.clone(),
             features: record.features.clone(),
             negative: record.negative.clone(),
@@ -117,10 +116,9 @@ mod tests {
     }
 
     #[test]
-    fn excludes_non_strict_module_and_raw_lanes() {
+    fn excludes_non_strict_and_raw_lanes() {
         for (flag, reason) in [
             ("noStrict", "initial-lane:no-strict"),
-            ("module", "initial-lane:module"),
             ("raw", "initial-lane:raw"),
         ] {
             assert_eq!(
@@ -130,6 +128,15 @@ mod tests {
                 }
             );
         }
+    }
+
+    #[test]
+    fn schedules_a_module_test_as_its_one_module_variant() {
+        let ScheduleOutcome::Planned { plan } = schedule_strict_script(&record(&["module"])) else {
+            panic!("a module test is in the lane");
+        };
+        assert_eq!(plan.id, "language/example.js#module");
+        assert_eq!(plan.strict_prefix, "");
     }
 
     #[test]

@@ -60,13 +60,16 @@ both flow-style and multiline YAML flag lists:
 | default scripts | 45,985 | run the injected strict variant only |
 | `onlyStrict` scripts | 678 | run |
 | **initial strict-script lane** | **46,663** | one variant per file |
+| modules | 841 | run as module code (in the lane since 2026-10-02) |
 | `noStrict` scripts | 2,687 | scope-excluded |
-| modules | 843 | scope-excluded |
-| raw tests | 30 | scope-excluded |
+| raw tests | 32 | scope-excluded (2 are also `module`) |
 
 Modules are inherently strict, but they are not global scripts with an injected
-directive and require a different loader and resolution protocol. Raw tests
-forbid source modification. Neither belongs in this first lane. An `async` flag
+directive and require a different loader and resolution protocol. They were
+out of the first lane and are **in the lane since 2026-10-02**, by the
+project owner's decision: a `module` test runs once, as module code, with its
+`_FIXTURE.js` modules materialised beside it (see "Done" below). Raw tests
+forbid source modification and stay out. An `async` flag
 does not remove a test from the strict lane; it adds a capability requirement,
 so the test remains scheduled and reports `unsupported` until the async host can
 execute it.
@@ -83,8 +86,16 @@ Test262 is **done** when every ECMA-262 strict-lane file -- all directories:
 `language`, `built-ins`, `annexB`, `staging`, `harness` -- ends as a pass or
 under a **named permanent boundary**: an exclusion with an authority in
 `tooling/census/test262-exclusions.json` or `tooling/census/features.json`.
-No `fail`, no `no-verdict`, no unclassified refusal. Modules, sloppy-mode and
-raw tests stay scope-excluded, counted and not attempted.
+No `fail`, no `no-verdict`, no unclassified refusal. Sloppy-mode and raw tests
+stay scope-excluded, counted and not attempted.
+
+**Module tests are in the lane (decided 2026-10-02).** The project owner
+reversed the 2026-09-29 exclusion: "module tests should be included, they
+should not be out of scope". The scheduler plans each as its one `#module`
+variant; the census materialises it as module code (marked with `export {};`
+when it has no `import`/`export`, so module-goal early errors are seen) with
+its fixture modules, and judges `negative: {phase: resolution}` by the
+checker's evidence like a parse negative, counted with the accepted negatives.
 
 These are permanent boundaries by the project owner's decision, not backlog.
 Each is attempted all the same -- a boundary that starts passing is news, and
@@ -439,9 +450,10 @@ The independent tooling can:
   through a scripted mock adapter; and
 - write deterministic JSON reports.
 
-Module fixtures are deliberately not resolved in this first lane because all
-modules are scope-excluded. Fixture graph resolution belongs to the later module
-adapter and does not change the record, plan, event, or report types.
+Module fixtures are resolved by the census materialiser (`project.ts`'s
+`fixturesOf`): a test's `./*_FIXTURE.js` modules, transitively, beside it and
+outside the program's roots, so a fixture is evaluated only when loaded. This
+serves both dynamic `import()` from scripts and, since 2026-10-02, module tests.
 
 The command surface is:
 

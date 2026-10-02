@@ -67,7 +67,7 @@ const TEST_PRELUDE = '"use strict";\n';
  * stand-in laid out two ways -- are two runs even under one compiler. Derived
  * here, beside the list, so a member added is a member hashed.
  */
-const LAYOUT = `${HARNESS_FILE} + ${INCLUDE_PREFIX}*.js verbatim + ${TEST_FILE} (allowJs, checkJs unset), test prelude ${JSON.stringify(TEST_PRELUDE)}, ./*_FIXTURE.js modules beside it and outside the roots, each a module`;
+const LAYOUT = `${HARNESS_FILE} + ${INCLUDE_PREFIX}*.js verbatim + ${TEST_FILE} (allowJs, checkJs unset), test prelude ${JSON.stringify(TEST_PRELUDE)}, ./*_FIXTURE.js modules beside it and outside the roots, each a module; a "module" test is module code too`;
 export const HARNESS_HASH = [LAYOUT, HARNESS, ...GLOBALS.map((g) => g.source), ...MEMBERS.map((m) => m.source)]
   .reduce((hash, source) => hash.update(source), createHash("sha256"))
   .digest("hex")
@@ -197,7 +197,12 @@ export function materialise(dir, body, origin?) {
   for (const include of includesOf(body).filter((name) => !PROVIDED_INCLUDES.has(name))) {
     writeFileSync(join(dir, `${INCLUDE_PREFIX}${include}`), `"use strict";\n${bodyOf(readFileSync(join(SUITE_HARNESS, include), "utf8"))}`);
   }
-  writeFileSync(join(dir, TEST_FILE), `${TEST_PRELUDE}${body}`);
+  // A `module` test is module code (in the lane since 2026-10-02): parsed as
+  // one even when it has no `import` or `export` -- its module-goal early
+  // errors (`await` as a name, a duplicate export) are the point of many of
+  // them -- so it is marked a module the way a fixture is.
+  const test = `${TEST_PRELUDE}${body}`;
+  writeFileSync(join(dir, TEST_FILE), flagsOf(body).includes("module") ? asModule(test) : test);
 }
 
 /**
