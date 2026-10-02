@@ -10,6 +10,12 @@
 // Found by test262: 23 files calling `assert.compareArray` on a destructured
 // rest (a non-generic `readonly unknown[]` stand-in), and 14 more reaching the
 // same cast through a generator (`NtsObj_Generator0`) once raising was removed.
+// Re-recorded 2026-10-02: the refusal moved one wall in. `cd8cbd029` collects a rest element
+// through its iterator, so this no longer stops at *"a rest element over a value that is not an
+// array"* -- it gets as far as **"an array of Erased where an array of Float is wanted"**, which is
+// this fixture's own subject: an untyped tail passed where a `number[]` is wanted. The artefact
+// still segfaults for the reason the header gives, so the category is unchanged.
+
 function lengthOf(xs: number[]): number {
   return xs.length;
 }

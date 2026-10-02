@@ -1,9 +1,9 @@
 {
   "run": "build",
   "category": "refused",
-  "nts": "NTS1001 a rest element over a value that is not an array, which needs it collected through its iterator first",
+  "nts": "NTS1001 an array of Erased where an array of Float { bits: 64 } is wanted -- the two hold different widths, so a pointer to one is not a pointer to the other",
   "ran": "SIGSEGV",
   "node": "exit 1; nts: uncaught Observed: length=2;",
-  "measured_with": "35057410e523b37e",
+  "measured_with": "e2ff33794952c566",
   "source": "measured"
 }

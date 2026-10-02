@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught Observed: empty pattern, null=none;empty pattern, an object=none;",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: empty pattern, null=TypeError;empty pattern, an object=none;",
   "node": "exit 1; nts: uncaught Observed: empty pattern, null=TypeError;empty pattern, an object=none;",
-  "measured_with": "dd280b34fba2674f",
+  "measured_with": "e2ff33794952c566",
   "source": "measured"
 }

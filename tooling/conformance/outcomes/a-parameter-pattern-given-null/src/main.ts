@@ -12,6 +12,11 @@
 // A named pattern `{ a }` on an erased parameter already refuses ("an erased
 // value where a concrete representation is wanted"), so only the empty one is
 // silent.
+// Re-recorded 2026-10-02 as a **guard**: `1005fe5b1` made this throw, so the record now holds the
+// right answer and a regression would move it back. The arms also live in
+// `examples/a-destructuring-of-null-or-undefined`, which runs them on five backends; this stays
+// because the harness's `observe`/`done` form is what the census population looks like, and a
+// guard here fails on a wrong *category* where the example fails on a wrong *answer*.
 function empty({}: any): void {}
 function attempt(value: unknown): string {
   try {
