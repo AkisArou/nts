@@ -30,7 +30,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { availableParallelism, homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { HARNESS_FILE, materialise, workspace } from "./project.ts";
+import { flagsOf, HARNESS_FILE, materialise, workspace } from "./project.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -89,7 +89,7 @@ function measure(dir, record) {
     const timer = setTimeout(() => child.kill("SIGKILL"), 60_000);
     child.on("close", () => {
       clearTimeout(timer);
-      resolve({ path: record.path, negative: record.negative ? record.negative.phase : null, codes: codesOf(text) });
+      resolve({ path: record.path, negative: record.negative ? record.negative.phase : null, module: flagsOf(body).includes("module"), codes: codesOf(text) });
     });
   });
 }
@@ -141,12 +141,14 @@ const table = new Map();
 for (const r of results) {
   if (r.unread) continue;
   for (const code of r.codes) {
-    const e = table.get(code) ?? { positives: 0, negatives: 0, positiveExample: null, negativeExample: null };
+    const e = table.get(code) ?? { positives: 0, negatives: 0, modulePositives: 0, moduleNegatives: 0, positiveExample: null, negativeExample: null };
     if (r.negative) {
       e.negatives += 1;
+      if (r.module) e.moduleNegatives += 1;
       e.negativeExample ??= r.path;
     } else {
       e.positives += 1;
+      if (r.module) e.modulePositives += 1;
       e.positiveExample ??= r.path;
     }
     table.set(code, e);
@@ -156,10 +158,15 @@ const positives = results.filter((r) => !r.unread && !r.negative).length;
 const negatives = results.filter((r) => !r.unread && r.negative).length;
 const unread = results.filter((r) => r.unread).length;
 console.log(`  ${results.length} file(s) under ${unders.join(", ")} in ${Math.round((Date.now() - started) / 1000)} s: ${positives} positive, ${negatives} negative, ${unread} unread; tsgo ${TSGO}, checkJs true`);
-console.log("  code      positives  negatives  allowlistable  example");
+// **By goal as well as overall.** A code script positives draw can still be
+// an early error in module code -- TS2300, a duplicate binding, is legal for
+// a sloppy global redeclaration and an error for a duplicate export -- so a
+// rule keyed on the goal can allow it where the overall column cannot.
+console.log("  code      positives  negatives  allowlistable  (module: positives negatives allowlistable)  example");
 const rows = [...table].sort((a, b) => b[1].negatives - a[1].negatives || a[0].localeCompare(b[0]));
 for (const [code, e] of rows) {
   const ok = e.positives === 0 && e.negatives > 0;
-  console.log(`  ${code.padEnd(9)} ${String(e.positives).padStart(9)}  ${String(e.negatives).padStart(9)}  ${(ok ? "yes" : "no").padStart(13)}  ${ok ? e.negativeExample : e.positiveExample ?? e.negativeExample}`);
+  const moduleOk = e.modulePositives === 0 && e.moduleNegatives > 0;
+  console.log(`  ${code.padEnd(9)} ${String(e.positives).padStart(9)}  ${String(e.negatives).padStart(9)}  ${(ok ? "yes" : "no").padStart(13)}  (module: ${String(e.modulePositives).padStart(5)} ${String(e.moduleNegatives).padStart(5)} ${(moduleOk ? "yes" : "no").padStart(4)})  ${ok ? e.negativeExample : e.positiveExample ?? e.negativeExample}`);
 }
 if (out) writeFileSync(out, `${JSON.stringify({ unders, positives, negatives, unread, tsgo: TSGO, codes: Object.fromEntries(rows) }, null, 2)}\n`);
