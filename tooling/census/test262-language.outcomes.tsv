@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler d7a6a96cfc4b7615, commit b664c4f2663c1009ccecca9615975d1ed839dd67, harness d6442dbc09f91ad0; machine at start: 20.5 GB available, swap 7.9/20 GB, load 7.5/11.3 (1m/5m), 32 cores; 8 worker(s)
+# compiler 6fa410e1da57d5a6, commit 1cc41dd039ccef8c561ac080f37b95ee99858f68, harness d6442dbc09f91ad0; machine at start: 18.2 GB available, swap 8/20 GB, load 7.5/9.9 (1m/5m), 32 cores; 8 worker(s)
 test/language/arguments-object/10.5-1gs.js	pass	
 test/language/asi/S7.9.2_A1_T1.js	pass	
 test/language/asi/S7.9.2_A1_T2.js	pass	
@@ -308,6 +308,7 @@ test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-elem-iter.js	pas
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-empty-iter.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-rest-init.js	pass	
+test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-id-init-hole.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-id-init-skipped.js	pass	
@@ -317,6 +318,8 @@ test/language/expressions/arrow-function/dstr/ary-ptrn-elem-id-iter-done.js	pass
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-id.js	pass	
+test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-val-undef.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/arrow-function/dstr/ary-ptrn-elision-exhausted.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-empty.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-rest-id-exhausted.js	pass	
@@ -354,11 +357,23 @@ test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-not-final-ary.j
 test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-not-final-id.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-not-final-obj.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-obj-id.js	pass	
+test/language/expressions/arrow-function/dstr/dflt-obj-init-undefined.js	pass	
+test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-prop-id-init-throws.js	pass	
+test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-prop-obj-value-null.js	pass	
+test/language/expressions/arrow-function/dstr/obj-init-null.js	pass	
+test/language/expressions/arrow-function/dstr/obj-init-undefined.js	pass	
 test/language/expressions/arrow-function/dstr/obj-ptrn-id-init-skipped.js	pass	
+test/language/expressions/arrow-function/dstr/obj-ptrn-id-init-throws.js	pass	
 test/language/expressions/arrow-function/dstr/obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/arrow-function/dstr/obj-ptrn-list-err.js	pass	
 test/language/expressions/arrow-function/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/arrow-function/dstr/obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/arrow-function/dstr/obj-ptrn-prop-id-init-throws.js	pass	
+test/language/expressions/arrow-function/dstr/obj-ptrn-prop-obj-value-null.js	pass	
 test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-break-escaped.js	pass	
 test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-case-escaped.js	pass	
 test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-catch-escaped.js	pass	
@@ -404,7 +419,9 @@ test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-var-escaped
 test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-void-escaped.js	pass	
 test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-while-escaped.js	pass	
 test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-with-escaped.js	pass	
+test/language/expressions/arrow-function/empty-function-body-returns-undefined.js	pass	
 test/language/expressions/arrow-function/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/arrow-function/object-literal-return-requires-body-parens.js	pass	
 test/language/expressions/arrow-function/param-dflt-yield-expr.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/arrow-function/param-dflt-yield-id-strict.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/arrow-function/params-duplicate.js	fail	accepted: ran and threw Test262Error
@@ -412,6 +429,19 @@ test/language/expressions/arrow-function/rest-param-strict-body.js	fail	accepted
 test/language/expressions/arrow-function/rest-params-trailing-comma-early-error.js	pass	
 test/language/expressions/arrow-function/static-init-await-binding.js	pass	
 test/language/expressions/arrow-function/static-init-await-reference.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/arrow-function/syntax/arrowparameters-bindingidentifier-concisebody-assignmentexpression.js	pass	
+test/language/expressions/arrow-function/syntax/arrowparameters-bindingidentifier-concisebody-functionbody.js	pass	
+test/language/expressions/arrow-function/syntax/arrowparameters-bindingidentifier-lineterminator-concisebody-assignmentexpression.js	pass	
+test/language/expressions/arrow-function/syntax/arrowparameters-bindingidentifier-lineterminator-concisebody-functionbody.js	pass	
+test/language/expressions/arrow-function/syntax/arrowparameters-cover-concisebody-assignmentexpression.js	pass	
+test/language/expressions/arrow-function/syntax/arrowparameters-cover-concisebody-functionbody.js	pass	
+test/language/expressions/arrow-function/syntax/arrowparameters-cover-includes-rest-concisebody-functionbody.js	pass	
+test/language/expressions/arrow-function/syntax/arrowparameters-cover-initialize-1.js	pass	
+test/language/expressions/arrow-function/syntax/arrowparameters-cover-initialize-2.js	pass	
+test/language/expressions/arrow-function/syntax/arrowparameters-cover-lineterminator-concisebody-assignmentexpression.js	pass	
+test/language/expressions/arrow-function/syntax/arrowparameters-cover-lineterminator-concisebody-functionbody.js	pass	
+test/language/expressions/arrow-function/syntax/arrowparameters-cover-rest-concisebody-functionbody.js	pass	
+test/language/expressions/arrow-function/syntax/arrowparameters-cover-rest-lineterminator-concisebody-functionbody.js	pass	
 test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-bindingidentifier-identifier-futurereservedword.js	pass	
 test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-bindingidentifier-identifier-strict-futurereservedword.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/arrow-function/syntax/early-errors/arrowparameters-bindingidentifier-identifier.js	pass	
@@ -951,6 +981,7 @@ test/language/expressions/async-arrow-function/await-as-param-nested-arrow-body-
 test/language/expressions/async-arrow-function/await-as-param-nested-arrow-parameter-position.js	pass	
 test/language/expressions/async-arrow-function/await-as-param-rest-nested-arrow-parameter-position.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-arrow-function/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/async-arrow-function/dflt-params-ref-prior.js	pass	
 test/language/expressions/async-arrow-function/dflt-params-rest.js	pass	
 test/language/expressions/async-arrow-function/early-errors-arrow-NSPL-with-USD.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-arrow-function/early-errors-arrow-arguments-in-formal-parameters.js	pass	
@@ -967,6 +998,8 @@ test/language/expressions/async-arrow-function/escaped-async.js	pass
 test/language/expressions/async-arrow-function/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-arrow-function/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-arrow-function/rest-params-trailing-comma-early-error.js	pass	
+test/language/expressions/async-arrow-function/try-return-finally-throw.js	pass	
+test/language/expressions/async-arrow-function/try-throw-finally-throw.js	pass	
 test/language/expressions/async-function/await-as-identifier-reference-escaped.js	pass	
 test/language/expressions/async-function/await-as-identifier-reference.js	pass	
 test/language/expressions/async-function/await-as-label-identifier-escaped.js	pass	
@@ -994,6 +1027,8 @@ test/language/expressions/async-function/named-dflt-params-rest.js	pass
 test/language/expressions/async-function/named-object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-function/named-rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-function/named-rest-params-trailing-comma-early-error.js	pass	
+test/language/expressions/async-function/named-returns-async-arrow.js	pass	
+test/language/expressions/async-function/named-returns-async-function.js	pass	
 test/language/expressions/async-function/nameless-array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-function/nameless-dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-function/nameless-dflt-params-ref-prior.js	pass	
@@ -1001,6 +1036,8 @@ test/language/expressions/async-function/nameless-dflt-params-rest.js	pass
 test/language/expressions/async-function/nameless-object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-function/nameless-rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-function/nameless-rest-params-trailing-comma-early-error.js	pass	
+test/language/expressions/async-function/try-return-finally-throw.js	pass	
+test/language/expressions/async-function/try-throw-finally-throw.js	pass	
 test/language/expressions/async-generator/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-generator/await-as-identifier-reference-escaped.js	pass	
 test/language/expressions/async-generator/await-as-identifier-reference.js	pass	
@@ -1020,6 +1057,11 @@ test/language/expressions/async-generator/dstr/dflt-ary-ptrn-rest-init-obj.js	pa
 test/language/expressions/async-generator/dstr/dflt-ary-ptrn-rest-not-final-ary.js	pass	
 test/language/expressions/async-generator/dstr/dflt-ary-ptrn-rest-not-final-id.js	pass	
 test/language/expressions/async-generator/dstr/dflt-ary-ptrn-rest-not-final-obj.js	pass	
+test/language/expressions/async-generator/dstr/dflt-obj-init-undefined.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/async-generator/dstr/dflt-obj-ptrn-id-init-throws.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/async-generator/dstr/dflt-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/async-generator/dstr/dflt-obj-ptrn-prop-id-init-throws.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/async-generator/dstr/dflt-obj-ptrn-prop-obj-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/async-generator/dstr/named-ary-ptrn-rest-init-ary.js	pass	
 test/language/expressions/async-generator/dstr/named-ary-ptrn-rest-init-id.js	pass	
 test/language/expressions/async-generator/dstr/named-ary-ptrn-rest-init-obj.js	pass	
@@ -2329,6 +2371,7 @@ test/language/expressions/concatenation/S9.8_A3_T2.js	pass
 test/language/expressions/concatenation/S9.8_A4_T2.js	pass	
 test/language/expressions/conditional/S11.12_A3_T4.js	pass	
 test/language/expressions/conditional/S11.12_A4_T4.js	pass	
+test/language/expressions/conditional/in-branch-1.js	pass	
 test/language/expressions/conditional/in-branch-2.js	pass	
 test/language/expressions/conditional/in-condition.js	pass	
 test/language/expressions/conditional/symbol-conditional-evaluation.js	pass	
@@ -2852,6 +2895,7 @@ test/language/expressions/function/dstr/ary-ptrn-elem-ary-elem-iter.js	pass
 test/language/expressions/function/dstr/ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-ary-empty-iter.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-ary-rest-init.js	pass	
+test/language/expressions/function/dstr/ary-ptrn-elem-ary-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/function/dstr/ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-id-init-hole.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-id-init-skipped.js	pass	
@@ -2861,6 +2905,8 @@ test/language/expressions/function/dstr/ary-ptrn-elem-id-iter-done.js	pass
 test/language/expressions/function/dstr/ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-obj-id.js	pass	
+test/language/expressions/function/dstr/ary-ptrn-elem-obj-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/function/dstr/ary-ptrn-elem-obj-val-undef.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/function/dstr/ary-ptrn-elision-exhausted.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-empty.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-rest-id-exhausted.js	pass	
@@ -2898,11 +2944,23 @@ test/language/expressions/function/dstr/dflt-ary-ptrn-rest-not-final-ary.js	pass
 test/language/expressions/function/dstr/dflt-ary-ptrn-rest-not-final-id.js	pass	
 test/language/expressions/function/dstr/dflt-ary-ptrn-rest-not-final-obj.js	pass	
 test/language/expressions/function/dstr/dflt-ary-ptrn-rest-obj-id.js	pass	
+test/language/expressions/function/dstr/dflt-obj-init-undefined.js	pass	
+test/language/expressions/function/dstr/dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/expressions/function/dstr/dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/function/dstr/dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/function/dstr/dflt-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/function/dstr/dflt-obj-ptrn-prop-id-init-throws.js	pass	
+test/language/expressions/function/dstr/dflt-obj-ptrn-prop-obj-value-null.js	pass	
+test/language/expressions/function/dstr/obj-init-null.js	pass	
+test/language/expressions/function/dstr/obj-init-undefined.js	pass	
 test/language/expressions/function/dstr/obj-ptrn-id-init-skipped.js	pass	
+test/language/expressions/function/dstr/obj-ptrn-id-init-throws.js	pass	
 test/language/expressions/function/dstr/obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/function/dstr/obj-ptrn-list-err.js	pass	
 test/language/expressions/function/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/function/dstr/obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/function/dstr/obj-ptrn-prop-id-init-throws.js	pass	
+test/language/expressions/function/dstr/obj-ptrn-prop-obj-value-null.js	pass	
 test/language/expressions/function/early-body-super-call.js	fail	accepted: was refused later (lowering)
 test/language/expressions/function/early-body-super-prop.js	fail	accepted: was refused later (lowering)
 test/language/expressions/function/early-errors/invalid-names-call-expression-bad-reference.js	fail	accepted: ran and threw Test262Error
@@ -2933,6 +2991,7 @@ test/language/expressions/generators/dstr/ary-ptrn-elem-ary-elem-iter.js	pass
 test/language/expressions/generators/dstr/ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-elem-ary-empty-iter.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-elem-ary-rest-init.js	pass	
+test/language/expressions/generators/dstr/ary-ptrn-elem-ary-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/generators/dstr/ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-elem-id-init-hole.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-elem-id-init-skipped.js	pass	
@@ -2942,6 +3001,8 @@ test/language/expressions/generators/dstr/ary-ptrn-elem-id-iter-done.js	pass
 test/language/expressions/generators/dstr/ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-elem-obj-id.js	pass	
+test/language/expressions/generators/dstr/ary-ptrn-elem-obj-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/generators/dstr/ary-ptrn-elem-obj-val-undef.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/generators/dstr/ary-ptrn-elision-exhausted.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-empty.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-rest-id-exhausted.js	pass	
@@ -2979,11 +3040,23 @@ test/language/expressions/generators/dstr/dflt-ary-ptrn-rest-not-final-ary.js	pa
 test/language/expressions/generators/dstr/dflt-ary-ptrn-rest-not-final-id.js	pass	
 test/language/expressions/generators/dstr/dflt-ary-ptrn-rest-not-final-obj.js	pass	
 test/language/expressions/generators/dstr/dflt-ary-ptrn-rest-obj-id.js	pass	
+test/language/expressions/generators/dstr/dflt-obj-init-undefined.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/generators/dstr/dflt-obj-ptrn-id-init-throws.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/generators/dstr/dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/generators/dstr/dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/generators/dstr/dflt-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/generators/dstr/dflt-obj-ptrn-prop-id-init-throws.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/generators/dstr/dflt-obj-ptrn-prop-obj-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/generators/dstr/obj-init-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/generators/dstr/obj-init-undefined.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/generators/dstr/obj-ptrn-id-init-skipped.js	pass	
+test/language/expressions/generators/dstr/obj-ptrn-id-init-throws.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/generators/dstr/obj-ptrn-id-trailing-comma.js	pass	
+test/language/expressions/generators/dstr/obj-ptrn-list-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/generators/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass	
+test/language/expressions/generators/dstr/obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/generators/dstr/obj-ptrn-prop-id-init-throws.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/generators/dstr/obj-ptrn-prop-obj-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/generators/named-strict-error-reassign-fn-name-in-body.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/generators/named-yield-as-binding-identifier-escaped.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/generators/named-yield-as-binding-identifier.js	fail	accepted: ran and threw Test262Error
@@ -5066,6 +5139,7 @@ test/language/statements/block/early-errors/invalid-names-call-expression-this.j
 test/language/statements/block/early-errors/invalid-names-member-expression-bad-reference.js	pass	
 test/language/statements/block/early-errors/invalid-names-member-expression-this.js	fail	accepted: was refused later (lowering)
 test/language/statements/block/labeled-continue.js	pass	
+test/language/statements/block/scope-var-none.js	fail	nts: uncaught Test262Error: reference preceding statement
 test/language/statements/break/12.8-1.js	pass	
 test/language/statements/break/S12.8_A1_T1.js	pass	
 test/language/statements/break/S12.8_A1_T2.js	pass	
@@ -7478,6 +7552,7 @@ test/language/statements/try/optional-catch-binding-finally.js	pass
 test/language/statements/try/optional-catch-binding-parens.js	pass	
 test/language/statements/try/optional-catch-binding-throws.js	pass	
 test/language/statements/try/optional-catch-binding.js	pass	
+test/language/statements/try/scope-catch-block-var-none.js	fail	nts: uncaught Test262Error: reference preceding statement
 test/language/statements/try/static-init-await-binding-valid.js	pass	
 test/language/statements/using/syntax/block-scope-syntax-using-declarations-mixed-with-without-initializer.js	pass	
 test/language/statements/using/syntax/block-scope-syntax-using-declarations-mixed-without-with-initializer.js	pass	
