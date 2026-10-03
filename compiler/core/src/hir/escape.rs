@@ -119,6 +119,10 @@ fn repeats(func: &Func) -> FxHashSet<ValueId> {
 pub struct Escapes {
     /// Values whose reference outlives this frame.
     values: FxHashSet<ValueId>,
+    /// Values handed to a callee that reads their fields out and lets what it
+    /// read escape: what is *in* them leaves, and they themselves need not. Kept
+    /// so [`leaks_its_fields`] can publish a parameter this frame only forwards.
+    contents_leave: FxHashSet<ValueId>,
 }
 
 impl Escapes {
@@ -251,15 +255,37 @@ fn leaks_its_fields(func: &Func, escapes: &Escapes) -> FxHashSet<u32> {
             // returned parameter, one level in, and it is a **pre-existing**
             // hole rather than one this introduces: before this function, a
             // field read's obligation was not published at all.
-            if let OpKind::Param(slot) = func.values[container.0 as usize].kind
-                && escapes.escapes(*value)
-                && handed_on.contains(value)
+            // A read whose own contents leave leaks this slot's too, one level
+            // further in: `f(p) { g(p.inner) }` with `g` keeping a field of what
+            // it is given. Publishing the slot over-approximates by a level --
+            // the caller escapes everything in `p` -- and that is the safe side.
+            if (escapes.escapes(*value) && handed_on.contains(value))
+                || escapes.contents_leave.contains(value)
             {
-                slots.insert(slot);
+                slots.extend(params_under(func, container));
             }
         }
     }
+    // **Forwarding is not reading, and it leaks the same.** `forward(b) {
+    // keepInner(b) }` reads no field of `b`, so the rule above published
+    // nothing, and `forward`'s callers confined what they put in `b` -- while
+    // `keepInner` kept `b.inner` in a module-level array. The obligation this
+    // frame took on at the call is the caller's too when what it handed over
+    // was a parameter.
+    for value in &escapes.contents_leave {
+        slots.extend(params_under(func, *value));
+    }
     slots
+}
+
+/// The parameter slots a value is, through the views that keep a reference's
+/// identity -- an erasure, an unerasure, a join. A field read of `unerase(p)`
+/// reads `p`'s fields, which is what every `erased_call` entry does.
+fn params_under(func: &Func, value: ValueId) -> impl Iterator<Item = u32> + '_ {
+    super::carried_values(func, value).filter_map(|at| match func.values[at.0 as usize].kind {
+        OpKind::Param(slot) => Some(slot),
+        _ => None,
+    })
 }
 
 /// Which parameter slots a function returns.
@@ -582,7 +608,7 @@ fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
                     for target in targets {
                         for slot in &of.leaking[*target] {
                             if let Some(argument) = args.get(*slot as usize) {
-                                contents_leave.insert(*argument);
+                                contents_leave.extend(super::carried_values(func, *argument));
                             }
                         }
                         for slot in &of.handed_back[*target] {
@@ -662,6 +688,7 @@ fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
             break;
         }
     }
+    escapes.contents_leave = contents_leave;
     escapes
 }
 
@@ -1503,6 +1530,103 @@ mod tests {
         let escapes = analyze_program(&program);
         assert!(escapes[0].escapes(ValueId(0)), "the parameter is what was stored");
         assert!(!escapes[1].is_frame_local(ValueId(0)), "so the caller's object is on the heap");
+    }
+
+    /// A function that only forwards its parameter takes on the obligation of
+    /// the one it forwards to.
+    ///
+    /// `keeper(p) { stash = p.f }` publishes that slot 0's contents leave.
+    /// `forward(p) { keeper(p) }` reads no field, and published nothing, so
+    /// `caller` confined the object it put in `o` -- and the global held a
+    /// pointer into `caller`'s dead frame.
+    #[test]
+    fn forwarding_a_parameter_forwards_what_leaves_it() {
+        let mut program = Program::default();
+        // `keeper(p) { stash = p.f }`
+        program.funcs.push(func(
+            "keeper",
+            1,
+            vec![
+                op(OpKind::Param(0), object()),
+                op(
+                    OpKind::FieldGet {
+                        object: ValueId(0),
+                        field: 0,
+                    },
+                    object(),
+                ),
+                op(
+                    OpKind::GlobalSet {
+                        global: 0,
+                        value: ValueId(1),
+                    },
+                    HirType::Void,
+                ),
+            ],
+            vec![Block {
+                params: Vec::new(),
+                ops: vec![ValueId(0), ValueId(1), ValueId(2)],
+                terminator: Terminator::Return(None),
+            }],
+        ));
+        // `forward(p) { keeper(p) }`
+        program.funcs.push(func(
+            "forward",
+            1,
+            vec![
+                op(OpKind::Param(0), object()),
+                op(
+                    OpKind::Call {
+                        callee: Callee::Direct("keeper".to_owned()),
+                        args: vec![ValueId(0)],
+                        frame: None,
+                    },
+                    HirType::Void,
+                ),
+            ],
+            vec![Block {
+                params: Vec::new(),
+                ops: vec![ValueId(0), ValueId(1)],
+                terminator: Terminator::Return(None),
+            }],
+        ));
+        // `caller() { const o = new P(); o.f = new P(); forward(o) }`
+        program.funcs.push(func(
+            "caller",
+            0,
+            vec![
+                op(OpKind::ObjectNew { frame: false }, object()),
+                op(OpKind::ObjectNew { frame: false }, object()),
+                op(
+                    OpKind::FieldSet {
+                        object: ValueId(0),
+                        field: 0,
+                        value: ValueId(1),
+                    },
+                    HirType::Void,
+                ),
+                op(
+                    OpKind::Call {
+                        callee: Callee::Direct("forward".to_owned()),
+                        args: vec![ValueId(0)],
+                        frame: None,
+                    },
+                    HirType::Void,
+                ),
+            ],
+            vec![Block {
+                params: Vec::new(),
+                ops: vec![ValueId(0), ValueId(1), ValueId(2), ValueId(3)],
+                terminator: Terminator::Return(None),
+            }],
+        ));
+
+        let escapes = analyze_program(&program);
+        let caller = &escapes[2];
+        assert!(!caller.is_frame_local(ValueId(1)), "what `keeper` keeps is on the heap");
+        // And the container is not: `keeper` reads through it and keeps nothing
+        // of it but its contents, which is what `leaks_its_fields` is for.
+        assert!(caller.is_frame_local(ValueId(0)));
     }
 
     /// An allocation nothing does anything with stays in the frame, which is
