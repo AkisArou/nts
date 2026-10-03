@@ -170,3 +170,80 @@ Integrated after the ECMAScript runtime addition `4eced6ca0`. The final pin
 (SHA256 prefix `9509cdb5c11e700e`); the new runtime does not alter the existing
 corpus inputs. Broader obligations from `owed.mjs` remain pending at the full
 sweep after item 3. Next implementation: tagged-template calls and identity.
+
+## Current candidates, 2026-10-03
+
+Item 3 is private while its broad checkpoint completes. The cooked template
+object is immutable, keyed by its original source site, and shared by all copies
+of that site. Tags and ordinary calls share argument/default/rest lowering.
+Raw access, invalid cooked escapes, mutation through aliases and missing cooked
+element reads retain named boundaries. A checked read remains observable even
+when simplification discards its result.
+
+The 23-root identity witness compares 667 cases on each of the five backend and
+provider configurations. The old template witness and ordinary-array controls
+also hold. C and JVM comparisons of all 424 examples find one fixed witness,
+423 unchanged, and zero regressions. Recorded test262, all 119 outcomes, runtime
+and outcome JVM verification, LLVM assembly, integrity, definitions and snapshot
+cache checks hold. These completed checks do not make the checkpoint green:
+workspace audits found missing target ABI and ownership classifications for the
+new helper. Those are corrected; the remaining checks run on the final pin.
+
+NoGc and counted emission comparisons cover all 29 runtime projects. Most growth
+is an 82-byte compile-time assertion. Five modules also gain four unused closure
+layout declarations. Crypto changes two literal argument bindings relative to
+parameter defaults; helper and allocation counts do not grow. Its compiled test
+axis has zero real passes on both pins and supplies no positive coverage.
+
+Item 4 is a separate private candidate. A nested JavaScript pattern reads an
+inferred reference through the existing erased array-element operation, checks
+for absence, then reconstructs the present type proved by the source array.
+One predicate selects both the read and reconstruction. Existing defaults and
+direct generator frame paths retain their lowering. The initial candidate fixes
+all eight strict test262 cases and compares 145 witness cases on each of the five
+configurations. All 29 runtime programs are byte-identical to its control.
+Recorded reconciliation exposed one empty-generator-pattern regression; its
+correction and final reconciliation remain pending. No repaired cases are banked
+before landing and independent conformance measurement.
+
+## Erased-value implementation slices
+
+The next milestone extends the existing mechanisms in this order:
+
+1. **Make analysis usable by lowering.** Give each erasure site its binding and
+   declaration IDs and, for a parameter, its declaration and written position.
+   Keep the classification collection immutable and index it once. Reporting and
+   planning use these identities; names, source spans and shared `any` type IDs
+   cannot identify a value. A private implementation passes the classification
+   tests, including two parameters with the same checker type and different uses.
+2. **Recover examined parameters at closed direct calls.** Feed independently
+   proved argument representations into existing source-level function copies.
+   Keep substitutions positional and separate copy identity from exception mode.
+   Propagate the copy's parameter and constant-alias evidence through existing
+   nested-call and capture machinery. Deduplicate equivalent representations and
+   bound new copies. Preserve the ordinary entry and published callable identity.
+3. **Carry evidence through locals and returns.** Extend the same flow result to
+   immutable aliases, branch joins and call results. Shared mutable storage needs
+   all-writer evidence. Infer eligible object-literal fields from their producers;
+   an operation's required type is never evidence of its operand's type.
+4. **Dispatch finite receiver sets.** Extend existing field and branch dispatch
+   using proved alternatives. Each alternative must have a member and compatible
+   call contract. Keep uniform erased/raising slots and one layout per type ID;
+   avoid a second callable hierarchy or signature-specific raising slots.
+5. **Optimize lifetimes from caller evidence.** Publish freshness and escape
+   summaries only after representation recovery is stable. Runtime-entered bodies
+   and callbacks require their own caller proof; they cannot inherit a local
+   constructor's zero-field assumption.
+
+The current erasure report records the strongest use. `Examined` can conceal an
+unresolved use, and a return can reach several consumers. That report alone is
+not a closed-flow proof. Before slice 2 consumes it, retain every relevant flow
+edge and unknown boundary independently, follow them to a bounded fixpoint, and
+keep exported, escaping and unresolved flows conservative.
+
+Each behavioral slice needs a failing control, retained roots, all-backend
+answers and a measured effect in a real corpus. Mixed parameters, recursive
+forwarding, mutable aliases, returned values, external callbacks and copy-budget
+exhaustion are refuting cases. Compare changed emitted bodies, allocation and
+counting placement, code size and compilation cost. Run focused checks while
+iterating; the next full checkpoint remains after items 4–5.
