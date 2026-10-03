@@ -349,12 +349,12 @@ declare module "c:types" {
   // class is constructed and typed as before.
   //
   // `readonly incremented = signal<[by: number]>()`: a signal of the class,
-  // registered as `incremented` with one `double` parameter. `emit` and
-  // `connect` by its name are typed by it (`WithSelf`), and so is the field.
+  // registered as `incremented` with one `double` parameter. Emitted and
+  // connected by its name, as a binding's own signals are -- `emit` and
+  // `connect` are typed by it (`WithSelf`) -- and the field itself is only
+  // the declaration: it holds no value and has no members of its own.
   export interface Signal<A extends readonly unknown[] = [], R = void> {
     readonly __c_signal?: [A, R];
-    emit(...args: A): R;
-    connect(handler: (...args: A) => R): CNumber<"ulong">;
   }
   /** @ntsAbi intrinsic */
   export function signal<A extends readonly unknown[] = [], R = void>(): Signal<A, R>;

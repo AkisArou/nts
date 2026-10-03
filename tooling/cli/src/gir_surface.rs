@@ -455,6 +455,8 @@ export function made(): number {
   tally.emit("incremented", "x");
   // @ts-expect-error no signal of that name
   tally.emit("decremented");
+  // @ts-expect-error a signal is connected by its name; its field is only its declaration
+  tally.incremented.connect(() => {});
   // @ts-expect-error `title` is a string
   new Book({ isbn: "x", title: 1 });
   return book.pageCount;
