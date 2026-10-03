@@ -33,12 +33,12 @@ operations remain named refusals.
    Preserve existing import-cycle boundaries. Proven-safe accesses gain no check.
    The parked module-wide `wild` design grew runtime modules by about 100 KB and
    is not the implementation to land.
-3. **Tagged-template call semantics and identity (#32).** Reuse argument lowering
+3. **Tagged-template call semantics and identity (#32), delivered in `51bcef99c`.** Reuse argument lowering
    for excess arguments, missing arguments, defaults and rest packing. Intern
    supported immutable template arrays by source site, across specializations.
    Evaluate substitutions once in order. Raw-string access remains explicitly
    refused in this milestone.
-4. **Missing destructuring elements.** Carry `undefined` from an absent reference
+4. **Missing destructuring elements, delivered in `c7bcbccb1`.** Carry `undefined` from an absent reference
    element to its default or coercion check. Nested patterns must throw the
    specified `TypeError`, rather than decline on indexing or dereference null.
    Keep lowering and throwing analysis in agreement; close the eight recorded
@@ -171,40 +171,95 @@ Integrated after the ECMAScript runtime addition `4eced6ca0`. The final pin
 corpus inputs. Broader obligations from `owed.mjs` remain pending at the full
 sweep after item 3. Next implementation: tagged-template calls and identity.
 
-## Current candidates, 2026-10-03
+## Third milestone and broader checkpoint, 2026-10-03
 
-Item 3 is private while its broad checkpoint completes. The cooked template
-object is immutable, keyed by its original source site, and shared by all copies
-of that site. Tags and ordinary calls share argument/default/rest lowering.
-Raw access, invalid cooked escapes, mutation through aliases and missing cooked
-element reads retain named boundaries. A checked read remains observable even
-when simplification discards its result.
+Tagged templates landed as one coherent change in `51bcef99c`; `77b2457c5`
+keeps Builtins' dependency-resource packaging lint-clean. The cooked template
+object is immutable, keyed by its original source site, and shared across copies.
+Tags and ordinary calls share argument/default/rest lowering. Raw access, invalid
+cooked escapes, mutation through aliases and missing cooked reads remain named
+boundaries. A checked read remains observable when its result is unused.
 
 The 23-root identity witness compares 667 cases on each of the five backend and
-provider configurations. The old template witness and ordinary-array controls
-also hold. C and JVM comparisons of all 424 examples find one fixed witness,
-423 unchanged, and zero regressions. Recorded test262, all 119 outcomes, runtime
-and outcome JVM verification, LLVM assembly, integrity, definitions and snapshot
-cache checks hold. These completed checks do not make the checkpoint green:
-workspace audits found missing target ABI and ownership classifications for the
-new helper. Those are corrected; the remaining checks run on the final pin.
+provider configurations. The old template witness and writable-array controls
+hold. C and counted-C comparisons cover all 424 examples: 423 unchanged and one
+fixed, without regression. The final JVM comparison finds 422 unchanged, one
+fixed and one unstable control (the existing iteration-protocol flake), without
+regression. An existing counted-C field-initializer abort reproduces on both arms.
+
+The broader checkpoint after items 1–3 is complete. Workspace tests, lint,
+recorded conformance, outcomes, integrity, definitions, runtime validity, LLVM
+assembly, snapshot caching, all backend example checks, counting and memory,
+benchmarks, addons and interop pass. Interop builds and runs 58 projects; four
+Windows projects skip because no Windows host is reachable. Those four paths
+have no new execution evidence. The interop step alone takes almost an hour;
+reuse unchanged inputs instead of repeating the sweep during iteration.
 
 NoGc and counted emission comparisons cover all 29 runtime projects. Most growth
 is an 82-byte compile-time assertion. Five modules also gain four unused closure
 layout declarations. Crypto changes two literal argument bindings relative to
-parameter defaults; helper and allocation counts do not grow. Its compiled test
-axis has zero real passes on both pins and supplies no positive coverage.
+parameter defaults; helper and allocation counts do not grow. Its compiled axis
+has zero real passes on both pins and supplies no positive coverage.
 
-Item 4 is a separate private candidate. A nested JavaScript pattern reads an
-inferred reference through the existing erased array-element operation, checks
-for absence, then reconstructs the present type proved by the source array.
-One predicate selects both the read and reconstruction. Existing defaults and
-direct generator frame paths retain their lowering. The initial candidate fixes
-all eight strict test262 cases and compares 145 witness cases on each of the five
-configurations. All 29 runtime programs are byte-identical to its control.
-Recorded reconciliation exposed one empty-generator-pattern regression; its
-correction and final reconciliation remain pending. No repaired cases are banked
-before landing and independent conformance measurement.
+Integration preserves the concurrent Builtins runtime additions and the JVM
+peer's updated launcher test. All five recorded sets and all 120 outcomes hold;
+JVM verifies 25,093/25,099 runtime classes with the same three known limitations
+and 1,678/1,678 outcome classes. The integrated workspace tests pass. The landed
+tree equals pin `1e3c7997d491`; its compiler is byte-identical to `d85c63f959bb`
+(SHA256 prefix `a3291deffe28ba8f`).
+
+## Fourth milestone and loop correction, 2026-10-03
+
+Missing-reference destructuring landed in `c7bcbccb1`. A nested JavaScript pattern
+reads through the existing erased array-element operation, checks for absence,
+then reconstructs the present type proved by the source array. One predicate
+selects the read and reconstruction. Defaults and the direct generator frame
+path retain their lowering. Assistant's `36908c7f7` checks the reconstruction's
+array origin and resolved layout identity, including its negative controls.
+
+All eight strict test262 cases and the empty-generator control pass. The witness
+compares 145 cases on each of the five configurations. The final C comparison
+covers 425 examples: 424 unchanged, one fixed, no regression or unstable result.
+The initial prototype emits all 29 runtime programs byte-identically to its
+control; that emission comparison precedes the direct-generator correction.
+
+The separate `e46ddae84` repairs writes in while, do and for conditions. Lowering
+carries those bindings around repetition and passes their post-condition values
+on exit. The new ten-root witness compares 290 cases per configuration. The
+bounded wrong-answer outcome now agrees. Across 426 C examples, 425 are unchanged
+and one is fixed. Runtime changes are limited to `normalize____win#` in seven
+modules, each 184 bytes smaller, in both ordinary and counted emission. The real
+compiled path axis retains its 15 passes; there is no measured speed claim.
+
+The combined final pin `37a8d077835f` is byte-identical to the validated
+`056cdd7aad9b` compiler (SHA256 prefix `96e2f269dfb7ec03`). All five recorded sets
+reconcile; outcomes retain 119 records and report the loop fixture fixed, without
+a new refusal. Integrity adds no violation beyond the 95 known entries. Runtime
+and outcome JVM verification retain the same counts and limitations as above.
+Core/CLI tests and lint pass, as do the updated six whole-program JVM tests.
+Twenty focused checks cover templates, tagged calls, destructuring and loop
+conditions across all five configurations. Assistant owns independent banking.
+
+## Erasure-analysis foundation, delivered in `9aba5cbb2`
+
+Classifications now retain binding identity, declaration identity and written
+parameter position. The immutable collection has one binding index. Every
+returned-value consumer and unresolved boundary contributes independently; a
+bounded reverse-edge worklist settles their verdicts. The deciding use propagates
+to the originating binding through forwarding chains. Ten analysis tests and
+core/CLI lint pass. The current status in `docs/any-unknown.md` is corrected.
+
+This foundation does not change lowering or prove a flow closed. Known examined
+uses can coexist with unresolved uses, and classifications do not prove storage
+consumers, all writers or callable escape. Closed-call specialization remains the
+next implementation. General alias/return/field recovery, finite dispatch and
+caller freshness remain later slices.
+
+An isolated-cache compilation comparison used seven alternating warm samples per
+arm for crypto, util and stream. Coarse whole-process medians were 0.13→0.11 s,
+0.06→0.05 s and 0.06→0.07 s, with similar memory use. This finds no large cost
+growth in that analysis revision; it does not isolate analysis cost or measure
+runtime speed. The final deciding-origin correction adds one provenance lookup.
 
 ## Erased-value implementation slices
 
@@ -214,8 +269,8 @@ The next milestone extends the existing mechanisms in this order:
    declaration IDs and, for a parameter, its declaration and written position.
    Keep the classification collection immutable and index it once. Reporting and
    planning use these identities; names, source spans and shared `any` type IDs
-   cannot identify a value. A private implementation passes the classification
-   tests, including two parameters with the same checker type and different uses.
+   cannot identify a value. Delivered in `9aba5cbb2`, including two parameters with the same checker
+   type and different uses.
 2. **Recover examined parameters at closed direct calls.** Feed independently
    proved argument representations into existing source-level function copies.
    Keep substitutions positional and separate copy identity from exception mode.
@@ -235,11 +290,10 @@ The next milestone extends the existing mechanisms in this order:
    and callbacks require their own caller proof; they cannot inherit a local
    constructor's zero-field assumption.
 
-The current erasure report records the strongest use. `Examined` can conceal an
-unresolved use, and a return can reach several consumers. That report alone is
-not a closed-flow proof. Before slice 2 consumes it, retain every relevant flow
-edge and unknown boundary independently, follow them to a bounded fixpoint, and
-keep exported, escaping and unresolved flows conservative.
+The erasure report now retains every consumer and the unresolved bit independently
+of its strongest verdict. This is necessary evidence, not a closed-flow proof.
+Slice 2 must separately prove its accepted call and parameter uses closed;
+exported, escaping and unresolved flows remain conservative.
 
 Each behavioral slice needs a failing control, retained roots, all-backend
 answers and a measured effect in a real corpus. Mixed parameters, recursive
