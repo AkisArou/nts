@@ -37,9 +37,9 @@ rose by 2 and every variant count by 4 while no flag-selected bucket moved.
 One file may require two variants, which is why variants outnumber files.
 At this pin, 4,238 standalone files select one variant and 49,342 use the
 default two; the ECMA-402 files all use two variants.
-NativeTS does not implement `Intl`, and Test262 explicitly permits an
-implementation without ECMA-402 to exclude `test/intl402`. That scope exclusion
-must be recorded rather than mixed into the ECMA-262 conformance percentage.
+The shared runtime lane is implementing `Intl`. ECMA-402 cases are scheduled as
+implementation gaps; they no longer receive the blanket `initial-lane:intl402`
+exclusion. ECMA-262 and ECMA-402 results still have separate denominators.
 Staging tests outside ECMA-402 remain part of the ECMA-262 inventory.
 
 The metadata parser must still read all 53,580 standalone files. Parser
@@ -107,8 +107,11 @@ the census's FIXED? check says so:
 - the global object and realms (`globalThis`, cross-realm);
 - the redirect hooks (`Symbol.toPrimitive`, `Symbol.hasInstance`,
   `Symbol.unscopables`);
-- **Temporal** -- a runtime this project does not build. Its tests are
-  classed `inapplicable` by feature, with this section as the authority.
+
+Temporal is now an implementation gap, not a permanent boundary. The shared
+Date/Temporal/Intl lane is described in
+[`runtime/ecmascript/DATE-TEMPORAL-INTL.md`](../../runtime/ecmascript/DATE-TEMPORAL-INTL.md).
+Its host adapter results do not establish compiled standard-builtin conformance.
 
 **Because boundaries are attempted, they appear in every refusal ranking, and
 at the top.** Read these rows as boundaries, never as compiler work. In the

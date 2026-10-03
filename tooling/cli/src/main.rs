@@ -16,6 +16,7 @@ mod bind_gir;
 mod gir_surface;
 mod bind_winmd;
 mod windows_surface;
+mod jar_resources;
 
 use std::fmt::Write as _;
 
@@ -4871,14 +4872,35 @@ fn package_apk(
     // `package_jvm` and `package_aar` shell out to `jar`: the JDK is already a
     // hard requirement of this backend, and a second zip implementation in the
     // tree is a second set of answers about compression and alignment.
+    let resources = staged.join("resources");
+    let jars: Vec<_> = [classes.to_owned(), runtime]
+        .into_iter()
+        .chain(depends.iter().cloned())
+        .collect();
+    jar_resources::unpack_resources(&jars, &staged.join("unpacked"), &resources)?;
+    // D8 emits classes2.dex and later files when its method limit is reached.
+    // Copy the complete output alongside resources before updating the APK.
+    let mut dex_count = 0;
+    for entry in std::fs::read_dir(&staged)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let text = name.to_string_lossy();
+        if entry.file_type()?.is_file() && text.starts_with("classes") && text.ends_with(".dex") {
+            std::fs::copy(entry.path(), resources.join(text.as_ref()))?;
+            dex_count += 1;
+        }
+    }
+    if dex_count == 0 {
+        bail!("`d8` produced no dex files for product `{name}`");
+    }
     let mut add = std::process::Command::new("jar");
     add.arg("--update")
         .arg("--file")
         .arg(unsigned.as_str())
         .arg("-C")
-        .arg(staged.as_str())
-        .arg("classes.dex");
-    run_tool(add, "jar", "add classes.dex to the APK")?;
+        .arg(resources.as_str())
+        .arg(".");
+    run_tool(add, "jar", "add dex and dependency resources to the APK")?;
 
     let aligned = staged.join("aligned.apk");
     let mut zipalign = sdk.tool("zipalign");
@@ -5010,7 +5032,7 @@ fn package_runnable_jar(
     // A signature in the runtime jar's manifest would be checked against
     // contents that are now different; there is none today, and removing the
     // manifests we did not write costs nothing and keeps it that way.
-    drop(std::fs::remove_dir_all(built.join("META-INF")));
+    jar_resources::remove_signatures(&built.join("META-INF"))?;
 
     // **Built beside and then moved over.** `package_jvm` already wrote
     // `<name>.jar` -- the classes this is assembled *from* -- so creating the

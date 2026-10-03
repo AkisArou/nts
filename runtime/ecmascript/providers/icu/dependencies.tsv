@@ -1,0 +1,2 @@
+# group	artifact	version	sha256	license	scope	repository
+com.ibm.icu	icu4j	78.3	e962c1758d9659ea1e1fbab99c58683f654d304e1126ace19aaabfe39e0edb25	Unicode-3.0	runtime	https://repo.maven.apache.org/maven2

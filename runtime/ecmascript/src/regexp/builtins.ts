@@ -14,14 +14,15 @@ import {
 import { advanceStringIndex, isLead, isTrail } from "./utf16.ts";
 import { contains, spaceSet } from "./sets.ts";
 
-export type CaptureIndices = [number, number];
-export interface MatchIndices extends Array<CaptureIndices | undefined> {
+export type CaptureIndices = NonNullable<RegExpIndicesArray[number]>;
+export interface MatchIndices extends Omit<RegExpIndicesArray, "groups"> {
+  // The pinned lib incorrectly excludes undefined for unmatched named groups.
   groups: Record<string, CaptureIndices | undefined> | undefined;
 }
-export interface RegExpMatchArray extends Array<string | undefined> {
-  index: number;
-  input: string;
-  groups: Record<string, string | undefined> | undefined;
+export interface RegExpMatchArray
+  extends Array<RegExpExecArray[number] | undefined>, Pick<RegExpExecArray, "index" | "input"> {
+  0: RegExpExecArray[0];
+  groups: Record<string, RegExpExecArray[number] | undefined> | undefined;
   indices?: MatchIndices;
 }
 export type RegExpReplacer = (match: string, ...capturesAndContext: unknown[]) => unknown;
@@ -144,7 +145,10 @@ function speciesConstructor(regexp: NtsRegExp): RegExpConstructor {
   return species as unknown as RegExpConstructor;
 }
 
-export class NtsRegExp {
+// The result and index types below correct limitations in the pinned library.
+// The generic host facade still requires the typed-boundary rewrite documented
+// in the architecture audit before it can claim the full RegExp contract.
+export class NtsRegExp implements Pick<RegExp, "flags" | "source" | "test"> {
   /** JavaScript permits any value here; conversion happens when exec reads it. */
   lastIndex: unknown = 0;
   readonly #program: RegexProgram;
@@ -438,7 +442,11 @@ export class NtsRegExp {
 // RegExpExec's fallback is an intrinsic, even if user code replaces prototype.exec.
 const builtinExec = NtsRegExp.prototype.exec;
 
-export class RegExpStringIterator implements IterableIterator<RegExpMatchArray> {
+export class RegExpStringIterator implements IterableIterator<
+  RegExpMatchArray,
+  undefined,
+  undefined
+> {
   readonly #matcher: NtsRegExp;
   readonly #input: string;
   readonly #global: boolean;
@@ -450,7 +458,7 @@ export class RegExpStringIterator implements IterableIterator<RegExpMatchArray> 
     this.#global = global;
     this.#unicode = unicode;
   }
-  next(): IteratorResult<RegExpMatchArray> {
+  next(): IteratorResult<RegExpMatchArray, undefined> {
     objectReceiver(this);
     if (!(#matcher in this)) {
       throw new TypeError("Incompatible RegExp iterator receiver");

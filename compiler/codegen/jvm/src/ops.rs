@@ -4076,6 +4076,11 @@ impl Emitter<'_> {
         // is a call rather than an instruction. `hir::verify` has already
         // checked that both sides are bigints.
         if matches!(self.ty(lhs), HirType::BigInt) {
+            // Value-producing ordering uses the same exact compare-and-branch
+            // path as a condition, materialized below by `binary`.
+            if matches!(op, BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge) {
+                return Ok(None);
+            }
             let Some((name, signature)) = bigint_operation(op) else {
                 return Err(refuse(
                     self.func,

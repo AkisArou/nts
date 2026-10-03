@@ -19,12 +19,6 @@ const KNOWN_FLAGS: &[&str] = &[
 /// while `noStrict` and raw files remain visible as reasoned scope exclusions.
 #[must_use]
 pub fn schedule_strict_script(record: &TestRecord) -> ScheduleOutcome {
-    if record.path.starts_with("test/intl402/") {
-        return ScheduleOutcome::ScopeExcluded {
-            reason: "initial-lane:intl402".to_owned(),
-        };
-    }
-
     if let Some(flag) = record
         .flags
         .iter()
@@ -163,15 +157,10 @@ mod tests {
     }
 
     #[test]
-    fn excludes_ecma_402_before_feature_scheduling() {
+    fn schedules_ecma_402_as_an_implementation_gap() {
         let mut record = record(&[]);
         record.path = "test/intl402/NumberFormat/example.js".to_owned();
-        assert_eq!(
-            schedule_strict_script(&record),
-            ScheduleOutcome::ScopeExcluded {
-                reason: "initial-lane:intl402".to_owned()
-            }
-        );
+        assert!(matches!(schedule_strict_script(&record), ScheduleOutcome::Planned { .. }));
     }
 
     #[test]

@@ -1,4 +1,15 @@
-# Shared ECMAScript regexp implementation
+# Shared ECMAScript builtins
+
+Date, Temporal and Intl architecture, implementation stages and validation are
+tracked in [DATE-TEMPORAL-INTL.md](DATE-TEMPORAL-INTL.md). Their calendar/exact-time
+core shares TypeScript semantics; ICU providers supply typed data primitives.
+Date, Instant and Duration now own their state in typed private fields and check
+their supported API against the pinned TypeScript libraries. The type audit in
+that document records the remaining RegExp facade rewrite and compiler gaps for
+canonical Temporal unions. Host results do not establish that public exports
+compile under NTS's typed object model. No WeakMap is needed for these values.
+
+## Regexp
 
 The parser, matcher and builtin algorithms have one TypeScript source for native
 and JVM targets. JVM execution needs no JNI, Java regex engine or C library.
@@ -130,28 +141,27 @@ representation. An invalid dynamic pattern throws `SyntaxError`; literal syntax
 errors remain frontend early errors. A compiler may precompile a literal to the
 same instruction/data format later. Do not introduce a second matching engine.
 
-The generic facade uses specification-level operations such as object creation,
-symbol lookup and `Reflect.apply`. Those operations do not currently lower as
-ordinary typed user code in NTS. The compiler adapter must map the supported
-default builtin paths to typed operations/intrinsics; host validation does not
-establish that the entire facade compiles unchanged. Metaobject behavior outside
-the target profile remains outside that binding.
+The generic facade uses `Reflect.apply`, dynamic species construction and
+unchecked constructor casts. These conflict with the fixed-layout boundary in
+`docs/conformance/typescript.md` §13. Replace the production facade with typed
+operations and direct calls while retaining the parser, matcher and reusable
+buffers. Bind supported default builtin paths to those operations; the compiler
+must not recreate excluded metaobject behavior to accommodate the host facade.
+Host validation does not establish that the public exports compile unchanged.
 
 Builtin lowering must provide:
 
-- Regexp instance branding and the prototype special cases. Replace existing
-  constant-false handling of `instanceof RegExp` when the representation lands.
+- Regexp instance branding through the normal class/descriptor machinery.
+  Replace existing constant-false handling of `instanceof RegExp` when the
+  representation lands.
 - Mutable `lastIndex`, ordered coercion and global/sticky reset rules. `exec`
   does not advance an empty match; the String algorithms do when required.
 - Match arrays with `index`, `input`, `groups` and optional `indices`. Named maps
-  have null prototypes, unmatched entries are `undefined`, and named index
+  use typed dictionaries, unmatched entries are `undefined`, and named index
   entries share the same pair objects as numbered entries. Metadata and entries
   use intrinsic creation, without invoking inherited setters.
-- Symbol dispatch, callable replacement, species construction and iterator
-  lowering. The internal constructor's third argument carries a precomputed
-  `IsRegExp` result so function-call construction reads `@@match` once.
-- String operations and regexp errors as backend intrinsics, plus standard
-  iterator ancestry where the target profile provides that intrinsic graph.
+- Supported String operations, typed replacement callbacks, iterators and regexp
+  errors. Direct default construction does not need dynamic species dispatch.
 
 The host source currently does not reproduce native object descriptors,
 prototype poisoning immunity or `$262` realms. Those remain visible failures,

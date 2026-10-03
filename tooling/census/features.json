@@ -115,9 +115,9 @@
       "authority": "docs/conformance/typescript.md §13"
     },
     "Temporal": {
-      "class": "inapplicable",
-      "reason": "no-temporal-runtime",
-      "authority": "docs/conformance/test262.md §Done, and the permanent boundaries"
+      "class": "gap",
+      "reason": "shared-runtime-in-progress",
+      "authority": "runtime/ecmascript/DATE-TEMPORAL-INTL.md"
     },
     "TypedArray": {
       "class": "gap"

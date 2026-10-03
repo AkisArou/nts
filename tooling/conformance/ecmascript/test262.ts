@@ -1,6 +1,6 @@
-// Host validation of the shared regexp implementation using the pinned Test262
+// Host validation of shared ECMAScript builtins using the pinned Test262
 // corpus. This does not claim compiled builtin conformance: the compiler lane's
-// ordinary Test262 runner owns that. Only regexp literals are adapted, so they
+// ordinary Test262 runner owns that. Regexp literals are adapted so they
 // construct our implementation instead of silently exercising Node's engine.
 //
 // node tooling/conformance/ecmascript/test262.ts [--under test/built-ins/RegExp]
@@ -32,13 +32,19 @@ function option(name: string, fallback: string): string {
   return index < 0 ? fallback : (argv[index + 1] ?? fallback);
 }
 const under = option("--under", "test/built-ins/RegExp");
+const profile = option(
+  "--profile",
+  under.includes("/Temporal") ? "temporal" : under.includes("/Date") ? "date" : "regexp",
+);
+if (profile !== "date" && profile !== "regexp" && profile !== "temporal")
+  throw new Error("Unknown candidate profile: " + profile);
 const filter = option("--filter", "");
 const limit = Number(option("--limit", "0"));
-const rowsPath = option("--rows", "target/regexp-test262.jsonl");
+const rowsPath = option("--rows", "target/" + profile + "-test262.jsonl");
 const sabotage = argv.includes("--sabotage");
 const timeout = Number(option("--timeout", "30000"));
 const sources = new Map<string, string>();
-async function candidate(context: vm.Context): Promise<vm.ModuleNamespace> {
+async function candidate(context: vm.Context): Promise<vm.Module["namespace"]> {
   const modules = new Map<string, vm.SourceTextModule>();
   function moduleFor(path: string): vm.SourceTextModule {
     const cached = modules.get(path);
@@ -52,7 +58,7 @@ async function candidate(context: vm.Context): Promise<vm.ModuleNamespace> {
     modules.set(path, module);
     return module;
   }
-  const builtins = moduleFor(resolve(root, "runtime/ecmascript/src/regexp/builtins.ts"));
+  const builtins = moduleFor(resolve(root, "runtime/ecmascript/src/" + profile + "/builtins.ts"));
   await builtins.link((specifier, importer) =>
     moduleFor(resolve(dirname(importer.identifier), specifier)),
   );
@@ -78,7 +84,7 @@ function literals(text: string): Literal[] {
   const tokenizer = LiteralTokenizer.tokenizer(text, { ecmaVersion: "latest" });
   for (const token of tokenizer) {
     if (token.type.label === "regexp") {
-      const value = token.value as { pattern: string; flags: string };
+      const value = (token as typeof token & { value: { pattern: string; flags: string } }).value;
       found.push({
         start: token.start,
         end: token.end,
@@ -90,6 +96,7 @@ function literals(text: string): Literal[] {
   return found;
 }
 function adapt(text: string): { text: string; literals: Literal[] } {
+  if (profile !== "regexp") return { text, literals: [] };
   const found = literals(text);
   let from = 0;
   let result = "";
@@ -168,9 +175,35 @@ for (const selected of selection) {
     __sabotage: sabotage,
     console,
     print: () => {},
+    __clock: () => Date.now(),
   });
   context.__impl = await candidate(context);
-  new vm.Script(`
+  if (profile === "temporal") {
+    new vm.Script(`
+      Object.defineProperty(globalThis, "Temporal", { value: __impl, writable: true, configurable: true });
+      if (__sabotage) Temporal.Instant.prototype.equals = function equals() { return false; };
+    `).runInContext(context, { timeout });
+  } else if (profile === "date") {
+    new vm.Script(`
+      // Host-only wiring of the typed candidate. There is no native Date
+      // constructor or parser fallback; missing APIs remain visible failures.
+      class Date extends __impl.NtsDate {
+        constructor(value, month, day, hour, minute, second, millisecond) {
+          const count = arguments.length;
+          super(count === 0 ? __clock() : count > 1 ?
+            __impl.NtsDate.UTC(Number(value), Number(month), count > 2 ? Number(day) : 1,
+              count > 3 ? Number(hour) : 0, count > 4 ? Number(minute) : 0,
+              count > 5 ? Number(second) : 0, count > 6 ? Number(millisecond) : 0) :
+            value instanceof __impl.NtsDate ? value.getTime() :
+            typeof value === "string" ? __impl.NtsDate.parse(value) : Number(value));
+        }
+        static now() { return __clock(); }
+      }
+      globalThis.Date = Date;
+      if (__sabotage) Date.prototype.getTime = function getTime() { return 123; };
+    `).runInContext(context, { timeout });
+  } else
+    new vm.Script(`
     "use strict";
     const ImplRegExp = __impl.NtsRegExp;
     const originalExec = ImplRegExp.prototype.exec;
@@ -298,6 +331,7 @@ console.log(
       encoding: "utf8",
     }).trim(),
     under,
+    profile,
     sabotage,
     counts,
     rows: rowsPath,

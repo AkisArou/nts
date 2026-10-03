@@ -2842,6 +2842,10 @@ fn vendored_jar(project: &Path, digest: &str) -> bool {
     let lib = project.join("lib/com/example");
     std::fs::create_dir_all(&lib).expect("the library source directory");
     std::fs::create_dir_all(project.join("deps")).expect("the deps directory");
+    std::fs::create_dir_all(project.join("lib/META-INF")).expect("dependency metadata");
+    std::fs::write(lib.join("locale.dat"), b"pinned locale resource\n").expect("dependency data");
+    std::fs::write(project.join("lib/META-INF/LICENSE.txt"), b"dependency redistribution notice\n")
+        .expect("dependency license");
     std::fs::write(
         lib.join("Greeter.java"),
         "package com.example;\npublic final class Greeter {\n  \
@@ -2862,7 +2866,7 @@ fn vendored_jar(project: &Path, digest: &str) -> bool {
         .arg(project.join("deps/greeter-1.0.0.jar"))
         .arg("-C")
         .arg(project.join("lib"))
-        .arg("com")
+        .arg(".")
         .status()
         .is_ok_and(|status| status.success());
     if !packaged {
@@ -2923,6 +2927,8 @@ fn a_pinned_jar_ships_inside_the_executable() {
         inside.contains("com/example/Greeter.class"),
         "the pinned jar was resolved and not packaged:\n{inside}"
     );
+    assert!(inside.contains("com/example/locale.dat"), "dependency data was lost:\n{inside}");
+    assert!(inside.contains("META-INF/LICENSE.txt"), "dependency notice was lost:\n{inside}");
 
     // --- the same program with no claim --------------------------------------
     let bare = fixture("build-jar-none", JVM_EXECUTABLE);
@@ -3781,6 +3787,18 @@ fn an_apk_dexes_its_pinned_jars_into_itself() {
     // The control: the program's own class is there too, so the search is not
     // matching something every dex happens to contain.
     assert!(found("Lnts/gen/Program;"), "the program's own class is missing from the dex");
+    let resource = Command::new("unzip")
+        .arg("-p")
+        .arg(&apk)
+        .arg("com/example/locale.dat")
+        .output()
+        .expect("reading dependency resources");
+    assert!(resource.status.success(), "dependency resources were dropped from the APK");
+    assert_eq!(resource.stdout, b"pinned locale resource\n");
+    let listed = Command::new("jar").arg("--list").arg("--file").arg(&apk).output().expect("listing the APK");
+    let inside = String::from_utf8_lossy(&listed.stdout);
+    assert!(inside.contains("greeter-1.0.0.jar/META-INF/LICENSE.txt"), "dependency notice was lost:\n{inside}");
+    assert!(!inside.contains("Greeter.class"), "JVM bytecode was copied as an Android resource:\n{inside}");
     let _ = tools;
 }
 

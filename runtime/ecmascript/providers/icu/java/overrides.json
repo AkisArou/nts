@@ -1,0 +1,11 @@
+{
+  "nts.intl.IcuTimeZone": {
+    "nullability": { "id()Ljava/lang/String;": "nonnull" }
+  },
+  "nts.intl.IcuNumberFormatter": {
+    "nullability": {
+      "format(DZ)Ljava/lang/String;": "nonnull",
+      "formatDecimal(Ljava/lang/String;Z)Ljava/lang/String;": "nonnull"
+    }
+  }
+}
