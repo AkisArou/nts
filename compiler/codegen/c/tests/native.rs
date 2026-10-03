@@ -493,10 +493,12 @@ fn curated_libc_bindings_match_system_headers_and_call_the_real_symbols() {
         "/../../../runtime/native/libc.d.ts"
     ));
     // The shipped surface now includes compiler operations as well as libc.
-    // Only an explicitly tagged intrinsic has no linker symbol to exercise.
+    // Only an explicitly tagged intrinsic has no linker symbol to exercise:
+    // a backend's (`@ntsAbi intrinsic`) or a family's declaration the
+    // lowering defines (`@ntsIntrinsic gobject.property`).
     let mut intrinsic = false;
     for line in declarations.lines().map(str::trim) {
-        if line.contains("@ntsAbi intrinsic") { intrinsic = true; }
+        if line.contains("@ntsAbi intrinsic") || line.contains("@ntsIntrinsic ") { intrinsic = true; }
         let Some(function) = line.strip_prefix("export function ") else { continue; };
         if std::mem::take(&mut intrinsic) { continue; }
         let function = function.split('(').next().unwrap();

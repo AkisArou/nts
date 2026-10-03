@@ -315,15 +315,15 @@ declare module "c:types" {
   // its type: `property<Orientation>(Orientation.VERTICAL)`,
   // `property<Book | null>(null)`. Lowered to its default; it runs nothing,
   // so a field initialiser may be one where it may not call.
-  /** @ntsAbi intrinsic */
+  /** @ntsIntrinsic gobject.property */
   export function property<T>(): RequiredProperty<T>;
-  /** @ntsAbi intrinsic */
+  /** @ntsIntrinsic gobject.property */
   export function property(initial: string): Property<string>;
-  /** @ntsAbi intrinsic */
+  /** @ntsIntrinsic gobject.property */
   export function property(initial: number): Property<number>;
-  /** @ntsAbi intrinsic */
+  /** @ntsIntrinsic gobject.property */
   export function property(initial: boolean): Property<boolean>;
-  /** @ntsAbi intrinsic */
+  /** @ntsIntrinsic gobject.property */
   export function property<T>(initial: T): Property<T>;
   // What a class the program writes is constructed with: its base's props
   // and its own properties, each optional -- the constructor GJS infers,
@@ -356,7 +356,7 @@ declare module "c:types" {
   export interface Signal<A extends readonly unknown[] = [], R = void> {
     readonly __c_signal?: [A, R];
   }
-  /** @ntsAbi intrinsic */
+  /** @ntsIntrinsic gobject.signal */
   export function signal<A extends readonly unknown[] = [], R = void>(): Signal<A, R>;
   // A class's own names, without the brands its base adds (`__c_signals`,
   // which is computed from these: reading it here would be a cycle).

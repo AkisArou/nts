@@ -25,7 +25,7 @@ if [ ! -e /usr/share/gir-1.0/Gtk-4.0.gir ] && [ -z "${GI_GIR_PATH:-}" ]; then
   exit 0
 fi
 
-expected="made hi! 6 true 1 wider 10 order=12 items=1 priority=0 string=64 book Solaris 413 true me title 978 "
+expected="made hi! 6 true 1 wider 10 order=12 items=1 priority=0 string=64 book Solaris 413 true me title 978 tally count 2 3 "
 mkdir -p "$out"
 for mode in plain rc; do
   flag=""

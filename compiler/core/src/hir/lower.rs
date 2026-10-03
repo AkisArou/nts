@@ -21319,10 +21319,10 @@ impl<'a> FuncBuilder<'a> {
             while let Some(node) = pending.pop() {
                 match self.kind_of(node) {
                     Some(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION) => {}
-                    // `title = property("")` runs nothing: it declares the
-                    // property and is its default (`lower_property_declaration`).
-                    // What it is given is held to this rule all the same.
-                    Some(syntax::CALL_EXPRESSION) if self.is_property_declaration(node) => {
+                    // `title = property("")` runs nothing: it declares a
+                    // property or a signal (`lower/gobject.rs`). What it is
+                    // given is held to this rule all the same.
+                    Some(syntax::CALL_EXPRESSION) if self.gobject_intrinsic(node).is_some() => {
                         pending.extend(self.arguments_of(node));
                     }
                     Some(
@@ -21346,64 +21346,6 @@ impl<'a> FuncBuilder<'a> {
             }
         }
         Ok(())
-    }
-
-    /// Whether `call` is `property(...)`: `c:types`' intrinsic declaring a
-    /// `GObject` class's property, which is a field's default and runs nothing.
-    fn is_property_declaration(&self, call: NodeId) -> bool {
-        self.snapshot.call_targets.get(&call).and_then(|target| target.callee).is_some_and(|decl| {
-            self.node(decl).native.as_ref().and_then(|n| n.abi.as_deref()) == Some("intrinsic")
-                && !self.has_a_body(decl)
-                && self.declared_name(decl).as_deref() == Some("property")
-        })
-    }
-
-    /// Whether `call` initialises an instance field of a class whose instances
-    /// are `GObject` handles: where `property(...)` declares a property.
-    fn declares_a_gobject_property(&self, call: NodeId) -> bool {
-        let Some(field) = self.node(call).parent else { return false };
-        if self.kind_of(field) != Some(syntax::PROPERTY_DECLARATION) || is_static_member(self.snapshot, field) {
-            return false;
-        }
-        let Some(class) = self.enclosing_class(field) else { return false };
-        matches!(
-            instance_type_of(self.snapshot, class).and_then(|ty| super::native::pointer(self.snapshot, ty)),
-            Some(super::native::Pointee::Opaque(handle)) if handle.family == super::native::Family::GObject
-        )
-    }
-
-    /// `property(default)`, the declaration of a property of a class over a
-    /// `GObject` class: the field holds `default`, and is a property by its
-    /// type, which carries `Property`'s brand (`property_fields`). Without one
-    /// -- `readonly isbn = property<string>()`, which a construction must give
-    /// -- it holds its type's zero until the construction writes it. Options
-    /// (`{ type: "int", minimum: 0 }`) are refused by name until they are read.
-    fn lower_property_declaration(&mut self, id: NodeId, arguments: &[NodeId]) -> Result<ValueId, Diagnostic> {
-        if !self.declares_a_gobject_property(id) {
-            return Err(self.unsupported(
-                id,
-                "a `property(...)` that is not the initialiser of a field of a class over a `GObject` class: it declares one of that class's properties, and is no value anywhere else",
-            ));
-        }
-        let want = self.type_of(id).ok_or_else(|| self.unrepresentable(id, "a `property` declaration"))?;
-        match arguments {
-            [default] => {
-                let value = self.lower_expression(*default)?;
-                self.coerce(value, &want, id)
-            }
-            [] => {
-                let origin = self.origin(id);
-                let zero = match &want {
-                    HirType::Float { .. } => OpKind::ConstFloat(0.0),
-                    HirType::Bool => OpKind::ConstBool(false),
-                    HirType::Managed(ManagedType::String) => OpKind::ConstString(String::new()),
-                    HirType::NativePointer(_) => OpKind::ConstNull,
-                    _ => return Err(self.unsupported(id, "a `property()` with no default, of a type with no zero here")),
-                };
-                Ok(self.push(zero, want, origin))
-            }
-            _ => Err(self.unsupported(id, "a `property` given options, which this compiler does not read yet")),
-        }
     }
 
     /// Whether `name` is a field of the class the program writes over an
@@ -32620,6 +32562,11 @@ impl<'a> FuncBuilder<'a> {
         {
             return Some(self.lower_static_native(id, declaration, *member, arguments));
         }
+        // A declaration of a `GObject` class's, `@ntsIntrinsic gobject.*`
+        // (`lower/gobject.rs`).
+        if let Some(intrinsic) = self.gobject_intrinsic(id) {
+            return Some(self.lower_gobject_intrinsic(id, intrinsic, arguments));
+        }
         if let Some(decl) = self.snapshot.call_targets.get(&id).and_then(|target| target.callee)
             && self.node(decl).native.as_ref().and_then(|n| n.abi.as_deref()) == Some("intrinsic")
             && !self.has_a_body(decl)
@@ -32629,7 +32576,6 @@ impl<'a> FuncBuilder<'a> {
                 Some(name @ ("local" | "sizeof" | "malloc" | "free" | "copy")) => return Some(self.native_storage(id, name, arguments)),
                 Some("unsafeDowncast") => return Some(self.native_downcast(id, arguments)),
                 Some("stringFrom") => return Some(self.native_string_from(id, arguments)),
-                Some("property") => return Some(self.lower_property_declaration(id, arguments)),
                 Some("bytesFrom") => return Some(self.native_bytes_from(id, arguments)),
                 Some("selector") if self.in_objc_module(decl) => return Some(self.lower_selector(id, arguments)),
                 _ => {},
@@ -68478,6 +68424,7 @@ mod tests {
     }
 }
 
+mod gobject;
 mod native_memory;
 
 /// An Objective-C property: its declaration, and the selectors that read and

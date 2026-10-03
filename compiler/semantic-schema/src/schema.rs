@@ -51,8 +51,9 @@ use crate::origin::Origin;
 /// `runtime_class`, a sealed Windows Runtime class a binding declares. 40:
 /// `TypeKind::Evolving`, the checker's `autoType` kept apart from its `anyType`
 /// -- two facts one variant had been flattening. 41: `vfunc_out`, the out
-/// parameters a `GObject` override answers as a tuple.
-pub const SCHEMA_VERSION: u32 = 41;
+/// parameters a `GObject` override answers as a tuple. 42: `intrinsic`, the
+/// compiler-defined declaration a call names (`@ntsIntrinsic gobject.signal`).
+pub const SCHEMA_VERSION: u32 = 42;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -864,6 +865,13 @@ pub struct NativeAttributes {
     /// type, after the ins.
     #[serde(default)]
     pub vfunc_out: Option<String>,
+    /// `@ntsIntrinsic gobject.property`: a declaration the compiler defines
+    /// itself, named by its family and its name rather than by the function's
+    /// own name -- `c:types`' `property()` and `signal()`, which declare a
+    /// `GObject` class's properties and signals. Lowering dispatches on this
+    /// value, never on what the function is called.
+    #[serde(default)]
+    pub intrinsic: Option<String>,
     /// `@ntsGType gtk_button_get_type`, on the phantom `__c_gtype` member of
     /// the value a binding declares beside a `GObject` class: the function
     /// answering the class's `GType`, which a subclass the program writes

@@ -26,10 +26,14 @@
 //                 read, `notify::title` fired by a write; `readonly isbn =
 //                 property<string>()`, which has no default, given by the
 //                 construction -- one that leaves it out does not typecheck
+//   tally count 2 3  a signal declared `readonly incremented =
+//                 signal<[by: number]>()`, and emitted and connected by its
+//                 name, as a binding's own are, its argument typed by the
+//                 declaration: two clicks emit 1 and 2
 import { Box, Button, Label, Orientation, init } from "gi:gtk";
 import * as Gio from "gi:gio";
 import { PRIORITY_DEFAULT } from "gi:glib";
-import { GObject, TYPE_STRING, property } from "gi:gobject";
+import { GObject, TYPE_STRING, property, signal } from "gi:gobject";
 
 class Wider extends Label {
   vfuncMeasure(orientation: Orientation, forSize: number): [number, number, number, number] {
@@ -44,6 +48,26 @@ class Book extends GObject<Book> {
   done = property(false);
   owner = property<Label | null>(null);
   readonly isbn = property<string>();
+}
+
+class Tally extends Button<Tally> {
+  readonly incremented = signal<[by: number]>();
+  count = 0;
+  vfuncClicked(): void {
+    this.count++;
+    this.emit("incremented", this.count);
+  }
+}
+
+function tallied(): string {
+  const tally = new Tally({ label: "count" });
+  let seen = 0;
+  tally.connect("incremented", (_self, by) => {
+    seen += by;
+  });
+  tally.emit("clicked");
+  tally.emit("clicked");
+  return `tally ${tally.label} ${tally.count} ${seen}`;
 }
 
 function books(): string {
@@ -87,6 +111,7 @@ function main(): void {
   console.log("items=" + String(store.getNItems()));
   console.log("priority=" + String(PRIORITY_DEFAULT) + " string=" + String(TYPE_STRING));
   console.log(books());
+  console.log(tallied());
 }
 
 init();
