@@ -25,4 +25,6 @@ export { Duration, Instant, dateToInstant } from "./temporal/builtins.ts";
 export * as Temporal from "./temporal/builtins.ts";
 export { NumberFormatter } from "./intl/number.ts";
 export type { NumberFormatterPrimitive } from "./intl/number.ts";
+export { NumberFormatConfiguration } from "./intl/number-options.ts";
+export type { NumberFormatData } from "./intl/number-options.ts";
 export { FieldSpans, NumberPartBuffer } from "./intl/parts.ts";

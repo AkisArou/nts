@@ -4,9 +4,19 @@ import {
   nts_icu_number_decimal,
   nts_icu_number_field_count,
   nts_icu_number_field,
+  nts_icu_currency_digits,
 } from "c:nts_icu";
 import type { IcuNumberHandle } from "c:nts_icu";
 import type { NumberFormatterPrimitive } from "../../../src/intl/number.ts";
+import type { NumberFormatData } from "../../../src/intl/number-options.ts";
+
+export class IcuNumberData implements NumberFormatData {
+  currencyDigits(currency: string): number {
+    const digits = nts_icu_currency_digits(currency);
+    if (!Number.isFinite(digits)) throw new RangeError("Invalid ICU currency data request");
+    return digits;
+  }
+}
 
 export class IcuNumberFormatter implements NumberFormatterPrimitive {
   private readonly handle: IcuNumberHandle;

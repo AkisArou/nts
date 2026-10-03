@@ -5,16 +5,18 @@
 # <end-byte> <line> <column> <call> <keeps> <owner.member:descriptor>
 # <keeps> is `-` when the analysis could not read the method, `.` when it
 # proved nothing escapes, and a comma-separated parameter list otherwise.
-540 12 5 special - nts/intl/IcuNumberFormatter.<init>:(Ljava/lang/String;Ljava/lang/String;)V
-585 13 5 virtual . nts/intl/IcuNumberFormatter.format:(DZ)Ljava/lang/String;
-637 14 5 virtual 0 nts/intl/IcuNumberFormatter.formatDecimal:(Ljava/lang/String;Z)Ljava/lang/String;
-663 15 5 virtual . nts/intl/IcuNumberFormatter.fieldCount:()I
-694 16 5 virtual . nts/intl/IcuNumberFormatter.field:(I)I
-725 17 5 virtual . nts/intl/IcuNumberFormatter.start:(I)I
-754 18 5 virtual . nts/intl/IcuNumberFormatter.end:(I)I
-894 23 5 static 0 nts/intl/IcuTimeZone.open:(Ljava/lang/String;)Lnts/intl/IcuTimeZone;
-912 24 5 virtual . nts/intl/IcuTimeZone.id:()Ljava/lang/String;
-956 25 5 virtual . nts/intl/IcuTimeZone.offsetMilliseconds:(D)D
-1018 26 5 virtual . nts/intl/IcuTimeZone.localOffsetMilliseconds:(DZ)D
-1067 27 5 virtual . nts/intl/IcuTimeZone.transition:(DZ)D
-1185 32 5 static . nts/intl/IcuVersions.verify:()V
+508 12 5 special - nts/intl/IcuNumberData.<init>:()V
+548 13 5 virtual 0 nts/intl/IcuNumberData.currencyDigits:(Ljava/lang/String;)I
+694 18 5 special - nts/intl/IcuNumberFormatter.<init>:(Ljava/lang/String;Ljava/lang/String;)V
+739 19 5 virtual . nts/intl/IcuNumberFormatter.format:(DZ)Ljava/lang/String;
+791 20 5 virtual 0 nts/intl/IcuNumberFormatter.formatDecimal:(Ljava/lang/String;Z)Ljava/lang/String;
+817 21 5 virtual . nts/intl/IcuNumberFormatter.fieldCount:()I
+848 22 5 virtual . nts/intl/IcuNumberFormatter.field:(I)I
+879 23 5 virtual . nts/intl/IcuNumberFormatter.start:(I)I
+908 24 5 virtual . nts/intl/IcuNumberFormatter.end:(I)I
+1048 29 5 static 0 nts/intl/IcuTimeZone.open:(Ljava/lang/String;)Lnts/intl/IcuTimeZone;
+1066 30 5 virtual . nts/intl/IcuTimeZone.id:()Ljava/lang/String;
+1110 31 5 virtual . nts/intl/IcuTimeZone.offsetMilliseconds:(D)D
+1172 32 5 virtual . nts/intl/IcuTimeZone.localOffsetMilliseconds:(DZ)D
+1221 33 5 virtual . nts/intl/IcuTimeZone.transition:(DZ)D
+1339 38 5 static . nts/intl/IcuVersions.verify:()V

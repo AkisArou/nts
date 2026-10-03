@@ -23,6 +23,9 @@ declare module "c:nts_icu" {
   ): number;
   /** @ntsAbi managed */
   export function nts_icu_number_open(locale: string, skeleton: string): IcuNumberHandle | null;
+
+  /** @ntsAbi managed */
+  export function nts_icu_currency_digits(currency: string): number;
   /** @ntsAbi managed */
   export function nts_icu_number_format(
     handle: IcuNumberHandle,

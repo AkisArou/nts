@@ -1,5 +1,6 @@
 #include "nts_icu.h"
 #include <unicode/ucal.h>
+#include <unicode/ucurr.h>
 #include <unicode/ulocdata.h>
 #include <unicode/uversion.h>
 #include <unicode/unumberformatter.h>
@@ -103,6 +104,19 @@ typedef struct NtsIcuNumber {
   int32_t count;
   int32_t capacity;
 } NtsIcuNumber;
+
+double nts_icu_currency_digits(NtsString *currency) {
+  if (!nts_icu_versions_match() || currency->length != 3) return NAN;
+  UChar code[4];
+  for (uint32_t i = 0; i < 3; i++) {
+    code[i] = nts_unit(currency, i);
+    if (code[i] < 'A' || code[i] > 'Z') return NAN;
+  }
+  code[3] = 0;
+  UErrorCode status = U_ZERO_ERROR;
+  int32_t digits = ucurr_getDefaultFractionDigits(code, &status);
+  return U_SUCCESS(status) && digits >= 0 ? digits : 2;
+}
 
 static void close_number(void *state, size_t data) {
   (void)data;

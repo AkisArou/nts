@@ -9,6 +9,11 @@ that document records the remaining RegExp facade rewrite and compiler gaps for
 canonical Temporal unions. Host results do not establish that public exports
 compile under NTS's typed object model. No WeakMap is needed for these values.
 
+Intl number options now normalize in shared TypeScript and produce the same ICU
+configuration on C and JVM. Currency precision uses pinned provider data;
+formatting reuses its state and buffers. Locale resolution and the complete
+standard Intl constructors remain in progress.
+
 ## Regexp
 
 The parser, matcher and builtin algorithms have one TypeScript source for native

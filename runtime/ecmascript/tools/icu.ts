@@ -148,7 +148,7 @@ for (const [name, source] of [
 run(process.env.CXX ?? "clang++", [...sanitize, ...objects, ...libs, "-lm", "-o", executable]);
 const cResult = run(executable, []);
 const expected =
-  "America/New_York:-18000000:1710055800000:1730611800000:1710054000000\n900,719,925,474,099,312,345.00;minusSign=-;integer=12;group=,;integer=345;decimal=.;fraction=678\n𝟗𝟎𝟎,𝟕𝟏𝟗,𝟗𝟐𝟓,𝟒𝟕𝟒,𝟎𝟗𝟗,𝟑𝟏𝟐,𝟑𝟒𝟓.𝟎𝟎;minusSign=-;integer=𝟏𝟐;group=,;integer=𝟑𝟒𝟓;decimal=.;fraction=𝟔𝟕𝟖";
+  "America/New_York:-18000000:1710055800000:1730611800000:1710054000000\n900,719,925,474,099,312,345.00;minusSign=-;integer=12;group=,;integer=345;decimal=.;fraction=678\n𝟗𝟎𝟎,𝟕𝟏𝟗,𝟗𝟐𝟓,𝟒𝟕𝟒,𝟎𝟗𝟗,𝟑𝟏𝟐,𝟑𝟒𝟓.𝟎𝟎;minusSign=-;integer=𝟏𝟐;group=,;integer=𝟑𝟒𝟓;decimal=.;fraction=𝟔𝟕𝟖\n+1.3%\n($1.05)\n¥1,235\nKWD 1.235\n1.2K\n12.4 meters per second\n001\n13\n0.10\nZZZ 1.23";
 if (jvmResult !== expected || cResult !== expected)
   throw new Error("ICU compiled ABI mismatch:\nC: " + cResult + "\nJVM: " + jvmResult);
 console.log(
@@ -159,6 +159,7 @@ console.log(
     exactDecimal: true,
     utf16Parts: true,
     dst: true,
+    numberOptions: true,
     sanitize: sanitize.length > 0,
   }),
 );

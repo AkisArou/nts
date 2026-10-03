@@ -7,6 +7,12 @@
 // this file must NOT import them, or it becomes a module and declares nothing.
 
 declare module "java:nts.intl" {
+  /** nts.intl.IcuNumberData Final: cannot be extended. */
+  export class IcuNumberData {
+    constructor();
+    currencyDigits(a0: string): number;
+  }
+
   /** nts.intl.IcuNumberFormatter Final: cannot be extended. */
   export class IcuNumberFormatter {
     constructor(a0: string, a1: string);

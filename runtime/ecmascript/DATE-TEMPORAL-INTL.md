@@ -11,6 +11,11 @@ their public APIs become compiled integration APIs.
 
 ## Architecture and performance requirements
 
+Best architecture, clean code and performance are standing design requirements
+for every stage. Prefer one shared algorithm and direct standard-library types;
+keep provider configuration and temporary allocations outside formatting loops.
+Measure performance through the compiled public paths before making claims.
+
 ECMAScript rules live in TypeScript. C and Java provide ICU primitives through
 small typed adapters. They do not implement separate JS parsers, rounding,
 clipping, coercion, disambiguation or `formatToParts` algorithms. No JSON RPC,
@@ -70,7 +75,7 @@ The full ICU redistribution notice is in `third_party/ICU-LICENSE`.
 | Date                    | Scalar constructor/UTC operations; UTC/local arithmetic; TimeClip; ISO/legacy parsing and serialization; typed private-state class                                                 | Standard builtin binding, preserving supplied argument counts; Intl-backed locale methods; named-zone validation                                                                                                           |
 | Temporal ISO            | Exact Instant parsing/formatting, range checks, rounding and time-unit arithmetic; one immutable Duration representation with cached exact time; library-derived typed classes     | Compiler support for canonical Temporal unions; complete Instant, relative Duration and all Plain types; adapt pinned upstream algorithms where appropriate                                                                |
 | Zoned/calendar Temporal | Shared gap/overlap disambiguation; direct ICU transitions                                                                                                                          | ZonedDateTime, Now, non-ISO calendar conversion and arithmetic                                                                                                                                                             |
-| Intl                    | C/JVM number skeleton and exact decimal primitives; UTF-16 spans; shared reusable number partitioning                                                                              | Complete Locale, Collator, NumberFormat, PluralRules, DateTimeFormat, RelativeTimeFormat, ListFormat, DisplayNames, Segmenter and DurationFormat; canonicalization, supportedValuesOf, ranges, parts and toLocale bindings |
+| Intl                    | Shared NumberFormat style/unit/digit options and ICU skeleton construction; pinned currency precision data; C/JVM exact decimal primitives, UTF-16 spans and reusable number partitioning | Complete Locale, Collator, NumberFormat, PluralRules, DateTimeFormat, RelativeTimeFormat, ListFormat, DisplayNames, Segmenter and DurationFormat; canonicalization, supportedValuesOf, ranges, parts and toLocale bindings |
 | Packaging/performance   | Hashed acquisition; native static build; generated Java bindings; C RC + sanitizers; JVM verification; Android API 29 dex/resource probe; compiled formatter benchmark             | Automatic reachability-controlled packaging; Android device matrix and desugaring audit; other native platforms; startup, heap and artifact-size measurements                                                              |
 
 NTS's fixed-width 128-bit BigInt covers Temporal's timestamp domain, but is not
@@ -126,6 +131,31 @@ compiled TS calls, New York DST gaps and
 overlaps, transitions, exact decimal formatting above 2^53 and UTF-16 parts with
 astral mathematical digits. Native verification enables RC, ASan, UBSan and leak
 detection; a wrong result, compiler refusal or sanitizer diagnostic fails.
+
+The NumberFormat configuration now follows the pinned
+[unit and digit option algorithms](https://github.com/tc39/ecma402/blob/e463f3c8b62e5c67f4846cd05eec40d8d5947ed0/spec/numberformat.html).
+It validates options in their specified read order, resolves fraction/significant
+precision and compact defaults, and translates the normalized slots to an
+[ICU skeleton](https://unicode-org.github.io/icu/userguide/format_parse/numbers/skeletons.html).
+Currency fraction digits come from the same pinned ICU data, with no copied
+currency table. No formatter, option record or skeleton is built in a formatting
+loop. This configuration implements the locale-independent subset of
+`Readonly<Intl.ResolvedNumberFormatOptions>`; input options are
+`Readonly<Intl.NumberFormatOptions>` directly.
+
+The compiled provider fixture passes C RC with ASan/UBSan/leak checks and JVM
+verification after exercising percent scaling, USD accounting with a 0.05
+increment, JPY/KWD/unknown currency precision, compact notation, a compound
+unit, competing precision settings, ignored invalid fraction options, integer
+padding and stripped zero fractions. These are integration probes, not a second
+semantic corpus. A targeted replay of 34 original Test262 NumberFormat option
+cases reports **29 host-options passes and 5 retained failures** with pinned
+ICU4J currency data. The replay installs configuration only, without a native
+NumberFormat formatting fallback. The remaining failures check the intrinsic
+prototype or optional-property presence on the internal configuration object.
+They do not establish a public `resolvedOptions()` implementation. Locale
+resolution, exact public input dispatch, bound formatting, ranges and standard
+builtin integration remain open; this is not a complete NumberFormat pass.
 
 ```sh
 pnpm exec tsc -p runtime/ecmascript/tsconfig.json
@@ -215,8 +245,9 @@ iterator implements the standard `IterableIterator` contract with the corrected
 match result. It cannot honestly claim the whole `RegExp` interface yet: its
 host prototype compatibility widens flag getters and `lastIndex`, while capture
 result typing differs from the pinned library. `NumberFormatter` is a typed
-provider integration helper; it lacks standard constructor/options resolution,
-BigInt/string dispatch, bound formatting and range APIs. Neither class gains
+provider integration helper; shared locale-independent option normalization
+now lives in `NumberFormatConfiguration`. The public API still lacks locale
+resolution, BigInt/string dispatch, bound formatting and range APIs. Neither class gains
 throwing stubs merely to satisfy a full `implements` declaration.
 
 Strict checking passed for the runtime source, C/JVM adapters, generated
@@ -261,7 +292,8 @@ remain useful. The public facades are the main architectural problem.
    typed matching buffers. Bind supported default paths to typed operations.
 5. In progress: public imports now have integration probes. Resolve canonical
    union and record-projection compiler gaps and validate C/JVM execution before
-   extending the API. Use original Test262 semantic cases; keep documented
+   advertising support for those public paths. Intl work can proceed through
+   its verified compiled provider path. Use original Test262 semantic cases; keep documented
    metaobject non-goals separate from missing supported behavior. Treat refused
    exports, timeouts and unvisited cases as incomplete validation even if the
    differential command exits successfully. Host pass counts are supplementary.
