@@ -1130,6 +1130,31 @@ static const NtsHandleCounting *nts_handle_counting(uint32_t tag) {
 }
 #endif
 
+void nts_template_reflection(NtsValue value) {
+  const NtsHeader *object = NTS_TAG_IS_MANAGED(nts_value_tag(value))
+                                ? nts_value_reference(value)
+                                : NULL;
+  if (object && object->descriptor->kind == NTS_KIND_ARRAY &&
+      (object->flags & NTS_ARRAY_IMMUTABLE)) {
+    fflush(stdout);
+    fputs("nts: refused at run time: reflecting on a cooked-only template "
+          "object\n",
+          stderr);
+    abort();
+  }
+}
+
+NtsArray *nts_array_writable(NtsArray *array) {
+  if (array && (array->header.flags & NTS_ARRAY_IMMUTABLE)) {
+    fflush(stdout);
+    fputs("nts: refused at run time: converting an immutable template object "
+          "to writable array storage\n",
+          stderr);
+    abort();
+  }
+  return array;
+}
+
 void nts_handle_check(uint32_t found, uint32_t wanted) {
   if (found == wanted || found == NTS_TAG_UNDEFINED || found == NTS_TAG_NULL) {
     return;

@@ -1178,6 +1178,7 @@ pub(crate) fn spell(ty: &super::HirType) -> String {
             format!("{}{bits}", if *signed { 'i' } else { 'u' })
         }
         HirType::Managed(ManagedType::String) => "str".to_owned(),
+        HirType::Managed(ManagedType::Template) => "template".to_owned(),
         HirType::Managed(ManagedType::Symbol) => "sym".to_owned(),
         HirType::Managed(ManagedType::Date) => "date".to_owned(),
         HirType::Managed(ManagedType::Buffer) => "buffer".to_owned(),

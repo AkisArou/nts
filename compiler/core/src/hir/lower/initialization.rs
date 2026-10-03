@@ -471,7 +471,7 @@ impl Summaries<'_, '_> {
     }
 
     fn call(&self, at: NodeId, kind: Option<u16>, into: &mut Vec<Event>) {
-        if matches!(kind, Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION))
+        if matches!(kind, Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION | syntax::TAGGED_TEMPLATE_EXPRESSION))
             || self.probe.reads_an_accessor(at)
         {
             let mut bodies = raising_callees_of(self.probe.snapshot, self.probe, at);

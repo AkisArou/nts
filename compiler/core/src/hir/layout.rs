@@ -67,6 +67,9 @@ pub const HEADER: Shape = Shape {
 /// backend so clang checks it against the macro.
 pub const IMMORTAL: u64 = u32::MAX as u64;
 
+/// Array-only immutability flag, checked against the native header by C.
+pub const TEMPLATE_IMMUTABLE: u32 = 1 << 6;
+
 /// Where `NtsHeader::length` sits, in bytes from the object's address.
 ///
 /// The header is a descriptor pointer, the provider's word, `flags` and
@@ -126,6 +129,7 @@ pub fn shape_of(ty: &HirType) -> Option<Shape> {
             | ManagedType::DataView
             | ManagedType::Object(_)
             | ManagedType::Array(_)
+            | ManagedType::Template
             | ManagedType::Promise(_)
             | ManagedType::Map(_, _)
             // The same pointer to the same `NtsMap`. This is the arm the

@@ -55,6 +55,8 @@ pub const VALUE_DESCRIPTOR: &str = "Lnts/rt/NtsValue;";
 
 /// `java.lang.String`, the JVM's name for it.
 pub const STRING: &str = "java/lang/String";
+pub const TEMPLATE: &str = "nts/rt/NtsTemplate";
+pub const TEMPLATE_DESCRIPTOR: &str = "Lnts/rt/NtsTemplate;";
 pub const STRING_DESCRIPTOR: &str = "Ljava/lang/String;";
 
 /// The binary name of the class one layout becomes.
@@ -695,6 +697,7 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
         // in the type for the *compiler*, to choose which `fulfill` to emit and
         // how to read the value back. Not a monomorphization.
         HirType::Managed(ManagedType::Promise(_)) => PROMISE_DESCRIPTOR.to_owned(),
+        HirType::Managed(ManagedType::Template) => TEMPLATE_DESCRIPTOR.to_owned(),
         // A bare JVM array, which is what a Java programmer writes and what the
         // hand-written reference will use. `arraylength` is one instruction,
         // the bounds check is mandatory *and* eliminated in a counted loop, and
@@ -789,6 +792,7 @@ pub fn kind(ty: &HirType) -> Option<Kind> {
         | HirType::Managed(
             ManagedType::Object(_)
             | ManagedType::String
+            | ManagedType::Template
             | ManagedType::Symbol
             | ManagedType::Date
             | ManagedType::Buffer
@@ -845,6 +849,7 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
             HirType::Managed(ManagedType::Set(_)) => VType::Object(SET.to_owned()),
             HirType::Managed(ManagedType::Promise(_)) => VType::Object(PROMISE.to_owned()),
             HirType::Managed(ManagedType::String) => VType::Object(STRING.to_owned()),
+            HirType::Managed(ManagedType::Template) => VType::Object(TEMPLATE.to_owned()),
             // An array's *class* constant is named by its descriptor rather
             // than by an internal name: `[D`, not `D` and not `L[D;`. That is
             // true of a **bare** array only -- a growable one is an ordinary
@@ -917,6 +922,7 @@ pub fn describe(ty: &HirType) -> String {
         HirType::BigInt => "a bigint".to_owned(),
         HirType::Erased => "an erased value".to_owned(),
         HirType::Managed(ManagedType::String) => "a string".to_owned(),
+        HirType::Managed(ManagedType::Template) => "an immutable template object".to_owned(),
         HirType::Managed(ManagedType::Symbol) => "a symbol".to_owned(),
         HirType::Managed(ManagedType::Date) => "a date".to_owned(),
         HirType::Managed(ManagedType::Buffer) => "an array buffer".to_owned(),

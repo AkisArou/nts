@@ -1,47 +1,11 @@
-// `` tag`a${x}b` ``, which is `tag(["a", "b"], x)`.
+// A tagged template supplies one immutable cooked object followed by its
+// substitutions, evaluated once from left to right. The object is cached by
+// source site and shared across copies of the containing function.
 //
-// A tagged template is a **call**, and the specification says what its
-// arguments are: an array of the literal pieces first, then one argument per
-// substitution in source order. So the lowering builds the array, lowers the
-// substitutions left to right — which is observable, since one of them may call
-// something — and hands both to the tag.
-//
-// # Two things were missing and only one of them was the expression
-//
-// `TemplateStringsArray` had no representation. lib.d.ts declares it as a
-// `ReadonlyArray<string>` with a `raw` beside it, and `readonly string[]`
-// already represented — so the interface was decomposed at the library boundary
-// and came back with nothing, and a tag's *parameter* refused before the
-// expression was ever reached. It represents as `string[]` now, which is what a
-// tag receives and indexes.
-//
-// **`raw` is deliberately not there.** It is the un-cooked text — `\n` as two
-// characters rather than one — a second string list this compiler does not
-// build, so reading it refuses as an ordinary member of an array rather than
-// answering the cooked strings to a program that asked for the raw ones.
-//
-// # What is still refused, and why each is its own sentence
-//
-//     a tag that is not a plain declared function
-//     a tag that takes a rest parameter
-//
-// The first is a call-path question: `lower_call` resolves a callee through
-// qualified names, generic suffixes, static and method dispatch, closures and
-// imports, and duplicating any of that here would be a second derivation of
-// "which function is this". The second is the spread machinery — a rest takes
-// the substitutions as one array, so handing them over positionally is the
-// wrong number of arguments, which the verifier caught as
-// `CallArgumentCount { expected: 2, found: 3 }`.
-//
-// # The array's identity is not interned, and that is observable
-//
-// The specification interns the template object per call *site*: the same tag
-// called twice in a loop receives the identical array, and `strings ===
-// strings` across two calls is `true`. This rebuilds it per evaluation, so a
-// tag memoising on the array's identity would miss every time. It is written
-// down rather than hidden because it is the one observable difference, and the
-// fix is an interned per-site constant rather than anything about this
-// lowering — no arm below can see it, which is exactly why it is here.
+// Tagged calls use the ordinary argument convention, including defaults,
+// excess arguments and rest packing. The larger identity witness is beside
+// this example. Tags currently use plain declared functions; raw-string access,
+// invalid cooked entries and writable template casts remain named boundaries.
 
 function pieces(strings: TemplateStringsArray): number {
   return strings.length * 100 + strings[0].length;

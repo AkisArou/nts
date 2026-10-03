@@ -1518,8 +1518,10 @@ impl SemanticSource for TsgoApi {
     /// two commands that ask the same thing still share an entry -- which is the
     /// point of the cache.
     fn identity(&self) -> String {
+        // v2 resolves tagged calls and retains undefined cooked template
+        // entries. Older decoded snapshots cannot answer those questions.
         let asked = format!(
-            "asks:{}{}{}",
+            "api-v2:asks:{}{}{}",
             self.decompose.as_ref().map_or_else(|| "-".to_owned(), |b| format!("d{}", b.per_seed)),
             self.resolve_calls.as_ref().map_or_else(|| "-".to_owned(), |b| format!("c{}", b.per_seed)),
             self.fold_constants.as_ref().map_or_else(|| "-".to_owned(), |b| format!("k{}", b.per_seed)),

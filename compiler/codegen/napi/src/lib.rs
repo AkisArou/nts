@@ -239,6 +239,8 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
         // meaning the other side cannot reproduce -- `Symbol.for` on the far
         // side is a different registry. Refused rather than marshalled.
         HirType::Managed(ManagedType::Symbol) => None,
+        // A copied JS array would lose source-site identity and immutability.
+        HirType::Managed(ManagedType::Template) => None,
         // A `Date` crossing the boundary would have to become a JavaScript
         // `Date`, which is a construction on the other side rather than a
         // handle to this one. Refused rather than marshalled as its number.
@@ -368,6 +370,7 @@ fn spell(ty: &HirType) -> String {
         HirType::Int { bits, signed } => format!("{}{bits}", if *signed { 'i' } else { 'u' }),
         HirType::Float { bits } => format!("f{bits}"),
         HirType::Managed(ManagedType::String) => "string".to_owned(),
+        HirType::Managed(ManagedType::Template) => "an immutable template object".to_owned(),
         HirType::Managed(ManagedType::Symbol) => "symbol".to_owned(),
         HirType::Managed(ManagedType::Date) => "Date".to_owned(),
         HirType::Managed(ManagedType::Buffer) => "ArrayBuffer".to_owned(),
@@ -424,7 +427,7 @@ fn c_type(ty: &HirType, layouts: &[hir::Layout]) -> String {
         HirType::Managed(ManagedType::Buffer) => "NtsBuffer *".to_owned(),
         HirType::Managed(ManagedType::View(_) | ManagedType::AnyView) => "NtsView *".to_owned(),
         HirType::Managed(ManagedType::DataView) => "NtsDataView *".to_owned(),
-        HirType::Managed(ManagedType::Array(_)) => "NtsArray *".to_owned(),
+        HirType::Managed(ManagedType::Array(_) | ManagedType::Template) => "NtsArray *".to_owned(),
         // The fixed runtime layout, not a generated struct: the payload's
         // representation is in the type for the compiler's benefit, and the C
         // sees one tagged union whatever it carries.

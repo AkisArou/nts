@@ -1380,6 +1380,7 @@ fn costs_nothing(
         | OpKind::ConstUndefined
         | OpKind::ObjectNew { frame: true }
         | OpKind::ConstString(_)
+        | OpKind::ConstTemplate { .. }
         | OpKind::ClosureStatic
         | OpKind::Call { frame: Some(_), .. } => true,
         OpKind::FieldGet { object, field, .. } => inert.contains(&(*object, *field)),
@@ -1993,6 +1994,7 @@ fn counted_here(func: &Func, layouts: &[Layout], value: ValueId) -> bool {
         // were counted in `string-build` -- one release an iteration, for
         // storage that was never allocated.
         OpKind::ConstString(_)
+        | OpKind::ConstTemplate { .. }
         | OpKind::ConstNull
         | OpKind::ConstUndefined
         | OpKind::ClosureStatic
@@ -2083,6 +2085,7 @@ fn quiet(kind: &OpKind) -> bool {
         | OpKind::ConstFloat(_)
         | OpKind::ConstBool(_)
         | OpKind::ConstString(_)
+        | OpKind::ConstTemplate { .. }
         | OpKind::ConstNull
         | OpKind::ConstUndefined
         | OpKind::ClosureStatic
@@ -2755,6 +2758,8 @@ fn consuming(func: &Func, layouts: &[Layout]) -> rustc_hash::FxHashSet<u32> {
 /// the count goes the other way -- see `nts_map_same` and `nts_array_same`,
 /// which is where the retain used to be and why.
 const RUNTIME_HANDS_BACK: &[&str] = &[
+    // A guard returns the original array without retaining it.
+    "nts_array_writable",
     "nts_array_fill",
     "nts_array_fill_bool",
     "nts_array_fill_ref",

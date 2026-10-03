@@ -222,21 +222,9 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
     // layout at a time. `LambdaMetafactory` is wrong here for a reason no
     // API level reaches: it does not promise one instance. The floor is 29 and
     // would run an `invoke-custom` happily; identity is what rules it out.
-    let singletons = closure_singletons(package, program);
-    for (field, class) in &singletons {
-        builder.field(access::PRIVATE | access::STATIC | access::FINAL, field.clone(), format!("L{class};"));
-    }
-    let erased = erased_closures(package, program);
-    for (field, _) in &erased {
-        builder.field(
-            access::PRIVATE | access::STATIC | access::FINAL,
-            field.clone(),
-            types::VALUE_DESCRIPTOR.to_owned(),
-        );
-    }
-
-    if let Some(body) = class_initializer(package, program, &singletons, &erased, &mut pool) {
-        builder.method(access::STATIC, "<clinit>", "()V", Some(body));
+    if let Err(error) = initialize_statics(package, program, &mut builder, &mut pool) {
+        diagnostics.push(error);
+        return Emitted { classes: Vec::new(), diagnostics };
     }
     if let Err(error) = builder.default_constructor(&program_origin(program), &mut pool) {
         diagnostics.push(Diagnostic::error(
@@ -250,6 +238,7 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
 
     // through it are widened together or not at all. See `widen`.
 
+    let templates = nts_core::hir::templates::present(program);
     let plan = widen::plan(package, program);
     let mut declined: Vec<(&nts_core::hir::Func, Diagnostic)> = Vec::new();
 
@@ -269,7 +258,7 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
         if func.abstract_declaration {
             continue;
         }
-        match render(package, program, func, &plan, &mut pool) {
+        match render(package, program, func, &plan, &mut pool, templates) {
             Ok((name, signature, rendered)) => {
                 // **Synthetic exactly when an instance method replaces it.**
                 //
@@ -1146,8 +1135,9 @@ fn render(
     func: &nts_core::hir::Func,
     plan: &widen::Plan,
     pool: &mut Pool,
+    templates: bool,
 ) -> Result<(String, String, nts_jvm_emitter::Body), Diagnostic> {
-    let emitter = body::Emitter::new(package, program, func, plan)?;
+    let emitter = body::Emitter::new(package, program, func, plan, templates)?;
     let signature = body::signature(package, program, func)
         .ok_or_else(|| body::refuse(func, "a signature with no representation"))?;
     let rendered = emitter.emit(pool)?;
@@ -2647,39 +2637,99 @@ fn closure_singletons(package: &str, program: &Program) -> Vec<(String, String)>
     found.into_iter().map(|class| (closure_field(&class), class)).collect()
 }
 
-/// `<clinit>`, where a global that starts as something other than zero is set.
-///
-/// The JVM zeroes a static field, so a global whose initial value is zero needs
-/// nothing -- which is most of them, and is why this returns `None` rather than
-/// an empty method for a program with no interesting initializers.
+/// Declare and initialize source-site caches and closure singletons.
+fn initialize_statics(
+    package: &str,
+    program: &Program,
+    builder: &mut ClassBuilder,
+    pool: &mut Pool,
+) -> Result<(), Diagnostic> {
+    let singletons = closure_singletons(package, program);
+    for (field, class) in &singletons {
+        builder.field(
+            access::PRIVATE | access::STATIC | access::FINAL,
+            field.clone(),
+            format!("L{class};"),
+        );
+    }
+    let erased = erased_closures(package, program);
+    for (field, _) in &erased {
+        builder.field(
+            access::PRIVATE | access::STATIC | access::FINAL,
+            field.clone(),
+            types::VALUE_DESCRIPTOR.to_owned(),
+        );
+    }
+
+    for object in nts_core::hir::templates::objects(program) {
+        builder.field(
+            access::PRIVATE | access::STATIC | access::FINAL,
+            template_field(object.site),
+            types::TEMPLATE_DESCRIPTOR.to_owned(),
+        );
+    }
+    if let Some(body) = class_initializer(package, program, &singletons, &erased, pool)? {
+        builder.method(access::STATIC, "<clinit>", "()V", Some(body));
+    }
+    Ok(())
+}
+
+pub(crate) fn template_field(site: u32) -> String { format!("template${site}") }
+
+/// `<clinit>` for nonzero globals and immutable singleton caches.
+/// No method is needed where Java's zeroed static storage suffices.
 fn class_initializer(
     package: &str,
     program: &Program,
     singletons: &[(String, String)],
     erased: &[(String, String)],
     pool: &mut Pool,
-) -> Option<nts_jvm_emitter::Body> {
+) -> Result<Option<nts_jvm_emitter::Body>, Diagnostic> {
     let interesting: Vec<_> = program
         .globals
         .iter()
-        .filter(|global| global.initial != 0.0 && types::descriptor(types::Shape::packaged(program, package), &global.ty).is_some())
+        .filter(|global| {
+            global.initial != 0.0
+                && types::descriptor(types::Shape::packaged(program, package), &global.ty).is_some()
+        })
         .collect();
-    if interesting.is_empty() && singletons.is_empty() && erased.is_empty() {
-        return None;
+    if interesting.is_empty()
+        && singletons.is_empty()
+        && erased.is_empty()
+        && nts_core::hir::templates::objects(program).is_empty()
+    {
+        return Ok(None);
     }
     let mut code = Code::new(Vec::<VType>::new(), 0);
     let origin = program_origin(program);
+    initialize_templates(package, program, pool, &mut code)?;
     for (field, class) in singletons {
         code.new_object(&origin, pool, class);
         code.dup(&origin);
         code.invoke_special(&origin, pool, class, "<init>", "()V");
-        code.put_static(&origin, pool, &body::program_class(package), field, &format!("L{class};"));
+        code.put_static(
+            &origin,
+            pool,
+            &body::program_class(package),
+            field,
+            &format!("L{class};"),
+        );
     }
     // After the instances they wrap, and in the same method, so an erased form
     // cannot be read before the closure it names exists.
     for (field, class) in erased {
-        code.const_int(&origin, pool, i32::try_from(nts_core::hir::tags::FUNCTION).unwrap_or(0));
-        code.get_static(&origin, pool, &body::program_class(package), &closure_field(class), &format!("L{class};"));
+        code.const_int(
+            &origin,
+            pool,
+            i32::try_from(nts_core::hir::tags::FUNCTION).unwrap_or(0),
+        );
+        code.get_static(
+            &origin,
+            pool,
+            &body::program_class(package),
+            &closure_field(class),
+            &format!("L{class};"),
+        );
         code.invoke_static(
             &origin,
             pool,
@@ -2687,12 +2737,21 @@ fn class_initializer(
             "ofTagged",
             "(ILjava/lang/Object;)Lnts/rt/NtsValue;",
         );
-        code.put_static(&origin, pool, &body::program_class(package), field, types::VALUE_DESCRIPTOR);
+        code.put_static(
+            &origin,
+            pool,
+            &body::program_class(package),
+            field,
+            types::VALUE_DESCRIPTOR,
+        );
     }
     for global in interesting {
         let origin = global.origin.clone();
-        let descriptor = types::descriptor(types::Shape::packaged(program, package), &global.ty)?;
-        match types::kind(&global.ty)? {
+        let descriptor = types::descriptor(types::Shape::packaged(program, package), &global.ty)
+            .ok_or_else(|| initializer_refusal(program, "an unrepresentable global initializer"))?;
+        match types::kind(&global.ty)
+            .ok_or_else(|| initializer_refusal(program, "an unrepresentable global initializer"))?
+        {
             Kind::Double => code.const_double(&origin, pool, global.initial),
             #[allow(
                 clippy::cast_possible_truncation,
@@ -2710,11 +2769,80 @@ fn class_initializer(
             )]
             _ => code.const_int(&origin, pool, global.initial as i32),
         }
-        code.put_static(&origin, pool, &body::program_class(package), &body::method_name(&global.name), &descriptor);
+        code.put_static(
+            &origin,
+            pool,
+            &body::program_class(package),
+            &body::method_name(&global.name),
+            &descriptor,
+        );
     }
     let origin = program_origin(program);
     code.ret(&origin, None);
-    code.finish(pool).ok()
+    code.finish(pool)
+        .map(Some)
+        .map_err(|error| initializer_refusal(program, &error.to_string()))
+}
+
+/// Build each template once, without exposing its writable construction array.
+fn initialize_templates(
+    package: &str,
+    program: &Program,
+    pool: &mut Pool,
+    code: &mut Code,
+) -> Result<(), Diagnostic> {
+    for object in nts_core::hir::templates::objects(program) {
+        let origin = object.origin;
+        code.const_int(
+            origin,
+            pool,
+            i32::try_from(object.cooked.len())
+                .map_err(|_| initializer_refusal(program, "a template past the JVM array limit"))?,
+        );
+        code.new_array(origin, pool, "Ljava/lang/String;");
+        for (index, text) in object.cooked.iter().enumerate() {
+            if Pool::utf8_length(text) > 65_535 {
+                return Err(Diagnostic::error(
+                    "NTS4003",
+                    "a template string past the JVM's 65,535-byte constant limit",
+                    object.origin.location,
+                ));
+            }
+            code.dup(origin);
+            code.const_int(
+                origin,
+                pool,
+                i32::try_from(index).map_err(|_| {
+                    initializer_refusal(program, "a template past the JVM array limit")
+                })?,
+            );
+            code.const_string(origin, pool, text);
+            code.array_store(origin, "Ljava/lang/String;");
+        }
+        code.invoke_static(
+            origin,
+            pool,
+            types::TEMPLATE,
+            "of",
+            "([Ljava/lang/String;)Lnts/rt/NtsTemplate;",
+        );
+        code.put_static(
+            origin,
+            pool,
+            &body::program_class(package),
+            &template_field(object.site),
+            types::TEMPLATE_DESCRIPTOR,
+        );
+    }
+    Ok(())
+}
+
+fn initializer_refusal(program: &Program, detail: &str) -> Diagnostic {
+    Diagnostic::error(
+        "NTS4003",
+        format!("the generated class initializer could not be written: {detail}"),
+        program_origin(program).location,
+    )
 }
 
 fn program_origin(program: &Program) -> nts_semantic_schema::Origin {

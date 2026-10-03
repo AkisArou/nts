@@ -2393,6 +2393,7 @@ fn render(ty: &HirType) -> String {
         HirType::Int { bits, signed } => format!("{}{bits}", if *signed { 'i' } else { 'u' }),
         HirType::Float { bits } => format!("f{bits}"),
         HirType::Managed(ManagedType::String) => "managed<str>".to_owned(),
+        HirType::Managed(ManagedType::Template) => "managed<template>".to_owned(),
         HirType::Managed(ManagedType::Symbol) => "managed<sym>".to_owned(),
         HirType::Managed(ManagedType::Date) => "managed<date>".to_owned(),
         HirType::Managed(ManagedType::Buffer) => "managed<buffer>".to_owned(),
@@ -2522,6 +2523,7 @@ fn render_constant(index: usize, ty: &str, kind: &OpKind) -> String {
         OpKind::ConstFloat(v) => v.to_string(),
         OpKind::ConstBool(v) => v.to_string(),
         OpKind::ConstString(v) => format!("{v:?}"),
+        OpKind::ConstTemplate { site, cooked } => format!("template#{site} {cooked:?}"),
         OpKind::ConstNull => "null".to_owned(),
         OpKind::ConstUndefined => "undefined".to_owned(),
         // A constant with an address: the one instance of a named function's
@@ -2708,6 +2710,7 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         | OpKind::ConstFloat(_)
         | OpKind::ConstBool(_)
         | OpKind::ConstString(_)
+        | OpKind::ConstTemplate { .. }
         | OpKind::ConstNull
         | OpKind::ConstUndefined
         | OpKind::ClosureStatic => render_constant(index, &ty, &op.kind),

@@ -1835,6 +1835,7 @@ impl Type {
                 ManagedType::String => "NtsString *",
                 ManagedType::Object(_) => "NtsHeader *",
                 ManagedType::Array(_) => "NtsArray *",
+                ManagedType::Template => "const NtsArray *",
                 ManagedType::Promise(_) => "NtsPromise *",
                 ManagedType::Map(..) | ManagedType::Table(..) | ManagedType::Set(_) => "NtsMap *",
                 ManagedType::Date => "NtsDate *",

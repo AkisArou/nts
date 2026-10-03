@@ -15,7 +15,7 @@
 
 use rustc_hash::FxHashSet;
 
-use super::{BlockId, Func, OpKind, Terminator, ValueId};
+use super::{BlockId, Func, HirType, ManagedType, Op, OpKind, Terminator, ValueId};
 
 /// Drop operations whose results nothing reads, and report how many.
 pub fn eliminate(func: &mut Func) -> usize {
@@ -28,7 +28,7 @@ pub fn eliminate(func: &mut Func) -> usize {
             live.insert(operand);
         }
         for value in &block.ops {
-            if has_effects(&func.values[value.0 as usize].kind) {
+            if has_effects(&func.values[value.0 as usize], &func.values) {
                 live.insert(*value);
             }
         }
@@ -101,8 +101,14 @@ const PURE_RUNTIME_CALLS: &[&str] = &["nts_tag_name"];
 // they would be a list rather than a set of decisions, and the next operation
 // to arrive would join the list instead of being thought about.
 #[allow(clippy::match_same_arms)]
-fn has_effects(kind: &OpKind) -> bool {
-    match kind {
+fn has_effects(op: &Op, values: &[Op]) -> bool {
+    match &op.kind {
+        // Cooked-only reads cannot return undefined. The checked read is the
+        // runtime boundary, even when a type-based comparison drops its result.
+        // A bounds proof makes it unchecked and therefore removable again.
+        OpKind::ArrayGet { array, checked, .. } => {
+            *checked && values[array.0 as usize].ty == HirType::Managed(ManagedType::Template)
+        }
         // A copy writes memory, which is the whole of what it does: nothing
         // reads its result, so without this it would be dropped as unused.
         OpKind::NativeMalloc { .. } | OpKind::NativeFree { .. } | OpKind::NativeCopy { .. } => true,
@@ -182,6 +188,7 @@ fn has_effects(kind: &OpKind) -> bool {
         | OpKind::ConstFloat(_)
         | OpKind::ConstBool(_)
         | OpKind::ConstString(_)
+        | OpKind::ConstTemplate { .. }
         | OpKind::ConstNull
         | OpKind::ConstUndefined
         | OpKind::ClosureStatic
@@ -197,7 +204,6 @@ fn has_effects(kind: &OpKind) -> bool {
         | OpKind::NativeIndexAddress { .. }
         | OpKind::NativeFieldAddress { .. }
         | OpKind::NativeBitLoad { .. }
-        | OpKind::ArrayGet { .. }
         | OpKind::StringUnitAt { .. } => false,
     }
 }

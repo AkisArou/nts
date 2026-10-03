@@ -311,7 +311,7 @@ fn c_type(ty: &HirType) -> String {
         // Neither is drivable -- `drivable` gates what reaches here -- but a
         // wrong *spelling* would be a wrong C declaration rather than a
         // refusal, so they are named rather than defaulted.
-        HirType::Managed(nts_core::hir::ManagedType::Array(_)) => "NtsArray *",
+        HirType::Managed(nts_core::hir::ManagedType::Array(_) | nts_core::hir::ManagedType::Template) => "NtsArray *",
         HirType::Managed(nts_core::hir::ManagedType::Object(_)) => "void *",
         HirType::Void | HirType::Never => "void",
     }.to_owned()

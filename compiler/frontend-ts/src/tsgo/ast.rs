@@ -361,6 +361,13 @@ fn decode_nodes(
             if let Some(bytes) = extended.get(at..at + 4) {
                 let index = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
                 text = strings.get(index, node_index).ok();
+                let flags_at = at + if raw.kind == u32::from(nts_semantic_schema::syntax::NO_SUBSTITUTION_TEMPLATE_LITERAL) { 4 } else { 8 };
+                if let Some(flags) = extended.get(flags_at..flags_at + 4) {
+                    let flags = u32::from_le_bytes([flags[0], flags[1], flags[2], flags[3]]);
+                    // tsgo's ContainsInvalidEscape. Such a tagged token has an
+                    // undefined cooked entry, not the scanner's recovery text.
+                    if flags & (1 << 11) != 0 { text = None; }
+                }
             }
         }
 

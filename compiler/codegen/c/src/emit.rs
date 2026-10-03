@@ -480,6 +480,7 @@ struct Context<'a> {
     /// The target's C ABI, which decides every size and offset emitted.
     abi: NativeAbi,
     literals: &'a [String],
+    templates: bool,
     /// Values something in this function reads.
     ///
     /// A call whose result nobody wants still has to happen, so dead-code
@@ -913,18 +914,7 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     // and a static nothing reads is an error under `-Wunused-const-variable`,
     // which is the setting that makes a warning from generated code a compiler
     // bug rather than a style preference.
-    let mut literals: Vec<String> = Vec::new();
-    for func in &program.funcs {
-        for block in &func.blocks {
-            for value in &block.ops {
-                if let OpKind::ConstString(text) = &func.values[value.0 as usize].kind
-                    && !literals.contains(text)
-                {
-                    literals.push(text.clone());
-                }
-            }
-        }
-    }
+    let literals = literal_table(program);
 
     let mut bodies = emit_bodies(program, abi, &literals, &mut diagnostics, &mut refused);
     drop_orphaned_bodies(program, &mut bodies, &mut diagnostics, &mut refused);
@@ -1015,6 +1005,7 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     emit_object_descriptors(&mut writer, &origin, program, &defined, &mut diagnostics);
     emit_descriptors(&mut writer, &origin, &descriptors);
     emit_literals(&mut writer, &origin, &literals);
+    emit_templates(&mut writer, program, &literals);
     if let Err(diagnostic) = emit_globals(&mut writer, program) {
         diagnostics.push(diagnostic);
     }
@@ -1513,6 +1504,7 @@ fn emit_bodies<'a>(
     refused: &mut Vec<String>,
 ) -> Vec<(String, CodeWriter, &'a Func)> {
     let mut bodies = Vec::new();
+    let templates = nts_core::hir::templates::present(program);
     for func in &program.funcs {
         // An `abstract` method is a signature and no body. It is in `funcs` so
         // that a call through the slot can take its function-pointer type from
@@ -1529,6 +1521,7 @@ fn emit_bodies<'a>(
             program,
             abi,
             literals,
+            templates,
             read: values_read(func),
         };
         match emit_func(&mut body, func, &context) {
@@ -2697,6 +2690,26 @@ fn float_literal(value: f64) -> String {
     format!("{value:?}")
 }
 
+fn literal_table(program: &Program) -> Vec<String> {
+    let mut literals: Vec<String> = Vec::new();
+    for func in &program.funcs {
+        for block in &func.blocks {
+            for value in &block.ops {
+                let texts: &[String] = match &func.values[value.0 as usize].kind {
+                    OpKind::ConstString(text) => std::slice::from_ref(text),
+                    OpKind::ConstTemplate { cooked, .. } => cooked,
+                    _ => &[],
+                };
+                for text in texts {
+                    if !literals.contains(text) { literals.push(text.clone()); }
+                }
+            }
+        }
+    }
+
+    literals
+}
+
 /// String literals, as static data.
 ///
 /// Emitted as numeric code units rather than as C string literals: a C literal
@@ -2733,6 +2746,21 @@ fn emit_literals(writer: &mut CodeWriter, origin: &Origin, literals: &[String]) 
     }
     if !literals.is_empty() {
         writer.blank(origin);
+    }
+}
+
+/// Immutable arrays are static data. Their identity is the source site rather
+/// than their contents; ordinary arrays retain their existing storage and ABI.
+fn emit_templates(writer: &mut CodeWriter, program: &Program, literals: &[String]) {
+    for object in nts_core::hir::templates::objects(program) {
+        let site = object.site;
+        let pieces: Vec<String> = object.cooked.iter().map(|text|
+            format!("(NtsString *)(void *)&{}", literal_name(literals, text))).collect();
+        writer.line(object.origin, format!(
+            "static NtsString *const nts_template_{site}_items[] = {{ {} }};", pieces.join(", ")));
+        writer.line(object.origin, format!(
+            "static const NtsArray nts_template_{site} = {{ {{ &nts_desc_ref, NTS_IMMORTAL, NTS_ARRAY_IMMUTABLE, {} }}, {}, (void *)nts_template_{site}_items, {{ 0, 0 }} }};",
+            pieces.len(), pieces.len()));
     }
 }
 
@@ -2835,6 +2863,11 @@ fn emit_object_types(
             "_Static_assert(NTS_IMMORTAL == {}u, \"NTS_IMMORTAL is not what nts writes\");",
             nts_core::hir::layout::IMMORTAL
         ),
+    );
+    writer.line(
+        origin,
+        format!("_Static_assert(NTS_ARRAY_IMMUTABLE == {}u, \"template immutability flag differs\");",
+            nts_core::hir::layout::TEMPLATE_IMMUTABLE),
     );
     for layout in &program.layouts {
         // A property name C cannot spell, which stops the *whole* struct.
@@ -3716,6 +3749,7 @@ fn length_expression(ty: &HirType, value: ValueId) -> String {
         }
         HirType::Managed(
             ManagedType::Array(_)
+                | ManagedType::Template
                 | ManagedType::Map(_, _)
                 | ManagedType::Table(_, _)
                 | ManagedType::Set(_),
@@ -3734,6 +3768,7 @@ fn length_expression(ty: &HirType, value: ValueId) -> String {
 /// types can differ and share a spelling only by accident.
 fn element_declared(array: &HirType) -> Option<HirType> {
     match array {
+        HirType::Managed(ManagedType::Template) => Some(HirType::Managed(ManagedType::String)),
         HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)) => {
             Some((**element).clone())
         }
@@ -3742,22 +3777,11 @@ fn element_declared(array: &HirType) -> Option<HirType> {
 }
 
 fn element_type(program: &Program, array: &HirType, origin: &Origin) -> Result<String, Diagnostic> {
-    let HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)) = array else {
-        return Err(Diagnostic::error(
-            "NTS2005",
-            "an array operation on something that is not an array",
-            origin.location,
-        ));
-    };
-    c_type_of(program, element, origin)
+    let element = element_declared(array).ok_or_else(|| Diagnostic::error(
+        "NTS2005", "an array operation on something that is not an array", origin.location))?;
+    c_type_of(program, &element, origin)
 }
 
-/// The descriptor an array's elements use.
-///
-/// Every reference is the same shape -- a pointer -- so arrays of references
-/// share one descriptor. A descriptor describes the element's *shape*, not what
-/// it points at, and emitting one per pointed-to type would be as many copies
-/// of the same three numbers.
 fn element_descriptor(array: &HirType, origin: &Origin) -> Result<String, Diagnostic> {
     let HirType::Managed(ManagedType::Array(element)) = array else {
         return Err(Diagnostic::error(
@@ -3975,7 +3999,12 @@ fn erased_conversion(
                 }
                 "reference" => {
                     let ty = c_type_of(context.program, &op.ty, &op.origin)?;
-                    format!("({ty})nts_value_reference({})", value_name(*value))
+                    let reference = format!("nts_value_reference({})", value_name(*value));
+                    if context.templates && matches!(op.ty, HirType::Managed(ManagedType::Array(_))) {
+                        format!("({ty})nts_array_writable((NtsArray *){reference})")
+                    } else {
+                        format!("({ty}){reference}")
+                    }
                 }
                 "boolean" => format!("nts_value_boolean({})", value_name(*value)),
                 _ => format!("nts_value_number({})", value_name(*value)),
@@ -4029,6 +4058,7 @@ fn erased_tag(ty: &HirType) -> Option<(&'static str, &'static str)> {
         HirType::Managed(
             ManagedType::Object(_)
             | ManagedType::Array(_)
+            | ManagedType::Template
             | ManagedType::View(_)
             // And a view whose element the declaration did not name, which is
             // the same runtime object with the same tag. Leaving it out would
@@ -4132,6 +4162,7 @@ fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
         // it from the HIR and spelling it here would need a struct per element
         // type for no benefit.
         HirType::Managed(ManagedType::Array(_)) => "NtsArray *",
+        HirType::Managed(ManagedType::Template) => "const NtsArray *",
         HirType::Managed(ManagedType::String) => "NtsString *",
         HirType::Managed(ManagedType::Symbol) => "NtsSymbol *",
         HirType::Managed(ManagedType::Date) => "NtsDate *",
@@ -4264,7 +4295,7 @@ fn emit_body(
     // nothing to declare. `c.advance();` written for its effect is exactly that,
     // and a local assigned by nobody is `-Wunused-variable`.
     declared.retain(|value| {
-        read.contains(value) || !matches!(func.values[value.0 as usize].kind, OpKind::ClosureStatic | OpKind::Call { .. } | OpKind::NativeMalloc { .. })
+        read.contains(value) || !matches!(func.values[value.0 as usize].kind, OpKind::ClosureStatic | OpKind::Call { .. } | OpKind::NativeMalloc { .. } | OpKind::ArrayGet { .. })
     });
 
     // A parameter nothing reads is an error under -Werror, and constant folding
@@ -4946,6 +4977,26 @@ fn suspension(op: &nts_core::hir::Op) -> Result<String, Diagnostic> {
     }
 }
 
+/// A checked read can survive solely for its bounds refusal.
+fn array_read(
+    func: &Func,
+    value: ValueId,
+    (array, index, checked): (ValueId, ValueId, bool),
+    context: &Context<'_>,
+) -> Result<String, Diagnostic> {
+    let op = &func.values[value.0 as usize];
+    let source = &func.values[array.0 as usize].ty;
+    let element = element_type(context.program, source, &op.origin)?;
+    let slot = index_expression(func, array, index, checked);
+    let items = items_macro(source);
+    let read = format!("{items}({}, {element})[{slot}]", value_name(array));
+    Ok(if context.read.contains(&value) {
+        format!("{} = {read};", value_name(value))
+    } else {
+        format!("(void){read};")
+    })
+}
+
 fn memory_op(
     writer: &mut CodeWriter,
     func: &Func,
@@ -5016,27 +5067,8 @@ fn memory_op(
                 length_expression(&func.values[array.0 as usize].ty, *array)
             )
         }
-        OpKind::ArrayGet {
-            array,
-            index,
-            checked,
-        } => {
-            let element = element_type(
-                context.program,
-                &func.values[array.0 as usize].ty,
-                &op.origin,
-            )?;
-            let slot = index_expression(func, *array, *index, *checked);
-            // A view's elements are not inline, so they are addressed through
-            // the buffer it names. Same operation, different storage -- which
-            // is the whole reason `ArrayGet` takes both rather than there
-            // being a second opcode.
-            let items = items_macro(&func.values[array.0 as usize].ty);
-            format!(
-                "{name} = {items}({}, {element})[{slot}];",
-                value_name(*array)
-            )
-        }
+        OpKind::ArrayGet { array, index, checked } =>
+            array_read(func, value, (*array, *index, *checked), context)?,
         OpKind::ArraySet {
             array,
             index,
@@ -5256,6 +5288,7 @@ fn emit_op(
             let literal = literal_name(context.literals, text);
             format!("{name} = (NtsString *)(void *)&{literal};")
         }
+        OpKind::ConstTemplate { site, .. } => format!("{name} = (NtsArray *)(void *)&nts_template_{site};"),
         OpKind::Binary { op: bin, lhs, rhs } => binary_text(func, op, &name, *bin, *lhs, *rhs),
         OpKind::Call { callee, args, .. } => {
             call_text(func, &name, value, callee, args, context, &op.origin)?
@@ -5332,7 +5365,13 @@ fn emit_op(
                 HirType::NativePointer(pointee) => pointee.pointer_type(),
                 other => c_type(other, &op.origin)?.to_owned(),
             };
-            format!("{name} = ({target}){};", value_name(*operand))
+            let source = value_name(*operand);
+            if matches!(func.value(*operand).ty, HirType::Managed(ManagedType::Template))
+                && matches!(op.ty, HirType::Managed(ManagedType::Array(_))) {
+                format!("{name} = ({target})nts_array_writable((NtsArray *){source});")
+            } else {
+                format!("{name} = ({target}){source};")
+            }
         }
     };
     writer.line(&op.origin, text);
@@ -5495,7 +5534,7 @@ mod tests {
     /// match arm is not evidence that anything was tested.
     fn every_managed_variant() -> Vec<ManagedType> {
         use nts_semantic_schema::schema::TypeId;
-        const COUNT: usize = 13;
+        const COUNT: usize = 14;
         fn position(kind: &ManagedType) -> usize {
             match kind {
                 ManagedType::String => 0,
@@ -5511,6 +5550,7 @@ mod tests {
                 ManagedType::AnyView => 10,
                 ManagedType::DataView => 11,
                 ManagedType::Symbol => 12,
+                ManagedType::Template => 13,
             }
         }
         let number = || Box::new(HirType::NUMBER);
@@ -5528,6 +5568,7 @@ mod tests {
             ManagedType::AnyView,
             ManagedType::DataView,
             ManagedType::Symbol,
+            ManagedType::Template,
         ];
         let mut covered: Vec<usize> = samples.iter().map(position).collect();
         covered.sort_unstable();

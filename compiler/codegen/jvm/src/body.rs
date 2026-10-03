@@ -381,6 +381,7 @@ fn held_values(package: &str, program: &Program, func: &Func, plan: &crate::wide
 #[derive(Debug)]
 pub struct Emitter<'a> {
     pub(crate) program: &'a Program,
+    pub(crate) templates: bool,
     /// The program plus the one whole-program fact that changes a type's
     /// spelling; see [`types::Shape`].
     pub(crate) shape: types::Shape<'a>,
@@ -422,6 +423,7 @@ impl<'a> Emitter<'a> {
         program: &'a Program,
         func: &'a Func,
         plan: &crate::widen::Plan,
+        templates: bool,
     ) -> Result<Self, Diagnostic> {
         check_signature(package, program, func)?;
 
@@ -542,6 +544,7 @@ impl<'a> Emitter<'a> {
             slots,
             locals,
             max_locals: u16::try_from(next).unwrap_or(u16::MAX),
+            templates,
             scratch: None,
             unboxed: plans.unboxed,
             fused: plans.fused,

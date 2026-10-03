@@ -217,9 +217,10 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
             symbol(&global_symbol(program, at))
         );
     }
+    let templates = nts_core::hir::templates::present(program);
     let mut bodies = String::new();
     for func in &program.funcs {
-        match function(program, func, platform) {
+        match function(program, func, platform, templates) {
             Ok(rendered) => {
                 let _ = writeln!(bodies, "\n{rendered}");
             }
@@ -363,6 +364,7 @@ fn tbaa(ty: &str) -> &'static str {
 /// through a `double *` and C converts on the way in. Here it is written down.
 fn array_element(func: &Func, array: ValueId) -> Result<&HirType, Diagnostic> {
     match &func.values[array.0 as usize].ty {
+        HirType::Managed(nts_core::hir::ManagedType::Template) => Ok(&HirType::Managed(nts_core::hir::ManagedType::String)),
         HirType::Managed(
             nts_core::hir::ManagedType::Array(element) | nts_core::hir::ManagedType::View(element),
         ) => Ok(element),
@@ -538,7 +540,8 @@ fn literals(program: &Program) -> String {
     let _ = writeln!(out, "%struct.NtsTask = type {{ ptr, ptr, ptr }}");
     let _ = writeln!(out, "@nts_desc_string1 = external constant %NtsDescriptor");
     let _ = writeln!(out, "@nts_desc_string2 = external constant %NtsDescriptor");
-    for (index, text) in literal_table(program).iter().enumerate() {
+    let table = literal_table(program);
+    for (index, text) in table.iter().enumerate() {
         let units: Vec<u16> = text.encode_utf16().collect();
         let wide = units.iter().any(|unit| *unit > 0xFF);
         let (element, descriptor, flags) = if wide {
@@ -564,6 +567,19 @@ fn literals(program: &Program) -> String {
             length = units.len(),
         );
     }
+    for object in nts_core::hir::templates::objects(program) {
+        let pieces: Vec<String> = object.cooked.iter().map(|text| {
+            let index = table.iter().position(|known| known == text).unwrap_or(0);
+            format!("ptr @nts_str_{index}")
+        }).collect();
+        let site = object.site;
+        let count = pieces.len();
+        let _ = writeln!(out, "@nts_template_{site}_items = internal constant [{count} x ptr] [{}]", pieces.join(", "));
+        let _ = writeln!(out,
+            "@nts_template_{site} = internal constant {{ %NtsHeader, i32, ptr, [2 x i32] }} {{ %NtsHeader {{ ptr @nts_desc_ref, i64 {}, i32 {}, i32 {count} }}, i32 {count}, ptr @nts_template_{site}_items, [2 x i32] zeroinitializer }}",
+            nts_core::hir::layout::IMMORTAL, nts_core::hir::layout::TEMPLATE_IMMUTABLE);
+    }
+
     out
 }
 
@@ -573,11 +589,12 @@ fn literal_table(program: &Program) -> Vec<String> {
     for func in &program.funcs {
         for block in &func.blocks {
             for value in &block.ops {
-                if let OpKind::ConstString(text) = &func.values[value.0 as usize].kind
-                    && !table.contains(text)
-                {
-                    table.push(text.clone());
-                }
+                let texts: &[String] = match &func.values[value.0 as usize].kind {
+                    OpKind::ConstString(text) => std::slice::from_ref(text),
+                    OpKind::ConstTemplate { cooked, .. } => cooked,
+                    _ => &[],
+                };
+                for text in texts { if !table.contains(text) { table.push(text.clone()); } }
             }
         }
     }
@@ -1921,6 +1938,7 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     // And an array of objects it makes from C's, likewise.
     "nts_array_from_handles",
     "nts_handle_check",
+    "nts_array_writable",
     // The growing pair, here for the reason the view trio is: `index_lines`
     // writes the call as raw IR, so `externals` -- which reads `OpKind::Call` --
     // never sees it, and the module referred to an undefined symbol.
@@ -2451,7 +2469,7 @@ fn symbol(raw: &str) -> String {
     format!("@{}", nts_codegen_common::symbols::c_identifier(raw))
 }
 
-fn function(program: &Program, func: &Func, platform: Platform) -> Result<String, Diagnostic> {
+fn function(program: &Program, func: &Func, platform: Platform, templates: bool) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let returns = return_ty_of(&func.return_type, func)?;
     let mut params = Vec::new();
@@ -2522,7 +2540,7 @@ fn function(program: &Program, func: &Func, platform: Platform) -> Result<String
     for block in &func.blocks {
         let mut lines = Vec::new();
         for value in &block.ops {
-            let line = operation(program, func, *value, platform)?;
+            let line = operation(program, func, *value, platform, templates)?;
             if !line.is_empty() {
                 lines.push(line);
             }
@@ -2797,7 +2815,7 @@ fn field_at(
     Ok((offset, ty_of(ty, func)?))
 }
 
-fn operation(program: &Program, func: &Func, value: ValueId, platform: Platform) -> Result<String, Diagnostic> {
+fn operation(program: &Program, func: &Func, value: ValueId, platform: Platform, templates: bool) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     let out = name(value);
     Ok(match &op.kind {
@@ -2848,11 +2866,12 @@ fn operation(program: &Program, func: &Func, value: ValueId, platform: Platform)
                 .unwrap_or(0);
             format!("{out} = getelementptr i8, ptr @nts_str_{index}, i64 0")
         }
+        OpKind::ConstTemplate { site, .. } => format!("{out} = getelementptr i8, ptr @nts_template_{site}, i64 0"),
         OpKind::ConstBool(flag) => {
             format!("{out} = add i1 0, {}", u8::from(*flag))
         }
         OpKind::Erase { .. } | OpKind::Unerase { .. } | OpKind::TagOf { .. } => {
-            return tagging(func, value, &out, platform);
+            return tagging(func, value, &out, platform, templates);
         }
         // See `instance_of`, which is where the reasoning is.
         OpKind::InstanceOf {
@@ -2873,7 +2892,7 @@ fn operation(program: &Program, func: &Func, value: ValueId, platform: Platform)
         } if func.values[lhs.0 as usize].ty == HirType::Erased
             || func.values[rhs.0 as usize].ty == HirType::Erased =>
         {
-            return tagging(func, value, &out, platform);
+            return tagging(func, value, &out, platform, templates);
         }
         // And before it again, for the same reason one step over: two strings
         // are equal when their *contents* are, and `icmp eq` compares the
@@ -2903,39 +2922,7 @@ fn operation(program: &Program, func: &Func, value: ValueId, platform: Platform)
         // Out-of-range float to integer is undefined in C and poison here --
         // the same hazard by the same argument, and specialization only emits
         // one where the interval analysis proved the value fits.
-        OpKind::Convert(operand) => {
-            let from = &func.values[operand.0 as usize].ty;
-            let to = &op.ty;
-            let (from_ty, to_ty) = (ty_of(from, func)?, ty_of(to, func)?);
-            // `int32_t` to `uint32_t` is a conversion in C and nothing at all
-            // in LLVM: same width, same bits, and signedness is a property of
-            // the *operation* here rather than of the type. Falling through to
-            // the width comparison produced `zext i32 %v to i32`, which is not
-            // an instruction -- two benchmarks failed to assemble on it.
-            //
-            // There is no no-op cast, so this is the same `add x, 0` the
-            // backend already uses to give a constant a name.
-            if from_ty == to_ty {
-                // `add ptr %v, 0` is not an instruction -- `add` wants an
-                // integer. A pointer's no-op is a zero-offset `getelementptr`,
-                // which is what a `T *` to `void *` conversion is here: the
-                // address does not change, and under opaque pointers the type
-                // does not either. C spells the same thing `(void *)p`.
-                if matches!(to, HirType::NativePointer(_) | HirType::Managed(_)) {
-                    format!("{out} = getelementptr i8, {from_ty} {}, i64 0", name(*operand))
-                } else {
-                    format!("{out} = add {from_ty} {}, 0", name(*operand))
-                }
-            } else if matches!(to, HirType::Bool) && !matches!(from, HirType::Bool) {
-                is_not_zero(&out, from, from_ty, &name(*operand))
-            } else {
-                let instruction = conversion(from, to, func)?;
-                format!(
-                    "{out} = {instruction} {from_ty} {} to {to_ty}",
-                    name(*operand)
-                )
-            }
-        }
+        OpKind::Convert(operand) => return representation_change(func, value, *operand, &out),
         OpKind::Call { .. } => return call(func, value, &out, platform),
         // A null pointer, which is what an absent reference is: the one spare
         // value a pointer has, and the whole reason `T | null` costs nothing.
@@ -2987,6 +2974,59 @@ fn operation(program: &Program, func: &Func, value: ValueId, platform: Platform)
             )
         }
         _ => return memory_operation(program, func, value, &out, platform),
+    })
+}
+
+fn representation_change(
+    func: &Func,
+    value: ValueId,
+    operand: ValueId,
+    out: &str,
+) -> Result<String, Diagnostic> {
+    let op = &func.values[value.0 as usize];
+    Ok({
+        let from = &func.values[operand.0 as usize].ty;
+        let to = &op.ty;
+        if matches!(from, HirType::Managed(nts_core::hir::ManagedType::Template))
+            && matches!(to, HirType::Managed(nts_core::hir::ManagedType::Array(_)))
+        {
+            return Ok(format!(
+                "{out} = call ptr @nts_array_writable(ptr {})",
+                name(operand)
+            ));
+        }
+        let (from_ty, to_ty) = (ty_of(from, func)?, ty_of(to, func)?);
+        // `int32_t` to `uint32_t` is a conversion in C and nothing at all
+        // in LLVM: same width, same bits, and signedness is a property of
+        // the *operation* here rather than of the type. Falling through to
+        // the width comparison produced `zext i32 %v to i32`, which is not
+        // an instruction -- two benchmarks failed to assemble on it.
+        //
+        // There is no no-op cast, so this is the same `add x, 0` the
+        // backend already uses to give a constant a name.
+        if from_ty == to_ty {
+            // `add ptr %v, 0` is not an instruction -- `add` wants an
+            // integer. A pointer's no-op is a zero-offset `getelementptr`,
+            // which is what a `T *` to `void *` conversion is here: the
+            // address does not change, and under opaque pointers the type
+            // does not either. C spells the same thing `(void *)p`.
+            if matches!(to, HirType::NativePointer(_) | HirType::Managed(_)) {
+                format!(
+                    "{out} = getelementptr i8, {from_ty} {}, i64 0",
+                    name(operand)
+                )
+            } else {
+                format!("{out} = add {from_ty} {}, 0", name(operand))
+            }
+        } else if matches!(to, HirType::Bool) && !matches!(from, HirType::Bool) {
+            is_not_zero(out, from, from_ty, &name(operand))
+        } else {
+            let instruction = conversion(from, to, func)?;
+            format!(
+                "{out} = {instruction} {from_ty} {} to {to_ty}",
+                name(operand)
+            )
+        }
     })
 }
 
@@ -3533,7 +3573,7 @@ fn mixed_equality(
 /// only a tag can answer, and the runtime answers them. The payload eightbyte
 /// holds the union's first member, the `double`, so an integer is converted
 /// before it is stored -- the same conversion `nts_value_of_number(x)` makes.
-fn tagging(func: &Func, value: ValueId, out: &str, platform: Platform) -> Result<String, Diagnostic> {
+fn tagging(func: &Func, value: ValueId, out: &str, platform: Platform, templates: bool) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     let out = out.to_owned();
     Ok(match &op.kind {
@@ -3632,6 +3672,9 @@ fn tagging(func: &Func, value: ValueId, out: &str, platform: Platform) -> Result
                      {out} = inttoptr i64 {bits} to ptr",
                     name(*value)
                 ));
+            }
+            if templates && matches!(op.ty, HirType::Managed(nts_core::hir::ManagedType::Array(_))) {
+                return Ok(format!("{read}\n  {out}.reference = inttoptr i64 {bits} to ptr\n  {out} = call ptr @nts_array_writable(ptr {out}.reference)"));
             }
             let narrow = payload_into(func, &out, &bits, &op.ty)?;
             format!("{read}\n  {narrow}")

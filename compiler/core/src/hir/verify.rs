@@ -662,6 +662,11 @@ pub(super) fn compatible(found: &HirType, want: &HirType) -> bool {
     if found == want {
         return true;
     }
+    if matches!(found, HirType::Managed(super::ManagedType::Template))
+        || matches!(want, HirType::Managed(super::ManagedType::Template))
+    {
+        return false;
+    }
     // An array is the exception to the reference rule below, and the JVM
     // backend is what found it.
     //
@@ -1050,6 +1055,8 @@ fn check_stores(program: &Program, func: &Func, problems: &mut Vec<Invalid>) {
                     &func.values[array.0 as usize].ty
                 {
                     report("an array element read", element, &op.ty);
+                } else if matches!(func.values[array.0 as usize].ty, HirType::Managed(super::ManagedType::Template)) {
+                    report("a template element read", &HirType::Managed(super::ManagedType::String), &op.ty);
                 }
             }
             OpKind::ArraySet { array, value, .. } => {
@@ -1061,6 +1068,8 @@ fn check_stores(program: &Program, func: &Func, problems: &mut Vec<Invalid>) {
                         element,
                         &func.values[value.0 as usize].ty,
                     );
+                } else if matches!(func.values[array.0 as usize].ty, HirType::Managed(super::ManagedType::Template)) {
+                    report("writing an immutable template element", &HirType::Never, &func.values[value.0 as usize].ty);
                 }
             }
             OpKind::GlobalSet { global, value } => {
@@ -1708,6 +1717,7 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         | OpKind::ConstFloat(_)
         | OpKind::ConstBool(_)
         | OpKind::ConstString(_)
+        | OpKind::ConstTemplate { .. }
         | OpKind::ConstNull
         | OpKind::ConstUndefined
         | OpKind::ClosureStatic

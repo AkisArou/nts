@@ -401,6 +401,8 @@ fn global_external(name: &str) -> Option<(&'static str, &'static str, &'static s
 /// `NtsValue` in, or `NtsValue` out, or both.
 fn value_external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
     Some(match name {
+        "nts_template_reflection" => (types::VALUE, "templateReflection", "(Lnts/rt/NtsValue;)V"),
+        "nts_array_writable" => (types::VALUE, "arrayReference", "(Ljava/lang/Object;)Ljava/lang/Object;"),
         "nts_value_to_string" => {
             (types::VALUE, "valueToString", "(Lnts/rt/NtsValue;)Ljava/lang/String;")
         }
@@ -1368,6 +1370,7 @@ impl Emitter<'_> {
             OpKind::ConstBool(_) | OpKind::ConstInt(_) | OpKind::ConstFloat(_) => {
                 self.constant(code, pool, &op.kind, &op.ty, &origin)?
             }
+            OpKind::ConstTemplate { .. } | OpKind::ClosureStatic => self.static_instance(code, pool, &op.kind, &op.ty, &origin)?,
             OpKind::ConstString(_) | OpKind::Length(_) | OpKind::StringUnitAt { .. } => {
                 self.string_operation(code, pool, value, &op.kind, &op.ty, &origin)?
             }
@@ -1384,14 +1387,6 @@ impl Emitter<'_> {
             OpKind::CellReady { cell, name } => {
                 self.cell_ready(code, pool, *cell, name, &origin)?;
                 Placed::Stored
-            }
-            // The one instance, read back. Built in `<clinit>`; see
-            // `closure_singletons`.
-            OpKind::ClosureStatic => {
-                let class = self.object_class(&op.ty)?;
-                let field = format!("closure${}", class.rsplit('/').next().unwrap_or(&class));
-                code.get_static(&origin, pool, &crate::body::program_class(self.shape.package), &field, &format!("L{class};"));
-                Placed::OnStack
             }
             OpKind::ConstNull | OpKind::ConstUndefined => {
                 self.absence(code, pool, &op.kind, &op.ty, &origin)?
@@ -2969,6 +2964,7 @@ impl Emitter<'_> {
                 // The reference is already the value; the narrowing the middle
                 // end proved still has to be spelled for the verifier.
                 self.load(code, pool, *value)?;
+                self.writable_array(code, pool, ty, origin);
                 self.refuse_impossible_cast(ty)?;
                 if let Some(want) = types::descriptor(self.shape, ty) {
                     code.check_cast(origin, pool, &want);
@@ -3000,6 +2996,7 @@ impl Emitter<'_> {
                     }
                     HirType::Managed(_) => {
                         code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
+                        self.writable_array(code, pool, ty, origin);
                         let descriptor = types::descriptor(self.shape, ty).ok_or_else(|| {
                             refuse(self.func, "unerasing to an unrepresentable reference")
                         })?;
@@ -3018,6 +3015,24 @@ impl Emitter<'_> {
                 Ok(Placed::OnStack)
             }
             _ => Err(refuse(self.func, "an erasure this backend does not spell")),
+        }
+    }
+
+    fn writable_array(
+        &self,
+        code: &mut Code,
+        pool: &mut Pool,
+        ty: &HirType,
+        origin: &nts_semantic_schema::Origin,
+    ) {
+        if self.templates && matches!(ty, HirType::Managed(ManagedType::Array(_))) {
+            code.invoke_static(
+                origin,
+                pool,
+                types::VALUE,
+                "arrayReference",
+                "(Ljava/lang/Object;)Ljava/lang/Object;",
+            );
         }
     }
 
@@ -3248,6 +3263,96 @@ impl Emitter<'_> {
         Ok(Placed::Stored)
     }
 
+    fn static_instance(
+        &self,
+        code: &mut Code,
+        pool: &mut Pool,
+        kind: &OpKind,
+        ty: &HirType,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        let (field, descriptor) = if let OpKind::ConstTemplate { site, .. } = kind {
+            (
+                crate::template_field(*site),
+                types::TEMPLATE_DESCRIPTOR.to_owned(),
+            )
+        } else {
+            let class = self.object_class(ty)?;
+            (crate::closure_field(&class), format!("L{class};"))
+        };
+        code.get_static(
+            origin,
+            pool,
+            &crate::body::program_class(self.shape.package),
+            &field,
+            &descriptor,
+        );
+        Ok(Placed::OnStack)
+    }
+
+    fn growable_new(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        length: ValueId,
+        ty: &HirType,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        let class = self.growable_class(ty)?;
+        // By the length's own kind, for the reason `ArrayGet` picks its
+        // subscript's: an `i64` length reached the `double` overload
+        // through `d2l; l2d` so that `of` could narrow it back.
+        let size = match self.kind_of(length)? {
+            Kind::Int => Kind::Int,
+            Kind::Long => Kind::Long,
+            _ => Kind::Double,
+        };
+        self.push_as(code, pool, length, size, origin)?;
+        let n = match size {
+            Kind::Int => "I",
+            Kind::Long => "J",
+            _ => "D",
+        };
+        code.invoke_static(origin, pool, &class, "of", &format!("({n})L{class};"));
+        Ok(Placed::OnStack)
+    }
+
+    fn template_get(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        array: ValueId,
+        index: ValueId,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        self.load(code, pool, array)?;
+        self.load(code, pool, index)?;
+        let kind = self.kind_of(index)?;
+        let integral = kind == Kind::Int;
+        self.adapt(
+            code,
+            kind,
+            &if integral {
+                HirType::Int {
+                    bits: 32,
+                    signed: true,
+                }
+            } else {
+                HirType::NUMBER
+            },
+            origin,
+        )?;
+        let parameter = if integral { "I" } else { "D" };
+        code.invoke_static(
+            origin,
+            pool,
+            types::TEMPLATE,
+            "get",
+            &format!("(Lnts/rt/NtsTemplate;{parameter})Ljava/lang/String;"),
+        );
+        Ok(Placed::OnStack)
+    }
+
     fn array_operation(
         &mut self,
         code: &mut Code,
@@ -3257,6 +3362,8 @@ impl Emitter<'_> {
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
         match kind {
+            OpKind::ArrayGet { array, index, .. } if self.ty(*array) == &HirType::Managed(ManagedType::Template) => self.template_get(code, pool, *array, *index, origin),
+
             // A typed array. Its elements are bytes in a buffer something else
             // may also be looking at, so a subscript is a call on the element's
             // own class rather than an `aaload`.
@@ -3284,25 +3391,7 @@ impl Emitter<'_> {
             // index is a `double` across this boundary, matching the C ABI:
             // that is how it passes a number the compiler knew all along, and
             // it saves a narrowing at each site.
-            OpKind::ArrayNew { length, .. } if self.shape.grows => {
-                let class = self.growable_class(ty)?;
-                // By the length's own kind, for the reason `ArrayGet` picks its
-                // subscript's: an `i64` length reached the `double` overload
-                // through `d2l; l2d` so that `of` could narrow it back.
-                let size = match self.kind_of(*length)? {
-                    Kind::Int => Kind::Int,
-                    Kind::Long => Kind::Long,
-                    _ => Kind::Double,
-                };
-                self.push_as(code, pool, *length, size, origin)?;
-                let n = match size {
-                    Kind::Int => "I",
-                    Kind::Long => "J",
-                    _ => "D",
-                };
-                code.invoke_static(origin, pool, &class, "of", &format!("({n})L{class};"));
-                Ok(Placed::OnStack)
-            }
+            OpKind::ArrayNew { length, .. } if self.shape.grows => self.growable_new(code, pool, *length, ty, origin),
             OpKind::ArrayGet { array, index, checked } if self.shape.grows => {
                 let class = self.growable_class(&self.ty(*array).clone())?;
                 let (element, holds) = self.growable_element(&self.ty(*array).clone())?;
@@ -3684,6 +3773,13 @@ impl Emitter<'_> {
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
         match kind {
+            OpKind::Length(of) if self.ty(*of) == &HirType::Managed(ManagedType::Template) => {
+                self.load(code, pool, *of)?;
+                code.invoke_static(origin, pool, types::TEMPLATE, "count", "(Lnts/rt/NtsTemplate;)I");
+                self.adapt_to(code, Kind::Int, value, origin)?;
+                Ok(Placed::OnStack)
+            }
+
             OpKind::Length(of) if matches!(self.ty(*of), HirType::Managed(ManagedType::String)) => {
                 self.load(code, pool, *of)?;
                 code.invoke_virtual(origin, pool, types::STRING, "length", "()I");
@@ -5100,6 +5196,11 @@ impl Emitter<'_> {
         to: &HirType,
         origin: &nts_semantic_schema::Origin,
     ) -> Result<(), Diagnostic> {
+        if matches!(from, HirType::Managed(ManagedType::Template))
+            && matches!(to, HirType::Managed(ManagedType::Array(_))) {
+            self.writable_array(code, pool, to, origin);
+        }
+
         let have = types::descriptor(self.shape, from).ok_or_else(|| {
             refuse(self.func, "a conversion from a managed type this backend cannot spell")
         })?;

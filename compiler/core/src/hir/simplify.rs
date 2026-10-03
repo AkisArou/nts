@@ -250,6 +250,7 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
         | OpKind::ConstFloat(_)
         | OpKind::ConstBool(_)
         | OpKind::ConstString(_)
+        | OpKind::ConstTemplate { .. }
         | OpKind::ConstNull
         | OpKind::ConstUndefined
         | OpKind::ClosureStatic
@@ -521,6 +522,7 @@ const fn leaves_fields_alone(kind: &OpKind) -> bool {
             | OpKind::ConstFloat(_)
             | OpKind::ConstBool(_)
             | OpKind::ConstString(_)
+        | OpKind::ConstTemplate { .. }
             | OpKind::ConstNull
             | OpKind::ConstUndefined
             | OpKind::Binary { .. }

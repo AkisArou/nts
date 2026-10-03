@@ -974,6 +974,13 @@ void nts_handle_family_register(uint32_t tag, void (*retain)(void *),
  * pays is the slack every growable buffer pays. */
 #define NTS_GROWN 2u
 
+/* An array whose source-site storage is immutable. The object and its elements
+ * are static; checked when erasure is narrowed to writable array storage. */
+#define NTS_ARRAY_IMMUTABLE 64u
+
+NtsArray *nts_array_writable(NtsArray *array);
+void nts_template_reflection(NtsValue value);
+
 /* The smallest capacity a grown string takes, in code units. See
  * `nts_round_up_pow2`: doubling from one costs a fresh allocation for each of
  * the first few units, and those are the units every short string has. */

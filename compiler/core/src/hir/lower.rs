@@ -219,6 +219,8 @@ impl Lowered {
 /// shares.
 #[derive(Debug, Clone, Default)]
 struct ModuleScope {
+    /// Computed once; cooked-only templates need a boundary for erased reflection.
+    templates: bool,
     /// One initialization proof for representation and throwing decisions.
     initialization: std::rc::Rc<initialization::Analysis>,
     /// Symbol to readiness flag, only where an executable access can be early.
@@ -283,8 +285,11 @@ struct ModuleScope {
 }
 
 impl ModuleScope {
-    fn with_initialization(initialization: std::rc::Rc<initialization::Analysis>) -> Self {
-        Self { initialization, ..Self::default() }
+    fn for_snapshot(snapshot: &SemanticSnapshot, initialization: std::rc::Rc<initialization::Analysis>) -> Self {
+        let templates = snapshot.nodes.iter().any(|node| {
+            node.kind == NodeKind::Syntax(syntax::TAGGED_TEMPLATE_EXPRESSION)
+        });
+        Self { templates, initialization, ..Self::default() }
     }
 }
 
@@ -5013,7 +5018,7 @@ fn walk_one_declaration(
                         .map_or(Reached::Elsewhere, |member| Reached::Body(member.0)),
                 );
             }
-            if matches!(kind, Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION)) {
+            if matches!(kind, Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION | syntax::TAGGED_TEMPLATE_EXPRESSION)) {
                 let callee = probe.children(at).first().copied();
                 // **`super(…)` is a call to the base's constructor, and the `super`
                 // keyword carries no symbol.** So it read as an *unresolved* callee,
@@ -6158,7 +6163,7 @@ fn functions_used_as_values(
     for (index, node) in snapshot.nodes.iter().enumerate() {
         if matches!(
             node.kind,
-            NodeKind::Syntax(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION)
+            NodeKind::Syntax(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION | syntax::TAGGED_TEMPLATE_EXPRESSION)
         ) {
             let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
             // **The callee's own name, which for a member call is the member.**
@@ -6328,7 +6333,7 @@ fn calls_guarded_by_a_try(
         while let Some(at) = pending.pop() {
             if matches!(
                 probe.kind_of(at),
-                Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION)
+                Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION | syntax::TAGGED_TEMPLATE_EXPRESSION)
             ) {
                 guarded_a_call = true;
                 guarded_calls.insert(at);
@@ -6848,7 +6853,7 @@ fn collect_module_scope(
     hierarchy: &Hierarchy,
     initialization: &std::rc::Rc<initialization::Analysis>,
 ) -> ModuleScope {
-    let mut scope = ModuleScope::with_initialization(initialization.clone());
+    let mut scope = ModuleScope::for_snapshot(snapshot, initialization.clone());
     // With the hierarchy, and that is the whole of a silent wrong answer.
     //
     // This probe lays out every class a module-scope binding mentions, and its
@@ -7343,6 +7348,7 @@ fn managed_word(managed: &ManagedType) -> &'static str {
         ManagedType::String => "a string",
         ManagedType::Object(_) => "an object",
         ManagedType::Array(_) => "an array",
+        ManagedType::Template => "an immutable template object",
         ManagedType::Promise(_) => "a promise",
         ManagedType::Map(_, _) => "a map",
         ManagedType::Table(_, _) => "a table",
@@ -8659,7 +8665,7 @@ fn calls_under(probe: &FuncBuilder, id: NodeId, into: &mut Vec<NodeId>) {
         // nothing. Third omission in the same shape, after the accessor in this
         // walk and the accessor in `throwing_symbols`' -- and every one of them
         // was found by running a program the census called compiled.
-        Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION) => into.push(id),
+        Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION | syntax::TAGGED_TEMPLATE_EXPRESSION) => into.push(id),
         // **An accessor is a call, and an assignment to one is not a call node.**
         // `call_within` draws exactly this line for a `try` and has since 6 of 29
         // cases declined without it; this walk did not, so a body that writes a
@@ -15141,6 +15147,7 @@ fn named_representation(ty: &HirType) -> &'static str {
         HirType::Managed(managed) => match managed {
             ManagedType::String => "a string",
             ManagedType::Array(_) => "an array",
+        ManagedType::Template => "an immutable template object",
             ManagedType::Promise(_) => "a promise",
             ManagedType::Map(_, _) => "a map",
             ManagedType::Set(_) => "a set",
@@ -15205,6 +15212,7 @@ pub fn erasable(ty: &HirType) -> bool {
                 ManagedType::String
                     | ManagedType::Object(_)
                     | ManagedType::Array(_)
+                    | ManagedType::Template
                     | ManagedType::View(_)
                     | ManagedType::Buffer
                     // A promise is an ordinary managed object too, and it is
@@ -16242,22 +16250,10 @@ fn provided_representation(
         return Some(HirType::Managed(ManagedType::Date));
     }
 
-    // A `TemplateStringsArray` **is** an array of the cooked strings, which is
-    // what a tag receives and indexes. lib.d.ts declares it as a
-    // `ReadonlyArray<string>` with a `raw` beside it -- and `readonly string[]`
-    // already represents, so the only thing stopping the whole construct was
-    // that the interface itself was decomposed at the library boundary and came
-    // back with no representation at all.
-    //
-    // **`raw` is not here and refuses as an ordinary member read.** It is the
-    // *un*-cooked text -- `\n` as two characters rather than one -- which is a
-    // second string list this compiler does not build, so a representation
-    // carrying only the cooked strings is honest about what it has. An array
-    // has only a `length`, and that is the sentence a reader gets.
+    // A runtime-immutable source-site object, rather than TypeScript's purely
+    // static readonly-array annotation. Raw strings remain a named boundary.
     if named(snapshot, ty) == Some("TemplateStringsArray") {
-        return Some(HirType::Managed(ManagedType::Array(Box::new(
-            HirType::Managed(ManagedType::String),
-        ))));
+        return Some(HirType::Managed(ManagedType::Template));
     }
 
     // An `ArrayBuffer`, for the same reason and on the same terms: it carries
@@ -23360,6 +23356,15 @@ impl<'a> FuncBuilder<'a> {
         if have == *want {
             return Ok(value);
         }
+        // Erasure preserves the object's identity. Reading it back as writable
+        // array storage checks immutability; a direct cast cannot forge either
+        // representation's capability.
+        if *want != HirType::Erased && (matches!(have, HirType::Managed(ManagedType::Template))
+                || matches!(want, HirType::Managed(ManagedType::Template)))
+            && !matches!(self.values[value.0 as usize].kind, OpKind::ConstNull | OpKind::ConstUndefined)
+        {
+            return Err(self.unsupported(id, "converting between an immutable template object and a different managed representation"));
+        }
         if let Some(converted) = self.coerce_to_native_pointer(value, &have, want, id) {
             return converted;
         }
@@ -27315,6 +27320,20 @@ impl<'a> FuncBuilder<'a> {
         tail: Option<&HirType>,
         receiver: Option<ValueId>,
     ) -> Result<Vec<ValueId>, Diagnostic> {
+        let arguments: Vec<Argument> = arguments.iter().copied().map(Argument::expression).collect();
+        self.lower_argument_values(call, &arguments, tail, receiver)
+    }
+
+    /// Evaluate every supplied argument before applying parameter defaults.
+    /// A template contributes one already computed array, then ordinary source
+    /// expressions; both use this same arity, coercion and rest convention.
+    fn lower_argument_values(
+        &mut self,
+        call: NodeId,
+        arguments: &[Argument],
+        tail: Option<&HirType>,
+        receiver: Option<ValueId>,
+    ) -> Result<Vec<ValueId>, Diagnostic> {
         // Where the callee's rest parameter starts, if it has one. Everything
         // from there is one array rather than one argument each.
         //
@@ -27346,14 +27365,17 @@ impl<'a> FuncBuilder<'a> {
         };
 
         let mut args = Vec::new();
+        let mut sources = Vec::new();
         for (at, argument) in arguments.iter().enumerate() {
-            if rest == Some(at) {
-                let gathered = self.gather_rest(call, at, &arguments[at..])?;
+            if rest == Some(args.len()) {
+                let gathered = self.gather_rest(call, args.len(), &arguments[at..])?;
                 args.push(gathered);
-                return Ok(args);
+                break;
             }
             if arity.is_some_and(|arity| args.len() >= arity) {
-                self.lower_for_its_effects(*argument)?;
+                if argument.value.is_none() {
+                    self.lower_for_its_effects(argument.node)?;
+                }
                 continue;
             }
             // **A spread of a fixed-arity tuple is that many arguments.**
@@ -27369,9 +27391,9 @@ impl<'a> FuncBuilder<'a> {
             // visible at all: expanding the declaration turned the old invalid
             // HIR into a named refusal here, and `agreed on every case` was
             // still printed over the two functions that survived it.
-            if self.kind_of(*argument) == Some(syntax::SPREAD_ELEMENT)
+            if self.kind_of(argument.node) == Some(syntax::SPREAD_ELEMENT)
                 && let Some(operand) = self
-                    .children(*argument)
+                    .children(argument.node)
                     .into_iter()
                     .find(|child| self.kind_of(*child) != Some(syntax::DOT_DOT_DOT_TOKEN))
                 && let Some(positions) = self
@@ -27391,7 +27413,7 @@ impl<'a> FuncBuilder<'a> {
                         .ok_or_else(|| self.unrepresentable(operand, "a spread position"))?;
                     let value = self.read_a_position(array, offset, &want, operand)?;
                     let value = self.coerce_to_parameter(call, args.len(), value, operand)?;
-                    let value = self.unless_undefined(call, operand, Some(*position), value, &args, receiver)?;
+                    sources.push((operand, Some(*position)));
                     args.push(value);
                 }
                 continue;
@@ -27414,46 +27436,39 @@ impl<'a> FuncBuilder<'a> {
                 (Some(element), Some(from)) if args.len() >= from => Some((*element).clone()),
                 _ if self.lends_handles(call, args.len()) => None,
                 // A `Copied<T>` literal, which is the struct's storage.
-                _ if self.copied_pending.contains_key(argument) => None,
+                _ if self.copied_pending.contains_key(&argument.node) => None,
                 _ => self.parameter_representation(call, args.len()),
             };
+            let defaulted_undefined = self.is_the_undefined_literal(argument.node)
+                && self.declared_default(call, args.len()).is_some();
+            let value = if defaulted_undefined {
+                let origin = self.origin(argument.node);
+                self.push(OpKind::ConstUndefined, HirType::Erased, origin)
+            } else { match (argument.value, &want) {
+                (Some(value), _) => value,
+                (None, Some(want)) => self.lower_expecting(argument.node, want)?,
+                (None, None) => self.lower_expression(argument.node)?,
+            }};
             let value = match &want {
-                Some(want) => self.lower_expecting(*argument, want)?,
-                None => self.lower_expression(*argument)?,
+                Some(want) if !defaulted_undefined => self.coerce(value, want, argument.node)?,
+                _ => value,
             };
-            let value = match &want {
-                Some(want) => self.coerce(value, want, *argument)?,
-                None => value,
-            };
-            let argument_ty = self.snapshot.node_types.get(argument).copied();
-            let value = self.unless_undefined(call, *argument, argument_ty, value, &args, receiver)?;
+            sources.push((argument.node, self.snapshot.node_types.get(&argument.node).copied()));
             args.push(value);
         }
-        // A rest the call gave nothing to still takes an array, an empty one.
-        // `f()` and `f(1)` reach the same function and it reads `xs.length`.
-        if rest == Some(args.len()) {
-            let gathered = self.gather_rest(call, args.len(), &[])?;
-            args.push(gathered);
-            return Ok(args);
+        // Defaults run in parameter order, after all supplied expressions,
+        // including excess expressions and the expressions gathered into rest.
+        for (at, (node, ty)) in sources.into_iter().enumerate() {
+            args[at] = self.unless_undefined(call, node, ty, args[at], &args[..at], receiver)?;
         }
-        for omitted in self.omitted_after(call, arguments.len()) {
+        for omitted in self.omitted_after(call, args.len()) {
             let value = match omitted {
                 Omitted::Default(node, callee) => self.lower_parameter_default(call, node, callee, &args, receiver)?,
                 Omitted::Absent => self.absent_argument(call, args.len())?,
             };
             args.push(value);
         }
-        // The rest can be reached *after* the defaults are filled, and the
-        // check above cannot see that: it fires only when the call itself
-        // stopped exactly at the rest. `f(a)` against
-        // `f(a, b = 5, ...rest: number[])` supplies `a`, the loop supplies `b`,
-        // and the array is still owed -- which reached the verifier as
-        // `CallArgumentCount { callee: "f", expected: 3, found: 2 }`.
-        //
-        // Both checks, rather than moving the first one down here. The early
-        // one returns before `omitted_after` runs, and that ordering is what
-        // keeps a call that stops at the rest from asking the signature about
-        // parameters past it.
+        // An empty rest follows the supplied and defaulted fixed parameters.
         if rest == Some(args.len()) {
             let gathered = self.gather_rest(call, args.len(), &[])?;
             args.push(gathered);
@@ -27482,6 +27497,12 @@ impl<'a> FuncBuilder<'a> {
         let Some((default, callee)) = self.declared_default(call, before.len()) else {
             return Ok(value);
         };
+        // The literal cannot take the supplied-value arm. Defer its default
+        // until every argument has run, then evaluate it directly at the slot's
+        // representation, including a concrete numeric parameter.
+        if self.is_the_undefined_literal(argument) {
+            return self.lower_parameter_default(call, default, callee, before, receiver);
+        }
         // The argument's *type* first: a `number` passed to `id: number | null =
         // null` is erased to fit the parameter, and a test of its tag would ask
         // what the checker already answered.
@@ -27666,7 +27687,7 @@ impl<'a> FuncBuilder<'a> {
         &mut self,
         call: NodeId,
         at: usize,
-        elements: &[NodeId],
+        elements: &[Argument],
     ) -> Result<ValueId, Diagnostic> {
         // The declaration and the call have to agree, and they ask two different
         // questions to get there. `lower_param` decided this parameter is an
@@ -27718,12 +27739,12 @@ impl<'a> FuncBuilder<'a> {
         // the first one keeps its position; a spread in the *middle* would need
         // the elements after it placed at an offset this compiler does not know,
         // so it is refused by name rather than mis-placed.
-        let (fixed, spreads): (Vec<NodeId>, Vec<NodeId>) = elements
-            .iter()
-            .partition(|node| self.kind_of(**node) != Some(syntax::SPREAD_ELEMENT));
+        let (fixed, spreads): (Vec<Argument>, Vec<Argument>) = elements
+            .iter().copied()
+            .partition(|argument| self.kind_of(argument.node) != Some(syntax::SPREAD_ELEMENT));
         if let Some(first) = elements
             .iter()
-            .position(|node| self.kind_of(*node) == Some(syntax::SPREAD_ELEMENT))
+            .position(|argument| self.kind_of(argument.node) == Some(syntax::SPREAD_ELEMENT))
             && first != fixed.len()
         {
             return Err(self.unsupported(call, "a spread element before another argument"));
@@ -27740,10 +27761,13 @@ impl<'a> FuncBuilder<'a> {
             ty.clone(),
             origin.clone(),
         );
-        for (index, node) in elements.iter().enumerate() {
-            let value = self.lower_expression(*node)?;
+        for (index, argument) in elements.iter().enumerate() {
+            let value = match argument.value {
+                Some(value) => value,
+                None => self.lower_expecting(argument.node, &element)?,
+            };
             // At the element's type, like every other store into a slot.
-            let value = self.coerce(value, &element, *node)?;
+            let value = self.coerce(value, &element, argument.node)?;
             #[allow(clippy::cast_precision_loss)]
             let position = index as f64;
             let index = self.push(
@@ -27765,6 +27789,7 @@ impl<'a> FuncBuilder<'a> {
         if spreads.is_empty() {
             return Ok(array);
         }
+        let spreads: Vec<NodeId> = spreads.into_iter().map(|argument| argument.node).collect();
         self.gather_rest_with_spreads(call, &element, &ty, array, &spreads)
     }
 
@@ -32479,7 +32504,7 @@ impl<'a> FuncBuilder<'a> {
                 if !matches!(self.values[subject.0 as usize].ty, HirType::Erased) =>
             {
                 match &self.values[subject.0 as usize].ty {
-                    HirType::Managed(ManagedType::Array(_)) => true,
+                    HirType::Managed(ManagedType::Array(_) | ManagedType::Template) => true,
                     HirType::Managed(ManagedType::Object(at)) => matches!(
                         self.snapshot.types.get(at.0 as usize).map(|r| &r.kind),
                         Some(TypeKind::Tuple(_))
@@ -34642,6 +34667,7 @@ impl<'a> FuncBuilder<'a> {
                 ManagedType::Map(_, _)
                     | ManagedType::Set(_)
                     | ManagedType::Array(_)
+                    | ManagedType::Template
                     | ManagedType::View(_)
             ))
         ) {
@@ -36290,6 +36316,9 @@ impl<'a> FuncBuilder<'a> {
         let value = self.lower_expression(rhs)?;
         let origin = self.origin(id);
         let value = self.erased(value, &origin);
+        if self.module.templates {
+            self.call_runtime("nts_template_reflection", vec![value], HirType::Void, &origin);
+        }
         // The classes first, and the natives folded onto it.
         //
         // A constant when no class declares the name, rather than an
@@ -36572,6 +36601,9 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn lower_in(&mut self, id: NodeId, lhs: NodeId, rhs: NodeId) -> Result<ValueId, Diagnostic> {
+        if self.type_of(rhs) == Some(HirType::Managed(ManagedType::Template)) {
+            return Err(self.unsupported(id, "property membership on a cooked-only template object"));
+        }
         if matches!(self.type_of(rhs), Some(HirType::NativePointer(_))) {
             return Err(self.unsupported(id, "an `in` test through an opaque C pointer"));
         }
@@ -40105,103 +40137,42 @@ impl<'a> FuncBuilder<'a> {
         })
     }
 
-    /// Both sides of a string `+` have to *be* strings.
-    ///
-    /// `+` resolves to concatenation from the *result* type, which is right —
-    /// `"a" + "b"` is a string and `1 + 2` is not — and says nothing about the
-    /// operands. `"" + n` is a string result with a `double` operand, and it
-    /// reached the backend as `(NtsString *)v0`: a cast from a double to a
-    /// pointer, which is not merely wrong but is C that does not compile. The
-    /// lowering reported success and clang reported the error, with no source
-    /// location and nothing pointing at the `+`.
-    ///
-    /// What it needs is `ToString`, and there is no cheap version of that for a
-    /// number: the shortest decimal that round-trips through a `double` is a
-    /// real algorithm — Ryū, Grisu — and `%.17g` is not it. So this is refused
-    /// rather than approximated.
-    /// `` `a${x}b` ``, which is a concatenation written with fewer plus signs.
-    ///
-    /// The tree is a head, then one span per substitution, each span holding
-    /// its expression and the literal text that follows it. So the lowering is
-    /// the same walk left to right that the source reads as, and the
-    /// substitutions are evaluated in that order — which is observable, because
-    /// one of them may call something.
-    ///
-    /// Each substitution goes through [`Self::as_string`], so `` `${n}` `` is
-    /// `String(n)` and gets ECMAScript's conversion rather than a `printf` one.
-    /// An empty literal part contributes no concatenation: `` `${a}${b}` `` is
-    /// one join rather than three.
-    /// `` tag`a${x}b` ``, which is `tag(["a", "b"], x)`.
-    ///
-    /// A tagged template is a **call**, and the specification says what its
-    /// arguments are: an array of the literal pieces first, then one argument
-    /// per substitution in source order. So this builds the array, lowers the
-    /// substitutions left to right -- which is observable, since one of them may
-    /// call something -- and hands both to the call the checker resolved.
-    ///
-    /// # What the array is, and what it is not
-    ///
-    /// `TemplateStringsArray` represents as `string[]`, which is what a tag
-    /// receives and indexes. lib.d.ts declares a `raw` beside it -- the
-    /// *un*-cooked text, `\n` as two characters rather than one -- and this
-    /// builds no such second list, so reading `raw` refuses as an ordinary
-    /// member of an array. That is honest about what is there rather than
-    /// answering the cooked strings to a program asking for the raw ones.
-    ///
-    /// The array is rebuilt per evaluation. The specification interns it per
-    /// call *site* -- the same tag called twice in a loop receives the identical
-    /// object, and `strings === strings` across two calls is `true` -- which a
-    /// program can observe and a memoising tag depends on. Nothing here does
-    /// that, so a tag that keys a cache on the array's identity would see a
-    /// miss every time; it is written down rather than hidden because it is the
-    /// one observable difference, and the fix is an interned per-site constant
-    /// rather than anything about this lowering.
-    ///
-    /// # The tag has to be a plain declared function
-    ///
-    /// `lower_call` resolves a callee through qualified names, generic
-    /// suffixes, static and method dispatch, closures and imports, and none of
-    /// that is duplicated here: a tag that is not a directly-callable function
-    /// declaration is refused by name. Every other shape is a call path this
-    /// one would have to reproduce, and two derivations of "which function is
-    /// this" is the mistake this file keeps recording.
-    /// A template's literal pieces and the expressions between them.
-    ///
-    /// A template with no substitution is one piece and no expression;
-    /// otherwise it is the head's text, then each span's expression followed by
-    /// its own trailing text. An empty piece is a real string rather than an
-    /// absence -- `` tag`${x}y` `` has pieces `["", "y"]` -- which is the
-    /// difference between this and [`Self::lower_template`], where an empty
-    /// part contributes no concatenation.
-    fn template_parts(
-        &mut self,
-        template: NodeId,
-    ) -> Result<(Vec<String>, Vec<NodeId>), Diagnostic> {
+    /// Cooked literal pieces and substitutions in source order. An empty piece
+    /// is a real string; raw-string access remains a separate named boundary.
+    fn template_cooked(&self, token: NodeId) -> Result<String, Diagnostic> {
+        self.node(token).text.clone().ok_or_else(|| {
+            self.unsupported(
+                token,
+                "a tagged template with an undefined cooked entry from an invalid escape",
+            )
+        })
+    }
+
+    fn template_parts(&mut self, template: NodeId) -> Result<(Vec<String>, Vec<NodeId>), Diagnostic> {
         let mut pieces: Vec<String> = Vec::new();
         let mut substitutions: Vec<NodeId> = Vec::new();
         match self.kind_of(template) {
             Some(syntax::NO_SUBSTITUTION_TEMPLATE_LITERAL) => {
-                pieces.push(self.node(template).text.clone().unwrap_or_default());
+                pieces.push(self.template_cooked(template)?);
             }
             Some(syntax::TEMPLATE_EXPRESSION) => {
                 for part in self.children(template) {
                     match self.kind_of(part) {
                         Some(syntax::TEMPLATE_HEAD) => {
-                            pieces.push(self.node(part).text.clone().unwrap_or_default());
+                            pieces.push(self.template_cooked(part)?);
                         }
                         Some(syntax::TEMPLATE_SPAN) => {
                             let inner = self.children(part);
                             let [expression, literal] = inner.as_slice() else {
-                                return Err(self
-                                    .unsupported(part, "a template span of unexpected shape"));
+                                return Err(
+                                    self.unsupported(part, "a template span of unexpected shape")
+                                );
                             };
                             substitutions.push(*expression);
-                            pieces.push(self.node(*literal).text.clone().unwrap_or_default());
+                            pieces.push(self.template_cooked(*literal)?);
                         }
                         _ => {
-                            return Err(
-                                self.unsupported(part, "a template part of unexpected shape")
-                            );
+                            return Err(self.unsupported(part, "a template part of unexpected shape"));
                         }
                     }
                 }
@@ -40217,104 +40188,54 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, "a tagged template of unexpected shape"));
         };
         let (tag, template) = (*tag, *template);
-        // Through the tag's **symbol**, not through `call_targets`: the checker
-        // keys that map by call expression and a tagged template is a different
-        // node kind, so asking it answers `None` for every tag there is. The
-        // first version did ask, and refused all three arms of its own fixture
-        // with `the checker did not resolve` -- which was true and was about
-        // the map rather than about the program.
+        self.a_raising_body_carries_this_call(id)?;
+        let target = self
+            .snapshot
+            .call_targets
+            .get(&id)
+            .copied()
+            .ok_or_else(|| self.unresolved_call(id))?;
         let declaration = self
-            .node(tag)
-            .symbol
-            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
-            .map(|record| record.declarations.clone())
-            .unwrap_or_default()
-            .into_iter()
-            .find(|at| self.kind_of(*at) == Some(syntax::FUNCTION_DECLARATION));
-        let Some(declaration) = declaration.filter(|_| {
-            // A locally bound name holds a *value*, which is a closure and a
-            // dispatch rather than a direct call. Refused rather than called by
-            // the declaration's name, which would call the wrong function where
-            // a parameter shadows one.
-            !self
-                .node(tag)
-                .symbol
-                .is_some_and(|symbol| self.bindings.contains_key(&symbol.0))
-        }) else {
-            return Err(self.unsupported(
-                id,
-                "a tagged template whose tag is not a plain declared function",
-            ));
-        };
-
-        // **A rest parameter takes the substitutions as one array**, and that is
-        // the spread machinery rather than this one: the callee's arity is the
-        // fixed parameters plus one, and handing it the substitutions
-        // positionally is the wrong number of arguments. The verifier said so
-        // -- `CallArgumentCount { expected: 2, found: 3 }` -- which is the right
-        // place for it to fail and the wrong place for a reader to find out.
-        if self.children(declaration).into_iter().any(|child| {
-            self.kind_of(child) == Some(syntax::PARAMETER)
-                && self
-                    .children(child)
-                    .into_iter()
-                    .any(|part| self.kind_of(part) == Some(syntax::DOT_DOT_DOT_TOKEN))
-        }) {
-            return Err(self.unsupported(
-                id,
-                "a tagged template whose tag takes a rest parameter, which wants the \
-                 substitutions as one array",
-            ));
-        }
+            .direct_callee(target.callee, tag)
+            .filter(|declaration| {
+                self.kind_of(*declaration) == Some(syntax::FUNCTION_DECLARATION)
+                    && self.defines(*declaration)
+            })
+            .filter(|_| {
+                !self
+                    .node(tag)
+                    .symbol
+                    .is_some_and(|symbol| self.bindings.contains_key(&symbol.0))
+            })
+            .ok_or_else(|| {
+                self.unsupported(
+                    id,
+                    "a tagged template whose tag is not a plain declared function",
+                )
+            })?;
 
         let (pieces, substitutions) = self.template_parts(template)?;
 
         let origin = self.origin(id);
-        let text = HirType::Managed(ManagedType::String);
-        let array_ty = HirType::Managed(ManagedType::Array(Box::new(text.clone())));
-        #[allow(clippy::cast_precision_loss)]
-        let count = pieces.len() as f64;
-        let length = self.push(OpKind::ConstFloat(count), HirType::NUMBER, origin.clone());
         let strings = self.push(
-            OpKind::ArrayNew {
-                length,
-                zeroed: true,
+            OpKind::ConstTemplate {
+                site: id.0,
+                cooked: pieces,
             },
-            array_ty,
-            origin.clone(),
+            HirType::Managed(ManagedType::Template),
+            origin,
         );
-        for (at, piece) in pieces.into_iter().enumerate() {
-            #[allow(clippy::cast_precision_loss)]
-            let position = at as f64;
-            let index = self.push(OpKind::ConstFloat(position), HirType::NUMBER, origin.clone());
-            let value = self.push(OpKind::ConstString(piece), text.clone(), origin.clone());
-            self.push(
-                OpKind::ArraySet {
-                    array: strings,
-                    index,
-                    value,
-                    checked: false,
-                },
-                HirType::Void,
-                origin.clone(),
-            );
-        }
 
-        // **After the array**, because the substitutions are expressions and
-        // may call something: the specification evaluates them left to right
-        // after the template object is made, and an allocation between two of
-        // them would be the only thing that could reorder.
-        let mut args = vec![strings];
-        for expression in substitutions {
-            args.push(self.lower_expression(expression)?);
-        }
-
-        let name = self
-            .qualified
-            .get(&declaration)
-            .cloned()
-            .or_else(|| self.declared_name(declaration))
-            .ok_or_else(|| self.unsupported(tag, "a tagged template with an unnamed tag"))?;
+        let arguments: Vec<Argument> = std::iter::once(Argument {
+            node: template,
+            value: Some(strings),
+        })
+        .chain(substitutions.into_iter().map(Argument::expression))
+        .collect();
+        let args = self.lower_argument_values(id, &arguments, None, None)?;
+        let name = self.emitted_callee_name(Some(declaration), tag)?;
+        let specialization = self.generic_calls.get(&id).map_or("", String::as_str);
+        let name = format!("{name}{specialization}{}", self.raising_suffix_of(id));
         self.push_call(id, Callee::Direct(name), args, Some(declaration), None)
     }
 
@@ -48382,12 +48303,11 @@ impl<'a> FuncBuilder<'a> {
                 origin,
             ));
         }
-        let HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)) =
-            self.values[array.0 as usize].ty.clone()
-        else {
-            return Err(self.not_an_array(id));
+        let ty = match self.values[array.0 as usize].ty.clone() {
+            HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)) => *element,
+            HirType::Managed(ManagedType::Template) => HirType::Managed(ManagedType::String),
+            _ => return Err(self.not_an_array(id)),
         };
-        let ty = *element;
         let origin = self.origin(id);
         let read = self.push(
             OpKind::ArrayGet {
@@ -48691,7 +48611,7 @@ impl<'a> FuncBuilder<'a> {
         if !matches!(
             self.values[array_value.0 as usize].ty,
             HirType::Managed(
-                ManagedType::Array(_) | ManagedType::View(_) | ManagedType::Table(_, _)
+                ManagedType::Array(_) | ManagedType::Template | ManagedType::View(_) | ManagedType::Table(_, _)
             ) | HirType::NativePointer(_)
         ) && !self.erased_but_proven_an_array(id, array_value)
         {
@@ -50214,7 +50134,7 @@ impl<'a> FuncBuilder<'a> {
         }
         let sequence = matches!(
             self.values[value.0 as usize].ty,
-            HirType::Managed(ManagedType::Array(_) | ManagedType::String)
+            HirType::Managed(ManagedType::Array(_) | ManagedType::Template | ManagedType::String)
         );
         // **A field every arm of a union puts in the same place.** A
         // discriminated union is written with the discriminant declared first
@@ -51209,7 +51129,7 @@ impl<'a> FuncBuilder<'a> {
     ) -> Option<(NodeId, String)> {
         if matches!(
             self.kind_of(node),
-            Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION)
+            Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION | syntax::TAGGED_TEMPLATE_EXPRESSION)
         ) && self.calls_compiled_code(node)
         {
             // **Unless a raising copy of the callee exists**, in which case
@@ -67557,6 +67477,18 @@ enum Intrinsic {
     /// constant `false` that the C compiler removes. A runtime call would have
     /// pinned the value to a `double` to pass it.
     NotANumber,
+}
+
+/// A supplied expression, or the implicit template array already computed at
+/// the same call site. The node keeps coercion/default diagnostics at the source.
+#[derive(Debug, Clone, Copy)]
+struct Argument {
+    node: NodeId,
+    value: Option<ValueId>,
+}
+
+impl Argument {
+    fn expression(node: NodeId) -> Self { Self { node, value: None } }
 }
 
 /// What a call has to supply for a parameter its argument list did not reach.

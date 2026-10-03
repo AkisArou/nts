@@ -101,7 +101,8 @@ public final class NtsValue {
             || ref instanceof NtsTuple
             || ref instanceof NtsArrayD
             || ref instanceof NtsArrayL
-            || ref instanceof NtsArrayZ;
+            || ref instanceof NtsArrayZ
+            || ref instanceof NtsTemplate;
     }
 
     /**
@@ -245,7 +246,7 @@ public final class NtsValue {
             return ref.toString();
         }
         if (ref.getClass().isArray() || ref instanceof NtsArrayD || ref instanceof NtsArrayL
-            || ref instanceof NtsArrayZ) {
+            || ref instanceof NtsArrayZ || ref instanceof NtsTemplate) {
             return arrayText(ref);
         }
         if (ref instanceof NtsTuple) {
@@ -277,7 +278,29 @@ public final class NtsValue {
      * path, not a hot one; the alternative is a correctness hazard on every
      * future element type.
      */
+    public static void templateReflection(NtsValue value) {
+        if (value != null && value.ref instanceof NtsTemplate) {
+            throw new NtsRefusal("reflecting on a cooked-only template object");
+        }
+    }
+
+    public static Object arrayReference(Object ref) {
+        if (ref instanceof NtsTemplate) {
+            throw new NtsRefusal("converting an immutable template object to writable array storage");
+        }
+        return ref;
+    }
+
     private static String arrayText(Object ref) {
+        if (ref instanceof NtsTemplate) {
+            NtsTemplate template = (NtsTemplate) ref;
+            StringBuilder text = new StringBuilder();
+            for (int at = 0; at < NtsTemplate.count(template); at++) {
+                if (at > 0) text.append(',');
+                text.append(NtsTemplate.get(template, at));
+            }
+            return text.toString();
+        }
         Object items = ref;
         int count = -1;
         if (ref instanceof NtsArrayD) {
@@ -447,6 +470,10 @@ public final class NtsValue {
         int at = (int) index;
         if (at < 0 || (double) at != index) {
             return UNDEFINED_VALUE;
+        }
+        if (ref instanceof NtsTemplate) {
+            NtsTemplate template = (NtsTemplate) ref;
+            return at < NtsTemplate.count(template) ? ofString(NtsTemplate.get(template, at)) : UNDEFINED_VALUE;
         }
         if (ref instanceof NtsArrayD) {
             NtsArrayD xs = (NtsArrayD) ref;

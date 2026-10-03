@@ -121,6 +121,30 @@ fn a_direct_call_names_the_function_it_reaches() {
 }
 
 #[test]
+fn tagged_templates_resolve_through_the_same_call_target_table() {
+    use nts_semantic_schema::{NodeKind::Syntax, syntax};
+
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else { return };
+    let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/a-tagged-template/tsconfig.json");
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&tsconfig)
+        .expect("snapshot succeeds");
+    let sites: Vec<_> = snapshot.nodes.iter().enumerate()
+        .filter(|(_, node)| node.kind == Syntax(syntax::TAGGED_TEMPLATE_EXPRESSION))
+        .map(|(at, _)| NodeId(u32::try_from(at).unwrap()))
+        .collect();
+    assert_eq!(sites.len(), 5);
+    for site in sites {
+        let target = snapshot.call_targets.get(&site).expect("a tag resolves");
+        let declaration = target.callee.expect("tag declaration is decoded");
+        assert_eq!(snapshot.nodes[declaration.0 as usize].kind,
+            Syntax(syntax::FUNCTION_DECLARATION));
+        assert!(!snapshot.signatures[target.signature.0 as usize].parameters.is_empty());
+    }
+}
+
+#[test]
 fn syntax_kinds_still_match_the_pinned_tsgo() {
     use nts_frontend_ts::tsgo::types::syntax;
     use nts_semantic_schema::NodeKind::Syntax;

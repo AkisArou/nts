@@ -887,7 +887,12 @@ impl<'a> Decomposer<'a> {
                 let NodeKind::Syntax(kind) = node.kind else {
                     return None;
                 };
-                if kind != syntax::CALL_EXPRESSION && kind != syntax::NEW_EXPRESSION {
+                if !matches!(
+                    kind,
+                    syntax::CALL_EXPRESSION
+                        | syntax::NEW_EXPRESSION
+                        | syntax::TAGGED_TEMPLATE_EXPRESSION
+                ) {
                     return None;
                 }
                 let arena = u32::try_from(index).unwrap_or(u32::MAX);

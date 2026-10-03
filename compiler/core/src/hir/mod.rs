@@ -45,6 +45,7 @@ pub mod loops;
 pub mod presence;
 pub mod suspend;
 pub mod tags;
+pub mod templates;
 pub mod unerase;
 
 pub mod floating;
@@ -193,6 +194,11 @@ pub enum ManagedType {
     /// mean two answers to one question.
     Object(TypeId),
     Array(Box<HirType>),
+    /// The immutable cooked strings of one tagged-template source site.
+    /// Kept distinct from a writable array so casts cannot expose static storage
+    /// to array stores or mutating helpers. TypeScript's `readonly` alone does
+    /// not establish this runtime property.
+    Template,
     /// A promise, carrying the representation of what it settles with.
     ///
     /// The payload type is here for the *compiler*: it is what says which
@@ -983,6 +989,10 @@ pub enum OpKind {
     ConstFloat(f64),
     ConstBool(bool),
     ConstString(String),
+    /// One immortal object per original source site, shared by every copy of
+    /// the containing body. Backends cache by `site`, never by emitted name or
+    /// equal contents: different sites must have different identities.
+    ConstTemplate { site: u32, cooked: Vec<String> },
     /// A concrete value becomes an erased one, tagged with what it was.
     ///
     /// The tag is not stored here: it is a function of the operand's type,
@@ -1502,6 +1512,7 @@ pub fn carries_a_length(ty: &HirType) -> bool {
         HirType::Erased
             | HirType::Managed(
                 ManagedType::Array(_)
+                    | ManagedType::Template
                     | ManagedType::View(_)
                     | ManagedType::Map(_, _)
                     | ManagedType::Table(_, _)
@@ -6107,6 +6118,8 @@ mod tests {
             // its end: C reads the block, and nothing resizes the array.
             "nts_array_handles",
             "nts_array_unlend",
+            // Checks the immutable flag and returns the same array.
+            "nts_array_writable",
             // An array made from C's, for a callback: the result is new.
             "nts_array_from_handles",
         ];
