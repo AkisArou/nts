@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler a3291deffe28ba8f, commit 77b2457c53ac6e6f2b0197ec18823e233c591850, harness d6442dbc09f91ad0; machine at start: 19.9 GB available, swap 7.2/20 GB, load 1.8/3.3 (1m/5m), 32 cores; 8 worker(s)
+# compiler 96e2f269dfb7ec03, commit 9aba5cbb2dfa94f4faa7425a930b0b1928bdc791, harness d6442dbc09f91ad0; machine at start: 20.8 GB available, swap 7.2/20 GB, load 11.3/9.4 (1m/5m), 32 cores; 8 worker(s)
 test/language/arguments-object/10.5-1gs.js	pass	
 test/language/asi/S7.9.2_A1_T1.js	pass	
 test/language/asi/S7.9.2_A1_T2.js	pass	
@@ -320,6 +320,7 @@ test/language/expressions/arrow-function/dstr/ary-ptrn-elem-id-iter-val.js	pass
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-val-null.js	pass	
+test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-val-undef.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elision-exhausted.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elision-step-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/arrow-function/dstr/ary-ptrn-empty.js	pass	
@@ -1473,6 +1474,7 @@ test/language/expressions/class/dstr/meth-ary-ptrn-elem-id-iter-val.js	pass
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-obj-val-null.js	pass	
+test/language/expressions/class/dstr/meth-ary-ptrn-elem-obj-val-undef.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-elision-exhausted.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-elision-step-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/class/dstr/meth-ary-ptrn-empty.js	pass	
@@ -1547,6 +1549,7 @@ test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-id-iter-val.js	pa
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-obj-val-null.js	pass	
+test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-obj-val-undef.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elision-exhausted.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elision-step-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/class/dstr/meth-static-ary-ptrn-empty.js	pass	
@@ -2911,6 +2914,7 @@ test/language/expressions/function/dstr/ary-ptrn-elem-id-iter-val.js	pass
 test/language/expressions/function/dstr/ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-obj-val-null.js	pass	
+test/language/expressions/function/dstr/ary-ptrn-elem-obj-val-undef.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elision-exhausted.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elision-step-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/function/dstr/ary-ptrn-empty.js	pass	
@@ -3455,6 +3459,7 @@ test/language/expressions/object/dstr/meth-ary-ptrn-elem-id-iter-val.js	pass
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-obj-val-null.js	pass	
+test/language/expressions/object/dstr/meth-ary-ptrn-elem-obj-val-undef.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-elision-exhausted.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-elision-step-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/object/dstr/meth-ary-ptrn-empty.js	pass	
@@ -5518,6 +5523,7 @@ test/language/statements/class/dstr/meth-ary-ptrn-elem-id-iter-val.js	pass
 test/language/statements/class/dstr/meth-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-elem-obj-val-null.js	pass	
+test/language/statements/class/dstr/meth-ary-ptrn-elem-obj-val-undef.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-elision-exhausted.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-elision-step-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/class/dstr/meth-ary-ptrn-empty.js	pass	
@@ -5592,6 +5598,7 @@ test/language/statements/class/dstr/meth-static-ary-ptrn-elem-id-iter-val.js	pas
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-obj-val-null.js	pass	
+test/language/statements/class/dstr/meth-static-ary-ptrn-elem-obj-val-undef.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-elision-exhausted.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-elision-step-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/class/dstr/meth-static-ary-ptrn-empty.js	pass	
@@ -7128,6 +7135,7 @@ test/language/statements/function/dstr/ary-ptrn-elem-id-iter-val.js	pass
 test/language/statements/function/dstr/ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/function/dstr/ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/function/dstr/ary-ptrn-elem-obj-val-null.js	pass	
+test/language/statements/function/dstr/ary-ptrn-elem-obj-val-undef.js	pass	
 test/language/statements/function/dstr/ary-ptrn-elision-exhausted.js	pass	
 test/language/statements/function/dstr/ary-ptrn-elision-step-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/function/dstr/ary-ptrn-empty.js	pass	
