@@ -39,6 +39,9 @@ fn preamble(binding: &Binding, command: &str) -> String {
     for (module, name) in &binding.namespaces {
         let _ = writeln!(out, "  import type * as {name} from \"{module}\";");
     }
+    if !binding.reexports.is_empty() {
+        let _ = writeln!(out, "  export {{ {} }} from \"c:types\";", binding.reexports.join(", "));
+    }
     out
 }
 

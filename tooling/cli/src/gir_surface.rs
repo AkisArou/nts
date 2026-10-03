@@ -426,6 +426,7 @@ mod tests {
             ("@nts/gi-glib", "  export type GError = Class<\"_GError\"> & GErrorMethods;"),
             ("@nts/gi-gobject", "  export type GObject = GObjectClass<\"_GObject\", TypeInstance> & GObjectMethods;"),
             ("@nts/gi-gobject", "  export const TYPE_STRING: c_size_t;"),
+            ("@nts/gi-gobject", "  export { property } from \"c:types\";"),
         ];
         for (package, present) in pins {
             assert!(text(package).contains(present), "{package} is missing: {present}");

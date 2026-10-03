@@ -72,6 +72,9 @@ pub(crate) struct Binding {
     /// as `(module, name)`, imported whole (`import type * as Gio from
     /// "gi:gio"`). Empty for the `c:` surface, which imports by name.
     pub(crate) namespaces: Vec<(String, String)>,
+    /// What the module re-exports from `c:types`: `gi:gobject`'s `property`,
+    /// which a program imports beside `GObject`.
+    pub(crate) reexports: Vec<&'static str>,
     pub(crate) headers: Vec<String>,
     pub(crate) types: Vec<TypeDecl>,
     pub(crate) functions: Vec<Function>,

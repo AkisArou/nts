@@ -303,6 +303,28 @@ declare module "c:types" {
   // see it; each write notifies. A `number` (`G_TYPE_DOUBLE`), a `boolean`,
   // a `string` or a GObject class's handle.
   export type Property<T> = T & { readonly __c_property?: true };
+  // One a construction must give, declared with no default:
+  // `readonly isbn = property<string>()`.
+  // One brand carrying both keys, so the field is `T` and one brand as a
+  // `Property<T>` is, which is what lowering represents.
+  export type RequiredProperty<T> = T & { readonly __c_property?: true; readonly __c_required?: true };
+  // The `gi:` surface's declaration of a property (`gi:gobject` re-exports
+  // it): `title = property("")` is the field `title: Property<string> = ""`,
+  // its default the argument and its type read from it -- a literal widened,
+  // so `property("")` is a `string` and not `""`. An enum or an object says
+  // its type: `property<Orientation>(Orientation.VERTICAL)`,
+  // `property<Book | null>(null)`. Lowered to its default; it runs nothing,
+  // so a field initialiser may be one where it may not call.
+  /** @ntsAbi intrinsic */
+  export function property<T>(): RequiredProperty<T>;
+  /** @ntsAbi intrinsic */
+  export function property(initial: string): Property<string>;
+  /** @ntsAbi intrinsic */
+  export function property(initial: number): Property<number>;
+  /** @ntsAbi intrinsic */
+  export function property(initial: boolean): Property<boolean>;
+  /** @ntsAbi intrinsic */
+  export function property<T>(initial: T): Property<T>;
   // What a class the program writes is constructed with: its base's props
   // and its own properties, each optional -- the constructor GJS infers,
   // written in TypeScript's one line, `constructor(props: Properties<Book,

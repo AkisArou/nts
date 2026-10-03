@@ -275,6 +275,11 @@ pub(crate) fn gi(binding: &Binding, namespace: &Namespace, names: &Names) -> Bin
         qualifiers.extend(bases.flat_map(|base| names.qualifiers(&namespace.name, base)));
     }
     out.namespaces = qualifiers.into_iter().map(|qualifier| (module_of(&qualifier), qualifier)).collect();
+    // What a class the program writes declares itself with, beside the class
+    // it extends: `import { GObject, property } from "gi:gobject"`.
+    if namespace.name == "GObject" {
+        out.reexports = vec!["property"];
+    }
     out
 }
 
