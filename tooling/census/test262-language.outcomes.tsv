@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 8db9860c741baf87, commit fa77038611f45b670f86c08a2dd2f33dd62e769b, harness d6442dbc09f91ad0; machine at start: 19 GB available, swap 7.4/20 GB, load 7.4/11.2 (1m/5m), 32 cores; 8 worker(s)
+# compiler c34fb3d8255572be, commit 38fa28b020a3ab333d7a6dfe619ed15748bbe4ed, harness d6442dbc09f91ad0; machine at start: 19.2 GB available, swap 7.7/20 GB, load 6.9/5.3 (1m/5m), 32 cores; 8 worker(s)
 test/language/arguments-object/10.5-1gs.js	pass	
 test/language/asi/S7.9.2_A1_T1.js	pass	
 test/language/asi/S7.9.2_A1_T2.js	pass	
@@ -308,7 +308,7 @@ test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-elem-iter.js	pas
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-empty-iter.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-rest-init.js	pass	
-test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/arrow-function/dstr/ary-ptrn-elem-ary-val-null.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-id-init-hole.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-id-init-skipped.js	pass	
@@ -318,7 +318,7 @@ test/language/expressions/arrow-function/dstr/ary-ptrn-elem-id-iter-done.js	pass
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-id.js	pass	
-test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-val-null.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elision-exhausted.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-empty.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-rest-id-exhausted.js	pass	
@@ -360,7 +360,7 @@ test/language/expressions/arrow-function/dstr/dflt-obj-init-undefined.js	pass
 test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-prop-id-init-throws.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-obj-ptrn-prop-obj-value-null.js	pass	
 test/language/expressions/arrow-function/dstr/obj-init-null.js	pass	
@@ -370,7 +370,7 @@ test/language/expressions/arrow-function/dstr/obj-ptrn-id-init-throws.js	pass
 test/language/expressions/arrow-function/dstr/obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/arrow-function/dstr/obj-ptrn-list-err.js	pass	
 test/language/expressions/arrow-function/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/expressions/arrow-function/dstr/obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/arrow-function/dstr/obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/arrow-function/dstr/obj-ptrn-prop-id-init-throws.js	pass	
 test/language/expressions/arrow-function/dstr/obj-ptrn-prop-obj-value-null.js	pass	
 test/language/expressions/arrow-function/dstr/syntax-error-ident-ref-break-escaped.js	pass	
@@ -1455,7 +1455,7 @@ test/language/expressions/class/dstr/meth-ary-ptrn-elem-ary-elem-iter.js	pass
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-ary-empty-iter.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-ary-rest-init.js	pass	
-test/language/expressions/class/dstr/meth-ary-ptrn-elem-ary-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/class/dstr/meth-ary-ptrn-elem-ary-val-null.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-id-init-skipped.js	pass	
@@ -1465,7 +1465,7 @@ test/language/expressions/class/dstr/meth-ary-ptrn-elem-id-iter-done.js	pass
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-obj-id.js	pass	
-test/language/expressions/class/dstr/meth-ary-ptrn-elem-obj-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/class/dstr/meth-ary-ptrn-elem-obj-val-null.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-elision-exhausted.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-elision-step-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/class/dstr/meth-ary-ptrn-empty.js	pass	
@@ -1510,7 +1510,7 @@ test/language/expressions/class/dstr/meth-dflt-obj-init-undefined.js	pass
 test/language/expressions/class/dstr/meth-dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/expressions/class/dstr/meth-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/class/dstr/meth-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/expressions/class/dstr/meth-dflt-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/class/dstr/meth-dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/class/dstr/meth-dflt-obj-ptrn-prop-id-init-throws.js	pass	
 test/language/expressions/class/dstr/meth-dflt-obj-ptrn-prop-obj-value-null.js	pass	
 test/language/expressions/class/dstr/meth-obj-init-null.js	pass	
@@ -1520,7 +1520,7 @@ test/language/expressions/class/dstr/meth-obj-ptrn-id-init-throws.js	pass
 test/language/expressions/class/dstr/meth-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/class/dstr/meth-obj-ptrn-list-err.js	pass	
 test/language/expressions/class/dstr/meth-obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/expressions/class/dstr/meth-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/class/dstr/meth-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/class/dstr/meth-obj-ptrn-prop-id-init-throws.js	pass	
 test/language/expressions/class/dstr/meth-obj-ptrn-prop-obj-value-null.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-name-iter-val.js	pass	
@@ -1529,7 +1529,7 @@ test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-ary-elem-iter.js	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-ary-empty-iter.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-ary-rest-init.js	pass	
-test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-ary-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-ary-val-null.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-id-init-skipped.js	pass	
@@ -1539,7 +1539,7 @@ test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-id-iter-done.js	p
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-obj-id.js	pass	
-test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-obj-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-obj-val-null.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elision-exhausted.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elision-step-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/class/dstr/meth-static-ary-ptrn-empty.js	pass	
@@ -1584,7 +1584,7 @@ test/language/expressions/class/dstr/meth-static-dflt-obj-init-undefined.js	pass
 test/language/expressions/class/dstr/meth-static-dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/expressions/class/dstr/meth-static-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/class/dstr/meth-static-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/expressions/class/dstr/meth-static-dflt-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/class/dstr/meth-static-dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/class/dstr/meth-static-dflt-obj-ptrn-prop-id-init-throws.js	pass	
 test/language/expressions/class/dstr/meth-static-dflt-obj-ptrn-prop-obj-value-null.js	pass	
 test/language/expressions/class/dstr/meth-static-obj-init-null.js	pass	
@@ -1594,7 +1594,7 @@ test/language/expressions/class/dstr/meth-static-obj-ptrn-id-init-throws.js	pass
 test/language/expressions/class/dstr/meth-static-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/class/dstr/meth-static-obj-ptrn-list-err.js	pass	
 test/language/expressions/class/dstr/meth-static-obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/expressions/class/dstr/meth-static-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/class/dstr/meth-static-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/class/dstr/meth-static-obj-ptrn-prop-id-init-throws.js	pass	
 test/language/expressions/class/dstr/meth-static-obj-ptrn-prop-obj-value-null.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-ary-name-iter-val.js	pass	
@@ -2892,7 +2892,7 @@ test/language/expressions/function/dstr/ary-ptrn-elem-ary-elem-iter.js	pass
 test/language/expressions/function/dstr/ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-ary-empty-iter.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-ary-rest-init.js	pass	
-test/language/expressions/function/dstr/ary-ptrn-elem-ary-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/function/dstr/ary-ptrn-elem-ary-val-null.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-id-init-hole.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-id-init-skipped.js	pass	
@@ -2902,7 +2902,7 @@ test/language/expressions/function/dstr/ary-ptrn-elem-id-iter-done.js	pass
 test/language/expressions/function/dstr/ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-obj-id.js	pass	
-test/language/expressions/function/dstr/ary-ptrn-elem-obj-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/function/dstr/ary-ptrn-elem-obj-val-null.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elision-exhausted.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-empty.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-rest-id-exhausted.js	pass	
@@ -2944,7 +2944,7 @@ test/language/expressions/function/dstr/dflt-obj-init-undefined.js	pass
 test/language/expressions/function/dstr/dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/expressions/function/dstr/dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/function/dstr/dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/expressions/function/dstr/dflt-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/function/dstr/dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/function/dstr/dflt-obj-ptrn-prop-id-init-throws.js	pass	
 test/language/expressions/function/dstr/dflt-obj-ptrn-prop-obj-value-null.js	pass	
 test/language/expressions/function/dstr/obj-init-null.js	pass	
@@ -2954,7 +2954,7 @@ test/language/expressions/function/dstr/obj-ptrn-id-init-throws.js	pass
 test/language/expressions/function/dstr/obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/function/dstr/obj-ptrn-list-err.js	pass	
 test/language/expressions/function/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/expressions/function/dstr/obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/function/dstr/obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/function/dstr/obj-ptrn-prop-id-init-throws.js	pass	
 test/language/expressions/function/dstr/obj-ptrn-prop-obj-value-null.js	pass	
 test/language/expressions/function/early-body-super-call.js	fail	accepted: was refused later (lowering)
@@ -3429,7 +3429,7 @@ test/language/expressions/object/dstr/meth-ary-ptrn-elem-ary-elem-iter.js	pass
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-ary-empty-iter.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-ary-rest-init.js	pass	
-test/language/expressions/object/dstr/meth-ary-ptrn-elem-ary-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/object/dstr/meth-ary-ptrn-elem-ary-val-null.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-id-init-skipped.js	pass	
@@ -3439,7 +3439,7 @@ test/language/expressions/object/dstr/meth-ary-ptrn-elem-id-iter-done.js	pass
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-obj-id.js	pass	
-test/language/expressions/object/dstr/meth-ary-ptrn-elem-obj-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/object/dstr/meth-ary-ptrn-elem-obj-val-null.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-elision-exhausted.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-elision-step-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/object/dstr/meth-ary-ptrn-empty.js	pass	
@@ -3484,7 +3484,7 @@ test/language/expressions/object/dstr/meth-dflt-obj-init-undefined.js	pass
 test/language/expressions/object/dstr/meth-dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/expressions/object/dstr/meth-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/object/dstr/meth-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/expressions/object/dstr/meth-dflt-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/object/dstr/meth-dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/object/dstr/meth-dflt-obj-ptrn-prop-id-init-throws.js	pass	
 test/language/expressions/object/dstr/meth-dflt-obj-ptrn-prop-obj-value-null.js	pass	
 test/language/expressions/object/dstr/meth-obj-init-null.js	pass	
@@ -3494,7 +3494,7 @@ test/language/expressions/object/dstr/meth-obj-ptrn-id-init-throws.js	pass
 test/language/expressions/object/dstr/meth-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/object/dstr/meth-obj-ptrn-list-err.js	pass	
 test/language/expressions/object/dstr/meth-obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/expressions/object/dstr/meth-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/object/dstr/meth-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/object/dstr/meth-obj-ptrn-prop-id-init-throws.js	pass	
 test/language/expressions/object/dstr/meth-obj-ptrn-prop-obj-value-null.js	pass	
 test/language/expressions/object/getter-body-strict-outside.js	fail	accepted: was refused later (lowering)
@@ -5491,7 +5491,7 @@ test/language/statements/class/dstr/meth-ary-ptrn-elem-ary-elem-iter.js	pass
 test/language/statements/class/dstr/meth-ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-elem-ary-empty-iter.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-elem-ary-rest-init.js	pass	
-test/language/statements/class/dstr/meth-ary-ptrn-elem-ary-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/class/dstr/meth-ary-ptrn-elem-ary-val-null.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-elem-id-init-skipped.js	pass	
@@ -5501,7 +5501,7 @@ test/language/statements/class/dstr/meth-ary-ptrn-elem-id-iter-done.js	pass
 test/language/statements/class/dstr/meth-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-elem-obj-id.js	pass	
-test/language/statements/class/dstr/meth-ary-ptrn-elem-obj-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/class/dstr/meth-ary-ptrn-elem-obj-val-null.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-elision-exhausted.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-elision-step-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/class/dstr/meth-ary-ptrn-empty.js	pass	
@@ -5546,7 +5546,7 @@ test/language/statements/class/dstr/meth-dflt-obj-init-undefined.js	pass
 test/language/statements/class/dstr/meth-dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/statements/class/dstr/meth-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/class/dstr/meth-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/statements/class/dstr/meth-dflt-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/class/dstr/meth-dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/class/dstr/meth-dflt-obj-ptrn-prop-id-init-throws.js	pass	
 test/language/statements/class/dstr/meth-dflt-obj-ptrn-prop-obj-value-null.js	pass	
 test/language/statements/class/dstr/meth-obj-init-null.js	pass	
@@ -5556,7 +5556,7 @@ test/language/statements/class/dstr/meth-obj-ptrn-id-init-throws.js	pass
 test/language/statements/class/dstr/meth-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/class/dstr/meth-obj-ptrn-list-err.js	pass	
 test/language/statements/class/dstr/meth-obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/statements/class/dstr/meth-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/class/dstr/meth-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/class/dstr/meth-obj-ptrn-prop-id-init-throws.js	pass	
 test/language/statements/class/dstr/meth-obj-ptrn-prop-obj-value-null.js	pass	
 test/language/statements/class/dstr/meth-static-ary-name-iter-val.js	pass	
@@ -5565,7 +5565,7 @@ test/language/statements/class/dstr/meth-static-ary-ptrn-elem-ary-elem-iter.js	p
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-ary-empty-iter.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-ary-rest-init.js	pass	
-test/language/statements/class/dstr/meth-static-ary-ptrn-elem-ary-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/class/dstr/meth-static-ary-ptrn-elem-ary-val-null.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-id-init-skipped.js	pass	
@@ -5575,7 +5575,7 @@ test/language/statements/class/dstr/meth-static-ary-ptrn-elem-id-iter-done.js	pa
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-obj-id.js	pass	
-test/language/statements/class/dstr/meth-static-ary-ptrn-elem-obj-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/class/dstr/meth-static-ary-ptrn-elem-obj-val-null.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-elision-exhausted.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-elision-step-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/class/dstr/meth-static-ary-ptrn-empty.js	pass	
@@ -5620,7 +5620,7 @@ test/language/statements/class/dstr/meth-static-dflt-obj-init-undefined.js	pass
 test/language/statements/class/dstr/meth-static-dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/statements/class/dstr/meth-static-dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/class/dstr/meth-static-dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/statements/class/dstr/meth-static-dflt-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/class/dstr/meth-static-dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/class/dstr/meth-static-dflt-obj-ptrn-prop-id-init-throws.js	pass	
 test/language/statements/class/dstr/meth-static-dflt-obj-ptrn-prop-obj-value-null.js	pass	
 test/language/statements/class/dstr/meth-static-obj-init-null.js	pass	
@@ -5630,7 +5630,7 @@ test/language/statements/class/dstr/meth-static-obj-ptrn-id-init-throws.js	pass
 test/language/statements/class/dstr/meth-static-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/class/dstr/meth-static-obj-ptrn-list-err.js	pass	
 test/language/statements/class/dstr/meth-static-obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/statements/class/dstr/meth-static-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/class/dstr/meth-static-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/class/dstr/meth-static-obj-ptrn-prop-id-init-throws.js	pass	
 test/language/statements/class/dstr/meth-static-obj-ptrn-prop-obj-value-null.js	pass	
 test/language/statements/class/dstr/private-gen-meth-ary-name-iter-val.js	pass	
@@ -6407,7 +6407,7 @@ test/language/statements/const/dstr/ary-ptrn-rest-not-final-obj.js	pass
 test/language/statements/const/dstr/obj-init-undefined.js	pass	
 test/language/statements/const/dstr/obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/const/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/statements/const/dstr/obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/const/dstr/obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/const/dstr/obj-ptrn-prop-obj-value-null.js	pass	
 test/language/statements/const/function-local-closure-get-before-initialization.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/const/global-closure-get-before-initialization.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
@@ -6785,7 +6785,7 @@ test/language/statements/for-of/dstr/const-obj-init-undefined.js	pass
 test/language/statements/for-of/dstr/const-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/for-of/dstr/const-obj-ptrn-init-err.js	pass	
 test/language/statements/for-of/dstr/const-obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/statements/for-of/dstr/const-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/for-of/dstr/const-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/for-of/dstr/const-obj-ptrn-prop-obj-value-null.js	pass	
 test/language/statements/for-of/dstr/let-ary-name-iter-val.js	pass	
 test/language/statements/for-of/dstr/let-ary-ptrn-elem-ary-elem-iter.js	pass	
@@ -6817,7 +6817,7 @@ test/language/statements/for-of/dstr/let-obj-init-undefined.js	pass
 test/language/statements/for-of/dstr/let-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/for-of/dstr/let-obj-ptrn-init-err.js	pass	
 test/language/statements/for-of/dstr/let-obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/statements/for-of/dstr/let-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/for-of/dstr/let-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/for-of/dstr/let-obj-ptrn-prop-obj-value-null.js	pass	
 test/language/statements/for-of/dstr/obj-empty-bool.js	pass	
 test/language/statements/for-of/dstr/obj-empty-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
@@ -6882,7 +6882,7 @@ test/language/statements/for-of/dstr/var-obj-init-undefined.js	pass
 test/language/statements/for-of/dstr/var-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/for-of/dstr/var-obj-ptrn-init-err.js	pass	
 test/language/statements/for-of/dstr/var-obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/statements/for-of/dstr/var-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/for-of/dstr/var-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/for-of/dstr/var-obj-ptrn-prop-obj-value-null.js	pass	
 test/language/statements/for-of/escaped-of.js	pass	
 test/language/statements/for-of/generator-next-error.js	pass	
@@ -7006,7 +7006,7 @@ test/language/statements/for/dstr/const-ary-ptrn-rest-obj-id.js	pass
 test/language/statements/for/dstr/const-obj-init-undefined.js	pass	
 test/language/statements/for/dstr/const-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/for/dstr/const-obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/statements/for/dstr/const-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/for/dstr/const-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/for/dstr/const-obj-ptrn-prop-obj-value-null.js	pass	
 test/language/statements/for/dstr/let-ary-name-iter-val.js	pass	
 test/language/statements/for/dstr/let-ary-ptrn-elem-ary-elem-init.js	pass	
@@ -7038,7 +7038,7 @@ test/language/statements/for/dstr/let-ary-ptrn-rest-obj-id.js	pass
 test/language/statements/for/dstr/let-obj-init-undefined.js	pass	
 test/language/statements/for/dstr/let-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/for/dstr/let-obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/statements/for/dstr/let-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/for/dstr/let-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/for/dstr/let-obj-ptrn-prop-obj-value-null.js	pass	
 test/language/statements/for/dstr/var-ary-name-iter-val.js	pass	
 test/language/statements/for/dstr/var-ary-ptrn-elem-ary-elem-init.js	pass	
@@ -7101,7 +7101,7 @@ test/language/statements/function/dstr/ary-ptrn-elem-ary-elem-iter.js	pass
 test/language/statements/function/dstr/ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/statements/function/dstr/ary-ptrn-elem-ary-empty-iter.js	pass	
 test/language/statements/function/dstr/ary-ptrn-elem-ary-rest-init.js	pass	
-test/language/statements/function/dstr/ary-ptrn-elem-ary-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/function/dstr/ary-ptrn-elem-ary-val-null.js	pass	
 test/language/statements/function/dstr/ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/statements/function/dstr/ary-ptrn-elem-id-init-hole.js	pass	
 test/language/statements/function/dstr/ary-ptrn-elem-id-init-skipped.js	pass	
@@ -7111,7 +7111,7 @@ test/language/statements/function/dstr/ary-ptrn-elem-id-iter-done.js	pass
 test/language/statements/function/dstr/ary-ptrn-elem-id-iter-val.js	pass	
 test/language/statements/function/dstr/ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/function/dstr/ary-ptrn-elem-obj-id.js	pass	
-test/language/statements/function/dstr/ary-ptrn-elem-obj-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/function/dstr/ary-ptrn-elem-obj-val-null.js	pass	
 test/language/statements/function/dstr/ary-ptrn-elision-exhausted.js	pass	
 test/language/statements/function/dstr/ary-ptrn-elision-step-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/function/dstr/ary-ptrn-empty.js	pass	
@@ -7156,7 +7156,7 @@ test/language/statements/function/dstr/dflt-obj-init-undefined.js	pass
 test/language/statements/function/dstr/dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/statements/function/dstr/dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/function/dstr/dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/statements/function/dstr/dflt-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/function/dstr/dflt-obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/function/dstr/dflt-obj-ptrn-prop-id-init-throws.js	pass	
 test/language/statements/function/dstr/dflt-obj-ptrn-prop-obj-value-null.js	pass	
 test/language/statements/function/dstr/obj-init-null.js	pass	
@@ -7166,7 +7166,7 @@ test/language/statements/function/dstr/obj-ptrn-id-init-throws.js	pass
 test/language/statements/function/dstr/obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/function/dstr/obj-ptrn-list-err.js	pass	
 test/language/statements/function/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/statements/function/dstr/obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/function/dstr/obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/function/dstr/obj-ptrn-prop-id-init-throws.js	pass	
 test/language/statements/function/dstr/obj-ptrn-prop-obj-value-null.js	pass	
 test/language/statements/function/early-body-super-call.js	fail	accepted: was refused later (lowering)
@@ -7379,7 +7379,7 @@ test/language/statements/let/dstr/ary-ptrn-rest-not-final-obj.js	pass
 test/language/statements/let/dstr/obj-init-undefined.js	pass	
 test/language/statements/let/dstr/obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/let/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/statements/let/dstr/obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/let/dstr/obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/let/dstr/obj-ptrn-prop-obj-value-null.js	pass	
 test/language/statements/let/global-closure-set-before-initialization.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/let/global-use-before-initialization-in-prior-statement.js	fail	completed
@@ -7640,7 +7640,7 @@ test/language/statements/variable/dstr/ary-ptrn-rest-obj-id.js	pass
 test/language/statements/variable/dstr/obj-init-undefined.js	pass	
 test/language/statements/variable/dstr/obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/variable/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/statements/variable/dstr/obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/variable/dstr/obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/variable/dstr/obj-ptrn-prop-obj-value-null.js	pass	
 test/language/statements/variable/eval-strict-list-final-init.js	pass	
 test/language/statements/variable/eval-strict-list-final.js	pass	
