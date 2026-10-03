@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 96e2f269dfb7ec03, commit 9aba5cbb2dfa94f4faa7425a930b0b1928bdc791, harness d6442dbc09f91ad0; machine at start: 20.8 GB available, swap 7.2/20 GB, load 11.3/9.4 (1m/5m), 32 cores; 8 worker(s)
+# compiler ed28cfafc425bc9d, commit abc1564a91eaa138d5a1480b49aeace2efd650e0, harness d6442dbc09f91ad0; machine at start: 21 GB available, swap 7.3/20 GB, load 14.1/8.9 (1m/5m), 32 cores; 8 worker(s)
 test/language/arguments-object/10.5-1gs.js	pass	
 test/language/asi/S7.9.2_A1_T1.js	pass	
 test/language/asi/S7.9.2_A1_T2.js	pass	
@@ -299,7 +299,7 @@ test/language/expressions/array/11.1.4-0.js	pass
 test/language/expressions/arrow-function/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/arrow-function/arrow/concisebody-lookahead-assignmentexpression-1.js	pass	
 test/language/expressions/arrow-function/arrow/concisebody-lookahead-assignmentexpression-2.js	pass	
-test/language/expressions/arrow-function/dflt-params-arg-val-undefined.js	fail	nts: uncaught Test262Error: sameValue
+test/language/expressions/arrow-function/dflt-params-arg-val-undefined.js	pass	
 test/language/expressions/arrow-function/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/arrow-function/dflt-params-ref-prior.js	pass	
 test/language/expressions/arrow-function/dflt-params-rest.js	pass	
@@ -984,6 +984,7 @@ test/language/expressions/async-arrow-function/await-as-param-ident-nested-arrow
 test/language/expressions/async-arrow-function/await-as-param-nested-arrow-body-position.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-arrow-function/await-as-param-nested-arrow-parameter-position.js	pass	
 test/language/expressions/async-arrow-function/await-as-param-rest-nested-arrow-parameter-position.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/async-arrow-function/dflt-params-arg-val-undefined.js	pass	
 test/language/expressions/async-arrow-function/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-arrow-function/dflt-params-ref-prior.js	pass	
 test/language/expressions/async-arrow-function/dflt-params-rest.js	pass	
@@ -1025,7 +1026,7 @@ test/language/expressions/async-function/named-await-as-identifier-reference-esc
 test/language/expressions/async-function/named-await-as-identifier-reference.js	pass	
 test/language/expressions/async-function/named-await-as-label-identifier-escaped.js	pass	
 test/language/expressions/async-function/named-await-as-label-identifier.js	pass	
-test/language/expressions/async-function/named-dflt-params-arg-val-undefined.js	fail	nts: uncaught Test262Error: sameValue
+test/language/expressions/async-function/named-dflt-params-arg-val-undefined.js	pass	
 test/language/expressions/async-function/named-dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-function/named-dflt-params-ref-prior.js	pass	
 test/language/expressions/async-function/named-dflt-params-rest.js	pass	
@@ -1035,7 +1036,7 @@ test/language/expressions/async-function/named-rest-params-trailing-comma-early-
 test/language/expressions/async-function/named-returns-async-arrow.js	pass	
 test/language/expressions/async-function/named-returns-async-function.js	pass	
 test/language/expressions/async-function/nameless-array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/async-function/nameless-dflt-params-arg-val-undefined.js	fail	nts: uncaught Test262Error: sameValue
+test/language/expressions/async-function/nameless-dflt-params-arg-val-undefined.js	pass	
 test/language/expressions/async-function/nameless-dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-function/nameless-dflt-params-ref-prior.js	pass	
 test/language/expressions/async-function/nameless-dflt-params-rest.js	pass	
@@ -1208,6 +1209,7 @@ test/language/expressions/class/async-method-static/await-as-identifier-referenc
 test/language/expressions/class/async-method-static/await-as-identifier-reference.js	pass	
 test/language/expressions/class/async-method-static/await-as-label-identifier-escaped.js	pass	
 test/language/expressions/class/async-method-static/await-as-label-identifier.js	pass	
+test/language/expressions/class/async-method-static/dflt-params-arg-val-undefined.js	pass	
 test/language/expressions/class/async-method-static/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/async-method-static/dflt-params-ref-prior.js	pass	
 test/language/expressions/class/async-method-static/dflt-params-rest.js	pass	
@@ -2162,6 +2164,7 @@ test/language/expressions/class/elements/wrapped-in-sc-rs-static-privatename-ide
 test/language/expressions/class/elements/wrapped-in-sc-rs-static-privatename-identifier-initializer.js	pass	
 test/language/expressions/class/gen-method-param-dflt-yield.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/gen-method-static/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/gen-method-static/dflt-params-arg-val-undefined.js	pass	
 test/language/expressions/class/gen-method-static/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/gen-method-static/dflt-params-ref-prior.js	pass	
 test/language/expressions/class/gen-method-static/dflt-params-rest.js	pass	
@@ -2240,6 +2243,7 @@ test/language/expressions/class/ident-name-method-def-while-escaped.js	pass
 test/language/expressions/class/ident-name-method-def-with-escaped.js	pass	
 test/language/expressions/class/method-param-dflt-yield.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/method-static/array-destructuring-param-strict-body.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/method-static/dflt-params-arg-val-undefined.js	pass	
 test/language/expressions/class/method-static/dflt-params-duplicates.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/method-static/dflt-params-ref-prior.js	pass	
 test/language/expressions/class/method-static/dflt-params-rest.js	pass	
@@ -2893,7 +2897,7 @@ test/language/expressions/exponentiation/exp-operator.js	pass
 test/language/expressions/exponentiation/int32_min-exponent.js	pass	
 test/language/expressions/function/S10.1.1_A1_T2.js	pass	
 test/language/expressions/function/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/function/dflt-params-arg-val-undefined.js	fail	nts: uncaught Test262Error: sameValue
+test/language/expressions/function/dflt-params-arg-val-undefined.js	pass	
 test/language/expressions/function/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/function/dflt-params-ref-prior.js	pass	
 test/language/expressions/function/dflt-params-rest.js	pass	
@@ -2993,7 +2997,7 @@ test/language/expressions/function/rest-params-trailing-comma-early-error.js	pas
 test/language/expressions/function/static-init-await-reference.js	pass	
 test/language/expressions/function/use-strict-with-non-simple-param.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/generators/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/generators/dflt-params-arg-val-undefined.js	fail	nts: uncaught Test262Error: sameValue
+test/language/expressions/generators/dflt-params-arg-val-undefined.js	pass	
 test/language/expressions/generators/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/generators/dflt-params-ref-prior.js	pass	
 test/language/expressions/generators/dflt-params-rest.js	pass	
@@ -3662,6 +3666,7 @@ test/language/expressions/object/method-definition/escaped-set-s.js	pass
 test/language/expressions/object/method-definition/escaped-set-t.js	pass	
 test/language/expressions/object/method-definition/escaped-set.js	pass	
 test/language/expressions/object/method-definition/gen-meth-array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/object/method-definition/gen-meth-dflt-params-arg-val-undefined.js	pass	
 test/language/expressions/object/method-definition/gen-meth-dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/object/method-definition/gen-meth-dflt-params-ref-prior.js	pass	
 test/language/expressions/object/method-definition/gen-meth-dflt-params-rest.js	pass	
@@ -3683,6 +3688,7 @@ test/language/expressions/object/method-definition/generator-super-call-body.js	
 test/language/expressions/object/method-definition/generator-super-call-param.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/object/method-definition/generator-use-strict-with-non-simple-param.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/object/method-definition/meth-array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/object/method-definition/meth-dflt-params-arg-val-undefined.js	pass	
 test/language/expressions/object/method-definition/meth-dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/object/method-definition/meth-dflt-params-ref-prior.js	pass	
 test/language/expressions/object/method-definition/meth-dflt-params-rest.js	pass	
@@ -5039,6 +5045,7 @@ test/language/statements/async-function/await-as-identifier-reference.js	pass
 test/language/statements/async-function/await-as-label-identifier-escaped.js	pass	
 test/language/statements/async-function/await-as-label-identifier.js	pass	
 test/language/statements/async-function/declaration-returns-promise.js	pass	
+test/language/statements/async-function/dflt-params-arg-val-undefined.js	pass	
 test/language/statements/async-function/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/statements/async-function/dflt-params-ref-prior.js	pass	
 test/language/statements/async-function/dflt-params-rest.js	pass	
@@ -5231,6 +5238,7 @@ test/language/statements/class/async-method-static/await-as-identifier-reference
 test/language/statements/class/async-method-static/await-as-identifier-reference.js	pass	
 test/language/statements/class/async-method-static/await-as-label-identifier-escaped.js	pass	
 test/language/statements/class/async-method-static/await-as-label-identifier.js	pass	
+test/language/statements/class/async-method-static/dflt-params-arg-val-undefined.js	pass	
 test/language/statements/class/async-method-static/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/async-method-static/dflt-params-ref-prior.js	pass	
 test/language/statements/class/async-method-static/dflt-params-rest.js	pass	
@@ -6230,6 +6238,7 @@ test/language/statements/class/elements/wrapped-in-sc-rs-static-privatename-iden
 test/language/statements/class/elements/wrapped-in-sc-rs-static-privatename-identifier-initializer.js	pass	
 test/language/statements/class/gen-method-param-dflt-yield.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/gen-method-static/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/gen-method-static/dflt-params-arg-val-undefined.js	pass	
 test/language/statements/class/gen-method-static/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/gen-method-static/dflt-params-ref-prior.js	pass	
 test/language/statements/class/gen-method-static/dflt-params-rest.js	pass	
@@ -6306,6 +6315,7 @@ test/language/statements/class/ident-name-method-def-while-escaped.js	pass
 test/language/statements/class/ident-name-method-def-with-escaped.js	pass	
 test/language/statements/class/method-param-yield.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/method-static/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/method-static/dflt-params-arg-val-undefined.js	pass	
 test/language/statements/class/method-static/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/method-static/dflt-params-ref-prior.js	pass	
 test/language/statements/class/method-static/dflt-params-rest.js	pass	
@@ -7115,6 +7125,7 @@ test/language/statements/function/S13_A4_T1.js	pass
 test/language/statements/function/S13_A4_T2.js	pass	
 test/language/statements/function/S13_A7_T3.js	pass	
 test/language/statements/function/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/statements/function/dflt-params-arg-val-undefined.js	pass	
 test/language/statements/function/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/statements/function/dflt-params-ref-prior.js	pass	
 test/language/statements/function/dflt-params-rest.js	pass	
@@ -7224,6 +7235,7 @@ test/language/statements/function/rest-params-trailing-comma-early-error.js	pass
 test/language/statements/function/static-init-await-binding-valid.js	pass	
 test/language/statements/function/use-strict-with-non-simple-param.js	fail	accepted: ran and threw Test262Error
 test/language/statements/generators/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/statements/generators/dflt-params-arg-val-undefined.js	pass	
 test/language/statements/generators/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/statements/generators/dflt-params-ref-prior.js	pass	
 test/language/statements/generators/dflt-params-rest.js	pass	
