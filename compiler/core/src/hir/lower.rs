@@ -17410,8 +17410,6 @@ struct Loop {
     latch_params: Vec<ValueId>,
     /// The symbols the loop carries, in parameter order.
     carried: Vec<u32>,
-    /// Each carried name's value at the top of an iteration.
-    header_params: Vec<ValueId>,
 }
 
 /// One reason a `try` has to be noticed while the statements inside it lower.
@@ -29710,14 +29708,14 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// # Where block parameters earn their keep
     ///
-    /// A variable the body assigns has a different value on each iteration, and
+    /// A variable the body or condition assigns can differ on each iteration, and
     /// the header has to see whichever one the previous iteration produced. That
     /// is exactly a block parameter: the entry passes the initial value, the back
     /// edge passes the updated one, and the body reads the parameter.
     ///
     /// The parameters are created before the body is lowered, because the body
     /// refers to them. Which variables need one is a syntactic question —
-    /// [`Self::assigned_symbols`] — answered by scanning the body first.
+    /// [`Self::assigned_symbols`] — answered before either part is lowered.
     fn lower_while(&mut self, id: NodeId) -> Result<(), Diagnostic> {
         let children = self.children(id);
         let [condition, body] = children.as_slice() else {
@@ -29726,6 +29724,7 @@ impl<'a> FuncBuilder<'a> {
 
         let mut carried = Vec::new();
         self.assigned_symbols(*body, &mut carried);
+        self.assigned_symbols(*condition, &mut carried);
         let mut declared = Vec::new();
         self.declared_symbols(*body, &mut declared);
         carried.retain(|symbol| !declared.contains(symbol));
@@ -30033,6 +30032,7 @@ impl<'a> FuncBuilder<'a> {
 
         let mut carried = Vec::new();
         self.assigned_symbols(body, &mut carried);
+        self.assigned_symbols(condition, &mut carried);
         let mut declared = Vec::new();
         self.declared_symbols(body, &mut declared);
         carried.retain(|symbol| !declared.contains(symbol));
@@ -30154,14 +30154,12 @@ impl<'a> FuncBuilder<'a> {
 
         // Inside the loop, each carried name *is* its header parameter.
         self.switch_to(header);
-        let mut header_params = Vec::new();
         let mut latch_params = Vec::new();
         let mut exit_types = Vec::new();
         for (symbol, entering) in carried.iter().zip(&incoming) {
             let ty = self.values[entering.0 as usize].ty.clone();
             let param = self.push_block_param(header, ty.clone(), origin.clone());
             self.bindings.insert(*symbol, param);
-            header_params.push(param);
             exit_types.push(ty.clone());
             if latch != header {
                 latch_params.push(self.push_block_param(latch, ty, origin.clone()));
@@ -30185,7 +30183,6 @@ impl<'a> FuncBuilder<'a> {
             latch,
             latch_params,
             carried: carried.to_vec(),
-            header_params,
         })
     }
 
@@ -30209,7 +30206,7 @@ impl<'a> FuncBuilder<'a> {
         Ok(())
     }
 
-    /// Into the body, or out of the loop with what the header holds.
+    /// Into the body, or out with the values reached after evaluating the test.
     fn test_loop(&mut self, cond: ValueId, record: &Loop) {
         // A condition that is constantly true is `for (;;)` written another
         // way, and lowers the same way. The difference is not cosmetic: the
@@ -30230,12 +30227,13 @@ impl<'a> FuncBuilder<'a> {
             return;
         }
         let (exit, _) = self.exit_of(record.depth);
+        let reached = self.carried_now(&record.carried);
         self.terminate(Terminator::Branch {
             cond,
             then_target: record.body,
             then_args: Vec::new(),
             else_target: exit,
-            else_args: record.header_params.clone(),
+            else_args: reached,
         });
     }
 
@@ -33604,13 +33602,16 @@ impl<'a> FuncBuilder<'a> {
             }
         }
 
-        // The update assigns the loop variable too, so it counts toward what is
-        // carried. Missing it is how `i` ends up defined in the body and read
-        // from the header.
+        // Every part evaluated repeatedly contributes writes. The initializer
+        // runs once; the body, update and condition can each change a name the
+        // next iteration must see.
         let mut carried = Vec::new();
         self.assigned_symbols(body, &mut carried);
         if let Some(update) = update {
             self.assigned_symbols(update, &mut carried);
+        }
+        if let Some(condition) = condition {
+            self.assigned_symbols(condition, &mut carried);
         }
         let mut declared = Vec::new();
         self.declared_symbols(body, &mut declared);

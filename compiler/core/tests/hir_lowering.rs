@@ -518,6 +518,30 @@ fn a_loop_carried_value_becomes_a_block_parameter() {
 }
 
 #[test]
+fn loop_conditions_carry_their_writes_and_publish_the_final_write() {
+    let Some(lowered) = lowered("a-loop-condition-keeps-its-writes") else {
+        return;
+    };
+    assert!(lowered.diagnostics.is_empty(), "{:?}", lowered.diagnostics);
+    assert_eq!(lowered.program.funcs.iter().filter(|f| f.exported).count(), 10);
+    hir::verify::verify(&lowered.program).expect("every loop has valid SSA");
+    for name in ["whilePostfix", "forPostfix", "doContinue"] {
+        let f = func(&lowered, name);
+        let Terminator::Jump { args, .. } = &f.entry().terminator else {
+            panic!("{name} must enter its loop");
+        };
+        assert_eq!(args.len(), 2, "{name} carries both count and steps");
+    }
+    let zero = func(&lowered, "zeroIterations");
+    assert!(zero.blocks.iter().any(|block| {
+        let Terminator::Branch { else_args, .. } = &block.terminator else {
+            return false;
+        };
+        else_args.iter().any(|arg| matches!(zero.value(*arg).kind, OpKind::Binary { op: BinOp::Add, .. }))
+    }), "even a false first condition must publish its increment");
+}
+
+#[test]
 fn the_value_after_a_loop_is_the_header_parameter() {
     let Some(lowered) = lowered("loops") else {
         return;
