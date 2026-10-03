@@ -15344,49 +15344,15 @@ fn holds_only_absences(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
             .all(|member| absence_of_member(snapshot, *member).is_some())
 }
 
-/// Whether this binding pattern runs `RequireObjectCoercible` on its own source: an object
-/// pattern, anywhere but directly inside an **array** pattern.
+/// Which patterns require a `TypeError` check before consuming their source.
+/// JavaScript requires it for object and array patterns: inferred reference
+/// types do not guarantee a present value. A nested reference element stays
+/// erased through this check; its array proves the representation on the
+/// present path (`reference_element_for_pattern`).
 ///
-/// Step 1 of `BindingInitialization` says every object pattern does, and this stops one case
-/// short of that for a reason measured rather than argued -- **four** measurements now, the
-/// last of which says the exclusion is not about nesting at all.
-///
-/// A nested pattern's source is a *read*: inside an object pattern a **property** read, which
-/// cannot fail on a present object; inside an array pattern an **element** read. All four, on
-/// the recorded language set:
-///
-/// ```text
-/// every object pattern                        51 FIXED, 6 REGRESSED, 6 CHANGED
-/// the root of a binding only                  31 FIXED, 0 REGRESSED
-/// not inside an array pattern                 51 FIXED, 0 REGRESSED  <- this
-/// every object pattern, with a past-the-end
-///   element answering `undefined`             57 FIXED, 6 REGRESSED
-/// ```
-///
-/// The 20 between the second and third are all `obj-ptrn-prop-obj-value-null`, nested inside an
-/// *object* pattern, which is why the line sits between the two kinds of nesting rather than at
-/// the root. And the fourth is the one that corrects the story: making a past-the-end element
-/// `undefined` did **not** release the array case, because the element type of
-/// `function f([{ x }]) {}` is a **reference** (`managed<[managed<obj#49>]>`), not erased, and
-/// an absence at a reference element is the same lie at the type that a `number[]`'s is -- the
-/// `-undef` cases still decline, and they are the same 6.
-///
-/// So what the array case waits on is not the read answering `undefined`; it is a **reference
-/// element able to carry an absence**, which is a representation question with its own hazard:
-/// a null past the end is silently produced rather than declined, and anything that reads it
-/// without an object pattern's check faults. That is its own item.
-///
-/// **One predicate, two readers**, because the two run at different times and disagreeing is
-/// a throw with no handler path: [`FuncBuilder::require_object_coercible`] asks it of the
-/// pattern it is binding, and [`a_parameter_pattern_can_throw`] asks whether any pattern in a
-/// parameter satisfies it -- which is what makes the declaration a raiser.
-///
-/// **In a JavaScript source, every pattern.** The types of a `.js` file are inferred and
-/// nothing checks them, so a reference the checker calls non-null can be `null` at run time:
-/// `function f([[x]]) {}` called `f([null])` reads a null where `[any]` is declared, and the
-/// inner array pattern -- `GetIterator(null)` -- must throw, as must an object pattern inside
-/// an array one. In a `.ts` file the type is the guarantee and the exclusion above stands;
-/// so a TypeScript program, the runtime included, emits nothing new.
+/// TypeScript retains the existing exclusion for an object pattern directly
+/// inside an array pattern, whose declared element representation is trusted.
+/// One predicate selects both the guard and a parameter's throwing analysis.
 fn a_pattern_that_requires_coercion(probe: &FuncBuilder, pattern: NodeId) -> bool {
     match probe.kind_of(pattern) {
         Some(syntax::OBJECT_BINDING_PATTERN) => {
@@ -52587,6 +52553,25 @@ impl<'a> FuncBuilder<'a> {
         settled
     }
 
+    /// A nested JavaScript pattern whose array proves a present reference's type.
+    /// This proof selects both the erased read and its checked reconstruction.
+    fn reference_element_for_pattern(
+        &self,
+        binding: NodeId,
+        array: ValueId,
+        default: Option<NodeId>,
+    ) -> Option<HirType> {
+        if default.is_some() || !in_javascript(self, binding)
+            || !matches!(self.kind_of(binding), Some(syntax::OBJECT_BINDING_PATTERN | syntax::ARRAY_BINDING_PATTERN))
+        {
+            return None;
+        }
+        match &self.values[array.0 as usize].ty {
+            HirType::Managed(ManagedType::Array(ty)) if ty.is_managed() => Some((**ty).clone()),
+            _ => None,
+        }
+    }
+
     /// Bind every name a destructuring pattern introduces.
     ///
     /// The initializer is lowered *once* and each name is a read of it, which
@@ -52639,6 +52624,16 @@ impl<'a> FuncBuilder<'a> {
         else {
             return Ok(None);
         };
+        // Keep an inferred reference's absence until the nested pattern checks it.
+        if self.reference_element_for_pattern(binding, value, default).is_some()
+        {
+            let origin = self.origin(element);
+            #[allow(clippy::cast_precision_loss)]
+            let at = position as f64;
+            let index = self.push(OpKind::ConstFloat(at), HirType::NUMBER, origin.clone());
+            let array = self.push(OpKind::Erase { value, absent: Absent::Impossible }, HirType::Erased, origin.clone());
+            return Ok(Some(self.runtime_call("nts_array_element", vec![array, index], HirType::Erased, origin)));
+        }
         // **With no default, this still answers for an erased element**, and that is a
         // run-time decline closed rather than a conformance row gained: `const [a, b] = [1]`
         // stops the program -- *"an index its `!` promised was in range and was not"* -- where
@@ -53055,30 +53050,44 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn bind_pattern(&mut self, pattern: NodeId, value: ValueId, scope: PatternScope) -> Result<(), Diagnostic> {
+        self.bind_pattern_from(pattern, value, scope, None)
+    }
+
+    fn bind_pattern_from(
+        &mut self,
+        pattern: NodeId,
+        value: ValueId,
+        scope: PatternScope,
+        present: Option<HirType>,
+    ) -> Result<(), Diagnostic> {
         let object = self.kind_of(pattern) == Some(syntax::OBJECT_BINDING_PATTERN);
+        let source = present.as_ref().unwrap_or(&self.values[value.0 as usize].ty);
+        let steps = !object && matches!(source, HirType::Managed(ManagedType::Object(ty))
+            if self.generator_declared(*ty).is_some() || abstract_generator_kind(self.snapshot, *ty).is_some());
         // **Step 1, before any element is read.** An object pattern over `null` or
         // `undefined` throws a `TypeError`, and an *empty* one reads nothing -- so this is
         // the only place the check can be. Which patterns ask is
         // [`a_pattern_that_requires_coercion`]'s. See [`Self::require_object_coercible`].
-        if object {
+        // Direct generators retain their existing frame path. An erased
+        // reference element still needs the guard before reconstruction.
+        if !steps || present.is_some() {
             self.require_object_coercible(pattern, value)?;
         }
+        // The source array proves a present element's representation. The
+        // absence check must run before reading that payload back.
+        let value = match present {
+            Some(ty) => {
+                let origin = self.origin(pattern);
+                self.push(OpKind::Unerase { value }, ty, origin)
+            }
+            None => value,
+        };
         // **An array pattern over a generator is a step per element**, elisions included,
         // because a hole still asks the iterator for one. See
         // [`Self::bind_array_pattern_by_stepping`] -- including why an *array* source does not
         // come here.
-        if !object
-            && let HirType::Managed(ManagedType::Object(ty)) = self.values[value.0 as usize].ty
-            && (self.generator_declared(ty).is_some()
-                || abstract_generator_kind(self.snapshot, ty).is_some())
-        {
+        if steps {
             return self.bind_array_pattern_by_stepping(pattern, value, scope);
-        }
-        // An array pattern's `GetIterator` throws the same `TypeError` over an absence --
-        // asked after the generator arm, which steps a source its type says is a
-        // generator and has its own frame to throw from.
-        if !object {
-            self.require_object_coercible(pattern, value)?;
         }
         for (position, element) in self.children(pattern).into_iter().enumerate() {
             if self.kind_of(element) != Some(syntax::BINDING_ELEMENT) {
@@ -53231,11 +53240,13 @@ impl<'a> FuncBuilder<'a> {
             };
             // `{ p: { x } }` is a read and then another pattern over what it
             // produced, which is the same function one level down.
-            match symbol {
-                Some(symbol) => {
-                    self.bind_pattern_value(binding, symbol.0, read, scope)?;
-                }
-                None => self.bind_pattern(binding, read, scope)?,
+            if let Some(symbol) = symbol {
+                self.bind_pattern_value(binding, symbol.0, read, scope)?;
+            } else {
+                let present = if !object && self.values[read.0 as usize].ty == HirType::Erased {
+                    self.reference_element_for_pattern(binding, value, default)
+                } else { None };
+                self.bind_pattern_from(binding, read, scope, present)?;
             }
         }
         Ok(())
