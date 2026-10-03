@@ -5803,10 +5803,20 @@ fn describe_gate_holder(probe: &FuncBuilder, holder: NodeId, call: NodeId) -> St
         .filter(|at| names_a_body(probe.kind_of(*at)) || probe.kind_of(*at) == Some(syntax::CONSTRUCTOR))
         .find_map(named)
         .map_or_else(|| "module scope".to_owned(), |name| format!("`{name}`"));
+    // Through a cast or a `!`, and an element read by what it reads from: its last
+    // child is the index, so `queue[i]()` was once named `i`.
     let callee = probe
         .children(call)
         .first()
-        .and_then(|callee| probe.node(*callee).text.clone().or_else(|| probe.children(*callee).last().and_then(|last| probe.node(*last).text.clone())))
+        .map(|callee| probe.through_assertions(*callee))
+        .and_then(|callee| {
+            let last_text = |at: NodeId| probe.children(at).last().and_then(|last| probe.node(*last).text.clone());
+            if probe.kind_of(callee) == Some(syntax::ELEMENT_ACCESS_EXPRESSION) {
+                let read = probe.children(callee).first().copied()?;
+                return probe.node(read).text.clone().or_else(|| last_text(read)).map(|name| format!("{name}[…]"));
+            }
+            probe.node(callee).text.clone().or_else(|| last_text(callee))
+        })
         .unwrap_or_else(|| "a function value".to_owned());
     format!("a closure in {within} calls `{callee}`, whose own `throw` cannot be carried")
 }
@@ -6031,15 +6041,37 @@ fn a_value_held_callee(snapshot: &SemanticSnapshot, probe: &FuncBuilder, symbol:
 /// Whether this call reaches a function held in a **value**, which is the only kind of
 /// callee a copy cannot name: there is nothing to suffix, so the raise is carried by the
 /// uniform raising entry or not at all. See [`a_value_held_callee`].
+///
+/// **An element read is one, and names no declaration at all.** `queue[i]!()` reads a
+/// function out of an array, which is a value held exactly as a field's is -- but the
+/// access has no symbol, so asking for one answered "not held", the call read as one
+/// no entry could carry, and the closure making it held the program-wide gate off.
+/// react-gtk's idle closure drains its restore queue that way, so every native React
+/// program linking it lost the gate.
+///
+/// **Unless the read names a method**, which an element read can: `this[kReaderFail](e)`
+/// calls a method under a computed key, and its access has no symbol either. Read as a
+/// value it dispatched at the raising slot instead of naming the method's copy, and 26
+/// raising copies left every `runtime/node` module -- the `definitions` floor caught
+/// it. So the checker's target decides: a method's declaration or signature is a
+/// method call, and anything else -- the function-type annotation `queue[i]!()`
+/// resolves to, an arrow, a function stored as a value -- is a value.
 fn a_value_held_call(snapshot: &SemanticSnapshot, probe: &FuncBuilder, call: NodeId) -> bool {
     if probe.reads_an_accessor(call) {
         return false;
     }
-    probe
-        .children(call)
-        .first()
-        .and_then(|callee| probe.node(probe.through_assertions(*callee)).symbol)
-        .is_some_and(|symbol| a_value_held_callee(snapshot, probe, symbol.0))
+    let Some(callee) = probe.children(call).first().map(|callee| probe.through_assertions(*callee)) else {
+        return false;
+    };
+    match probe.node(callee).symbol {
+        Some(symbol) => a_value_held_callee(snapshot, probe, symbol.0),
+        None => {
+            probe.kind_of(callee) == Some(syntax::ELEMENT_ACCESS_EXPRESSION)
+                && !snapshot.call_targets.get(&call).and_then(|target| target.callee).is_some_and(|at| {
+                    matches!(probe.kind_of(at), Some(syntax::METHOD_DECLARATION | syntax::METHOD_SIGNATURE))
+                })
+        }
+    }
 }
 
 /// Every eligible function this program mentions somewhere other than as a callee.
@@ -51440,12 +51472,14 @@ impl<'a> FuncBuilder<'a> {
         // cases where node answers `-1`. One predicate for it now
         // ([`a_value_held_callee`]) with four readers, rather than one kind named
         // here and the rest left to a lookup that cannot see them.
-        if self
-            .children(call)
-            .first()
-            .and_then(|callee| self.node(*callee).symbol)
-            .is_some_and(|symbol| a_value_held_callee(self.snapshot, self, symbol.0))
-        {
+        //
+        // **And asked through [`a_value_held_call`]**, which looks through a cast and
+        // reads an element as a value. This asked the callee's own symbol, so a `try`
+        // directly around `queue[i]!()` fell to the checker's target -- the
+        // function-type annotation, which no arm matches -- and was refused as
+        // "neither a plain function nor a method" while the gate, asking the shared
+        // predicate, carried the same call.
+        if a_value_held_call(self.snapshot, self, call) {
             return Some(THROUGH_A_FUNCTION_VALUE);
         }
         let Some(declaration) = self
