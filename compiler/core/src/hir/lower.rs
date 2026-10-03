@@ -15346,13 +15346,37 @@ fn holds_only_absences(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
 /// a throw with no handler path: [`FuncBuilder::require_object_coercible`] asks it of the
 /// pattern it is binding, and [`a_parameter_pattern_can_throw`] asks whether any pattern in a
 /// parameter satisfies it -- which is what makes the declaration a raiser.
+///
+/// **In a JavaScript source, every pattern.** The types of a `.js` file are inferred and
+/// nothing checks them, so a reference the checker calls non-null can be `null` at run time:
+/// `function f([[x]]) {}` called `f([null])` reads a null where `[any]` is declared, and the
+/// inner array pattern -- `GetIterator(null)` -- must throw, as must an object pattern inside
+/// an array one. In a `.ts` file the type is the guarantee and the exclusion above stands;
+/// so a TypeScript program, the runtime included, emits nothing new.
 fn a_pattern_that_requires_coercion(probe: &FuncBuilder, pattern: NodeId) -> bool {
-    probe.kind_of(pattern) == Some(syntax::OBJECT_BINDING_PATTERN)
-        && !probe.syntactic_parent(pattern).is_some_and(|element| {
-            probe
-                .syntactic_parent(element)
-                .is_some_and(|outer| probe.kind_of(outer) == Some(syntax::ARRAY_BINDING_PATTERN))
-        })
+    match probe.kind_of(pattern) {
+        Some(syntax::OBJECT_BINDING_PATTERN) => {
+            in_javascript(probe, pattern)
+                || !probe.syntactic_parent(pattern).is_some_and(|element| {
+                    probe
+                        .syntactic_parent(element)
+                        .is_some_and(|outer| probe.kind_of(outer) == Some(syntax::ARRAY_BINDING_PATTERN))
+                })
+        }
+        Some(syntax::ARRAY_BINDING_PATTERN) => in_javascript(probe, pattern),
+        _ => false,
+    }
+}
+
+/// Whether `node` is in a JavaScript source, where the checker's types are inferred and
+/// unchecked.
+fn in_javascript(probe: &FuncBuilder, node: NodeId) -> bool {
+    let file = probe.node(node).origin.location.file;
+    probe
+        .snapshot
+        .sources
+        .get(file.0 as usize)
+        .is_some_and(|source| [".js", ".mjs", ".cjs", ".jsx"].iter().any(|extension| source.uri.ends_with(extension)))
 }
 
 /// Whether any pattern in this parameter can throw, which is what puts its function in
@@ -52983,11 +53007,12 @@ impl<'a> FuncBuilder<'a> {
         // undefined.` for a named one -- and test262 asserts the *type* alone. One sentence
         // naming the operation is the honest answer; a fixture printing the message would
         // diverge on wording nobody specified.
-        self.throw_provided_error(
-            pattern,
-            "TypeError",
-            "Cannot destructure a null or undefined value",
-        )?;
+        let message = if self.kind_of(pattern) == Some(syntax::ARRAY_BINDING_PATTERN) {
+            "a null or undefined value is not iterable"
+        } else {
+            "Cannot destructure a null or undefined value"
+        };
+        self.throw_provided_error(pattern, "TypeError", message)?;
         if !self.is_terminated() {
             self.terminate(Terminator::Jump {
                 target: carry_on,
@@ -53066,7 +53091,8 @@ impl<'a> FuncBuilder<'a> {
         let object = self.kind_of(pattern) == Some(syntax::OBJECT_BINDING_PATTERN);
         // **Step 1, before any element is read.** An object pattern over `null` or
         // `undefined` throws a `TypeError`, and an *empty* one reads nothing -- so this is
-        // the only place the check can be. See [`Self::require_object_coercible`].
+        // the only place the check can be. Which patterns ask is
+        // [`a_pattern_that_requires_coercion`]'s. See [`Self::require_object_coercible`].
         if object {
             self.require_object_coercible(pattern, value)?;
         }
@@ -53080,6 +53106,12 @@ impl<'a> FuncBuilder<'a> {
                 || abstract_generator_kind(self.snapshot, ty).is_some())
         {
             return self.bind_array_pattern_by_stepping(pattern, value);
+        }
+        // An array pattern's `GetIterator` throws the same `TypeError` over an absence --
+        // asked after the generator arm, which steps a source its type says is a
+        // generator and has its own frame to throw from.
+        if !object {
+            self.require_object_coercible(pattern, value)?;
         }
         for (position, element) in self.children(pattern).into_iter().enumerate() {
             if self.kind_of(element) != Some(syntax::BINDING_ELEMENT) {
