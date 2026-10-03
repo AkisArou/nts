@@ -1,44 +1,30 @@
-// **A conditional whose two arms are two different classes, returned at an
-// interface type: SIGSEGV, with nothing refused.**
+// **FIXED by `5ec3fe8a4` (escape: what an unerasure keeps, the parameter it
+// unerased keeps) and kept as a guard.** A conditional whose two arms are two
+// different classes, returned at an interface type, segfaulted with nothing
+// refused; it now agrees with node.
 //
-// The merge parameter is correctly `erased` -- two classes, two layouts -- and then
-// the return unerases it to the *interface's own* layout:
+// **The cause, read from the C diff across the fix, which is exactly two
+// allocations:** `byConditional`'s `Square` and `Circle` were *frame*-allocated
+// and returned through erase -> join -> unerase -> return. Escape analysis did
+// not follow `Unerase`, so it saw no escape, both objects lived in the callee's
+// dead frame, and `.area()` read a header out of a popped stack. With the fix
+// both are `nts_object_new`, and the call dispatches through each object's own
+// descriptor as it always did.
 //
-//     b3(%5: erased):
-//       %8 = unerase %5 : managed<obj#1>      <- obj#1 is `Shape`
-//       ret %8
+// **What this header said before, and why it was wrong.** It blamed the
+// unerase to `Shape`'s layout, "an empty method table, because nothing is ever
+// built at it, so `.area()` is a jump through a null slot". No call jumps
+// through a `Shape` table: dispatch reads the object's own descriptor, and the
+// emitted C has none for `Shape`. A plausible mechanism, verified only as far as
+// "the unerase is there", and not the one that crashed -- the fix that cleared
+// it does not touch the unerase at all. integrity's `unerase-is-built` rule
+// still names the function, so its integrity.known entry is kept, re-worded.
 //
-// `Shape`'s layout has an empty method table, because nothing is ever *built* at it,
-// so `.area()` on the result is a jump through a null slot. Nothing refuses at any
-// point: the unerase to a managed type is unchecked on C and LLVM.
-//
-// **The control is the same function written with an `if`**, which returns from each
-// arm and so has no merge to unerase: it agrees with node. That is the one
-// difference, and it is why this is a lowering defect rather than anything about
-// interfaces being called.
-//
-// # Which failure a program gets depends on the program
-//
-// The same shape gives a **wrong answer** rather than a crash where the dispatch
-// happens to land somewhere readable. With the two values put in an
-// `Shape[]` and summed, nts answered 9 -- every element's `area()` returning the
-// *second* class's 3 -- where node answered 22. So a census counting refusals sees
-// neither face.
-//
-// # It is the defect the React lane reports at scale
-//
-// Some forty `fiber.pendingProps as SuspenseProps` sites are the same thing written
-// as a cast: an erased value unerased straight to an interface layout. This is a
-// six-line reduction of it, found from the other end while probing a narrowing.
-//
-// # What it wants
-//
-// Not a checked unerase on its own: the value here is a `Square` or a `Circle` and
-// **never** a `Shape`-layout object, so a check would abort every time rather than
-// fix it. What it wants is for the slot to stay **erased** -- the interface
-// indirection stage, where a type several layouts can inhabit erases and is read per
-// arm. A checked unerase is what turns this from a segfault into a sentence in the
-// meantime, which is worth having on its own.
+// **The control is the same function written with an `if`**, which returns
+// from each arm and so has no merge: no erase, no unerase, and escape analysis
+// saw the return directly. It agreed with node before the fix too, which is
+// consistent with the real cause as well as the old one -- the reason a
+// one-difference control finds a defect without explaining it.
 
 interface Shape {
   area(): number;
