@@ -339,6 +339,79 @@ declare module "c:types" {
     [K in keyof Base | PropertyKeys<T>]?: K extends keyof Base ? Base[K] : K extends keyof T ? T[K] : never;
   };
   type PropertyKeys<T> = { [K in keyof T]: "__c_property" extends keyof T[K] ? K : never }[keyof T];
+
+  // The `gi:` surface's subclassing (`gi:gtk`), where a class names itself in
+  // its heritage clause: `class Book extends GObject<Book>`. The base then
+  // constructs it from its own props and the class's properties -- `new
+  // Book({ title })`, with no constructor written; one declared
+  // `property<T>()` with no default must be given -- and types its signals from
+  // the class's `signal()` fields. `Self` defaults to `{}`, so a binding's own
+  // class is constructed and typed as before.
+  //
+  // `readonly incremented = signal<[by: number]>()`: a signal of the class,
+  // registered as `incremented` with one `double` parameter. `emit` and
+  // `connect` by its name are typed by it (`WithSelf`), and so is the field.
+  export interface Signal<A extends readonly unknown[] = [], R = void> {
+    readonly __c_signal?: [A, R];
+    emit(...args: A): R;
+    connect(handler: (...args: A) => R): CNumber<"ulong">;
+  }
+  /** @ntsAbi intrinsic */
+  export function signal<A extends readonly unknown[] = [], R = void>(): Signal<A, R>;
+  // A class's own names, without the brands its base adds (`__c_signals`,
+  // which is computed from these: reading it here would be a cycle).
+  type OwnKeys<Self> = Exclude<keyof Self, `__c_${string}`>;
+  type SelfPropertyKeys<Self> = { [K in OwnKeys<Self>]: "__c_property" extends keyof Self[K] ? K : never }[OwnKeys<Self>];
+  type RequiredPropertyKeys<Self> = { [K in OwnKeys<Self>]: "__c_required" extends keyof Self[K] ? K : never }[OwnKeys<Self>];
+  type Unbranded<T> = T extends Property<infer U> ? U : T;
+  // A class's own properties as a construction gives them: each optional,
+  // but one with no default (`RequiredProperty`).
+  export type OwnProps<Self> = { [K in Exclude<SelfPropertyKeys<Self>, RequiredPropertyKeys<Self>>]?: Unbranded<Self[K]> } & {
+    [K in RequiredPropertyKeys<Self>]: Unbranded<Self[K]>;
+  };
+  // What a `gi:` class's `new` takes: its props and the class's, required
+  // where the base's constructor requires one (`BaseRequired`) or the class
+  // declares one with no default.
+  export type ConstructArgs<Self, Base, BaseRequired extends boolean> = BaseRequired extends true
+    ? [props: Base & OwnProps<Self>]
+    : [RequiredPropertyKeys<Self>] extends [never]
+      ? [props?: Base & OwnProps<Self>]
+      : [props: Base & OwnProps<Self>];
+  type SignalKeys<Self> = { [K in OwnKeys<Self>]-?: Self[K] extends Signal<any, any> ? K : never }[OwnKeys<Self>] & string;
+  type SignalOf<Self, K extends keyof Self> = Self[K] extends Signal<infer A, any> ? A : never;
+  // A `gi:` instance's signals, read from its class (`Self`) lazily -- a
+  // member's type is resolved when it is asked for, after the class is whole,
+  // so the heritage clause naming the class is no cycle.
+  export interface WithSelf<Self> {
+    // What the compiler reads the signals from, as `WithSignals` has it.
+    readonly __c_signals?: { [K in SignalKeys<Self>]: SignalOf<Self, K> };
+    /**
+     * @ntsSymbol nts_gobject_connect
+     * @ntsDefault connect_flags=0
+     */
+    connect<S extends ClassChain, K extends SignalKeys<Self>>(
+      this: S,
+      detailed_signal: K,
+      handler: ErasedClosure<(self: S, ...args: SignalArgs<SignalOf<Self, K>>) => void, (data: Ptr<unknown>, closure: Class<"_GClosure">) => void>,
+      connect_flags?: c_uint,
+    ): CNumber<"ulong">;
+    /**
+     * @ntsSymbol nts_gobject_connect
+     * @ntsDefault connect_flags=1
+     */
+    connectAfter<S extends ClassChain, K extends SignalKeys<Self>>(
+      this: S,
+      detailed_signal: K,
+      handler: ErasedClosure<(self: S, ...args: SignalArgs<SignalOf<Self, K>>) => void, (data: Ptr<unknown>, closure: Class<"_GClosure">) => void>,
+      connect_flags?: c_uint,
+    ): CNumber<"ulong">;
+    /**
+     * @ntsSymbol nts_gobject_emit
+     */
+    emit<S extends ClassChain, K extends SignalKeys<Self>>(this: S, detailed_signal: K, ...args: SignalArgs<SignalOf<Self, K>>): void;
+  }
+  // A `gi:` class's instance, as `Signalled` is a `c:` one's.
+  export type Selfed<T, Self, Impl = never> = T & WithSelf<Self> & Implementing<Impl>;
   // A GLib boxed record -- a C struct GLib copies and frees by its `GType`
   // (`g_boxed_copy`, `g_boxed_free`): `GtkTextIter`, `GdkRGBA`. The program
   // holds one by reference, as JavaScript holds any object, in a box of its

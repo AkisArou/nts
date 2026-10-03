@@ -330,9 +330,9 @@ fn construction(
         };
         // Optional where nothing in it is required.
         let required = constructor_properties(binding, Some(constructor)).iter().any(|(_, _, required)| *required);
-        let optional = if required { "" } else { "?" };
-        let (generic, made) = made_by(name, gtype.is_some());
-        Some(format!("    /**\n     * @ntsConstruct {tag}\n     */\n    new {generic}(props{optional}: {name}Props): {made};\n"))
+        let (generic, made) = made_by(name, gtype.is_some(), binding.self_typed);
+        let props = construct_props(name, gtype.is_some() && binding.self_typed, required);
+        Some(format!("    /**\n     * @ntsConstruct {tag}\n     */\n    new {generic}({props}): {made};\n"))
     });
     // The class's constructors and functions, as GJS has them on the class:
     // `GtkStringObject.new("x")`, `GtkButton.new_with_label("Add")`.
@@ -350,8 +350,9 @@ fn construction(
     // signature of its own (`GtkWidget`, abstract) gets an abstract one, so it
     // can be extended and still not constructed.
     let abstract_construct = if construct.is_none() && gtype.is_some() {
-        let (generic, made) = made_by(name, true);
-        format!("(abstract new {generic}(props?: {name}Props) => {made}) & ")
+        let (generic, made) = made_by(name, true, binding.self_typed);
+        let props = construct_props(name, binding.self_typed, false);
+        format!("(abstract new {generic}({props}) => {made}) & ")
     } else {
         String::new()
     };
@@ -373,12 +374,26 @@ fn construction(
 
 /// What a `GObject` class's `new` makes: generic in the signals a subclass the
 /// program writes declares (`extends GtkButton<{ incremented: [by: number] }>`,
-/// see `Signalled` in `c:types`), and the class itself for anything else.
-fn made_by(name: &str, gobject: bool) -> (&'static str, String) {
-    if gobject {
-        ("<Sig extends SignalMap = {}, Impl = never>", format!("Signalled<{name}, Sig, Impl>"))
+/// see `Signalled` in `c:types`), and the class itself for anything else. On
+/// the `gi:` surface (`self_typed`), generic in the class the program writes
+/// instead, which names itself: `extends Button<Tally>` (`Selfed`).
+fn made_by(name: &str, gobject: bool, self_typed: bool) -> (&'static str, String) {
+    match (gobject, self_typed) {
+        (true, false) => ("<Sig extends SignalMap = {}, Impl = never>", format!("Signalled<{name}, Sig, Impl>")),
+        (true, true) => ("<Self = {}, Impl = never>", format!("Selfed<{name}, Self, Impl>")),
+        (false, _) => ("", name.to_owned()),
+    }
+}
+
+/// What a class's `new` takes: its props, optional unless one is `required`;
+/// on the `gi:` surface (`self_typed`), the props of the class the program
+/// writes too (`ConstructArgs`).
+fn construct_props(name: &str, self_typed: bool, required: bool) -> String {
+    if self_typed {
+        format!("...props: ConstructArgs<Self, {name}Props, {required}>")
     } else {
-        ("", name.to_owned())
+        let optional = if required { "" } else { "?" };
+        format!("props{optional}: {name}Props")
     }
 }
 

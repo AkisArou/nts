@@ -364,6 +364,12 @@ mod tests {
                 files.push(dir.join(name));
             }
         }
+        // A program on the `gi:` surface, beside them: what a class the program
+        // writes over a `gi:` class can say, and what it cannot -- each
+        // `@ts-expect-error` is unused, and so an error, the day its line
+        // typechecks.
+        std::fs::write(dir.join("gi-program.ts"), GI_PROGRAM).unwrap();
+        files.push(dir.join("gi-program.ts"));
         let listed: Vec<String> = files.iter().map(|file| format!("{file:?}")).collect();
         std::fs::write(
             dir.join("tsconfig.json"),
@@ -409,6 +415,52 @@ mod tests {
     /// GIR's constants and the fundamental types, as the binder declares them.
     /// An override answering its trailing scalar outs as GJS's does, a
     /// tuple, with the tag naming the slot's out pointers.
+    /// A program on the `gi:` surface, typechecked against the packages
+    /// (`the_gir_packages_typecheck`): a class names itself in its heritage
+    /// clause and is constructed by its properties with no constructor; a
+    /// signal is a field, `emit` and `connect` typed by it.
+    const GI_PROGRAM: &str = r#"import { Button, Orientation } from "gi:gtk";
+import { GObject, property } from "gi:gobject";
+import type { Signal } from "c:types";
+
+class Book extends GObject<Book> {
+  title = property("");
+  pageCount = property(0);
+  orientation = property<Orientation>(Orientation.VERTICAL);
+  readonly isbn = property<string>();
+  cache = new Map<string, number>();
+}
+
+class Tally extends Button<Tally> {
+  declare readonly incremented: Signal<[by: number]>;
+  count = 0;
+  bump(): void {
+    this.emit("incremented", 1);
+  }
+}
+
+export function made(): number {
+  const book = new Book({ title: "Dune", pageCount: 412, isbn: "978" });
+  const tally = new Tally({ label: "count" });
+  tally.connect("incremented", (_self, by) => {
+    tally.count += by;
+  });
+  tally.connectAfter("incremented", () => {});
+  new Button({ label: "plain" });
+  // @ts-expect-error `isbn` has no default, so a construction must give it
+  new Book({ title: "x" });
+  // @ts-expect-error `cache` is a field, not a property
+  new Book({ isbn: "x", cache: new Map() });
+  // @ts-expect-error `incremented` takes a number
+  tally.emit("incremented", "x");
+  // @ts-expect-error no signal of that name
+  tally.emit("decremented");
+  // @ts-expect-error `title` is a string
+  new Book({ isbn: "x", title: 1 });
+  return book.pageCount;
+}
+"#;
+
     /// The `gi:` surface (`bind_gir::naming`): short names, camelCase members
     /// and parameters, another namespace's types qualified, GIR's names for a
     /// constant and a namespace function, and a class named like a JavaScript
@@ -426,7 +478,7 @@ mod tests {
             ("@nts/gi-glib", "  export type GError = Class<\"_GError\"> & GErrorMethods;"),
             ("@nts/gi-gobject", "  export type GObject = GObjectClass<\"_GObject\", TypeInstance> & GObjectMethods;"),
             ("@nts/gi-gobject", "  export const TYPE_STRING: c_size_t;"),
-            ("@nts/gi-gobject", "  export { property } from \"c:types\";"),
+            ("@nts/gi-gobject", "  export { property, signal } from \"c:types\";"),
         ];
         for (package, present) in pins {
             assert!(text(package).contains(present), "{package} is missing: {present}");

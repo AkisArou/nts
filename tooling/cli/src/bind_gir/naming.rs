@@ -278,7 +278,11 @@ pub(crate) fn gi(binding: &Binding, namespace: &Namespace, names: &Names) -> Bin
     // What a class the program writes declares itself with, beside the class
     // it extends: `import { GObject, property } from "gi:gobject"`.
     if namespace.name == "GObject" {
-        out.reexports = vec!["property"];
+        out.reexports = vec!["property", "signal"];
+    }
+    out.self_typed = true;
+    if out.brands.contains("Signalled") {
+        out.brands.extend(["Selfed", "ConstructArgs"]);
     }
     out
 }

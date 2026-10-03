@@ -75,6 +75,10 @@ pub(crate) struct Binding {
     /// What the module re-exports from `c:types`: `gi:gobject`'s `property`,
     /// which a program imports beside `GObject`.
     pub(crate) reexports: Vec<&'static str>,
+    /// Whether a class's `new` is self-typed, `new <Self, Impl>`, as the `gi:`
+    /// surface's are (`Selfed` in `c:types`); a `c:` one's is generic in a
+    /// signal map (`Signalled`).
+    pub(crate) self_typed: bool,
     pub(crate) headers: Vec<String>,
     pub(crate) types: Vec<TypeDecl>,
     pub(crate) functions: Vec<Function>,
