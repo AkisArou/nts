@@ -18,7 +18,7 @@ operations remain named refusals.
 
 ## Delivery order
 
-1. **Exception propagation through specialization (#42), in progress.** Keep a
+1. **Exception propagation through specialization (#42), delivered in `188141404`.** Keep a
    function copy's specialization context independent of its exception mode.
    Pair eligible generic and structural function specializations with raising
    forms. Preserve nested-call substitutions and closure capture layouts. Methods
@@ -92,10 +92,13 @@ subjects. React's reduced module-scope case answers `6 caught effect` on C and
 the verified JVM whole-program launcher.
 
 All five recorded test262 sets reconcile without moved rows; all 116 outcome
-fixtures retain their records. JVM verification covers all 29 runtime projects
+fixtures retain their records. The additional field-callee exception fixture in
+`3efcac518` reproduces independently; it remains a separate defect. JVM
+verification covers all 29 runtime projects
 and all 116 outcome fixtures, retaining the three known runtime limitations.
-The conformance lane has two repaired blockers to bank: the generic throw below
-`try`, and the callback held in a field with the exception gate previously off.
+The conformance lane can bank the generic throw below `try` and add a guard for
+the supported generic callback case. Its gate-off negative now uses a method
+with its own type parameters, preserving that boundary.
 Focused interop covers the Java API and consumer, Java bindings, C callbacks and
 captured closures. The Java API capture requires the locale used by its record.
 
@@ -110,5 +113,10 @@ copy to its exception entry. An alternating, single-CPU native measurement of
 500,000 allocations per process under NoGc found no slowdown (ten samples per
 arm, medians 27.43 ms before and 26.76 ms after); this is a narrow measurement.
 
-Integration awaits GTK's schema-42 landing. The broad platform interop sweep and
-other deferred checks remain owed at the milestone after items 1–3.
+Integrated after GTK's schema-42 landing, with the final combined compiler pinned
+as `d58b3008f324` (SHA256 prefix `07ce5b3e52b9dd87`). The landed compiler sources
+are identical to that pin. Repeated focused checks cover core tests and clippy,
+all five scalar configurations, recorded conformance, JVM verification, Java API,
+native callbacks, captured closures, integrity and the React module-scope probe.
+The broad platform interop sweep and other deferred checks remain owed at the
+milestone after items 1–3. Next implementation: precise in-module TDZ (#33).
