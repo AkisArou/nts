@@ -27376,9 +27376,12 @@ impl<'a> FuncBuilder<'a> {
                 _ if self.copied_pending.contains_key(&argument.node) => None,
                 _ => self.parameter_representation(call, args.len()),
             };
-            let defaulted_undefined = self.is_the_undefined_literal(argument.node)
-                && self.declared_default(call, args.len()).is_some();
-            let value = if defaulted_undefined {
+            let defaulted_undefined = self.undefined_argument(argument.node)
+                .filter(|_| self.declared_default(call, args.len()).is_some());
+            let value = if let Some(undefined) = defaulted_undefined {
+                if self.kind_of(undefined) == Some(syntax::VOID_EXPRESSION) {
+                    self.lower_for_its_effects(argument.node)?;
+                }
                 let origin = self.origin(argument.node);
                 self.push(OpKind::ConstUndefined, HirType::Erased, origin)
             } else { match (argument.value, &want) {
@@ -27387,7 +27390,7 @@ impl<'a> FuncBuilder<'a> {
                 (None, None) => self.lower_expression(argument.node)?,
             }};
             let value = match &want {
-                Some(want) if !defaulted_undefined => self.coerce(value, want, argument.node)?,
+                Some(want) if defaulted_undefined.is_none() => self.coerce(value, want, argument.node)?,
                 _ => value,
             };
             sources.push((argument.node, self.snapshot.node_types.get(&argument.node).copied()));
@@ -27411,6 +27414,17 @@ impl<'a> FuncBuilder<'a> {
             args.push(gathered);
         }
         Ok(args)
+    }
+
+    /// A literal undefined or a void expression always takes a parameter's
+    /// default. The supplied expression still runs with all other arguments,
+    /// before defaults are evaluated; this predicate does not fold its effects.
+    fn undefined_argument(&self, mut argument: NodeId) -> Option<NodeId> {
+        while self.kind_of(argument) == Some(syntax::PARENTHESIZED_EXPRESSION) {
+            argument = *self.children(argument).first()?;
+        }
+        (self.is_the_undefined_literal(argument) || self.kind_of(argument) == Some(syntax::VOID_EXPRESSION))
+            .then_some(argument)
     }
 
     /// The argument a call passes for a parameter with a default: `value`, or
@@ -27437,7 +27451,7 @@ impl<'a> FuncBuilder<'a> {
         // The literal cannot take the supplied-value arm. Defer its default
         // until every argument has run, then evaluate it directly at the slot's
         // representation, including a concrete numeric parameter.
-        if self.is_the_undefined_literal(argument) {
+        if self.undefined_argument(argument).is_some() {
             return self.lower_parameter_default(call, default, callee, before, receiver);
         }
         // The argument's *type* first: a `number` passed to `id: number | null =
