@@ -1,4 +1,4 @@
-//! Preserve ClassLoader resources when jar bytecode is converted to dex.
+//! Preserve `ClassLoader` resources when jar bytecode is converted to dex.
 
 use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -64,7 +64,7 @@ fn merge_tree(
         .map(|entry| {
             let path = entry?.path();
             Utf8PathBuf::from_path_buf(path)
-                .map_err(|path| anyhow::anyhow!("non-UTF-8 jar path: {path:?}"))
+                .map_err(|path| anyhow::anyhow!("non-UTF-8 jar path: {}", path.display()))
         })
         .collect::<Result<Vec<_>>>()?;
     entries.sort();
@@ -94,11 +94,11 @@ fn merge_tree(
         } else {
             destination.join(relative)
         };
-        std::fs::create_dir_all(target.parent().unwrap())
-            .with_context(|| format!("creating parents of {target}"))?;
-        if !target.exists() {
-            std::fs::copy(&path, &target).with_context(|| format!("copying {path} to {target}"))?;
-        } else {
+        let parent = target
+            .parent()
+            .with_context(|| format!("no parent for {target}"))?;
+        std::fs::create_dir_all(parent).with_context(|| format!("creating parents of {target}"))?;
+        if target.exists() {
             let old = std::fs::read(&target)?;
             let new = std::fs::read(&path)?;
             if old == new {
@@ -115,6 +115,8 @@ fn merge_tree(
                     "conflicting dependency resource `{relative}` from `{owner}`; the APK cannot choose different library data silently"
                 );
             }
+        } else {
+            std::fs::copy(&path, &target).with_context(|| format!("copying {path} to {target}"))?;
         }
     }
     Ok(())
