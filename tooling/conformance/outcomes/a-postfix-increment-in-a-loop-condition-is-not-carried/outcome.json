@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Observed: a postfix increment in a for condition=2003;a postfix increment in a while condition=2003;the increment in the body (control)=609;",
+  "node": "exit 1; nts: uncaught Observed: a postfix increment in a for condition=610;a postfix increment in a while condition=610;the increment in the body (control)=609;",
+  "measured_with": "9509cdb5c11e700e",
+  "source": "measured"
+}
