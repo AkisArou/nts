@@ -80,7 +80,10 @@ const KEYS = {
  * consequence (NTS1005) does not match.
  */
 export const ROOT_CLASSES = {
-  any: (d) => /\bany\b|erased/i.test(`${d.message} ${(d.named ?? []).join(" ")}`),
+  // `unknown` as well as `any`: both are erased, and the class is the whole
+  // any/unknown contract. Without it, 171 roots naming only `unknown` fell
+  // outside the selection (census of caf82c58d, 2026-10-04).
+  any: (d) => /\b(any|unknown)\b|erased/i.test(`${d.message} ${(d.named ?? []).join(" ")}`),
 };
 
 /** A predicate over rows from the command line's filters. */
