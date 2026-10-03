@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 9509cdb5c11e700e, commit a21b865813a42458c5e61d3da8af47a08d491aaf, harness d6442dbc09f91ad0; machine at start: 21.6 GB available, swap 7/20 GB, load 1.5/1.6 (1m/5m), 32 cores; 8 worker(s)
+# compiler a3291deffe28ba8f, commit 77b2457c53ac6e6f2b0197ec18823e233c591850, harness d6442dbc09f91ad0; machine at start: 19.9 GB available, swap 7.2/20 GB, load 1.8/3.3 (1m/5m), 32 cores; 8 worker(s)
 test/language/arguments-object/10.5-1gs.js	pass	
 test/language/asi/S7.9.2_A1_T1.js	pass	
 test/language/asi/S7.9.2_A1_T2.js	pass	
@@ -299,6 +299,7 @@ test/language/expressions/array/11.1.4-0.js	pass
 test/language/expressions/arrow-function/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/arrow-function/arrow/concisebody-lookahead-assignmentexpression-1.js	pass	
 test/language/expressions/arrow-function/arrow/concisebody-lookahead-assignmentexpression-2.js	pass	
+test/language/expressions/arrow-function/dflt-params-arg-val-undefined.js	fail	nts: uncaught Test262Error: sameValue
 test/language/expressions/arrow-function/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/arrow-function/dflt-params-ref-prior.js	pass	
 test/language/expressions/arrow-function/dflt-params-rest.js	pass	
@@ -1023,6 +1024,7 @@ test/language/expressions/async-function/named-await-as-identifier-reference-esc
 test/language/expressions/async-function/named-await-as-identifier-reference.js	pass	
 test/language/expressions/async-function/named-await-as-label-identifier-escaped.js	pass	
 test/language/expressions/async-function/named-await-as-label-identifier.js	pass	
+test/language/expressions/async-function/named-dflt-params-arg-val-undefined.js	fail	nts: uncaught Test262Error: sameValue
 test/language/expressions/async-function/named-dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-function/named-dflt-params-ref-prior.js	pass	
 test/language/expressions/async-function/named-dflt-params-rest.js	pass	
@@ -1032,6 +1034,7 @@ test/language/expressions/async-function/named-rest-params-trailing-comma-early-
 test/language/expressions/async-function/named-returns-async-arrow.js	pass	
 test/language/expressions/async-function/named-returns-async-function.js	pass	
 test/language/expressions/async-function/nameless-array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/async-function/nameless-dflt-params-arg-val-undefined.js	fail	nts: uncaught Test262Error: sameValue
 test/language/expressions/async-function/nameless-dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-function/nameless-dflt-params-ref-prior.js	pass	
 test/language/expressions/async-function/nameless-dflt-params-rest.js	pass	
@@ -2887,6 +2890,7 @@ test/language/expressions/exponentiation/exp-operator.js	pass
 test/language/expressions/exponentiation/int32_min-exponent.js	pass	
 test/language/expressions/function/S10.1.1_A1_T2.js	pass	
 test/language/expressions/function/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/function/dflt-params-arg-val-undefined.js	fail	nts: uncaught Test262Error: sameValue
 test/language/expressions/function/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/function/dflt-params-ref-prior.js	pass	
 test/language/expressions/function/dflt-params-rest.js	pass	
@@ -2985,6 +2989,7 @@ test/language/expressions/function/rest-params-trailing-comma-early-error.js	pas
 test/language/expressions/function/static-init-await-reference.js	pass	
 test/language/expressions/function/use-strict-with-non-simple-param.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/generators/array-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/generators/dflt-params-arg-val-undefined.js	fail	nts: uncaught Test262Error: sameValue
 test/language/expressions/generators/dflt-params-duplicates.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/generators/dflt-params-ref-prior.js	pass	
 test/language/expressions/generators/dflt-params-rest.js	pass	
@@ -3820,6 +3825,7 @@ test/language/expressions/subtraction/S11.6.2_A4_T6.js	pass
 test/language/expressions/subtraction/S11.6.2_A4_T7.js	pass	
 test/language/expressions/subtraction/S11.6.2_A4_T8.js	pass	
 test/language/expressions/super/super-reference-resolution.js	pass	
+test/language/expressions/tagged-template/cache-same-site-top-level.js	pass	
 test/language/expressions/template-literal/invalid-hexidecimal-character-escape-sequence-truncated-1.js	pass	
 test/language/expressions/template-literal/invalid-hexidecimal-character-escape-sequence-truncated-2.js	pass	
 test/language/expressions/template-literal/invalid-hexidecimal-character-escape-sequence-truncated-3.js	pass	
