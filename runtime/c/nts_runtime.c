@@ -166,6 +166,11 @@ struct NtsEnvironment {
   /* Whether a callback returning to a foreign loop is a checkpoint. Set once,
      before module evaluation; see `nts_checkpoint_after_callbacks`. */
   bool checkpoint_after_callbacks;
+  /* Whether one returning returns to that loop, where the host can say, and
+     whether a checkpoint is already posted for one that did not; see
+     `nts_callbacks_return_to_loop_when`. */
+  bool (*returns_to_loop)(void);
+  bool checkpoint_posted;
   /* -- one cache line: the reference-counting and allocation hot path -- */
   size_t retains;
   size_t releases;
@@ -1659,6 +1664,14 @@ void nts_callback_enter(void) {
   }
   nts_environment_current()->in_callback++;
 }
+/* The task `nts_callback_leave` posts for a callback that returned to
+ * compiled code: empty, since `nts_task_run`'s checkpoint around it is the
+ * point. */
+static void nts_posted_checkpoint(void *state) {
+  (void)state;
+  nts_environment_current()->checkpoint_posted = false;
+}
+
 void nts_callback_leave(void) {
   NtsEnvironment *environment = nts_environment_current();
   environment->in_callback--;
@@ -1669,7 +1682,16 @@ void nts_callback_leave(void) {
    * task's own `nts_leave` is the checkpoint, after it runs to completion. */
   if (environment->checkpoint_after_callbacks &&
       environment->in_callback == 0 && environment->depth == 0) {
-    nts_checkpoint();
+    if (environment->returns_to_loop == NULL ||
+        environment->returns_to_loop()) {
+      nts_checkpoint();
+    } else if (!environment->checkpoint_posted) {
+      /* Compiled code below, which runs on first: the jobs at the loop's next
+       * turn, or after module evaluation, whichever is first. */
+      environment->checkpoint_posted = true;
+      nts_post_task(
+          (NtsTask){.run = nts_posted_checkpoint, .drop = NULL, .state = NULL});
+    }
   }
 }
 
@@ -1679,6 +1701,10 @@ bool nts_in_callback(void) {
 
 void nts_checkpoint_after_callbacks(bool on) {
   nts_environment_current()->checkpoint_after_callbacks = on;
+}
+
+void nts_callbacks_return_to_loop_when(bool (*at_loop)(void)) {
+  nts_environment_current()->returns_to_loop = at_loop;
 }
 
 _Noreturn void nts_no_arm(const char *member) {

@@ -97,10 +97,17 @@ static GSourceFuncs nts_glib_funcs = {
     .dispatch = nts_glib_dispatch,
 };
 
+/* Whether a callback returning now returns to GLib's loop: inside one of its
+ * dispatches. `0` for a signal emitted from module evaluation, and for
+ * `activate`, which `g_application_run` emits itself before it dispatches
+ * anything (`nts_callbacks_return_to_loop_when`). */
+static bool nts_glib_dispatching(void) { return g_main_depth() > 0; }
+
 void nts_glib_host_attach(void) {
   if (nts_glib_source) {
     return;
   }
+  nts_callbacks_return_to_loop_when(nts_glib_dispatching);
   GSource *source = g_source_new(&nts_glib_funcs, sizeof(NtsGlibSource));
   NtsGlibSource *self = (NtsGlibSource *)source;
   self->tag = g_source_add_unix_fd(source, nts_uv_host_backend_fd(), G_IO_IN);

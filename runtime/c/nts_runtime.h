@@ -2805,6 +2805,18 @@ bool nts_in_callback(void);
  * make that ordering depend on when. A program with no foreign loop leaves it
  * off, and its callbacks behave exactly as they did. */
 void nts_checkpoint_after_callbacks(bool on);
+/* Whether the outermost callback now returning returns to the foreign loop,
+ * for a host that can say: `GLib`'s answers `g_main_depth() > 0`, inside a
+ * dispatch of its loop. One that returns to compiled code instead -- a signal
+ * emitted from module evaluation, before or after `g_application_run`, or
+ * `activate`, which `g_application_run` emits itself -- is no checkpoint:
+ * that code runs on first, as JavaScript runs a script to completion. Its
+ * jobs are not left waiting for an event that may not come: one empty task is
+ * posted, whose run is the checkpoint, at the loop's next turn or after module
+ * evaluation, whichever is first -- GJS's idle-scheduled job queue. A host
+ * that does not say has every outermost callback return to its loop. Set
+ * once, beside `nts_checkpoint_after_callbacks`. */
+void nts_callbacks_return_to_loop_when(bool (*at_loop)(void));
 
 void nts_landing_push(NtsLanding *landing);
 /* Remove `landing` if it is the innermost. Idempotent, and it names the frame

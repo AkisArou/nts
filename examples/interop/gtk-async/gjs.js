@@ -26,12 +26,22 @@ button.connect("clicked", async () => {
   log.push("b2");
 });
 
+const direct = new Gtk.Button({ label: "d" });
+direct.connect("clicked", async () => {
+  log.push("c1");
+  await tick();
+  log.push("c2");
+});
 const failing = new Gtk.Button({ label: "f" });
 failing.connect("clicked", async () => {
   await fail().catch((error) => {
     log.push("caught " + (error instanceof Error ? error.message : "?"));
   });
 });
+
+log.push("direct");
+direct.emit("clicked");
+log.push("after");
 
 GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
   button.emit("clicked");

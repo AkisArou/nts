@@ -6,13 +6,17 @@
 //
 // The log, in order:
 //
+//   direct c1 after c2  one emitted from module code: it runs to its `await`,
+//                 and the module code after the emission runs before its
+//                 continuation, as a script runs to completion first; the
+//                 continuation runs at the loop's first turn
 //   a1 b1 emitted a2 b2  two async handlers emitted from an idle callback:
 //                 each runs to its `await`, the emission returns, and their
 //                 continuations run when the idle callback returns to GLib
 //   caught boom   a rejection handled by the handler's own `.catch`
 //
 // Against GJS (gjs.js beside this file, `gjs -m gjs.js`): the same steps in
-// the same order, `a1 b1 emitted` and then `a2 b2`. GJS runs its job queue
+// the same order, `direct c1 after c2 a1 b1 emitted` and then `a2 b2`. GJS runs its job queue
 // from an idle source of its own, so its continuations come after every idle
 // already queued -- after the one printing the log -- where these run as the
 // callback returns, as node's do after a macrotask.
@@ -42,12 +46,22 @@ button.connect("clicked", async () => {
   log.push("b2");
 });
 
+const direct = new Button({ label: "d" });
+direct.connect("clicked", async () => {
+  log.push("c1");
+  await tick();
+  log.push("c2");
+});
 const failing = new Button({ label: "f" });
 failing.connect("clicked", async () => {
   await fail().catch((error: unknown) => {
     log.push("caught " + (error instanceof Error ? error.message : "?"));
   });
 });
+
+log.push("direct");
+direct.emit("clicked");
+log.push("after");
 
 idleAdd(PRIORITY_DEFAULT, () => {
   button.emit("clicked");

@@ -25,7 +25,7 @@ if [ ! -e /usr/share/gir-1.0/Gtk-4.0.gir ] && [ -z "${GI_GIR_PATH:-}" ]; then
   exit 0
 fi
 
-expected="a1 b1 emitted a2 b2 caught boom "
+expected="direct c1 after c2 a1 b1 emitted a2 b2 caught boom "
 mkdir -p "$out"
 for mode in plain rc; do
   flag=""
