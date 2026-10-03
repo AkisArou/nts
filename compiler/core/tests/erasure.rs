@@ -27,12 +27,12 @@ fn classified() -> Option<Erasure> {
 
 fn site<'a>(erasure: &'a Erasure, name: &str) -> &'a erasure::Site {
     erasure
-        .sites
+        .sites()
         .iter()
         .find(|site| format!("{}.{}", site.owner, site.name) == name)
         .unwrap_or_else(|| {
             let all: Vec<String> = erasure
-                .sites
+                .sites()
                 .iter()
                 .map(|s| format!("{}.{}", s.owner, s.name))
                 .collect();
@@ -117,6 +117,66 @@ fn a_property_read_examines() {
     assert_eq!(examined.checker, Checker::Any);
 }
 
+#[test]
+fn the_deciding_use_survives_a_same_file_forwarder() {
+    let Some(erasure) = classified() else { return };
+    let forwarded = site(&erasure, "forwardsThroughLocal.value");
+    assert_eq!(forwarded.verdict, Verdict::Examined);
+    assert!(forwarded.decided_elsewhere, "the deciding read is in reader.ts");
+}
+
+/// A shared checker type must not merge two parameters' evidence.
+#[test]
+fn bindings_and_parameter_positions_keep_distinct_classifications() {
+    let Some(erasure) = classified() else { return };
+    let first = site(&erasure, "twoParameters.first");
+    let second = site(&erasure, "twoParameters.second");
+    assert_eq!(first.verdict, Verdict::Examined);
+    assert_eq!(second.verdict, Verdict::Carried);
+    assert_ne!(first.binding, second.binding);
+    assert_ne!(first.node, second.node);
+    let first_parameter = first.parameter.expect("first parameter");
+    let second_parameter = second.parameter.expect("second parameter");
+    assert_eq!(first_parameter.declaration, second_parameter.declaration);
+    assert_eq!(first_parameter.position, 0);
+    assert_eq!(second_parameter.position, 1);
+    assert_eq!(
+        erasure.get(first.binding).expect("first binding").node,
+        first.node
+    );
+    assert_eq!(
+        erasure.get(second.binding).expect("second binding").node,
+        second.node
+    );
+}
+
+/// An unresolved return consumer must not erase another consumer's flow edge.
+#[test]
+fn every_return_consumer_contributes_its_uses() {
+    let Some(erasure) = classified() else { return };
+    assert_eq!(
+        site(&erasure, "returnedToDifferentUses.value").verdict,
+        Verdict::Examined
+    );
+    assert_eq!(
+        site(&erasure, "severalReturnConsumers.value").verdict,
+        Verdict::Examined
+    );
+    assert!(site(&erasure, "returnedToDifferentUses.value").unresolved);
+    assert!(site(&erasure, "severalReturnConsumers.value").unresolved);
+    assert!(!site(&erasure, "twoParameters.first").unresolved);
+}
+
+/// A cycle settles when an examined use reaches both forwarding parameters.
+#[test]
+fn cyclic_forwarders_share_the_examined_use() {
+    let Some(erasure) = classified() else { return };
+    for name in ["cycleA.value", "cycleB.value"] {
+        assert_eq!(site(&erasure, name).verdict, Verdict::Examined);
+        assert!(!site(&erasure, name).unresolved);
+    }
+}
+
 /// A value handed to another module inherits what that module does with it.
 ///
 /// This is the document's central claim as a test. `forwards` reads nothing;
@@ -167,9 +227,9 @@ fn the_local_analysis_is_optimistic_where_it_differs() {
     // Wherever they differ, the local answer is the cheaper one. If that ever
     // stops holding, a local rule is not merely incomplete but unpredictable,
     // and this assertion is where that shows up.
-    for site_of in &whole.sites {
+    for site_of in whole.sites() {
         let Some(alone) = local
-            .sites
+            .sites()
             .iter()
             .find(|other| other.location == site_of.location)
         else {

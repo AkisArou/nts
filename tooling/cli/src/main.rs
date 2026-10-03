@@ -1619,7 +1619,7 @@ fn list_sites(
     snapshot: &nts_semantic_schema::SemanticSnapshot,
     erasure: &nts_core::erasure::Erasure,
 ) {
-    for site in &erasure.sites {
+    for site in erasure.sites() {
         let file = snapshot
             .sources
             .get(site.location.file.0 as usize)
@@ -1948,17 +1948,6 @@ fn dump_erasure(tsconfig: &Utf8Path, per_site: bool) -> Result<()> {
     // per-signature rule could do; the difference between the two columns is
     // what following the value across calls is worth, as a number.
     let local = nts_core::erasure::classify_as(&snapshot, nts_core::erasure::Analysis::Local);
-    let local_verdict: std::collections::HashMap<(u32, u32), Verdict> = local
-        .sites
-        .iter()
-        .map(|site| {
-            (
-                (site.location.file.0, site.location.span.start),
-                site.verdict,
-            )
-        })
-        .collect();
-
     if per_site {
         list_sites(&snapshot, &erasure);
     }
@@ -1998,12 +1987,7 @@ fn dump_erasure(tsconfig: &Utf8Path, per_site: bool) -> Result<()> {
                     .count();
                 let alone = sites
                     .iter()
-                    .filter(|s| {
-                        local_verdict
-                            .get(&(s.location.file.0, s.location.span.start))
-                            .copied()
-                            == Some(verdict)
-                    })
+                    .filter(|s| local.get(s.binding).map(|site| site.verdict) == Some(verdict))
                     .count();
                 if n == 0 && alone == 0 {
                     continue;
@@ -2015,12 +1999,7 @@ fn dump_erasure(tsconfig: &Utf8Path, per_site: bool) -> Result<()> {
             }
             let moved = sites
                 .iter()
-                .filter(|s| {
-                    local_verdict
-                        .get(&(s.location.file.0, s.location.span.start))
-                        .copied()
-                        != Some(s.verdict)
-                })
+                .filter(|s| local.get(s.binding).map(|site| site.verdict) != Some(s.verdict))
                 .count();
             let across = sites.iter().filter(|s| s.decided_elsewhere).count();
             println!(
@@ -2028,7 +2007,7 @@ fn dump_erasure(tsconfig: &Utf8Path, per_site: bool) -> Result<()> {
             );
         }
     }
-    if erasure.sites.is_empty() {
+    if erasure.sites().is_empty() {
         println!("no `any` or `unknown` declarations in this program");
     }
     Ok(())

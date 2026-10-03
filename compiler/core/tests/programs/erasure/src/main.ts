@@ -40,3 +40,25 @@ export function examines(value: any): number {
 export function forwards(value: any): number {
   return reads(value);
 }
+
+function sameFileForwarder(value: any): number { return reads(value); }
+export function forwardsThroughLocal(value: any): number {
+  return sameFileForwarder(value);
+}
+
+// The checker gives both parameters the same type. Their uses differ.
+export function twoParameters(first: any, second: any): number {
+  return first.length;
+}
+
+function returnedToDifferentUses(value: any): any { return value; }
+
+export function severalReturnConsumers(value: any): number {
+  const inspected = returnedToDifferentUses(value);
+  // Switch discrimination is an unresolved use in this analysis.
+  switch (returnedToDifferentUses(value)) { default: break; }
+  return inspected.length;
+}
+
+function cycleA(value: any): void { cycleB(value); }
+function cycleB(value: any): void { value.length; cycleA(value); }

@@ -8470,11 +8470,12 @@ fn structural_instantiations(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy)
 /// have refuses by name. A store or return of it into the declared type is the
 /// one use left as it was, unconverted, which is what every use was before.
 ///
-/// That holds for these two triggers and not for the third. An `any` parameter
-/// is eligible by whether it *escapes*, and a local view of that is optimistic:
-/// `erasure.rs` answers it whole-program, and 99 sites answer differently once
-/// calls are followed, 34 by a use in another file. So that trigger passes in
-/// erasure's classification rather than asking here.
+/// An erased-parameter trigger additionally needs positional producer evidence
+/// and a closed-flow proof. `erasure.rs` classifies what uses require; it does
+/// not prove all writers, storage consumers, exports and captures are known.
+/// A known examined use can coexist with an unresolved use, and even a site
+/// with no unresolved classification may flow through storage the report does
+/// not follow. Its verdict alone must never authorize this transform.
 ///
 /// **An array where a record is declared** -- `requireArguments(args: {
 /// readonly length: number })` called with an argument tuple, which
@@ -16960,38 +16961,10 @@ fn representation_of(
         //
         // Left with no arm would read as an oversight; this is the arm.
         //
-        // **`any` falls here. `unknown` no longer does** — it is the first arm
-        // of this same match, `TypeKind::Unknown => HirType::Erased`, and has
-        // been since erasure landed. This comment said "`any` and `unknown` fall
-        // here and are refused" for as long as that arm has existed, 342 lines
-        // above it, in the same `match` a reader would have to scroll through to
-        // get here.
-        //
-        // `docs/any-unknown.md` settles what is left: `any` is not a runtime
-        // type at all and none may reach MIR — application `any` is rejected,
-        // while declaration-originated `any` (from `lib.*.d.ts` or `@types`) is
-        // tracked as *unchecked* rather than rejected, so the ecosystem stays
-        // usable. That is `NeedsRepresentation`, which has no implementation:
-        // evidence collection, provenance, polymorphic recovery and the trusted
-        // boundaries, none of which is another arm in this match.
-        //
-        // **`any` is already countable, and this comment claimed otherwise until
-        // it was checked.** The refusals reaching here name the type in a
-        // parenthetical, because `describe` answers `"any"` for `TypeKind::Any`:
-        //
-        //     a parameter of unrepresentable type (any)
-        //     a property `p` of unrepresentable type (any)
-        //     a call result of unrepresentable type (any)
-        //
-        // So a census can rank it and a before/after can measure it. In the
-        // slice-1 test262 population that is 8 of the 413 files that reach
-        // lowering, all of them the property form. No new diagnostic is needed
-        // before the analysis, which is what the plan for this work assumed.
-        // **`any` no longer arrives here and [`TypeKind::Evolving`] does.** Which
-        // is the point of the split: an evolving declaration has no representation
-        // *yet*, and answering `None` is what sends the question to
-        // `evolved_type`, which reads back what the assignments settled on. A
-        // written `any` has no better answer coming and takes `Erased` above.
+        // `Evolving` has no representation yet. Answering `None` retains the
+        // inference path through `evolved_type`; ordinary `any` and `unknown`
+        // take `Erased` above. Representation evidence and operation legality
+        // remain separate questions.
         _ => return None,
     })
 }

@@ -4,38 +4,29 @@ Native TypeScript is a typed-first native compiler. It must preserve ordinary Ty
 
 The compiler therefore distinguishes **TypeScript's checker type** from the **runtime trust and representation** of a value.
 
-This document is the design contract. **It is half implemented, and the two
-halves are in completely different states** — which matters because they are
-routinely spoken of as one thing.
+Implementation status, 2026-10-03: both ordinary `any` and `unknown` map to
+`HirType::Erased`, a 16-byte tagged value. Narrowing through `typeof`, null
+tests, `instanceof` and `Array.isArray` can recover supported concrete
+representations. Managed references retain their descriptor and counting
+information; `unerase.rs` removes redundant erasure. Operations that require
+an unproved representation remain named refusals. Giving `any` storage does
+not justify arbitrary reads, calls, indexing or arithmetic.
 
-`unknown` is done. `representation_of` answers `HirType::Erased` for it, a
-16-byte tagged value emitted by all four backends with the tag numbering chosen
-so `TagOf` *is* `typeof`; it narrows through `typeof`, `=== null`, `instanceof`
-and `Array.isArray`, references survive erasure with the descriptor carrying
-erased slots so the cycle collector reads the tag, and `unerase.rs` removes
-erasure that was never needed. See "It does now" below.
+The checker also reports `TypeKind::Evolving` for declarations it has not
+settled, such as an initially empty array. Those retain their separate
+inference path; treating them as ordinary erased `any` loses useful evidence.
 
-`any` is not started. `NeedsRepresentation` — the mechanism this document, the
-RFC and the README all name — has no occurrences in the compiler: no stub, no
-TODO, no disabled pass. `representation_of` has no `TypeKind::Any` arm, so `any`
-falls through to the "unrepresentable type" refusal.
+`nts erasure` measures carried, tested, examined and unresolved uses across
+the compiled program. It is a classification report, not a proof that a flow
+is closed and not a general representation planner. The implementation steps
+and validation requirements are in
+[`compiler-delivery-plan.md`](compiler-delivery-plan.md).
 
-It is nonetheless **already countable**, which this paragraph denied until it
-was checked on 2026-09-18. The refusals name the type in a parenthetical,
-because `describe` answers `"any"` for `TypeKind::Any`:
-
-```text
-a parameter of unrepresentable type (any)
-a property `p` of unrepresentable type (any)
-a call result of unrepresentable type (any)
-```
-
-So a census can rank `any` and a before/after can measure it today. In the
-slice-1 test262 population it is 8 of the 413 files that reach lowering, all of
-them the property form. No new diagnostic is needed before the analysis.
-
-This paragraph read "the current lowerer still refuses both `any` and
-`unknown`" while line 290 of this same file said otherwise.
+The sections below describe the intended evidence and boundary contract.
+`NeedsRepresentation`, general parameter recovery, structural assertion checks
+and boundary materialization describe planned mechanisms unless an implemented
+case is explicitly identified. They do not supersede the compiler's current
+named boundaries or require a second semantic type system.
 
 ## `any`
 
@@ -69,10 +60,9 @@ analysis. This includes:
 - `any` originating in `lib.*.d.ts`, `@types`, or another declaration file.
 
 The semantic snapshot keeps `TypeKind::Any`, because that is the checker's
-answer. Native TypeScript separately marks the runtime value as
-**`NeedsRepresentation`** and records its provenance. `NeedsRepresentation` is
-analysis state associated with a value, node, or symbol; it is not a source
-type and is never an HIR type.
+answer. Representation planning must separately retain evidence and provenance
+for the value. The original design called this state **`NeedsRepresentation`**;
+it is a proposed analysis concept, not an implemented source or HIR type.
 
 ### Evidence is not a requirement
 

@@ -117,12 +117,21 @@ impl Declaration {
 /// One declaration whose type the checker gave as `any` or `unknown`.
 #[derive(Debug, Clone)]
 pub struct Site {
+    /// Snapshot identity of the binding; names and checker types are not keys.
+    pub binding: SymbolId,
+    /// The declaration that introduced the binding.
+    pub node: NodeId,
+    /// Written parameter position, when this binding is a parameter.
+    pub parameter: Option<Parameter>,
     pub name: String,
     pub declaration: Declaration,
     /// The function, method or module the declaration belongs to.
     pub owner: String,
     pub checker: Checker,
     pub verdict: Verdict,
+    /// At least one reachable use could not be classified, even if another
+    /// examined use determined the verdict. False alone is not a closed-flow proof.
+    pub unresolved: bool,
     /// The use that decided the verdict, said in words.
     pub because: String,
     pub location: Location,
@@ -144,13 +153,35 @@ pub struct Site {
     pub decided_elsewhere: bool,
 }
 
+/// A parameter's position belongs to its declaration, not to its checker type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Parameter {
+    pub declaration: NodeId,
+    pub position: u32,
+}
+
 /// The classification of every erased site in one program.
 #[derive(Debug, Clone, Default)]
 pub struct Erasure {
-    pub sites: Vec<Site>,
+    sites: Vec<Site>,
+    by_binding: FxHashMap<SymbolId, usize>,
 }
 
 impl Erasure {
+    /// Classifications in source order; immutable so their index stays valid.
+    #[must_use]
+    pub fn sites(&self) -> &[Site] {
+        &self.sites
+    }
+
+    /// Find the classification of a particular binding in this snapshot.
+    #[must_use]
+    pub fn get(&self, binding: SymbolId) -> Option<&Site> {
+        self.by_binding
+            .get(&binding)
+            .map(|index| &self.sites[*index])
+    }
+
     #[must_use]
     pub fn count(&self, verdict: Verdict) -> usize {
         self.sites
@@ -172,7 +203,33 @@ enum Use {
     /// The value reaches another erased site, and inherits whatever happens
     /// there.
     Reaches(u32, String),
+    /// All consumers of one value contribute, including returned values.
+    Many(Vec<Self>),
 }
+
+impl Use {
+    fn returned(self) -> Self {
+        match self {
+            Self::Says(verdict, why) => {
+                Self::Says(verdict, format!("returned, and the result is {why}"))
+            }
+            Self::Reaches(target, why) => {
+                Self::Reaches(target, format!("returned, and the result is {why}"))
+            }
+            Self::Many(uses) => Self::Many(uses.into_iter().map(Self::returned).collect()),
+        }
+    }
+}
+
+struct Decision {
+    verdict: Verdict,
+    because: String,
+    uses: usize,
+    unresolved: bool,
+}
+
+type Decisions = FxHashMap<u32, Decision>;
+type Edges = FxHashMap<u32, Vec<(u32, String)>>;
 
 /// How far a use is followed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -202,6 +259,9 @@ pub fn classify_as(snapshot: &SemanticSnapshot, analysis: Analysis) -> Erasure {
             callers.entry(callee.0).or_default().push(*site);
         }
     }
+    for sites in callers.values_mut() {
+        sites.sort_by_key(|site| site.0);
+    }
     let walk = Walk { snapshot, callers };
     let sites = walk.sites();
     if sites.is_empty() {
@@ -209,104 +269,115 @@ pub fn classify_as(snapshot: &SemanticSnapshot, analysis: Analysis) -> Erasure {
     }
 
     let known: FxHashSet<u32> = sites.keys().copied().collect();
-    let uses = walk.uses_by_symbol();
+    let (mut local, edges) = walk.local_classifications(&known);
+    let decided_by = if analysis == Analysis::WholeProgram {
+        propagate(&mut local, &edges)
+    } else {
+        FxHashMap::default()
+    };
 
-    // Each site's own uses, split into verdicts and edges.
-    let mut local: FxHashMap<u32, (Verdict, String, usize)> = FxHashMap::default();
-    let mut edges: FxHashMap<u32, Vec<(u32, String)>> = FxHashMap::default();
-    for &symbol in &known {
-        let mine = uses.get(&symbol).map_or(&[][..], Vec::as_slice);
-        let mut verdict = Verdict::Carried;
-        let mut because = if mine.is_empty() {
-            "nothing in this program reads it".to_owned()
-        } else {
-            "only moved".to_owned()
+    report(sites, local, &decided_by)
+}
+
+/// Each site's verdict grows at most three times and its unresolved bit once.
+/// Revisit consumers only when one of those facts changes, without cloning the
+/// whole table each round. Stable site order makes equal-strength explanations stable.
+fn propagate(local: &mut Decisions, edges: &Edges) -> FxHashMap<u32, u32> {
+    let mut consumers: Edges = FxHashMap::default();
+    let mut symbols: Vec<_> = local.keys().copied().collect();
+    symbols.sort_unstable();
+    for symbol in &symbols {
+        for (target, why) in edges.get(symbol).map_or(&[][..], Vec::as_slice) {
+            consumers
+                .entry(*target)
+                .or_default()
+                .push((*symbol, why.clone()));
+        }
+    }
+    let mut pending: std::collections::VecDeque<_> = symbols.iter().copied().collect();
+    let mut queued: FxHashSet<_> = symbols.into_iter().collect();
+    let mut decided_by = FxHashMap::default();
+    while let Some(target) = pending.pop_front() {
+        queued.remove(&target);
+        let Some(reached) = local.get(&target) else {
+            continue;
         };
-        for &id in mine {
-            match walk.classify_use(id, &known) {
-                Use::Says(said, why) => {
-                    if said > verdict {
-                        verdict = said;
-                        because = why;
-                    }
-                }
-                Use::Reaches(target, why) => {
-                    edges.entry(symbol).or_default().push((target, why));
-                }
+        let (verdict, unresolved) = (reached.verdict, reached.unresolved);
+        let deciding_use = decided_by.get(&target).copied().unwrap_or(target);
+        for (symbol, why) in consumers.get(&target).map_or(&[][..], Vec::as_slice) {
+            let Some(entry) = local.get_mut(symbol) else {
+                continue;
+            };
+            let changed = verdict > entry.verdict || unresolved && !entry.unresolved;
+            if verdict > entry.verdict {
+                entry.verdict = verdict;
+                entry.because = format!("{why}, which is {}", verdict.as_str());
+                decided_by.insert(*symbol, deciding_use);
+            }
+            entry.unresolved |= unresolved;
+            if changed && queued.insert(*symbol) {
+                pending.push_back(*symbol);
             }
         }
-        local.insert(symbol, (verdict, because, mine.len()));
     }
+    decided_by
+}
 
-    // Fixpoint. A site that only passes its value on inherits the receiver's
-    // answer, which is the case the document exists to make: `console`'s
-    // `unknown` is decided by `node:util`.
-    let mut decided_by: FxHashMap<u32, u32> = FxHashMap::default();
-    if analysis == Analysis::Local {
-        edges.clear();
-    }
-    loop {
-        let mut moved = false;
-        let snapshot_of: FxHashMap<u32, Verdict> = local
-            .iter()
-            .map(|(symbol, (verdict, ..))| (*symbol, *verdict))
-            .collect();
-        for (symbol, outgoing) in &edges {
-            for (target, why) in outgoing {
-                let Some(&reached) = snapshot_of.get(target) else {
-                    continue;
-                };
-                let Some(entry) = local.get_mut(symbol) else {
-                    continue;
-                };
-                if reached > entry.0 {
-                    entry.0 = reached;
-                    entry.1 = format!("{why}, which is {}", reached.as_str());
-                    decided_by.insert(*symbol, *target);
-                    moved = true;
-                }
-            }
-        }
-        if !moved {
-            break;
-        }
-    }
-
+/// Preserve the source report and its binding index as one immutable result.
+fn report(
+    sites: FxHashMap<u32, Declared>,
+    mut local: Decisions,
+    decided_by: &FxHashMap<u32, u32>,
+) -> Erasure {
     let files: FxHashMap<u32, u32> = sites
         .iter()
         .map(|(symbol, site)| (*symbol, site.location.file.0))
         .collect();
     let mut out = Erasure::default();
     for (symbol, site) in sites {
-        let (verdict, because, uses) =
-            local
-                .remove(&symbol)
-                .unwrap_or((Verdict::Carried, "no uses".to_owned(), 0));
+        let decision = local.remove(&symbol).unwrap_or_else(|| Decision {
+            verdict: Verdict::Unclear,
+            because: "a declared site with no classified uses".to_owned(),
+            uses: 0,
+            unresolved: true,
+        });
         let decided_elsewhere = decided_by
             .get(&symbol)
             .and_then(|target| files.get(target))
             .is_some_and(|elsewhere| *elsewhere != site.location.file.0);
         out.sites.push(Site {
+            binding: SymbolId(symbol),
+            node: site.node,
+            parameter: site.parameter,
             decided_elsewhere,
             name: site.name,
             declaration: site.declaration,
             owner: site.owner,
             checker: site.checker,
-            verdict,
-            because,
+            verdict: decision.verdict,
+            unresolved: decision.unresolved,
+            because: decision.because,
             location: site.location,
             in_container: site.in_container,
-            uses,
+            uses: decision.uses,
         });
     }
     out.sites.sort_by(|a, b| {
         (a.location.file.0, a.location.span.start).cmp(&(b.location.file.0, b.location.span.start))
     });
+    out.by_binding = out
+        .sites
+        .iter()
+        .enumerate()
+        .map(|(index, site)| (site.binding, index))
+        .collect();
     out
 }
 
 /// A site before its verdict is known.
 struct Declared {
+    node: NodeId,
+    parameter: Option<Parameter>,
     name: String,
     declaration: Declaration,
     owner: String,
@@ -326,6 +397,50 @@ struct Walk<'a> {
 }
 
 impl Walk<'_> {
+    /// Keep verdicts and every flow edge; neither can replace the other.
+    fn local_classifications(&self, known: &FxHashSet<u32>) -> (Decisions, Edges) {
+        let uses = self.uses_by_symbol();
+        let mut local = Decisions::default();
+        let mut edges = Edges::default();
+        for &symbol in known {
+            let mine = uses.get(&symbol).map_or(&[][..], Vec::as_slice);
+            let mut decision = Decision {
+                verdict: Verdict::Carried,
+                because: if mine.is_empty() {
+                    "nothing in this program reads it"
+                } else {
+                    "only moved"
+                }
+                .to_owned(),
+                uses: mine.len(),
+                unresolved: false,
+            };
+            for &node in mine {
+                let mut pending = vec![self.classify_use(node, known)];
+                while let Some(usage) = pending.pop() {
+                    match usage {
+                        Use::Says(verdict, why) => {
+                            decision.unresolved |= verdict == Verdict::Unclear;
+                            if verdict > decision.verdict {
+                                decision.verdict = verdict;
+                                decision.because = why;
+                            }
+                        }
+                        Use::Reaches(target, why) => {
+                            edges.entry(symbol).or_default().push((target, why));
+                        }
+                        Use::Many(mut uses) => {
+                            uses.reverse();
+                            pending.extend(uses);
+                        }
+                    }
+                }
+            }
+            local.insert(symbol, decision);
+        }
+        (local, edges)
+    }
+
     // The five below are `nts_semantic_schema::walk`'s, forwarded rather than
     // written again. They were this file's own until 2026-09-24, and `denoted`
     // in particular is one fact with three owners -- `hir::lower`'s
@@ -409,6 +524,12 @@ impl Walk<'_> {
             out.insert(
                 symbol.0,
                 Declared {
+                    node: id,
+                    parameter: if kind == syntax::PARAMETER {
+                        self.parameter_at(id)
+                    } else {
+                        None
+                    },
                     name: self.text_of(name).unwrap_or("?").to_owned(),
                     declaration: match kind {
                         syntax::PARAMETER => Declaration::Parameter,
@@ -423,6 +544,19 @@ impl Walk<'_> {
             );
         }
         out
+    }
+
+    fn parameter_at(&self, node: NodeId) -> Option<Parameter> {
+        let declaration = self.parent(node)?;
+        let position = self
+            .children(declaration)
+            .into_iter()
+            .filter(|child| self.kind_of(*child) == Some(syntax::PARAMETER))
+            .position(|child| child == node)?;
+        Some(Parameter {
+            declaration,
+            position: u32::try_from(position).ok()?,
+        })
     }
 
     /// The named thing a declaration belongs to, for reading the report.
@@ -639,30 +773,12 @@ impl Walk<'_> {
                 "returned, and nothing in this program calls it".to_owned(),
             );
         };
-        // The strongest thing any caller does with the result. A `Reaches` from
-        // one call site cannot be returned alongside a verdict from another, so
-        // an edge is taken only when it is the sole answer; otherwise the
-        // verdict wins, which is the conservative direction.
-        let mut verdict = Verdict::Carried;
-        let mut because = "returned, and no caller reads the result".to_owned();
-        let mut edge = None;
-        for site in sites {
-            match self.classify_value_at(*site, known, depth + 1) {
-                Use::Says(said, why) => {
-                    if said > verdict {
-                        verdict = said;
-                        because = format!("returned, and the result is {why}");
-                    }
-                }
-                Use::Reaches(target, why) => edge = Some((target, why)),
-            }
-        }
-        match edge {
-            Some((target, why)) if verdict == Verdict::Carried => {
-                Use::Reaches(target, format!("returned, and the result is {why}"))
-            }
-            _ => Use::Says(verdict, because),
-        }
+        Use::Many(
+            sites
+                .iter()
+                .map(|site| self.classify_value_at(*site, known, depth + 1).returned())
+                .collect(),
+        )
     }
 
     /// The function whose body contains a node.
