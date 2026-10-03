@@ -26,7 +26,7 @@ operations remain named refusals.
    numeric, reference and closure arguments, imported calls and repeated captures.
    The structural witness also catches an existing wrong answer: a specialization
    inside `try` can call its ordinary entry and terminate instead of being caught.
-2. **Precise in-module TDZ (#33).** Derive early execution from bodies and function
+2. **Precise in-module TDZ (#33), delivered in `7040cb229`.** Derive early execution from bodies and function
    values available before initialization. Share that proof with existing
    initialization-order decisions. Guard only potentially early accesses,
    including accesses otherwise folded to constants; initialize per binding.
@@ -120,3 +120,53 @@ all five scalar configurations, recorded conformance, JVM verification, Java API
 native callbacks, captured closures, integrity and the React module-scope probe.
 The broad platform interop sweep and other deferred checks remain owed at the
 milestone after items 1–3. Next implementation: precise in-module TDZ (#33).
+
+## Second milestone evidence, 2026-10-03
+
+The TDZ implementation shares one initialization analysis across representation
+selection, exception propagation and lowering. Cached body summaries and a
+bounded worklist follow calls and function values available at each binding's
+initialization frontier. Unknown calls stop exposing values when they return;
+repeated calls consider newly created callbacks. Guards belong to access sites,
+so a later-only reader remains unguarded even when another reader can be early.
+Folded constants retain their exceptions. Patterns publish each element before
+the next default runs, with explicit module/local storage selection. Class
+definition and construction have separate execution walks. Import cycles retain
+their previous boundaries.
+
+Acceptance: 20 relevant core tests and core all-targets clippy; an error-rendering
+unit test and CLI all-targets clippy; 667/667 cases on each of C, LLVM, JVM, C+RC
+and LLVM+RC. The control crashes on the new witness rather than retaining its
+behavioral roots. Across all 423 C examples, 422 records remain unchanged and
+the new witness is fixed: zero regressions, changes or unstable comparisons.
+Both native and verified JVM startup preserve the folded initializer's
+ReferenceError. Verified JVM execution of the repaired outcome reads
+`let=ReferenceError;var=none;`, including its cast to `Error`.
+
+All five recorded test262 sets reconcile. Language gains four passes (6,081
+recorded passes), with the negative-acceptance count unchanged at 1,353. The
+conformance lane's `1c3a3bee3` distinguishes an accepted negative's changed
+execution phase from a changed verdict. Outcomes retain 118 records and fix
+the let-before-declaration fixture; 244 blockers remain as expected. Integrity
+measures 787 valid projects and finds no violation beyond the existing 95 known
+entries. JVM verifies 25,073/25,079 runtime classes across all 29 projects, with
+only the three known limitations, and 1,676/1,676 classes across all 119 outcomes.
+The Java API/consumer, native callback and captured-closure probes pass.
+
+Emitted comparison covers all 29 runtime projects. Eleven change only descriptor
+metadata at no byte cost and one is byte-identical. Seventeen lose the unnecessary
+`DOMException` constructor exception copy: its static definition is not part of
+construction. These removals are the refusal comparison's 17 apparent losses;
+no ordinary function is lost, and JVM linkage checks all remaining calls.
+Stream constructors gain no helper calls. Most remaining size changes are under
+1 KB; `assert` grows 1,363 bytes with four ancestry tests, and `crypto` grows
+2,540 bytes with one guarded singleton read in its `subtle` getter. Its added
+allocation is confined to the ReferenceError branch. The events flags have only
+initializer stores in both ordinary and counted emission. These code checks
+establish cost and reach, not new passing Node tests.
+
+Integrated after the ECMAScript runtime addition `4eced6ca0`. The final pin
+`7040cb229c45` is byte-identical to the fully validated `e37d2c0a1ddb` compiler
+(SHA256 prefix `9509cdb5c11e700e`); the new runtime does not alter the existing
+corpus inputs. Broader obligations from `owed.mjs` remain pending at the full
+sweep after item 3. Next implementation: tagged-template calls and identity.
