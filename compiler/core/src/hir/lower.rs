@@ -4987,7 +4987,14 @@ fn walk_one_declaration(
                     pending.extend(children_that_run(probe, at));
                     continue;
                 }
-                let named = callee.and_then(|callee| probe.node(callee).symbol).map(|it| it.0);
+                // **The declaration an import names, not the import.** A name
+                // arriving through `import { f }` is a local alias whose only
+                // declaration is the specifier, so it named no body and every call
+                // to an imported function was `Elsewhere` -- while `call_targets`,
+                // which the copy machinery reads, resolved the same call to `f`.
+                let named = callee
+                    .and_then(|callee| probe.node(callee).symbol)
+                    .map(|it| probe.denoted_symbol(it).0);
                 // **A `new` is resolved by its type, not by a value.** Which
                 // constructor runs is fixed by the name, so a `new X(...)` is
                 // not a callee arriving from somewhere -- and treating it as one
@@ -5997,7 +6004,12 @@ fn a_call_that_can_raise(
     // 1,037 -> 1,069) with nothing gained -- what a builtin does is the runtime's,
     // and where it runs a callback of ours the uniform entry carries that.
     let constructs = probe.kind_of(call) == Some(syntax::NEW_EXPRESSION);
-    match probe.node(callee).symbol.map(|it| it.0) {
+    // Through an import to what it names, as `walk_one_declaration` does: asked of the
+    // alias, `() => thrower(n)` with `thrower` imported read as unable to raise, no
+    // copy of `thrower` was offered, and the closure's raising variant -- which does
+    // resolve the call, through `call_targets` -- could not be built. Every `try`
+    // dispatching that closure aborted by name at run time.
+    match probe.node(callee).symbol.map(|it| probe.denoted_symbol(it).0) {
         Some(symbol) if constructs || a_callee_with_a_body(snapshot, probe, symbol) => {
             throwing.any.contains(&symbol)
         }
@@ -6064,7 +6076,7 @@ fn a_value_held_call(snapshot: &SemanticSnapshot, probe: &FuncBuilder, call: Nod
         return false;
     };
     match probe.node(callee).symbol {
-        Some(symbol) => a_value_held_callee(snapshot, probe, symbol.0),
+        Some(symbol) => a_value_held_callee(snapshot, probe, probe.denoted_symbol(symbol).0),
         None => {
             probe.kind_of(callee) == Some(syntax::ELEMENT_ACCESS_EXPRESSION)
                 && !snapshot.call_targets.get(&call).and_then(|target| target.callee).is_some_and(|at| {
