@@ -1,3 +1,9 @@
+// **FIXED by `e46ddae84` (loop-condition writes, the compiler lane) and kept as
+// a guard.** A count written in a loop's condition is now carried round the
+// loop, and the exit carries the bindings after the final false condition: both
+// condition arms answer 610 as node does, and the control still 609. What this
+// guards is that a write in a condition reaches the next iteration and the exit.
+//
 // A postfix increment in a loop's condition is not carried round the loop.
 //
 // `while (count++ < 9) fraction *= 10` compiles to a loop header whose block
@@ -19,8 +25,8 @@
 //
 // **Expected, confirmed under node:** from 3, 6 steps in every arm; the final
 // count is 10 for the two condition arms -- `count++ < 9` is false at 9 and
-// still increments -- and 9 for the control (610, 610, 609). nts answers 2003
-// for both condition arms: 20 steps, `count` still 3.
+// still increments -- and 9 for the control (610, 610, 609). Until `e46ddae84`
+// nts answered 2003 for both condition arms: 20 steps, `count` still 3.
 function bounded(start: number): number {
   let count = start;
   let steps = 0;
