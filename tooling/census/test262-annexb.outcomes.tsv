@@ -1,6 +1,6 @@
 # Test262 test/annexB cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 8db9860c741baf87, commit fa77038611f45b670f86c08a2dd2f33dd62e769b, harness d6442dbc09f91ad0; machine at start: 18.7 GB available, swap 7.4/20 GB, load 23.2/24.4 (1m/5m), 32 cores; 8 worker(s)
+# compiler c34fb3d8255572be, commit 38fa28b020a3ab333d7a6dfe619ed15748bbe4ed, harness d6442dbc09f91ad0; machine at start: 19.5 GB available, swap 7.7/20 GB, load 11.2/13 (1m/5m), 32 cores; 8 worker(s)
 test/annexB/language/expressions/template-literal/legacy-octal-escape-sequence-strict.js	pass	
 test/annexB/language/statements/for-in/bare-initializer.js	fail	accepted: was refused later (lowering)
 test/annexB/language/statements/for-in/const-initializer.js	pass	
