@@ -6038,7 +6038,7 @@ fn a_value_held_call(snapshot: &SemanticSnapshot, probe: &FuncBuilder, call: Nod
     probe
         .children(call)
         .first()
-        .and_then(|callee| probe.node(*callee).symbol)
+        .and_then(|callee| probe.node(probe.through_assertions(*callee)).symbol)
         .is_some_and(|symbol| a_value_held_callee(snapshot, probe, symbol.0))
 }
 
@@ -24076,6 +24076,36 @@ impl<'a> FuncBuilder<'a> {
     fn through_parentheses(&self, mut node: NodeId) -> NodeId {
         for _ in 0..32 {
             if self.kind_of(node) != Some(syntax::PARENTHESIZED_EXPRESSION) {
+                return node;
+            }
+            match self.children(node).first() {
+                Some(inner) => node = *inner,
+                None => return node,
+            }
+        }
+        node
+    }
+
+    /// The expression inside any number of parentheses and type assertions --
+    /// `as`, `!`, `satisfies` -- none of which changes the value it wraps.
+    ///
+    /// A question about *which value* an expression is -- a callee held in a field,
+    /// say -- has the same answer for `(slot.handler as F)` as for `slot.handler`.
+    /// The census asked the wrapper and found no symbol, so a call on a cast read as
+    /// "a function value" no raising entry could carry, and held the program-wide
+    /// raising gate off (`blockers/a-call-on-a-cast-in-a-closure-holds-the-raising-
+    /// gate-off`, react-gtk's `connectController`).
+    fn through_assertions(&self, mut node: NodeId) -> NodeId {
+        for _ in 0..32 {
+            if !matches!(
+                self.kind_of(node),
+                Some(
+                    syntax::PARENTHESIZED_EXPRESSION
+                        | syntax::AS_EXPRESSION
+                        | syntax::NON_NULL_EXPRESSION
+                        | syntax::SATISFIES_EXPRESSION
+                )
+            ) {
                 return node;
             }
             match self.children(node).first() {

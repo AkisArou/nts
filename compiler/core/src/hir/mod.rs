@@ -3600,10 +3600,17 @@ pub(super) fn call_directly(
     else {
         return false;
     };
+    // Where the target stands now: one further on once the receiver is inserted
+    // in front of it. A second insertion at the old `at` -- the moved call below
+    // -- landed *before* the receiver it reads: `call Closure2#call(%7, …)` then
+    // `%7 = unerase …`, which C compiled (its declarations hoist) and LLVM and
+    // the JVM verifier rejected (`examples/a-call-on-a-cast-inside-a-closure`).
+    let mut at = at;
     if let Some(op) = receiver {
         let pushed = id(func.values.len());
         func.values.push(op);
         func.blocks[block].ops.insert(at, pushed);
+        at += 1;
         if let Some(first) = args.first_mut() {
             *first = pushed;
         }
