@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Error: x",
+  "node": "exit 1; nts: uncaught Observed: a parameter callee (control)=ok caught;a field callee=ok caught;",
+  "measured_with": "ea1590d881790b10",
+  "source": "measured"
+}
