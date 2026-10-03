@@ -72,11 +72,19 @@ function parse(argv) {
   return { opts, rows };
 }
 
-/** One file's verdict between two arms' rows. */
+/**
+ * One file's verdict between two arms. Each arm is `{ row, judged }`: the raw
+ * row, and the census's judged outcome for the case. **A pass is the census's
+ * judgment, never a bucket**: a runtime negative passes by throwing the
+ * expected error and a parse negative by being refused, so reading
+ * `bucket === "strict-pass"` called a negative going completed -> threw-the-
+ * expected-type WORSE (statements/let/global-use-before-initialization-in-
+ * prior-statement.js, 2026-10-03). One derivation of a pass: judgeNegative's.
+ */
 export function verdict(before, after) {
-  const pass = (r) => r?.bucket === PASS;
-  const cause = (r) => `${r?.bucket}|${r?.why ?? ""}|${r?.first ?? ""}|${(r?.diagnostics ?? []).find((d) => d.code === "NTS1001")?.message ?? ""}`;
-  if (!before || !after) return "not measured";
+  const pass = (r) => r?.judged?.outcome === "pass";
+  const cause = (r) => `${r?.judged?.outcome}|${r?.judged?.cause ?? ""}|${r?.row?.bucket}|${r?.row?.why ?? ""}|${r?.row?.first ?? ""}|${(r?.row?.diagnostics ?? []).find((d) => d.code === "NTS1001")?.message ?? ""}`;
+  if (!before?.row || !after?.row || !before.judged || !after.judged) return "not measured";
   if (!pass(before) && pass(after)) return "FIXED";
   if (pass(before) && !pass(after)) return "WORSE";
   if (cause(before) !== cause(after)) return "MOVED";
@@ -85,13 +93,21 @@ export function verdict(before, after) {
 
 // **Seen to classify before it is trusted.**
 function selfTest() {
-  const r = (bucket, message) => ({ bucket, why: bucket === PASS ? undefined : "lowering", diagnostics: message ? [{ code: "NTS1001", message }] : [] });
+  const r = (bucket, message, outcome = bucket === PASS ? "pass" : "unsupported") => ({
+    row: { bucket, why: bucket === PASS ? undefined : "lowering", diagnostics: message ? [{ code: "NTS1001", message }] : [] },
+    judged: { outcome, cause: null },
+  });
   const cases = [
     [r("unsupported", "a"), r(PASS), "FIXED"],
-    [r(PASS), r("threw"), "WORSE"],
+    [r(PASS), r("threw", null, "fail"), "WORSE"],
     [r("unsupported", "a"), r("unsupported", "b"), "MOVED"],
     [r("unsupported", "a"), r("unsupported", "a"), "same"],
     [r("unsupported", "a"), undefined, "not measured"],
+    // A runtime negative: completing is its fail, throwing the expected type its pass.
+    [r(PASS, null, "fail"), r("threw", null, "pass"), "FIXED"],
+    [r("threw", null, "pass"), r(PASS, null, "fail"), "WORSE"],
+    // A parse negative: refused by the checker is its pass.
+    [r("unsupported", null, "pass"), r(PASS, null, "fail"), "WORSE"],
   ];
   for (const [a, b, want] of cases) if (verdict(a, b) !== want) return `${JSON.stringify([a, b])} read as ${verdict(a, b)}, not ${want}`;
   return null;
@@ -104,7 +120,7 @@ if (broken) {
   process.exit(2);
 }
 if (argv.includes("--self-test")) {
-  console.log("  self-test: fixed, worse, moved, same and not measured each classified");
+  console.log("  self-test: fixed, worse, moved, same and not measured each classified, negatives by their judged outcome");
   process.exit(0);
 }
 
@@ -145,13 +161,14 @@ mkdirSync(base, { recursive: true });
 const scratch = mkdtempSync(join(base, "run-"));
 process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
 
-/** One arm over one directory's selection: its rows, keyed by path. */
+/** One arm over one directory's selection: per path, its row and the census's judged outcome. */
 function arm(name, bin, dir, paths) {
   const tsv = join(scratch, `${dir.replace(/\//g, "_")}.tsv`);
   writeFileSync(tsv, `${paths.join("\n")}\n`);
   const out = join(scratch, `${name}-${dir.replace(/\//g, "_")}.rows`);
+  const json = join(scratch, `${name}-${dir.replace(/\//g, "_")}.json`);
   const run = spawnSync("node", [
-    join(HERE, "conformance262.ts"), "--under", dir, "--recorded", tsv, "--rows", out,
+    join(HERE, "conformance262.ts"), "--under", dir, "--recorded", tsv, "--rows", out, "--json", json,
     ...(opts.jobs ? ["--jobs", opts.jobs] : []),
   ], {
     cwd: ROOT,
@@ -159,11 +176,13 @@ function arm(name, bin, dir, paths) {
     maxBuffer: 1 << 26,
     env: { ...process.env, NTS_BIN: bin, NTS_CENSUS_DIR: join(scratch, `census-${name}-${dir.replace(/\//g, "_")}`) },
   });
-  if (!existsSync(out)) {
-    console.log(`  NOT MEASURED: the ${name} arm over ${dir} wrote no rows -- ${`${run.stdout}${run.stderr}`.trim().split("\n").slice(-2).join(" / ")}`);
+  if (!existsSync(out) || !existsSync(json)) {
+    console.log(`  NOT MEASURED: the ${name} arm over ${dir} wrote no ${existsSync(out) ? "outcomes" : "rows"} -- ${`${run.stdout}${run.stderr}`.trim().split("\n").slice(-2).join(" / ")}`);
     process.exit(2);
   }
-  return readRows(readFileSync(out, "utf8"));
+  const rows = readRows(readFileSync(out, "utf8"));
+  const outcomes = JSON.parse(readFileSync(json, "utf8")).outcomes ?? {};
+  return new Map(paths.map((path) => [path, { row: rows.get(path), judged: outcomes[path] }]));
 }
 
 const tally = new Map();
@@ -176,7 +195,12 @@ for (const [dir, paths] of byDir) {
     tally.set(v, (tally.get(v) ?? 0) + 1);
     const b = before.get(path);
     const a = after.get(path);
-    const reason = (r) => (r ? `${r.bucket}${r.why ? `/${r.why}` : ""}${r.first ? `: ${r.first}` : ""}${(r.diagnostics ?? []).find((d) => d.code === "NTS1001") ? `: ${r.diagnostics.find((d) => d.code === "NTS1001").message}` : ""}` : "(none)");
+    const reason = (arm) => {
+      const r = arm?.row;
+      if (!r) return "(none)";
+      const nts1001 = (r.diagnostics ?? []).find((d) => d.code === "NTS1001");
+      return `${arm.judged?.outcome ?? "?"} (${r.bucket}${r.why ? `/${r.why}` : ""})${r.first ? `: ${r.first}` : ""}${nts1001 ? `: ${nts1001.message}` : ""}`;
+    };
     if (v !== "same") lists.set(v, [...(lists.get(v) ?? []), `${path}\n        ${reason(b).slice(0, 110)}\n     -> ${reason(a).slice(0, 110)}`]);
     if (opts.out) appendFileSync(opts.out, `${JSON.stringify({ path, verdict: v, before: b ?? null, after: a ?? null })}\n`);
   }

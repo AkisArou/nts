@@ -984,6 +984,12 @@ if (jsonFile) {
     pin, compiler: NTS, fingerprint: FINGERPRINT, under, machine: { start: machineAtStart, end: machineAtEnd, jobs }, selected: records.length, population: population.length,
     attempted: toAttempt.length, checks, tally, inScope: inScope.length, inScopePass, excluded: excludedCases.length,
     rankSole, rankFirst, rankAny, rankNamed, exclusions: exclusionReport, comparison, problems,
+    // **The judged outcome of every case**, which a row alone does not carry:
+    // a negative's pass is decided by `judgeNegative`, not by its bucket (a
+    // runtime negative passes by *throwing*, a parse negative by being
+    // *refused*). A tool comparing two runs reads this rather than re-deriving
+    // a pass from buckets -- rerun.ts once called such a FIX "WORSE".
+    outcomes: Object.fromEntries(cases.filter((c) => c.outcome).map((c) => [c.record.path, { outcome: c.outcome, cause: c.cause ?? null }])),
   }, null, 2));
 }
 process.exit(problems.length === 0 ? 0 : 1);
