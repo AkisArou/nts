@@ -1445,6 +1445,66 @@ mod tests {
         assert!(!stash.is_frame_local(ValueId(0)));
     }
 
+    /// The other direction of the same box: what an `Unerase` produces is the
+    /// pointer that was erased, so keeping it keeps the parameter it came from.
+    ///
+    /// This is the shape of every function value's `erased_call` entry -- it
+    /// unerases its argument and hands it to the written body -- and only
+    /// `Erase` was followed. `entry`'s parameter looked held, so `caller` put
+    /// the object it erased and passed in its own frame, and the global pointed
+    /// at dead stack. The GTK corpus's `Workbench` was that object.
+    #[test]
+    fn what_an_unerasure_keeps_its_parameter_keeps() {
+        let mut program = Program::default();
+        // `entry(p) { stash = unerase(p) }`
+        program.funcs.push(func(
+            "entry",
+            1,
+            vec![
+                op(OpKind::Param(0), HirType::Erased),
+                op(OpKind::Unerase { value: ValueId(0) }, object()),
+                op(
+                    OpKind::GlobalSet {
+                        global: 0,
+                        value: ValueId(1),
+                    },
+                    HirType::Void,
+                ),
+            ],
+            vec![Block {
+                params: Vec::new(),
+                ops: vec![ValueId(0), ValueId(1), ValueId(2)],
+                terminator: Terminator::Return(None),
+            }],
+        ));
+        // `caller() { entry(erase(new P())) }`
+        program.funcs.push(func(
+            "caller",
+            0,
+            vec![
+                op(OpKind::ObjectNew { frame: false }, object()),
+                op(OpKind::Erase { value: ValueId(0), absent: super::super::Absent::Impossible }, HirType::Erased),
+                op(
+                    OpKind::Call {
+                        callee: Callee::Direct("entry".to_owned()),
+                        args: vec![ValueId(1)],
+                        frame: None,
+                    },
+                    HirType::Void,
+                ),
+            ],
+            vec![Block {
+                params: Vec::new(),
+                ops: vec![ValueId(0), ValueId(1), ValueId(2)],
+                terminator: Terminator::Return(None),
+            }],
+        ));
+
+        let escapes = analyze_program(&program);
+        assert!(escapes[0].escapes(ValueId(0)), "the parameter is what was stored");
+        assert!(!escapes[1].is_frame_local(ValueId(0)), "so the caller's object is on the heap");
+    }
+
     /// An allocation nothing does anything with stays in the frame, which is
     /// the base case the rest of the module narrows from.
     #[test]

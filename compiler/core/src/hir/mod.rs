@@ -3656,10 +3656,21 @@ pub(super) fn call_directly(
 /// Values carried through boxing and control-flow joins. These operations
 /// preserve reference identity; escape, callback reachability and exposure
 /// follow the same graph. Visited values make loop-carried joins terminate.
+///
+/// **Both directions of a box.** `Unerase` is the same pointer read back out of
+/// its slot, and `Convert` is the same value in another representation, so what
+/// either produces carries its operand exactly as `Erase` carries its own. Only
+/// `Erase` was followed, and the gap is what every function value's
+/// `erased_call` entry is made of: it unerases its parameter and hands the
+/// result on. A callee keeping that result escaped the `Unerase` and never the
+/// parameter, so every caller reaching the function through the erased entry
+/// put the object it passed in its own frame. The GTK corpus's `Workbench`,
+/// built in an `activate` handler and captured by a closure the demo connected
+/// to a signal, was a pointer into a dead frame for the cycle collector to walk.
 pub(super) fn carried_values(func: &Func, value: ValueId) -> impl Iterator<Item = ValueId> {
     if !matches!(
         func.values.get(value.0 as usize).map(|op| &op.kind),
-        Some(OpKind::Erase { .. } | OpKind::BlockParam(_))
+        Some(OpKind::Erase { .. } | OpKind::Unerase { .. } | OpKind::Convert(_) | OpKind::BlockParam(_))
     ) {
         return std::iter::once(value).chain(Vec::new());
     }
@@ -3678,7 +3689,9 @@ pub(super) fn carried_values(func: &Func, value: ValueId) -> impl Iterator<Item 
             values.push(at);
         }
         match op.kind {
-            OpKind::Erase { value, .. } => pending.push(value),
+            OpKind::Erase { value, .. } | OpKind::Unerase { value } | OpKind::Convert(value) => {
+                pending.push(value);
+            }
             OpKind::BlockParam(_) => {
                 let Some((block, slot)) =
                     func.blocks.iter().enumerate().find_map(|(block, body)| {
