@@ -2400,6 +2400,11 @@ fn render(ty: &HirType) -> String {
         }
         HirType::Managed(ManagedType::DataView) => "managed<dataview>".to_owned(),
         HirType::Managed(ManagedType::AnyView) => "managed<anyview>".to_owned(),
+        // Provided error instances have synthetic ids, but are ordinary
+        // objects. Keep the full id so listings join them to their layouts.
+        HirType::Managed(ManagedType::Object(id)) if nts_core::hir::is_provided_error_type(*id) => {
+            format!("managed<obj#{}>", id.0)
+        }
         // Named by the part of the synthetic space it is in. Every one of them
         // printed as `closure#N` before, which is the one thing an `async`
         // frame and a generator's frame are not -- and this dump is where a
@@ -2407,7 +2412,7 @@ fn render(ty: &HirType) -> String {
         HirType::Managed(ManagedType::Object(id))
             if id.0 >= nts_core::hir::SYNTHETIC_TYPE_FLOOR =>
         {
-            let (what, base) = if id.0 >= nts_core::hir::SYNTHETIC_CLOSURES {
+            let (what, base) = if nts_core::hir::is_closure_type(*id) {
                 ("closure", nts_core::hir::SYNTHETIC_CLOSURES)
             } else if id.0 >= nts_core::hir::SYNTHETIC_GENERATOR_FRAMES {
                 ("generator", nts_core::hir::SYNTHETIC_GENERATOR_FRAMES)
@@ -2433,6 +2438,22 @@ fn render(ty: &HirType) -> String {
         }
         HirType::Managed(ManagedType::Set(element)) => {
             format!("managed<set<{}>>", render(element))
+        }
+    }
+}
+
+#[cfg(test)]
+mod rendering_tests {
+    use super::{HirType, ManagedType, render};
+
+    #[test]
+    fn provided_error_instances_render_as_objects() {
+        for index in 0..nts_core::hir::PROVIDED_ERROR_NAMES.len() {
+            let id = nts_core::hir::provided_error_type(index);
+            assert_eq!(
+                render(&HirType::Managed(ManagedType::Object(id))),
+                format!("managed<obj#{}>", id.0),
+            );
         }
     }
 }
@@ -7873,4 +7894,3 @@ fn bridging_note(bridging: &nts_core::hir::Bridging) -> String {
     }
     note
 }
-

@@ -219,6 +219,10 @@ impl Lowered {
 /// shares.
 #[derive(Debug, Clone, Default)]
 struct ModuleScope {
+    /// One initialization proof for representation and throwing decisions.
+    initialization: std::rc::Rc<initialization::Analysis>,
+    /// Symbol to readiness flag, only where an executable access can be early.
+    initialized: rustc_hash::FxHashMap<u32, u32>,
     /// Symbol to value, for a `const` this could evaluate.
     constants: rustc_hash::FxHashMap<u32, f64>,
     /// Symbol to index in [`Program::globals`].
@@ -276,6 +280,12 @@ struct ModuleScope {
     /// declaration itself is only refused if something reads the name. The file
     /// compiled to "0 functions, nothing refused".
     refusals: Vec<Diagnostic>,
+}
+
+impl ModuleScope {
+    fn with_initialization(initialization: std::rc::Rc<initialization::Analysis>) -> Self {
+        Self { initialization, ..Self::default() }
+    }
 }
 
 /// The class hierarchy, as far as method dispatch needs it.
@@ -2001,6 +2011,33 @@ fn the_constructor_declared_by(probe: &FuncBuilder, class: NodeId) -> Option<Nod
         .map(|at| probe.implementation_of(at))
 }
 
+/// A class body's entry is construction, not definition. Static elements and
+/// computed names execute during definition; instance initializers and constructor
+/// parameters/body execute during construction. Keep that distinction shared by
+/// initialization and exception analysis.
+fn children_in_the_body_of(probe: &FuncBuilder, declaration: NodeId) -> Vec<NodeId> {
+    if !probe.kind_of(declaration).is_some_and(declares_a_class) {
+        return children_that_run(probe, declaration);
+    }
+    let mut children = Vec::new();
+    for member in probe.children(declaration) {
+        if probe.kind_of(member) == Some(syntax::CONSTRUCTOR) {
+            children.extend(probe.children(probe.implementation_of(member)));
+        } else if probe.kind_of(member) == Some(syntax::PROPERTY_DECLARATION)
+            && !is_static_member(probe.snapshot, member)
+        {
+            let fields = probe.children(member);
+            if let Some(name) = fields.first().copied()
+                && let Some(initializer) =
+                    declaration_initializer(&fields, name, |at| probe.kind_of(at))
+            {
+                children.push(initializer);
+            }
+        }
+    }
+    children
+}
+
 /// The `(interface, member)` a call dispatches through, where its receiver is typed at a
 /// face this hierarchy knows.
 ///
@@ -3241,6 +3278,15 @@ enum Head {
     Assign(NodeId),
 }
 
+/// The caller knows whether a pattern initializes module storage or local
+/// bindings. A declaration's AST ancestry alone cannot distinguish a loop
+/// head lowered as local state from a top-level module declaration.
+#[derive(Clone, Copy)]
+enum PatternScope {
+    Local,
+    Module,
+}
+
 /// The name of the `n`th closure's class, and of its one method.
 /// The function holding a module's top-level statements.
 ///
@@ -4136,6 +4182,7 @@ const RECEIVER_IS_NOT_BOUND: &str =
 #[derive(Default)]
 #[derive(Clone)]
 struct Naming {
+    initialization: std::rc::Rc<initialization::Analysis>,
     /// Which declarations a [raising copy](FuncBuilder::raises) is emitted for.
     /// See [`raising_copies`].
     raising: rustc_hash::FxHashSet<NodeId>,
@@ -4937,13 +4984,15 @@ fn walk_one_declaration(
         }
         let own: rustc_hash::FxHashSet<NodeId> =
             parameters_of(probe, declaration).into_iter().collect();
-        let mut pending: Vec<NodeId> = children_that_run(probe, declaration);
+        let mut pending: Vec<NodeId> = children_in_the_body_of(probe, declaration);
         while let Some(at) = pending.pop() {
             let kind = probe.kind_of(at);
             if names_a_body(kind) {
                 continue;
             }
-            if kind == Some(syntax::THROW_STATEMENT) {
+            if kind == Some(syntax::THROW_STATEMENT)
+                || probe.module.initialization.can_raise_at(at)
+            {
                 throws.insert(symbol);
             }
             // **An accessor access is a call to its body**, which this walk did
@@ -5088,10 +5137,9 @@ fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwin
         for declaration in &record.declarations {
             let declaration = &the_function_of(probe, *declaration);
             // **A class gets an entry too, and its entry is its *construction*.**
-            // `walk_one_declaration` skips a nested body, and a `Constructor` and a
-            // `PropertyDeclaration`'s initializer are not nested bodies -- so walking
-            // the class node gives exactly what `new X()` runs, and skips its methods
-            // and accessors, which have entries of their own.
+            // `children_in_the_body_of` selects its instance initializers and
+            // constructor. Its static elements run at definition, and its methods
+            // and accessors have entries of their own.
             //
             // Without it a class symbol was in no set, so `new X()` could not raise
             // however loudly its field initializer threw:
@@ -6371,13 +6419,15 @@ fn written_field_orders(
 }
 
 fn naming(snapshot: &SemanticSnapshot) -> Naming {
-    let probe = FuncBuilder::probe(snapshot);
+    let mut probe = FuncBuilder::probe(snapshot);
+    probe.module.initialization = std::rc::Rc::new(initialization::analyze(snapshot, &probe));
     let class_tokens = class_token_indices(snapshot);
     let generators = generator_indices(snapshot);
     let written_order = written_field_orders(snapshot, &probe);
 
     let (qualified, ambiguous) = qualified_names(snapshot);
     let mut naming = Naming {
+        initialization: probe.module.initialization.clone(),
         qualified,
         ambiguous,
         class_tokens,
@@ -6558,13 +6608,13 @@ fn closure_typed_global(
             // runs, and a slot typed by a closure has no `undefined` to hold until
             // then. So it is taken only where nothing *can* read it then: one
             // declaration, nothing writing it again, and nothing that runs before
-            // its statement -- see `nothing_runs_before`. That is test262's
+            // its statement -- see `initialized_before_use`. That is test262's
             // `var f = async function* () {}` followed by calls to `f`, which is
             // most of the 766 rows this sentence's refusal stood first in.
             nts_semantic_schema::VariableKind::Var => {
                 declared_once(probe, name_node)
                     && !reassigned_anywhere(probe, name_node)
-                    && nothing_runs_before(probe, name_node)
+                    && initialized_before_use(probe, name_node)
             }
             _ => false,
         })
@@ -6606,132 +6656,13 @@ fn declared_once(probe: &FuncBuilder, name_node: NodeId) -> bool {
         .is_some_and(|record| record.declarations.len() == 1)
 }
 
-/// Whether nothing the program wrote can run before the module-scope statement
-/// declaring `name_node` has run -- so nothing can read the binding while it
-/// holds no value yet.
-///
-/// Every earlier statement of the module, and the declaring statement itself
-/// (`var a = f(), g = () => 1` runs `f` before `g` is set), must be one
-/// [`may_run_code`] answers no for. And the module must be in no import cycle:
-/// a module that imports this one before it has evaluated could call into it.
-/// Reads from the module's own functions need nothing more, because none of
-/// them can have been called yet.
-fn nothing_runs_before(probe: &FuncBuilder, name_node: NodeId) -> bool {
-    let modules = &probe.snapshot.modules;
-    let ancestors: Vec<NodeId> = std::iter::successors(Some(name_node), |at| probe.node(*at).parent).collect();
-    let Some(module) = modules.iter().position(|module| ancestors.contains(&module.root)) else {
-        return false;
-    };
-    // Asked only of a `var` holding a closure, so the order is computed here
-    // rather than threaded through every module-scope binding.
-    if evaluation_order(probe.snapshot, &[]).1.iter().any(|cycle| cycle.contains(&module)) {
-        return false;
-    }
-    // The module's statements as `children` gives them -- the list node between
-    // them and the root is flattened -- and the one of them this name is in.
-    let statements = probe.children(modules[module].root);
-    let Some(own) = statements.iter().position(|at| ancestors.contains(at)) else {
-        return false;
-    };
-    !statements[..=own].iter().any(|at| may_run_code(probe, *at))
-}
-
-/// Whether evaluating `node` at module scope can run code the program wrote: a
-/// call, a getter, an iterator, `valueOf` -- anything that could read a binding
-/// before its declaration has run. A deferred body (a function, an arrow, a
-/// method) runs when it is called, not here, so it is not entered.
-///
-/// **What runs no code is listed, and everything else is answered yes**, because
-/// the cost of a wrong yes is a refusal that stays and the cost of a wrong no
-/// is a read of an empty slot. A node with no children -- a name, a literal, a
-/// keyword, an operator -- runs nothing.
-fn may_run_code(probe: &FuncBuilder, node: NodeId) -> bool {
-    let children = probe.children(node);
-    let Some(kind) = probe.kind_of(node) else {
-        // A `NodeList`: an argument or declaration list.
-        return children.iter().any(|child| may_run_code(probe, *child));
-    };
-    if children.is_empty() || syntax::is_type_node(kind) {
-        return false;
-    }
-    let any = |nodes: &[NodeId]| nodes.iter().any(|child| may_run_code(probe, *child));
-    // A primitive operand has no `valueOf` to call; an object one may.
-    let primitive = |at: NodeId| {
-        probe
-            .snapshot
-            .node_types
-            .get(&at)
-            .and_then(|ty| probe.snapshot.types.get(ty.0 as usize))
-            .is_some_and(|record| {
-                matches!(
-                    record.kind,
-                    TypeKind::Boolean
-                        | TypeKind::Number
-                        | TypeKind::BigInt
-                        | TypeKind::String
-                        | TypeKind::Literal(_)
-                        | TypeKind::Undefined
-                        | TypeKind::Null
-                        | TypeKind::Void
-                )
-            })
-    };
-    match kind {
-        syntax::FUNCTION_EXPRESSION
-        | syntax::ARROW_FUNCTION
-        | syntax::FUNCTION_DECLARATION
-        | syntax::INTERFACE_DECLARATION
-        | syntax::TYPE_ALIAS_DECLARATION
-        | syntax::IMPORT_DECLARATION => false,
-        // A method's body is deferred; its *name* is evaluated now, and a
-        // computed one can be any expression.
-        syntax::METHOD_DECLARATION | syntax::GET_ACCESSOR | syntax::SET_ACCESSOR => children
-            .iter()
-            .any(|child| probe.kind_of(*child) == Some(syntax::COMPUTED_PROPERTY_NAME) && may_run_code(probe, *child)),
-        syntax::VARIABLE_STATEMENT
-        | syntax::VARIABLE_DECLARATION_LIST
-        | syntax::VARIABLE_DECLARATION
-        | syntax::EXPRESSION_STATEMENT
-        | syntax::PARENTHESIZED_EXPRESSION
-        | syntax::OBJECT_LITERAL_EXPRESSION
-        | syntax::ARRAY_LITERAL_EXPRESSION
-        | syntax::PROPERTY_ASSIGNMENT
-        | syntax::SHORTHAND_PROPERTY_ASSIGNMENT
-        | syntax::COMPUTED_PROPERTY_NAME
-        | syntax::CONDITIONAL_EXPRESSION
-        | syntax::TYPE_OF_EXPRESSION
-        | syntax::VOID_EXPRESSION => any(&children),
-        // `!x` converts to a boolean, which calls nothing; `-x`, `+x` and `~x`
-        // convert to a number, which calls `valueOf` on an object.
-        syntax::PREFIX_UNARY_EXPRESSION => {
-            let converts = !matches!(
-                probe.node(node).data,
-                NodeData::Children { small, .. } if small & syntax::prefix_operator::MASK == syntax::prefix_operator::EXCLAMATION
-            );
-            (converts && !children.last().is_some_and(|operand| primitive(*operand))) || any(&children)
-        }
-        // An assignment to a *name*, an identity comparison and a logical
-        // operator convert nothing; every other operator may.
-        syntax::BINARY_EXPRESSION => {
-            let [left, operator, right] = children.as_slice() else {
-                return true;
-            };
-            let converts = !matches!(
-                probe.kind_of(*operator),
-                Some(
-                    syntax::EQUALS_EQUALS_EQUALS_TOKEN
-                        | syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN
-                        | syntax::AMPERSAND_AMPERSAND_TOKEN
-                        | syntax::BAR_BAR_TOKEN
-                        | syntax::QUESTION_QUESTION_TOKEN
-                        | syntax::COMMA_TOKEN
-                        | syntax::EQUALS_TOKEN
-                )
-            );
-            (converts && !(primitive(*left) && primitive(*right))) || any(&children)
-        }
-        _ => true,
-    }
+/// Whether every possible read occurs after initialization. A `var` closure
+/// needs this proof because its representation cannot hold hoisted `undefined`.
+/// Import cycles keep their existing conservative boundary.
+fn initialized_before_use(probe: &FuncBuilder, name_node: NodeId) -> bool {
+    probe.node(name_node).symbol.is_some_and(|symbol| {
+        probe.module.initialization.proven_ready(symbol.0)
+    })
 }
 
 /// Whether anything but its own declaration can write this name.
@@ -6897,13 +6828,27 @@ fn is_scalar(ty: &HirType) -> bool {
     matches!(ty, HirType::Float { .. } | HirType::Int { .. } | HirType::Bool)
 }
 
+fn module_scope_probe<'a>(
+    snapshot: &'a SemanticSnapshot,
+    foreign: &'a super::runtime::ForeignTable,
+    hierarchy: &Hierarchy,
+    initialization: &std::rc::Rc<initialization::Analysis>,
+) -> FuncBuilder<'a> {
+    let mut probe = FuncBuilder::new(snapshot, foreign);
+    probe.hierarchy = hierarchy.clone();
+    probe.module.initialization = initialization.clone();
+    probe.written_order = written_field_orders(snapshot, &probe);
+    probe
+}
+
 fn collect_module_scope(
     snapshot: &SemanticSnapshot,
     foreign: &super::runtime::ForeignTable,
     closures: &[ClosureInfo],
     hierarchy: &Hierarchy,
+    initialization: &std::rc::Rc<initialization::Analysis>,
 ) -> ModuleScope {
-    let mut scope = ModuleScope::default();
+    let mut scope = ModuleScope::with_initialization(initialization.clone());
     // With the hierarchy, and that is the whole of a silent wrong answer.
     //
     // This probe lays out every class a module-scope binding mentions, and its
@@ -6921,8 +6866,7 @@ fn collect_module_scope(
     // had a different type; `NtsObj_Request` has eight consecutive
     // `NtsString *` members, where the same defect compiles clean and returns
     // the wrong value.
-    let mut probe = FuncBuilder::new(snapshot, foreign);
-    probe.hierarchy = hierarchy.clone();
+    let mut probe = module_scope_probe(snapshot, foreign, hierarchy, initialization);
     // **And with the written field order, for the same reason as the hierarchy.**
     // Without it this probe laid `interface R extends Required<Omit<O, …>> { … }`
     // out in the checker's own-members-first order while every function indexed
@@ -6935,7 +6879,6 @@ fn collect_module_scope(
     // one of the two. `wire_naming`'s doc predicted exactly that: *a site that
     // copies two of the four has that same problem for the other two, and says
     // nothing about it.*
-    probe.written_order = written_field_orders(snapshot, &probe);
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
         if node.kind != NodeKind::Syntax(syntax::VARIABLE_DECLARATION) {
@@ -7215,6 +7158,7 @@ fn collect_module_scope(
         }
     }
     collect_static_fields(snapshot, &mut probe, &mut scope);
+    add_initialized_flags(&probe, &mut scope);
     // What materializing the globals' types produced. Nothing else collects
     // from this walk, which is why they were missing.
     scope.layouts = probe.layouts;
@@ -7223,6 +7167,45 @@ fn collect_module_scope(
     // builder reads it and a global must exist before a function names it.
     add_lazy_modules(snapshot, &mut scope);
     scope
+}
+
+/// Readiness storage is independent of value storage: a folded constant and a
+/// class binding need a flag as surely as a mutable global does.
+fn add_initialized_flags(probe: &FuncBuilder, scope: &mut ModuleScope) {
+    let mut flagged: Vec<_> = scope.initialization.flagged().collect();
+    flagged.sort_unstable_by_key(|(symbol, _)| *symbol);
+    for (symbol, name) in flagged {
+        let flag = u32::try_from(scope.globals.len()).unwrap_or(u32::MAX);
+        let spelling = probe.snapshot.symbols.get(symbol as usize)
+            .map(|record| format!("{}#initialized", record.name));
+        scope.globals.push(super::Global {
+            name: unshared_name(&scope.globals, spelling, flag),
+            ty: HirType::Bool,
+            initial: 0.0,
+            exported: false,
+            deferred: false,
+            origin: probe.origin(name),
+        });
+        scope.types.push(HirType::Bool);
+        scope.initialized.insert(symbol, flag);
+    }
+}
+
+/// The property, binding and optional default of one binding element. The
+/// checker's declaration identity distinguishes `{ a: b }` from `{ a = b }`.
+fn binding_element_parts(probe: &FuncBuilder, element: NodeId) -> Option<(NodeId, NodeId, Option<NodeId>)> {
+    let parts: Vec<_> = probe.children(element).into_iter()
+        .filter(|at| probe.kind_of(*at) != Some(syntax::DOT_DOT_DOT_TOKEN))
+        .collect();
+    let binds = |at| probe.declared_by(element, at)
+        || matches!(probe.kind_of(at), Some(syntax::OBJECT_BINDING_PATTERN | syntax::ARRAY_BINDING_PATTERN));
+    match parts.as_slice() {
+        [only] => Some((*only, *only, None)),
+        [first, second] if binds(*second) => Some((*first, *second, None)),
+        [first, second] => Some((*first, *first, Some(*second))),
+        [first, second, third] => Some((*first, *second, Some(*third))),
+        _ => None,
+    }
 }
 
 /// `const [a, b] = pair` at module scope: storage for every name the pattern
@@ -8643,7 +8626,7 @@ fn children_that_run(probe: &FuncBuilder, id: NodeId) -> Vec<NodeId> {
 
 fn calls_in_the_body_of(probe: &FuncBuilder, declaration: NodeId) -> Vec<NodeId> {
     let mut calls = Vec::new();
-    for child in children_that_run(probe, declaration) {
+    for child in children_in_the_body_of(probe, declaration) {
         calls_under(probe, child, &mut calls);
     }
     calls
@@ -10846,6 +10829,7 @@ impl Shared {
 /// silently, because the layout is otherwise correct and no diagnostic is
 /// involved.
 fn wire_naming(builder: &mut FuncBuilder, naming: &Naming) {
+    builder.module.initialization = naming.initialization.clone();
     builder.qualified.clone_from(&naming.qualified);
     builder.generators.clone_from(&naming.generators);
     builder.throwing.clone_from(&naming.throwing);
@@ -11007,7 +10991,7 @@ type ModuleStatements = (Option<(NodeId, Vec<NodeId>)>, Vec<(usize, Vec<NodeId>)
 /// `examples/module-order` is four files with top-level statements in each,
 /// written to pin the order against node, and it has been green throughout.
 #[must_use]
-fn module_statements(snapshot: &SemanticSnapshot, lazy: &[bool]) -> ModuleStatements {
+fn module_statements(snapshot: &SemanticSnapshot, lazy: &[bool], initialization: &initialization::Analysis) -> ModuleStatements {
     let probe = FuncBuilder::probe(snapshot);
     let mut refusals = Vec::new();
 
@@ -11017,7 +11001,9 @@ fn module_statements(snapshot: &SemanticSnapshot, lazy: &[bool]) -> ModuleStatem
             let Some(kind) = probe.kind_of(child) else {
                 continue;
             };
-            if is_module_statement(kind) || runs_a_static_initializer(&probe, child) {
+            if is_module_statement(kind) || runs_a_static_initializer(&probe, child)
+                || (kind == syntax::CLASS_DECLARATION && initialization.guards_declaration(child))
+            {
                 per_module[at].push(child);
             } else if !is_module_declaration(kind) && carries_code(&probe, child) {
                 // Something with code in it that module evaluation does not
@@ -11529,7 +11515,7 @@ fn lower_module_initializer(
     // the program compiled, ran, and answered as though the line were not
     // there. Lowered *after* the declarations so that a closure it allocates
     // joins the worklist below rather than missing it.
-    let (initializer, deferred, refusals) = module_statements(snapshot, &shared.module.roles.lazy);
+    let (initializer, deferred, refusals) = module_statements(snapshot, &shared.module.roles.lazy, &shared.module.initialization);
     lowered.diagnostics.extend(refusals);
 
     if let Some((file, mut statements)) = initializer {
@@ -12958,7 +12944,7 @@ pub fn lower_with(
     // probe lays out classes and a layout built without the hierarchy is a different
     // layout. See `hierarchy_and_naming` for why the two are built together.
     let (hierarchy, naming) = hierarchy_and_naming(snapshot, foreign, &closures);
-    let mut module = collect_module_scope(snapshot, foreign, &closures, &hierarchy);
+    let mut module = collect_module_scope(snapshot, foreign, &closures, &hierarchy, &naming.initialization);
     lowered.diagnostics.extend(module.refusals.iter().cloned());
     lowered.program.globals.clone_from(&module.globals);
     hierarchy.publish_uniform_slots(&mut lowered.program);
@@ -24205,6 +24191,9 @@ impl<'a> FuncBuilder<'a> {
     /// 17 of 29 runtime projects emitted the same program renumbered -- a binding
     /// read pushed and then removed by DCE, which is churn for nothing.
     fn operand_has_no_effects(&self, operand: NodeId) -> bool {
+        if self.module.initialization.can_raise_at(operand) {
+            return false;
+        }
         // **Through parentheses first.** `typeof(null)` is a
         // `ParenthesizedExpression` around the keyword, so without this it fell to
         // the effects path, lowered a bare `null`, and was refused as "`null` or
@@ -24361,6 +24350,62 @@ impl<'a> FuncBuilder<'a> {
         ))
     }
 
+    /// A potentially early access tests its binding, including a folded constant.
+    fn check_initialized(&mut self, id: NodeId, symbol: u32) -> Result<(), Diagnostic> {
+        if !self.module.initialization.guards(id, symbol) {
+            return Ok(());
+        }
+        let Some(flag) = self.module.initialized.get(&symbol).copied() else {
+            return Ok(());
+        };
+        let origin = self.origin(id);
+        let ready = self.push(OpKind::GlobalGet(flag), HirType::Bool, origin.clone());
+        let unset = self.push(OpKind::ConstBool(false), HirType::Bool, origin.clone());
+        let missing = self.push(OpKind::Binary { op: BinOp::Eq, lhs: ready, rhs: unset }, HirType::Bool, origin);
+        let name = self.snapshot.symbols.get(symbol as usize).map_or("", |record| record.name.as_str());
+        self.refuse_when(id, missing, "ReferenceError", &format!("Cannot access '{name}' before initialization"))
+    }
+
+    fn check_initialized_place(&mut self, id: NodeId, global: u32) -> Result<(), Diagnostic> {
+        let symbol = self.module.initialized.keys().copied().find(|symbol| {
+            self.module.variables.get(symbol) == Some(&global)
+                && self.module.initialization.guards(id, *symbol)
+        });
+        if let Some(symbol) = symbol {
+            self.check_initialized(id, symbol)?;
+        }
+        Ok(())
+    }
+
+    /// Static calls and field accesses need no class object, but still evaluate
+    /// the class binding. Its readiness check cannot vanish with that object.
+    fn check_class_binding(&mut self, at: NodeId) -> Result<(), Diagnostic> {
+        let at = self.through_assertions(at);
+        let at = if matches!(self.kind_of(at), Some(syntax::PROPERTY_ACCESS_EXPRESSION | syntax::ELEMENT_ACCESS_EXPRESSION)) {
+            self.children(at).first().copied().unwrap_or(at)
+        } else {
+            at
+        };
+        if let Some(symbol) = self.node(at).symbol {
+            let symbol = self.denoted_symbol(symbol);
+            if self.snapshot.symbols.get(symbol.0 as usize).is_some_and(|record| {
+                record.declarations.iter().any(|at| self.kind_of(*at).is_some_and(declares_a_class))
+            }) {
+                self.check_initialized(at, symbol.0)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn mark_initialized(&mut self, at: NodeId, symbol: u32) {
+        if self.is_terminated() { return }
+        if let Some(flag) = self.module.initialized.get(&symbol).copied() {
+            let origin = self.origin(at);
+            let ready = self.push(OpKind::ConstBool(true), HirType::Bool, origin.clone());
+            self.push(OpKind::GlobalSet { global: flag, value: ready }, HirType::Void, origin);
+        }
+    }
+
     /// A module-scope declaration, as the assignment it is.
     ///
     /// Not `lower_statement`: that would bind the name as a *local* of the
@@ -24369,7 +24414,8 @@ impl<'a> FuncBuilder<'a> {
     /// away, leaving the global at zero. The declaration and the store are the
     /// same line here.
     ///
-    /// Declarations whose initializer folded to a constant are skipped: their
+    /// Declarations whose initializer folded to a constant need only readiness
+    /// and any exception checks: their
     /// value is already in the artifact, either as the global's `initial` or,
     /// for a `const`, inlined at every read. `deferred` is exactly the set that
     /// needs code, which is why *that* decision is made once in
@@ -24450,6 +24496,13 @@ impl<'a> FuncBuilder<'a> {
             // declaration's position -- so `var x = 1; … var x = 2;` set `x` to
             // 2 twice.
             if !self.module.deferred.contains_key(&symbol.0) {
+                // Folding the value must preserve evaluation's exceptions.
+                if let Some(initializer) = declaration_initializer(&children, *name, |c| self.kind_of(c))
+                    && self.module.initialization.can_raise_at(initializer)
+                {
+                    self.lower_expression(initializer)?;
+                }
+                self.mark_initialized(declaration, symbol.0);
                 continue;
             }
             let Some(initializer) = declaration_initializer(&children, *name, |c| self.kind_of(c))
@@ -24473,6 +24526,7 @@ impl<'a> FuncBuilder<'a> {
             let value = self.lower_expecting(initializer, &want)?;
             let value = self.coerce(value, &want, declaration)?;
             self.write_place(declaration, &Place::Global(global), value)?;
+            self.mark_initialized(declaration, symbol.0);
         }
         Ok(())
     }
@@ -24586,42 +24640,7 @@ impl<'a> FuncBuilder<'a> {
             return Ok(());
         };
         let value = self.lower_expression(initializer)?;
-        self.bind_pattern(pattern, value)?;
-
-        let mut names = Vec::new();
-        self.pattern_names(pattern, &mut names);
-        for name in names {
-            let Some(symbol) = self.node(name).symbol else {
-                continue;
-            };
-            // `bind_pattern` put the read here; the global is where a *reader*
-            // will look, and every reader outside `module#init` resolves through
-            // `self.module.variables` rather than through the bindings.
-            let Some(bound) = self.bindings.get(&symbol.0).copied() else {
-                return Err(self.unsupported(name, "a destructured name the pattern did not bind"));
-            };
-            let Some(global) = self.module.variables.get(&symbol.0).copied() else {
-                continue;
-            };
-            let want = self.module.types[global as usize].clone();
-            let value = self.coerce(bound, &want, declaration)?;
-            self.write_place(declaration, &Place::Global(global), value)?;
-            // **And then the binding goes.** It is a temporary of the
-            // destructuring, not the name's storage: the global is. Left in
-            // place it shadows the global for the rest of `module#init`, so a
-            // later `a = 100` wrote the binding while every function reading `a`
-            // read the global and still saw the destructured value.
-            //
-            // Reading at module scope agreed, because that read took the
-            // binding too — which is what made it a wrong answer visible only
-            // from *outside* the initializer, and is why the fixture reads every
-            // name through an exported function.
-            //
-            // The identifier path never had this to undo: it writes the global
-            // and binds nothing.
-            self.bindings.remove(&symbol.0);
-        }
-        Ok(())
+        self.bind_pattern(pattern, value, PatternScope::Module)
     }
 
     /// A module's top-level statements, as one function.
@@ -24642,7 +24661,14 @@ impl<'a> FuncBuilder<'a> {
         // the two is why the first attempt reported "a `class declaration` is
         // not supported" from the emitter it had not been added to.
         if self.kind_of(statement) == Some(syntax::CLASS_DECLARATION) {
-            return self.lower_static_fields(statement);
+            self.lower_static_fields(statement)?;
+            if let Some(symbol) = self.children(statement).into_iter()
+                .find(|at| self.kind_of(*at) == Some(syntax::IDENTIFIER))
+                .and_then(|name| self.node(name).symbol)
+            {
+                self.mark_initialized(statement, symbol.0);
+            }
+            return Ok(());
         }
         self.lower_statement(statement)
     }
@@ -29066,7 +29092,7 @@ impl<'a> FuncBuilder<'a> {
             // whole and the real function destructures it, which is the only
             // place that should.
             if binds == ParameterNames::Bound {
-                self.bind_pattern(name_node, value)?;
+                self.bind_pattern(name_node, value, PatternScope::Local)?;
             }
         } else if let Some(symbol) = self.node(name_node).symbol {
             // A parameter is a name like any other, and `callback =
@@ -35364,7 +35390,7 @@ impl<'a> FuncBuilder<'a> {
                     return Err(self.unsupported(id, "a `for...of` pattern over a walk of pairs"));
                 };
                 let (pattern, element) = (*pattern, *element);
-                self.bind_pattern(pattern, element)
+                self.bind_pattern(pattern, element, PatternScope::Local)
             }
             // The same write an assignment statement makes, once per iteration
             // -- including when the target is a **destructuring pattern**.
@@ -39479,6 +39505,9 @@ impl<'a> FuncBuilder<'a> {
         target: NodeId,
         member: NodeId,
     ) -> Option<Result<Place, Diagnostic>> {
+        if let Err(diagnostic) = self.check_class_binding(target) {
+            return Some(Err(diagnostic));
+        }
         let symbol = self.node(member).symbol?;
         if !is_static_member_symbol(self.snapshot, symbol) {
             return None;
@@ -39993,6 +40022,7 @@ impl<'a> FuncBuilder<'a> {
                 // `boolean | undefined` and `number | null` alike, while
                 // `string | undefined` compiled because a nullable pointer is
                 // not erased and had nothing to unerase.
+                self.check_initialized_place(id, global)?;
                 let ty = self.module.types[global as usize].clone();
                 let read = self.push(OpKind::GlobalGet(global), ty, origin);
                 self.narrowed(id, read)?
@@ -40973,6 +41003,9 @@ impl<'a> FuncBuilder<'a> {
         place: &Place,
         value: ValueId,
     ) -> Result<(), Diagnostic> {
+        if let Place::Global(global) = *place {
+            self.check_initialized_place(id, global)?;
+        }
         let origin = self.origin(id);
         let value = self.coerce_to_slot(id, place, value)?;
         match *place {
@@ -41370,6 +41403,9 @@ impl<'a> FuncBuilder<'a> {
     /// The checker's literal answer for a condition, where the condition reads
     /// nothing that can change under it.
     fn the_checker_decided(&self, condition: NodeId) -> Option<bool> {
+        if self.module.initialization.can_raise_at(condition) {
+            return None;
+        }
         let ty = self.snapshot.node_types.get(&condition)?;
         match &self.snapshot.types.get(ty.0 as usize)?.kind {
             TypeKind::Literal(LiteralValue::Boolean(known)) => {
@@ -41988,6 +42024,11 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn lower_expression(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        if self.kind_of(id) == Some(syntax::NEW_EXPRESSION)
+            && let Some(callee) = self.children(id).first().copied()
+        {
+            self.check_class_binding(callee)?;
+        }
         match self.kind_of(id) {
             Some(syntax::IDENTIFIER) => self.lower_identifier(id),
             Some(syntax::NUMERIC_LITERAL) => self.lower_number(id),
@@ -43769,18 +43810,7 @@ impl<'a> FuncBuilder<'a> {
                     ));
                 };
                 let ty = super::provided_error_type(index);
-                let layout = Layout {
-                    types: vec![ty],
-                    name: class.to_owned(),
-                    interfaces: Vec::new(),
-                    fields: super::builtin::error_fields(class),
-                    methods: vec![None; self.hierarchy.table_size()],
-                    // No base. `TypeError extends Error` is spelled where
-                    // `instanceof` needs it, and a program that never named
-                    // either has nothing to relate them for.
-                    base: None,
-                };
-                self.layouts.push(layout.clone());
+                let layout = self.layout_for_provided_error(ty, class);
                 (ty, layout)
             }
         };
@@ -43808,6 +43838,14 @@ impl<'a> FuncBuilder<'a> {
         let name = named(self.snapshot, ty)
             .filter(|name| super::builtin::is_error(name))?
             .to_owned();
+        Some(self.layout_for_provided_error(ty, &name))
+    }
+
+    /// Named and synthesized errors share their fields and ancestry. A TDZ
+    /// throws `ReferenceError` even when only `Error` was named in the source;
+    /// casting that caught value to Error requires the same relation as a
+    /// source-written `new ReferenceError`.
+    fn layout_for_provided_error(&mut self, ty: TypeId, name: &str) -> Layout {
         // `TypeError extends Error`, which the compiler knows and used to
         // discard. The hierarchy has never heard of these four -- they are not
         // declarations in this program -- so `Hierarchy::base` has nothing, and
@@ -43830,16 +43868,21 @@ impl<'a> FuncBuilder<'a> {
         let base = (name != "Error")
             .then(|| self.type_named("Error"))
             .flatten();
+        if let Some(base) = base
+            && !self.layouts.iter().any(|layout| layout.types.contains(&base))
+        {
+            self.provided_layout(base);
+        }
         let layout = Layout {
             types: vec![ty],
             interfaces: Vec::new(),
-            fields: super::builtin::error_fields(&name),
+            fields: super::builtin::error_fields(name),
             methods: vec![None; self.hierarchy.table_size()],
             base,
-            name,
+            name: name.to_owned(),
         };
         self.layouts.push(layout.clone());
-        Some(layout)
+        layout
     }
 
     /// The call an accessor of `member` on `ty` is emitted as.
@@ -48948,6 +48991,7 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn lower_property_access(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        self.check_class_binding(id)?;
         if let Some(value) = self.foreign_property_read(id)? {
             return Ok(value);
         }
@@ -52400,7 +52444,7 @@ impl<'a> FuncBuilder<'a> {
                 self.kind_of(name),
                 Some(syntax::OBJECT_BINDING_PATTERN | syntax::ARRAY_BINDING_PATTERN)
             ) {
-                self.bind_pattern(name, value)?;
+                self.bind_pattern(name, value, PatternScope::Local)?;
                 continue;
             }
             if let Some(place) = existing {
@@ -53042,6 +53086,7 @@ impl<'a> FuncBuilder<'a> {
         &mut self,
         pattern: NodeId,
         value: ValueId,
+        scope: PatternScope,
     ) -> Result<(), Diagnostic> {
         let walk = self.walk_of(pattern, value, None, 1)?;
         let origin = self.origin(pattern);
@@ -53058,7 +53103,7 @@ impl<'a> FuncBuilder<'a> {
                 // `[...x]` over an `Iterable` uses -- and with the same walk this loop has been
                 // stepping, which is what makes a rest after an elision correct: the iterator
                 // has already advanced past the holes before it.
-                return self.bind_rest(element, value, 0);
+                return self.bind_rest(element, value, 0, scope);
             }
             // **The step comes first and happens for every element**, which is the whole of what
             // an elision means here: the specification steps the iterator and throws the value
@@ -53075,7 +53120,21 @@ impl<'a> FuncBuilder<'a> {
         Ok(())
     }
 
-    fn bind_pattern(&mut self, pattern: NodeId, value: ValueId) -> Result<(), Diagnostic> {
+    /// Publish a module pattern's value at this element, before the next
+    /// default or getter can call a reader of it. Locals keep ordinary bindings.
+    fn bind_pattern_value(&mut self, at: NodeId, symbol: u32, value: ValueId, scope: PatternScope) -> Result<(), Diagnostic> {
+        if matches!(scope, PatternScope::Module)
+            && let Some(global) = self.module.variables.get(&symbol).copied()
+        {
+            self.write_place(at, &Place::Global(global), value)?;
+            self.mark_initialized(at, symbol);
+        } else {
+            self.bindings.insert(symbol, value);
+        }
+        Ok(())
+    }
+
+    fn bind_pattern(&mut self, pattern: NodeId, value: ValueId, scope: PatternScope) -> Result<(), Diagnostic> {
         let object = self.kind_of(pattern) == Some(syntax::OBJECT_BINDING_PATTERN);
         // **Step 1, before any element is read.** An object pattern over `null` or
         // `undefined` throws a `TypeError`, and an *empty* one reads nothing -- so this is
@@ -53093,7 +53152,7 @@ impl<'a> FuncBuilder<'a> {
             && (self.generator_declared(ty).is_some()
                 || abstract_generator_kind(self.snapshot, ty).is_some())
         {
-            return self.bind_array_pattern_by_stepping(pattern, value);
+            return self.bind_array_pattern_by_stepping(pattern, value, scope);
         }
         // An array pattern's `GetIterator` throws the same `TypeError` over an absence --
         // asked after the generator arm, which steps a source its type says is a
@@ -53117,7 +53176,7 @@ impl<'a> FuncBuilder<'a> {
                 if object {
                     return Err(self.unsupported(element, "a rest element in an object pattern"));
                 }
-                self.bind_rest(element, value, position)?;
+                self.bind_rest(element, value, position, scope)?;
                 continue;
             }
             // One identifier for `{ a }` and `[a]`; two for `{ a: renamed }`,
@@ -53139,14 +53198,7 @@ impl<'a> FuncBuilder<'a> {
             // A nested *pattern* is a binding too, and declares no symbol of
             // its own -- `{ inner: { name } }` would otherwise read as a
             // property with the pattern as its default.
-            let binds = |builder: &Self, node: NodeId| {
-                builder.declared_by(element, node)
-                    || matches!(
-                        builder.kind_of(node),
-                        Some(syntax::OBJECT_BINDING_PATTERN | syntax::ARRAY_BINDING_PATTERN)
-                    )
-            };
-            let (property, binding, default) = match parts.as_slice() {
+            let (property, binding, default) = match binding_element_parts(self, element) {
                 // **A hole: `const [, second] = pair`.** The frontend gives an
                 // elision as a binding element with no children at all, so it
                 // has no name, no property and nothing to write to -- and the
@@ -53154,12 +53206,9 @@ impl<'a> FuncBuilder<'a> {
                 // of what a hole means: the *next* element is one further
                 // along. Skipping it here rather than refusing keeps that
                 // counting in one place.
-                [] => continue,
-                [only] => (*only, *only, None),
-                [first, second] if binds(self, *second) => (*first, *second, None),
-                [first, second] => (*first, *first, Some(*second)),
-                [first, second, third] => (*first, *second, Some(*third)),
-                _ => return Err(self.unsupported(element, "a binding of unexpected shape")),
+                None if parts.is_empty() => continue,
+                Some(parts) => parts,
+                None => return Err(self.unsupported(element, "a binding of unexpected shape")),
             };
             let nested = matches!(
                 self.kind_of(binding),
@@ -53196,7 +53245,7 @@ impl<'a> FuncBuilder<'a> {
                 && let Some(bound) = self.bind_capability_member(element, property, binding, value)?
             {
                 if let (Some(symbol), Some(read)) = (symbol, bound.read) {
-                    self.bindings.insert(symbol.0, read);
+                    self.bind_pattern_value(binding, symbol.0, read, scope)?;
                 }
                 continue;
             }
@@ -53264,9 +53313,9 @@ impl<'a> FuncBuilder<'a> {
             // produced, which is the same function one level down.
             match symbol {
                 Some(symbol) => {
-                    self.bindings.insert(symbol.0, read);
+                    self.bind_pattern_value(binding, symbol.0, read, scope)?;
                 }
-                None => self.bind_pattern(binding, read)?,
+                None => self.bind_pattern(binding, read, scope)?,
             }
         }
         Ok(())
@@ -53539,6 +53588,7 @@ impl<'a> FuncBuilder<'a> {
         element: NodeId,
         value: ValueId,
         position: usize,
+        scope: PatternScope,
     ) -> Result<(), Diagnostic> {
         // **The rest target may be a pattern, not only a name.**
         // `function f([...[x, y]])` and `function f([...{ length }])` are both
@@ -53581,13 +53631,13 @@ impl<'a> FuncBuilder<'a> {
         let rest = self.rest_tail(element, value, position)?;
         match symbol {
             Some(symbol) => {
-                self.bindings.insert(symbol.0, rest);
+                self.bind_pattern_value(target, symbol.0, rest, scope)?;
                 Ok(())
             }
             // `[...[x, y]]` is the tail and then another pattern over it, which
             // is the same function one level down — exactly what `bind_pattern`
             // already does for `{ p: { x } }`.
-            None => self.bind_pattern(target, rest),
+            None => self.bind_pattern(target, rest, scope),
         }
     }
 
@@ -55558,6 +55608,9 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn lower_call(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        if let Some(callee) = self.children(id).first().copied() {
+            self.check_class_binding(callee)?;
+        }
         // `import(...)`: a call whose callee is the keyword, which nothing below
         // can name -- it read as "a computed callee", which is what 624 of the
         // 704 test262 files under that message were.
@@ -61386,6 +61439,7 @@ impl<'a> FuncBuilder<'a> {
         name: &str,
         arguments: &[NodeId],
     ) -> Option<Result<ValueId, Diagnostic>> {
+        let primitive = primitive_builtin(name);
         // `isNaN` and `isFinite`. Over a `number` these are exactly the
         // `Number.` forms -- the whole difference between the two pairs is what
         // they do to a value that is not a number, and one cannot reach here.
@@ -61451,7 +61505,7 @@ impl<'a> FuncBuilder<'a> {
         // Called rather than `new`-ed: `new Symbol()` is a TypeError in
         // JavaScript, and the checker rejects it, so there is no constructor
         // form to handle.
-        if name == "Symbol" {
+        if primitive == Some(PrimitiveBuiltin::Symbol) {
             return Some(self.lower_symbol_new(id, arguments));
         }
         let [argument] = arguments else {
@@ -61460,7 +61514,7 @@ impl<'a> FuncBuilder<'a> {
         // `String(x)` is `ToString`, which is what `s + n` already needs. For a
         // number only -- `String(unknown)` is a general renderer and
         // `String({})` walks a prototype chain.
-        if name == "String" {
+        if primitive == Some(PrimitiveBuiltin::String) {
             return Some(
                 self.lower_expression(*argument)
                     .and_then(|value| self.as_string(*argument, value)),
@@ -61472,7 +61526,7 @@ impl<'a> FuncBuilder<'a> {
         // knows about each representation. Nineteen sites in the profile, every
         // one of them turning an optional or an erased value into a flag to
         // store.
-        if name == "Boolean" {
+        if primitive == Some(PrimitiveBuiltin::Boolean) {
             let value = match self.lower_expression(*argument) {
                 Ok(value) => value,
                 Err(problem) => return Some(Err(problem)),
@@ -61484,7 +61538,7 @@ impl<'a> FuncBuilder<'a> {
         // as 1 and 0. On a string it is a parse -- the same parse `parseFloat`
         // needs, and neither exists yet -- and on anything else it is `valueOf`
         // off a prototype chain.
-        if name == "Number" {
+        if primitive == Some(PrimitiveBuiltin::Number) {
             let value = match self.lower_expression(*argument) {
                 Ok(value) => value,
                 Err(problem) => return Some(Err(problem)),
@@ -61505,7 +61559,7 @@ impl<'a> FuncBuilder<'a> {
         // neither has; on anything else it is `valueOf` off a prototype chain.
         // Both are refused by name -- 22 sites in the node profile said only
         // "a builtin this compiler does not provide" before this existed.
-        if name == "BigInt" {
+        if primitive == Some(PrimitiveBuiltin::BigInt) {
             let value = match self.lower_expression(*argument) {
                 Ok(value) => value,
                 Err(problem) => return Some(Err(problem)),
@@ -65302,6 +65356,7 @@ impl<'a> FuncBuilder<'a> {
         // An imported name, resolved to what it imports. Below the local
         // lookup because an import binds nothing a function body can shadow.
         let symbol = self.denoted_symbol(symbol);
+        self.check_initialized(id, symbol.0)?;
         if let Some(class) = self.objc_class_object(id, symbol)? {
             return Ok(class);
         }
@@ -67295,6 +67350,28 @@ fn math_member(member: &str) -> Option<Intrinsic> {
     })
 }
 
+/// Primitive conversions and symbol creation. Initialization analysis uses the
+/// same classification as lowering; with primitive inputs none calls user code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PrimitiveBuiltin {
+    Symbol,
+    String,
+    Boolean,
+    Number,
+    BigInt,
+}
+
+fn primitive_builtin(name: &str) -> Option<PrimitiveBuiltin> {
+    match name {
+        "Symbol" => Some(PrimitiveBuiltin::Symbol),
+        "String" => Some(PrimitiveBuiltin::String),
+        "Boolean" => Some(PrimitiveBuiltin::Boolean),
+        "Number" => Some(PrimitiveBuiltin::Number),
+        "BigInt" => Some(PrimitiveBuiltin::BigInt),
+        _ => None,
+    }
+}
+
 /// The global function a name spells, for the two that are numeric predicates.
 fn global_predicate(name: &str) -> Option<Intrinsic> {
     Some(match name {
@@ -68417,6 +68494,7 @@ mod tests {
 }
 
 mod gobject;
+mod initialization;
 mod native_memory;
 
 /// An Objective-C property: its declaration, and the selectors that read and
