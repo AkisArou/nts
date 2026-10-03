@@ -820,7 +820,15 @@ if (checkFile) {
       }),
   );
   const now = new Map(cases.map((c) => [c.record.path, c]));
-  comparison = { REGRESSED: [], "NEW FAIL": [], CHANGED: [], FIXED: [], "NEW PASS": [], MISSING: [] };
+  comparison = { REGRESSED: [], "NEW FAIL": [], CHANGED: [], FIXED: [], "NEW PASS": [], MISSING: [], "ACCEPTED, DIFFERENTLY": [] };
+  // **An accepted negative's verdict is "accepted"; how it went on is not.** A
+  // program that must not parse and compiled is wrong whatever it did next --
+  // ran, threw, or was refused by a later stage -- and that next step moves with
+  // every unrelated compiler change. Reading it as CHANGED failed a TDZ change
+  // over five yield-identifier and bad-reference negatives that were accepted
+  // before and after (2026-10-03). The record keeps the detail, and a change of
+  // it is listed, but only a change of *verdict* fails the check.
+  const acceptedAsNegative = (detail) => /^accepted:/.test(detail ?? "");
   for (const [path, was] of before) {
     const c = now.get(path);
     if (!c) {
@@ -831,7 +839,10 @@ if (checkFile) {
     }
     if (was.outcome === "pass" && c.outcome !== "pass") comparison.REGRESSED.push(`${path}: pass -> ${c.outcome} (${c.cause ?? ""})`);
     if (was.outcome === "fail" && c.outcome === "pass") comparison.FIXED.push(`${path}: fail -> pass`);
-    if (was.outcome === "fail" && c.outcome === "fail" && c.detail !== was.detail) comparison.CHANGED.push(`${path}: ${was.detail} -> ${c.detail}`);
+    if (was.outcome === "fail" && c.outcome === "fail" && c.detail !== was.detail) {
+      const kind = acceptedAsNegative(was.detail) && acceptedAsNegative(c.detail) ? "ACCEPTED, DIFFERENTLY" : "CHANGED";
+      comparison[kind].push(`${path}: ${was.detail} -> ${c.detail}`);
+    }
     if (was.outcome === "fail" && c.outcome !== "fail" && c.outcome !== "pass") comparison.REGRESSED.push(`${path}: fail -> ${c.outcome} (${c.cause ?? ""})`);
   }
   for (const c of ranRows) {
