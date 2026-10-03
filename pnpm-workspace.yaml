@@ -7,6 +7,7 @@ packages:
 
 catalog:
   '@types/node': 24.13.3
+  acorn: 8.15.0
   typescript: 7.0.2
 
 catalogMode: strict

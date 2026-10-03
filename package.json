@@ -14,6 +14,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "acorn": "catalog:",
     "typescript": "catalog:"
   },
   "packageManager": "pnpm@10.15.0"
