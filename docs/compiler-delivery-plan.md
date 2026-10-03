@@ -1,7 +1,8 @@
 # Main compiler delivery
 
-Current plan, 2026-10-03. Baseline: `c132dbf6e`. Main owns this plan and the
-compiler work; platform and runtime peers retain their lanes.
+Current plan, 2026-10-04. The original baseline was `c132dbf6e`; delivered
+changes and their acceptance evidence are recorded below. Main owns this plan
+and the compiler work; platform and runtime peers retain their lanes.
 
 ## Implemented architecture
 
@@ -74,9 +75,10 @@ conformance, affected outcomes and blockers, and relevant backend checks. Copy a
 representation changes include JVM verification; class/call changes include
 interop; lifetime changes include counted execution and emitted-code inspection.
 
-Use `owed.mjs` to track broader obligations. Run one full sweep on a stable pin
-after items 1–3 and another after items 4–5. Deferred checks remain pending until
-discharged. Reuse evidence only for identical inputs; rerun affected checks after
+Use `owed.mjs` to track broader obligations. Run a broad sweep at stable
+checkpoints: after items 1–3 and after item 4 plus the first behavioral slice of
+item 5. Later erasure slices establish their own obligations. Deferred checks
+remain pending until discharged. Reuse evidence only for identical inputs; rerun affected checks after
 subsequent changes. Bound worker concurrency on the shared machine.
 
 Coordinate shared-file access before landing. Assistant owns repaired blocker
@@ -251,8 +253,8 @@ core/CLI lint pass. The current status in `docs/any-unknown.md` is corrected.
 
 This foundation does not change lowering or prove a flow closed. Known examined
 uses can coexist with unresolved uses, and classifications do not prove storage
-consumers, all writers or callable escape. Closed-call specialization remains the
-next implementation. General alias/return/field recovery, finite dispatch and
+consumers, all writers or callable escape. The closed-call implementation below
+adds that proof separately. General alias/return/field recovery, finite dispatch and
 caller freshness remain later slices.
 
 An isolated-cache compilation comparison used seven alternating warm samples per
@@ -271,12 +273,16 @@ The next milestone extends the existing mechanisms in this order:
    planning use these identities; names, source spans and shared `any` type IDs
    cannot identify a value. Delivered in `9aba5cbb2`, including two parameters with the same checker
    type and different uses.
-2. **Recover examined parameters at closed direct calls.** Feed independently
-   proved argument representations into existing source-level function copies.
+2. **Recover examined parameters at closed direct calls, delivered in
+   `9533b3a5e`.** Recover numbers and strings for private,
+   nongeneric function declarations. Feed independently proved argument
+   representations into existing source-level function copies.
    Keep substitutions positional and separate copy identity from exception mode.
    Propagate the copy's parameter and constant-alias evidence through existing
-   nested-call and capture machinery. Deduplicate equivalent representations and
-   bound new copies. Preserve the ordinary entry and published callable identity.
+   nested-call machinery. Captures remain outside this proof. Deduplicate
+   equivalent representations and cap new erased-parameter variants at eight per
+   declaration, separately from exception mode and established structural copies.
+   Preserve the ordinary entry and published callable identity.
 3. **Carry evidence through locals and returns.** Extend the same flow result to
    immutable aliases, branch joins and call results. Shared mutable storage needs
    all-writer evidence. Infer eligible object-literal fields from their producers;
@@ -300,4 +306,86 @@ answers and a measured effect in a real corpus. Mixed parameters, recursive
 forwarding, mutable aliases, returned values, external callbacks and copy-budget
 exhaustion are refuting cases. Compare changed emitted bodies, allocation and
 counting placement, code size and compilation cost. Run focused checks while
-iterating; the next full checkpoint remains after items 4–5.
+iterating; the current checkpoint closes item 4 and the first behavioral slice
+of item 5, while the later erasure slices remain separate work.
+
+## Closed-call specialization evidence, 2026-10-04
+
+The implementation in `9533b3a5e` combines erasure classification with an independent
+closed-flow proof. Binding and written parameter position identify a candidate;
+the shared `any` type ID does not. Calls must resolve directly to private plain
+function declarations. Exported or escaping callables remain conservative, as
+do mutable aliases, stores, returned parameters, captures, unresolved calls,
+defaults, spreads, mixed BigInt/native integer operands and unsupported
+exponentiation uses. Checked narrowing retains its ordinary path. An assertion or a consumer's required type supplies no
+producer evidence.
+
+Source copies reuse positional structural substitutions and their constant-alias
+propagation. Closed forwarding edges settle through a removal worklist, including
+recursive components. Exception eligibility belongs to the selected source copy:
+it reuses the existing call proof in that representation context and removes
+upstream copies when a selected callee cannot carry exceptions. Ordinary and
+raising entries share the source specialization. This adds no layout, synthetic
+type band, callable hierarchy or signature-specific uniform raising slot.
+
+The witness retains 18 behavioral roots and agrees on 522 cases under each of C,
+LLVM, JVM, C with reference counting and LLVM with reference counting. The control
+retains five roots and compares 145 cases. The witness covers independent
+parameter positions, constant aliases, recursive forwarding, argument effects,
+ordinary erased entries, arithmetic, string ordering, `unknown`, and exceptions
+through both forwarded calls and primitive methods. Boundary tests check both
+compiled and refused copy offers, including budget exhaustion. The final review
+found that contextual literal lowering could round a BigInt operand to double
+in a recovered context. Such binary uses and their upstream forwarding paths
+are excluded; guards cover literals, immutable BigInt aliases and the forwarding
+edge. A reduction beyond the exact-double integer range reproduces the private
+candidate's wrong answer and becomes an honest refusal after the correction.
+
+The full workspace tests and all-target lint pass. All five recorded test262 sets
+reconcile with zero changed, fixed or regressed cases: language 6,109, built-ins
+776, annexB 9, staging 46 and harness 12. The 121 outcome fixtures retain their
+63 guards and 58 defects. A targeted judged-outcome comparison of 429 erased-value
+refusals finds no change. This is a measured boundary: those cases mainly involve
+harness `Function` parameters, catch bindings and erased properties. No test262
+coverage gain is attributed to this slice. The full 429-example comparisons on
+C and JVM each retain 428 unchanged results and fix the new witness, with zero
+regressions, changed results or unstable comparisons. All 29 runtime projects
+emit byte-identically under both NoGc and reference counting; the runtime refusal
+comparison finds no losses. There is no new passing Node-path claim.
+
+Number arithmetic copies emit multiplication and addition directly, without an
+erased wrapper or allocation. String arithmetic reuses `ToNumber`; string-to-string
+ordering retains lexical comparison. Mixed strict equality preserves existing
+mixed erased/reference handling and native integer-width widening. Counted
+execution passes the behavioral witness and allocation-floor checks, with no
+leaks or changed answers. Runtime JVM verification retains its three known
+limitations and adds no linkage or raising-slot failure; all 1,680 outcome classes
+verify. The nine ordinary erased-entry refusal roots in the new example are
+recorded alongside it; all 18 exported roots still run. Compilation probes use
+separate warm snapshot caches and alternating arms; the small sample ran alongside correctness
+checks, so it establishes neither a speedup nor precise analysis overhead.
+The new-copy cap and the single program-wide classification bound the work.
+
+The broad checkpoint is complete. Workspace tests and lint, recorded
+conformance, outcomes, integrity, runtime definitions and validity, LLVM assembly,
+snapshot caching, backend examples, counting and memory, benchmark builds, DEX,
+addons and interop meet their gates. Interop builds and runs 58 projects; four
+Windows projects cross-build and skip execution because no Windows host is
+reachable. The Java API capture needs its original `en_US.UTF-8` sorting locale;
+its initial ordering-only failure reproduces on the control, and the final
+capture and verified Java consumer pass in that locale.
+
+After the BigInt boundary correction, exact prepared HIR and diagnostic outputs
+match the tested checkpoint on all 904 example, runtime, interop, outcome and
+blocker configurations, including their existing refusals and type errors.
+Final-pin C code and headers also match on all 29 runtime projects. Those
+comparisons support reuse of unchanged checkpoint evidence. Workspace tests and
+lint, all five witness configurations, recorded sets, outcomes, blockers, example
+refusal accounting, benchmark builds and the memory suite were rerun on the
+final source or pin. The landed compiler is pin `9533b3a5e62e`, SHA256
+`9b707d7e81e2a94bc6afe2514f4bff0152bd92353fc3c501286cd79982702512`.
+No Android device was present, so the DEX gate adds no ART execution evidence.
+
+The remaining locals/returns, object-field, finite-dispatch and caller-freshness
+slices are future work. Main stops here for the user's requested parallel
+compiler planning discussion before starting a different task.
