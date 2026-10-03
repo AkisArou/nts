@@ -1,3 +1,10 @@
+// **FIXED by `7040cb229` (guard module binding accesses that can precede
+// initialization, the compiler lane's #33) and kept as a guard.** The `let` arm
+// now throws ReferenceError where node does; the `var` control still answers
+// `none` in both. What this guards is the per-binding guard the header below
+// asked for: a read the initializer does not dominate throws, and a `var`
+// read in the same position does not.
+//
 // Reading a `let` before its declaration runs throws a ReferenceError (the
 // temporal dead zone); nts reads on. Found by test262's statements/let/
 // global-use-before-initialization-in-prior-statement.js (and const's twin),
@@ -19,8 +26,8 @@
 // **So widening is wrong here**, and the obvious inference from that record to
 // this one is false. Two fixtures, one analysis, two mechanisms.
 //
-// What is recorded below is that nts throws nothing: it reads the global's initial
-// storage and carries on, so `caught` stays `none` where node has `ReferenceError`.
+// What was recorded until `7040cb229` is that nts threw nothing: it read the global's
+// initial storage and carried on, so `caught` stayed `none` where node had `ReferenceError`.
 // The `var` control beside it answers `none` in both, which is correct -- and is
 // what makes this fixture about the *throw* rather than about the value.
 //
