@@ -1,4 +1,9 @@
-// **An explicit `undefined` at a parameter whose type its default inferred is
+// **FIXED by `abc1564a9` (apply inferred parameter defaults to void arguments)
+// and kept as a guard.** The call now fills every default and answers 234599 as
+// node does. What it guards is the inferred-concrete case between an erased
+// parameter (fixed by `85c062fc9`) and an annotated one.
+//
+// **An explicit `undefined` at a parameter whose type its default inferred was
 // invalid HIR.** `defaulted(undefined, void 0)` where `defaulted(a = 23, b = 45,
 // c = 99)`: the checker infers `number` for each parameter from its default, and
 // lowering passes the `undefined` as a value to an `f64` slot, which the
@@ -9,7 +14,7 @@
 // **A regression of `51bcef99c` (shared call-argument semantics, #32), not an old
 // defect.** On a pin of a21b86581 this program was refused by name, "`null` or
 // `undefined` where what it stands in for is not a reference", which is honest.
-// After #32 the refusal is gone and the verifier catches what lowering built.
+// After #32 the refusal was gone and the verifier caught what lowering built.
 // The test262 census of 77b2457c5 shows it six ways: statements/function/
 // dflt-params-arg-val-undefined.js as this invalid HIR, and five JavaScript twins
 // (expressions/{function,arrow-function,generators} and async-function's named and

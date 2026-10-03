@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "invalid-hir",
-  "nts": "invalid HIR: CallArgumentType { func: \"module#init\", callee: \"defaulted\", at: 1, expected: Float { bits: 64 }, found: Void }",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: an explicit undefined at an inferred defaulted parameter=234599;",
   "node": "exit 1; nts: uncaught Observed: an explicit undefined at an inferred defaulted parameter=234599;",
-  "measured_with": "96e2f269dfb7ec03",
+  "measured_with": "ed28cfafc425bc9d",
   "source": "measured"
 }
