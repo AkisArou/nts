@@ -8375,6 +8375,34 @@ struct Structural {
     /// because a call node lives in exactly one function, so two functions'
     /// copies sharing a suffix cannot collide in the inner map.
     at_call: rustc_hash::FxHashMap<String, rustc_hash::FxHashMap<NodeId, (String, Retyped)>>,
+    /// Erased-triggered source copies, independent of their exception mode.
+    erased_copies: rustc_hash::FxHashSet<(NodeId, String)>,
+    /// The subset that can carry exceptions in their own representation context.
+    raising: rustc_hash::FxHashSet<(NodeId, String)>,
+}
+
+impl Structural {
+    fn wire_calls(&self, builder: &mut FuncBuilder<'_>, suffix: &str) {
+        for context in ["", suffix] {
+            if let Some(calls) = self.at_call.get(context) {
+                for (call, (suffix, bindings)) in calls {
+                    builder.generic_calls.insert(*call, suffix.clone());
+                    builder.structural_calls.insert(*call, bindings.clone());
+                    let raises = builder
+                        .snapshot
+                        .call_targets
+                        .get(call)
+                        .and_then(|target| target.callee)
+                        .is_some_and(|callee| self.raising.contains(&(callee, suffix.clone())));
+                    if raises {
+                        builder.raising_specializations.insert(*call);
+                    } else {
+                        builder.raising_specializations.remove(call);
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// A copy whose body has yet to be walked for the calls it makes.
@@ -8384,8 +8412,17 @@ struct PendingCopy {
     suffix: String,
 }
 
+mod erased_calls;
+
+struct StructuralPlanner<'a, 's> {
+    probe: &'a FuncBuilder<'s>,
+    found: Structural,
+    pending: Vec<PendingCopy>,
+    erased: erased_calls::ClosedParameters,
+    erased_copies: rustc_hash::FxHashMap<NodeId, rustc_hash::FxHashSet<String>>,
+}
+
 fn structural_instantiations(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy) -> Structural {
-    let mut found = Structural::default();
     let mut probe = FuncBuilder::probe(snapshot);
     probe.hierarchy = hierarchy.clone();
 
@@ -8397,10 +8434,19 @@ fn structural_instantiations(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy)
         .filter_map(|(call, target)| target.callee.map(|callee| (*call, callee)))
         .collect();
     calls.sort_by_key(|(call, _)| call.0);
-    let mut pending: Vec<PendingCopy> = Vec::new();
+    let mut planner = StructuralPlanner {
+        probe: &probe,
+        found: Structural::default(),
+        pending: Vec::new(),
+        erased: erased_calls::ClosedParameters::collect(&probe),
+        erased_copies: rustc_hash::FxHashMap::default(),
+    };
+    let original = std::collections::BTreeMap::new();
     for (call, callee) in &calls {
         let actual = |argument: NodeId| snapshot.node_types.get(&argument).copied();
-        record_structural_call(&mut found, &mut pending, &probe, "", *call, *callee, actual);
+        planner.record_call("", *call, *callee, actual, |argument| {
+            erased_calls::produced(&probe, argument, &original, 0)
+        });
     }
 
     // **Then every copy, to a fixpoint.** A copy re-types a parameter, and a
@@ -8416,7 +8462,7 @@ fn structural_instantiations(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy)
     // the checker says, as in the original.
     // Each copy is walked once, so this ends: the set of copies is bounded by
     // the concrete types the program has.
-    while let Some(copy) = pending.pop() {
+    while let Some(copy) = planner.pending.pop() {
         let symbols = retyped_symbols_of(&probe, copy.declaration, &copy.retyped);
         for call in calls_in_the_body_of(&probe, copy.declaration) {
             let Some(callee) = snapshot.call_targets.get(&call).and_then(|it| it.callee) else {
@@ -8434,21 +8480,26 @@ fn structural_instantiations(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy)
                     });
                 as_retyped.or_else(|| snapshot.node_types.get(&argument).copied())
             };
-            record_structural_call(
-                &mut found,
-                &mut pending,
-                &probe,
+            planner.record_call(
                 &copy.suffix,
                 call,
                 callee,
                 actual,
+                |argument| erased_calls::produced(&probe, argument, &symbols, 0),
             );
         }
     }
-    for copies in found.copies.values_mut() {
+    for copies in planner.found.copies.values_mut() {
         copies.sort_by(|a, b| a.1.cmp(&b.1));
     }
-    found
+    planner.found.erased_copies = planner
+        .erased_copies
+        .into_iter()
+        .flat_map(|(declaration, suffixes)| {
+            suffixes.into_iter().map(move |suffix| (declaration, suffix))
+        })
+        .collect();
+    planner.found
 }
 
 /// Whether a callee is copied with one parameter re-typed to what its argument
@@ -8520,64 +8571,95 @@ fn copy_retype(probe: &FuncBuilder, declared: TypeId, actual: TypeId) -> Option<
 /// walked in: the checker's type in the original, and the copy's for a
 /// parameter the copy re-typed. A callee copy seen for the first time is
 /// queued so its own body gets walked.
-fn record_structural_call(
-    found: &mut Structural,
-    pending: &mut Vec<PendingCopy>,
-    probe: &FuncBuilder,
-    within: &str,
-    call: NodeId,
-    callee: NodeId,
-    actual: impl Fn(NodeId) -> Option<TypeId>,
-) {
-    let snapshot = probe.snapshot;
-    if is_generic_function(snapshot, callee) {
-        return;
-    }
-    let Some(signature) = super::generics::declared_signature(snapshot, callee) else {
-        return;
-    };
-    let parameters: Vec<TypeId> = signature.parameters.iter().map(|p| p.ty).collect();
-    let arguments = probe.arguments_of(call);
+impl StructuralPlanner<'_, '_> {
+    fn record_call(
+        &mut self,
+        within: &str,
+        call: NodeId,
+        callee: NodeId,
+        actual: impl Fn(NodeId) -> Option<TypeId>,
+        producer: impl Fn(NodeId) -> Option<HirType>,
+    ) {
+        let probe = self.probe;
+        let snapshot = probe.snapshot;
+        if is_generic_function(snapshot, callee) {
+            return;
+        }
+        let Some(signature) = super::generics::declared_signature(snapshot, callee) else {
+            return;
+        };
+        let parameters: Vec<TypeId> = signature.parameters.iter().map(|p| p.ty).collect();
+        let arguments = probe.arguments_of(call);
+        let positional = probe.kind_of(call) == Some(syntax::CALL_EXPRESSION)
+            && !arguments
+                .iter()
+                .any(|argument| probe.kind_of(*argument) == Some(syntax::SPREAD_ELEMENT));
 
-    let mut retyped = Retyped::new();
-    let mut spelled = Vec::new();
-    for (at, (declared, argument)) in parameters.iter().zip(&arguments).enumerate() {
-        if probe.kind_of(*argument) == Some(syntax::OBJECT_LITERAL_EXPRESSION) {
-            continue;
+        let mut retyped = Retyped::new();
+        let mut spelled = Vec::new();
+        let mut legacy = Retyped::new();
+        let mut legacy_spelled = Vec::new();
+        let mut recovered = false;
+        for (at, (declared, argument)) in parameters.iter().zip(&arguments).enumerate() {
+            if probe.kind_of(*argument) == Some(syntax::OBJECT_LITERAL_EXPRESSION) {
+                continue;
+            }
+            let Ok(position) = u32::try_from(at) else {
+                continue;
+            };
+            if let Some((ty, spelling)) =
+                actual(*argument).and_then(|actual| copy_retype(probe, *declared, actual))
+            {
+                legacy.insert(position, ty.clone());
+                legacy_spelled.push(format!("{at}{spelling}"));
+                retyped.insert(position, ty);
+                spelled.push(format!("{at}{spelling}"));
+            } else if positional
+                && probe.represent(*declared) == Some(HirType::Erased)
+                && self.erased.contains(callee, position)
+                && let Some(ty) = producer(*argument)
+            {
+                spelled.push(format!("{at}e{}", super::generics::spell(&ty)));
+                retyped.insert(position, ty);
+                recovered = true;
+            }
         }
-        let Some(actual) = actual(*argument) else {
-            continue;
-        };
-        if actual == *declared {
-            continue;
+        if retyped.is_empty() {
+            return;
         }
-        let Some((ty, spelling)) = copy_retype(probe, *declared, actual) else {
-            continue;
-        };
-        retyped.insert(u32::try_from(at).unwrap_or(u32::MAX), ty);
-        spelled.push(format!("{at}{spelling}"));
-    }
-    if retyped.is_empty() {
-        return;
-    }
-    let suffix = format!("@{}", spelled.join("_"));
-    found
-        .at_call
-        .entry(within.to_owned())
-        .or_default()
-        .insert(call, (suffix.clone(), retyped.clone()));
-    let copies = found.copies.entry(callee).or_default();
-    if !copies.iter().any(|(_, at)| *at == suffix) {
-        copies.push((retyped.clone(), suffix.clone()));
-        // Walked only where a copy will be lowered: `function_copies` makes
-        // copies of plain function declarations, and a method's or an
-        // accessor's would be a context no builder ever runs in.
-        if probe.kind_of(callee) == Some(syntax::FUNCTION_DECLARATION) {
-            pending.push(PendingCopy {
-                declaration: callee,
-                retyped,
-                suffix,
-            });
+        let mut suffix = format!("@{}", spelled.join("_"));
+        if recovered {
+            let offered = self.erased_copies.entry(callee).or_default();
+            if !offered.contains(&suffix) && offered.len() >= erased_calls::COPY_CAP {
+                // Keep the established structural decision when the separate
+                // erased-copy budget is exhausted; no other call changes identity.
+                retyped = legacy;
+                if retyped.is_empty() {
+                    return;
+                }
+                suffix = format!("@{}", legacy_spelled.join("_"));
+            } else {
+                offered.insert(suffix.clone());
+            }
+        }
+        self.found
+            .at_call
+            .entry(within.to_owned())
+            .or_default()
+            .insert(call, (suffix.clone(), retyped.clone()));
+        let copies = self.found.copies.entry(callee).or_default();
+        if !copies.iter().any(|(_, at)| *at == suffix) {
+            copies.push((retyped.clone(), suffix.clone()));
+            // Walked only where a copy will be lowered: `function_copies` makes
+            // copies of plain function declarations, and a method's or an
+            // accessor's would be a context no builder ever runs in.
+            if probe.kind_of(callee) == Some(syntax::FUNCTION_DECLARATION) {
+                self.pending.push(PendingCopy {
+                    declaration: callee,
+                    retyped,
+                    suffix,
+                });
+            }
         }
     }
 }
@@ -9152,8 +9234,10 @@ fn function_copies(
     // ordinary copy with the same bindings in raising mode; this includes
     // structural copies, whose previous ordinary-only form escaped a `try`.
     // `raising` selects reachable declarations, and unused instances are pruned.
-    if raising.contains(&id) {
-        for index in 0..copies.len() {
+    for index in 0..copies.len() {
+        if raising.contains(&id)
+            || structural.raising.contains(&(id, copies[index].suffix.clone()))
+        {
             let mut raising = copies[index].clone();
             raising.raises = true;
             copies.push(raising);
@@ -10714,7 +10798,8 @@ impl Shared {
         closures: &[ClosureInfo],
         naming: Naming,
     ) -> Self {
-        let structural = structural_instantiations(snapshot, hierarchy);
+        let mut structural = structural_instantiations(snapshot, hierarchy);
+        erased_calls::raising_copies(snapshot, hierarchy, &naming, &mut structural);
         let probe = FuncBuilder::probe(snapshot);
         let mut closures = closures.to_vec();
         let variants = closure_variants(&probe, &closures, &structural);
@@ -10787,15 +10872,7 @@ impl Shared {
         // Which copy of a generic function this is, if it is one -- read below,
         // and taken before `copy.suffix` is moved into the contexts.
         let within = copy.declaration.map(|of| (of, copy.suffix.clone()));
-        let contexts = [String::new(), copy.suffix].into_iter();
-        for calls in contexts.filter_map(|context| self.structural.at_call.get(&context)) {
-            for (call, (suffix, bindings)) in calls {
-                builder.generic_calls.insert(*call, suffix.clone());
-                builder
-                    .structural_calls
-                    .insert(*call, bindings.clone());
-            }
-        }
+        self.structural.wire_calls(&mut builder, &copy.suffix);
         // And the calls this copy of a *generic class* makes, which name their
         // callee's copy over whatever the class's parameters are bound to
         // here. On top of the program-wide answers for the same reason the
@@ -17786,6 +17863,8 @@ struct FuncBuilder<'a> {
     /// a test. Written by [`Self::lower_try`] and by the raising walk; read by
     /// [`Self::push_call`], which is the one place a plain call is emitted.
     raising_calls: rustc_hash::FxHashSet<NodeId>,
+    /// Calls whose selected source specialization has its own raising entry.
+    raising_specializations: rustc_hash::FxHashSet<NodeId>,
     /// Whether this body is a **raising copy**: one reached only from call
     /// sites that test for a raise afterwards.
     ///
@@ -17918,6 +17997,7 @@ impl<'a> FuncBuilder<'a> {
             raising: rustc_hash::FxHashSet::default(),
             withheld: rustc_hash::FxHashMap::default(),
             raising_calls: rustc_hash::FxHashSet::default(),
+            raising_specializations: rustc_hash::FxHashSet::default(),
             boxed: Vec::new(),
             guarded: Vec::new(),
             in_closure: false,
@@ -51318,7 +51398,8 @@ impl<'a> FuncBuilder<'a> {
     /// have the same problem -- and the constants stay the single source of the
     /// sentence, which is the reason they exist.
     fn calls_a_closure(&self, call: NodeId) -> bool {
-        self.kind_of(call) == Some(syntax::CALL_EXPRESSION)
+        !erased_calls::inline_method(self, call)
+            && self.kind_of(call) == Some(syntax::CALL_EXPRESSION)
             && self.reason_without_a_leaf(call).is_some_and(|why| {
                 why == THROUGH_A_FUNCTION_VALUE || why == A_FUNCTION_WRITTEN_AS_A_VALUE
             })
@@ -51656,7 +51737,7 @@ impl<'a> FuncBuilder<'a> {
     /// a closure aborts by name instead of losing the `throw`. Measured at **0
     /// reachable entries** across all 29 runtime corpora.
     fn a_raising_body_carries_this_call(&self, id: NodeId) -> Result<(), Diagnostic> {
-        if !self.raises || self.tested_for_a_raise(id) {
+        if !self.raises || self.tested_for_a_raise(id) || erased_calls::inline_method(self, id) {
             return Ok(());
         }
         // **A call through a value is compiled code too, and `calls_compiled_code` is
@@ -51706,6 +51787,9 @@ impl<'a> FuncBuilder<'a> {
     /// the declaration, which is what `raising_copies` collected and what the
     /// emitted name comes from.
     fn has_a_raising_copy(&self, call: NodeId) -> bool {
+        if self.raising_specializations.contains(&call) {
+            return true;
+        }
         // Through [`raising_callees_of`], which is the one place that turns a site into
         // the declarations a copy belongs to: the set was built from the
         // implementation, and a call to an overloaded function resolves to a
@@ -51856,6 +51940,9 @@ impl<'a> FuncBuilder<'a> {
     /// the snapshot is the host's, and a `new` of a provided error is this
     /// compiler's own.
     fn calls_compiled_code(&self, call: NodeId) -> bool {
+        if erased_calls::inline_method(self, call) {
+            return false;
+        }
         // A bound foreign member, reached through the binding table. It can
         // raise, and the premise above -- "only compiled code can" -- was
         // written before there was a backend where that is false. A Java method
@@ -66142,15 +66229,15 @@ impl<'a> FuncBuilder<'a> {
     /// HIR and costs the whole program. The language compares two non-strings
     /// numerically, and an erased operand is not provably a string -- so asking for a
     /// number is both what the operator needs and what cannot be shown. A
-    /// *concrete* string operand is untouched, so `"a" < "b"` still lowers.
+    /// pair of concrete strings remains lexical, so `"a" < "b"` still lowers.
     ///
     /// `==` and `!=` are deliberately **not** here: an erased operand is answered
     /// there rather than refused, by the absence test and by
     /// `comparable_without_coercing`, which is a different and narrower question.
     ///
-    /// Only where an operand **is** erased: `Concat` has `as_string` before this, and
-    /// anything with a concrete operand takes the path it took before, so its emitted
-    /// code cannot move.
+    /// Source copies can expose concrete strings in numeric operations. They use
+    /// the existing `ToNumber`; other concrete operands keep their representation.
+    /// `Concat` uses `as_string` before reaching this helper.
     fn numeric_operands(
         &mut self,
         id: NodeId,
@@ -66172,9 +66259,21 @@ impl<'a> FuncBuilder<'a> {
         ) {
             return Ok((lhs, rhs));
         }
-        let erased = |builder: &Self, v: ValueId| builder.values[v.0 as usize].ty == HirType::Erased;
-        let lhs = if erased(self, lhs) { self.coerce(lhs, &HirType::NUMBER, id)? } else { lhs };
-        let rhs = if erased(self, rhs) { self.coerce(rhs, &HirType::NUMBER, id)? } else { rhs };
+        if matches!(op, BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge)
+            && self.values[lhs.0 as usize].ty == HirType::Managed(ManagedType::String)
+            && self.values[rhs.0 as usize].ty == HirType::Managed(ManagedType::String)
+        {
+            return Ok((lhs, rhs));
+        }
+        let numeric = |builder: &mut Self, value: ValueId| match builder.values[value.0 as usize].ty {
+            HirType::Erased => builder.coerce(value, &HirType::NUMBER, id),
+            // A scalar source copy can expose a string at an arithmetic
+            // operand. Use the same ToNumber as Number() and unary +.
+            HirType::Managed(ManagedType::String) => builder.coerce_to_number(id, id, value),
+            _ => Ok(value),
+        };
+        let lhs = numeric(self, lhs)?;
+        let rhs = numeric(self, rhs)?;
         Ok((lhs, rhs))
     }
 
@@ -66256,6 +66355,37 @@ impl<'a> FuncBuilder<'a> {
             self.snapshot.types.get(element.0 as usize).map(|r| &r.kind),
             Some(TypeKind::Any | TypeKind::Evolving)
         )
+    }
+
+    /// Preserve strict equality's erased contract when a positional copy
+    /// recovers one side, or different primitive kinds. Written native integer
+    /// types retain the existing width reconciliation in `relational_operands`.
+    fn erased_equality_operands(
+        &mut self,
+        token: u16,
+        nodes: [NodeId; 2],
+        values: (ValueId, ValueId),
+    ) -> Result<(ValueId, ValueId), Diagnostic> {
+        let (lhs, rhs) = values;
+        if !matches!(
+            token,
+            syntax::EQUALS_EQUALS_EQUALS_TOKEN | syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN
+        ) || self.values[lhs.0 as usize].ty == self.values[rhs.0 as usize].ty
+            || self.values[lhs.0 as usize].ty == HirType::Erased
+            || self.values[rhs.0 as usize].ty == HirType::Erased
+            || (self.values[lhs.0 as usize].ty.holds_a_pointer()
+                && self.values[rhs.0 as usize].ty.holds_a_pointer())
+            || !nodes.into_iter().any(|node| {
+                self.snapshot.node_types.get(&node)
+                    .and_then(|ty| self.represent(*ty)) == Some(HirType::Erased)
+            })
+        {
+            return Ok(values);
+        }
+        Ok((
+            self.coerce(lhs, &HirType::Erased, nodes[0])?,
+            self.coerce(rhs, &HirType::Erased, nodes[1])?,
+        ))
     }
 
     fn relational_operands(
@@ -66475,13 +66605,32 @@ impl<'a> FuncBuilder<'a> {
 
         let lhs = self.lower_expression(*lhs_node)?;
         let rhs = self.lower_expression(*rhs_node)?;
-        let ty = self
+        let mut ty = self
             .type_of(id)
             .ok_or_else(|| self.unrepresentable(id, "a binary expression"))?;
 
         let token = self
             .kind_of(*operator)
             .ok_or_else(|| self.unsupported(id, "a binary expression with no operator"))?;
+
+        // A source copy can give both operands concrete representations
+        // where the shared AST still says any. Derive + from those produced
+        // values; a use's demanded result type is not operand evidence.
+        if token == syntax::PLUS_TOKEN && ty == HirType::Erased {
+            let (left, right) = (
+                &self.values[lhs.0 as usize].ty,
+                &self.values[rhs.0 as usize].ty,
+            );
+            if *left == HirType::NUMBER && *right == HirType::NUMBER {
+                ty = HirType::NUMBER;
+            } else if *left == HirType::Managed(ManagedType::String)
+                || *right == HirType::Managed(ManagedType::String)
+            {
+                ty = HirType::Managed(ManagedType::String);
+            } else if *left == HirType::BigInt && *right == HirType::BigInt {
+                ty = HirType::BigInt;
+            }
+        }
 
         // A bitwise operator is `ToInt32`, the machine operation, and back. The
         // coercion is made explicit rather than folded into the operator so the
@@ -66512,6 +66661,8 @@ impl<'a> FuncBuilder<'a> {
         }
 
         let op = self.binary_op_for(id, *operator, *lhs_node, *rhs_node, token, &ty)?;
+
+        let (lhs, rhs) = self.erased_equality_operands(token, [*lhs_node, *rhs_node], (lhs, rhs))?;
 
         let (lhs, rhs) = self.relational_operands(id, op, *lhs_node, *rhs_node, lhs, rhs)?;
 
