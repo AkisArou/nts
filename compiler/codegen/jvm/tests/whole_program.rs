@@ -92,21 +92,41 @@ fn an_uncaught_throw_at_module_scope_exits_one() {
     assert_eq!(stderr.trim(), "nts: uncaught RangeError: at module scope");
 }
 
+/// A run-time refusal ends the run as C's `abort()` does: status 134 and the
+/// line C prints. The refusal is a checked read past the end of an array --
+/// `xs[1]!` on a one-element array, where node answers `undefined` and nts
+/// refuses rather than hand back a value the `!` promised was there.
+///
+/// It used to be a `bigint` ordering the JVM declined, until cc95747e5 made
+/// that comparison compile; a refusal that a feature can retire is a fragile
+/// witness for the launcher, so this one is a rule rather than a gap.
 #[test]
 fn a_run_time_refusal_exits_as_c_aborts() {
     let Some((status, stdout, stderr)) = run_whole(
         "refusal",
-        "function big(a: bigint, b: bigint): boolean {\n  return a > b;\n}\n\
-         console.log(\"start\");\nconsole.log(big(10n ** 30n, 5n));\n",
+        "function outside(xs: number[]): number {\n  return xs[1]!;\n}\n\
+         console.log(\"start\");\nconsole.log(outside([3]));\n",
     ) else {
         return;
     };
     assert_eq!(status, 134, "C's `abort()` status: {stderr}");
     assert_eq!(stdout, "start\n");
-    assert!(
-        stderr.starts_with("nts: refused at run time: `big` was declined"),
-        "the line C prints, naming the declined function: {stderr}"
-    );
+    assert_eq!(stderr.trim(), "nts: refused at run time: index 1 is outside [0, 1)");
+}
+
+/// The program the refusal test used to run, now that it compiles: a `bigint`
+/// ordering across a value past 2^64 answers as node does and the run is clean.
+#[test]
+fn a_bigint_ordering_runs_to_completion() {
+    let Some((status, stdout, stderr)) = run_whole(
+        "bigint",
+        "function big(a: bigint, b: bigint): boolean {\n  return a > b;\n}\n\
+         console.log(\"start\");\nconsole.log(big(10n ** 30n, 5n));\n",
+    ) else {
+        return;
+    };
+    assert_eq!(status, 0, "{stderr}");
+    assert_eq!(stdout, "start\ntrue\n");
 }
 
 /// The first divergence the launcher measured: an unhandled rejection exited 0
