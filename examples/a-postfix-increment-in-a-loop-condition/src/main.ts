@@ -42,3 +42,4 @@ export function inBody(n: number): number {
     steps++;
   }
   return steps * 100 + count;
+}
