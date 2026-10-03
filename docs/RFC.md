@@ -1,5 +1,9 @@
 # RFC: Native TypeScript Architecture v3
 
+> Historical design proposal. Its implementation descriptions are outdated.
+> See [the current compiler delivery plan](compiler-delivery-plan.md) for the
+> implemented pipeline, upcoming Main-lane work and acceptance criteria.
+
 **Subtitle:** Compiler, Memory Management, Debugging, Libraries, Modules, Renderers, Products, Hot Reload, and Developer Experience
 **Status:** Proposed
 **Date:** August 25, 2026

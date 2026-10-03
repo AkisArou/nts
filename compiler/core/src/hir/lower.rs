@@ -5232,10 +5232,11 @@ fn copyable_symbols(
 }
 
 /// Whether a raising copy can be made of this declaration: a plain function, a
-/// **method** or an **accessor**, not generic and not `async`.
+/// **method** or an **accessor**, not `async`.
 ///
-/// A generic's suffix is already spoken for, and an `async` function never raises
-/// synchronously, so it is not this question at all.
+/// A generic function has one raising form per specialization. A method with its
+/// own type parameters still has no such instantiation machinery. An `async`
+/// function rejects its promise rather than raising synchronously.
 ///
 /// **How the copy is reached depends on the dispatch, and both answers exist.** A
 /// member no subclass overrides is already a `Callee::Direct`, so the copy is that
@@ -5264,8 +5265,9 @@ fn a_copy_can_be_made_of(
     probe: &FuncBuilder,
     declaration: NodeId,
 ) -> bool {
+    let kind = probe.kind_of(declaration);
     matches!(
-        probe.kind_of(declaration),
+        kind,
         Some(
             syntax::FUNCTION_DECLARATION
                 | syntax::METHOD_DECLARATION
@@ -5273,7 +5275,7 @@ fn a_copy_can_be_made_of(
                 | syntax::SET_ACCESSOR
                 | syntax::CONSTRUCTOR
         )
-    ) && !is_generic_function(snapshot, declaration)
+    ) && (!is_generic_function(snapshot, declaration) || kind == Some(syntax::FUNCTION_DECLARATION))
         && !probe
             .node(declaration)
             .modifiers
@@ -5360,9 +5362,8 @@ const THROUGH_A_FUNCTION_VALUE: &str =
 /// `an-interface-reached-by-six-routes` records the same boundary for the other
 /// copy kinds, and it is the same line of code drawing it.
 ///
-/// Generic functions are excluded because a copy's suffix is already spoken
-/// for there, and `async` ones because a `throw` in one rejects the promise it
-/// returned -- a real edge the lowering already routes, and not this.
+/// Methods with their own type parameters are excluded until their instantiations
+/// can be copied, and `async` functions because a `throw` in one rejects its promise.
 ///
 /// **Only for a callee some `try` in the program actually calls.** "Every
 /// qualifying function, and let `hir::dce` drop the rest" was the first version
@@ -9122,8 +9123,8 @@ fn function_copies(
     raising: &rustc_hash::FxHashSet<NodeId>,
     id: NodeId,
 ) -> Vec<Copy> {
-    if let Some(instances) = generic.copies.get(&id) {
-        return instances
+    let mut copies: Vec<Copy> = if let Some(instances) = generic.copies.get(&id) {
+        instances
             .iter()
             .map(|instance| Copy {
                 substitution: instance.substitution.clone(),
@@ -9136,55 +9137,50 @@ fn function_copies(
                 declaration: Some(id),
                 raises: false,
             })
-            .collect();
-    }
-    if is_generic_function(snapshot, id) {
+            .collect()
+    } else if is_generic_function(snapshot, id) {
         return Vec::new();
-    }
-    // **The unspecialised version as well**, which is the difference from a
-    // generic. A generic is lowered once per instantiation and *not at all* as
-    // itself, because a parameter of type `T` has no width. An ordinary function
-    // has a perfectly good width; a structural copy is an addition, not a
-    // replacement, and a call that passes the declared type still names the
-    // plain one.
-    let mut copies = vec![Copy::default()];
-    copies.extend(
-        structural
-            .copies
-            .get(&id)
-            .into_iter()
-            .flatten()
-            .map(|(retyped, suffix)| Copy {
-                retyped: retyped.clone(),
-                suffix: suffix.clone(),
-                ..Copy::default()
-            }),
-    );
-    // And the raising copy, for a function a `try` around a call can use. The
-    // same addition-not-replacement the structural copies are: an ordinary call
-    // still names the plain one and still ends the program on an uncaught
-    // throw, which is what node does and what nothing here should change.
-    //
-    // Made for every qualifying function rather than for those a `try` reaches,
-    // because that is not known until every body is lowered. One nothing names
-    // is dead and `hir::dce` removes it.
+    } else {
+        // An ordinary function keeps its unspecialized body as well: a call
+        // passing the declared parameter type still names that body.
+        let mut copies = vec![Copy::default()];
+        copies.extend(
+            structural
+                .copies
+                .get(&id)
+                .into_iter()
+                .flatten()
+                .map(|(retyped, suffix)| Copy {
+                    retyped: retyped.clone(),
+                    suffix: suffix.clone(),
+                    ..Copy::default()
+                }),
+        );
+        copies
+    };
+    // Exception mode does not change the specialization context. Pair every
+    // ordinary copy with the same bindings in raising mode; this includes
+    // structural copies, whose previous ordinary-only form escaped a `try`.
+    // `raising` selects reachable declarations, and unused instances are pruned.
     if raising.contains(&id) {
-        copies.push(Copy {
-            suffix: RAISING_SUFFIX.to_owned(),
-            raises: true,
-            ..Copy::default()
-        });
+        for index in 0..copies.len() {
+            let mut raising = copies[index].clone();
+            raising.raises = true;
+            copies.push(raising);
+        }
     }
     copies
 }
 
 /// One version of a function to emit: a generic instantiation, a structural
 /// specialisation, or the plain one with neither.
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct Copy {
     substitution: Substitution,
     sources: super::generics::Sources,
     retyped: Retyped,
+    /// Specialization identity, shared by ordinary and raising forms. Exception
+    /// mode is appended only when naming a function, never to lookup contexts.
     suffix: String,
     /// The instantiation this is a copy *of*, where it is a generic class's.
     ///
@@ -17639,7 +17635,6 @@ struct FuncBuilder<'a> {
     callee_signature: Option<(NodeId, TypeId)>,
     /// The receiver, in a method.
     this: Option<ValueId>,
-    /// What this copy's name carries, for one instantiation of a generic
     /// The type this function's `return` statements must produce.
     ///
     /// Kept on the builder because a `return` needs it while the body is being
@@ -17649,7 +17644,7 @@ struct FuncBuilder<'a> {
     /// refused and failed in C, because the verifier checks call arguments and
     /// not returns.
     returns: HirType,
-    /// function. Empty for everything else.
+    /// This copy's specialization context, shared with its raising form.
     suffix: String,
     /// What each function declaration is emitted as, where its plain name is
     /// taken by another module's.
@@ -25071,7 +25066,8 @@ impl<'a> FuncBuilder<'a> {
             .find(|child| self.kind_of(**child) == Some(syntax::IDENTIFIER))
             .and_then(|child| self.node(*child).text.clone())?;
         let name = self.qualified.get(&id).cloned().unwrap_or(name);
-        Some(format!("{name}{}", self.suffix))
+        let raising = if self.raises { RAISING_SUFFIX } else { "" };
+        Some(format!("{name}{}{raising}", self.suffix))
     }
 
     fn lower_function(&mut self, id: NodeId) -> Result<Func, Diagnostic> {
@@ -51527,7 +51523,7 @@ impl<'a> FuncBuilder<'a> {
             return None;
         }
         if is_generic_function(self.snapshot, declaration) {
-            return Some("a generic, whose copy suffix already names its instantiation");
+            return Some("a generic method, whose own type parameters have no instantiations here");
         }
         if self
             .node(declaration)
@@ -55678,12 +55674,8 @@ impl<'a> FuncBuilder<'a> {
         // And the copy made for *this* call's instantiation, where the callee
         // is generic. There is one copy per distinct substitution and the
         // suffix is what tells them apart.
-        let name = format!(
-            "{name}{}",
-            self.generic_calls
-                .get(&id)
-                .map_or_else(|| self.raising_suffix_of(id), String::as_str)
-        );
+        let specialization = self.generic_calls.get(&id).map_or("", String::as_str);
+        let name = format!("{name}{specialization}{}", self.raising_suffix_of(id));
 
         // A callee inside the compiled program becomes a static call; one outside
         // it is still typed exactly, and the definition comes from elsewhere.
