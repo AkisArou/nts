@@ -425,12 +425,28 @@ export function unbuiltUnerases(prepared, { byName, byId }) {
     const tests = new Map([...f.chunk.matchAll(/^ {2}(%\d+) = instanceof (%\d+) /gm)].map((m) => [m[1], m[2]]));
     const guarded = new Set();
     for (const m of f.chunk.matchAll(/^ {2}br (%\d+), (b\d+)/gm)) if (tests.has(m[1])) guarded.add(`${m[2]} ${tests.get(m[1])}`);
+    // **An element read back to its own array's element layout is a round trip,
+    // not a guess.** `%e = erase %a` then `nts_array_element(%e, ..)` then
+    // `unerase` to obj#N, where `%a` is *statically* `managed<[managed<obj#N>]>`:
+    // the array's representation holds only that layout (or null, which the
+    // caller tests first), so erasing it to call the one element reader loses
+    // nothing. A JavaScript pattern over an array element compiles this way
+    // (2026-10-03, examples/a-javascript-pattern-over-null). The proof is the
+    // array's static type and nothing weaker: an array that was erased at its own
+    // source, or a different element layout, is judged as before.
+    const typeOf = new Map([...f.chunk.matchAll(/^ {2}(%\d+) = .* : (\S+)$/gm)].map((m) => [m[1], m[2]]));
+    const erasedFrom = new Map([...f.chunk.matchAll(/^ {2}(%\d+) = erase (%\d+) : erased$/gm)].map((m) => [m[1], m[2]]));
+    const elementOf = new Map([...f.chunk.matchAll(/^ {2}(%\d+) = call\.extern nts_array_element\((%\d+), %\d+\) : erased$/gm)].map((m) => [m[1], m[2]]));
+    const roundTrip = (value, target) => {
+      const array = erasedFrom.get(elementOf.get(value));
+      return array !== undefined && typeOf.get(array) === `managed<[managed<obj#${target}>]>`;
+    };
     let block = "b0";
     for (const line of f.chunk.split("\n")) {
       const head = /^(b\d+)(?:\(.*\))?:$/.exec(line);
       if (head) { block = head[1]; continue; }
       const u = /^ {2}%\d+ = unerase (%\d+) : managed<obj#(\d+)>$/.exec(line);
-      if (!u || guarded.has(`${block} ${u[1]}`) || boundary(f, u[1])) continue;
+      if (!u || guarded.has(`${block} ${u[1]}`) || boundary(f, u[1]) || roundTrip(u[1], u[2])) continue;
       const layout = byId.get(u[2]);
       if (layout && /^Fn[\d_]*__\d+$/.test(layout.name)) continue;
       if (layout ? covered.has(layout.name) : madeIds.has(u[2])) continue;
@@ -693,6 +709,16 @@ function selfTest() {
   const through = `${unerase(10)}\nexport func g(y: erased) -> void {\nb0:\n  %0 = param 0 : erased\n  call f(%0)\n}`;
   if (unbuiltUnerases(through, lay).length !== 0) return "a parameter filled only by an export's parameter was judged";
   if (unbuiltUnerases(`${through.replace("export func g", "func g")}`, lay).length !== 1) return "a parameter filled by an unexported caller's parameter was not judged";
+  // An element read back to its array's own element layout is a round trip; a
+  // mismatched layout, or an array that was itself erased at its source, is not.
+  const element = (arrayType, target) => [
+    "func h(x: erased) -> void {", "b0:", "  %0 = object.new heap : managed<obj#13>",
+    `  %1 = const null : ${arrayType}`, "  %2 = erase %1 : erased", "  %3 = const 0 : f64",
+    "  %4 = call.extern nts_array_element(%2, %3) : erased", `  %5 = unerase %4 : managed<obj#${target}>`, "}",
+  ].join("\n");
+  if (unbuiltUnerases(element("managed<[managed<obj#10>]>", 10), lay).length !== 0) return "an element unerased to its own array's element layout was caught";
+  if (unbuiltUnerases(element("managed<[managed<obj#12>]>", 10), lay).length !== 1) return "an element unerased to a layout its array does not hold was not caught";
+  if (unbuiltUnerases(element("erased", 10), lay).length !== 1) return "an element of an array erased at its source was not caught";
   // The known file's order: a sorted file passes, an appended entry is named.
   if (firstDisorder(["# h", "a\t1", "b\t2"]) !== null) return "a sorted known file read as out of order";
   if (firstDisorder(["a\t1", "c\t3", "b\t2"])?.at !== 3) return "an out-of-order known entry was not named";
