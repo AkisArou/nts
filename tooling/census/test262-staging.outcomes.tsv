@@ -1,6 +1,6 @@
 # Test262 test/staging cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 07ce5b3e52b9dd87, commit 1f34d211052fca17409fe3fa634ff673a859f633, harness d6442dbc09f91ad0; machine at start: 20.3 GB available, swap 5.8/20 GB, load 9.2/13.4 (1m/5m), 32 cores; 8 worker(s)
+# compiler 9509cdb5c11e700e, commit a21b865813a42458c5e61d3da8af47a08d491aaf, harness d6442dbc09f91ad0; machine at start: 21.5 GB available, swap 7/20 GB, load 9.9/12.7 (1m/5m), 32 cores; 8 worker(s)
 test/staging/sm/ArrayBuffer/bug1777413.js	pass	
 test/staging/sm/Math/cbrt-exact.js	pass	
 test/staging/sm/Math/cosh-exact.js	pass	

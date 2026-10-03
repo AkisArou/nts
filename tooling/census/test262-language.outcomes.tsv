@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 07ce5b3e52b9dd87, commit 1f34d211052fca17409fe3fa634ff673a859f633, harness d6442dbc09f91ad0; machine at start: 19.3 GB available, swap 5.8/20 GB, load 7.1/5.2 (1m/5m), 32 cores; 8 worker(s)
+# compiler 9509cdb5c11e700e, commit a21b865813a42458c5e61d3da8af47a08d491aaf, harness d6442dbc09f91ad0; machine at start: 21.6 GB available, swap 7/20 GB, load 1.5/1.6 (1m/5m), 32 cores; 8 worker(s)
 test/language/arguments-object/10.5-1gs.js	pass	
 test/language/asi/S7.9.2_A1_T1.js	pass	
 test/language/asi/S7.9.2_A1_T2.js	pass	
@@ -320,7 +320,9 @@ test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-id-init.js	pass
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-val-null.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elision-exhausted.js	pass	
+test/language/expressions/arrow-function/dstr/ary-ptrn-elision-step-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/arrow-function/dstr/ary-ptrn-empty.js	pass	
+test/language/expressions/arrow-function/dstr/ary-ptrn-rest-id-elision-next-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/arrow-function/dstr/ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-rest-init-ary.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-rest-init-id.js	pass	
@@ -342,6 +344,7 @@ test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-id-iter-val.js	
 test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elision-exhausted.js	pass	
+test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elision-step-err.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-empty.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-rest-ary-rest.js	pass	
@@ -471,7 +474,7 @@ test/language/expressions/assignment/S11.13.1_A3.1.js	pass
 test/language/expressions/assignment/S11.13.1_A3.2.js	pass	
 test/language/expressions/assignment/S11.13.1_A4_T1.js	pass	
 test/language/expressions/assignment/S8.12.5_A1.js	pass	
-test/language/expressions/assignment/dstr/array-elem-init-let.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/assignment/dstr/array-elem-init-let.js	pass	
 test/language/expressions/assignment/dstr/array-elem-init-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignment/dstr/array-elem-nested-array-invalid.js	pass	
 test/language/expressions/assignment/dstr/array-elem-nested-array-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
@@ -1050,6 +1053,7 @@ test/language/expressions/async-generator/dstr/ary-ptrn-rest-init-obj.js	pass
 test/language/expressions/async-generator/dstr/ary-ptrn-rest-not-final-ary.js	pass	
 test/language/expressions/async-generator/dstr/ary-ptrn-rest-not-final-id.js	pass	
 test/language/expressions/async-generator/dstr/ary-ptrn-rest-not-final-obj.js	pass	
+test/language/expressions/async-generator/dstr/dflt-ary-ptrn-elision-step-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/async-generator/dstr/dflt-ary-ptrn-rest-init-ary.js	pass	
 test/language/expressions/async-generator/dstr/dflt-ary-ptrn-rest-init-id.js	pass	
 test/language/expressions/async-generator/dstr/dflt-ary-ptrn-rest-init-obj.js	pass	
@@ -1110,7 +1114,7 @@ test/language/expressions/async-generator/named-yield-as-identifier-reference.js
 test/language/expressions/async-generator/named-yield-as-label-identifier-escaped.js	pass	
 test/language/expressions/async-generator/named-yield-as-label-identifier.js	pass	
 test/language/expressions/async-generator/named-yield-identifier-spread-strict.js	fail	accepted: was refused later (lowering)
-test/language/expressions/async-generator/named-yield-identifier-strict.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-generator/named-yield-identifier-strict.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-generator/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-generator/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/async-generator/rest-params-trailing-comma-early-error.js	pass	
@@ -1121,7 +1125,7 @@ test/language/expressions/async-generator/yield-as-identifier-reference.js	pass
 test/language/expressions/async-generator/yield-as-label-identifier-escaped.js	pass	
 test/language/expressions/async-generator/yield-as-label-identifier.js	pass	
 test/language/expressions/async-generator/yield-identifier-spread-strict.js	fail	accepted: was refused later (lowering)
-test/language/expressions/async-generator/yield-identifier-strict.js	fail	accepted: was refused later (lowering)
+test/language/expressions/async-generator/yield-identifier-strict.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/await/await-in-function.js	pass	
 test/language/expressions/await/await-in-global.js	pass	
 test/language/expressions/await/await-in-nested-function.js	pass	
@@ -2904,7 +2908,9 @@ test/language/expressions/function/dstr/ary-ptrn-elem-obj-id-init.js	pass
 test/language/expressions/function/dstr/ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-obj-val-null.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elision-exhausted.js	pass	
+test/language/expressions/function/dstr/ary-ptrn-elision-step-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/function/dstr/ary-ptrn-empty.js	pass	
+test/language/expressions/function/dstr/ary-ptrn-rest-id-elision-next-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/function/dstr/ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-rest-init-ary.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-rest-init-id.js	pass	
@@ -2926,6 +2932,7 @@ test/language/expressions/function/dstr/dflt-ary-ptrn-elem-id-iter-val.js	pass
 test/language/expressions/function/dstr/dflt-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/function/dstr/dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/function/dstr/dflt-ary-ptrn-elision-exhausted.js	pass	
+test/language/expressions/function/dstr/dflt-ary-ptrn-elision-step-err.js	pass	
 test/language/expressions/function/dstr/dflt-ary-ptrn-empty.js	pass	
 test/language/expressions/function/dstr/dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/expressions/function/dstr/dflt-ary-ptrn-rest-ary-rest.js	pass	
@@ -2959,7 +2966,7 @@ test/language/expressions/function/dstr/obj-ptrn-prop-id-init-throws.js	pass
 test/language/expressions/function/dstr/obj-ptrn-prop-obj-value-null.js	pass	
 test/language/expressions/function/early-body-super-call.js	fail	accepted: was refused later (lowering)
 test/language/expressions/function/early-body-super-prop.js	fail	accepted: was refused later (lowering)
-test/language/expressions/function/early-errors/invalid-names-call-expression-bad-reference.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/function/early-errors/invalid-names-call-expression-bad-reference.js	fail	accepted: was refused later (lowering)
 test/language/expressions/function/early-errors/invalid-names-call-expression-this.js	pass	
 test/language/expressions/function/early-errors/invalid-names-member-expression-bad-reference.js	pass	
 test/language/expressions/function/early-errors/invalid-names-member-expression-this.js	pass	
@@ -3000,7 +3007,9 @@ test/language/expressions/generators/dstr/ary-ptrn-elem-obj-id.js	pass
 test/language/expressions/generators/dstr/ary-ptrn-elem-obj-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/generators/dstr/ary-ptrn-elem-obj-val-undef.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/generators/dstr/ary-ptrn-elision-exhausted.js	pass	
+test/language/expressions/generators/dstr/ary-ptrn-elision-step-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/generators/dstr/ary-ptrn-empty.js	pass	
+test/language/expressions/generators/dstr/ary-ptrn-rest-id-elision-next-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/generators/dstr/ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-rest-init-ary.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-rest-init-id.js	pass	
@@ -3022,6 +3031,7 @@ test/language/expressions/generators/dstr/dflt-ary-ptrn-elem-id-iter-val.js	pass
 test/language/expressions/generators/dstr/dflt-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/generators/dstr/dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/generators/dstr/dflt-ary-ptrn-elision-exhausted.js	pass	
+test/language/expressions/generators/dstr/dflt-ary-ptrn-elision-step-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/generators/dstr/dflt-ary-ptrn-empty.js	pass	
 test/language/expressions/generators/dstr/dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/expressions/generators/dstr/dflt-ary-ptrn-rest-ary-rest.js	pass	
@@ -3061,7 +3071,7 @@ test/language/expressions/generators/named-yield-as-identifier-reference.js	pass
 test/language/expressions/generators/named-yield-as-label-identifier-escaped.js	pass	
 test/language/expressions/generators/named-yield-as-label-identifier.js	pass	
 test/language/expressions/generators/named-yield-identifier-spread-strict.js	fail	accepted: was refused later (lowering)
-test/language/expressions/generators/named-yield-identifier-strict.js	fail	accepted: was refused later (lowering)
+test/language/expressions/generators/named-yield-identifier-strict.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/generators/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/generators/param-dflt-yield.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/generators/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
@@ -3077,7 +3087,7 @@ test/language/expressions/generators/yield-as-label-identifier.js	pass
 test/language/expressions/generators/yield-as-logical-or-expression.js	pass	
 test/language/expressions/generators/yield-as-parameter.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/generators/yield-identifier-spread-strict.js	fail	accepted: was refused later (lowering)
-test/language/expressions/generators/yield-identifier-strict.js	fail	accepted: was refused later (lowering)
+test/language/expressions/generators/yield-identifier-strict.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/generators/yield-star-after-newline.js	pass	
 test/language/expressions/generators/yield-weak-binding.js	pass	
 test/language/expressions/greater-than-or-equal/S11.8.4_A2.4_T1.js	pass	
@@ -6410,8 +6420,8 @@ test/language/statements/const/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass
 test/language/statements/const/dstr/obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/const/dstr/obj-ptrn-prop-obj-value-null.js	pass	
 test/language/statements/const/function-local-closure-get-before-initialization.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/statements/const/global-closure-get-before-initialization.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/statements/const/global-use-before-initialization-in-prior-statement.js	fail	completed
+test/language/statements/const/global-closure-get-before-initialization.js	pass	
+test/language/statements/const/global-use-before-initialization-in-prior-statement.js	pass	
 test/language/statements/const/static-init-await-binding-valid.js	pass	
 test/language/statements/const/syntax/block-scope-syntax-const-declarations-mixed-with-without-initialiser.js	pass	
 test/language/statements/const/syntax/block-scope-syntax-const-declarations-mixed-without-with-initialiser.js	pass	
@@ -7382,7 +7392,7 @@ test/language/statements/let/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass
 test/language/statements/let/dstr/obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/let/dstr/obj-ptrn-prop-obj-value-null.js	pass	
 test/language/statements/let/global-closure-set-before-initialization.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/statements/let/global-use-before-initialization-in-prior-statement.js	fail	completed
+test/language/statements/let/global-use-before-initialization-in-prior-statement.js	pass	
 test/language/statements/let/static-init-await-binding-valid.js	pass	
 test/language/statements/let/syntax/identifier-let-allowed-as-lefthandside-expression-strict.js	pass	
 test/language/statements/let/syntax/identifier-let-disallowed-as-boundname.js	pass	
