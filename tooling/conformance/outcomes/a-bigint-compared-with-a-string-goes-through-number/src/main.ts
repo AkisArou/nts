@@ -7,12 +7,14 @@
 //   1n > "0."                              node false   nts true    ("0." is 0 as a Number)
 //   9007199254740993n > "9007199254740992" node true    nts false   (both 2^53 as doubles)
 //
-// Found by the test262 census of caf82c58d: closed-call specialization
-// (9533b3a5e) recovered the string argument, and six files that were refused
-// before now answer wrongly -- {less-than,greater-than,less-than-or-equal,
+// Found by the test262 census of caf82c58d: six files that were **invalid HIR**
+// before closed-call specialization (9533b3a5e) -- `OperandsDiffer { left: BigInt,
+// right: Managed(String) }`, a no-verdict outside the record -- now compile and
+// answer wrongly -- {less-than,greater-than,less-than-or-equal,
 // greater-than-or-equal}/bigint-and-incomparable-string.js and
-// {greater-than,less-than-or-equal}/bigint-and-string.js. The defect stood behind
-// the refusal; it was not introduced.
+// {greater-than,less-than-or-equal}/bigint-and-string.js. The conversion defect is
+// older: with typed parameters, as here, it reproduces identically on a pin of
+// abc1564a9, before specialization.
 //
 // **Controls, one difference each:** a comparable string with no fraction
 // (`1n > "0"`, where Number and StringToBigInt agree) and the precision case
