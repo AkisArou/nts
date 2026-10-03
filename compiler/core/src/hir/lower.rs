@@ -21991,7 +21991,16 @@ impl<'a> FuncBuilder<'a> {
             .into_iter()
             .filter(|child| self.kind_of(*child) == Some(syntax::HERITAGE_CLAUSE))
             .any(|clause| HeritageKind::from_data(self.node(clause).data) == HeritageKind::Extends);
-        let Some(constructor) = the_constructor_declared_by(self, class).filter(|_| derived) else {
+        // **A constructor with a body.** One with none is a signature -- a native
+        // class's in a `.d.ts` (`class NSString extends NSObject { constructor(…) }`),
+        // or an ambient one -- and says nothing about `super()`. Read as "calls it
+        // nowhere", every construction of a bound Objective-C subclass counted as
+        // throwing, and `interop/macos-notes`' `new NSString(…)` inside a `try` was
+        // refused.
+        let Some(constructor) = the_constructor_declared_by(self, class)
+            .filter(|_| derived)
+            .filter(|constructor| self.children(*constructor).into_iter().any(|child| self.kind_of(child) == Some(syntax::BLOCK)))
+        else {
             return false;
         };
         let mut subtree = Vec::new();
