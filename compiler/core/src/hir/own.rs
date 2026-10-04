@@ -193,6 +193,15 @@ pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
                 .iter()
                 .flat_map(|layout| layout.methods.iter().flatten().map(String::as_str)),
         )
+        // A foreign caller holds its input through both return and a throw.
+        // A wrapper cannot observe whether a consuming store ran before an
+        // uncaught call jumped to its landing pad. Published entries therefore
+        // use the same borrowed-input, owned-result convention as dispatch.
+        // Keep the publication decision in the existing surface enumeration.
+        .chain(super::reachable::root_names(
+            program,
+            super::reachable::Roots::EntrySurface,
+        ))
         .collect();
     // Computed before the literal because the slot answer is derived from it:
     // a slot mutates when an implementation in it does.

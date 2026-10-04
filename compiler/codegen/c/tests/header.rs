@@ -501,14 +501,16 @@ fn a_published_class_is_reported_as_crossing_no_symbol() {
     assert!(defined.contains(&"published".to_owned()), "{defined:?}");
 }
 
-/// An export that keeps a parameter takes the caller's reference to it rather
-/// than one of its own, which is part of how C must call it -- the N-API glue
-/// hands its reference over because the ownership summary says so. A
-/// hand-written caller has only the header, so the header says it: a caller
-/// passing a borrowed reference would have it released once more than it
-/// was taken. One that only reads its parameter says nothing.
+/// An export **borrows** its parameters, even one it keeps: it takes a
+/// reference of its own for what it stores, and the caller keeps and releases
+/// its own. A foreign caller cannot see whether a consuming store ran before a
+/// throw unwound past its wrapper, so the entry surface uses the
+/// borrowed-input, owned-result convention dispatch already did (94b4133ab).
+/// The header used to name the parameters an export took over; there are none
+/// now, and a header that still said so would have a C caller hand over a
+/// reference the export then also releases.
 #[test]
-fn the_header_names_the_parameters_an_export_takes_over() {
+fn an_export_borrows_even_the_parameters_it_keeps() {
     let Some(tsgo) = toolchain() else {
         return;
     };
@@ -519,6 +521,7 @@ fn the_header_names_the_parameters_an_export_takes_over() {
     );
     let header = std::fs::read_to_string(dir.join("program.h")).unwrap();
     let line = |name: &str| header.lines().find(|line| line.contains(&format!("Export: {name}."))).unwrap_or_default().to_owned();
-    assert!(line("keep").contains("Takes over the caller's reference to v1:"), "{}", line("keep"));
+    assert!(!line("keep").is_empty() && !line("size").is_empty(), "both exports are published:\n{header}");
+    assert!(!line("keep").contains("Takes over"), "{}", line("keep"));
     assert!(!line("size").contains("Takes over"), "{}", line("size"));
 }

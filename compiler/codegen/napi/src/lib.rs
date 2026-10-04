@@ -48,6 +48,8 @@ pub const ADDON_SOURCE_NAME: &str = "addon.c";
 /// How a value of this type crosses the boundary.
 enum Cross {
     Number,
+    /// An exact value inside the compiled signed 128-bit profile.
+    BigInt,
     Bool,
     Str,
     /// An array, by how its elements cross. A JavaScript array, copied.
@@ -201,7 +203,7 @@ fn object_crosses(
     }
     path.push(at);
     let crosses = layout.fields.iter().all(|field| match &field.ty {
-        HirType::Bool | HirType::Float { .. } | HirType::Int { .. } => true,
+        HirType::Bool | HirType::Float { .. } | HirType::Int { .. } | HirType::BigInt => true,
         HirType::Managed(ManagedType::String | ManagedType::Table(_, _)) => true,
         // A closure is a synthetic object layout whose JavaScript value is a
         // function, excluded here for the reason `cross` excludes it one level
@@ -301,11 +303,9 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
         // it when the promise settles, which is a threadsafe-function design
         // rather than a marshalling rule.
         HirType::Managed(ManagedType::Promise(_)) => None,
-        // Node-API has `napi_create_bigint_words`, so a `bigint` *can* cross --
-        // but it crosses as an arbitrary-precision value, and this compiler's
-        // is 128 bits. Answering `None` keeps the boundary honest until the two
-        // agree about what a `bigint` is.
-        HirType::BigInt => None,
+        // Outward is exact; inward checks the complete magnitude against the
+        // same signed 128-bit profile as compiled literal/arithmetic storage.
+        HirType::BigInt => Some(Cross::BigInt),
         // A `Map` or a `Set` crossing is a copy, not a handle: JavaScript's are
         // engine objects with their own storage, so there is no wrapping a
         // runtime table in one. Every entry would have to be built on the other
@@ -335,7 +335,7 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
             let inner = cross(value, layouts, classes)?;
             matches!(
                 inner,
-                Cross::Number | Cross::Bool | Cross::Str | Cross::Erased
+                Cross::Number | Cross::BigInt | Cross::Bool | Cross::Str | Cross::Erased
             )
             .then_some(Cross::Entries)
         }
@@ -636,6 +636,51 @@ static inline napi_status nts_from_napi_string(napi_env env, napi_value value,
     return status;
 }
 
+/* The compiled BigInt profile is signed 128-bit. Ask for the complete word
+ * count before reading either word, and reject an out-of-profile integer
+ * rather than truncate it. No signed overflow, including at -2^127. */
+static napi_status nts_from_napi_bigint(napi_env env, napi_value value,
+                                        __int128 *out) {
+    size_t count = 0;
+    napi_status status =
+        napi_get_value_bigint_words(env, value, NULL, &count, NULL);
+    if (status != napi_ok) return status;
+    if (count > 2) goto outside_profile;
+
+    uint64_t words[2] = {0, 0};
+    int negative = 0;
+    count = 2;
+    status = napi_get_value_bigint_words(env, value, &negative, &count, words);
+    if (status != napi_ok) return status;
+    unsigned __int128 magnitude =
+        ((unsigned __int128)words[1] << 64) | words[0];
+    const unsigned __int128 sign = (unsigned __int128)1 << 127;
+    if (magnitude > sign || (magnitude == sign && !negative)) {
+        goto outside_profile;
+    }
+    *out = negative && magnitude != 0
+        ? -(__int128)(magnitude - 1) - 1
+        : (__int128)magnitude;
+    return napi_ok;
+
+outside_profile:
+    napi_throw_range_error(env, "ERR_OUT_OF_RANGE",
+                           "bigint is outside the compiled signed 128-bit range");
+    return napi_pending_exception;
+}
+
+static napi_status nts_to_napi_bigint(napi_env env, __int128 value,
+                                      napi_value *out) {
+    unsigned __int128 magnitude = value < 0
+        ? (unsigned __int128)(-(value + 1)) + 1
+        : (unsigned __int128)value;
+    const uint64_t words[2] = {
+        (uint64_t)magnitude, (uint64_t)(magnitude >> 64)
+    };
+    const size_t count = words[1] != 0 ? 2 : (words[0] != 0 ? 1 : 0);
+    return napi_create_bigint_words(env, value < 0, count, words, out);
+}
+
 /* A value whose type the declaration did not fix, arriving from JavaScript.
  *
  * `unknown` is the one parameter type where node's runtime contract and
@@ -647,8 +692,9 @@ static inline napi_status nts_from_napi_string(napi_env env, napi_value value,
  * parameter `unknown` is what makes those guards live again, and this is what
  * lets one cross.
  *
- * Primitives only, and the refusal is loud. An object, a function, a symbol or
- * a bigint has no representation on this side, and answering `undefined` for
+ * Supported primitives only, and the refusal is loud. An object, a function
+ * or a symbol has no identity-preserving representation on this side. Answering
+ * `undefined` for
  * one would be a wrong value where the caller passed a real thing -- the
  * failure mode this compiler refuses everywhere else. `napi_pending_exception`
  * after a thrown `TypeError` is the same shape every other conversion failure
@@ -682,6 +728,15 @@ static napi_status nts_from_napi_value(napi_env env, napi_value value,
         status = nts_from_napi_string(env, value, &text);
         if (status == napi_ok) {
             *out = nts_value_of_reference((NtsHeader *)text, NTS_TAG_STRING);
+        }
+        return status;
+    }
+    case napi_bigint: {
+        __int128 number = 0;
+        status = nts_from_napi_bigint(env, value, &number);
+        if (status == napi_ok) {
+            *out = nts_value_of_reference(
+                (NtsHeader *)nts_bigint_box(number), NTS_TAG_BIGINT);
         }
         return status;
     }
@@ -732,6 +787,10 @@ static napi_status nts_to_napi_value(napi_env env, NtsValue value,
     case NTS_TAG_STRING:
         return nts_to_napi_string(env, (const NtsString *)nts_value_reference(value),
                                   out);
+    case NTS_TAG_BIGINT:
+        return nts_to_napi_bigint(
+            env, nts_bigint_unbox((const NtsBigIntBox *)nts_value_reference(value)),
+            out);
     default:
         break;
     }
@@ -1362,6 +1421,24 @@ __attribute__((weak)) void nts_napi_set_env(void *env) { (void)env; }
 
 static void nts_napi_raise(napi_env env, const NtsLanding *landing) {
     NtsValue thrown = nts_landing_thrown(landing);
+    /* A thrown primitive is the primitive itself, including BigInt. Use the
+     * ordinary erased-result conversion while its native owner is alive. */
+    switch (nts_value_tag(thrown)) {
+    case NTS_TAG_UNDEFINED:
+    case NTS_TAG_NULL:
+    case NTS_TAG_BOOLEAN:
+    case NTS_TAG_NUMBER:
+    case NTS_TAG_STRING:
+    case NTS_TAG_BIGINT: {
+        napi_value value = NULL;
+        if (nts_to_napi_value(env, thrown, &value) == napi_ok) {
+            napi_throw(env, value);
+        }
+        return;
+    }
+    default:
+        break;
+    }
     const NtsString *detail = nts_landing_detail(landing);
     const char *class_name = nts_thrown_class(thrown);
 
@@ -1843,12 +1920,7 @@ fn member_callback(
     out.push_str("nts_napi_cleanup:\n    nts_landing_pop(&nts_landing);\n");
     if release_managed {
         for (crossing, name) in crossings.iter().zip(args.iter().skip(1)) {
-            if matches!(crossing, Cross::Str | Cross::Elements(_)) {
-                let _ = writeln!(
-                    out,
-                    "    if ({name} != NULL) nts_release((NtsHeader *){name});"
-                );
-            }
+            out.push_str(&release_argument(crossing, name));
         }
     }
     out.push_str("    return out;\n}\n\n");
@@ -1931,12 +2003,7 @@ fn constructor_callback(
     );
     if release_managed {
         for (crossing, name) in ctor_crossings.iter().zip(args.iter().skip(1)) {
-            if matches!(crossing, Cross::Str | Cross::Elements(_)) {
-                let _ = writeln!(
-                    out,
-                    "    if ({name} != NULL) nts_release((NtsHeader *){name});"
-                );
-            }
+            out.push_str(&release_argument(crossing, name));
         }
     }
     out.push_str("    return out;\n}\n\n");
@@ -2400,12 +2467,7 @@ fn wrapper(
     out.push_str("nts_napi_cleanup:\n    nts_landing_pop(&nts_landing);\n");
     if release_managed {
         for (crossing, name) in crossings.iter().zip(&args) {
-            if matches!(crossing, Cross::Str | Cross::Elements(_)) {
-                let _ = writeln!(
-                    out,
-                    "    if ({name} != NULL) nts_release((NtsHeader *){name});"
-                );
-            }
+            out.push_str(&release_argument(crossing, name));
         }
     }
     out.push_str("    return out;\n}\n\n");
@@ -2466,6 +2528,7 @@ fn absent_argument(crossing: &Cross, name: &str) -> String {
         | Cross::Entries
         | Cross::Object(_) => format!("{name} = NULL;"),
         Cross::Number => format!("{name} = 0.0;"),
+        Cross::BigInt => format!("{name} = 0;"),
         Cross::Bool => format!("{name} = false;"),
         // The one crossing that can *say* absent rather than stand in for it.
         Cross::Erased => format!("{name} = nts_value_of_undefined();"),
@@ -2495,11 +2558,31 @@ fn forget_consumed_arguments(
         let Ok(slot) = u32::try_from(index) else {
             continue;
         };
-        if consumed_parameters.contains(&slot) && matches!(crossing, Cross::Str) {
-            let _ = writeln!(out, "    {name} = NULL;");
+        if consumed_parameters.contains(&slot) {
+            match crossing {
+                Cross::Erased => {
+                    let _ = writeln!(out, "    {name} = nts_value_of_undefined();");
+                }
+                Cross::Str | Cross::Elements(_) => {
+                    let _ = writeln!(out, "    {name} = NULL;");
+                }
+                _ => {}
+            }
         }
     }
     out
+}
+
+/// Inbound strings, arrays and erased reference payloads own their allocation
+/// until the compiled callee consumes it. All wrapper kinds share the cleanup.
+fn release_argument(crossing: &Cross, name: &str) -> String {
+    match crossing {
+        Cross::Erased => format!("    nts_value_release({name});\n"),
+        Cross::Str | Cross::Elements(_) => {
+            format!("    if ({name} != NULL) nts_release((NtsHeader *){name});\n")
+        }
+        _ => String::new(),
+    }
 }
 
 /// Declare every argument before converting any of them, so a conversion
@@ -2515,6 +2598,7 @@ fn declare_argument(
         // Undefined until read, which is also what an omitted optional argument
         // leaves it as -- so the two paths need no separate initialisation.
         Cross::Erased => format!("    NtsValue {name} = nts_value_of_undefined();\n"),
+        Cross::BigInt => format!("    __int128 {name} = 0;\n"),
         // Outward only, so this is never read -- declared for the same reason
         // every other crossing is, and never filled.
         Cross::Entries => format!("    NtsMap *{name} = NULL;\n"),
@@ -2545,6 +2629,9 @@ fn unmarshal(
     match crossing {
         Cross::Erased => format!(
             "    if (!nts_napi_expect(env, nts_from_napi_value(env, argv[{index}], &{name}), \"could not read an argument of unknown type\")) goto nts_napi_cleanup;\n"
+        ),
+        Cross::BigInt => format!(
+            "    if (!nts_napi_expect(env, nts_from_napi_bigint(env, argv[{index}], &{name}), \"expected a bigint argument\")) goto nts_napi_cleanup;\n"
         ),
         Cross::Number if matches!(ty, HirType::Float { bits: 64 }) => format!(
             "    if (napi_get_value_double(env, argv[{index}], &{name}) != napi_ok) {{\n        nts_napi_argument_type_error(env, \"{declared}\", argv[{index}], \"number\");\n        goto nts_napi_cleanup;\n    }}\n"
@@ -2701,6 +2788,9 @@ fn marshal(
         Cross::Number => format!(
             "    {} result = {call};\n{after_call}    if (!nts_napi_check(env, napi_create_double(env, (double)result, &out), \"could not create a number\")) goto nts_napi_cleanup;\n",
             c_type(return_type, layouts)
+        ),
+        Cross::BigInt => format!(
+            "    __int128 result = {call};\n{after_call}    if (!nts_napi_check(env, nts_to_napi_bigint(env, result, &out), \"could not create a bigint\")) goto nts_napi_cleanup;\n"
         ),
         Cross::Str => {
             let mut text = format!(
@@ -3161,6 +3251,7 @@ fn namespace_value(
     let make = match crossing {
         Cross::Bool => format!("napi_get_boolean(env, {symbol}, &value)"),
         Cross::Number => format!("napi_create_double(env, (double){symbol}, &value)"),
+        Cross::BigInt => format!("nts_to_napi_bigint(env, {symbol}, &value)"),
         Cross::Str => format!("nts_to_napi_string(env, {symbol}, &value)"),
         Cross::Bytes => format!("nts_to_napi_view(env, {symbol}, &value)"),
         Cross::Erased => format!("nts_to_napi_value(env, {symbol}, &value)"),
@@ -3703,6 +3794,7 @@ fn conversion(crossing: &Cross, symbol: &str, layouts: &[hir::Layout]) -> Option
     Some(match crossing {
         Cross::Bool => format!("napi_get_boolean(env, {symbol}, &value)"),
         Cross::Number => format!("napi_create_double(env, (double){symbol}, &value)"),
+        Cross::BigInt => format!("nts_to_napi_bigint(env, {symbol}, &value)"),
         Cross::Str => format!("nts_to_napi_string(env, {symbol}, &value)"),
         Cross::Elements(inner) => {
             format!("{}(env, {symbol}, &value)", elements_helper(inner, layouts))

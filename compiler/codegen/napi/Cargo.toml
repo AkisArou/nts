@@ -11,5 +11,9 @@ nts-core.workspace = true
 nts-codegen-c.workspace = true
 rustc-hash.workspace = true
 
+[dev-dependencies]
+nts-diagnostics.workspace = true
+nts-semantic-schema.workspace = true
+
 [lints]
 workspace = true

@@ -62,6 +62,15 @@ export function mapKeys(n: number): number {
   return map.size * 10 + (map.get(held(input(n))) ?? -1);
 }
 
+export function caughtPrimitive(n: number): string {
+  const value: unknown = held(input(n));
+  try {
+    throw value;
+  } catch (caught) {
+    return typeof caught === "bigint" ? `bigint:${String(caught)}` : "other";
+  }
+}
+
 function identity<T>(value: T): T { return value; }
 const bigintIdentity: (value: bigint) => bigint = identity;
 const literalIdentity: (value: 9007199254740993n) => 9007199254740993n = identity;
