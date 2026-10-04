@@ -10,3 +10,4 @@
 - Auto-JNI for some portion of code that has no performance penalty for many data exchanges? Same spirit like webworkers work. So some portion can be in native code, and pass some results automatically to jvm. What about debuggability? Are we being smart in a bad way?
 - LSP go to definition for a C shows the header definition, Java shows the java implementation
 - Playground with code + compiler output
+- Support matrix in website with filters (unsupported etc?)
