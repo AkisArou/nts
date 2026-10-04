@@ -3,6 +3,33 @@
 #include "nts_runtime.h"
 
 bool nts_icu_versions_match(void);
+NtsHeader *nts_icu_date_open(NtsString *locale, NtsString *pattern, NtsString *time_zone);
+NtsString *nts_icu_date_format(NtsHeader *handle, double milliseconds, bool fields);
+NtsString *nts_icu_date_range(NtsHeader *handle, double start, double end, bool fields);
+double nts_icu_date_field_count(NtsHeader *handle);
+double nts_icu_date_field(NtsHeader *handle, double index, double component);
+NtsHeader *nts_icu_date_patterns_open(NtsString *locale);
+NtsString *nts_icu_date_best_pattern(NtsHeader *handle, NtsString *skeleton);
+NtsString *nts_icu_date_style_pattern(NtsHeader *handle, double date_style, double time_style);
+NtsArray *nts_icu_date_patterns(NtsHeader *handle);
+double nts_icu_collation_defaults(NtsString *locale);
+NtsHeader *nts_icu_collator_open(NtsString *locale, double sensitivity, bool punctuation, bool numeric, double case_first);
+double nts_icu_collator_compare(NtsHeader *handle, NtsString *one, NtsString *two);
+NtsHeader *nts_icu_locale_open(void);
+NtsString *nts_icu_locale_transform(NtsString *tag, double operation);
+NtsString *nts_icu_locale_default(void);
+double nts_icu_locale_count(NtsHeader *handle);
+NtsString *nts_icu_locale_available(NtsHeader *handle, double index);
+NtsString *nts_icu_locale_best_fit(NtsHeader *handle, NtsString *tag);
+NtsString *nts_icu_locale_numbering(NtsString *tag);
+bool nts_icu_numbering_supported(NtsString *name);
+NtsString *nts_icu_locale_type(NtsString *key, NtsString *value);
+NtsArray *nts_icu_locale_values(NtsString *tag, double kind);
+NtsString *nts_icu_locale_hour_cycle(NtsString *tag);
+double nts_icu_script_direction(NtsString *script);
+double nts_icu_locale_week(NtsString *region);
+NtsString *nts_icu_timezone_canonical(NtsString *name);
+NtsString *nts_icu_timezone_default(void);
 NtsHeader *nts_icu_timezone_open(NtsString *id);
 NtsString *nts_icu_timezone_id(NtsHeader *handle);
 double nts_icu_timezone_offset(NtsHeader *handle, double epoch_ms);
@@ -12,6 +39,10 @@ NtsHeader *nts_icu_number_open(NtsString *locale, NtsString *skeleton);
 double nts_icu_currency_digits(NtsString *currency);
 NtsString *nts_icu_number_format(NtsHeader *handle, double value, bool fields);
 NtsString *nts_icu_number_decimal(NtsHeader *handle, NtsString *value, bool fields);
+NtsHeader *nts_icu_number_range_open(NtsString *locale, NtsString *start_skeleton, NtsString *end_skeleton);
+NtsString *nts_icu_number_range_format(NtsHeader *handle, NtsString *start, NtsString *end, bool fields);
+double nts_icu_number_range_field_count(NtsHeader *handle);
+double nts_icu_number_range_field(NtsHeader *handle, double index, double component);
 double nts_icu_number_field_count(NtsHeader *handle);
 double nts_icu_number_field(NtsHeader *handle, double index, double component);
 

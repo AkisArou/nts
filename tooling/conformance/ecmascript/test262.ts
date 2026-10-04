@@ -12,6 +12,7 @@ import { dirname, resolve } from "node:path";
 import vm from "node:vm";
 import { stripTypeScriptTypes } from "node:module";
 import { Parser } from "acorn";
+import { icuHost } from "./icu-host.ts";
 
 // Each candidate module must execute in the test's realm. Otherwise captures
 // have Node's Array.prototype and host-thrown TypeErrors have the wrong brand.
@@ -34,15 +35,23 @@ function option(name: string, fallback: string): string {
 const under = option("--under", "test/built-ins/RegExp");
 const profile = option(
   "--profile",
-  under.includes("/Temporal") ? "temporal" : under.includes("/Date") ? "date" : "regexp",
+  under.includes("/intl402/")
+    ? "intl"
+    : under.includes("/Temporal")
+      ? "temporal"
+      : under.includes("/Date")
+        ? "date"
+        : "regexp",
 );
-if (profile !== "date" && profile !== "regexp" && profile !== "temporal")
+if (profile !== "date" && profile !== "regexp" && profile !== "temporal" && profile !== "intl")
   throw new Error("Unknown candidate profile: " + profile);
 const filter = option("--filter", "");
 const limit = Number(option("--limit", "0"));
 const rowsPath = option("--rows", "target/" + profile + "-test262.jsonl");
 const sabotage = argv.includes("--sabotage");
 const timeout = Number(option("--timeout", "30000"));
+const intlProvider = profile === "intl" ? icuHost(root) : undefined;
+if (intlProvider) process.on("exit", () => intlProvider.close());
 const sources = new Map<string, string>();
 async function candidate(context: vm.Context): Promise<vm.Module["namespace"]> {
   const modules = new Map<string, vm.SourceTextModule>();
@@ -63,6 +72,10 @@ async function candidate(context: vm.Context): Promise<vm.Module["namespace"]> {
     moduleFor(resolve(dirname(importer.identifier), specifier)),
   );
   await builtins.evaluate({ timeout });
+  if (profile === "intl")
+    context.__temporal = moduleFor(
+      resolve(root, "runtime/ecmascript/src/temporal/builtins.ts"),
+    ).namespace;
   return builtins.namespace;
 }
 
@@ -176,9 +189,43 @@ for (const selected of selection) {
     console,
     print: () => {},
     __clock: () => Date.now(),
+    __intlData: intlProvider?.data,
+    __intlNumberOpen: intlProvider?.openNumber,
+    __intlCollatorOpen: intlProvider?.openCollator,
+    __intlPatternOpen: intlProvider?.openPatterns,
+    __intlDateOpen: intlProvider?.openDate,
   });
   context.__impl = await candidate(context);
-  if (profile === "temporal") {
+  if (profile === "intl") {
+    intlProvider!.reset();
+    new vm.Script(`
+      (() => {
+      const resolver = new __impl.LocaleResolver(__intlData);
+      const timeZones = new __impl.TimeZoneRegistry(__intlData);
+      class NumberFormat extends __impl.NtsNumberFormat {
+        constructor(locales, options) { super(resolver, __intlNumberOpen, locales, options); }
+        static supportedLocalesOf(locales, options) { return __impl.supportedLocalesOf(resolver, locales, options); }
+      }
+      class Locale extends __impl.NtsLocale {
+        constructor(tag, options) { super(__intlData, tag, options); }
+      }
+      class Collator extends __impl.NtsCollator {
+        constructor(locales, options) { super(resolver, __intlCollatorOpen, locales, options); }
+        static supportedLocalesOf(locales, options) { return __impl.supportedLocalesOf(resolver, locales, options); }
+      }
+      class DateTimeFormat extends __impl.NtsDateTimeFormat {
+        constructor(locales, options) { super(resolver, timeZones, __intlPatternOpen, __intlDateOpen, __clock, locales, options); }
+        static supportedLocalesOf(locales, options) { return __impl.supportedLocalesOf(resolver, locales, options); }
+      }
+      globalThis.Intl = {
+        NumberFormat, Locale, Collator, DateTimeFormat,
+        getCanonicalLocales(locales) { return __impl.getCanonicalLocales(__intlData, locales); },
+      };
+      globalThis.Temporal = __temporal;
+      if (__sabotage) NumberFormat.prototype.formatToParts = function() { return []; };
+      })();
+    `).runInContext(context, { timeout });
+  } else if (profile === "temporal") {
     new vm.Script(`
       Object.defineProperty(globalThis, "Temporal", { value: __impl, writable: true, configurable: true });
       if (__sabotage) Temporal.Instant.prototype.equals = function equals() { return false; };
@@ -323,6 +370,7 @@ for (const selected of selection) {
 mkdirSync(dirname(resolve(root, rowsPath)), { recursive: true });
 writeFileSync(resolve(root, rowsPath), rows.map((row) => JSON.stringify(row)).join("\n") + "\n");
 const counts: Record<string, number> = {};
+intlProvider?.close();
 for (const row of rows) counts[row.verdict] = (counts[row.verdict] ?? 0) + 1;
 console.log(
   JSON.stringify({

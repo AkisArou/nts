@@ -3,10 +3,19 @@ import {
   roundingIncrement,
   roundingMode,
   validateIncrement,
+  requireOptions,
+  secondsStringPrecision,
 } from "./options.ts";
-import { roundNanoseconds } from "./exact.ts";
+import { roundNanoseconds, checkTimeDuration, divideExact, floorDivide } from "./exact.ts";
 import type { RoundingMode } from "./exact.ts";
-import type { WithResult } from "./contract.ts";
+import type { WithResult } from "../contract.ts";
+import { PlainDate } from "./plain-date.ts";
+import { checkDateDay } from "./iso-date.ts";
+import {
+  relativePlainDate,
+  relativeISODuration,
+  relativeISOCalendarTotal,
+} from "./relative-iso.ts";
 import { pad } from "../date/format.ts";
 import {
   NS_PER_DAY,
@@ -16,8 +25,6 @@ import {
   NS_PER_MINUTE,
   NS_PER_SECOND,
 } from "./exact.ts";
-
-const TIME_DURATION_LIMIT = 9007199254740992n * NS_PER_SECOND;
 
 // One object owns the validated fields and their exact normalized time. The
 // cached time is derived from the public binary64 integers, never from a more
@@ -83,10 +90,8 @@ export class Duration implements WithResult<
       BigInt(this.#milliseconds) * NS_PER_MILLISECOND +
       BigInt(this.#microseconds) * NS_PER_MICROSECOND +
       BigInt(this.#nanoseconds);
-    if (time <= -TIME_DURATION_LIMIT || time >= TIME_DURATION_LIMIT)
-      throw new RangeError("Time duration outside supported range");
     this.#sign = sign;
-    this.#time = time;
+    this.#time = checkTimeDuration(time);
   }
   static from(value: Temporal.DurationLike): Duration {
     if (!(value instanceof Duration)) return toDuration(value);
@@ -110,6 +115,9 @@ export class Duration implements WithResult<
   ): number {
     const a = toDuration(one);
     const b = toDuration(two);
+    requireOptions(opts);
+    const relativeTo = opts.relativeTo;
+    const relative = relativePlainDate(relativeTo);
     if (
       a.years === b.years &&
       a.months === b.months &&
@@ -123,8 +131,14 @@ export class Duration implements WithResult<
       a.nanoseconds === b.nanoseconds
     )
       return 0;
-    requireFixedDays(a, opts.relativeTo);
-    requireFixedDays(b, opts.relativeTo);
+    if (relative !== undefined) {
+      const day = PlainDate.epochDay(relative);
+      const first = relativeISODuration(day, a.#years, a.#months, a.#weeks, a.#time);
+      const last = relativeISODuration(day, b.#years, b.#months, b.#weeks, b.#time);
+      return first < last ? -1 : first > last ? 1 : 0;
+    }
+    requireFixedDays(a);
+    requireFixedDays(b);
     return a.#time < b.#time ? -1 : a.#time > b.#time ? 1 : 0;
   }
   get years(): number {
@@ -216,10 +230,19 @@ export class Duration implements WithResult<
     return this.scaled(this.#sign < 0 ? -1 : 1);
   }
   add(other: Temporal.DurationLike): Duration {
-    return addDurations(this, toDuration(other), 1);
+    return this.#add(other, 1);
   }
   subtract(other: Temporal.DurationLike): Duration {
-    return addDurations(this, toDuration(other), -1);
+    return this.#add(other, -1);
+  }
+  #add(value: Temporal.DurationLike, sign: number): Duration {
+    const other = toDuration(value);
+    requireFixedDays(this);
+    requireFixedDays(other);
+    return balanceDuration(
+      this.#time + other.#time * BigInt(sign),
+      Math.min(this.largestUnit(), other.largestUnit()),
+    );
   }
 
   round(
@@ -227,16 +250,34 @@ export class Duration implements WithResult<
       | Temporal.PluralizeUnit<"day" | Temporal.TimeUnit>
       | Readonly<Temporal.DurationRoundingOptions>,
   ): Duration {
-    if (typeof value === "string") return roundDuration(this, value, "auto", 1, "halfExpand");
-    if (value.largestUnit === undefined && value.smallestUnit === undefined)
+    const time = this.#time;
+    const existingLargest = this.largestUnit();
+    if (typeof value === "string") {
+      const smallest = durationUnitIndex(value);
+      requireFixedDays(this);
+      return roundDuration(time, smallest, Math.min(existingLargest, smallest), 1, "halfExpand");
+    }
+    requireOptions(value);
+    const rawLargest = value.largestUnit;
+    if (typeof rawLargest === "symbol")
+      throw new TypeError("Temporal string options reject Symbols");
+    const largestText = rawLargest === undefined ? "auto" : String(rawLargest);
+    const largest = largestText === "auto" ? -1 : durationUnitIndex(largestText);
+    const relativeTo = value.relativeTo;
+    const increment = roundingIncrement(value.roundingIncrement);
+    const rawMode = value.roundingMode;
+    const mode = roundingMode(rawMode === undefined ? "halfExpand" : rawMode);
+    const rawSmallest = value.smallestUnit;
+    const smallest = rawSmallest === undefined ? 9 : durationUnitIndex(rawSmallest);
+    if (rawLargest === undefined && rawSmallest === undefined)
       throw new RangeError("A rounding unit is required");
-    requireFixedDays(this, value.relativeTo);
+    requireFixedDays(this, relativeTo);
     return roundDuration(
-      this,
-      value.smallestUnit ?? "nanosecond",
-      value.largestUnit ?? "auto",
-      roundingIncrement(value.roundingIncrement ?? 1),
-      roundingMode(value.roundingMode ?? "halfExpand"),
+      time,
+      smallest,
+      largest < 0 ? Math.min(existingLargest, smallest) : largest,
+      increment,
+      mode,
     );
   }
   total(
@@ -244,16 +285,39 @@ export class Duration implements WithResult<
       | Temporal.PluralizeUnit<"day" | Temporal.TimeUnit>
       | Readonly<Temporal.DurationTotalOptions>,
   ): number {
-    const unit = typeof value === "string" ? value : value.unit;
-    requireFixedDays(this, typeof value === "string" ? undefined : value.relativeTo);
-    return durationTotal(this.#time, durationUnitIndex(unit));
+    const time = this.#time;
+    if (typeof value === "string") {
+      const unit = durationUnitIndex(value);
+      requireFixedDays(this);
+      return durationTotal(time, unit);
+    }
+    requireOptions(value);
+    const relativeTo = value.relativeTo;
+    const relative = relativePlainDate(relativeTo);
+    const rawUnit = value.unit;
+    if (rawUnit === undefined) throw new RangeError("A total unit is required");
+    const unit = durationUnitIndex(rawUnit);
+    if (relative !== undefined) {
+      const day = PlainDate.epochDay(relative);
+      const nanoseconds = relativeISODuration(day, this.#years, this.#months, this.#weeks, time);
+      checkDateDay(day + Number(floorDivide(nanoseconds, NS_PER_DAY)));
+      return unit < 3
+        ? relativeISOCalendarTotal(day, nanoseconds, unit)
+        : durationTotal(nanoseconds, unit);
+    }
+    requireFixedDays(this);
+    return durationTotal(time, unit);
   }
   toString(opts: Readonly<Temporal.DurationToStringOptions> = {}): string {
-    let digits = fractionalSecondDigits(opts.fractionalSecondDigits ?? "auto");
-    const mode = roundingMode(opts.roundingMode ?? "trunc");
-    if (opts.smallestUnit !== undefined) digits = (timeUnitIndex(opts.smallestUnit) - 6) * 3;
-    if (digits < 0) return formatDuration(this);
-    const rounded = roundNanoseconds(this.#time, BigInt(10 ** (9 - digits)), mode);
+    const time = this.#time;
+    requireOptions(opts);
+    const digits = fractionalSecondDigits(opts.fractionalSecondDigits);
+    const mode = roundingMode(opts.roundingMode);
+    const precision = secondsStringPrecision(opts.smallestUnit, digits);
+    if (precision === -2)
+      throw new RangeError("Duration strings require second precision or smaller");
+    if (precision < 0 || precision === 9) return formatDuration(this, precision);
+    const rounded = roundNanoseconds(time, BigInt(10 ** (9 - precision)), mode);
     const balanced = balanceDuration(rounded, Math.min(6, Math.max(3, this.largestUnit())));
     return formatDuration(
       new Duration(
@@ -268,7 +332,7 @@ export class Duration implements WithResult<
         balanced.microseconds,
         balanced.nanoseconds,
       ),
-      digits,
+      precision,
     );
   }
   toJSON(): string {
@@ -280,9 +344,12 @@ export class Duration implements WithResult<
 }
 
 function integer(value: number): number {
-  if (!Number.isFinite(value) || !Number.isInteger(value))
+  if (typeof value === "bigint" || typeof value === "symbol")
+    throw new TypeError("Duration numeric fields reject BigInts and Symbols");
+  const number = Number(value);
+  if (!Number.isFinite(number) || !Number.isInteger(number))
     throw new RangeError("Duration fields must be integral");
-  return value === 0 ? 0 : value;
+  return number === 0 ? 0 : number;
 }
 function durationFields(
   value: Readonly<Temporal.DurationLikeObject>,
@@ -351,17 +418,9 @@ function requireFixedDays(
   if (relativeTo !== undefined || value.years !== 0 || value.months !== 0 || value.weeks !== 0)
     throw new RangeError("Calendar duration arithmetic requires the relative-date adapter");
 }
-function addDurations(one: Duration, two: Duration, sign: number): Duration {
-  requireFixedDays(one);
-  requireFixedDays(two);
-  return balanceDuration(
-    one.timeNanoseconds() + two.timeNanoseconds() * BigInt(sign),
-    Math.min(one.largestUnit(), two.largestUnit()),
-  );
-}
-export function durationUnitIndex(
-  unit: Temporal.PluralizeUnit<Temporal.DateUnit | Temporal.TimeUnit>,
-): number {
+export function durationUnitIndex(unit: string): number {
+  if (typeof unit === "symbol") throw new TypeError("Temporal string options reject Symbols");
+  unit = String(unit);
   if (unit === "year" || unit === "years") return 0;
   if (unit === "month" || unit === "months") return 1;
   if (unit === "week" || unit === "weeks") return 2;
@@ -369,24 +428,18 @@ export function durationUnitIndex(
   return timeUnitIndex(unit);
 }
 function roundDuration(
-  value: Duration,
-  smallestUnit: Temporal.PluralizeUnit<Temporal.DateUnit | Temporal.TimeUnit>,
-  largestUnit: Temporal.PluralizeUnit<Temporal.DateUnit | Temporal.TimeUnit> | "auto",
+  time: bigint,
+  smallest: number,
+  largest: number,
   increment: number,
   mode: RoundingMode,
 ): Duration {
-  requireFixedDays(value);
-  const smallest = durationUnitIndex(smallestUnit);
-  const largest =
-    largestUnit === "auto"
-      ? Math.min(value.largestUnit(), smallest)
-      : durationUnitIndex(largestUnit);
   if (largest > smallest) throw new RangeError("Invalid duration unit order");
   if (largest < 3 || smallest < 3)
     throw new RangeError("Calendar rounding requires a relative date");
   validateIncrement(smallest, increment);
   return balanceDuration(
-    roundNanoseconds(value.timeNanoseconds(), unitNanoseconds(smallest) * BigInt(increment), mode),
+    roundNanoseconds(time, unitNanoseconds(smallest) * BigInt(increment), mode),
     largest,
   );
 }
@@ -395,36 +448,12 @@ function roundDuration(
 // whole/fraction values or converting nanoseconds to Number first double-rounds
 // some totals. All scaled intermediates here need at most ~100 bits.
 export function durationTotal(nanoseconds: bigint, unit: number): number {
-  const divisor = unitNanoseconds(unit);
-  const negative = nanoseconds < 0n;
-  const magnitude = negative ? -nanoseconds : nanoseconds;
-  if (magnitude <= 9007199254740991n) return Number(nanoseconds) / Number(divisor);
-  let exponent = 0;
-  if (magnitude >= divisor) {
-    let scaled = divisor;
-    while (scaled * 2n <= magnitude) {
-      scaled *= 2n;
-      exponent++;
-    }
-  } else {
-    let scaled = magnitude;
-    while (scaled < divisor) {
-      scaled *= 2n;
-      exponent--;
-    }
-  }
-  const shift = 52 - exponent;
-  const numerator = shift >= 0 ? magnitude << BigInt(shift) : magnitude;
-  const denominator = shift >= 0 ? divisor : divisor << BigInt(-shift);
-  let significand = numerator / denominator;
-  const remainder = numerator % denominator;
-  if (remainder * 2n > denominator || (remainder * 2n === denominator && significand % 2n !== 0n))
-    significand++;
-  const result = Number(significand) * 2 ** (exponent - 52);
-  return negative ? -result : result;
+  return divideExact(nanoseconds, unitNanoseconds(unit));
 }
 
 export function timeUnitIndex(unit: string): number {
+  if (typeof unit === "symbol") throw new TypeError("Temporal string options reject Symbols");
+  unit = String(unit);
   if (unit === "hour" || unit === "hours") return 4;
   if (unit === "minute" || unit === "minutes") return 5;
   if (unit === "second" || unit === "seconds") return 6;
@@ -447,7 +476,7 @@ export function unitNanoseconds(index: number): bigint {
 
 // Divide in bigint before converting each result field to Number. This avoids
 // rounding the entire duration before its nanosecond remainder is computed.
-export function balanceDuration(value: bigint, largestUnit: number): Duration {
+export function balanceDuration(value: bigint, largestUnit: number, years = 0, months = 0, weeks = 0): Duration {
   let remainder = value;
   let days = 0;
   let hours = 0;
@@ -480,9 +509,9 @@ export function balanceDuration(value: bigint, largestUnit: number): Duration {
     remainder %= NS_PER_MICROSECOND;
   }
   return new Duration(
-    0,
-    0,
-    0,
+    years,
+    months,
+    weeks,
     days,
     hours,
     minutes,

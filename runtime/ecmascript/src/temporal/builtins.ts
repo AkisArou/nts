@@ -12,14 +12,24 @@ import {
   roundingIncrement,
   roundingMode,
   validateIncrement,
+  requireOptions,
+  secondsStringPrecision,
 } from "./options.ts";
 import type { NtsDate } from "../date/builtins.ts";
-import type { WithResult } from "./contract.ts";
+import type { WithResult } from "../contract.ts";
 
 export { Duration } from "./duration.ts";
+export { PlainTime } from "./plain-time.ts";
+export { PlainDate } from "./plain-date.ts";
 
 function toInstant(value: Temporal.InstantLike | Instant): bigint {
-  return typeof value === "string" ? parseInstant(value) : value.epochNanoseconds;
+  if (typeof value === "string") return parseInstant(value);
+  if (value === null || typeof value !== "object")
+    throw new TypeError("Instant requires an instant, zoned date-time or string");
+  const epoch = value.epochNanoseconds;
+  if (typeof epoch !== "bigint")
+    throw new TypeError("Instant requires an instant or zoned date-time");
+  return checkInstant(epoch);
 }
 function difference(
   epoch: bigint,
@@ -28,10 +38,15 @@ function difference(
   since: boolean,
 ): Duration {
   const target = toInstant(other);
-  const largestText = opts.largestUnit ?? "auto";
-  const increment = roundingIncrement(opts.roundingIncrement ?? 1);
-  const mode = roundingMode(opts.roundingMode ?? "trunc");
-  const smallest = timeUnitIndex(opts.smallestUnit ?? "nanosecond");
+  requireOptions(opts);
+  const largestOption = opts.largestUnit;
+  if (typeof largestOption === "symbol")
+    throw new TypeError("Temporal string options reject Symbols");
+  const largestText = largestOption === undefined ? "auto" : String(largestOption);
+  const increment = roundingIncrement(opts.roundingIncrement);
+  const mode = roundingMode(opts.roundingMode);
+  const smallestOption = opts.smallestUnit;
+  const smallest = timeUnitIndex(smallestOption === undefined ? "nanosecond" : smallestOption);
   const largest = largestText === "auto" ? Math.min(6, smallest) : timeUnitIndex(largestText);
   if (largest > smallest) throw new RangeError("Invalid instant difference unit order");
   validateIncrement(smallest, increment);
@@ -53,12 +68,17 @@ export class Instant implements WithResult<
 > {
   readonly #epochNanoseconds: bigint;
   constructor(epochNanoseconds: bigint) {
+    if (typeof epochNanoseconds !== "bigint")
+      throw new TypeError("Instant epoch nanoseconds must be a BigInt");
     this.#epochNanoseconds = checkInstant(epochNanoseconds);
   }
   static from(value: Temporal.InstantLike | Instant): Instant {
     return new Instant(toInstant(value));
   }
   static fromEpochMilliseconds(milliseconds: number): Instant {
+    if (typeof milliseconds === "bigint" || typeof milliseconds === "symbol")
+      throw new TypeError("Epoch milliseconds must be a Number");
+    milliseconds = Number(milliseconds);
     if (!Number.isInteger(milliseconds) || Math.abs(milliseconds) > 8640000000000000)
       throw new RangeError("Epoch milliseconds must be integral and within range");
     return new Instant(BigInt(milliseconds) * NS_PER_MILLISECOND);
@@ -73,6 +93,10 @@ export class Instant implements WithResult<
   }
   get epochMilliseconds(): number {
     return epochMilliseconds(this.#epochNanoseconds);
+  }
+  // Internal-slot access for Intl, independent of overridable public getters.
+  static epochMilliseconds(value: Instant): number {
+    return epochMilliseconds(value.#epochNanoseconds);
   }
   get epochNanoseconds(): bigint {
     return this.#epochNanoseconds;
@@ -105,38 +129,26 @@ export class Instant implements WithResult<
   ): Instant {
     if (typeof value === "string")
       return new Instant(roundInstant(this.#epochNanoseconds, value, 1, "halfExpand"));
-    const increment = roundingIncrement(value.roundingIncrement ?? 1);
-    const mode = roundingMode(value.roundingMode ?? "halfExpand");
+    requireOptions(value);
+    const increment = roundingIncrement(value.roundingIncrement);
+    const modeOption = value.roundingMode;
+    const mode = roundingMode(modeOption === undefined ? "halfExpand" : modeOption);
     const unit = value.smallestUnit;
     if (unit === undefined) throw new RangeError("smallestUnit required");
     return new Instant(roundInstant(this.#epochNanoseconds, unit, increment, mode));
   }
   toString(opts: Readonly<Temporal.InstantToStringOptions> = {}): string {
-    let digits = fractionalSecondDigits(opts.fractionalSecondDigits ?? "auto");
-    const mode = roundingMode(opts.roundingMode ?? "trunc");
-    const precision = opts.smallestUnit;
+    requireOptions(opts);
+    const digits = fractionalSecondDigits(opts.fractionalSecondDigits);
+    const mode = roundingMode(opts.roundingMode);
+    const precision = secondsStringPrecision(opts.smallestUnit, digits);
     if (opts.timeZone !== undefined)
       throw new RangeError("Instant time-zone formatting requires the zone adapter");
-    let unit: Temporal.PluralizeUnit<Temporal.TimeUnit> = "nanosecond";
-    let increment = 1;
-    const minutes = precision === "minute" || precision === "minutes";
-    if (precision !== undefined) {
-      unit = precision;
-      digits = minutes ? 0 : (timeUnitIndex(precision) - 6) * 3;
-    } else if (digits >= 0) {
-      unit =
-        digits === 0
-          ? "second"
-          : digits <= 3
-            ? "millisecond"
-            : digits <= 6
-              ? "microsecond"
-              : "nanosecond";
-      increment = digits === 0 ? 1 : 10 ** ((digits <= 3 ? 3 : digits <= 6 ? 6 : 9) - digits);
-    }
+    const minutes = precision === -2;
+    const increment = minutes ? 60000000000n : BigInt(precision < 0 ? 1 : 10 ** (9 - precision));
     const result = formatInstant(
-      roundInstant(this.#epochNanoseconds, unit, increment, mode),
-      digits,
+      roundInstant(this.#epochNanoseconds, "nanosecond", Number(increment), mode),
+      minutes ? 0 : precision,
     );
     return minutes ? result.slice(0, -4) + "Z" : result;
   }

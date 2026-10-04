@@ -1,9 +1,24 @@
 import { IcuTimeZone } from "../../../../../runtime/ecmascript/providers/icu/c/provider.ts";
+import { IcuLocaleData } from "../../../../../runtime/ecmascript/providers/icu/c/locale.ts";
+import { IcuCollator } from "../../../../../runtime/ecmascript/providers/icu/c/collator.ts";
+import { IcuDatePatterns } from "../../../../../runtime/ecmascript/providers/icu/c/date-pattern.ts";
+import { IcuDateFormatter } from "../../../../../runtime/ecmascript/providers/icu/c/date-time.ts";
 import {
   IcuNumberData,
   IcuNumberFormatter,
 } from "../../../../../runtime/ecmascript/providers/icu/c/number.ts";
-import { digest, numberDigest, numberOptionsDigest, formatBenchmark } from "./common.ts";
+import {
+  digest,
+  numberDigest,
+  numberOptionsDigest,
+  numberRangeDigest,
+  localeDataDigest,
+  collatorDigest,
+  datePatternDigest,
+  dateTextDigest,
+  timeZoneDataDigest,
+  formatBenchmark,
+} from "./common.ts";
 export function main(): string {
   return (
     digest(new IcuTimeZone("America/New_York")) +
@@ -15,7 +30,26 @@ export function main(): string {
     numberOptionsDigest(
       new IcuNumberData(),
       (skeleton) => new IcuNumberFormatter("en-US", skeleton),
-    )
+    ) +
+    "\n" +
+    numberRangeDigest(
+      new IcuNumberData(),
+      (skeleton, negativeSkeleton) => new IcuNumberFormatter("en-US", skeleton, negativeSkeleton),
+    ) +
+    "\n" +
+    localeDataDigest(new IcuLocaleData()) +
+    "\n" +
+    collatorDigest(
+      new IcuLocaleData(),
+      (locale, sensitivity, punctuation, numeric, caseFirst) =>
+        new IcuCollator(locale, sensitivity, punctuation, numeric, caseFirst),
+    ) +
+    "\n" +
+    datePatternDigest(new IcuDatePatterns("en-US")) +
+    "\n" +
+    dateTextDigest((locale, pattern, timeZone) => new IcuDateFormatter(locale, pattern, timeZone)) +
+    "\n" +
+    timeZoneDataDigest(new IcuLocaleData())
   );
 }
 export function benchmark(iterations: number): number {

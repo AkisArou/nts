@@ -131,7 +131,7 @@ static void close_number(void *state, size_t data) {
 NtsHeader *nts_icu_number_open(NtsString *locale, NtsString *skeleton) {
   if (!nts_icu_versions_match()) return NULL;
   for (uint32_t i = 0; i < locale->length; i++)
-    if (nts_unit(locale, i) == 0) return NULL;
+    if (nts_unit(locale, i) == 0 || nts_unit(locale, i) > 127) return NULL;
   NtsIcuNumber *number = calloc(1, sizeof(*number));
   if (number == NULL) abort();
   const UChar *units = nts_string_to_utf16(skeleton);
@@ -150,6 +150,20 @@ static NtsIcuNumber *number_state(NtsHeader *handle) {
   return icu_state(handle, close_number);
 }
 
+static void append_number_span(NtsIcuNumber *number, int32_t field, int32_t start, int32_t end) {
+  if (number->count == number->capacity) {
+    int32_t capacity = number->capacity == 0 ? 16 : number->capacity * 2;
+    int32_t *spans = realloc(number->spans, (size_t)capacity * 3 * sizeof(*spans));
+    if (spans == NULL) abort();
+    number->spans = spans;
+    number->capacity = capacity;
+  }
+  number->spans[number->count * 3] = field;
+  number->spans[number->count * 3 + 1] = start;
+  number->spans[number->count * 3 + 2] = end;
+  number->count++;
+}
+
 static NtsString *finish_number(NtsIcuNumber *number, bool fields, UErrorCode *status) {
   number->count = 0;
   if (U_FAILURE(*status)) return NULL;
@@ -157,17 +171,7 @@ static NtsString *finish_number(NtsIcuNumber *number, bool fields, UErrorCode *s
     unumf_resultGetAllFieldPositions(number->result, number->iterator, status);
     int32_t start, end, field;
     while ((field = ufieldpositer_next(number->iterator, &start, &end)) >= 0) {
-      if (number->count == number->capacity) {
-        int32_t capacity = number->capacity == 0 ? 16 : number->capacity * 2;
-        int32_t *spans = realloc(number->spans, (size_t)capacity * 3 * sizeof(*spans));
-        if (spans == NULL) abort();
-        number->spans = spans;
-        number->capacity = capacity;
-      }
-      number->spans[number->count * 3] = field;
-      number->spans[number->count * 3 + 1] = start;
-      number->spans[number->count * 3 + 2] = end;
-      number->count++;
+      append_number_span(number, field, start, end);
     }
   }
   int32_t length = 0;

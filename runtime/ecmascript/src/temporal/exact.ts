@@ -8,6 +8,46 @@ export const NS_PER_MINUTE = 60000000000n;
 export const NS_PER_HOUR = 3600000000000n;
 export const NS_PER_DAY = 86400000000000n;
 export const INSTANT_LIMIT = 8640000000000000000000n;
+const TIME_DURATION_LIMIT = 9007199254740992n * NS_PER_SECOND;
+
+export function checkTimeDuration(value: bigint): bigint {
+  if (value <= -TIME_DURATION_LIMIT || value >= TIME_DURATION_LIMIT)
+    throw new RangeError("Time duration outside supported range");
+  return value;
+}
+
+// One rounding to binary64, even when the numerator exceeds Number's integer
+// precision. The supported Temporal quotients fit in the 128-bit domain.
+export function divideExact(nanoseconds: bigint, divisor: bigint): number {
+  const negative = nanoseconds < 0n;
+  const magnitude = negative ? -nanoseconds : nanoseconds;
+  if (magnitude === 0n) return 0;
+  if (magnitude <= 9007199254740991n && divisor <= 9007199254740991n)
+    return Number(nanoseconds) / Number(divisor);
+  let exponent = 0;
+  if (magnitude >= divisor) {
+    let scaled = divisor;
+    while (scaled * 2n <= magnitude) {
+      scaled *= 2n;
+      exponent++;
+    }
+  } else {
+    let scaled = magnitude;
+    while (scaled < divisor) {
+      scaled *= 2n;
+      exponent--;
+    }
+  }
+  const shift = 52 - exponent;
+  const numerator = shift >= 0 ? magnitude << BigInt(shift) : magnitude;
+  const denominator = shift >= 0 ? divisor : divisor << BigInt(-shift);
+  let significand = numerator / denominator;
+  const remainder = numerator % denominator;
+  if (remainder * 2n > denominator || (remainder * 2n === denominator && significand % 2n !== 0n))
+    significand++;
+  const result = Number(significand) * 2 ** (exponent - 52);
+  return negative ? -result : result;
+}
 
 export type RoundingMode = NonNullable<Temporal.RoundingOptions<Temporal.TimeUnit>["roundingMode"]>;
 

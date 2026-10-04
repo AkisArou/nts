@@ -178,20 +178,20 @@ export class NumberFormatConfiguration<D extends NumberFormatData> implements Re
   readonly roundingPriority: Intl.ResolvedNumberFormatOptions["roundingPriority"];
   readonly trailingZeroDisplay: Intl.ResolvedNumberFormatOptions["trailingZeroDisplay"];
 
-  constructor(data: D, options: Readonly<Intl.NumberFormatOptions> = {}) {
+  constructor(data: D, options?: Readonly<Intl.NumberFormatOptions>) {
     if (options === null) throw new TypeError("Intl options must not be null");
-    this.style = stringOption(options.style, styles, "decimal");
-    const currency = optionalString(options.currency);
+    this.style = stringOption(options?.style, styles, "decimal");
+    const currency = optionalString(options?.currency);
     if (currency === undefined) {
       if (this.style === "currency") throw new TypeError("Currency is required");
     } else if (!validCurrency(currency)) throw new RangeError("Invalid currency code");
-    const currencyDisplay = stringOption(options.currencyDisplay, currencyDisplays, "symbol");
-    const currencySign = stringOption(options.currencySign, currencySigns, "standard");
-    const unit = optionalString(options.unit);
+    const currencyDisplay = stringOption(options?.currencyDisplay, currencyDisplays, "symbol");
+    const currencySign = stringOption(options?.currencySign, currencySigns, "standard");
+    const unit = optionalString(options?.unit);
     if (unit === undefined) {
       if (this.style === "unit") throw new TypeError("Unit is required");
     } else if (!validUnit(unit)) throw new RangeError("Invalid measurement unit");
-    const unitDisplay = stringOption(options.unitDisplay, unitDisplays, "short");
+    const unitDisplay = stringOption(options?.unitDisplay, unitDisplays, "short");
     if (this.style === "currency") {
       this.currency = currency!.toUpperCase();
       this.currencyDisplay = currencyDisplay;
@@ -201,22 +201,22 @@ export class NumberFormatConfiguration<D extends NumberFormatData> implements Re
       this.unit = unit;
       this.unitDisplay = unitDisplay;
     }
-    this.notation = stringOption(options.notation, notations, "standard");
+    this.notation = stringOption(options?.notation, notations, "standard");
     const currencyPrecision = this.style === "currency" && this.notation === "standard";
     const minimumDefault = currencyPrecision ? data.currencyDigits(this.currency!) : 0;
     let maximumDefault = currencyPrecision ? minimumDefault : this.style === "percent" ? 0 : 3;
 
     // Read all digit options before interpreting their interaction. In
     // particular, ignored fraction options must not be numerically converted.
-    this.minimumIntegerDigits = numberOption(options.minimumIntegerDigits, 1, 21, 1);
-    const minimumFraction = options.minimumFractionDigits;
-    const maximumFraction = options.maximumFractionDigits;
-    const minimumSignificant = options.minimumSignificantDigits;
-    const maximumSignificant = options.maximumSignificantDigits;
-    this.roundingIncrement = roundingIncrement(options.roundingIncrement);
-    this.roundingMode = stringOption(options.roundingMode, roundingModes, "halfExpand");
-    const priority = stringOption(options.roundingPriority, priorities, "auto");
-    this.trailingZeroDisplay = stringOption(options.trailingZeroDisplay, trailingZeros, "auto");
+    this.minimumIntegerDigits = numberOption(options?.minimumIntegerDigits, 1, 21, 1);
+    const minimumFraction = options?.minimumFractionDigits;
+    const maximumFraction = options?.maximumFractionDigits;
+    const minimumSignificant = options?.minimumSignificantDigits;
+    const maximumSignificant = options?.maximumSignificantDigits;
+    this.roundingIncrement = roundingIncrement(options?.roundingIncrement);
+    this.roundingMode = stringOption(options?.roundingMode, roundingModes, "halfExpand");
+    const priority = stringOption(options?.roundingPriority, priorities, "auto");
+    this.trailingZeroDisplay = stringOption(options?.trailingZeroDisplay, trailingZeros, "auto");
     if (this.roundingIncrement !== 1) maximumDefault = minimumDefault;
     const hasSignificant = minimumSignificant !== undefined || maximumSignificant !== undefined;
     const hasFraction = minimumFraction !== undefined || maximumFraction !== undefined;
@@ -256,15 +256,15 @@ export class NumberFormatConfiguration<D extends NumberFormatData> implements Re
       if (this.minimumFractionDigits !== this.maximumFractionDigits)
         throw new RangeError("Rounding increments require equal fraction digits");
     }
-    const compactDisplay = stringOption(options.compactDisplay, compactDisplays, "short");
+    const compactDisplay = stringOption(options?.compactDisplay, compactDisplays, "short");
     if (this.notation === "compact") this.compactDisplay = compactDisplay;
-    this.useGrouping = grouping(options.useGrouping, this.notation === "compact");
-    this.signDisplay = stringOption(options.signDisplay, signs, "auto");
+    this.useGrouping = grouping(options?.useGrouping, this.notation === "compact");
+    this.signDisplay = stringOption(options?.signDisplay, signs, "auto");
   }
 
   // Construction-only translation to ICU's declarative primitive. The explicit
   // precision and rounding tokens override ICU's different default rounding.
-  skeleton(): string {
+  skeleton(negative = false): string {
     let text = "";
     if (this.style === "percent") text = "percent scale/100 ";
     else if (this.style === "currency") text = "currency/" + this.currency + " ";
@@ -283,7 +283,7 @@ export class NumberFormatConfiguration<D extends NumberFormatData> implements Re
     else if (this.notation !== "standard") text += this.notation + " ";
     text += this.precisionSkeleton();
     if (this.trailingZeroDisplay === "stripIfInteger") text += "/w";
-    text += " " + roundingSkeleton(this.roundingMode);
+    text += " " + roundingSkeleton(this.roundingMode, negative);
     text += " integer-width/*" + "0".repeat(this.minimumIntegerDigits);
     if (this.useGrouping === false) text += " group-off";
     else if (this.useGrouping === "always") text += " group-on-aligned";
@@ -315,7 +315,10 @@ export class NumberFormatConfiguration<D extends NumberFormatData> implements Re
   }
 }
 
-function roundingSkeleton(mode: Intl.ResolvedNumberFormatOptions["roundingMode"]): string {
+function roundingSkeleton(
+  mode: Intl.ResolvedNumberFormatOptions["roundingMode"],
+  negative: boolean,
+): string {
   switch (mode) {
     case "ceil":
       return "rounding-mode-ceiling";
@@ -326,9 +329,9 @@ function roundingSkeleton(mode: Intl.ResolvedNumberFormatOptions["roundingMode"]
     case "trunc":
       return "rounding-mode-down";
     case "halfCeil":
-      return "rounding-mode-half-ceiling";
+      return negative ? "rounding-mode-half-down" : "rounding-mode-half-up";
     case "halfFloor":
-      return "rounding-mode-half-floor";
+      return negative ? "rounding-mode-half-up" : "rounding-mode-half-down";
     case "halfExpand":
       return "rounding-mode-half-up";
     case "halfTrunc":

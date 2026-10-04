@@ -7,6 +7,57 @@
 // this file must NOT import them, or it becomes a module and declares nothing.
 
 declare module "java:nts.intl" {
+  /** nts.intl.IcuCollator Final: cannot be extended. */
+  export class IcuCollator {
+    constructor(a0: string, a1: number, a2: boolean, a3: boolean, a4: number);
+    compare(a0: string, a1: string): number;
+    static defaults(a0: string): number;
+  }
+
+  /** nts.intl.IcuDateFormatter Final: cannot be extended. */
+  export class IcuDateFormatter {
+    constructor(a0: string, a1: string, a2: string);
+    format(a0: number, a1: boolean): string;
+    fieldCount(): number;
+    field(a0: number): number;
+    start(a0: number): number;
+    end(a0: number): number;
+    formatRange(a0: number, a1: number, a2: boolean): string;
+  }
+
+  /** nts.intl.IcuDatePatterns Final: cannot be extended. */
+  export class IcuDatePatterns {
+    constructor(a0: string);
+    bestPattern(a0: string): string;
+    stylePattern(a0: number, a1: number): string;
+    patterns(): string[];
+  }
+
+  /** nts.intl.IcuLocaleData Final: cannot be extended. */
+  export class IcuLocaleData {
+    constructor();
+    canonicalize(a0: string): string;
+    maximize(a0: string): string;
+    minimize(a0: string): string;
+    defaultLocale(): string;
+    availableCount(): number;
+    availableLocale(a0: number): string;
+    bestFit(a0: string): string | null;
+    defaultNumberingSystem(a0: string): string;
+    hasNumberingSystem(a0: string): boolean;
+    canonicalType(a0: string, a1: string): string;
+    calendarValues(a0: string): string[];
+    availableCalendars(a0: string): string[];
+    collationValues(a0: string): string[];
+    hourCycle(a0: string): string;
+    timeZones(a0: string): string[];
+    timeZoneNames(): string[];
+    canonicalTimeZone(a0: string): string | null;
+    defaultTimeZoneIdentifier(): string;
+    textDirection(a0: string): number;
+    weekData(a0: string): number;
+  }
+
   /** nts.intl.IcuNumberData Final: cannot be extended. */
   export class IcuNumberData {
     constructor();
@@ -15,9 +66,10 @@ declare module "java:nts.intl" {
 
   /** nts.intl.IcuNumberFormatter Final: cannot be extended. */
   export class IcuNumberFormatter {
-    constructor(a0: string, a1: string);
-    format(a0: number, a1: boolean): string;
-    formatDecimal(a0: string, a1: boolean): string;
+    constructor(a0: string, a1: string, a2: string);
+    format(a0: number, a1: boolean, a2: boolean): string;
+    formatDecimal(a0: string, a1: boolean, a2: boolean): string;
+    formatRange(a0: string, a1: string, a2: boolean, a3: boolean, a4: boolean): string;
     fieldCount(): number;
     field(a0: number): number;
     start(a0: number): number;

@@ -1,4 +1,12 @@
-import type { TimeZoneHandleBrand, NumberHandleBrand } from "./handle-brands.d.ts";
+import type {
+  TimeZoneHandleBrand,
+  NumberHandleBrand,
+  LocaleHandleBrand,
+  NumberRangeHandleBrand,
+  CollatorHandleBrand,
+  DatePatternHandleBrand,
+  DateHandleBrand,
+} from "./handle-brands.d.ts";
 
 // Empty classes describe managed references, whose actual descriptor and
 // lifetime are supplied by NtsBoxed. Type-only interface merging makes them
@@ -9,5 +17,25 @@ export class IcuTimeZoneHandle {
 }
 export interface IcuNumberHandle extends NumberHandleBrand {}
 export class IcuNumberHandle {
+  private constructor() {}
+}
+export interface IcuLocaleHandle extends LocaleHandleBrand {}
+export class IcuLocaleHandle {
+  private constructor() {}
+}
+export interface IcuNumberRangeHandle extends NumberRangeHandleBrand {}
+export class IcuNumberRangeHandle {
+  private constructor() {}
+}
+export interface IcuCollatorHandle extends CollatorHandleBrand {}
+export class IcuCollatorHandle {
+  private constructor() {}
+}
+export interface IcuDatePatternHandle extends DatePatternHandleBrand {}
+export class IcuDatePatternHandle {
+  private constructor() {}
+}
+export interface IcuDateHandle extends DateHandleBrand {}
+export class IcuDateHandle {
   private constructor() {}
 }

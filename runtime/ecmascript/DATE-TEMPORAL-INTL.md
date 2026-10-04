@@ -1,320 +1,287 @@
 # Shared Date, Temporal and Intl
 
-The target is Date, Temporal and all ECMA-402 constructors within NTS's typed
-object model, delivered in stages. The representation boundary is defined in
-[`typescript.md` §13](../../docs/conformance/typescript.md#13-what-this-compiler-is-not).
-This document tracks implementation, not a claim that the whole plan is done.
-Standard builtin lowering remains a compiler integration task. Date, Instant
-and Duration now use typed classes with private state and library-derived
-contracts. Canonical Temporal input unions still require compiler support before
-their public APIs become compiled integration APIs.
+Date, Temporal and all ECMA-402 services are the target within NTS's typed
+object model. The plan is in progress. Standard builtin binding and complete
+compiled public acceptance remain open, alongside the APIs listed below.
+The supported representation boundary is
+[typescript.md §13](../../docs/conformance/typescript.md#13-what-this-compiler-is-not).
 
-## Architecture and performance requirements
+## Standing architecture and performance requirements
 
-Best architecture, clean code and performance are standing design requirements
-for every stage. Prefer one shared algorithm and direct standard-library types;
-keep provider configuration and temporary allocations outside formatting loops.
-Measure performance through the compiled public paths before making claims.
+Best architecture, clean code and performance apply to every stage.
 
-ECMAScript rules live in TypeScript. C and Java provide ICU primitives through
-small typed adapters. They do not implement separate JS parsers, rounding,
-clipping, coercion, disambiguation or `formatToParts` algorithms. No JSON RPC,
-JNI, JRE regex, date parsing or localized-text scraping is used at this boundary.
+ECMAScript semantics live in shared TypeScript. Native C/C++ and Java expose pinned ICU
+data and text primitives through typed adapters. They do not implement separate
+JS parsing, rounding, clipping, option resolution, disambiguation or parts
+algorithms. Production calls use the native C ABI or ordinary Java calls.
+JNI is not used. Native locale matching and independently configured number
+ranges use ICU's public C++ APIs; date/pattern adapters also use C++ resource
+ownership. ICU's static native libraries already require the C++ standard
+library. The generated C program sees only the narrow C ABI.
 
-Date holds mutable clipped integral milliseconds in a private field, with NaN
-for invalid dates. Temporal holds immutable values in private readonly fields.
-No side table is needed for instance state or branding: private fields and the
-compiler's instance descriptors supply those properties. WeakMap is not a
-prerequisite for this plan.
+Public inputs, options and results use the pinned TypeScript libraries directly.
+Use a derived contract only to express a supported subset or an actual library
+typing defect. Do not rename an existing library type, duplicate its declarations,
+or assert an erased value into an ABI layout. Classes check their implemented
+contracts with `implements`.
 
-Public fields, units, options and input unions use the pinned TypeScript libraries
-directly. Derived types express an actual subset or representation difference;
-they do not rename a library type or copy its declarations. Erased `unknown` inputs are narrowed
-only at boundaries that actually accept them. Type assertions do not substitute
-for runtime conversion or establish an ABI representation. Property reads and
-method calls are direct; constructors initialize their own fields. Production
-code must not reconstruct JavaScript prototypes, descriptors, coercion hooks,
-species constructors, or observable function names and lengths. These are
-declared non-goals of the object model, not compiler prerequisites to queue.
+Date owns mutable clipped milliseconds; Temporal values own immutable state.
+Private fields and instance descriptors supply branding. No WeakMap side table,
+descriptor patch, dynamic prototype setup, reflective coercion or function
+metadata repair belongs in these implementations. The user requires discussion
+before introducing WeakMap. Intrinsic graphs, descriptors, realms, species and
+coercion hooks are object-model non-goals, not compiler prerequisites.
 
-Gregorian arithmetic is independent of host Date and ICU. ISO-only operations
-can import that core without importing providers. Host clock and default time
-zone capabilities are injected explicitly through `TimeHost`.
+Gregorian arithmetic and ISO parsing do not depend on host Date or ICU.
+UTC/ISO-only binaries must not acquire ICU. Host clocks, default locale and
+default zone belong to an injected environment. Formatters and locale matchers
+are created outside hot loops. Handles follow managed boxed lifetime on C and
+ordinary GC on JVM. Typed scratch buffers grow when required and are reused;
+parts arrays have their exact output size. Array push is appropriate for builders
+whose output size is unknown; its presence alone is not a performance defect.
 
-Formatter creation is outside formatting loops. Native handles use the existing
-managed boxed-object lifecycle; JVM handles use ordinary GC. Scratch buffers
-grow when needed and are reused. Parts arrays have their exact output length.
-Generic provider parameters permit direct calls in compiled formatting code.
-In particular, formatter state does not rely on C interface vtable casts, which
-UBSan found incompatible with the emitted concrete method signatures.
+The initial production providers use bundled ICU4J on JVM/Android and matching
+ICU4C on native platforms. The optional Java provider targets Java 11; the Java-8
+core runtime remains independent. Android device ICU requires separate API/data
+and artifact-size evidence before becoming another provider.
 
-The production providers use bundled ICU4J on desktop JVM and Android, and a
-matching ICU4C source build for native targets. Android's device ICU is deferred
-until its API coverage, data behavior and measured artifact-size benefit justify
-another provider. The Java-8 core runtime remains independent; the optional ICU
-provider is compiled for Java 11. Locale resources are included in full initially.
+## Accepted completion plan
 
-## Pins
+1. **Compiler integration.** Support canonical library unions, record projection,
+   nested generic dispatch, standard builtin binding, actual supplied argument
+   counts and mutable Date representation. The compiler lane owns these changes.
+2. **Shared foundations.** Complete locale validation, aliases, extension
+   negotiation/matching, Locale, supportedValuesOf, clocks/default locale/zone,
+   calendar metadata and conversion. Locale metadata is implemented through ICU.
+   supportedValuesOf, primary time-zone identities, calendar conversion and
+   runtime host binding remain open.
+3. **NumberFormat and DateTimeFormat.** Complete exact public inputs, bound
+   formatting, resolved options, ranges, parts and Temporal date/time inputs.
+   NumberFormat's shared semantics and C/JVM primitives exist; compiled public
+   acceptance remains open. DateTimeFormat pattern metadata, basic matching,
+   construction, single/range formatting and UTF-16 parts exist on both providers.
+   Instant, PlainTime and ISO PlainDate inputs are integrated; remaining Temporal
+   types, calendar corrections and compiled public acceptance remain open.
+4. **Date.** Complete standard constructor/call behavior, local operations,
+   setters, localization and the Temporal bridge. Core arithmetic, parsing and
+   serialization exist. UTC and multi-component setters distinguish omission
+   from explicit undefined. Their emitted optional-tuple witness still exposes
+   a compiler argument-count defect. Standard host binding and locale methods
+   remain open.
+5. **Temporal.** Complete Instant, Duration, PlainDate, PlainTime, PlainDateTime,
+   PlainYearMonth, PlainMonthDay, ZonedDateTime and Now, with non-ISO calendars,
+   relative arithmetic, transitions and disambiguation. Instant/Duration scalar
+   operations, shared ISO scanning and non-localized PlainTime operations exist.
+   ISO PlainDate arithmetic/week fields/rounding and plain ISO relative Duration
+   totals/comparison now exist. Named-zone formatting, non-ISO calendars, other
+   date/zoned classes, complete relative rounding and Now remain open.
+6. **PluralRules, ListFormat and DurationFormat.** Implement each service and
+   connect localization methods to shared formatters.
+7. **Other Intl services.** Complete Collator, RelativeTimeFormat, DisplayNames,
+   Segmenter and Locale information APIs. Collator's typed API, shared option
+   resolution and C/JVM primitives exist. The other services and compiled public
+   acceptance remain open.
+8. **Packaging and performance.** Finish reachability-controlled acquisition,
+   platform/device acceptance and construction, format, parts, range, startup,
+   heap and artifact-size measurements.
 
-`providers/icu/versions.json` records the specification revisions, existing
-Test262 revision, ICU 78.3, Unicode 17, CLDR 48.2 and TZDB 2026a. The exact Maven
-artifact is pinned in `dependencies.tsv`; the ICU4C source and redistribution
-license hashes are in `artifacts.json`. These match the upstream release asset
-digests. Downloads are verified before use, including cached artifacts.
+Independent semantic/provider work can proceed while compiler integration is
+pending. No stage is complete solely because a host or provider probe passes.
 
-ICU's runtime CLDR API reports **48.0** for this release's **48.2** maintenance
-data. The runtime checks use that reported value; exact source/jar hashes identify
-the maintenance release. Providers reject mismatched component versions.
-The full ICU redistribution notice is in `third_party/ICU-LICENSE`.
+NTS deliberately uses fixed-width 128-bit BigInt. It covers Temporal's timestamp
+domain; arbitrary-precision BigInt is outside this plan. NumberFormat decimal
+strings preserve all digits across the provider boundary without entering this
+BigInt domain.
 
-## Implementation stages
+## Implemented shared paths
 
-| Stage                   | Implemented                                                                                                                                                                        | Required next                                                                                                                                                                                                              |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Foundations             | Pins; Gregorian arithmetic; exact nanosecond helpers; typed host/time zone interfaces; C/JVM ICU offsets, local offsets and transitions; managed handles; compiled provider probes | Clock/default-zone bindings and provider selection in the compiler/build pipeline; calendar and additional Intl primitives                                                                                                 |
-| Date                    | Scalar constructor/UTC operations; UTC/local arithmetic; TimeClip; ISO/legacy parsing and serialization; typed private-state class                                                 | Standard builtin binding, preserving supplied argument counts; Intl-backed locale methods; named-zone validation                                                                                                           |
-| Temporal ISO            | Exact Instant parsing/formatting, range checks, rounding and time-unit arithmetic; one immutable Duration representation with cached exact time; library-derived typed classes     | Compiler support for canonical Temporal unions; complete Instant, relative Duration and all Plain types; adapt pinned upstream algorithms where appropriate                                                                |
-| Zoned/calendar Temporal | Shared gap/overlap disambiguation; direct ICU transitions                                                                                                                          | ZonedDateTime, Now, non-ISO calendar conversion and arithmetic                                                                                                                                                             |
-| Intl                    | Shared NumberFormat style/unit/digit options and ICU skeleton construction; pinned currency precision data; C/JVM exact decimal primitives, UTF-16 spans and reusable number partitioning | Complete Locale, Collator, NumberFormat, PluralRules, DateTimeFormat, RelativeTimeFormat, ListFormat, DisplayNames, Segmenter and DurationFormat; canonicalization, supportedValuesOf, ranges, parts and toLocale bindings |
-| Packaging/performance   | Hashed acquisition; native static build; generated Java bindings; C RC + sanitizers; JVM verification; Android API 29 dex/resource probe; compiled formatter benchmark             | Automatic reachability-controlled packaging; Android device matrix and desugaring audit; other native platforms; startup, heap and artifact-size measurements                                                              |
+- **NumberFormat:** locale negotiation; style/unit/currency/digit options in
+  specified read order; exact decimal, BigInt and string dispatch; stable lazy
+  bound format; resolved options; formatting, ranges and parts. ICU supplies
+  currency precision, text and UTF-16 spans. Sign-sensitive halfCeil/halfFloor
+  configurations are selected in shared code. Range handles are created lazily
+  and reused; equal-range approximation and source attribution are preserved.
+- **Locale:** structural language-tag validation, CLDR aliases, likely subtags,
+  overrides, maximize/minimize and data getters. ICU supplies calendars,
+  collations, preferred hour cycle, numbering system, zone lists, script
+  direction and weekday metadata. Shared code controls JS lists and result
+  objects. Primary time-zone naming and unavailable-region override fallback
+  still require finishing.
+- **Collator:** ordered option conversion and extension negotiation; stable lazy
+  bound comparison; resolved options. C borrows Latin-1/UTF-16 inputs through ICU
+  iterators/direct spans; JVM compares its native strings. No provider input
+  copy or TS options/result allocation is introduced by the comparison callback.
+- **DateTimeFormat:** ordered options, calendar aliases/deprecation fallback,
+  locale and hour-cycle negotiation, styles, resolved options and lazy bound
+  format. Shared quote-aware ICU pattern metadata,
+  skeleton construction, specified basic format matching and UTF-16 parts
+  partitioning. C/JVM retain their selected-pattern formatter and buffers.
+  Gregorian formatting uses a cutover below ECMAScript's entire time domain.
+  Parts scratch is created lazily and reused; output arrays have their exact
+  size. Interval formatters/calendars are created lazily; identity fallback keeps
+  the selected single-date pattern, and shared code partitions endpoint sources.
+  Instant, PlainTime and ISO PlainDate formatting reads immutable private slots;
+  plain values ignore the formatter's time zone and bypass Date's time clipping.
+  Providers also expose time-zone name enumeration, canonical/default
+  names; shared code parses and normalizes Intl offset identifiers, retains named
+  identifier casing and excludes ICU's non-IANA compatibility zones. Other
+  Temporal inputs and primary time-zone identity correction remain open.
+- **Temporal:** one ISO scanner supplies Instant and PlainTime parsing, including
+  annotation syntax, offsets, leap seconds and ambiguous bare-time rejection.
+  PlainTime owns one exact within-day nanosecond Number; Duration owns validated
+  fields and cached normalized BigInt time. Precision and rounding helpers use
+  scalar state and read each option once. Calendar-relative operations remain
+  unfinished. PlainDate's ISO stage owns one epoch-day scalar and uses bounded
+  estimates for date differences, avoiding searches over years/months/days.
+  ISO relative Duration totals use exact calendar fractions with one binary64
+  rounding; zoned/non-ISO relative arithmetic remains open.
+- **Date:** mutable private state and scalar UTC/local operations. Static UTC
+  and multi-component setters use standard Parameters tuples to preserve the
+  supplied argument count. The standard compiled boundary remains pending.
 
-NTS's fixed-width 128-bit BigInt covers Temporal's timestamp domain, but is not
-arbitrary-precision ECMAScript BigInt. General external inputs/intermediates
-remain a compiler prerequisite. The JVM fix accompanying this work routes
-value-producing ordered BigInt comparisons through its existing exact comparator.
+## Pins and verification
 
-## Verification
+The specification, Test262 and data revisions are in
+[versions.json](providers/icu/versions.json). The Maven artifact is hash-pinned in
+[dependencies.tsv](providers/icu/dependencies.tsv); native source and license
+hashes are in [artifacts.json](providers/icu/artifacts.json). Cached downloads are
+verified. ICU 78.3 contains Unicode 17, CLDR 48.2 and TZDB 2026a; its CLDR runtime
+API reports 48.0. Runtime version checks use that reported value; exact artifact
+hashes identify the maintenance data. The redistribution notice is preserved.
 
-Test262 supplies semantic conformance cases. The existing adapter now has Date
-and Temporal profiles; it installs the candidate inside each test realm. It
-retains failures and reports `host-pass`, never compiled standard-builtin passes.
-Date uses an explicitly injected UTC zone. Unsupported `$262` realms remain
-visible. No replacement conformance package or separate test corpus was added.
+Original Test262 supplies the semantic corpus. The host adapter loads the actual
+shared classes in each test realm and retains all failures. Its Intl bridge calls
+the same pinned Java provider as compiled TS and preserves UTF-16 code units.
+It is supplementary POSIX host tooling, not a production transport or a native
+formatter fallback. Reports say host-pass; they never claim compiled standard
+builtin conformance.
 
-At Test262 revision `14e8c908e54ae2e770e473bcacf536f8cb654929`:
+Current host results against Test262
+`14e8c908e54ae2e770e473bcacf536f8cb654929` (2026-10-04):
 
-| Host slice        | Passes | Failures |
-| ----------------- | -----: | -------: |
-| Date              |    576 |       18 |
-| Temporal.Instant  |    433 |       32 |
-| Temporal.Duration |    394 |      146 |
+| Slice                    | Host passes | Retained failures |
+| ------------------------ | ----------: | ----------------: |
+| Date                     |         390 |               204 |
+| Temporal.Instant         |         415 |                50 |
+| Temporal.Duration        |         417 |               123 |
+| Temporal.PlainTime       |         474 |                19 |
+| Temporal.PlainDate       |         526 |               126 |
+| Intl.NumberFormat        |         220 |                29 |
+| Intl.DateTimeFormat      |         167 |                77 |
+| Intl.Collator            |          50 |                15 |
+| Intl.Locale              |         128 |                40 |
+| Intl.getCanonicalLocales |          29 |                 9 |
 
-Those counts are the pre-audit reflective-facade baseline. The post-refactor
-counts below retain metadata, intrinsic graph and supported semantic failures.
-Date needs original supplied-argument counts and conversions at its standard
-builtin boundary. Temporal also lacks Plain/Zoned APIs, relative calendar
-arithmetic and localized/zone formatting. Semantic gaps within
-the typed profile still require implementation. Intrinsic graph, descriptors,
-realms and function metadata are outside that profile and must remain identified
-as such; chasing their host pass counts must not dictate the production design.
-Temporal is no longer classified as a permanent non-goal; the ordinary scheduler
-also no longer excludes all `intl402` tests before attempting them.
+Failures include missing supported semantics/APIs, adapter limitations and
+documented metadata/realm non-goals. These counts do not establish completeness.
+Earlier reflective-facade results are superseded.
 
-The original eight-probe emitted-code fixture reached 261 cases on each backend.
-It now also imports the actual public classes and exercises library option
-layouts. Public compilation is currently blocked by `NTS1001` on canonical
-Temporal unions. Before adopting the canonical unions, the public fixture
-exposed a C record-layout mismatch (18 Instant disagreements) and JVM record
-casts (10 aborts), plus unfinished cases. Those are compiler/integration defects,
-not passing validation. A fraction-padding loop caused 17 C timeouts: the emitted
-loop failed to retain the counter increment in its condition. Padding now uses
-one bounded power-of-ten multiplication instead. The compiler reproducer is
-[`a-postfix-increment-in-a-loop-condition-is-not-carried`](../../tooling/conformance/outcomes/a-postfix-increment-in-a-loop-condition-is-not-carried/src/main.ts)
-at commit `9ef297662`; the compiler lane identified shared lowering as the cause,
-affecting C, LLVM and JVM. An AST audit of all
-34 TypeScript files under `runtime/ecmascript` checked 98 while/do-while/for
-headers and found no remaining increment/decrement expressions in loop tests.
-The current canonical-API
-refusals prevent a complete differential rerun; that remains required.
-Provider probes verify
-compiled TS calls, New York DST gaps and
-overlaps, transitions, exact decimal formatting above 2^53 and UTF-16 parts with
-astral mathematical digits. Native verification enables RC, ASan, UBSan and leak
-detection; a wrong result, compiler refusal or sanitizer diagnostic fails.
+The scalar ISO parser fixture agrees on **812 cases across 18 functions** on C,
+LLVM, JVM, C+RC and LLVM+RC. RC differential checks use `NTS_RC=1`. Separate
+public fixtures retain canonical union refusals and optional-tuple argument-count
+failures; an exit status of zero is not sufficient evidence of execution.
 
-The NumberFormat configuration now follows the pinned
-[unit and digit option algorithms](https://github.com/tc39/ecma402/blob/e463f3c8b62e5c67f4846cd05eec40d8d5947ed0/spec/numberformat.html).
-It validates options in their specified read order, resolves fraction/significant
-precision and compact defaults, and translates the normalized slots to an
-[ICU skeleton](https://unicode-org.github.io/icu/userguide/format_parse/numbers/skeletons.html).
-Currency fraction digits come from the same pinned ICU data, with no copied
-currency table. No formatter, option record or skeleton is built in a formatting
-loop. This configuration implements the locale-independent subset of
-`Readonly<Intl.ResolvedNumberFormatOptions>`; input options are
-`Readonly<Intl.NumberFormatOptions>` directly.
+The pinned compiled ICU fixture passes **C RC with ASan, UBSan and leak checks**
+and **JVM verification**, including DST gaps/overlaps/transitions, exact decimals
+above 2^53, astral-digit UTF-16 parts, sign-sensitive rounding, range identity and
+sources, locale metadata, and collation with embedded NULs/lone surrogates.
+Date-pattern and single-date formatting probes also pass, including proleptic
+Gregorian dates at both time-domain boundaries, DST, astral numbering systems,
+Chinese relatedYear/yearName parts and offset time-zone identifiers.
+Date ranges now execute on both backends, including interval sources and
+single-date identity fallback. The public PlainDate witness retains canonical
+union/record projection refusals on C and JVM.
+This verifies provider integration; it does not replace public API acceptance.
+A separate nested generic locale fixture exposes a C interface-vtable signature
+mismatch under UBSan. Logs and witnesses are retained for compiler integration.
 
-The compiled provider fixture passes C RC with ASan/UBSan/leak checks and JVM
-verification after exercising percent scaling, USD accounting with a 0.05
-increment, JPY/KWD/unknown currency precision, compact notation, a compound
-unit, competing precision settings, ignored invalid fraction options, integer
-padding and stripped zero fractions. These are integration probes, not a second
-semantic corpus. A targeted replay of 34 original Test262 NumberFormat option
-cases reports **29 host-options passes and 5 retained failures** with pinned
-ICU4J currency data. The replay installs configuration only, without a native
-NumberFormat formatting fallback. The remaining failures check the intrinsic
-prototype or optional-property presence on the internal configuration object.
-They do not establish a public `resolvedOptions()` implementation. Locale
-resolution, exact public input dispatch, bound formatting, ranges and standard
-builtin integration remain open; this is not a complete NumberFormat pass.
+The earlier loop-condition compiler defect
+[a-postfix-increment-in-a-loop-condition-is-not-carried](../../tooling/conformance/outcomes/a-postfix-increment-in-a-loop-condition-is-not-carried/src/main.ts)
+was recorded at `9ef297662` and fixed by the compiler lane. The padding algorithm
+uses bounded multiplication; the runtime loop-header audit found no remaining
+increment/decrement expressions in loop conditions.
+
+## Type audit and remaining integration boundary
+
+The libraries already include `lib.esnext.temporal.d.ts`; no extra package,
+copied ambient declarations or renaming aliases are needed.
+
+- Inputs use Temporal.DurationLike, InstantLike, PlainTimeLike and the canonical
+  readonly options directly. Units and precisions derive from their libraries.
+- DateFields, DurationLike, InstantLike, DateFormatter and FormatPart copies are
+  removed. DateComponent expresses Date's actual subset of Temporal units.
+- NtsDate's supported contract corrects Date.toJSON's nullable result and omits
+  pending localization/bridge members. Instant, Duration and PlainTime omit
+  unfinished localization/zoned members. The type-only
+  [WithResult](src/contract.ts) binds implemented object results to shared classes
+  while retaining both library overloads; it emits no allocation or code.
+- NtsNumberFormat and NtsCollator implement their complete library instance
+  contracts. Provider field helpers project standard part fields where the
+  compiler currently refuses the direct library part-array representation.
+- NtsLocale corrects the library's hourCycle/caseFirst getter narrowing: a valid
+  Unicode extension may have an unknown or empty value. variants and
+  firstDayOfWeek supplement members missing from the pinned LocaleOptions.
+- DateTimeFormatPart derives the standard value field and corrects the pinned
+  library's missing relatedYear/yearName type names. It is a record interface,
+  rather than an asserted or erased provider layout.
+- TimeHost, TimeZoneRules, locale/data capabilities, native primitives, nominal
+  foreign handles and physical scanners/buffers are internal contracts with no
+  standard-library equivalent. Provider imports use pure capability modules.
+- RegExp's unmatched capture/indices types correct inaccurate library array
+  elements. Its earlier reflective facade still needs a separate typed-boundary
+  rewrite; Date/Temporal/Intl must not reproduce that architecture.
+
+Public C/JVM compilation still refuses canonical Temporal/Intl unions. Nested
+generic locale dispatch and Date Parameters tuple argument counts also need
+compiler fixes. Keep canonical types and the reproducing fixtures. Do not replace
+these paths with erased inputs, casts or duplicated scalar-only public APIs to
+make a probe pass. Main's local handoff contains the concrete integration cases.
+
+## Acceptance still required
+
+Run original Test262 through actual compiled standard bindings on C, LLVM, JVM,
+C+RC and LLVM+RC. Retain refusals, timeouts, failures and unvisited cases. Complete
+binding-drift checks, relevant lane gates, native sanitizers/leaks and JVM
+verification before accepting a change.
+
+Validate Linux, Windows, macOS/iOS, JVM and Android; Android API 29, 30, 33 and
+current, plus desktop Java 11 and current LTS. Existing Android evidence covers
+API-29 dex/resource packaging, not device execution. The APK packager preserves
+dependency resources, dex files and licenses and rejects conflicting resources.
+
+The reused-number-formatter sample measured approximately 592 ns on C RC and
+625 ns on JVM for 50,000 calls, with matching checksums. This is a provider
+microbenchmark, not a whole-public-API throughput, allocation or startup claim.
+Broader measurements and reachability-controlled packaging remain open.
+
+Local Linux x86-64 size evidence (2026-10-04, `-O2`, without sanitizers): the
+four native C++ adapter objects contain **28,337 bytes of allocated code/data**
+before final linking. The untrimmed pinned ICU4J jar is **14.5 MiB** and the native
+ICU data archive is **31.6 MiB**. The current compiled ICU integration fixture is
+**35.5 MiB stripped**, without section garbage collection; this is not a whole
+public Intl application or the final platform packaging policy. The larger cost
+is ICU code/data, rather than the adapter language.
+
+A direct UTC/ISO core sample links and runs without ICU on C and JVM. Its
+stripped C executable is 51,640 bytes with section garbage collection and links
+only the normal C/math libraries. JVM runs with emitted classes and the 145,457
+byte core runtime jar alone under `-Xverify:all`. These supplementary artifacts
+and commands are retained under `target/ecmascript/audit/size`; provider
+acquisition through the final standard builtin bindings still needs acceptance.
+Do not silently remove locale/calendar data to shrink a full-coverage provider.
+Any reduced data profile must specify its supported coverage.
 
 ```sh
 pnpm exec tsc -p runtime/ecmascript/tsconfig.json
-node tooling/conformance/ecmascript/test262.ts --under test/built-ins/Date
-node tooling/conformance/ecmascript/test262.ts --under test/built-ins/Temporal/Instant
-node tooling/conformance/ecmascript/test262.ts --under test/built-ins/Temporal/Duration
-NTS_BACKEND=c NTS_TSGO=target/tsgo target/release/nts check tooling/conformance/ecmascript/date-compiled/tsconfig.json
-NTS_BACKEND=jvm NTS_TSGO=target/tsgo target/release/nts check tooling/conformance/ecmascript/date-compiled/tsconfig.json
-node runtime/ecmascript/tools/build-icu.ts
+node tooling/conformance/ecmascript/test262.ts --under test/built-ins/Temporal/PlainTime
+node tooling/conformance/ecmascript/test262.ts --under test/intl402/NumberFormat
+node tooling/conformance/ecmascript/test262.ts --under test/intl402/Collator
+NTS_BACKEND=c NTS_RC=1 NTS_TSGO=target/tsgo target/debug/nts check tooling/conformance/ecmascript/date-compiled/tsconfig.iso-parser.json
 node runtime/ecmascript/tools/icu.ts --pinned-native --sanitize
 node runtime/ecmascript/tools/icu.ts --pinned-native --bench
 node runtime/ecmascript/tools/icu.ts --pinned-native --android
 ```
 
-`--regenerate-bindings` refreshes the `.d.ts` and `.bind` together after a provider
-change. Do not format generated declarations independently: the binding table
-records byte offsets in those exact declarations. `icu.ts` checks for drift.
-The default native probe permits an installed ICU matching the runtime pin;
-production/reproducibility checks use `--pinned-native`.
-
-A local 50,000-call reused-formatter sample with installed ICU 78.3 measured about
-272 ns/format on C RC and 392 ns/format on JVM after warmup, with matching
-checksums. This is a microbenchmark, not a throughput or memory guarantee for the
-whole API. The probe exposes `--bench` for repeatable measurement.
-
-The Android probe contains dex and all ICU resources, with its license, and
-checks that no JVM `.class` files remain. It is dex/package evidence, not device
-execution. The ordinary APK packager now copies dependency resources and all
-generated dex files, preserves licenses and rejects conflicting resource bytes.
-Existing pinned-jar packaging checks passed with resource/license assertions.
-API 29/30/33/current device execution,
-desktop Java 11/current LTS and other native-platform validation remain open.
-
-## Compiler integration boundary
-
-Bind supported standard paths to typed classes and the same scalar core. Apply
-the supported scalar conversions at the builtin boundary and preserve instance
-branding through the normal class/descriptor machinery. Date's
-managed representation must become mutable for setters; the existing JVM
-`NtsDate.ms` is final. Compile-time TS builtin inclusion/provider selection must
-preserve reachability, so UTC Date arithmetic does not pull ICU into a product.
-
-The previous Date/Temporal facades used reflection, descriptors, WeakMap
-branding and constructor casts; those have been removed. RegExp's generic host
-facade still uses reflection and needs its own typed-boundary rewrite. The
-replacement APIs must compile through their actual public imports on C and JVM,
-not just through separate scalar probes. Canonical library unions are supported
-TypeScript requirements; excluded metaobject behavior is not a prerequisite.
-
-## Type and contract audit
-
-All authored TypeScript declarations and classes under `runtime/ecmascript`
-were checked against the pinned TypeScript 7.0.2 libraries, including provider
-bindings and build tools. `lib.esnext.temporal.d.ts` is already available through
-ESNext; no additional package or copied declaration file is needed.
-
-| Area                              | Change or reason to retain                                                                                                                                                                                       |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Duration inputs                   | Removed the local `DurationLike` union. Parameters use `Temporal.DurationLike` directly; our class also satisfies its standard field-object branch.                                                              |
-| Instant inputs                    | Removed the local `InstantLike` alias. Parameters use `Temporal.InstantLike` plus the shared `Instant` representation.                                                                                           |
-| Unit and option declarations      | Removed copied unit, precision, field and options interfaces. Methods use `Temporal.PluralizeUnit`, library options and `Temporal.DurationLikeObject` directly. `Readonly` expresses immutable input views.      |
-| `DateFields`                      | Removed this unnecessary convenience record and factory. Local construction accepts numeric components and an explicit zone.                                                                                     |
-| `DateComponent`                   | Derived with `Exclude<Temporal.DateUnit \| Temporal.TimeUnit, "week" \| "microsecond" \| "nanosecond">`; Date has neither week setters nor precision below milliseconds.                                         |
-| `RoundingMode`                    | Internal repeated scalar parameter type, derived from `Temporal.RoundingOptions<Temporal.TimeUnit>["roundingMode"]`; no copied nine-value union or public renaming alias.                                        |
-| Disambiguation                    | Removed the one-use alias; the parameter indexes `Temporal.DisambiguationOptions` directly.                                                                                                                      |
-| Relative options                  | Removed `IsoRelativeOptions` and its local string-only restriction. Use canonical readonly relative, rounding and total options. Relative/calendar algorithms remain explicitly unfinished.                      |
-| Formatter types                   | Removed `DateFormatter` and `FormatPart`. Provider parts use `Omit<Intl.NumberRangeFormatPart, "source">`, including the library's `approximatelySign`. Range source attribution belongs to the range algorithm. |
-| RegExp indices                    | Index pairs derive from `RegExpIndicesArray[number]`. The named-group map still needs a corrected type: the pinned library excludes undefined for nonparticipating named captures.                               |
-| RegExp match results              | Metadata derives from `RegExpExecArray`; retain a corrected array element union for unmatched captures. The pinned `Array<string>` declaration is inaccurate here.                                               |
-| RegExp replacers                  | The library callback uses `any[]`. The existing facade's `unknown[]` adapter is still an erased boundary needing a typed callback/builtin-lowering design; importing `any` would not fix it.                     |
-| Clock and time-zone rules         | Retain `TimeHost` and `TimeZoneRules`. These are host/provider capabilities, not ECMAScript value interfaces. All concrete zones implement `TimeZoneRules`.                                                      |
-| Number provider                   | Retain `NumberFormatterPrimitive`. Native and JVM adapters implement it; it describes ICU text/field-span operations, not the public Intl API.                                                                   |
-| Foreign handles                   | Retain distinct nominal types and type-only brands. No library type describes a managed ICU payload. Negative type checks reject `{}` and cross-family handle assignments.                                       |
-| Internal classes and tool records | Parser nodes, instruction programs, match buffers, Unicode tables, scanners and provider/build artifact records have no standard-library equivalent. Their physical storage is intentional.                      |
-
-`NtsDate` checks its supported instance API against `Date`, excluding the
-documented metadata/legacy and pending locale/Temporal bridge members. Its
-nullable `toJSON` result corrects the pinned library's string-only declaration.
-`Duration` and `Instant` check the standard supported method and field contracts.
-The type-only `WithResult` transformation binds standard object results to the
-shared classes, preserving both overloads of the pinned methods. It copies no
-member declarations and emits no allocation or code. Locale methods, zoned
-conversion and intrinsic metadata omissions are explicit.
-
-The RegExp facade checks its supported source/flags/test contract, and its
-iterator implements the standard `IterableIterator` contract with the corrected
-match result. It cannot honestly claim the whole `RegExp` interface yet: its
-host prototype compatibility widens flag getters and `lastIndex`, while capture
-result typing differs from the pinned library. `NumberFormatter` is a typed
-provider integration helper; shared locale-independent option normalization
-now lives in `NumberFormatConfiguration`. The public API still lacks locale
-resolution, BigInt/string dispatch, bound formatting and range APIs. Neither class gains
-throwing stubs merely to satisfy a full `implements` declaration.
-
-Strict checking passed for the runtime source, C/JVM adapters, generated
-declarations, tools and integration fixtures. The ICU fixture, including nominal
-handle type checks, passes C RC with ASan/UBSan/leak checks and JVM verification.
-Post-refactor original Test262 host slices report Date **368/226**,
-Instant **382/83** and Duration **347/193** passes/failures. These include retained
-profile divergences and semantic gaps; they are not compiled conformance results.
-
-Both emitted backends currently report `NTS1001` for canonical
-`Temporal.DurationLike`, Instant/Zoned input unions and relative/time-zone option
-unions. These declarations are valid TypeScript. The production API retains
-canonical types; supporting their representation and builtin bindings belongs
-to compiler integration. Earlier literal field records entering erased unions
-were not projected into the expected record layout: C ignored the supplied
-second and JVM threw a class cast. The public fixture retains that trigger for
-verification after compiler support lands. A zero-diagnostic scalar/provider
-probe cannot establish that these public paths work.
-
-## Architecture correction status
-
-The audit covers Date, Temporal, Intl providers and the earlier RegExp facade.
-The pure algorithms, exact-time helpers, typed buffers and provider separation
-remain useful. The public facades are the main architectural problem.
-
-1. Done: Date, Instant and Duration own private state and reuse library types.
-   Descriptor patches, dynamic prototype construction, reflective coercion and
-   WeakMap state are removed. Duration has one representation; its obsolete
-   wrapper file and `DurationRecord` export alias are removed.
-2. Done: fixed ICU handle typing and provenance. The previous empty handle type
-   admitted `{}` and mixed number/time-zone handles. The distinct handle types
-   now use type-only brands over managed foreign references. Native
-   accessors validate boxed kind and cleanup-owner identity before casting,
-   including release builds. The nullable time-zone ID declaration matches its
-   native result and is checked by the adapter. No fake payload field is used.
-3. Done: removed eager Date-to-Temporal coupling and descriptor namespace setup;
-   the namespace is an ES module export. Provider selection and reachability
-   must keep UTC operations independent of optional Temporal and ICU code/data.
-4. Pending: rewrite the typed boundary of `src/regexp/builtins.ts`. It already
-   owns private state, but still uses `Reflect.apply`, dynamic species and
-   unchecked constructor casts. Keep its shared parser/matcher and reusable
-   typed matching buffers. Bind supported default paths to typed operations.
-5. In progress: public imports now have integration probes. Resolve canonical
-   union and record-projection compiler gaps and validate C/JVM execution before
-   advertising support for those public paths. Intl work can proceed through
-   its verified compiled provider path. Use original Test262 semantic cases; keep documented
-   metaobject non-goals separate from missing supported behavior. Treat refused
-   exports, timeouts and unvisited cases as incomplete validation even if the
-   differential command exits successfully. Host pass counts are supplementary.
-
-Allocation review found avoidable per-instance side tables and Duration's
-temporary ten-element field array plus wrapper allocation. Named field reads
-and directly owned immutable state avoid that work. Normalized duration time is
-cached in the same immutable object; its C layout is 128 bytes, including the
-exact-time field. Public unit and precision inputs derive from the libraries.
-Intl partition names derive from the standard range part type, retaining its
-approximation marker.
-
-Array `push` is appropriate for compilation builders and outputs with unknown
-length; it is not independently evidence of a performance problem. Keep
-exact-size output allocation and reusable scratch where sizes are known. Measure
-construction, `formatToParts`, heap, startup and artifact size alongside reused
-`format` throughput before making broader performance claims. The existing
-format microbenchmark does not establish those costs.
-
-For Intl, build normalized formatter configuration in shared code, then ask ICU
-for data/text and UTF-16 field spans. Shared code owns JS result objects,
-resolved options and partitioning. Exact decimal/BigInt inputs must stay exact
-across the boundary. Add one constructor at a time and run its original
-`intl402` slice through compiled standard bindings before advertising support.
+After a Java provider API change, use `--regenerate-bindings` to refresh the
+declarations and binding table together. Never format the generated declarations
+independently: the binding table records byte offsets. The ICU tool checks drift.

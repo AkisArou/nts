@@ -1,0 +1,246 @@
+import { canonicalizeLocale } from "./locale.ts";
+import type { LocaleData, LocaleInfoData } from "./locale-data.ts";
+import {
+  LocaleIdentifier,
+  validLanguage,
+  validScript,
+  validRegion,
+  validVariant,
+  validUnicodeType,
+} from "./locale-id.ts";
+import { optionalString, stringOption } from "./options.ts";
+import type { WithResult } from "../contract.ts";
+
+const hourCycles: readonly Intl.LocaleHourCycleKey[] = ["h11", "h12", "h23", "h24"];
+const caseFirstValues: readonly Intl.LocaleCollationCaseFirst[] = ["upper", "lower", "false"];
+const weekdays: readonly string[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const optionKeys: readonly string[] = ["ca", "co", "fw", "hc", "kf", "kn", "nu"];
+
+function typeOption(value: string | undefined): string | undefined {
+  const result = optionalString(value);
+  if (result !== undefined && !validUnicodeType(result))
+    throw new RangeError("Invalid Unicode locale option");
+  return result;
+}
+
+function subdivision<D extends LocaleData>(
+  data: D,
+  identifier: LocaleIdentifier,
+  key: string,
+): string | undefined {
+  const value = identifier.keyword(key);
+  if (value === undefined) return undefined;
+  const region = value.slice(0, value.charCodeAt(0) >= 48 && value.charCodeAt(0) <= 57 ? 3 : 2);
+  if (!validRegion(region) || value.length === region.length) return undefined;
+  for (let index = region.length; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    if (!((code >= 48 && code <= 57) || (code >= 97 && code <= 122))) return undefined;
+  }
+  return new LocaleIdentifier(canonicalizeLocale(data, "und-" + region)).region;
+}
+
+export class NtsLocale<D extends LocaleInfoData> implements WithResult<
+  Omit<Intl.Locale, "hourCycle" | "caseFirst">,
+  Intl.Locale,
+  NtsLocale<D>
+> {
+  readonly #data: D;
+  readonly #tag: string;
+  readonly #identifier: LocaleIdentifier;
+
+  constructor(
+    data: D,
+    tag: string | Intl.Locale | NtsLocale<D>,
+    // These two members are in the pinned ECMA-402 revision but missing
+    // from TypeScript 7.0.2's LocaleOptions. Keep the existing contract direct.
+    options: Readonly<Intl.LocaleOptions> & {
+      readonly variants?: string;
+      readonly firstDayOfWeek?: string | number;
+    } = {},
+  ) {
+    if (typeof tag !== "string" && (tag === null || typeof tag !== "object"))
+      throw new TypeError("Locale requires a string or locale object");
+    const text = typeof tag === "string" ? tag : tag.toString();
+    if (options === null) throw new TypeError("Locale options must not be null");
+    let identifier = new LocaleIdentifier(canonicalizeLocale(data, text));
+    const language = optionalString(options.language) ?? identifier.language;
+    if (!validLanguage(language)) throw new RangeError("Invalid locale language");
+    const script = optionalString(options.script) ?? identifier.script;
+    if (script !== undefined && !validScript(script)) throw new RangeError("Invalid locale script");
+    const region = optionalString(options.region) ?? identifier.region;
+    if (region !== undefined && !validRegion(region)) throw new RangeError("Invalid locale region");
+    const variantText = optionalString(options.variants);
+    const variants =
+      variantText === undefined ? identifier.variants : variantText.toLowerCase().split("-");
+    const seen = new Set<string>();
+    for (let index = 0; index < variants.length; index++) {
+      const value = variants[index]!;
+      if (!validVariant(value) || seen.has(value))
+        throw new RangeError("Invalid or duplicate locale variant");
+      seen.add(value);
+    }
+    const base = identifier.withBase(language, script, region, variants);
+    const calendar = typeOption(options.calendar);
+    const collation = typeOption(options.collation);
+    const firstDayOption = options.firstDayOfWeek;
+    let firstDay =
+      firstDayOption === undefined ? undefined : optionalString(String(firstDayOption));
+    if (typeof firstDayOption === "symbol")
+      throw new TypeError("Locale string options reject Symbols");
+    if (firstDay !== undefined) {
+      if (firstDay.length === 1 && firstDay >= "0" && firstDay <= "7") {
+        const index = Number(firstDay);
+        firstDay = weekdays[index === 0 ? 6 : index - 1]!;
+      }
+      if (!validUnicodeType(firstDay)) throw new RangeError("Invalid first day identifier");
+    }
+    const hourCycleOption = options.hourCycle;
+    const hourCycle =
+      hourCycleOption === undefined ? undefined : stringOption(hourCycleOption, hourCycles, "h23");
+    const caseFirstOption = options.caseFirst;
+    const caseFirst =
+      caseFirstOption === undefined
+        ? undefined
+        : stringOption(caseFirstOption, caseFirstValues, "false");
+    const numeric = options.numeric;
+    const numberingSystem = typeOption(options.numberingSystem);
+    // Apply overrides only after all ordered option reads. The canonicalizer
+    // owns CLDR aliases; the identifier owns placement and duplicate removal.
+    const result = canonicalizeLocale(
+      data,
+      new LocaleIdentifier(base).withKeywords(optionKeys, [
+        calendar?.toLowerCase(),
+        collation?.toLowerCase(),
+        firstDay?.toLowerCase(),
+        hourCycle,
+        caseFirst,
+        numeric === undefined ? undefined : Boolean(numeric) ? "true" : "false",
+        numberingSystem?.toLowerCase(),
+      ]),
+    );
+    identifier = new LocaleIdentifier(result);
+    this.#tag = result;
+    this.#identifier = identifier;
+    this.#data = data;
+  }
+
+  get baseName(): string {
+    return this.#identifier.baseName;
+  }
+  get language(): string {
+    return this.#identifier.language;
+  }
+  get script(): string | undefined {
+    return this.#identifier.script;
+  }
+  get region(): string | undefined {
+    return this.#identifier.region;
+  }
+  get variants(): string | undefined {
+    return this.#identifier.variants.length === 0 ? undefined : this.#identifier.variants.join("-");
+  }
+  get calendar(): string | undefined {
+    return this.#identifier.keyword("ca");
+  }
+  get collation(): string | undefined {
+    return this.#identifier.keyword("co");
+  }
+  // The library narrows these extension getters to their valid option values,
+  // but a structurally valid extension may contain an unrecognized value.
+  get hourCycle(): string | undefined {
+    return this.#identifier.keyword("hc");
+  }
+  get caseFirst(): string | undefined {
+    return this.#identifier.keyword("kf");
+  }
+  get numeric(): boolean {
+    const value = this.#identifier.keyword("kn");
+    return value === "" || value === "true";
+  }
+  get numberingSystem(): string | undefined {
+    return this.#identifier.keyword("nu");
+  }
+  get firstDayOfWeek(): string | undefined {
+    return this.#identifier.keyword("fw");
+  }
+
+  maximize(): NtsLocale<D> {
+    return new NtsLocale(this.#data, this.#data.maximize(this.#tag));
+  }
+  minimize(): NtsLocale<D> {
+    return new NtsLocale(this.#data, this.#data.minimize(this.#tag));
+  }
+  toString(): string {
+    return this.#tag;
+  }
+
+  private preferredRegion(): string {
+    return (
+      subdivision(this.#data, this.#identifier, "rg") ??
+      this.#identifier.region ??
+      subdivision(this.#data, this.#identifier, "sd") ??
+      new LocaleIdentifier(this.#data.maximize(this.#tag)).region ??
+      "001"
+    );
+  }
+
+  getCalendars(): string[] {
+    const calendar = this.#identifier.keyword("ca");
+    return calendar === undefined
+      ? this.#data.calendarValues(this.#identifier.language + "-" + this.preferredRegion())
+      : [calendar];
+  }
+  getCollations(): string[] {
+    const collation = this.#identifier.keyword("co");
+    if (collation !== undefined) return [collation];
+    const result = this.#data.collationValues(this.#identifier.baseName);
+    // The default collation and search collation are not named sort choices.
+    let count = 0;
+    for (let index = 0; index < result.length; index++) {
+      const value = result[index]!;
+      if (value !== "standard" && value !== "search") result[count++] = value;
+    }
+    result.length = count;
+    return result.sort();
+  }
+  getHourCycles(): string[] {
+    const value = this.#identifier.keyword("hc");
+    return [
+      value === undefined
+        ? this.#data.hourCycle(this.#identifier.language + "-" + this.preferredRegion())
+        : value,
+    ];
+  }
+  getNumberingSystems(): string[] {
+    return [
+      this.#identifier.keyword("nu") ??
+        this.#data.defaultNumberingSystem(this.#identifier.baseName),
+    ];
+  }
+  getTimeZones(): string[] | undefined {
+    const region = this.#identifier.region;
+    return region === undefined ? undefined : this.#data.timeZones(region).sort();
+  }
+  getTextInfo(): Intl.TextInfo {
+    const script =
+      this.#identifier.script ?? new LocaleIdentifier(this.#data.maximize(this.#tag)).script;
+    const direction = script === undefined ? -1 : this.#data.textDirection(script);
+    return { direction: direction < 0 ? undefined : direction === 0 ? "ltr" : "rtl" };
+  }
+  getWeekInfo(): Intl.WeekInfo {
+    const data = this.#data.weekData(this.preferredRegion());
+    const option = this.#identifier.keyword("fw");
+    let firstDay = (data & 7) === 1 ? 7 : (data & 7) - 1;
+    for (let index = 0; index < weekdays.length; index++)
+      if (option === weekdays[index]) firstDay = index + 1;
+    let count = 0;
+    for (let day = 1; day <= 7; day++) if ((data & (1 << (day + 2))) !== 0) count++;
+    const weekend = new Array<number>(count);
+    let index = 0;
+    for (let day = 1; day <= 7; day++) {
+      const icuDay = day === 7 ? 1 : day + 1;
+      if ((data & (1 << (icuDay + 2))) !== 0) weekend[index++] = day;
+    }
+    return { firstDay, weekend };
+  }
+}

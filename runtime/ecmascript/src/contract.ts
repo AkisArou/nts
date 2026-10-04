@@ -1,7 +1,7 @@
 // Preserve library fields and method parameters while binding object results
 // to the shared implementation class. Standard global types also require the
 // locale/zoned APIs and intrinsic metadata that these staged classes omit.
-// The pinned Temporal API has at most two overloads per method; preserve both
+// The methods using this contract have at most two overloads; preserve both
 // so implements also checks the string and options forms of round/total.
 export type WithResult<T, LibraryResult, SharedResult> = {
   [K in keyof T]: T[K] extends {

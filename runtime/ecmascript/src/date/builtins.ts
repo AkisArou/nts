@@ -57,16 +57,16 @@ export class NtsDate implements Omit<
   static parse(value: string, zone: TimeZoneRules = UTC): number {
     return parseDate(value, zone);
   }
-  static UTC(
-    year: number,
-    month = 0,
-    day = 1,
-    hour = 0,
-    minute = 0,
-    second = 0,
-    millisecond = 0,
-  ): number {
-    return dateUTC(year, month, day, hour, minute, second, millisecond);
+  static UTC(...args: Parameters<DateConstructor["UTC"]>): number {
+    return dateUTC(
+      Number(args[0]),
+      args.length > 1 ? Number(args[1]) : 0,
+      args.length > 2 ? Number(args[2]) : 1,
+      args.length > 3 ? Number(args[3]) : 0,
+      args.length > 4 ? Number(args[4]) : 0,
+      args.length > 5 ? Number(args[5]) : 0,
+      args.length > 6 ? Number(args[6]) : 0,
+    );
   }
   getTime(): number {
     return this.#milliseconds;
@@ -168,33 +168,42 @@ export class NtsDate implements Omit<
       setComponent(this.#milliseconds, kind, first, second, third, fourth, count, false, UTC),
     );
   }
-  setUTCFullYear(year: number, month?: number, day?: number): number {
+  setUTCFullYear(...args: Parameters<Date["setUTCFullYear"]>): number {
     return this.#setUTCComponent(
       "year",
-      year,
-      month ?? 0,
-      day ?? 0,
+      Number(args[0]),
+      Number(args[1]),
+      Number(args[2]),
       0,
-      day !== undefined ? 3 : month !== undefined ? 2 : 1,
+      args.length,
     );
   }
-  setFullYear(year: number, month?: number, day?: number, zone: TimeZoneRules = UTC): number {
+  setFullYear(...args: Parameters<Date["setFullYear"]>): number {
     return this.setComponent(
       "year",
-      year,
-      month ?? 0,
-      day ?? 0,
+      Number(args[0]),
+      Number(args[1]),
+      Number(args[2]),
       0,
-      day !== undefined ? 3 : month !== undefined ? 2 : 1,
+      args.length,
       true,
-      zone,
+      UTC,
     );
   }
-  setUTCMonth(month: number, day?: number): number {
-    return this.#setUTCComponent("month", month, day ?? 0, 0, 0, day === undefined ? 1 : 2);
+  setUTCMonth(...args: Parameters<Date["setUTCMonth"]>): number {
+    return this.#setUTCComponent("month", Number(args[0]), Number(args[1]), 0, 0, args.length);
   }
-  setMonth(month: number, day?: number, zone: TimeZoneRules = UTC): number {
-    return this.setComponent("month", month, day ?? 0, 0, 0, day === undefined ? 1 : 2, true, zone);
+  setMonth(...args: Parameters<Date["setMonth"]>): number {
+    return this.setComponent(
+      "month",
+      Number(args[0]),
+      Number(args[1]),
+      0,
+      0,
+      args.length,
+      true,
+      UTC,
+    );
   }
   setUTCDate(day: number): number {
     return this.#setUTCComponent("day", day, 0, 0, 0, 1);
@@ -202,81 +211,63 @@ export class NtsDate implements Omit<
   setDate(day: number, zone: TimeZoneRules = UTC): number {
     return this.setComponent("day", day, 0, 0, 0, 1, true, zone);
   }
-  setUTCHours(hour: number, minute?: number, second?: number, millisecond?: number): number {
+  setUTCHours(...args: Parameters<Date["setUTCHours"]>): number {
     return this.#setUTCComponent(
       "hour",
-      hour,
-      minute ?? 0,
-      second ?? 0,
-      millisecond ?? 0,
-      millisecond !== undefined ? 4 : second !== undefined ? 3 : minute !== undefined ? 2 : 1,
+      Number(args[0]),
+      Number(args[1]),
+      Number(args[2]),
+      Number(args[3]),
+      args.length,
     );
   }
-  setHours(
-    hour: number,
-    minute?: number,
-    second?: number,
-    millisecond?: number,
-    zone: TimeZoneRules = UTC,
-  ): number {
+  setHours(...args: Parameters<Date["setHours"]>): number {
     return this.setComponent(
       "hour",
-      hour,
-      minute ?? 0,
-      second ?? 0,
-      millisecond ?? 0,
-      millisecond !== undefined ? 4 : second !== undefined ? 3 : minute !== undefined ? 2 : 1,
+      Number(args[0]),
+      Number(args[1]),
+      Number(args[2]),
+      Number(args[3]),
+      args.length,
       true,
-      zone,
+      UTC,
     );
   }
-  setUTCMinutes(minute: number, second?: number, millisecond?: number): number {
+  setUTCMinutes(...args: Parameters<Date["setUTCMinutes"]>): number {
     return this.#setUTCComponent(
       "minute",
-      minute,
-      second ?? 0,
-      millisecond ?? 0,
+      Number(args[0]),
+      Number(args[1]),
+      Number(args[2]),
       0,
-      millisecond !== undefined ? 3 : second !== undefined ? 2 : 1,
+      args.length,
     );
   }
-  setMinutes(
-    minute: number,
-    second?: number,
-    millisecond?: number,
-    zone: TimeZoneRules = UTC,
-  ): number {
+  setMinutes(...args: Parameters<Date["setMinutes"]>): number {
     return this.setComponent(
       "minute",
-      minute,
-      second ?? 0,
-      millisecond ?? 0,
+      Number(args[0]),
+      Number(args[1]),
+      Number(args[2]),
       0,
-      millisecond !== undefined ? 3 : second !== undefined ? 2 : 1,
+      args.length,
       true,
-      zone,
+      UTC,
     );
   }
-  setUTCSeconds(second: number, millisecond?: number): number {
-    return this.#setUTCComponent(
-      "second",
-      second,
-      millisecond ?? 0,
-      0,
-      0,
-      millisecond === undefined ? 1 : 2,
-    );
+  setUTCSeconds(...args: Parameters<Date["setUTCSeconds"]>): number {
+    return this.#setUTCComponent("second", Number(args[0]), Number(args[1]), 0, 0, args.length);
   }
-  setSeconds(second: number, millisecond?: number, zone: TimeZoneRules = UTC): number {
+  setSeconds(...args: Parameters<Date["setSeconds"]>): number {
     return this.setComponent(
       "second",
-      second,
-      millisecond ?? 0,
+      Number(args[0]),
+      Number(args[1]),
       0,
       0,
-      millisecond === undefined ? 1 : 2,
+      args.length,
       true,
-      zone,
+      UTC,
     );
   }
   setUTCMilliseconds(millisecond: number): number {

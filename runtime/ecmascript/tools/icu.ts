@@ -2,7 +2,15 @@
 // node runtime/ecmascript/tools/icu.ts [--regenerate-bindings] [--sanitize]
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "../../..");
@@ -15,7 +23,12 @@ const env: NodeJS.ProcessEnv = {
   NTS_TSGO: process.env.NTS_TSGO ?? resolve(root, "target/tsgo"),
 };
 for (const option of process.argv.slice(2)) {
-  if (!["--pinned-native", "--regenerate-bindings", "--sanitize", "--bench", "--android"].includes(option)) throw new Error("Unknown option: " + option);
+  if (
+    !["--pinned-native", "--regenerate-bindings", "--sanitize", "--bench", "--android"].includes(
+      option,
+    )
+  )
+    throw new Error("Unknown option: " + option);
 }
 if (process.argv.includes("--pinned-native")) {
   env.PKG_CONFIG_LIBDIR = resolve(root, "target/ecmascript/icu-native-pin/install/lib/pkgconfig");
@@ -135,11 +148,45 @@ for (const [name, source] of [
   ["runtime", resolve(root, "runtime/c/nts_runtime.c")],
   ["unicode", resolve(root, "runtime/c/nts_unicode.c")],
   ["provider", resolve(provider, "c/nts_icu.c")],
+  ["collator", resolve(provider, "c/nts_icu_collator.c")],
   ["drive", resolve(fixture, "drive.c")],
 ] as const) {
   const object = resolve(native, name + ".o");
-  run(cc, ["-std=c11", "-O2", "-D_GNU_SOURCE", "-DNTS_PROVIDER_RC", ...sanitize, ...cflags,
-    "-I" + native, "-I" + resolve(root, "runtime/c"), "-I" + resolve(provider, "c"), "-c", source, "-o", object]);
+  run(cc, [
+    "-std=c11",
+    "-O2",
+    "-D_GNU_SOURCE",
+    "-DNTS_PROVIDER_RC",
+    ...(name === "collator" ? ["-Wall", "-Wextra", "-Werror"] : []),
+    ...sanitize,
+    ...cflags,
+    "-I" + native,
+    "-I" + resolve(root, "runtime/c"),
+    "-I" + resolve(provider, "c"),
+    "-c",
+    source,
+    "-o",
+    object,
+  ]);
+  objects.push(object);
+}
+for (const name of ["locale", "number_range", "date_pattern", "date"]) {
+  const object = resolve(native, name + ".o");
+  run(process.env.CXX ?? "clang++", [
+    "-std=c++17",
+    "-O2",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    ...sanitize,
+    ...cflags,
+    "-I" + resolve(root, "runtime/c"),
+    "-I" + resolve(provider, "c"),
+    "-c",
+    resolve(provider, "c/nts_icu_" + name + ".cpp"),
+    "-o",
+    object,
+  ]);
   objects.push(object);
 }
 // ICU's implementation uses C++; its C ABI does not remove the need to link
@@ -147,8 +194,22 @@ for (const [name, source] of [
 // then use the C++ driver for the final link so the platform selects that ABI.
 run(process.env.CXX ?? "clang++", [...sanitize, ...objects, ...libs, "-lm", "-o", executable]);
 const cResult = run(executable, []);
-const expected =
-  "America/New_York:-18000000:1710055800000:1730611800000:1710054000000\n900,719,925,474,099,312,345.00;minusSign=-;integer=12;group=,;integer=345;decimal=.;fraction=678\n𝟗𝟎𝟎,𝟕𝟏𝟗,𝟗𝟐𝟓,𝟒𝟕𝟒,𝟎𝟗𝟗,𝟑𝟏𝟐,𝟑𝟒𝟓.𝟎𝟎;minusSign=-;integer=𝟏𝟐;group=,;integer=𝟑𝟒𝟓;decimal=.;fraction=𝟔𝟕𝟖\n+1.3%\n($1.05)\n¥1,235\nKWD 1.235\n1.2K\n12.4 meters per second\n001\n13\n0.10\nZZZ 1.23";
+let expected =
+  "America/New_York:-18000000:1710055800000:1730611800000:1710054000000\n900,719,925,474,099,312,345.00;minusSign=-;integer=12;group=,;integer=345;decimal=.;fraction=678\n𝟗𝟎𝟎,𝟕𝟏𝟗,𝟗𝟐𝟓,𝟒𝟕𝟒,𝟎𝟗𝟗,𝟑𝟏𝟐,𝟑𝟒𝟓.𝟎𝟎;minusSign=-;integer=𝟏𝟐;group=,;integer=𝟑𝟒𝟓;decimal=.;fraction=𝟔𝟕𝟖\n+1.3%\n($1.05)\n¥1,235\nKWD 1.235\n1.2K\n12.4 meters per second\n001\n13\n0.10\nZZZ 1.23\n~$1;currency=$=startRange;integer=3=startRange;literal= – =shared;currency=$=endRange;integer=5=endRange\n1:2:~0\n987,654,321,987,654,321–987,654,321,987,654,322\nbuddhist,gregory;standard,phonebk,search,emoji,eor;h12;h23;Asia/Tokyo;521;522;1;0;-1";
+expected += "\n3:7:0:0:-1:-1:0:-1:-1:-1:-1";
+expected +=
+  "\nyMMMMdHHmmssSSSv:numeric:long:numeric:2-digit:2-digit:2-digit:3:shortGeneric:h24:2-digit:h12:numeric:long:numeric";
+expected +=
+  "\n2024-03-10 03:30:00.000 😀 EDT;year=1969;literal=-;month=12;literal=-;day=31;literal= ;hour=19;literal=:;minute=00;literal=:;second=00;literal=.;fractionalSecond=000;literal= 😀 ;timeZoneName=EST";
+expected += "\n1582-10-10 AD:0001-01-01 BC:271822-04-20 BC:275760-09-13 AD";
+expected += "\n𝟏𝟗𝟕𝟎-𝟎𝟏-𝟎𝟏;year=𝟏𝟗𝟕𝟎;literal=-;month=𝟎𝟏;literal=-;day=𝟎𝟏";
+expected +=
+  "\n2019(ji-hai) First Month 1;relatedYear=2019;literal=(;yearName=ji-hai;literal=) ;month=First Month;literal= ;day=1";
+expected +=
+  "\nJan 1 – 3, 1970;month=Jan=shared;literal= =shared;day=1=startRange;literal= – =shared;day=3=endRange;literal=, =shared;year=1970=shared";
+expected +=
+  "\nJan 1, 1970;month=Jan=shared;literal= =shared;day=1=shared;literal=, =shared;year=1970=shared";
+expected += "\nAmerica/New_York:true:true:-04:00:+05:30:+00:00";
 if (jvmResult !== expected || cResult !== expected)
   throw new Error("ICU compiled ABI mismatch:\nC: " + cResult + "\nJVM: " + jvmResult);
 console.log(
@@ -160,6 +221,13 @@ console.log(
     utf16Parts: true,
     dst: true,
     numberOptions: true,
+    numberRanges: true,
+    localeData: true,
+    collation: true,
+    datePatterns: true,
+    dateText: true,
+    dateRanges: true,
+    timeZoneIdentifiers: true,
     sanitize: sanitize.length > 0,
   }),
 );
@@ -172,7 +240,9 @@ if (process.argv.includes("--android")) {
   if (!sdk) throw new Error("--android requires ANDROID_HOME or ANDROID_SDK_ROOT");
   const androidJar = resolve(sdk, "platforms/android-29/android.jar");
   if (!existsSync(androidJar)) throw new Error("--android requires the API 29 platform");
-  const tools = readdirSync(resolve(sdk, "build-tools")).sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
+  const tools = readdirSync(resolve(sdk, "build-tools")).sort((a, b) =>
+    a.localeCompare(b, "en", { numeric: true }),
+  );
   const newest = tools[tools.length - 1];
   if (!newest) throw new Error("--android requires Android build-tools");
   const adapterJar = resolve(out, "adapter.jar");
@@ -182,7 +252,19 @@ if (process.argv.includes("--android")) {
   const dex = resolve(out, "dex");
   rmSync(dex, { force: true, recursive: true });
   mkdirSync(dex, { recursive: true });
-  run(resolve(sdk, "build-tools", newest, "d8"), ["--release", "--min-api", "29", "--lib", androidJar, "--output", dex, adapterJar, programJar, resolve(jvm, "nts-runtime.jar"), jar]);
+  run(resolve(sdk, "build-tools", newest, "d8"), [
+    "--release",
+    "--min-api",
+    "29",
+    "--lib",
+    androidJar,
+    "--output",
+    dex,
+    adapterJar,
+    programJar,
+    resolve(jvm, "nts-runtime.jar"),
+    jar,
+  ]);
   // D8 emits code only. ICU classpath resources must travel with that code.
   const resources = resolve(out, "android-resources");
   rmSync(resources, { force: true, recursive: true });
@@ -198,10 +280,26 @@ if (process.argv.includes("--android")) {
   removeBytecode(resources);
   rmSync(resolve(resources, "META-INF/MANIFEST.MF"), { force: true });
   mkdirSync(resolve(resources, "META-INF"), { recursive: true });
-  writeFileSync(resolve(resources, "META-INF/ICU-LICENSE"), readFileSync(resolve(root, "runtime/ecmascript/third_party/ICU-LICENSE")));
+  writeFileSync(
+    resolve(resources, "META-INF/ICU-LICENSE"),
+    readFileSync(resolve(root, "runtime/ecmascript/third_party/ICU-LICENSE")),
+  );
   const artifact = resolve(out, "nts-icu-android-probe.jar");
   run("jar", ["--create", "--file", artifact, "-C", dex, ".", "-C", resources, "."]);
   const entries = run("jar", ["--list", "--file", artifact]).split("\n");
-  if (!entries.includes("classes.dex") || !entries.some((name) => name.endsWith("/zoneinfo64.res")) || entries.some((name) => name.endsWith(".class"))) throw new Error("Android probe is missing dex/data or still contains JVM bytecode");
-  console.log(JSON.stringify({ mode: "ICU-Android-dex-and-resources", minApi: 29, bytes: statSync(artifact).size, artifact, deviceExecution: false }));
+  if (
+    !entries.includes("classes.dex") ||
+    !entries.some((name) => name.endsWith("/zoneinfo64.res")) ||
+    entries.some((name) => name.endsWith(".class"))
+  )
+    throw new Error("Android probe is missing dex/data or still contains JVM bytecode");
+  console.log(
+    JSON.stringify({
+      mode: "ICU-Android-dex-and-resources",
+      minApi: 29,
+      bytes: statSync(artifact).size,
+      artifact,
+      deviceExecution: false,
+    }),
+  );
 }

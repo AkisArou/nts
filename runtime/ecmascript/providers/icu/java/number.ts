@@ -12,14 +12,23 @@ export class IcuNumberData implements NumberFormatData {
 
 export class IcuNumberFormatter implements NumberFormatterPrimitive {
   private readonly handle: NativeFormatter;
-  constructor(locale: string, skeleton: string) {
-    this.handle = new NativeFormatter(locale, skeleton);
+  constructor(locale: string, skeleton: string, negativeSkeleton = "") {
+    this.handle = new NativeFormatter(locale, skeleton, negativeSkeleton);
   }
-  format(value: number, fields: boolean): string {
-    return this.handle.format(value, fields);
+  format(value: number, fields: boolean, negative = false): string {
+    return this.handle.format(value, fields, negative);
   }
-  formatDecimal(value: string, fields: boolean): string {
-    return this.handle.formatDecimal(value, fields);
+  formatDecimal(value: string, fields: boolean, negative = false): string {
+    return this.handle.formatDecimal(value, fields, negative);
+  }
+  formatRange(
+    start: string,
+    end: string,
+    fields: boolean,
+    negativeStart = false,
+    negativeEnd = false,
+  ): string {
+    return this.handle.formatRange(start, end, fields, negativeStart, negativeEnd);
   }
   fieldCount(): number {
     return this.handle.fieldCount();

@@ -1,11 +1,42 @@
 {
+  "nts.intl.IcuDateFormatter": {
+    "nullability": { "format(DZ)Ljava/lang/String;": "nonnull", "formatRange(DDZ)Ljava/lang/String;": "nonnull" }
+  },
+  "nts.intl.IcuDatePatterns": {
+    "nullability": {
+      "bestPattern(Ljava/lang/String;)Ljava/lang/String;": "nonnull",
+      "stylePattern(II)Ljava/lang/String;": "nonnull",
+      "patterns()[Ljava/lang/String;": "nonnull"
+    }
+  },
+  "nts.intl.IcuLocaleData": {
+    "nullability": {
+      "canonicalize(Ljava/lang/String;)Ljava/lang/String;": "nonnull",
+      "maximize(Ljava/lang/String;)Ljava/lang/String;": "nonnull",
+      "minimize(Ljava/lang/String;)Ljava/lang/String;": "nonnull",
+      "defaultLocale()Ljava/lang/String;": "nonnull",
+      "availableLocale(I)Ljava/lang/String;": "nonnull",
+      "bestFit(Ljava/lang/String;)Ljava/lang/String;": "nullable",
+      "defaultNumberingSystem(Ljava/lang/String;)Ljava/lang/String;": "nonnull",
+      "canonicalType(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;": "nonnull",
+      "calendarValues(Ljava/lang/String;)[Ljava/lang/String;": "nonnull",
+      "availableCalendars(Ljava/lang/String;)[Ljava/lang/String;": "nonnull",
+      "collationValues(Ljava/lang/String;)[Ljava/lang/String;": "nonnull",
+      "hourCycle(Ljava/lang/String;)Ljava/lang/String;": "nonnull",
+      "timeZones(Ljava/lang/String;)[Ljava/lang/String;": "nonnull",
+      "timeZoneNames()[Ljava/lang/String;": "nonnull",
+      "canonicalTimeZone(Ljava/lang/String;)Ljava/lang/String;": "nullable",
+      "defaultTimeZoneIdentifier()Ljava/lang/String;": "nonnull"
+    }
+  },
   "nts.intl.IcuTimeZone": {
     "nullability": { "id()Ljava/lang/String;": "nonnull" }
   },
   "nts.intl.IcuNumberFormatter": {
     "nullability": {
-      "format(DZ)Ljava/lang/String;": "nonnull",
-      "formatDecimal(Ljava/lang/String;Z)Ljava/lang/String;": "nonnull"
+      "format(DZZ)Ljava/lang/String;": "nonnull",
+      "formatDecimal(Ljava/lang/String;ZZ)Ljava/lang/String;": "nonnull",
+      "formatRange(Ljava/lang/String;Ljava/lang/String;ZZZ)Ljava/lang/String;": "nonnull"
     }
   }
 }
