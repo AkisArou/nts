@@ -140,6 +140,9 @@
  * every other site that reads a kind tests for MAP, BUFFER, ARRAY or TUPLE and
  * treats this as the object it is. */
 #define NTS_KIND_BOXED 7u
+/* Immutable primitive storage. It is managed, but compared by integer value,
+ * never by the allocation's identity. */
+#define NTS_KIND_BIGINT 8u
 
 /* How a foreign object system counts its objects: its retain and its release,
  * each safe on NULL. One per family the program uses, emitted by the compiler
@@ -360,6 +363,13 @@ extern const NtsDescriptor nts_holder_descriptor;
 void nts_register_holders(uint32_t family, const NtsHolders *holders);
 
 typedef NtsHeader NtsString;
+
+/* Only erased storage needs this box. Ordinary bigint arithmetic stays native
+ * and allocation-free; late boxing makes an allocation visible to ownership. */
+typedef struct NtsBigIntBox {
+  NtsHeader header;
+  __int128 value;
+} NtsBigIntBox;
 
 /* A symbol: an interned cell whose **address is its identity**.
  *
@@ -720,6 +730,8 @@ static inline bool nts_value_truthy(NtsValue value) {
     return value.as.boolean;
   case NTS_TAG_NUMBER:
     return value.as.number != 0.0 && !(value.as.number != value.as.number);
+  case NTS_TAG_BIGINT:
+    return ((const NtsBigIntBox *)value.as.reference)->value != 0;
   case NTS_TAG_STRING:
     return value.as.reference != 0 &&
            ((NtsString *)value.as.reference)->length != 0;
@@ -804,8 +816,8 @@ NtsString *nts_tag_name(uint32_t tag);
 
 /* Two facts about a tag's payload, which one predicate used to answer for both.
  *
- * `NTS_TAG_IS_POINTER`: the payload is an address. Identity, equality and
- * truthiness can be answered from the address alone.
+ * `NTS_TAG_IS_POINTER`: the payload is an address. A boxed bigint owns such
+ * storage but its equality and truthiness read the integer, not its address.
  *
  * `NTS_TAG_IS_MANAGED`: the payload is an object of this runtime's, with an
  * `NtsHeader`. The tracer walks it, `nts_retain` and `nts_release` count it,
@@ -819,9 +831,10 @@ NtsString *nts_tag_name(uint32_t tag);
  * reader of a header. */
 #define NTS_TAG_IS_POINTER(tag)                                                \
   (((tag) >= NTS_TAG_STRING && (tag) <= NTS_TAG_OBJECT) ||                     \
-   NTS_TAG_IS_HANDLE(tag))
+   NTS_TAG_IS_HANDLE(tag) || (tag) == NTS_TAG_BIGINT)
 #define NTS_TAG_IS_MANAGED(tag)                                                \
-  ((tag) >= NTS_TAG_STRING && (tag) <= NTS_TAG_OBJECT)
+  (((tag) >= NTS_TAG_STRING && (tag) <= NTS_TAG_OBJECT) ||                     \
+   (tag) == NTS_TAG_BIGINT)
 
 /* A `Map`, and a `Set`, which is one that stores no values.
  *
@@ -880,6 +893,9 @@ extern bool (*nts_objc_key_equal)(const void *a, const void *b);
  * at each call, because a shift by the full width is undefined in C. */
 __int128 nts_bigint_as_intn(double bits, __int128 value);
 __int128 nts_bigint_as_uintn(double bits, __int128 value);
+NtsBigIntBox *nts_bigint_box(__int128 value);
+/* A checked tag proof must precede this storage read. */
+NTS_READS_ONLY __int128 nts_bigint_unbox(const NtsBigIntBox *box);
 
 /* JavaScript's shifts on a bigint. A negative count reverses the direction and
  * a count past 128 saturates -- both undefined behaviour for C's operators,
@@ -1715,6 +1731,9 @@ NtsString *nts_encode_uri(const NtsString *s, double component);
  * rule -- ToNumber of an object is ToPrimitive, and `Number([5])` is 5. The
  * lowering emits this only where the checker's type admits no object. */
 NTS_READS_ONLY double nts_value_to_number(NtsValue value);
+/* The explicit Number() conversion additionally permits bigint. Implicit
+ * ToNumber must reject it; lowering supplies its catchable TypeError. */
+NTS_READS_ONLY double nts_value_to_number_explicit(NtsValue value);
 
 NtsString *nts_str_trim(const NtsString *s);
 /* `padStart` and `padEnd`. The pad is never empty here: an omitted one is the

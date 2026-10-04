@@ -270,6 +270,12 @@ fn an_erased_value_keeps_its_tag_across_a_promise() {
 }
 
 #[test]
+fn an_erased_bigint_keeps_value_semantics_and_owned_storage() {
+    let report = run_suite("erased_bigint", &["-DNTS_PROVIDER_RC", "-fsanitize=address,undefined"]);
+    assert!(checks(&report) >= 119, "{report}");
+}
+
+#[test]
 fn combinators_settle_in_the_order_node_settles_them() {
     // Reference counting, and the suite collects cycles before it measures:
     // a combinator, its slots and its result promise form one.

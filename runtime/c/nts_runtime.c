@@ -484,6 +484,27 @@ const NtsDescriptor nts_desc_string2 = {
     NTS_KIND_STRING,   2,  0,   0, 0, 0, "string", 0u, 0,
     NTS_ARRAY_UNKNOWN, 0u, NULL};
 
+static const NtsDescriptor nts_desc_bigint = {NTS_KIND_BIGINT,
+                                              (uint32_t)sizeof(NtsBigIntBox),
+                                              0u,
+                                              0u,
+                                              0,
+                                              0,
+                                              "bigint",
+                                              0u,
+                                              0,
+                                              NTS_ARRAY_UNKNOWN,
+                                              0u,
+                                              NULL};
+
+NtsBigIntBox *nts_bigint_box(__int128 value) {
+  NtsBigIntBox *box = (NtsBigIntBox *)nts_object_new(&nts_desc_bigint);
+  box->value = value;
+  return box;
+}
+
+__int128 nts_bigint_unbox(const NtsBigIntBox *box) { return box->value; }
+
 /* The NoGC provider (RFC 9.1): a bump allocator that never frees. For compiler
  * bring-up, allocation testing and bounded-lifetime tools. It must never be
  * selected silently for a general application. */
@@ -949,7 +970,8 @@ bool nts_value_eq_string(NtsValue value, const NtsString *text) {
 }
 
 bool nts_value_eq_reference(NtsValue value, const NtsHeader *reference) {
-  return NTS_TAG_IS_POINTER(value.tag) && value.as.reference == reference;
+  return value.tag != NTS_TAG_BIGINT && NTS_TAG_IS_POINTER(value.tag) &&
+         value.as.reference == reference;
 }
 
 /* Both sides erased. Different tags are unequal without further question --
@@ -969,6 +991,9 @@ bool nts_value_strict_eq(NtsValue a, NtsValue b) {
     return a.as.boolean == b.as.boolean;
   case NTS_TAG_NUMBER:
     return a.as.number == b.as.number;
+  case NTS_TAG_BIGINT:
+    return nts_bigint_unbox((const NtsBigIntBox *)a.as.reference) ==
+           nts_bigint_unbox((const NtsBigIntBox *)b.as.reference);
   case NTS_TAG_STRING:
     return nts_string_eq((const NtsString *)a.as.reference,
                          (const NtsString *)b.as.reference);
@@ -1949,6 +1974,9 @@ NtsString *nts_value_to_string(NtsValue value) {
     return nts_bool_to_string(nts_value_boolean(value));
   case NTS_TAG_NUMBER:
     return nts_number_to_string(nts_value_number(value));
+  case NTS_TAG_BIGINT:
+    return nts_bigint_to_string(
+        nts_bigint_unbox((const NtsBigIntBox *)nts_value_reference(value)));
   case NTS_TAG_STRING: {
     NtsString *text = (NtsString *)nts_value_reference(value);
     nts_retain((NtsHeader *)text);
@@ -4774,10 +4802,13 @@ NtsString *nts_bool_to_string(bool value) {
  * The magnitude is taken on the *unsigned* twin: the most negative value of a
  * two's-complement type has no positive counterpart, and negating it in the
  * signed type is undefined. */
-NtsString *nts_bigint_to_string(__int128 value) {
+static NtsString *nts_bigint_text(__int128 value, bool inspect) {
   /* 2^127 is 39 digits; one more for the sign. */
-  char digits[40];
+  char digits[41];
   size_t at = sizeof digits;
+  if (inspect) {
+    digits[--at] = 'n';
+  }
   bool negative = value < 0;
   unsigned __int128 magnitude =
       negative ? (unsigned __int128)0 - (unsigned __int128)value
@@ -4790,6 +4821,10 @@ NtsString *nts_bigint_to_string(__int128 value) {
     digits[--at] = '-';
   }
   return nts_string_from_utf8(digits + at, sizeof digits - at);
+}
+
+NtsString *nts_bigint_to_string(__int128 value) {
+  return nts_bigint_text(value, false);
 }
 
 NtsString *nts_string_from_utf8(const char *bytes, size_t length) {
@@ -4973,6 +5008,11 @@ static size_t nts_write_cstring(const NtsString *s, char *out) {
 }
 
 NtsString *nts_value_inspect(NtsValue value) {
+  if (nts_value_tag(value) == NTS_TAG_BIGINT) {
+    return nts_bigint_text(
+        nts_bigint_unbox((const NtsBigIntBox *)nts_value_reference(value)),
+        true);
+  }
   if (nts_value_tag(value) == NTS_TAG_NUMBER) {
     double x = nts_value_number(value);
     if (x == 0.0 && 1.0 / x < 0.0) {
@@ -5578,9 +5618,22 @@ double nts_value_to_number(NtsValue value) {
     return nts_str_to_number((const NtsString *)nts_value_reference(value));
   case NTS_TAG_NULL:
     return 0.0;
+  case NTS_TAG_BIGINT:
+    fputs(NTS_REFUSED "an implicit conversion of a bigint to a number, which "
+                      "is a TypeError\n",
+          stderr);
+    abort();
   default:
     return (double)NAN;
   }
+}
+
+double nts_value_to_number_explicit(NtsValue value) {
+  if (nts_value_tag(value) == NTS_TAG_BIGINT) {
+    return (double)nts_bigint_unbox(
+        (const NtsBigIntBox *)nts_value_reference(value));
+  }
+  return nts_value_to_number(value);
 }
 
 /* `parseFloat(string)`.
@@ -6582,6 +6635,12 @@ nts_hash_key(NtsValue key, uint32_t kind) {
     return nts_hash_string((const NtsString *)nts_value_reference(key)) ^ 3u;
   case NTS_TAG_NUMBER:
     return nts_hash_number(nts_value_number(key)) ^ 2u;
+  case NTS_TAG_BIGINT: {
+    unsigned __int128 bits = (unsigned __int128)nts_bigint_unbox(
+        (const NtsBigIntBox *)nts_value_reference(key));
+    return nts_hash_mix((uint64_t)bits) ^
+           nts_hash_mix((uint64_t)(bits >> 64u)) ^ NTS_TAG_BIGINT;
+  }
   case NTS_TAG_BOOLEAN:
     return nts_hash_mix(nts_value_boolean(key) ? 1u : 0u) ^ 1u;
   case NTS_TAG_UNDEFINED:
@@ -6635,6 +6694,9 @@ nts_key_eq(NtsValue a, NtsValue b, uint32_t kind) {
                          (const NtsString *)nts_value_reference(b));
   case NTS_TAG_NUMBER:
     return nts_same_value_zero(nts_value_number(a), nts_value_number(b));
+  case NTS_TAG_BIGINT:
+    return nts_bigint_unbox((const NtsBigIntBox *)nts_value_reference(a)) ==
+           nts_bigint_unbox((const NtsBigIntBox *)nts_value_reference(b));
   case NTS_TAG_BOOLEAN:
     return nts_value_boolean(a) == nts_value_boolean(b);
   case NTS_TAG_UNDEFINED:
@@ -8957,6 +9019,8 @@ uint32_t nts_tag_of_reference(const NtsHeader *object) {
     return NTS_TAG_STRING;
   case NTS_KIND_SYMBOL:
     return NTS_TAG_SYMBOL;
+  case NTS_KIND_BIGINT:
+    return NTS_TAG_BIGINT;
   default:
     /* A closure answers `"function"` and is not distinguishable here: its kind
      * is `NTS_KIND_OBJECT` like any other, and the tag it carries comes from
@@ -9018,7 +9082,8 @@ void nts_promise_fulfill_value(NtsPromise *promise, NtsValue value) {
   if (promise->state != NTS_PROMISE_PENDING) {
     return;
   }
-  if (nts_value_tag(value) > NTS_TAG_OBJECT) {
+  uint32_t tag = nts_value_tag(value);
+  if (tag > NTS_TAG_NULL && !NTS_TAG_IS_HANDLE(tag) && tag != NTS_TAG_BIGINT) {
     fprintf(stderr, "nts: settled a promise with an unknown value tag\n");
     abort();
   }
