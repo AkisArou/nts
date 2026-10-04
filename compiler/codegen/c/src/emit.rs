@@ -4064,6 +4064,7 @@ fn erased_tag(ty: &HirType) -> Option<(&'static str, &'static str)> {
         HirType::Float { .. } | HirType::Int { .. } => Some(("NTS_TAG_NUMBER", "number")),
         HirType::Bool => Some(("NTS_TAG_BOOLEAN", "boolean")),
         HirType::Void => Some(("NTS_TAG_UNDEFINED", "number")),
+        HirType::Managed(ManagedType::BoxedBigInt) => Some(("NTS_TAG_BIGINT", "reference")),
         HirType::Managed(ManagedType::String) => Some(("NTS_TAG_STRING", "reference")),
         // A symbol answers `"symbol"` to `typeof`, so it carries its own tag --
         // the same reason a closure does, and the reason both sit below the
@@ -4202,6 +4203,7 @@ fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
         HirType::Managed(ManagedType::Array(_)) => "NtsArray *",
         HirType::Managed(ManagedType::Template) => "const NtsArray *",
         HirType::Managed(ManagedType::String) => "NtsString *",
+        HirType::Managed(ManagedType::BoxedBigInt) => "NtsBigIntBox *",
         HirType::Managed(ManagedType::Symbol) => "NtsSymbol *",
         HirType::Managed(ManagedType::Date) => "NtsDate *",
         HirType::Managed(ManagedType::Buffer) => "NtsBuffer *",
@@ -5572,7 +5574,7 @@ mod tests {
     /// match arm is not evidence that anything was tested.
     fn every_managed_variant() -> Vec<ManagedType> {
         use nts_semantic_schema::schema::TypeId;
-        const COUNT: usize = 14;
+        const COUNT: usize = 15;
         fn position(kind: &ManagedType) -> usize {
             match kind {
                 ManagedType::String => 0,
@@ -5589,6 +5591,7 @@ mod tests {
                 ManagedType::DataView => 11,
                 ManagedType::Symbol => 12,
                 ManagedType::Template => 13,
+                ManagedType::BoxedBigInt => 14,
             }
         }
         let number = || Box::new(HirType::NUMBER);
@@ -5607,6 +5610,7 @@ mod tests {
             ManagedType::DataView,
             ManagedType::Symbol,
             ManagedType::Template,
+            ManagedType::BoxedBigInt,
         ];
         let mut covered: Vec<usize> = samples.iter().map(position).collect();
         covered.sort_unstable();

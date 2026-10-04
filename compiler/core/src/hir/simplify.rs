@@ -135,6 +135,16 @@ fn identity(func: &Func, value: ValueId) -> Option<ValueId> {
         // where it does not yet know whether a coercion is needed, and finding
         // out is this pass's job rather than the emitter's.
         OpKind::Convert(operand) if func.values[operand.0 as usize].ty == op.ty => Some(*operand),
+        // A BigInt erasure preserves every bit. Removing its immediate read
+        // before late boxing avoids allocating storage for a scalar roundtrip.
+        // Numeric Int erasure is deliberately excluded: it converts to double
+        // and can round a wide native integer.
+        OpKind::Unerase { value } if op.ty == HirType::BigInt => {
+            let OpKind::Erase { value: source, .. } = func.value(*value).kind else {
+                return None;
+            };
+            (func.value(source).ty == HirType::BigInt).then_some(source)
+        }
         OpKind::Binary { op: bin, lhs, rhs } => {
             let integral = matches!(op.ty, HirType::Int { .. });
             if !integral {

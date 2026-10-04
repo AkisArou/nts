@@ -107,11 +107,8 @@ const _: () = assert!(
     FUNCTION < OBJECT && FUNCTION >= STRING,
     "a closure answers \"function\", so it is a reference below the object range"
 );
-/// Every reference tag inside `STRING ..= OBJECT`, which is what
-/// `NTS_TAG_IS_POINTER` and `NTS_TAG_IS_MANAGED` test and what the tracer,
-/// retain, release and both emitters read. The two answer alike today; a
-/// payload that is an address without an `NtsHeader` is a pointer and not
-/// managed (see the header).
+/// Ordinary reference tags occupy `STRING ..= OBJECT`. Boxed `BigInt` also owns
+/// managed storage but remains a JavaScript primitive, so it has tag 16.
 const _: () = assert!(
     STRING < FUNCTION && FUNCTION < SYMBOL && SYMBOL < OBJECT,
     "the reference tags are the contiguous range STRING ..= OBJECT"
@@ -130,6 +127,7 @@ const _: () = assert!(
 #[must_use]
 pub const fn of_reference(managed: &ManagedType) -> u32 {
     match managed {
+        ManagedType::BoxedBigInt => BIGINT,
         ManagedType::String => STRING,
         ManagedType::Object(ty) if super::is_closure_type(*ty) => FUNCTION,
         // A symbol, which this table defined a tag for and then never returned.
@@ -170,6 +168,7 @@ pub const fn of_reference(managed: &ManagedType) -> u32 {
 pub fn of_representation(ty: &super::HirType) -> u32 {
     use super::HirType;
     match ty {
+        HirType::BigInt => BIGINT,
         HirType::Bool => BOOLEAN,
         HirType::Managed(managed) => of_reference(managed),
         HirType::Void => UNDEFINED,
@@ -246,6 +245,7 @@ pub(super) fn of_registered(
 #[must_use]
 pub fn payload_is_a_reference(ty: &super::HirType) -> bool {
     (STRING..=OBJECT).contains(&of_representation(ty))
+        || matches!(ty, super::HirType::Managed(ManagedType::BoxedBigInt))
 }
 
 /// The tag a `typeof` comparison against this literal is asking about.

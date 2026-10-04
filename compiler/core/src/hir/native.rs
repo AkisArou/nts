@@ -1944,6 +1944,7 @@ impl Type {
             Self::FnPointer(signature) => return std::borrow::Cow::Borrowed(&signature.name),
             Self::Record(record) => return std::borrow::Cow::Owned(Pointee::Record(record.clone()).c_type()),
             Self::Managed(ty) => match ty {
+                ManagedType::BoxedBigInt => "NtsBigIntBox *",
                 ManagedType::String => "NtsString *",
                 ManagedType::Object(_) => "NtsHeader *",
                 ManagedType::Array(_) => "NtsArray *",

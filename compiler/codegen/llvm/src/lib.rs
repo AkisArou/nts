@@ -515,6 +515,7 @@ fn tag_of(ty: &HirType) -> Option<u32> {
         // second time a wildcard over `Managed` has answered for a newcomer
         // here.
         HirType::Managed(nts_core::hir::ManagedType::Symbol) => tags::SYMBOL,
+        HirType::Managed(nts_core::hir::ManagedType::BoxedBigInt) => tags::BIGINT,
         HirType::Managed(_) => tags::OBJECT,
         HirType::Void => tags::UNDEFINED,
         // A counted C library's object: its family's tag in the handle block,

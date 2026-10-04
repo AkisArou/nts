@@ -26,6 +26,7 @@
 
 pub mod bounds;
 pub mod builtin;
+mod boxing;
 pub mod dce;
 pub mod elements;
 pub mod escape;
@@ -188,6 +189,10 @@ pub enum HirType {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ManagedType {
     String,
+    /// Owned storage for an erased bigint. Source bigint arithmetic still uses
+    /// [`HirType::BigInt`]; this immutable box is introduced after erasure
+    /// simplification and before ownership, so surviving boxes are allocations.
+    BoxedBigInt,
     /// An object whose layout comes from the snapshot's type record.
     ///
     /// Carries the schema's id rather than a resolved layout: the descriptor
@@ -3252,9 +3257,11 @@ impl Program {
             // so a new type has to be decided here instead of defaulting to "no
             // edge" -- which is the wrong default, and how three of the arms
             // above were missed.
-            // Typed memory holds bytes, and a symbol's description is a string.
+            // Typed memory and boxed BigInts hold bytes, and a symbol's
+            // description is a string.
             HirType::Managed(
                 ManagedType::String
+                | ManagedType::BoxedBigInt
                 | ManagedType::Template
                 | ManagedType::Date
                 | ManagedType::Buffer
@@ -6015,6 +6022,12 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // the call that replaces it.
     let erased_reads_answered = program.funcs.iter_mut().map(bounds::answer_erased_reads).sum();
 
+    // A scalar survives erasure only when optimization could not recover its
+    // concrete representation. Materialize its owned payload now, as ordinary
+    // calls visible to escape analysis and reference counting. Erase itself
+    // remains a free repackaging operation.
+    boxing::materialize(&mut program);
+
     // Escape analysis before reference counting, because an object that stays
     // in the frame should not be counted at all -- and after dead-code
     // elimination, because an allocation nothing reads is not evidence of
@@ -7088,6 +7101,9 @@ mod tests {
             ..Program::default()
         };
         assert_eq!(program.cyclic_layouts(), vec![true]);
+        let mut scalar_targets = Vec::new();
+        program.reaches(&HirType::Managed(ManagedType::BoxedBigInt), &mut scalar_targets);
+        assert!(scalar_targets.is_empty(), "a boxed integer cannot retain an object");
     }
 
     #[test]

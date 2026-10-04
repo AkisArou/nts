@@ -121,6 +121,7 @@ pub fn shape_of(ty: &HirType) -> Option<Shape> {
         // type has no layout be emitted opaque and still be placed exactly.
         HirType::NativePointer(_) | HirType::Managed(
             ManagedType::String
+            | ManagedType::BoxedBigInt
             | ManagedType::Symbol
             | ManagedType::Date
             | ManagedType::Buffer

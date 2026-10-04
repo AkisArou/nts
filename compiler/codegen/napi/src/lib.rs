@@ -234,6 +234,8 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
         HirType::Bool => Some(Cross::Bool),
         HirType::Float { .. } | HirType::Int { .. } => Some(Cross::Number),
         HirType::Managed(ManagedType::String) => Some(Cross::Str),
+        // Internal owned scalar storage is never a published signature.
+        HirType::Managed(ManagedType::BoxedBigInt) => None,
         // A symbol's identity is the address of a cell in *this* runtime, so
         // handing one across the boundary would hand out an address whose
         // meaning the other side cannot reproduce -- `Symbol.for` on the far
@@ -367,6 +369,7 @@ fn spell(ty: &HirType) -> String {
         HirType::Bool => "bool".to_owned(),
         HirType::Erased => "unknown".to_owned(),
         HirType::BigInt => "bigint".to_owned(),
+        HirType::Managed(ManagedType::BoxedBigInt) => "owned bigint storage".to_owned(),
         HirType::Int { bits, signed } => format!("{}{bits}", if *signed { 'i' } else { 'u' }),
         HirType::Float { bits } => format!("f{bits}"),
         HirType::Managed(ManagedType::String) => "string".to_owned(),
@@ -420,6 +423,7 @@ fn c_type(ty: &HirType, layouts: &[hir::Layout]) -> String {
         // what the C emitter actually produces rather than inherit it -- it is
         // reasoned, but it has never been compiled.
         HirType::Erased => "NtsValue".to_owned(),
+        HirType::Managed(ManagedType::BoxedBigInt) => "NtsBigIntBox *".to_owned(),
         HirType::BigInt => "__int128".to_owned(),
         HirType::Managed(ManagedType::String) => "NtsString *".to_owned(),
         HirType::Managed(ManagedType::Symbol) => "NtsSymbol *".to_owned(),

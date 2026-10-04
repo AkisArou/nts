@@ -7345,6 +7345,7 @@ fn representation_word(ty: &HirType) -> &'static str {
 /// The reference half of [`representation_word`].
 fn managed_word(managed: &ManagedType) -> &'static str {
     match managed {
+        ManagedType::BoxedBigInt => "owned bigint storage",
         ManagedType::String => "a string",
         ManagedType::Object(_) => "an object",
         ManagedType::Array(_) => "an array",
@@ -15223,6 +15224,7 @@ fn named_representation(ty: &HirType) -> &'static str {
         HirType::Int { .. } | HirType::Float { .. } => "a number",
         HirType::NativePointer(_) => "an opaque C pointer",
         HirType::Managed(managed) => match managed {
+            ManagedType::BoxedBigInt => "owned bigint storage",
             ManagedType::String => "a string",
             ManagedType::Array(_) => "an array",
         ManagedType::Template => "an immutable template object",
@@ -15287,7 +15289,8 @@ pub fn erasable(ty: &HirType) -> bool {
             | HirType::Bool
             | HirType::Void
             | HirType::Managed(
-                ManagedType::String
+                ManagedType::BoxedBigInt
+                    | ManagedType::String
                     | ManagedType::Object(_)
                     | ManagedType::Array(_)
                     | ManagedType::Template
