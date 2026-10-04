@@ -16,17 +16,6 @@ import { PlainYearMonth } from "../temporal/plain-year-month.ts";
 import { PlainMonthDay } from "../temporal/plain-month-day.ts";
 import { MS_PER_DAY } from "../date/calendar.ts";
 
-// The pinned library omits relatedYear/yearName in part types. Preserve its
-// parameters and other methods, and correct only the two affected results.
-export interface DateTimeFormat extends Omit<
-  Intl.DateTimeFormat,
-  "formatToParts" | "formatRangeToParts"
-> {
-  formatToParts(...args: Parameters<Intl.DateTimeFormat["formatToParts"]>): DateTimeFormatPart[];
-  formatRangeToParts(
-    ...args: Parameters<Intl.DateTimeFormat["formatRangeToParts"]>
-  ): DateTimeRangeFormatPart[];
-}
 function clip(value: number): number {
   const result = timeClip(value);
   if (Number.isNaN(result)) throw new RangeError("Invalid date/time value");
@@ -37,7 +26,7 @@ export class NtsDateTimeFormat<
   D extends DateTimeLocaleData & TimeZoneIdentifierData,
   G extends DateTimePatternData,
   P extends DateTimeFormatterPrimitive,
-> implements DateTimeFormat {
+> {
   readonly #configuration: DateTimeFormatConfiguration<D, G>;
   readonly #formatter: DateTimeFormatter<P>;
   readonly #clock: () => number;

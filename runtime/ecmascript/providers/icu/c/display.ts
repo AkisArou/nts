@@ -1,8 +1,7 @@
 import { nts_icu_display_open, nts_icu_display_name } from "c:nts_icu";
 import type { IcuDisplayHandle } from "c:nts_icu";
-import type { DisplayNamesPrimitive } from "../../../src/intl/display-data.ts";
 
-export class IcuDisplayNames implements DisplayNamesPrimitive {
+export class IcuDisplayNames {
   readonly #handle: IcuDisplayHandle;
   constructor(locale: string, type: number, style: number, dialect: boolean) {
     const handle = nts_icu_display_open(locale, type, style, dialect);

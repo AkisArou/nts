@@ -3,8 +3,9 @@
 Date, Temporal and Intl architecture, implementation stages and validation are
 tracked in [DATE-TEMPORAL-INTL.md](DATE-TEMPORAL-INTL.md). Their calendar/exact-time
 core shares TypeScript semantics; ICU providers supply typed data primitives.
-Date, Instant and Duration now own their state in typed private fields and check
-their supported API against the pinned TypeScript libraries. The type audit in
+Date and Temporal values own their state in typed private fields. Class
+declarations stay plain; standard inputs, options and results use the pinned
+TypeScript libraries directly. The type audit in
 that document records the remaining RegExp facade rewrite and compiler gaps for
 canonical Temporal unions. Host results do not establish that public exports
 compile under NTS's typed object model. No WeakMap is needed for these values.
@@ -23,7 +24,7 @@ supportedValuesOf now enumerates all six categories with cached shared semantics
 and fresh result arrays. Public ICU IANA identity queries supply primary zone
 names; NumberFormat shares the same sanctioned-unit table. Its original Test262
 host result is 24/25, retaining the excluded descriptor case. DisplayNames now
-implements the standard library contract for all six name types, with shared
+supports all six standard name types, with shared
 validation/canonicalization/fallback and bounded name caches. Its original
 Test262 host result is 49/57; canonical locale unions and resolved records still
 block public compiled acceptance.
@@ -39,8 +40,18 @@ ordering absent from public ICU queries; calendar names and week values stay in
 ICU. Country zone lists use public IANA identities. The preference/provider
 witness passes all five configurations; the public Locale constructor and result
 records still have compiler refusals. Original Locale Test262 remains 128/168.
-Provider/shared assembly probes execute on C, LLVM, JVM and both native memory
-modes. Complete standard bindings and public conformance remain in progress.
+Temporal now shares exact local-time resolution, gap/fold and offset selection,
+start-of-day and transition queries. Instant has an original Test262 host result
+of 459/465; the ISO ZonedDateTime value class is at 893/901, including all original
+field replacement and difference tests. Bounded shared caches retain eight named
+handles and two adjacent offset periods per handle. Resolved identifiers retain
+both named spelling and IANA primary identity, including Factory. ISO zoned
+date addition and rounding now handle variable days and preserve fold offsets. The cache matches public
+ICU across all 446 primary zones in the earlier five-configuration checkpoint.
+Removing class `implements` checks exposes a compiler dependency in structural
+provider dispatch; the current compiled gate stops before execution. Canonical
+public unions also remain compiler dependencies. Localization, Now, non-ISO
+calendars, complete standard bindings and public conformance remain in progress.
 
 ## Regexp
 

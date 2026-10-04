@@ -1,5 +1,8 @@
 import { IcuTimeZone } from "../../../../../runtime/ecmascript/providers/icu/java/provider.ts";
 import { zonedTimeDigest, zonedTimeBenchmark } from "./temporal-zone.ts";
+import { CachedTimeZone } from "../../../../../runtime/ecmascript/src/time/cached-zone.ts";
+import { TimeZoneRegistry } from "../../../../../runtime/ecmascript/src/time/zone-id.ts";
+import { timeZoneCacheAudit } from "./time-zone-cache.ts";
 import { IcuLocaleData } from "../../../../../runtime/ecmascript/providers/icu/java/locale.ts";
 import { IcuCollator } from "../../../../../runtime/ecmascript/providers/icu/java/collator.ts";
 import { IcuDatePatterns } from "../../../../../runtime/ecmascript/providers/icu/java/date-pattern.ts";
@@ -37,17 +40,32 @@ import {
   pluralBenchmark,
   formatBenchmark,
 } from "./common.ts";
+// These fixture inputs are already IANA primary identifiers.
+function cachedPrimaryZone(id: string): CachedTimeZone<IcuTimeZone> {
+  return new CachedTimeZone(new IcuTimeZone(id), id, id);
+}
 export function main(): string {
+  const rawTime = zonedTimeDigest(
+    new IcuTimeZone("America/New_York"),
+    new IcuTimeZone("Australia/Lord_Howe"),
+    new IcuTimeZone("Pacific/Apia"),
+    new IcuTimeZone("America/Havana"),
+    new IcuTimeZone("Africa/Monrovia"),
+  );
+  const cachedTime = zonedTimeDigest(
+    cachedPrimaryZone("America/New_York"),
+    cachedPrimaryZone("Australia/Lord_Howe"),
+    cachedPrimaryZone("Pacific/Apia"),
+    cachedPrimaryZone("America/Havana"),
+    cachedPrimaryZone("Africa/Monrovia"),
+  );
+  if (rawTime !== cachedTime) throw new Error("Cached time-zone data differs from its provider");
   return (
     digest(new IcuTimeZone("America/New_York")) +
     "\n" +
-    zonedTimeDigest(
-      new IcuTimeZone("America/New_York"),
-      new IcuTimeZone("Australia/Lord_Howe"),
-      new IcuTimeZone("Pacific/Apia"),
-      new IcuTimeZone("America/Havana"),
-      new IcuTimeZone("Africa/Monrovia"),
-    ) +
+    cachedTime +
+    "\ntemporal-zone-cache:" +
+    auditCachedTimeZones() +
     "\n" +
     numberDigest(new IcuNumberFormatter("en-US", ".00##")) +
     "\n" +
@@ -98,11 +116,32 @@ export function main(): string {
     )
   );
 }
+export function auditCachedTimeZones(): string {
+  const names = new TimeZoneRegistry(new IcuLocaleData()).primaryIdentifiers();
+  let comparisons = 0;
+  for (let index = 0; index < names.length; index++) {
+    const zone = new IcuTimeZone(names[index]!);
+    comparisons += timeZoneCacheAudit(zone, new CachedTimeZone(zone, names[index]!, names[index]!));
+  }
+  return names.length + ":" + comparisons;
+}
 export function benchmark(iterations: number): number {
   return formatBenchmark(new IcuNumberFormatter("en-US", ".00##"), iterations);
 }
-export function benchmarkZonedTime(iterations: number, ambiguous: boolean): number {
-  return zonedTimeBenchmark(new IcuTimeZone("America/New_York"), iterations, ambiguous);
+export function benchmarkZonedTime(
+  iterations: number,
+  ambiguous: boolean,
+  cached: boolean,
+  advancing: boolean,
+): number {
+  if (cached)
+    return zonedTimeBenchmark(
+      cachedPrimaryZone("America/New_York"),
+      iterations,
+      ambiguous,
+      advancing,
+    );
+  return zonedTimeBenchmark(new IcuTimeZone("America/New_York"), iterations, ambiguous, advancing);
 }
 export function benchmarkLocale(iterations: number, cached: boolean): number {
   return localePreferenceBenchmark(new IcuLocaleData(), iterations, cached);

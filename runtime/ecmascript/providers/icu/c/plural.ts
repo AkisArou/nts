@@ -6,9 +6,8 @@ import {
   nts_icu_plural_range,
 } from "c:nts_icu";
 import type { IcuPluralHandle } from "c:nts_icu";
-import type { PluralRulesPrimitive } from "../../../src/intl/plural-data.ts";
 
-export class IcuPluralRules implements PluralRulesPrimitive {
+export class IcuPluralRules {
   readonly #handle: IcuPluralHandle;
   constructor(locale: string, ordinal: boolean, skeleton: string, negativeSkeleton: string) {
     const handle = nts_icu_plural_open(locale, ordinal, skeleton, negativeSkeleton);

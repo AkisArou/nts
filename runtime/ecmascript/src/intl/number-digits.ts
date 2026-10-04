@@ -52,19 +52,6 @@ export class NumberDigits<
       | "trailingZeroDisplay"
     >
   > = Readonly<Intl.NumberFormatOptions>,
-> implements Readonly<
-  Pick<
-    Intl.ResolvedNumberFormatOptions,
-    | "minimumIntegerDigits"
-    | "minimumFractionDigits"
-    | "maximumFractionDigits"
-    | "minimumSignificantDigits"
-    | "maximumSignificantDigits"
-    | "roundingIncrement"
-    | "roundingMode"
-    | "roundingPriority"
-    | "trailingZeroDisplay"
-  >
 > {
   readonly minimumIntegerDigits: number;
   readonly minimumFractionDigits?: number;

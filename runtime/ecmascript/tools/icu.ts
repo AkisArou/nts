@@ -277,6 +277,11 @@ expected = expected.replace(
     "temporal-offset-selection:2024-11-03T06:30:00Z:2024-11-03T06:30:00Z:2024-11-03T04:30:00Z",
     "temporal-rounded-match:1880-01-01T04:56:02Z",
     "temporal-zone-like:-07:00:UTC:UTC:UTC:+05:30",
+    "temporal-calendar-add:2024-03-10T16:00:00Z:2024-03-10T17:00:00Z:2024-11-03T17:00:00Z:2024-11-03T16:00:00Z",
+    "temporal-calendar-special:2024-02-29T17:00:00Z:2011-12-30T22:00:00Z:2024-11-03T06:30:00Z",
+    "temporal-round-day:2024-03-10T05:00:00Z:2024-03-11T04:00:00Z:2024-11-04T05:00:00Z:2024-11-03T04:00:00Z",
+    "temporal-round-fold:2024-11-03T05:00:00Z:2024-11-03T06:00:00Z:2024-03-10T07:00:00Z:2024-10-05T15:30:00Z",
+    "temporal-zone-cache:446:1165128",
     "900,",
   ].join("\n"),
 );
@@ -320,7 +325,7 @@ expected +=
   "\nJan 1, 1970;month=Jan=shared;literal= =shared;day=1=shared;literal=, =shared;year=1970=shared";
 expected += "\nAmerica/New_York:true:true:-04:00:+05:30:+00:00";
 expected +=
-  "\ncalendar:16:3877277735:true:true\ncollation:12:899042060:true:true\ncurrency:307:1334098130:true:true\nnumberingSystem:78:28763515:true:true\ntimeZone:445:1348871885:true:true\nunit:45:2973811530:true:true";
+  "\ncalendar:16:3877277735:true:true\ncollation:12:899042060:true:true\ncurrency:307:1334098130:true:true\nnumberingSystem:78:28763515:true:true\ntimeZone:446:1759273099:true:true\nunit:45:2973811530:true:true";
 expected +=
   "\nEurope/Kyiv:Asia/Kolkata:Europe/Bratislava:Europe/Prague:Arctic/Longyearbyen:UTC:Etc/GMT+1:Europe/Kiev";
 expected +=
@@ -379,6 +384,8 @@ console.log(
           utf16Parts: true,
           dst: true,
           temporalTimeZones: true,
+          temporalTimeZoneCache: true,
+          temporalZonedISOArithmetic: true,
           temporalTimeZoneErrors: false,
           numberOptions: true,
           numberRanges: true,

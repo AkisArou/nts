@@ -5,10 +5,12 @@ public final class Drive {
             double iterations = Double.parseDouble(args[0]);
             if (args.length > 1 && args[1].equals("zoned-time")) {
                 boolean ambiguous = args.length > 2 && args[2].equals("ambiguous");
-                nts.gen.Program.benchmarkZonedTime(50000, ambiguous);
+                boolean cached = args.length > 3 && args[3].equals("cached");
+                boolean advancing = args.length > 4 && args[4].equals("advancing");
+                nts.gen.Program.benchmarkZonedTime(50000, ambiguous, cached, advancing);
                 long before = System.nanoTime();
-                double checksum = nts.gen.Program.benchmarkZonedTime(iterations, ambiguous);
-                System.out.println("{\"backend\":\"jvm\",\"mode\":\"zoned-time\",\"ambiguous\":" + ambiguous + ",\"checksum\":" + checksum + ",\"nsPerResolution\":" + (System.nanoTime() - before) / iterations + "}");
+                double checksum = nts.gen.Program.benchmarkZonedTime(iterations, ambiguous, cached, advancing);
+                System.out.println("{\"backend\":\"jvm\",\"mode\":\"zoned-time\",\"ambiguous\":" + ambiguous + ",\"cached\":" + cached + ",\"advancing\":" + advancing + ",\"checksum\":" + checksum + ",\"nsPerResolution\":" + (System.nanoTime() - before) / iterations + "}");
                 return;
             }
             if (args.length > 1 && args[1].equals("locale")) {

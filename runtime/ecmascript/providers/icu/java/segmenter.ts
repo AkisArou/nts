@@ -1,7 +1,6 @@
 import { IcuSegmenter as NativeSegmenter } from "java:nts.intl";
-import type { SegmenterPrimitive } from "../../../src/intl/segment-data.ts";
 
-export class IcuSegmenter implements SegmenterPrimitive<IcuSegmenter> {
+export class IcuSegmenter {
   readonly #handle: NativeSegmenter;
   private constructor(handle: NativeSegmenter) {
     this.#handle = handle;

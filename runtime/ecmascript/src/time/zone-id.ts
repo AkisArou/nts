@@ -68,6 +68,9 @@ export class TimeZoneRegistry<D extends TimeZoneIdentifierData> {
   primaryIdentifier(identifier: string): string {
     const name = this.resolve(identifier);
     if (offsetTimeZoneMinutes(name) !== undefined) return name;
+    // IANA's factory file defines this Zone. ICU maps it to its non-IANA
+    // Etc/Unknown sentinel; that provider spelling is not its JS identity.
+    if (name === "Factory") return name;
     let primary = this.#primary.get(name);
     if (primary === undefined) {
       const value = this.#data.primaryTimeZone(name);
@@ -88,6 +91,7 @@ export class TimeZoneRegistry<D extends TimeZoneIdentifierData> {
         if (!compatibilityZones.has(name) && !name.startsWith("SystemV/"))
           unique.add(name === "Etc/UTC" || name === "Etc/GMT" ? "UTC" : name);
       }
+      if (this.#identifiers.has("factory")) unique.add("Factory");
       const values = new Array<string>(unique.size);
       let index = 0;
       for (const name of unique) values[index++] = name;

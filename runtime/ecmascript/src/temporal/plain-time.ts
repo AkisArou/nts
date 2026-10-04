@@ -19,8 +19,8 @@ import {
 } from "./options.ts";
 import { formatPlainTime, timeNanoseconds } from "./iso-time.ts";
 import { regulateTimeField } from "./iso-fields.ts";
-import type { WithResult } from "../contract.ts";
 import { PlainDateTime } from "./plain-date-time.ts";
+import { ZonedDateTime } from "./zoned-date-time.ts";
 import { isPlainCalendar } from "./plain-calendar.ts";
 
 function withinDay(value: bigint): number {
@@ -82,15 +82,7 @@ function timeFields(
 // A time of day has fewer than 2^47 nanoseconds: one binary64 integer stores
 // the entire immutable value exactly. BigInt is needed only for arithmetic
 // with arbitrary supported duration magnitudes, before reducing into the day.
-export class PlainTime implements WithResult<
-  WithResult<
-    Omit<Temporal.PlainTime, "toLocaleString" | typeof Symbol.toStringTag>,
-    Temporal.PlainTime,
-    PlainTime
-  >,
-  Temporal.Duration,
-  Duration
-> {
+export class PlainTime {
   readonly #time: number;
 
   constructor(hour = 0, minute = 0, second = 0, millisecond = 0, microsecond = 0, nanosecond = 0) {
@@ -115,6 +107,11 @@ export class PlainTime implements WithResult<
     item: Temporal.PlainTimeLike,
     options: Readonly<Temporal.OverflowOptions> | undefined = undefined,
   ): PlainTime {
+    if (item instanceof ZonedDateTime) {
+      const time = ZonedDateTime.nanoseconds(item);
+      overflowOption(options);
+      return PlainTime.fromNanoseconds(time);
+    }
     if (item instanceof PlainTime) {
       overflowOption(options);
       return PlainTime.fromNanoseconds(item.#time);

@@ -17,10 +17,7 @@ const types: readonly Intl.PluralRuleType[] = ["cardinal", "ordinal"];
 // The pinned library omits notation, rounding and exact mathematical inputs;
 // its resolved result also requires fraction digits when significant precision
 // correctly omits them. Derive those corrections from NumberFormat's fields.
-export class NtsPluralRules<D extends LocaleData, P extends PluralRulesPrimitive> implements Omit<
-  Intl.PluralRules,
-  "resolvedOptions"
-> {
+export class NtsPluralRules<D extends LocaleData, P extends PluralRulesPrimitive> {
   readonly #locale: string;
   readonly #type: Intl.PluralRuleType;
   readonly #notation: Intl.ResolvedNumberFormatOptions["notation"];

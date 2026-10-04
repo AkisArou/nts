@@ -9,10 +9,13 @@ import {
   MS_PER_DAY,
 } from "../date/calendar.ts";
 import { pad } from "../date/format.ts";
-import type { WithResult } from "../contract.ts";
+import type { ResolvedTimeZone, TimeZoneSource } from "../time/zone-data.ts";
 import { ISOParser } from "./iso-parser.ts";
 import { PlainDate } from "./plain-date.ts";
 import { PlainTime } from "./plain-time.ts";
+import { ZonedDateTime } from "./zoned-date-time.ts";
+import { resolveTimeZone } from "./zone-like.ts";
+import { resolveLocalDateTime } from "./zoned-time.ts";
 import { requireISOCalendarLike, isPlainCalendar } from "./plain-calendar.ts";
 import { Duration, toDuration, unitNanoseconds } from "./duration.ts";
 import { NS_PER_DAY, floorDivide, roundNanoseconds } from "./exact.ts";
@@ -34,6 +37,7 @@ import { formatPlainTime, timeNanoseconds } from "./iso-time.ts";
 import { checkDateTime, dateTimeUnitIndex, roundISODateTimeDifference } from "./iso-date-time.ts";
 import {
   integerWithTruncation,
+  disambiguationOption,
   overflowOption,
   requireOptions,
   roundingIncrement,
@@ -154,26 +158,7 @@ function dateTimeString(
 
 // Both slots are exact binary64 integers. Getters and ordinary formatting do
 // not construct intermediate dates, times, arrays or field records.
-export class PlainDateTime implements WithResult<
-  WithResult<
-    WithResult<
-      WithResult<
-        Omit<
-          Temporal.PlainDateTime,
-          "toZonedDateTime" | "toLocaleString" | typeof Symbol.toStringTag
-        >,
-        Temporal.PlainDateTime,
-        PlainDateTime
-      >,
-      Temporal.PlainDate,
-      PlainDate
-    >,
-    Temporal.PlainTime,
-    PlainTime
-  >,
-  Temporal.Duration,
-  Duration
-> {
+export class PlainDateTime {
   readonly #day: number;
   readonly #time: number;
   constructor(
@@ -217,6 +202,12 @@ export class PlainDateTime implements WithResult<
     value: Temporal.PlainDateTimeLike,
     options: Readonly<Temporal.OverflowOptions> | undefined = undefined,
   ): PlainDateTime {
+    if (value instanceof ZonedDateTime) {
+      const day = ZonedDateTime.epochDay(value);
+      const time = ZonedDateTime.nanoseconds(value);
+      overflowOption(options);
+      return fromDayTime(day, time);
+    }
     if (value instanceof PlainDateTime) {
       overflowOption(options);
       return fromDayTime(value.#day, value.#time);
@@ -347,6 +338,18 @@ export class PlainDateTime implements WithResult<
     )
       throw new TypeError("with requires fields without a calendar or time zone");
     return fromFields(value, options, day, time);
+  }
+  toZonedDateTime(
+    value: Temporal.TimeZoneLike | ZonedDateTime<ResolvedTimeZone>,
+    options: Readonly<Temporal.DisambiguationOptions> | undefined = undefined,
+    source: TimeZoneSource | undefined = undefined,
+  ): ZonedDateTime<ResolvedTimeZone> {
+    const day = this.#day;
+    const time = this.#time;
+    const zone = resolveTimeZone(value, source);
+    if (options !== undefined) requireOptions(options);
+    const disambiguation = disambiguationOption(options?.disambiguation);
+    return new ZonedDateTime(resolveLocalDateTime(day, time, zone, disambiguation), zone);
   }
   withPlainTime(value: Temporal.PlainTimeLike | undefined = undefined): PlainDateTime {
     const day = this.#day;

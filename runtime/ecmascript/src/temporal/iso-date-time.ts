@@ -5,15 +5,7 @@ import { NS_PER_DAY, roundNanoseconds } from "./exact.ts";
 import type { RoundingMode } from "./exact.ts";
 import { dateUnitIndex } from "./iso-date.ts";
 
-export function checkDateTime(day: number, time: number): void {
-  if (
-    !Number.isInteger(day) ||
-    day < -100000001 ||
-    day > 100000000 ||
-    (day === -100000001 && time === 0)
-  )
-    throw new RangeError("Plain date-time outside supported range");
-}
+export { checkDateTime } from "./iso-date.ts";
 export function dateTimeUnitIndex(value: string): number {
   if (typeof value === "symbol") throw new TypeError("Temporal string options reject Symbols");
   const unit = String(value);

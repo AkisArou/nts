@@ -23,15 +23,6 @@ import {
   nts_icu_timezone_default,
 } from "c:nts_icu";
 import type { IcuLocaleHandle } from "c:nts_icu";
-import type {
-  CollationData,
-  LocaleInfoData,
-  DateTimeLocaleData,
-} from "../../../src/intl/locale-data.ts";
-import type { TimeZoneIdentifierData } from "../../../src/time/zone-data.ts";
-import type { ListPatternData } from "../../../src/intl/list-data.ts";
-import type { DurationPatternData } from "../../../src/intl/duration-data.ts";
-import type { SupportedValueData } from "../../../src/intl/supported-value-data.ts";
 import {
   hasCalendarPreferences,
   hasWeekPreferences,
@@ -43,16 +34,7 @@ function required(value: string | null): string {
   return value;
 }
 
-export class IcuLocaleData
-  implements
-    LocaleInfoData,
-    DateTimeLocaleData,
-    CollationData,
-    TimeZoneIdentifierData,
-    ListPatternData,
-    DurationPatternData,
-    SupportedValueData
-{
+export class IcuLocaleData {
   private readonly handle: IcuLocaleHandle;
   constructor() {
     const handle = nts_icu_locale_open();

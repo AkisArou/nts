@@ -23,8 +23,10 @@ library. The generated C program sees only the narrow C ABI.
 Public inputs, options and results use the pinned TypeScript libraries directly.
 Use a derived contract only to express a supported subset or an actual library
 typing defect. Do not rename an existing library type, duplicate its declarations,
-or assert an erased value into an ABI layout. Classes check their implemented
-contracts with `implements`.
+or assert an erased value into an ABI layout. Keep class declarations plain:
+do not add `implements` checks or mapped adapters to rebind standard return
+types. Method parameters and results, and injected provider boundaries, carry
+the useful type checks directly.
 
 Date owns mutable clipped milliseconds; Temporal values own immutable state.
 Private fields and instance descriptors supply branding. No WeakMap side table,
@@ -77,9 +79,12 @@ and artifact-size evidence before becoming another provider.
    operations, shared ISO scanning and non-localized PlainTime operations exist.
    All five ISO plain classes, their conversions, arithmetic/week fields and
    exact relative rounding now exist. Plain ISO relative Duration totals,
-   comparison and rounding reuse those operations. Named-zone formatting,
-   non-ISO calendars, ZonedDateTime, complete relative-field conversion and Now
-   remain open.
+   comparison and rounding reuse those operations. Instant named-zone formatting
+   and the shared local-time/transition foundation now exist. The ISO
+   ZonedDateTime value class has parsing, getters, field replacement,
+   arithmetic, variable-day rounding, differences, transitions and plain-type
+   conversions. Non-ISO calendars, localization, complete relative-field
+   conversion, Now and compiled public acceptance remain open.
 6. **PluralRules, ListFormat and DurationFormat.** Implement each service and
    connect localization methods to shared formatters. ListFormat's typed API,
    iterable validation, locale templates, contextual Spanish/Hebrew rules and
@@ -192,6 +197,21 @@ BigInt domain.
   class identity checks and Duration construction live in separate modules.
   Zoned/non-ISO relative arithmetic and complete relative-field conversion
   remain open.
+- **Temporal time zones:** shared exact local-time resolution, offset matching,
+  gap/fold disambiguation, missing-midnight start of day and exclusive transition
+  queries. Extended local milliseconds stay exact in Number; sub-millisecond
+  fragments stay separate, and complete nanosecond timestamps never enter
+  Number. Instant formatting supports named zones, fixed offsets and historic
+  sub-minute offsets, with the specified minute-rounded output. One immutable
+  named-zone environment retains eight handles. Each resolved handle retains both its requested named identifier and its IANA
+  primary identity. Each handle lazily caches two
+  adjacent UTC offset periods, including their local gap/fold windows. Nearby
+  timestamps reuse public rule data; arbitrary timestamps cannot grow the cache.
+  The ISO value class retains the resolved snapshot and derives local day,
+  time and offset scalars once. Its getters do not query the provider or
+  allocate records. Zoned differences keep calendar days separate from elapsed
+  hours, compare exact boundary distances and use bounded date corrections.
+  Non-ISO calendars, localization and compiled public acceptance remain open.
 - **Date:** mutable private state and scalar UTC/local operations. Static UTC
   and multi-component setters use standard Parameters tuples to preserve the
   supplied argument count. The standard compiled boundary remains pending.
@@ -202,6 +222,117 @@ BigInt domain.
   Temporal.Duration, and branded values read private slots. Number formatter
   variants, list templates and parts scratch are lazy and reused. Single-group
   formatting avoids list assembly arrays and template loading.
+
+## Temporal time-zone foundation checkpoint, 2026-10-04
+
+Original Instant Test262 initially improved from 415/465 to 423/465. With the
+ZonedDateTime class, private-slot conversions and ordered round-option fixes,
+the current result is 459/465. Standard constructor conversion, localization
+and excluded intrinsic metadata remain visible in those failures. The
+supplementary host provider uses the same pinned ICU4J primitives; production
+uses direct C/Java calls.
+
+The ISO ZonedDateTime class currently passes 893/901 original host tests,
+including every `with`, `until` and `since` test. The eight retained failures
+concern localization and excluded intrinsic metadata. PlainDate and
+PlainDateTime now convert through the same resolved zone capability and
+local-time kernel. Month-code and offset preparation require string primitives;
+offset syntax is validated before reading subsequent fields. The exact offset
+matcher preserves its distinct lower-range restriction. No provider context or
+transient prepared-fields record is stored in individual values.
+
+The user requested plain class declarations. All `implements` clauses, the
+mapped return-rebinding helper and the unused DateTimeFormat wrapper contract
+are removed. Strict shared/C/JVM TypeScript checks pass. All 901 ZonedDateTime
+verdicts and reasons were unchanged by that declaration cleanup. The current
+compiled provider gate stops before execution: NTS does not discover structural
+interface implementors without an explicit clause. C/JVM minimal implicit and
+explicit controls, plus the actual value-class witness, retain the diagnostics
+for the compiler lane. This is a compiler dependency; no casts or replacement
+ambient contracts hide it. The earlier compiled cache/performance receipts
+below precede this cleanup and are not current-source compiled acceptance.
+
+The compiled fixture compares cached and raw ICU offsets across all 446 primary
+zones and every one of 42,806 transitions from 1800 through 2099, including
+local window edges, both interpretations, cache eviction and the Temporal range
+endpoints. All five configurations pass 1,165,128 comparisons each, with native
+ASan/UBSan and JVM verification. An additional host differential includes
+nonsequential random timestamps: 1,232,028 comparisons, all equal. Separate
+nanosecond golden cases cover New York folds/gaps, Lord Howe half-hour changes,
+Apia's skipped date, Havana midnight changes, Monrovia historic seconds, strict
+transition queries one nanosecond before/after, offset matching and endpoint
+formatting. ISO zoned addition distinguishes calendar dates from elapsed
+24-hour periods, handles constrained month addition and skipped dates, and
+retains a fold occurrence when no date units are added. Day rounding measures
+actual 23-/25-hour midnight intervals; sub-day rounding prefers the original
+offset. These kernels pass all five configurations. Original PlainDateTime
+round tests remain 45/45; Duration round remains 95/126, with all 31 residual
+failures retained and no regressions from the prior 458/540 full Duration run.
+These are provider/cache/compiled boundary witnesses; original
+Test262 remains the semantic corpus.
+
+The original public Instant formatting probes typecheck with canonical library
+options on both providers. NTS still refuses canonical Instant/Duration/TimeZone
+unions, option record projection and JVM structural TimeZoneRules/ResolvedTimeZone dispatch.
+Generated output and exit zero do not establish public acceptance. Native RC
+negative-path acceptance is separately blocked by the compiler/runtime lifetime
+of a raised RangeError: raised-error-brand.ts catches a freshly thrown error,
+and ASan reports use-after-free in nts_is_class on C RC and LLVM RC. JVM returns
+the expected error brand. The positive time-zone gate reports
+`temporalTimeZoneErrors=false`; that obligation remains open.
+
+Resolved identity is a shared capability distinct from raw ICU rule data. Named
+aliases retain their specified spelling, while equality can use IANA primary
+identity without reading overridable public Temporal getters. All 598 accepted
+identifiers pass the identity audit; 40 ICU compatibility names remain excluded.
+Country-specific identities such as Bratislava and Prague stay distinct.
+Named UTC aliases share primary UTC; a fixed +00:00 identifier remains distinct.
+The constructor identifier parser also rejects date-time strings that are valid
+TimeZoneLike inputs. ICU maps IANA's Factory Zone to its Etc/Unknown sentinel;
+shared resolution preserves Factory and includes it in the 446 primary names.
+[ECMA-402's identifier operation](https://tc39.es/ecma402/#sec-availablenamedtimezoneidentifiers)
+requires the IANA Zone/Link set; the pinned
+[IANA 2026a factory source](https://github.com/eggert/tz/blob/2026a/factory)
+defines that distinct Zone. This is a small provider-identity correction, not a
+second time-zone database. Original supportedValuesOf stays 24/25, retaining
+its descriptor failure.
+
+Three paired compiled throughput runs use 500,000 exact local resolutions per
+batch, one zone/cache construction per timed batch, C -O2 without sanitizers and
+JVM verification. Warm ordinary fixed timestamps measure 35–39 ns on C RC and
+41–44 ns on JVM with the period cache, versus 128–135 ns and 185–197 ns without.
+Fold samples measure 65–69 ns and 61–69 ns cached, versus 282–285 ns and
+240–265 ns raw. Advancing timestamps within a one-second range retain the gain:
+36–41 ns C / 51–56 ns JVM ordinary, and 66–75 ns C / 70–79 ns JVM folded.
+JVM thread allocation measures about 160 bytes/iteration cached versus 552–560
+ordinary / 840 folded raw. Advancing cases measure about 192 bytes cached
+versus 580–590 / 865–872 raw. Allocation includes the benchmark's exact equality
+check and BigInt expected-value conversion; it is not engine-only accounting or
+an allocation-free claim. Cold period discovery adds public transition/offset
+queries and is amortized once per batch here. Public parsing, construction and
+result objects are outside this scalar sample.
+
+Reports and retained artifacts are in target/ecmascript/icu-check:
+temporal-zoned-factory-all-backends.log,
+temporal-zone-identities-report.json,
+temporal-zone-cache-all-zones-report.json,
+temporal-instant-zone-identity-comparison.json and
+temporal-zone-period-cache-performance-report.json. Compiler/front-end hashes
+are a406f657375a9f3fba72d93cfd5cd336201a35009996e6608f283cd9bada3dc8 and
+4ec6b1a5235e473fe20e6cef4972dfc867b6ea1b9fad1351a31d8557d66e7776.
+
+The fixed-offset parsing/formatting, constrained date addition and local-rounding
+witness in tsconfig.temporal-zone-utc.json links and executes on C RC and JVM
+without any ICU provider or library. Its four expected strings agree; JVM
+verification passes with only emitted classes and the 145,457-byte core jar.
+The stripped C binary is 100,832 bytes, linked with section garbage collection
+and only normal C/math libraries. The generated C contains two warnings for
+comparing a specialized FixedTimeZone pointer with a TimeZoneRules-typed null;
+no strict-warning compilation claim is made. This is supplementary physical
+reachability evidence, excluding final standard-binding acquisition policy.
+The ordinary scalar check harness reaches no string-valued export in this
+fixture; acceptance uses direct compiled ABI drivers and retained outputs,
+not its exit zero. Artifacts: target/ecmascript/audit/temporal-zone-utc.
 
 ## Pins and verification
 
@@ -226,15 +357,16 @@ Current host results against Test262
 | Slice                    | Host passes | Retained failures |
 | ------------------------ | ----------: | ----------------: |
 | Date                     |         390 |               204 |
-| Temporal.Instant         |         415 |                50 |
-| Temporal.Duration        |         458 |                82 |
-| Temporal.PlainTime       |         477 |                16 |
-| Temporal.PlainDate       |         584 |                68 |
-| Temporal.PlainDateTime   |         719 |                54 |
-| Temporal.PlainYearMonth  |         498 |                11 |
-| Temporal.PlainMonthDay   |         192 |                 7 |
+| Temporal.Instant         |         459 |                 6 |
+| Temporal.Duration        |         492 |                48 |
+| Temporal.PlainTime       |         489 |                 4 |
+| Temporal.PlainDate       |         648 |                 4 |
+| Temporal.PlainDateTime   |         768 |                 5 |
+| Temporal.PlainYearMonth  |         505 |                 4 |
+| Temporal.PlainMonthDay   |         195 |                 4 |
+| Temporal.ZonedDateTime   |         893 |                 8 |
 | Intl.NumberFormat        |         220 |                29 |
-| Intl.DateTimeFormat      |         185 |                59 |
+| Intl.DateTimeFormat      |         191 |                53 |
 | Intl.Collator            |          50 |                15 |
 | Intl.ListFormat          |          70 |                11 |
 | Intl.RelativeTimeFormat  |          69 |                11 |
@@ -419,33 +551,31 @@ copied ambient declarations or renaming aliases are needed.
   readonly options directly. Units and precisions derive from their libraries.
 - DateFields, DurationLike, InstantLike, DateFormatter and FormatPart copies are
   removed. DateComponent expresses Date's actual subset of Temporal units.
-- NtsDate's supported contract corrects Date.toJSON's nullable result and omits
-  pending localization/bridge members. Instant, Duration and PlainTime omit
-  unfinished localization/zoned members. The type-only
-  [WithResult](src/contract.ts) binds implemented object results to shared classes
-  while retaining both library overloads; it emits no allocation or code.
-- NtsNumberFormat, NtsCollator, NtsListFormat and NtsRelativeTimeFormat implement
-  their complete library instance contracts. RelativeTimeFormat's specified
+- Date.toJSON's result includes null for invalid dates, despite the pinned
+  library's string-only declaration. Temporal methods return their concrete
+  shared value classes. Class declarations have no `implements` clauses or
+  mapped return-type adapters; standard input/option/result types stay direct.
+- NtsNumberFormat, NtsCollator, NtsListFormat and NtsRelativeTimeFormat use
+  library types on their method boundaries. RelativeTimeFormat's specified
   numberingSystem input supplements the pinned library via the NumberFormat
   field type. Provider field helpers project standard part fields where the
   compiler currently refuses the direct library part-array representation.
-- NtsPluralRules implements the library's select contract and adds selectRange.
+- NtsPluralRules uses the library's selection types and adds selectRange.
   Notation, rounding and exact input types derive from NumberFormat. Its honest
   resolved result corrects the pinned PluralRules library's required fraction
   fields: significant-only precision omits them. There is no erased result cast
   or copied standard declaration. NumberDigits keeps the concrete option record
   type so sharing its algorithm requires no record projection or extra allocation.
-- NtsDurationFormat implements Intl.DurationFormat directly. Its input is
+- NtsDurationFormat uses Intl types directly. Its input is
   Temporal.DurationLike because the pinned Intl declaration omits the Temporal
   amendment's string input. Its configuration and part types derive directly
   from the libraries, without aliases, copied declarations or erased casts.
-- NtsDisplayNames implements Intl.DisplayNames directly. Options, name types,
+- NtsDisplayNames uses Intl types directly. Options, name types,
   fallback/dialect values and resolved results use the library declarations.
   Provider name capabilities and ordinal tables describe internal data only.
-- NtsSegmenter and NtsSegments use WithResult to retain the library contracts
-  while returning their concrete typed segmentation/iterator instances.
-  NtsSegmentIterator implements IterableIterator<Intl.SegmentData, undefined,
-  unknown>. Options and public records use Intl declarations directly. Modern
+- NtsSegmenter and NtsSegments return their concrete typed segmentation and
+  iterator instances. Iterator results use IteratorResult<Intl.SegmentData,
+  undefined>; options and public records use Intl declarations directly. Modern
   Intl.SegmentIterator additionally inherits common IteratorObject helpers and
   disposal; those are still pending runtime integration, with no asserted cast
   or duplicated library declaration hiding the missing contract.

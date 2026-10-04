@@ -1,16 +1,14 @@
 import { IcuNumberFormatter as NativeFormatter } from "java:nts.intl";
 import { IcuNumberData as NativeData } from "java:nts.intl";
-import type { NumberFormatterPrimitive } from "../../../src/intl/number-data.ts";
-import type { NumberFormatData } from "../../../src/intl/number-data.ts";
 
-export class IcuNumberData implements NumberFormatData {
+export class IcuNumberData {
   private readonly handle = new NativeData();
   currencyDigits(currency: string): number {
     return this.handle.currencyDigits(currency);
   }
 }
 
-export class IcuNumberFormatter implements NumberFormatterPrimitive {
+export class IcuNumberFormatter {
   private readonly handle: NativeFormatter;
   constructor(locale: string, skeleton: string, negativeSkeleton = "") {
     this.handle = new NativeFormatter(locale, skeleton, negativeSkeleton);

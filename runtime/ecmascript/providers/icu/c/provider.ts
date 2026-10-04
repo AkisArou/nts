@@ -7,9 +7,8 @@ import {
   nts_icu_timezone_transition,
 } from "c:nts_icu";
 import type { IcuTimeZoneHandle } from "c:nts_icu";
-import type { TimeZoneRules } from "../../../src/time/provider.ts";
 
-export class IcuTimeZone implements TimeZoneRules {
+export class IcuTimeZone {
   readonly id: string;
   private readonly handle: IcuTimeZoneHandle;
   constructor(id: string) {

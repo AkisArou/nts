@@ -41,7 +41,7 @@ export { NtsPluralRules } from "./intl/plural.ts";
 export { NtsDurationFormat } from "./intl/duration.ts";
 export { TimeZoneRegistry } from "./time/zone-id.ts";
 export { TimeZoneContext } from "./time/zone-source.ts";
-export type { TimeZoneSource } from "./time/zone-data.ts";
+export type { TimeZoneSource, ResolvedTimeZone } from "./time/zone-data.ts";
 export { SupportedValues } from "./intl/supported-values.ts";
 export { NtsDisplayNames } from "./intl/display.ts";
 export { NtsSegmenter } from "./intl/segmenter.ts";

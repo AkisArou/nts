@@ -1,7 +1,6 @@
 import { IcuTimeZone as NativeTimeZone } from "java:nts.intl";
-import type { TimeZoneRules } from "../../../src/time/provider.ts";
 
-export class IcuTimeZone implements TimeZoneRules {
+export class IcuTimeZone {
   readonly id: string;
   private readonly handle: NativeTimeZone;
   constructor(id: string) {

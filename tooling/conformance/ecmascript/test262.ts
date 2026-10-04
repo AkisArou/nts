@@ -72,7 +72,7 @@ async function candidate(context: vm.Context): Promise<vm.Module["namespace"]> {
     moduleFor(resolve(dirname(importer.identifier), specifier)),
   );
   await builtins.evaluate({ timeout });
-  if (profile === "temporal" && intlProvider) {
+  if ((profile === "temporal" || profile === "intl") && intlProvider) {
     const time = moduleFor(resolve(root, "runtime/ecmascript/src/time/zone-source.ts"));
     await time.link((specifier, importer) =>
       moduleFor(resolve(dirname(importer.identifier), specifier)),
@@ -88,8 +88,54 @@ async function candidate(context: vm.Context): Promise<vm.Module["namespace"]> {
     context.__temporal = moduleFor(
       resolve(root, "runtime/ecmascript/src/temporal/builtins.ts"),
     ).namespace;
+  if (profile === "temporal") context.__temporal = builtins.namespace;
+  if (profile === "temporal" || profile === "intl") {
+    context.__timeBindings = {
+      checkInstant: moduleFor(resolve(root, "runtime/ecmascript/src/temporal/exact.ts")).namespace
+        .checkInstant,
+      resolveIdentifier: moduleFor(resolve(root, "runtime/ecmascript/src/temporal/zone-like.ts"))
+        .namespace.resolveTimeZoneIdentifier,
+    };
+  }
   return builtins.namespace;
 }
+
+// Supplementary host binding only. The value class consumes a typed resolved
+// rule snapshot; standard constructor/method lowering supplies that capability.
+// Public results retain the candidate's actual private slots and prototype.
+const temporalBinding = `
+  (() => {
+    const source = __timeZoneOpen ? new __time.TimeZoneContext(new __time.TimeZoneRegistry(__intlData), __timeZoneOpen) : undefined;
+    const RawZonedDateTime = __temporal.ZonedDateTime;
+    function ZonedDateTime(epochNanoseconds, timeZone, calendar = "iso8601") {
+      if (!new.target) throw new TypeError("ZonedDateTime requires new");
+      if (typeof epochNanoseconds === "number") throw new TypeError("Epoch nanoseconds must be a BigInt");
+      const epoch = __timeBindings.checkInstant(BigInt(epochNanoseconds));
+      const zone = __timeBindings.resolveIdentifier(timeZone, source);
+      return Reflect.construct(RawZonedDateTime, [epoch, zone, calendar], new.target);
+    }
+    ZonedDateTime.prototype = RawZonedDateTime.prototype;
+    ZonedDateTime.from = { from(value, options = undefined) { return RawZonedDateTime.from(value, options, source); } }.from;
+    ZonedDateTime.compare = { compare(one, two) { return RawZonedDateTime.compare(one, two, source); } }.compare;
+    globalThis.Temporal = { ...__temporal, ZonedDateTime };
+    const instantString = Temporal.Instant.prototype.toString;
+    Temporal.Instant.prototype.toString = { toString(options = undefined) { return instantString.call(this, options, source); } }.toString;
+    const instantZoned = Temporal.Instant.prototype.toZonedDateTimeISO;
+    Temporal.Instant.prototype.toZonedDateTimeISO = { toZonedDateTimeISO(zone) { return instantZoned.call(this, zone, source); } }.toZonedDateTimeISO;
+    const equals = RawZonedDateTime.prototype.equals;
+    RawZonedDateTime.prototype.equals = { equals(other) { return equals.call(this, other, source); } }.equals;
+    const withTimeZone = RawZonedDateTime.prototype.withTimeZone;
+    RawZonedDateTime.prototype.withTimeZone = { withTimeZone(zone) { return withTimeZone.call(this, zone, source); } }.withTimeZone;
+    const until = RawZonedDateTime.prototype.until;
+    RawZonedDateTime.prototype.until = { until(other, options = undefined) { return until.call(this, other, options, source); } }.until;
+    const since = RawZonedDateTime.prototype.since;
+    RawZonedDateTime.prototype.since = { since(other, options = undefined) { return since.call(this, other, options, source); } }.since;
+    const dateZoned = Temporal.PlainDate.prototype.toZonedDateTime;
+    Temporal.PlainDate.prototype.toZonedDateTime = { toZonedDateTime(value) { return dateZoned.call(this, value, source); } }.toZonedDateTime;
+    const dateTimeZoned = Temporal.PlainDateTime.prototype.toZonedDateTime;
+    Temporal.PlainDateTime.prototype.toZonedDateTime = { toZonedDateTime(zone, options = undefined) { return dateTimeZoned.call(this, zone, options, source); } }.toZonedDateTime;
+  })();
+`;
 
 // Acorn decides lexical boundaries (division, comments, strings, templates).
 // Candidate syntax acceptance is exclusively decided by our parser. Acorn's
@@ -272,21 +318,14 @@ for (const selected of selection) {
       }
       })();
     `).runInContext(context, { timeout });
+    new vm.Script(temporalBinding).runInContext(context, { timeout });
   } else if (profile === "temporal") {
     intlProvider?.reset();
-    new vm.Script(`
-      Object.defineProperty(globalThis, "Temporal", { value: __impl, writable: true, configurable: true });
-      if (__timeZoneOpen) {
-        const timeZones = new __time.TimeZoneContext(new __time.TimeZoneRegistry(__intlData), __timeZoneOpen);
-        const original = Temporal.Instant.prototype.toString;
-        // Host-only binding of the same explicit environment argument used by
-        // compiled standard integration; no process-global production state.
-        Temporal.Instant.prototype.toString = {
-          toString(options = undefined) { return original.call(this, options, timeZones); },
-        }.toString;
-      }
-      if (__sabotage) Temporal.Instant.prototype.equals = function equals() { return false; };
-    `).runInContext(context, { timeout });
+    new vm.Script(temporalBinding).runInContext(context, { timeout });
+    if (sabotage)
+      new vm.Script(
+        "Temporal.Instant.prototype.equals = function equals() { return false; };",
+      ).runInContext(context, { timeout });
   } else if (profile === "date") {
     new vm.Script(`
       // Host-only wiring of the typed candidate. There is no native Date

@@ -8,7 +8,6 @@ import {
   MS_PER_DAY,
 } from "../date/calendar.ts";
 import { isoYear, pad } from "../date/format.ts";
-import type { WithResult } from "../contract.ts";
 import { calendarName, isoCalendarAnnotation, requireISOCalendar } from "./calendar-id.ts";
 import { ISOParser } from "./iso-parser.ts";
 import { positiveDateField, isoMonthCode, resolveISOFields } from "./iso-fields.ts";
@@ -24,10 +23,8 @@ import {
 } from "./options.ts";
 import { Duration, toDuration } from "./duration.ts";
 import { PlainDate } from "./plain-date.ts";
-import { PlainDateTime } from "./plain-date-time.ts";
 import { PlainTime } from "./plain-time.ts";
-import { PlainMonthDay } from "./plain-month-day.ts";
-import { requireISOCalendarLike } from "./plain-calendar.ts";
+import { requireISOCalendarLike, isPlainCalendar } from "./plain-calendar.ts";
 
 function checkYearMonth(year: number, month: number): void {
   if (
@@ -80,19 +77,7 @@ function yearMonthString(
   );
 }
 
-export class PlainYearMonth implements WithResult<
-  WithResult<
-    WithResult<
-      Omit<Temporal.PlainYearMonth, "toLocaleString" | typeof Symbol.toStringTag>,
-      Temporal.PlainYearMonth,
-      PlainYearMonth
-    >,
-    Temporal.PlainDate,
-    PlainDate
-  >,
-  Temporal.Duration,
-  Duration
-> {
+export class PlainYearMonth {
   readonly #day: number;
   constructor(isoYear: number, isoMonth: number, calendar = "iso8601", referenceISODay = 1) {
     const year = integerWithTruncation(isoYear);
@@ -180,11 +165,8 @@ export class PlainYearMonth implements WithResult<
         Partial<Pick<Temporal.ZonedDateTimeLikeObject, "calendar" | "timeZone">>
     > = value;
     if (
-      value instanceof PlainYearMonth ||
-      value instanceof PlainDate ||
-      value instanceof PlainDateTime ||
+      isPlainCalendar(value) ||
       value instanceof PlainTime ||
-      value instanceof PlainMonthDay ||
       fields.calendar !== undefined ||
       fields.timeZone !== undefined
     )

@@ -5,9 +5,8 @@ import {
   nts_icu_relative_field,
 } from "c:nts_icu";
 import type { IcuRelativeHandle } from "c:nts_icu";
-import type { RelativeTimePrimitive } from "../../../src/intl/relative-data.ts";
 
-export class IcuRelativeFormatter implements RelativeTimePrimitive {
+export class IcuRelativeFormatter {
   readonly #handle: IcuRelativeHandle;
   constructor(locale: string, style: number) {
     const handle = nts_icu_relative_open(locale, style);

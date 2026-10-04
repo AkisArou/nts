@@ -8,12 +8,14 @@ int main(int argc, char **argv) {
     double iterations = strtod(argv[1], NULL);
     if (argc > 2 && strcmp(argv[2], "zoned-time") == 0) {
       const bool ambiguous = argc > 3 && strcmp(argv[3], "ambiguous") == 0;
-      (void)benchmarkZonedTime(10000, ambiguous);
+      const bool cached = argc > 4 && strcmp(argv[4], "cached") == 0;
+      const bool advancing = argc > 5 && strcmp(argv[5], "advancing") == 0;
+      (void)benchmarkZonedTime(10000, ambiguous, cached, advancing);
       struct timespec before, after;
       clock_gettime(CLOCK_MONOTONIC, &before);
-      const double checksum = benchmarkZonedTime(iterations, ambiguous);
+      const double checksum = benchmarkZonedTime(iterations, ambiguous, cached, advancing);
       clock_gettime(CLOCK_MONOTONIC, &after);
-      printf("{\"backend\":\"c-rc\",\"mode\":\"zoned-time\",\"ambiguous\":%s,\"checksum\":%.0f,\"nsPerResolution\":%.3f}\n", ambiguous ? "true" : "false", checksum,
+      printf("{\"backend\":\"c-rc\",\"mode\":\"zoned-time\",\"ambiguous\":%s,\"cached\":%s,\"advancing\":%s,\"checksum\":%.0f,\"nsPerResolution\":%.3f}\n", ambiguous ? "true" : "false", cached ? "true" : "false", advancing ? "true" : "false", checksum,
         ((after.tv_sec - before.tv_sec) * 1e9 + after.tv_nsec - before.tv_nsec) / iterations);
       return 0;
     }

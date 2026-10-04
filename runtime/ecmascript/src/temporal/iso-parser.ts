@@ -25,9 +25,21 @@ export class ISOParser {
   calendar = "iso8601";
   hasYear = true;
   hasDay = true;
+  hasTime = false;
 
-  constructor(input: string, timeOnly = false, allowDateOnly = false, allowShortDate = false) {
+  constructor(
+    input: string,
+    timeOnly = false,
+    allowDateOnly = false,
+    allowShortDate = false,
+    offsetOnly = false,
+  ) {
     this.input = input;
+    if (offsetOnly) {
+      this.offsetNanoseconds = this.offset(false);
+      if (this.index !== input.length) this.fail();
+      return;
+    }
     const prefixed = timeOnly && (this.take("T") || this.take("t"));
     const date =
       !timeOnly ||
@@ -88,6 +100,7 @@ export class ISOParser {
       }
     }
     const timeStart = this.index;
+    this.hasTime = true;
     this.hour = this.digits(2);
     const separated = this.take(":");
     if (separated || this.nextDigit()) {
@@ -134,6 +147,10 @@ export class ISOParser {
       } else if (length === 6 && mainEnd === timeEnd && this.second >= 1 && this.second <= 12)
         this.fail();
     }
+  }
+
+  static parseUTCOffset(input: string): bigint {
+    return new ISOParser(input, false, false, false, true).offsetNanoseconds;
   }
 
   private fail(): never {

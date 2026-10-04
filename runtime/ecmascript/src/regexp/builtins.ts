@@ -148,7 +148,7 @@ function speciesConstructor(regexp: NtsRegExp): RegExpConstructor {
 // The result and index types below correct limitations in the pinned library.
 // The generic host facade still requires the typed-boundary rewrite documented
 // in the architecture audit before it can claim the full RegExp contract.
-export class NtsRegExp implements Pick<RegExp, "flags" | "source" | "test"> {
+export class NtsRegExp {
   /** JavaScript permits any value here; conversion happens when exec reads it. */
   lastIndex: unknown = 0;
   readonly #program: RegexProgram;
@@ -442,11 +442,7 @@ export class NtsRegExp implements Pick<RegExp, "flags" | "source" | "test"> {
 // RegExpExec's fallback is an intrinsic, even if user code replaces prototype.exec.
 const builtinExec = NtsRegExp.prototype.exec;
 
-export class RegExpStringIterator implements IterableIterator<
-  RegExpMatchArray,
-  undefined,
-  undefined
-> {
+export class RegExpStringIterator {
   readonly #matcher: NtsRegExp;
   readonly #input: string;
   readonly #global: boolean;

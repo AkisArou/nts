@@ -1,8 +1,7 @@
 import { nts_icu_collator_open, nts_icu_collator_compare } from "c:nts_icu";
 import type { IcuCollatorHandle } from "c:nts_icu";
-import type { CollatorPrimitive } from "../../../src/intl/collation.ts";
 
-export class IcuCollator implements CollatorPrimitive {
+export class IcuCollator {
   private readonly handle: IcuCollatorHandle;
   constructor(
     locale: string,

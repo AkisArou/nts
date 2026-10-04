@@ -6,9 +6,8 @@ import {
   nts_icu_date_field,
 } from "c:nts_icu";
 import type { IcuDateHandle } from "c:nts_icu";
-import type { DateTimeFormatterPrimitive } from "../../../src/intl/date-time-data.ts";
 
-export class IcuDateFormatter implements DateTimeFormatterPrimitive {
+export class IcuDateFormatter {
   private readonly handle: IcuDateHandle;
   constructor(locale: string, pattern: string, timeZone: string) {
     const handle = nts_icu_date_open(locale, pattern, timeZone);

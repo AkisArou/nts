@@ -5,13 +5,12 @@ import {
   nts_icu_date_patterns,
 } from "c:nts_icu";
 import type { IcuDatePatternHandle } from "c:nts_icu";
-import type { DateTimePatternData } from "../../../src/intl/date-time-data.ts";
 
 function required(pattern: string | null): string {
   if (pattern === null) throw new RangeError("ICU date-pattern operation failed");
   return pattern;
 }
-export class IcuDatePatterns implements DateTimePatternData {
+export class IcuDatePatterns {
   private readonly handle: IcuDatePatternHandle;
   constructor(locale: string) {
     const handle = nts_icu_date_patterns_open(locale);

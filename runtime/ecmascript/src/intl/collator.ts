@@ -24,9 +24,7 @@ const caseFirstValues: readonly NonNullable<Intl.CollatorOptions["caseFirst"]>[]
 
 // Configuration is immutable and built once. No options, locale identifiers or
 // result records are constructed by the comparison callback.
-export class CollatorConfiguration<D extends CollationData>
-  implements Intl.ResolvedCollatorOptions
-{
+export class CollatorConfiguration<D extends CollationData> {
   readonly locale: string;
   readonly dataLocale: string;
   readonly usage: NonNullable<Intl.CollatorOptions["usage"]>;
@@ -135,9 +133,7 @@ export class CollatorConfiguration<D extends CollationData>
   }
 }
 
-export class NtsCollator<D extends CollationData, P extends CollatorPrimitive>
-  implements Intl.Collator
-{
+export class NtsCollator<D extends CollationData, P extends CollatorPrimitive> {
   readonly #configuration: CollatorConfiguration<D>;
   readonly #primitive: P;
   #bound: Intl.Collator["compare"] | undefined;

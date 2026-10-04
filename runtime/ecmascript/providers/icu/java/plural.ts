@@ -1,7 +1,6 @@
 import { IcuPluralRules as NativeRules } from "java:nts.intl";
-import type { PluralRulesPrimitive } from "../../../src/intl/plural-data.ts";
 
-export class IcuPluralRules implements PluralRulesPrimitive {
+export class IcuPluralRules {
   readonly #handle: NativeRules;
   constructor(locale: string, ordinal: boolean, skeleton: string, negativeSkeleton: string) {
     this.#handle = new NativeRules(locale, ordinal, skeleton, negativeSkeleton);

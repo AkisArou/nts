@@ -27,7 +27,7 @@ function stringList(value: Iterable<string> | undefined): string[] {
   return items;
 }
 
-export class NtsListFormat<D extends LocaleData & ListPatternData> implements Intl.ListFormat {
+export class NtsListFormat<D extends LocaleData & ListPatternData> {
   readonly #locale: string;
   readonly #type: Intl.ResolvedListFormatOptions["type"];
   readonly #style: Intl.ResolvedListFormatOptions["style"];

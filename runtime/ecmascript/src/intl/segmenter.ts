@@ -1,4 +1,3 @@
-import type { WithResult } from "../contract.ts";
 import { LocaleResolver } from "./locale.ts";
 import type { LocaleData } from "./locale-data.ts";
 import { getCanonicalLocales } from "./locale-list.ts";
@@ -16,10 +15,7 @@ const granularities: readonly Intl.ResolvedSegmenterOptions["granularity"][] = [
   "sentence",
 ];
 
-export class NtsSegmenter<
-  D extends LocaleData,
-  P extends SegmenterPrimitive<P>,
-> implements WithResult<Intl.Segmenter, Intl.Segments, NtsSegments<P>> {
+export class NtsSegmenter<D extends LocaleData, P extends SegmenterPrimitive<P>> {
   readonly #locale: string;
   readonly #granularity: Intl.ResolvedSegmenterOptions["granularity"];
   readonly #primitive: P;

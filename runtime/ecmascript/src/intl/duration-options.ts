@@ -26,9 +26,7 @@ const digits: readonly NonNullable<Intl.DurationFormatOptions["fractionalDigits"
 
 // Codes index unitStyles; 5 is the internal fractional style. Compact buffers
 // hold ten immutable style/display slots rather than ten separate records.
-export class DurationConfiguration implements Readonly<
-  Omit<Intl.ResolvedDurationFormatOptions, "locale" | "numberingSystem">
-> {
+export class DurationConfiguration {
   readonly style: Intl.DurationFormatStyle;
   readonly fractionalDigits: Intl.DurationFormatOptions["fractionalDigits"];
   readonly firstNumeric: number;

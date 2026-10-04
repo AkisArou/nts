@@ -10,7 +10,6 @@ import {
   validUnicodeType,
 } from "./locale-id.ts";
 import { optionalString, stringOption } from "./options.ts";
-import type { WithResult } from "../contract.ts";
 
 const hourCycles: readonly Intl.LocaleHourCycleKey[] = ["h11", "h12", "h23", "h24"];
 const caseFirstValues: readonly Intl.LocaleCollationCaseFirst[] = ["upper", "lower", "false"];
@@ -24,11 +23,7 @@ function typeOption(value: string | undefined): string | undefined {
   return result;
 }
 
-export class NtsLocale<D extends LocaleInfoData> implements WithResult<
-  Omit<Intl.Locale, "hourCycle" | "caseFirst">,
-  Intl.Locale,
-  NtsLocale<D>
-> {
+export class NtsLocale<D extends LocaleInfoData> {
   readonly #data: D;
   readonly #tag: string;
   readonly #identifier: LocaleIdentifier;

@@ -95,6 +95,8 @@ export function resolveLocalDateTime(
   if (offsetOption === "use")
     return checkInstant(BigInt(day) * NS_PER_DAY + BigInt(time) - suppliedOffset);
   const useOffset = offsetOption !== "ignore";
+  if (useOffset && day < -100000000)
+    throw new RangeError("Offset matching requires a wall date inside the ISO days range");
   // The entire extended local millisecond domain fits below 2^53. The
   // sub-millisecond fragment is kept separately; a full timestamp never goes
   // through Number, and no large BigInt division is needed for ICU lookup.

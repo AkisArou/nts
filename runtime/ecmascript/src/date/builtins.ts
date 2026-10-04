@@ -19,16 +19,7 @@ import type { DateComponent } from "./operations.ts";
 // Standard builtin lowering supplies the host zone and already-converted
 // numeric arguments. Each value owns only its mutable clipped timestamp;
 // clock, locale and zone capabilities are kept outside individual dates.
-export class NtsDate implements Omit<
-  Date,
-  | typeof Symbol.toPrimitive
-  | "toJSON" // The pinned lib says string; invalid Date serializes as null.
-  | "toLocaleString"
-  | "toLocaleDateString"
-  | "toLocaleTimeString"
-  | "toTemporalInstant"
-  | "getVarDate" // Legacy ActiveX augmentation from lib.dom, outside ECMA-262.
-> {
+export class NtsDate {
   #milliseconds: number;
   constructor(milliseconds: number) {
     this.#milliseconds = timeClip(milliseconds);

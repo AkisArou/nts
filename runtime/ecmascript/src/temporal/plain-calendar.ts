@@ -3,9 +3,14 @@ import { PlainDateTime } from "./plain-date-time.ts";
 import { PlainYearMonth } from "./plain-year-month.ts";
 import { PlainMonthDay } from "./plain-month-day.ts";
 import { requireISOCalendarString } from "./calendar-id.ts";
+import { ZonedDateTime } from "./zoned-date-time.ts";
 
 // Class identity checks stay out of the scalar identifier/parser module.
 export function isPlainCalendar(value: object): boolean {
+  if (value instanceof ZonedDateTime) {
+    ZonedDateTime.epochNanoseconds(value);
+    return true;
+  }
   return (
     value instanceof PlainDate ||
     value instanceof PlainDateTime ||

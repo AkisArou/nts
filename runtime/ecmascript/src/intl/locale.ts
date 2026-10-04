@@ -25,10 +25,7 @@ export function canonicalizeLocale<D extends LocaleData>(data: D, tag: string): 
   return result;
 }
 
-export class NumberLocale implements Pick<
-  Intl.ResolvedNumberFormatOptions,
-  "locale" | "numberingSystem"
-> {
+export class NumberLocale {
   readonly locale: string;
   readonly numberingSystem: string;
   // The formatter's data locale includes explicit options even when the public

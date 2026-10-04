@@ -1,7 +1,6 @@
 import { IcuCollator as NativeCollator } from "java:nts.intl";
-import type { CollatorPrimitive } from "../../../src/intl/collation.ts";
 
-export class IcuCollator implements CollatorPrimitive {
+export class IcuCollator {
   private readonly handle: NativeCollator;
   constructor(
     locale: string,

@@ -1,30 +1,12 @@
 import { IcuLocaleData as NativeData } from "java:nts.intl";
 import { IcuCollator as NativeCollator } from "java:nts.intl";
-import type {
-  CollationData,
-  LocaleInfoData,
-  DateTimeLocaleData,
-} from "../../../src/intl/locale-data.ts";
-import type { TimeZoneIdentifierData } from "../../../src/time/zone-data.ts";
-import type { ListPatternData } from "../../../src/intl/list-data.ts";
-import type { DurationPatternData } from "../../../src/intl/duration-data.ts";
-import type { SupportedValueData } from "../../../src/intl/supported-value-data.ts";
 import {
   hasCalendarPreferences,
   hasWeekPreferences,
   hourCycleValues,
 } from "../shared/locale-preferences.ts";
 
-export class IcuLocaleData
-  implements
-    LocaleInfoData,
-    DateTimeLocaleData,
-    CollationData,
-    TimeZoneIdentifierData,
-    ListPatternData,
-    DurationPatternData,
-    SupportedValueData
-{
+export class IcuLocaleData {
   private readonly handle = new NativeData();
   canonicalize(tag: string): string {
     return this.handle.canonicalize(tag);

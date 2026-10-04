@@ -7,16 +7,13 @@ import {
 } from "../date/calendar.ts";
 import { formatISODate, checkDateDay, regulateISODate } from "./iso-date.ts";
 import { pad } from "../date/format.ts";
-import type { WithResult } from "../contract.ts";
 import { calendarName, isoCalendarAnnotation, requireISOCalendar } from "./calendar-id.ts";
 import { ISOParser } from "./iso-parser.ts";
 import { positiveDateField, isoMonthCode, resolveISOFields } from "./iso-fields.ts";
 import { integerWithTruncation, overflowOption } from "./options.ts";
 import { PlainDate } from "./plain-date.ts";
-import { PlainDateTime } from "./plain-date-time.ts";
 import { PlainTime } from "./plain-time.ts";
-import { PlainYearMonth } from "./plain-year-month.ts";
-import { requireISOCalendarLike } from "./plain-calendar.ts";
+import { requireISOCalendarLike, isPlainCalendar } from "./plain-calendar.ts";
 
 function fromFields(
   value: Readonly<Temporal.PartialTemporalLike<Temporal.DateLikeObject>>,
@@ -59,15 +56,7 @@ function monthDayString(
   );
 }
 
-export class PlainMonthDay implements WithResult<
-  WithResult<
-    Omit<Temporal.PlainMonthDay, "toLocaleString" | typeof Symbol.toStringTag>,
-    Temporal.PlainMonthDay,
-    PlainMonthDay
-  >,
-  Temporal.PlainDate,
-  PlainDate
-> {
+export class PlainMonthDay {
   readonly #day: number;
   constructor(isoMonth: number, isoDay: number, calendar = "iso8601", referenceISOYear = 1972) {
     const month = integerWithTruncation(isoMonth);
@@ -128,11 +117,8 @@ export class PlainMonthDay implements WithResult<
         Partial<Pick<Temporal.ZonedDateTimeLikeObject, "calendar" | "timeZone">>
     > = value;
     if (
-      value instanceof PlainYearMonth ||
-      value instanceof PlainDate ||
-      value instanceof PlainDateTime ||
+      isPlainCalendar(value) ||
       value instanceof PlainTime ||
-      value instanceof PlainMonthDay ||
       fields.calendar !== undefined ||
       fields.timeZone !== undefined
     )

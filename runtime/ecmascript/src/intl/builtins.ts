@@ -25,9 +25,7 @@ export { NtsSegmenter } from "./segmenter.ts";
 export class NtsNumberFormat<
   D extends LocaleData & NumberFormatData,
   P extends NumberFormatterPrimitive,
->
-  implements Intl.NumberFormat
-{
+> {
   readonly #configuration: NumberFormatConfiguration<D>;
   readonly #locale: NumberLocale;
   readonly #formatter: NumberFormatter<P>;

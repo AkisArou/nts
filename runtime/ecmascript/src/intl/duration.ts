@@ -12,9 +12,7 @@ import { Duration, toDuration } from "../temporal/duration.ts";
 export class NtsDurationFormat<
   D extends LocaleData & ListPatternData & DurationPatternData,
   P extends NumberFormatterPrimitive,
->
-  implements Intl.DurationFormat
-{
+> {
   readonly #locale: NumberLocale;
   readonly #configuration: DurationConfiguration;
   readonly #formatter: DurationFormatter<D, P>;

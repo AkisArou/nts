@@ -14,7 +14,11 @@ import {
   timeZoneTransitionMilliseconds,
 } from "../../../../../runtime/ecmascript/src/temporal/zoned-time.ts";
 import { timeZoneIdentifier } from "../../../../../runtime/ecmascript/src/temporal/zone-id.ts";
-import { NS_PER_HOUR } from "../../../../../runtime/ecmascript/src/temporal/exact.ts";
+import { NS_PER_DAY, NS_PER_HOUR } from "../../../../../runtime/ecmascript/src/temporal/exact.ts";
+import {
+  addISOZonedDateTime,
+  roundISOZonedDateTime,
+} from "../../../../../runtime/ecmascript/src/temporal/zoned-iso.ts";
 import { ISOParser } from "../../../../../runtime/ecmascript/src/temporal/iso-parser.ts";
 
 function localDigest(zone: TimeZoneRules, text: string): string {
@@ -124,6 +128,62 @@ export function zonedTimeDigest(
     timeZoneIdentifier("2021-08[UTC]") +
     ":" +
     timeZoneIdentifier("12-25[+05:30]");
+  const springNoon = parseInstant("2024-03-09T17:00Z");
+  const fallNoon = parseInstant("2024-11-02T16:00Z");
+  result +=
+    "\ntemporal-calendar-add:" +
+    formatInstant(addISOZonedDateTime(springNoon, ny, 0, 0, 0, 1, 0n, "constrain")) +
+    ":" +
+    formatInstant(addISOZonedDateTime(springNoon, ny, 0, 0, 0, 0, NS_PER_DAY, "constrain")) +
+    ":" +
+    formatInstant(addISOZonedDateTime(fallNoon, ny, 0, 0, 0, 1, 0n, "constrain")) +
+    ":" +
+    formatInstant(addISOZonedDateTime(fallNoon, ny, 0, 0, 0, 0, NS_PER_DAY, "constrain"));
+  result +=
+    "\ntemporal-calendar-special:" +
+    formatInstant(
+      addISOZonedDateTime(parseInstant("2024-01-31T17:00Z"), ny, 0, 1, 0, 0, 0n, "constrain"),
+    ) +
+    ":" +
+    formatInstant(
+      addISOZonedDateTime(parseInstant("2011-12-29T22:00Z"), apia, 0, 0, 0, 1, 0n, "constrain"),
+    ) +
+    ":" +
+    formatInstant(
+      addISOZonedDateTime(parseInstant("2024-11-03T06:30Z"), ny, 0, 0, 0, 0, 0n, "constrain"),
+    );
+  result +=
+    "\ntemporal-round-day:" +
+    formatInstant(
+      roundISOZonedDateTime(parseInstant("2024-03-10T16:00Z"), ny, 3, 1, "halfExpand"),
+    ) +
+    ":" +
+    formatInstant(
+      roundISOZonedDateTime(parseInstant("2024-03-10T16:30Z"), ny, 3, 1, "halfExpand"),
+    ) +
+    ":" +
+    formatInstant(
+      roundISOZonedDateTime(parseInstant("2024-11-03T16:30Z"), ny, 3, 1, "halfExpand"),
+    ) +
+    ":" +
+    formatInstant(roundISOZonedDateTime(parseInstant("2024-11-03T16:30Z"), ny, 3, 1, "halfEven"));
+  result +=
+    "\ntemporal-round-fold:" +
+    formatInstant(
+      roundISOZonedDateTime(parseInstant("2024-11-03T05:10Z"), ny, 4, 1, "halfExpand"),
+    ) +
+    ":" +
+    formatInstant(
+      roundISOZonedDateTime(parseInstant("2024-11-03T06:10Z"), ny, 4, 1, "halfExpand"),
+    ) +
+    ":" +
+    formatInstant(
+      roundISOZonedDateTime(parseInstant("2024-03-10T06:40Z"), ny, 4, 1, "halfExpand"),
+    ) +
+    ":" +
+    formatInstant(
+      roundISOZonedDateTime(parseInstant("2024-10-05T15:15Z"), lordHowe, 4, 1, "halfExpand"),
+    );
   return result;
 }
 
@@ -131,6 +191,7 @@ export function zonedTimeBenchmark(
   zone: TimeZoneRules,
   iterations: number,
   ambiguous: boolean,
+  advancing: boolean,
 ): number {
   const parsed = new ISOParser(
     ambiguous ? "2024-11-03T01:30:00.123456789Z" : "2024-11-04T12:30:00.123456789Z",
@@ -142,7 +203,8 @@ export function zonedTimeBenchmark(
   );
   let checksum = 0;
   for (let index = 0; index < iterations; index++) {
-    if (resolveLocalDateTime(day, time, zone, "compatible") !== expected)
+    const delta = advancing ? (index % 1000) * 1000000 : 0;
+    if (resolveLocalDateTime(day, time + delta, zone, "compatible") !== expected + BigInt(delta))
       throw new Error("Time-zone benchmark result changed");
     checksum++;
   }

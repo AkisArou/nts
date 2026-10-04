@@ -21,9 +21,7 @@ const types: readonly Intl.DisplayNamesType[] = [
 const fallbacks: readonly Intl.DisplayNamesFallback[] = ["code", "none"];
 const displays: readonly Intl.DisplayNamesLanguageDisplay[] = ["dialect", "standard"];
 
-export class NtsDisplayNames<D extends LocaleData, P extends DisplayNamesPrimitive>
-  implements Intl.DisplayNames
-{
+export class NtsDisplayNames<D extends LocaleData, P extends DisplayNamesPrimitive> {
   readonly #locale: string;
   readonly #style: Intl.ResolvedDisplayNamesOptions["style"];
   readonly #type: Intl.DisplayNamesType;

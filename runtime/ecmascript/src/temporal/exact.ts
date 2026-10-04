@@ -10,6 +10,17 @@ export const NS_PER_DAY = 86400000000000n;
 export const INSTANT_LIMIT = 8640000000000000000000n;
 const TIME_DURATION_LIMIT = 9007199254740992n * NS_PER_SECOND;
 
+export function unitNanoseconds(index: number): bigint {
+  if (index === 3) return NS_PER_DAY;
+  if (index === 4) return NS_PER_HOUR;
+  if (index === 5) return NS_PER_MINUTE;
+  if (index === 6) return NS_PER_SECOND;
+  if (index === 7) return NS_PER_MILLISECOND;
+  if (index === 8) return NS_PER_MICROSECOND;
+  if (index === 9) return 1n;
+  throw new RangeError("Calendar unit requires relative date");
+}
+
 export function checkTimeDuration(value: bigint): bigint {
   if (value <= -TIME_DURATION_LIMIT || value >= TIME_DURATION_LIMIT)
     throw new RangeError("Time duration outside supported range");
@@ -50,6 +61,14 @@ export function divideExact(nanoseconds: bigint, divisor: bigint): number {
 }
 
 export type RoundingMode = NonNullable<Temporal.RoundingOptions<Temporal.TimeUnit>["roundingMode"]>;
+
+export function negateRoundingMode(mode: RoundingMode): RoundingMode {
+  if (mode === "ceil") return "floor";
+  if (mode === "floor") return "ceil";
+  if (mode === "halfCeil") return "halfFloor";
+  if (mode === "halfFloor") return "halfCeil";
+  return mode;
+}
 
 export function floorDivide(value: bigint, divisor: bigint): bigint {
   const quotient = value / divisor;

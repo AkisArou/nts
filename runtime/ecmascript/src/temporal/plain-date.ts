@@ -28,11 +28,14 @@ import {
   isoWeekYear,
   formatISODate,
 } from "./iso-date.ts";
-import type { WithResult } from "../contract.ts";
+import type { ResolvedTimeZone, TimeZoneSource } from "../time/zone-data.ts";
 import { roundISODateDifference } from "./iso-date-duration.ts";
 import { positiveDateField, isoMonthCode, resolveISOFields } from "./iso-fields.ts";
 import { requireISOCalendar, calendarName, isoCalendarAnnotation } from "./calendar-id.ts";
 import { PlainDateTime } from "./plain-date-time.ts";
+import { ZonedDateTime } from "./zoned-date-time.ts";
+import { resolveTimeZone } from "./zone-like.ts";
+import { resolveLocalDateTime, startOfDay } from "./zoned-time.ts";
 import { PlainTime } from "./plain-time.ts";
 import { requireISOCalendarLike, isPlainCalendar } from "./plain-calendar.ts";
 import { PlainYearMonth } from "./plain-year-month.ts";
@@ -69,30 +72,7 @@ function dateString(day: number, options?: Readonly<Temporal.PlainDateToStringOp
 
 // Immutable ISO date stage. Calendar adapters and cross-type/localized methods
 // extend this contract as they become executable; missing APIs stay visible.
-export class PlainDate implements WithResult<
-  WithResult<
-    WithResult<
-      WithResult<
-        WithResult<
-          Omit<
-            Temporal.PlainDate,
-            "toZonedDateTime" | "toLocaleString" | typeof Symbol.toStringTag
-          >,
-          Temporal.PlainDate,
-          PlainDate
-        >,
-        Temporal.Duration,
-        Duration
-      >,
-      Temporal.PlainDateTime,
-      PlainDateTime
-    >,
-    Temporal.PlainYearMonth,
-    PlainYearMonth
-  >,
-  Temporal.PlainMonthDay,
-  PlainMonthDay
-> {
+export class PlainDate {
   readonly #day: number;
   constructor(isoYear: number, isoMonth: number, isoDay: number, calendar = "iso8601") {
     const year = integerWithTruncation(isoYear);
@@ -112,6 +92,11 @@ export class PlainDate implements WithResult<
     value: Temporal.PlainDateLike,
     options: Readonly<Temporal.OverflowOptions> | undefined = undefined,
   ): PlainDate {
+    if (value instanceof ZonedDateTime) {
+      const day = ZonedDateTime.epochDay(value);
+      overflowOption(options);
+      return PlainDate.fromDay(day);
+    }
     if (value instanceof PlainDate) {
       overflowOption(options);
       return PlainDate.fromDay(value.#day);
@@ -133,6 +118,39 @@ export class PlainDate implements WithResult<
     const calendar = fields.calendar;
     if (calendar !== undefined) requireISOCalendarLike(calendar);
     return PlainDate.fromDay(fieldsDay(value, options));
+  }
+  toZonedDateTime(
+    value:
+      | Temporal.TimeZoneLike
+      | Readonly<Temporal.PlainDateToZonedDateTimeOptions>
+      | ZonedDateTime<ResolvedTimeZone>,
+    source: TimeZoneSource | undefined = undefined,
+  ): ZonedDateTime<ResolvedTimeZone> {
+    const day = this.#day;
+    if (typeof value === "string" || value instanceof ZonedDateTime) {
+      const zone = resolveTimeZone(value, source);
+      return new ZonedDateTime(startOfDay(day, zone), zone);
+    }
+    if (value === null || (typeof value !== "object" && typeof value !== "function"))
+      throw new TypeError("A zoned date requires a time zone or options object");
+    const fields: Readonly<
+      Partial<Temporal.ZonedDateTimeLikeObject> &
+        Pick<Temporal.PlainDateToZonedDateTimeOptions, "plainTime">
+    > = value;
+    const rawZone = fields.timeZone;
+    if (rawZone === undefined) throw new TypeError("A zoned date requires a timeZone");
+    const zone = resolveTimeZone(rawZone, source);
+    const time = fields.plainTime;
+    const epoch =
+      time === undefined
+        ? startOfDay(day, zone)
+        : resolveLocalDateTime(
+            day,
+            PlainTime.nanoseconds(PlainTime.from(time)),
+            zone,
+            "compatible",
+          );
+    return new ZonedDateTime(epoch, zone);
   }
   static compare(one: Temporal.PlainDateLike, two: Temporal.PlainDateLike): number {
     const a = PlainDate.from(one).#day;

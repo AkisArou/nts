@@ -49,10 +49,7 @@ function grouping(
 // Locale-independent NumberFormat slots. Construct once, before opening ICU.
 // Library types are used directly; this is internal configuration, not an
 // incomplete implementation of the public Intl.NumberFormat interface.
-export class NumberFormatConfiguration<D extends NumberFormatData>
-  extends NumberDigits
-  implements Readonly<Omit<Intl.ResolvedNumberFormatOptions, "locale" | "numberingSystem">>
-{
+export class NumberFormatConfiguration<D extends NumberFormatData> extends NumberDigits {
   readonly style: Intl.ResolvedNumberFormatOptions["style"];
   readonly currency?: string;
   readonly currencyDisplay?: Intl.ResolvedNumberFormatOptions["currencyDisplay"];

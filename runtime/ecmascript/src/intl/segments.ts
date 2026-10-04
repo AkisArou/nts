@@ -1,4 +1,3 @@
-import type { WithResult } from "../contract.ts";
 import { numberValue } from "./options.ts";
 import type { SegmenterPrimitive } from "./segment-data.ts";
 import { SegmentBoundaries } from "./segment-boundaries.ts";
@@ -17,11 +16,7 @@ function segmentData<P extends SegmenterPrimitive<P>>(
 
 // The typed iterator protocol retains canonical segment/result types.
 // Intrinsic iterator inheritance and common helpers need runtime integration.
-export class NtsSegmentIterator<P extends SegmenterPrimitive<P>> implements IterableIterator<
-  Intl.SegmentData,
-  undefined,
-  unknown
-> {
+export class NtsSegmentIterator<P extends SegmenterPrimitive<P>> {
   readonly #primitive: P;
   readonly #input: string;
   readonly #word: boolean;
@@ -51,11 +46,7 @@ export class NtsSegmentIterator<P extends SegmenterPrimitive<P>> implements Iter
   }
 }
 
-export class NtsSegments<P extends SegmenterPrimitive<P>> implements WithResult<
-  Intl.Segments,
-  Intl.SegmentIterator<Intl.SegmentData>,
-  NtsSegmentIterator<P>
-> {
+export class NtsSegments<P extends SegmenterPrimitive<P>> {
   readonly #primitive: P;
   readonly #input: string;
   readonly #word: boolean;

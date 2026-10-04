@@ -4,6 +4,23 @@ import type { RoundingMode } from "./exact.ts";
 // name automatic precision explicitly rather than exposing its sentinel.
 export const AUTO_PRECISION = -1;
 
+// Month codes and offsets require a string primitive, rather than accepting
+// String's conversion of numbers or booleans. Ordinary object conversions use
+// the string hint and reject a non-string primitive immediately.
+export function requiredString(value: string | object): string {
+  if (value !== null && (typeof value === "object" || typeof value === "function")) {
+    const first = value.toString();
+    if (typeof first === "string") return first;
+    if (first === null || (typeof first !== "object" && typeof first !== "function"))
+      throw new TypeError("Temporal field requires a string primitive");
+    const second = value.valueOf();
+    if (typeof second === "string") return second;
+    throw new TypeError("Temporal field requires a string primitive");
+  }
+  if (typeof value !== "string") throw new TypeError("Temporal field requires a string");
+  return value;
+}
+
 // Read and convert a unit before validating its permitted group. Temporal's
 // ordered options read can precede a later algorithmic rejection of that unit.
 export function temporalUnit(value: string | undefined): string | undefined {
@@ -64,6 +81,28 @@ export function overflowOption(
 export function requireOptions(options: object): void {
   if (options === null || (typeof options !== "object" && typeof options !== "function"))
     throw new TypeError("Temporal options must be an object");
+}
+
+export function disambiguationOption(
+  value: Temporal.DisambiguationOptions["disambiguation"],
+): NonNullable<Temporal.DisambiguationOptions["disambiguation"]> {
+  if (value === undefined) return "compatible";
+  if (typeof value === "symbol") throw new TypeError("Temporal string options reject Symbols");
+  const text = String(value);
+  if (text === "compatible" || text === "earlier" || text === "later" || text === "reject")
+    return text;
+  throw new RangeError("Invalid Temporal disambiguation option");
+}
+
+export function offsetOption(
+  value: Temporal.ZonedDateTimeFromOptions["offset"],
+  fallback: NonNullable<Temporal.ZonedDateTimeFromOptions["offset"]>,
+): NonNullable<Temporal.ZonedDateTimeFromOptions["offset"]> {
+  if (value === undefined) return fallback;
+  if (typeof value === "symbol") throw new TypeError("Temporal string options reject Symbols");
+  const text = String(value);
+  if (text === "use" || text === "ignore" || text === "prefer" || text === "reject") return text;
+  throw new RangeError("Invalid Temporal offset option");
 }
 export function fractionalSecondDigits(
   value: NonNullable<Temporal.InstantToStringOptions["fractionalSecondDigits"]> = "auto",

@@ -11,10 +11,8 @@ import {
   nts_icu_number_range_field,
 } from "c:nts_icu";
 import type { IcuNumberHandle, IcuNumberRangeHandle } from "c:nts_icu";
-import type { NumberFormatterPrimitive } from "../../../src/intl/number-data.ts";
-import type { NumberFormatData } from "../../../src/intl/number-data.ts";
 
-export class IcuNumberData implements NumberFormatData {
+export class IcuNumberData {
   currencyDigits(currency: string): number {
     const digits = nts_icu_currency_digits(currency);
     if (!Number.isFinite(digits)) throw new RangeError("Invalid ICU currency data request");
@@ -22,7 +20,7 @@ export class IcuNumberData implements NumberFormatData {
   }
 }
 
-export class IcuNumberFormatter implements NumberFormatterPrimitive {
+export class IcuNumberFormatter {
   private readonly positive: IcuNumberHandle;
   private readonly negative: IcuNumberHandle | null;
   private usingNegative = false;

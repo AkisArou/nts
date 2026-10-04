@@ -5,9 +5,8 @@ import {
   nts_icu_segment_status,
 } from "c:nts_icu";
 import type { IcuSegmentHandle } from "c:nts_icu";
-import type { SegmenterPrimitive } from "../../../src/intl/segment-data.ts";
 
-export class IcuSegmenter implements SegmenterPrimitive<IcuSegmenter> {
+export class IcuSegmenter {
   readonly #handle: IcuSegmentHandle;
   private constructor(handle: IcuSegmentHandle) {
     this.#handle = handle;

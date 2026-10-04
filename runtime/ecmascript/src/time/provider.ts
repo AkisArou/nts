@@ -1,6 +1,7 @@
 // Backend primitives only. ECMAScript balancing, clipping, disambiguation and
 // option/error behavior belong to shared algorithms, not these adapters.
 export interface TimeZoneRules {
+  // A pinned rule snapshot, stable for the lifetime of this value.
   readonly id: string;
   offsetMilliseconds(epochMilliseconds: number): number;
   // ICU's former/latter interpretations at a discontinuity. Shared code decides
@@ -14,11 +15,13 @@ export interface TimeHost {
   defaultTimeZone(): TimeZoneRules;
 }
 
-export class FixedTimeZone implements TimeZoneRules {
+export class FixedTimeZone {
   readonly id: string;
+  readonly primaryId: string;
   readonly offset: number;
-  constructor(id: string, offsetMilliseconds: number) {
+  constructor(id: string, offsetMilliseconds: number, primaryId: string = id) {
     this.id = id;
+    this.primaryId = primaryId;
     this.offset = offsetMilliseconds;
   }
   offsetMilliseconds(_epochMilliseconds: number): number {

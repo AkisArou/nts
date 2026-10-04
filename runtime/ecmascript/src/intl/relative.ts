@@ -10,9 +10,7 @@ import { RelativePartBuffer } from "./relative-parts.ts";
 const styles: readonly Intl.RelativeTimeFormatStyle[] = ["long", "short", "narrow"];
 const numerics: readonly Intl.RelativeTimeFormatNumeric[] = ["always", "auto"];
 
-export class NtsRelativeTimeFormat<D extends LocaleData, P extends RelativeTimePrimitive>
-  implements Intl.RelativeTimeFormat
-{
+export class NtsRelativeTimeFormat<D extends LocaleData, P extends RelativeTimePrimitive> {
   readonly #locale: NumberLocale;
   readonly #style: Intl.RelativeTimeFormatStyle;
   readonly #numeric: Intl.RelativeTimeFormatNumeric;

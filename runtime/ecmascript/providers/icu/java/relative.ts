@@ -1,7 +1,6 @@
 import { IcuRelativeFormatter as NativeFormatter } from "java:nts.intl";
-import type { RelativeTimePrimitive } from "../../../src/intl/relative-data.ts";
 
-export class IcuRelativeFormatter implements RelativeTimePrimitive {
+export class IcuRelativeFormatter {
   readonly #handle: NativeFormatter;
   constructor(locale: string, style: number) {
     this.#handle = new NativeFormatter(locale, style);

@@ -1,7 +1,6 @@
 import { IcuDatePatterns as NativePatterns } from "java:nts.intl";
-import type { DateTimePatternData } from "../../../src/intl/date-time-data.ts";
 
-export class IcuDatePatterns implements DateTimePatternData {
+export class IcuDatePatterns {
   private readonly handle: NativePatterns;
   constructor(locale: string) {
     this.handle = new NativePatterns(locale);

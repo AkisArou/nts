@@ -6,9 +6,15 @@ import {
   requireOptions,
   secondsStringPrecision,
 } from "./options.ts";
-import { roundNanoseconds, checkTimeDuration, divideExact, floorDivide } from "./exact.ts";
+import {
+  roundNanoseconds,
+  checkTimeDuration,
+  divideExact,
+  floorDivide,
+  unitNanoseconds,
+} from "./exact.ts";
+export { unitNanoseconds } from "./exact.ts";
 import type { RoundingMode } from "./exact.ts";
-import type { WithResult } from "../contract.ts";
 import { PlainDate } from "./plain-date.ts";
 import { checkDateDay, addISODate } from "./iso-date.ts";
 import { checkDateTime, roundISODateTimeDifference } from "./iso-date-time.ts";
@@ -30,13 +36,9 @@ import {
 // One object owns the validated fields and their exact normalized time. The
 // cached time is derived from the public binary64 integers, never from a more
 // precise hidden input that could disagree with the getters.
-// Check the standard API, with object results bound to this implementation.
-// Localized formatting and intrinsic metadata remain outside this contract.
-export class Duration implements WithResult<
-  Omit<Temporal.Duration, "toLocaleString" | typeof Symbol.toStringTag>,
-  Temporal.Duration,
-  Duration
-> {
+// Public inputs use the standard types and object results name this value class.
+// Localized formatting and intrinsic metadata remain pending integration.
+export class Duration {
   readonly #years: number;
   readonly #months: number;
   readonly #weeks: number;
@@ -199,6 +201,12 @@ export class Duration implements WithResult<
   }
   field(index: number): number {
     return this.#field(index);
+  }
+  static field(value: Duration, index: number): number {
+    return value.#field(index);
+  }
+  static timeNanoseconds(value: Duration): bigint {
+    return value.#time;
   }
   timeNanoseconds(): bigint {
     return this.#time;
@@ -495,17 +503,6 @@ export function timeUnitIndex(unit: string): number {
   throw new RangeError("Invalid time unit");
 }
 
-export function unitNanoseconds(index: number): bigint {
-  if (index === 3) return NS_PER_DAY;
-  if (index === 4) return NS_PER_HOUR;
-  if (index === 5) return NS_PER_MINUTE;
-  if (index === 6) return NS_PER_SECOND;
-  if (index === 7) return NS_PER_MILLISECOND;
-  if (index === 8) return NS_PER_MICROSECOND;
-  if (index === 9) return 1n;
-  throw new RangeError("Calendar unit requires relative date");
-}
-
 // Divide in bigint before converting each result field to Number. This avoids
 // rounding the entire duration before its nanosecond remainder is computed.
 export function balanceDuration(
@@ -514,16 +511,17 @@ export function balanceDuration(
   years = 0,
   months = 0,
   weeks = 0,
+  dateDays = 0,
 ): Duration {
   let remainder = value;
-  let days = 0;
+  let days = dateDays;
   let hours = 0;
   let minutes = 0;
   let seconds = 0;
   let milliseconds = 0;
   let microseconds = 0;
   if (largestUnit <= 3) {
-    days = Number(remainder / NS_PER_DAY);
+    days += Number(remainder / NS_PER_DAY);
     remainder %= NS_PER_DAY;
   }
   if (largestUnit <= 4) {
