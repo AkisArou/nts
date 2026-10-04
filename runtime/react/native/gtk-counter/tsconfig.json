@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.native.json",
+  "compilerOptions": { "jsx": "react-jsx" },
+  "include": ["src", "types", "../gtk/types/react-gtk-shim.d.ts", "../../../native/libc.d.ts"]
+}
