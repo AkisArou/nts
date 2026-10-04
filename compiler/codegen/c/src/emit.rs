@@ -3773,9 +3773,9 @@ fn length_expression(ty: &HirType, value: ValueId) -> String {
                 | ManagedType::Table(_, _)
                 | ManagedType::Set(_),
         ) => format!("{}->header.length", value_name(value)),
-        // An erased value the lowering proved is an array: the length is in
-        // the header every reference carries, reached through the tag.
-        HirType::Erased => format!("nts_value_reference({})->length", value_name(value)),
+        // Array identity includes tuples; only the actual indexed storage
+        // contract supplies a live count.
+        HirType::Erased => format!("nts_array_length({})", value_name(value)),
         _ => format!("{}->length", value_name(value)),
     }
 }

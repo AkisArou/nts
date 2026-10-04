@@ -41,6 +41,7 @@ export function run(values: unknown[]): string {
     if (seen.get(value) === value) out += "=";
     if (value === 1) out += "1";
     if (value) out += "t";
+    if (Array.isArray(value)) out += String(value.length);
     if (value instanceof Point) out += "p";
   }
   const shifted = (n << 3n) >> 1n;
@@ -119,6 +120,7 @@ fn every_runtime_call_agrees_with_its_declaration() {
             "@nts_value_strict_eq(",
             "@nts_value_eq_number_fn(",
             "@nts_bigint_shl(",
+            "call i32 @nts_array_length(",
         ] {
             assert!(emitted.text.contains(helper), "{platform:?}: the program does not call {helper}");
         }
@@ -158,7 +160,7 @@ fn arm64_passes_an_erased_value_as_two_words() {
         // `run` is exported and returns a string, and takes `unknown[]` -- an
         // array, not an erased value -- so nothing here is refused.
         assert!(emitted.diagnostics.is_empty(), "arm64 {provider:?}: {:?}", emitted.diagnostics);
-        for helper in ["@nts_map_set(", "@nts_value_truthy_fn(", "@nts_value_strict_eq(", "@nts_is_class("] {
+        for helper in ["@nts_map_set(", "@nts_value_truthy_fn(", "@nts_value_strict_eq(", "@nts_is_class(", "call i32 @nts_array_length("] {
             assert!(emitted.text.contains(helper), "arm64 {provider:?}: the program does not call {helper}");
         }
         assert!(emitted.text.contains("[2 x i64]"), "arm64 {provider:?}: no erased value crossed as two words");

@@ -3873,6 +3873,10 @@ uint32_t nts_tag_of_reference(const NtsHeader *object);
  * guesses when the descriptor does not say. The result is owned. */
 NtsValue nts_array_element(NtsValue array, double index);
 
+/* The live count of actual array storage. Array identity alone includes tuples,
+ * whose fields have no indexed storage count; those refuse by name. Borrows. */
+uint32_t nts_array_length(NtsValue array);
+
 /* Whether the resumed state machine has to propagate a rejection rather than
  * read a value. A rejected promise has no payload and both readers above
  * assert, so an `await` asks this first. */

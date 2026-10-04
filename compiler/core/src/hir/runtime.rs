@@ -65,6 +65,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_array_index_of_str", &[None, None], Some(HirType::Float { bits: 64 })),
     ("nts_array_index_of_str_value", &[None, None], Some(HirType::Float { bits: 64 })),
     ("nts_array_last_index_of", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
+    ("nts_array_length", &[None], Some(HirType::Int { bits: 32, signed: false })),
     ("nts_array_new", &[None, Some(HirType::Float { bits: 64 })], None),
     ("nts_array_new_uninitialized", &[None, Some(HirType::Float { bits: 64 })], None),
     ("nts_array_pop", &[None], Some(HirType::Float { bits: 64 })),

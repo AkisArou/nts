@@ -2134,6 +2134,22 @@ NtsArray *nts_array_of_numbers(double length) {
   return nts_array_new(&nts_desc_number_array, length);
 }
 
+uint32_t nts_array_length(NtsValue array) {
+  if (!nts_is_array(array)) {
+    fprintf(stderr, NTS_REFUSED "the length of a non-array value\n");
+    abort();
+  }
+  const NtsHeader *object = nts_value_reference(array);
+  if (object->descriptor->kind != NTS_KIND_ARRAY) {
+    fprintf(stderr,
+            NTS_REFUSED "the length of `%s`, a tuple whose indexed storage "
+                        "count is not built\n",
+            object->descriptor->name ? object->descriptor->name : "?");
+    abort();
+  }
+  return object->length;
+}
+
 /* `xs[i]` where the compiler knows `xs` is an array and not what it holds.
  *
  * A guard is what produces this: `Array.isArray(xs)` proves the value is an

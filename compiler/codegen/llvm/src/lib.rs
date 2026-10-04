@@ -1943,6 +1943,8 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     // declaration is an invalid module rather than a refusal.
     "nts_no_arm",
     "nts_array_new",
+    // Length of erased array storage is emitted directly from the operation.
+    "nts_array_length",
     // The view trio. Emitted as raw IR from `index_lines` rather than as HIR
     // calls, so `externals` -- which reads `OpKind::Call` -- cannot see them
     // and would leave every element access referring to an undeclared symbol.
@@ -3396,7 +3398,7 @@ fn counting_or_global(
 /// Both are a load through a header, and both differ from an array's rule in
 /// the same direction: a string is immutable and cannot grow, so its count is
 /// the header's own and an index out of range answers NaN rather than trapping.
-fn text_operation(func: &Func, value: ValueId, out: &str) -> Result<String, Diagnostic> {
+fn text_operation(func: &Func, value: ValueId, out: &str, platform: Platform) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     let out = out.to_owned();
     Ok(match &op.kind {
@@ -3461,6 +3463,20 @@ fn text_operation(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
         }
         OpKind::Length(of) => {
             let returns = ty_of(&op.ty, func)?;
+            if func.values[of.0 as usize].ty == HirType::Erased {
+                // The shape guard proves array identity. A tuple also has that
+                // identity, so the descriptor must supply the storage count.
+                let mut lines = Vec::new();
+                let args = runtime_arguments(func, &out, &[*of], &mut lines, platform)?;
+                let raw = format!("{out}.count");
+                lines.push(format!("{raw} = call i32 @nts_array_length({})", args.join(", ")));
+                lines.push(if returns == "i32" {
+                    format!("{out} = add i32 {raw}, 0")
+                } else {
+                    converted(&out, "i32", returns, &raw, func)?
+                });
+                return Ok(lines.join("\n  "));
+            }
             let at = format!("{out}.at");
             let raw = format!("{out}.raw");
             // A view's length is computed rather than stored -- one built
@@ -3486,31 +3502,9 @@ fn text_operation(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
                 return Ok(lines.join("\n  "));
             }
             let offset = nts_core::hir::layout::LENGTH_OFFSET;
-            // **An erased operand is legitimate here, and only this backend
-            // could not take one.** `if (Array.isArray(v)) { v.length }` leaves
-            // `v` erased in the HIR -- the narrowing is the checker's and the
-            // value is still the tagged pair -- so `Length` arrives with an
-            // `Erased` operand. C has an arm for exactly it in
-            // `length_expression` (`nts_value_reference(v)->length`, "an erased
-            // value the lowering proved is an array") and the JVM refuses it by
-            // name; this emitted `getelementptr i8, ptr %v0` against a
-            // `{ i32, i64 }`, which is not IR. The module stopped assembling --
-            // "'%v0' defined with type '{ i32, i64 }' but expected 'ptr'" -- so
-            // it was loud and stopped the build rather than miscompiling.
-            // React's `stringsOf` is the reduction, and a scan for every erased
-            // value used as a pointer finds this one site and no other.
-            //
-            // Unchecked, as C's is: what licenses the read is the narrowing in
-            // front of it, and a tag check in one backend alone would be a
-            // different contract rather than a safer one.
+            // A statically represented aggregate supplies its header count.
             let mut lines = Vec::new();
-            let receiver = if func.values[of.0 as usize].ty == HirType::Erased {
-                let (prelude, pointer) = erased_reference(&out, &name(*of));
-                lines.push(prelude);
-                pointer
-            } else {
-                name(*of)
-            };
+            let receiver = name(*of);
             lines.push(format!("{at} = getelementptr i8, ptr {receiver}, i64 {offset}"));
             lines.push(format!("{raw} = load i32, ptr {at}{}", tbaa("i32")));
             // A length is a `uint32_t`, so widening it is `zext` and turning
@@ -4174,7 +4168,7 @@ fn memory_operation(
             return native_memory::operation(func, &op.kind, &op.ty, &out, platform);
         }
         OpKind::Length(_) | OpKind::StringUnitAt { .. } => {
-            return text_operation(func, value, &out);
+            return text_operation(func, value, &out, platform);
         }
         OpKind::Retain(_)
         | OpKind::Release(_)

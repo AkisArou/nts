@@ -118,7 +118,7 @@ static NtsValue as_value(NtsArray *array) {
   return nts_value_of_reference(&array->header, NTS_TAG_OBJECT);
 }
 
-static bool tuple_read_refuses(void) {
+static bool tuple_storage_refuses(bool length) {
   int output[2];
   if (pipe(output) != 0) {
     return false;
@@ -137,7 +137,12 @@ static bool tuple_read_refuses(void) {
     NtsHeader header = {0};
     header.descriptor = &tuple;
     /* A tuple has fields but no logical array length in its header. */
-    nts_array_element(nts_value_of_reference(&header, NTS_TAG_OBJECT), 0);
+    NtsValue erased = nts_value_of_reference(&header, NTS_TAG_OBJECT);
+    if (length) {
+      nts_array_length(erased);
+    } else {
+      nts_array_element(erased, 0);
+    }
     _exit(0);
   }
   close(output[1]);
@@ -150,13 +155,17 @@ static bool tuple_read_refuses(void) {
   }
   return read_bytes > 0 && WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT &&
          strstr(message, "nts: refused:") != NULL &&
-         strstr(message, "tuple whose indexed storage contract is not built") !=
+         strstr(message,
+                length ? "tuple whose indexed storage count is not built"
+                       : "tuple whose indexed storage contract is not built") !=
              NULL;
 }
 
 int main(void) {
   check("tuple identity does not invent an undefined indexed element",
-        tuple_read_refuses());
+        tuple_storage_refuses(false));
+  check("tuple identity does not invent an array length",
+        tuple_storage_refuses(true));
   /* THE CASE THE FIELD EXISTS FOR. Two descriptors that agree on kind, on
    * size, on references and on erasure, and hold different things. */
   check("eight bytes of double and eight bytes of int64 are the same width",
@@ -168,6 +177,8 @@ int main(void) {
   NTS_ITEMS(wide, int64_t)[0] = 4294967296;
   NTS_ITEMS(wide, int64_t)[1] = 8589934592;
   NTS_ITEMS(wide, int64_t)[2] = 4503599627370495;
+  check("erased length reads the live count",
+        nts_array_length(as_value(wide)) == 3);
   NtsValue got = nts_array_element(as_value(wide), 1);
   check("an int64 element reads as the integer it is",
         nts_value_tag(got) == NTS_TAG_NUMBER &&

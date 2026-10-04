@@ -58,6 +58,7 @@ pub const SIGNATURES_ARM64: &[Signature] = &[
     Signature { name: "nts_array_join_str", returns: "ptr", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_array_keep_first", returns: "void", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_array_last_index_of", returns: "double", params: &["ptr", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_array_length", returns: "i32", params: &["[2 x i64]"], attributes: &[] },
     Signature { name: "nts_array_new", returns: "noalias nonnull ptr", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_array_new_uninitialized", returns: "noalias nonnull ptr", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_array_of_numbers", returns: "noalias nonnull ptr", params: &["double"], attributes: &[] },
