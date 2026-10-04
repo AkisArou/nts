@@ -58,8 +58,10 @@ and artifact-size evidence before becoming another provider.
    calendar metadata and conversion. Locale metadata uses public ICU primitives
    and the minimal pinned preference availability/hour-order index.
    supportedValuesOf and primary time-zone identities now share cached TS
-   semantics and pinned public ICU data primitives. Calendar conversion and
-   runtime host binding remain open.
+   semantics and pinned public ICU data primitives. Calendar data now has
+   public C/JVM cursors, exact shared arithmetic for eleven non-ISO calendars,
+   and validated month-boundary snapshots with a two-year cache. Public value
+   integration, full-range astronomical data and runtime host binding remain open.
 3. **NumberFormat and DateTimeFormat.** Complete exact public inputs, bound
    formatting, resolved options, ranges, parts and Temporal date/time inputs.
    NumberFormat's shared semantics and C/JVM primitives exist; compiled public
@@ -72,7 +74,9 @@ and artifact-size evidence before becoming another provider.
    serialization exist. UTC and multi-component setters distinguish omission
    from explicit undefined. Their emitted optional-tuple witness still exposes
    a compiler argument-count defect. The three locale methods now use shared
-   Intl. Complete standard binding and local environment wiring remain open.
+   Intl. Original-value snapshots, intrinsic slot reads/writes and the optional
+   Temporal bridge now pass the host environment witness. Complete shipping
+   standard binding and local environment wiring remain open.
 5. **Temporal.** Complete Instant, Duration, PlainDate, PlainTime, PlainDateTime,
    PlainYearMonth, PlainMonthDay, ZonedDateTime and Now, with non-ISO calendars,
    relative arithmetic, transitions and disambiguation. Instant/Duration scalar
@@ -297,6 +301,44 @@ Now also unblocks a PlainDateTime return-type case and a global key-presence
 case. Localization and non-ISO semantics remain incomplete despite weak tests
 that only require a string result. DateTimeFormat was 191/244 at that checkpoint.
 
+The calendar foundation now supplies one shared arithmetic implementation for
+Gregorian variants, Coptic/Ethiopic, Indian, tabular Hijri and Hebrew calendars.
+Reusable cursors keep year boundaries and allocate no per-date object during
+load/conversion. Hebrew uses Euclidean arithmetic through negative years;
+ICU4J's Hebrew cache hangs in that range, as confirmed by the retained stack at
+target/ecmascript/audit/calendar-data/jvm-live-stack.log.
+The raw C/JVM Hebrew primitives now decline dates before year 1, before
+entering that cache; shared arithmetic handles the range. Direct C sanitizer
+and JVM verification witnesses check negative-year rejection and the valid epoch.
+ICU is still used for astronomical/table data through public APIs; no internal ICU methods or JNI
+are involved. The provider reverse conversion is explicitly an estimate.
+CalendarYear validates complete month topology before caching it; CalendarContext
+retains two immutable years, so subsequent reads do not query the provider.
+Era rules and month-code syntax/validation remain shared. These foundations
+are not yet connected to the public non-ISO Temporal values.
+
+The actual calendar data witness executes on C, C/RC, LLVM, LLVM/RC and JVM.
+Each configuration passes 21 fixed goldens and 825,000 modern round trips across
+15 calendars. The eleven shared arithmetic calendars also match all eight ICU
+fields and month codes for 605,000 modern dates per configuration. Their sampled
+full-range conversions pass. The full-range gate deliberately remains red:
+Chinese/Dangi first disagree at day -99,400,000, and Umm al-Qura needs the
+specified tabular fallback outside its data range. Each backend retains its
+output as result.log in the corresponding *-calendar directory; the combined
+audit is target/ecmascript/audit/calendar-data/final-all-backends.log.
+Native runs check ASan/UBSan; leak checking applies to RC because NoGC deliberately
+retains its bump-allocated heap. This is data/ABI acceptance, not public Test262
+or complete calendar-range acceptance.
+
+The actual calendar-topology fixture typechecks but is currently refused on C
+and JVM: CalendarPrimitive.load/estimateEpochDay cannot dispatch to the implicit
+class implementations. This is the structural-conformance work already owned
+by the compiler lane. No implements clause or erased adapter was introduced to
+bypass it. Logs are calendar-data/topology-{c,jvm}.log in the audit directory.
+The month-code refactor reran all 4,603 original builtin Temporal cases: 4,567
+pass, with all verdicts and failure reasons unchanged. Calendar rules follow the
+[specified era/month-code algorithms](https://tc39.es/proposal-intl-era-monthcode/).
+
 Shared localization now connects Instant, Duration, all five plain classes,
 ZonedDateTime and Date's three locale methods to the existing Intl algorithms.
 An environment owns the formatter capabilities; values pass their immutable
@@ -431,6 +473,31 @@ not its exit zero. Artifacts: target/ecmascript/audit/temporal-zone-utc.
 
 ## Pins and verification
 
+The Date environment/slot follow-up passes 543/594 original cases both with
+pinned ICU and in the explicit UTC environment without Intl. It fixes 149 cases
+relative to the localization checkpoint and retains two new excluded descriptor
+failures for the callable constructor/prototype binding. Eighty-two new passes
+are natural own-method metadata checks; the result is not a claim that 149
+semantic defects were fixed. All retained failures remain in the original rows.
+
+Setters capture the original private milliseconds before argument conversion,
+commit through private state, and preserve mutations made during conversion
+when the original invalid value requires an early return. The Temporal bridge
+and Date cloning read private slots, ignoring overridable getTime. toJSON calls
+the typed valueOf/toISOString methods, including non-finite results and subclass
+overrides. The host adapter supplies callable Date construction, supplied
+argument counts and local-zone injection through shared arithmetic; it does
+not provide shipping runtime bindings.
+
+The typed Date state fixture typechecks and its supplementary host driver passes
+the fixed subclass/private-state outputs. Its full C/JVM main remains refused
+at structural TimeZoneRules dispatch. The independent bridgeSnapshot export
+does execute as -1000000 on C with ASan/UBSan and JVM with -Xverify:all, without
+ICU. This is narrow bridge evidence, not full Date compiled acceptance. Receipts
+are under target/ecmascript/audit/date-state and the original Date comparisons
+are date-environment-slots{,-no-intl}-checkpoint.json under
+target/ecmascript/icu-check. Compiler/frontend pins remain unchanged.
+
 The specification, Test262 and data revisions are in
 [versions.json](providers/icu/versions.json). The Maven artifact is hash-pinned in
 [dependencies.tsv](providers/icu/dependencies.tsv); native source and license
@@ -451,7 +518,7 @@ Current host results against Test262
 
 | Slice                    | Host passes | Retained failures |
 | ------------------------ | ----------: | ----------------: |
-| Date                     |         396 |               198 |
+| Date                     |         543 |                51 |
 | Temporal.Instant         |         461 |                 4 |
 | Temporal.Duration        |         538 |                 2 |
 | Temporal.PlainTime       |         491 |                 2 |
@@ -849,6 +916,7 @@ node runtime/ecmascript/tools/icu.ts --pinned-native --all-backends --sanitize
 node runtime/ecmascript/tools/icu.ts --pinned-native --bench
 node runtime/ecmascript/tools/icu.ts --pinned-native --android
 NTS_BIN=target/debug/nts NTS_TSGO=target/tsgo node runtime/ecmascript/tools/icu.ts --pinned-native --duration --all-backends --sanitize
+NTS_BIN=target/debug/nts NTS_TSGO=target/tsgo node runtime/ecmascript/tools/icu.ts --pinned-native --calendar --all-backends --sanitize
 ```
 
 The DurationFormat command is a required pending gate and currently exposes the

@@ -23,6 +23,15 @@ import type { SupportedValueData } from "../../../runtime/ecmascript/src/intl/su
 import type { DisplayNamesPrimitive } from "../../../runtime/ecmascript/src/intl/display-data.ts";
 import type { SegmenterPrimitive } from "../../../runtime/ecmascript/src/intl/segment-data.ts";
 import type { TimeZoneRules } from "../../../runtime/ecmascript/src/time/provider.ts";
+import type { CalendarPrimitive } from "../../../runtime/ecmascript/src/temporal/calendar-data.ts";
+import {
+  icuCalendarYear,
+  icuExtendedYear,
+} from "../../../runtime/ecmascript/providers/icu/shared/calendar-year.ts";
+import {
+  calendarMonthIndex,
+  calendarYearFromMonthIndex,
+} from "../../../runtime/ecmascript/src/temporal/calendar-month-index.ts";
 import {
   hasCalendarPreferences,
   hasWeekPreferences,
@@ -302,6 +311,51 @@ export function icuHost(root: string) {
   function openTimeZone(identifier: string): HostTimeZone {
     return new HostTimeZone(Number(required("zoneOpen", identifier)));
   }
+  class HostCalendar {
+    readonly #identifier: string;
+    readonly #handle: number;
+    #fields: number[] = [];
+    #code: string | undefined;
+    constructor(identifier: string) {
+      this.#identifier = identifier;
+      this.#handle = Number(required("calendarOpen", identifier));
+    }
+    load(epochDay: number): boolean {
+      const result = call("calendarLoad", this.#handle, epochDay);
+      if (result === null) return false;
+      const parts = result.split(";");
+      this.#fields = parts[0]!.split(",").map(Number);
+      this.#fields[0] = icuCalendarYear(this.#identifier, this.#fields[0]!);
+      this.#code = parts[1];
+      return true;
+    }
+    field(index: number): number {
+      return this.#fields[index] ?? NaN;
+    }
+    monthCode(): string | undefined {
+      return this.#code;
+    }
+    estimateEpochDay(year: number, ordinalMonth: number, day: number): number {
+      return Number(
+        required(
+          "calendarEstimate",
+          this.#handle,
+          icuExtendedYear(this.#identifier, year),
+          ordinalMonth,
+          day,
+        ),
+      );
+    }
+    monthIndex(year: number, ordinalMonth: number): number {
+      return calendarMonthIndex(this.#identifier, year, ordinalMonth);
+    }
+    yearFromMonthIndex(index: number): number {
+      return calendarYearFromMonthIndex(this.#identifier, index);
+    }
+  }
+  function openCalendar(identifier: string): CalendarPrimitive {
+    return new HostCalendar(identifier);
+  }
   return {
     data,
     nowNanoseconds: () => BigInt(required("nowNanoseconds")),
@@ -314,6 +368,7 @@ export function icuHost(root: string) {
     openDisplay,
     openSegmenter,
     openTimeZone,
+    openCalendar,
     reset: () => {
       required("reset");
     },

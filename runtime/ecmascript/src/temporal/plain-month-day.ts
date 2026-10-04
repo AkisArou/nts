@@ -1,3 +1,4 @@
+import { parseMonthCode } from "./month-code.ts";
 import type { TimeLocaleSource } from "../time/locale-source.ts";
 import {
   yearFromDays,
@@ -10,7 +11,7 @@ import { formatISODate, checkDateDay, regulateISODate } from "./iso-date.ts";
 import { pad } from "../date/format.ts";
 import { calendarName, isoCalendarAnnotation, requireISOCalendar } from "./calendar-id.ts";
 import { ISOParser } from "./iso-parser.ts";
-import { positiveDateField, isoMonthCode, resolveISOFields } from "./iso-fields.ts";
+import { positiveDateField, resolveISOFields } from "./iso-fields.ts";
 import { integerWithTruncation, overflowOption } from "./options.ts";
 import { PlainDate } from "./plain-date.ts";
 import { PlainTime } from "./plain-time.ts";
@@ -26,7 +27,7 @@ function fromFields(
   const rawMonth = value.month;
   const month = rawMonth === undefined ? undefined : positiveDateField(rawMonth);
   const rawCode = value.monthCode;
-  const code = rawCode === undefined ? undefined : isoMonthCode(rawCode);
+  const code = rawCode === undefined ? undefined : parseMonthCode(rawCode);
   const rawYear = value.year;
   const year = rawYear === undefined ? 1972 : integerWithTruncation(rawYear);
   if (

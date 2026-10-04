@@ -1,0 +1,12 @@
+{
+  "extends": "../../../../tsconfig.fixtures.json",
+  "compilerOptions": {
+    "paths": {
+      "@nts/icu-calendar": ["../../../../runtime/ecmascript/providers/icu/java/calendar.ts"]
+    }
+  },
+  "include": [
+    "src/calendar-data.ts",
+    "../../../../runtime/ecmascript/providers/icu/java/types/*.d.ts"
+  ]
+}

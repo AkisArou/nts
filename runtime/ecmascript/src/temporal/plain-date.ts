@@ -1,3 +1,4 @@
+import { parseMonthCode } from "./month-code.ts";
 import type { TimeLocaleSource } from "../time/locale-source.ts";
 import {
   epochDays,
@@ -30,8 +31,8 @@ import {
   formatISODate,
 } from "./iso-date.ts";
 import type { ResolvedTimeZone, TimeZoneSource } from "../time/zone-data.ts";
-import { roundISODateDifference } from "./iso-date-duration.ts";
-import { positiveDateField, isoMonthCode, resolveISOFields } from "./iso-fields.ts";
+import { roundDateDifference } from "./date-duration.ts";
+import { positiveDateField, resolveISOFields } from "./iso-fields.ts";
 import { requireISOCalendar, calendarName, isoCalendarAnnotation } from "./calendar-id.ts";
 import { PlainDateTime } from "./plain-date-time.ts";
 import { ZonedDateTime } from "./zoned-date-time.ts";
@@ -51,7 +52,7 @@ function fieldsDay(
   const rawMonth = value.month;
   const month = rawMonth === undefined ? undefined : positiveDateField(rawMonth);
   const rawCode = value.monthCode;
-  const code = rawCode === undefined ? undefined : isoMonthCode(rawCode);
+  const code = rawCode === undefined ? undefined : parseMonthCode(rawCode);
   const rawYear = value.year;
   const year = rawYear === undefined ? undefined : integerWithTruncation(rawYear);
   if (
@@ -287,7 +288,7 @@ export class PlainDate {
     const smallest = rawSmallest === undefined ? 3 : dateUnitIndex(rawSmallest);
     const largest = largestText === "auto" ? smallest : dateUnitIndex(largestText);
     if (largest > smallest) throw new RangeError("Invalid date difference unit order");
-    const result = roundISODateDifference(
+    const result = roundDateDifference(
       day,
       target,
       largest,

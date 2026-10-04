@@ -1,4 +1,20 @@
 declare module "c:nts_icu" {
+  export type IcuCalendarHandle = import("./handle.ts").IcuCalendarHandle;
+  /** @ntsAbi managed */
+  export function nts_icu_calendar_open(identifier: string): IcuCalendarHandle | null;
+  /** @ntsAbi managed */
+  export function nts_icu_calendar_load(handle: IcuCalendarHandle, epochDay: number): boolean;
+  /** @ntsAbi managed */
+  export function nts_icu_calendar_field(handle: IcuCalendarHandle, index: number): number;
+  /** @ntsAbi managed */
+  export function nts_icu_calendar_month_code(handle: IcuCalendarHandle): string | null;
+  /** @ntsAbi managed */
+  export function nts_icu_calendar_to_day(
+    handle: IcuCalendarHandle,
+    extendedYear: number,
+    ordinalMonth: number,
+    day: number,
+  ): number;
   export type IcuSegmentHandle = import("./handle.ts").IcuSegmentHandle;
   /** @ntsAbi managed */
   export function nts_icu_segment_open(

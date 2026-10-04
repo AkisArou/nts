@@ -8,7 +8,7 @@ import {
   unitNanoseconds,
 } from "./exact.ts";
 import { Duration, balanceDuration } from "./duration.ts";
-import { differenceISODate } from "./iso-date-duration.ts";
+import { differenceDate } from "./date-duration.ts";
 import { addISODate } from "./iso-date.ts";
 import { localNanoseconds, resolveLocalDateTime } from "./zoned-time.ts";
 
@@ -38,7 +38,7 @@ function difference(
     const intermediate = resolveLocalDateTime(intermediateDay, startTime, zone, "compatible");
     const remainder = end - intermediate;
     if (sign > 0 ? remainder >= 0n : remainder <= 0n) {
-      const date = differenceISODate(startDay, intermediateDay, largest);
+      const date = differenceDate(startDay, intermediateDay, largest);
       return balanceDuration(
         remainder,
         4,

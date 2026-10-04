@@ -7,6 +7,15 @@
 // this file must NOT import them, or it becomes a module and declares nothing.
 
 declare module "java:nts.intl" {
+  /** nts.intl.IcuCalendar Final: cannot be extended. */
+  export class IcuCalendar {
+    constructor(a0: string);
+    load(a0: number): boolean;
+    field(a0: number): number;
+    monthCode(): string;
+    toEpochDay(a0: number, a1: number, a2: number): number;
+  }
+
   /** nts.intl.IcuCollator Final: cannot be extended. */
   export class IcuCollator {
     constructor(a0: string, a1: number, a2: boolean, a3: boolean, a4: number);

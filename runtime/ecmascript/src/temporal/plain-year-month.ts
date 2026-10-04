@@ -1,3 +1,4 @@
+import { parseMonthCode } from "./month-code.ts";
 import type { TimeLocaleSource } from "../time/locale-source.ts";
 import {
   yearFromDays,
@@ -11,9 +12,9 @@ import {
 import { isoYear, pad } from "../date/format.ts";
 import { calendarName, isoCalendarAnnotation, requireISOCalendar } from "./calendar-id.ts";
 import { ISOParser } from "./iso-parser.ts";
-import { positiveDateField, isoMonthCode, resolveISOFields } from "./iso-fields.ts";
+import { positiveDateField, resolveISOFields } from "./iso-fields.ts";
 import { regulateISODate, dateUnitIndex, checkDateDay, addISODate } from "./iso-date.ts";
-import { differenceISODate } from "./iso-date-duration.ts";
+import { differenceDate } from "./date-duration.ts";
 import { roundISODateTimeDifference } from "./iso-date-time.ts";
 import {
   integerWithTruncation,
@@ -52,7 +53,7 @@ function fromFields(
   const rawMonth = value.month;
   const month = rawMonth === undefined ? undefined : positiveDateField(rawMonth);
   const rawCode = value.monthCode;
-  const code = rawCode === undefined ? undefined : isoMonthCode(rawCode);
+  const code = rawCode === undefined ? undefined : parseMonthCode(rawCode);
   const rawYear = value.year;
   const year = rawYear === undefined ? undefined : integerWithTruncation(rawYear);
   if (
@@ -226,7 +227,7 @@ export class PlainYearMonth {
       epochDays(yearFromDays(target), monthFromTime(target * MS_PER_DAY), 1),
     );
     if (smallest === 1 && increment === 1) {
-      const result = differenceISODate(start, end, largest);
+      const result = differenceDate(start, end, largest);
       return since ? result.negated() : result;
     }
     const result = roundISODateTimeDifference(

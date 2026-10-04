@@ -7,6 +7,7 @@ import type {
   IcuPluralHandle,
   IcuDisplayHandle,
   IcuSegmentHandle,
+  IcuCalendarHandle,
 } from "../../../../runtime/ecmascript/providers/icu/c/handle.ts";
 
 type MustBeFalse<T extends false> = T;
@@ -51,4 +52,11 @@ export type SegmentIsNotNumber = MustBeFalse<
 >;
 export type NumberIsNotSegment = MustBeFalse<
   IcuNumberHandle extends IcuSegmentHandle ? true : false
+>;
+export type DataCalendarCannotBeForged = MustBeFalse<{} extends IcuCalendarHandle ? true : false>;
+export type DataCalendarIsNotTimeZone = MustBeFalse<
+  IcuCalendarHandle extends IcuTimeZoneHandle ? true : false
+>;
+export type TimeZoneIsNotDataCalendar = MustBeFalse<
+  IcuTimeZoneHandle extends IcuCalendarHandle ? true : false
 >;

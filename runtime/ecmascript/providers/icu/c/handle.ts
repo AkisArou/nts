@@ -10,6 +10,7 @@ import type {
   PluralHandleBrand,
   DisplayHandleBrand,
   SegmentHandleBrand,
+  CalendarHandleBrand,
 } from "./handle-brands.d.ts";
 
 // Empty classes describe managed references, whose actual descriptor and
@@ -57,5 +58,9 @@ export class IcuDisplayHandle {
 }
 export interface IcuSegmentHandle extends SegmentHandleBrand {}
 export class IcuSegmentHandle {
+  private constructor() {}
+}
+export interface IcuCalendarHandle extends CalendarHandleBrand {}
+export class IcuCalendarHandle {
   private constructor() {}
 }

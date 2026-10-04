@@ -15,6 +15,7 @@ import nts.intl.IcuPluralRules;
 import nts.intl.IcuDisplayNames;
 import nts.intl.IcuSegmenter;
 import nts.intl.IcuTimeZone;
+import nts.intl.IcuCalendar;
 
 /** Host Test262 driver only: calls the same pinned provider as compiled TS. */
 public final class Host {
@@ -47,6 +48,7 @@ public final class Host {
         ArrayList<IcuDisplayNames> displays = new ArrayList<>();
         ArrayList<IcuSegmenter> segments = new ArrayList<>();
         ArrayList<IcuTimeZone> zones = new ArrayList<>();
+        ArrayList<IcuCalendar> calendars = new ArrayList<>();
         try (BufferedReader input = new BufferedReader(new FileReader(args[0]));
              PrintWriter output = new PrintWriter(new FileWriter(args[1]), true)) {
             String line;
@@ -102,7 +104,30 @@ public final class Host {
                         case "primaryTimeZone": result = data.primaryTimeZone(first); break;
                         case "canonicalTimeZone": result = data.canonicalTimeZone(first); break;
                         case "defaultTimeZoneIdentifier": result = data.defaultTimeZoneIdentifier(); break;
-                        case "reset": formatters.clear(); collators.clear(); patterns.clear(); dates.clear(); relatives.clear(); plurals.clear(); displays.clear(); segments.clear(); zones.clear(); result = ""; break;
+                        case "reset": formatters.clear(); collators.clear(); patterns.clear(); dates.clear(); relatives.clear(); plurals.clear(); displays.clear(); segments.clear(); zones.clear(); calendars.clear(); result = ""; break;
+                        case "calendarOpen":
+                            calendars.add(new IcuCalendar(first));
+                            result = Integer.toString(calendars.size() - 1);
+                            break;
+                        case "calendarLoad": {
+                            IcuCalendar calendar = calendars.get(Integer.parseInt(first));
+                            if (!calendar.load(Double.parseDouble(decode(fields[2])))) {
+                                result = null;
+                                break;
+                            }
+                            StringBuilder snapshot = new StringBuilder();
+                            for (int index = 0; index < 8; index++) {
+                                if (index != 0) snapshot.append(',');
+                                snapshot.append(calendar.field(index));
+                            }
+                            result = snapshot.append(';').append(calendar.monthCode()).toString();
+                            break;
+                        }
+                        case "calendarEstimate":
+                            result = Double.toString(calendars.get(Integer.parseInt(first)).toEpochDay(
+                                Double.parseDouble(decode(fields[2])), Double.parseDouble(decode(fields[3])),
+                                Double.parseDouble(decode(fields[4]))));
+                            break;
                         case "zoneOpen": {
                             IcuTimeZone zone = IcuTimeZone.open(first);
                             if (zone == null) throw new IllegalArgumentException("Unknown time zone");

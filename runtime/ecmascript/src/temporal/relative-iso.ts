@@ -5,7 +5,7 @@ import type { ResolvedTimeZone, TimeZoneSource } from "../time/zone-data.ts";
 import { fromDateTimeFields } from "./date-time-fields.ts";
 import { ISOParser } from "./iso-parser.ts";
 import { addISODate, checkDateDay } from "./iso-date.ts";
-import { differenceISODate } from "./iso-date-duration.ts";
+import { differenceDate } from "./date-duration.ts";
 import { floorDivide, NS_PER_DAY, checkTimeDuration, divideExact } from "./exact.ts";
 
 export function relativeDate(
@@ -51,7 +51,7 @@ export function relativeISOCalendarTotal(day: number, nanoseconds: bigint, unit:
   const origin = BigInt(day) * NS_PER_DAY;
   const end = origin + nanoseconds;
   const targetDay = checkDateDay(Number(floorDivide(end, NS_PER_DAY)));
-  const difference = differenceISODate(day, targetDay, unit);
+  const difference = differenceDate(day, targetDay, unit);
   let whole = unit === 0 ? difference.years : unit === 1 ? difference.months : difference.weeks;
   let base = addISODate(
     day,

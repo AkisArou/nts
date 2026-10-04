@@ -1,3 +1,4 @@
+import { parseMonthCode } from "./month-code.ts";
 import type { TimeLocaleSource } from "../time/locale-source.ts";
 import {
   epochDays,
@@ -28,12 +29,7 @@ import {
   balanceISODate,
   regulateISODate,
 } from "./iso-date.ts";
-import {
-  positiveDateField,
-  isoMonthCode,
-  resolveISOFields,
-  regulateTimeField,
-} from "./iso-fields.ts";
+import { positiveDateField, resolveISOFields, regulateTimeField } from "./iso-fields.ts";
 import { formatPlainTime, timeNanoseconds } from "./iso-time.ts";
 import { checkDateTime, dateTimeUnitIndex, roundISODateTimeDifference } from "./iso-date-time.ts";
 import {
@@ -96,7 +92,7 @@ function fromFields(
   const rawMonth = value.month;
   const month = rawMonth === undefined ? undefined : positiveDateField(rawMonth);
   const rawCode = value.monthCode;
-  const code = rawCode === undefined ? undefined : isoMonthCode(rawCode);
+  const code = rawCode === undefined ? undefined : parseMonthCode(rawCode);
   const rawNanosecond = value.nanosecond;
   const nanosecond =
     rawNanosecond === undefined ? previousTime % 1000 : integerWithTruncation(rawNanosecond);

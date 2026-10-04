@@ -10,6 +10,13 @@ that document records the remaining RegExp facade rewrite and compiler gaps for
 canonical Temporal unions. Host results do not establish that public exports
 compile under NTS's typed object model. No WeakMap is needed for these values.
 
+Non-ISO calendar foundations now include shared arithmetic, era/month-code
+rules, validated year snapshots and a bounded cache, with public ICU C/JVM data
+cursors for the remaining calendars. The data witness passes modern checks on
+all five backend/memory configurations. Full-range Chinese/Dangi/Umm al-Qura
+data and public value integration remain open; `--calendar` retains those
+failures instead of claiming complete conformance.
+
 Intl number options now normalize in shared TypeScript and produce the same ICU
 configuration on C and JVM. Currency precision uses pinned provider data;
 formatting reuses its state and buffers. PluralRules shares the digit algorithm
@@ -63,7 +70,9 @@ formatter and preserves the specified fallback when Intl is absent. All 56
 original builtin Temporal locale cases pass both with and without Intl; the
 Intl-specific locale slice passes 69/97, retaining non-ISO calendar cases.
 The full builtin Temporal host result is 4,567/4,603, with no regressions in this
-localization change. Date is at 396/594 and DateTimeFormat at 192/244. The actual
+localization change. Date is at 543/594 and DateTimeFormat at 192/244. Date's
+environment/slot follow-up fixes 149 original cases and retains two new excluded
+descriptor failures; its full compiled state witness remains refused. The actual
 C/JVM localization witness typechecks but retains compiler refusals for canonical
 unions and structural dispatch. Shipping clock/locale bindings, non-ISO calendars,
 complete standard bindings and public conformance remain in progress.

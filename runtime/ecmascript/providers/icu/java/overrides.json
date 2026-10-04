@@ -1,4 +1,7 @@
 {
+  "nts.intl.IcuCalendar": {
+    "nullability": { "monthCode()Ljava/lang/String;": "nonnull" }
+  },
   "nts.intl.IcuSegmenter": {
     "nullability": {
       "forText(Ljava/lang/String;)Lnts/intl/IcuSegmenter;": "nonnull"

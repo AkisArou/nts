@@ -1,5 +1,5 @@
 // Reproducible provider/ABI validation, independent of the Java-8 core runtime.
-// node runtime/ecmascript/tools/icu.ts [--regenerate-bindings] [--all-backends] [--sanitize] [--duration]
+// node runtime/ecmascript/tools/icu.ts [--regenerate-bindings] [--all-backends] [--sanitize] [--duration|--calendar]
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
@@ -12,6 +12,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { resolve } from "node:path";
+import {
+  calendarCases,
+  calendarIdentifiers,
+} from "../../../tooling/conformance/ecmascript/icu-compiled/calendar-cases.ts";
 
 const root = resolve(import.meta.dirname, "../../..");
 const provider = resolve(root, "runtime/ecmascript/providers/icu");
@@ -32,31 +36,50 @@ for (const option of process.argv.slice(2)) {
       "--android",
       "--all-backends",
       "--duration",
+      "--calendar",
     ].includes(option)
   )
     throw new Error("Unknown option: " + option);
 }
 const duration = process.argv.includes("--duration");
-if (duration && (process.argv.includes("--bench") || process.argv.includes("--android")))
+const calendar = process.argv.includes("--calendar");
+if (duration && calendar) throw new Error("Choose one ICU witness: --duration or --calendar");
+if (
+  (duration || calendar) &&
+  (process.argv.includes("--bench") || process.argv.includes("--android"))
+)
   throw new Error(
-    "Duration text gate uses its own driver; run benchmarks/Android on the general fixture",
+    "This ICU witness uses its own driver; run benchmarks/Android on the general fixture",
   );
-const configuration = duration ? "tsconfig.duration." : "tsconfig.";
-const javaDriver = duration ? "DurationDrive" : "Drive";
+const configuration = calendar
+  ? "tsconfig.calendar-data."
+  : duration
+    ? "tsconfig.duration."
+    : "tsconfig.";
+const javaDriver = calendar ? "CalendarDrive" : duration ? "DurationDrive" : "Drive";
+const cDriver = calendar ? "calendar-drive.c" : duration ? "duration-drive.c" : "drive.c";
+const witnessScope = calendar ? "calendar" : duration ? "duration" : "";
 if (process.argv.includes("--pinned-native")) {
   env.PKG_CONFIG_LIBDIR = resolve(root, "target/ecmascript/icu-native-pin/install/lib/pkgconfig");
 }
 mkdirSync(out, { recursive: true });
 
-function run(binary: string, args: string[], cwd = root): string {
+function run(
+  binary: string,
+  args: string[],
+  cwd = root,
+  executionEnv: NodeJS.ProcessEnv = env,
+  receipt?: string,
+): string {
   const result = spawnSync(binary, args, {
     cwd,
-    env,
+    env: executionEnv,
     encoding: "utf8",
     maxBuffer: 32 * 1024 * 1024,
   });
   if (result.error) throw result.error;
   const diagnostics = result.stdout + result.stderr;
+  if (receipt !== undefined) writeFileSync(receipt, diagnostics);
   if (
     result.status !== 0 ||
     /\bNTS\d{4}\b|runtime error:|ERROR: (AddressSanitizer|LeakSanitizer)/.test(diagnostics)
@@ -123,8 +146,28 @@ for (const name of ["nts.intl.d.ts", "nts.intl.bind"]) {
   else if (!bytes.equals(readFileSync(committed))) throw new Error("Java binding drift: " + name);
 }
 
-const jvm = resolve(out, duration ? "jvm-duration" : "jvm");
+const jvm = resolve(out, witnessScope ? "jvm-" + witnessScope : "jvm");
 run(nts, ["emit-jvm", resolve(fixture, configuration + "jvm.json"), "--out", jvm]);
+if (calendar) {
+  writeFileSync(
+    resolve(jvm, "CalendarCases.java"),
+    [
+      "final class CalendarCases {",
+      "  static final class Case { final String calendar, expected; final double day;",
+      "    Case(String calendar, double day, String expected) { this.calendar = calendar; this.day = day; this.expected = expected; } }",
+      "  static final Case[] CASES = {",
+      ...calendarCases.map(
+        (sample) =>
+          `    new Case(${JSON.stringify(sample.calendar)}, ${sample.day}, ${JSON.stringify(sample.expected)}),`,
+      ),
+      "  };",
+      "  static final String[] IDS = {" +
+        calendarIdentifiers.map((id) => JSON.stringify(id)).join(",") +
+        "};",
+      "}",
+    ].join("\n"),
+  );
+}
 const classpath = [jvm, resolve(jvm, "nts-runtime.jar"), java, jar].join(
   process.platform === "win32" ? ";" : ":",
 );
@@ -136,11 +179,35 @@ run("javac", [
   "-d",
   jvm,
   resolve(fixture, javaDriver + ".java"),
+  ...(calendar ? [resolve(jvm, "CalendarCases.java")] : []),
 ]);
-const jvmResult = run("java", ["-Xverify:all", "-cp", classpath, javaDriver]);
+const jvmResult = run(
+  "java",
+  ["-Xverify:all", "-cp", classpath, javaDriver],
+  root,
+  env,
+  resolve(jvm, "result.log"),
+);
 
-const native = resolve(out, duration ? "native-duration" : "native");
+const native = resolve(out, witnessScope ? "native-" + witnessScope : "native");
 mkdirSync(native, { recursive: true });
+if (calendar) {
+  writeFileSync(
+    resolve(native, "calendar-cases.h"),
+    [
+      "typedef struct { const char *calendar; double day; const char *expected; } CalendarCase;",
+      "static const CalendarCase calendar_cases[] = {",
+      ...calendarCases.map(
+        (sample) =>
+          `  {${JSON.stringify(sample.calendar)}, ${sample.day}, ${JSON.stringify(sample.expected)}},`,
+      ),
+      "};",
+      "static const char *const calendar_ids[] = {" +
+        calendarIdentifiers.map((id) => JSON.stringify(id)).join(",") +
+        "};",
+    ].join("\n"),
+  );
+}
 const cc = process.env.CC ?? "clang";
 const cxx = process.env.CXX ?? "clang++";
 const cflags = run("pkg-config", ["--cflags", "icu-i18n", "icu-uc"]).split(/\s+/).filter(Boolean);
@@ -161,6 +228,7 @@ for (const [name, source] of [
   ["display", resolve(provider, "c/nts_icu_display.c")],
   ["segment", resolve(provider, "c/nts_icu_segment.c")],
 ] as const) {
+  if (calendar && name !== "unicode" && name !== "provider") continue;
   const object = resolve(native, name + ".o");
   run(cc, [
     "-std=c11",
@@ -178,7 +246,8 @@ for (const [name, source] of [
   ]);
   providerObjects.push(object);
 }
-for (const name of ["locale", "number_range", "date_pattern", "date", "plural"]) {
+for (const name of ["locale", "number_range", "date_pattern", "date", "plural", "calendar"]) {
+  if (calendar && name !== "calendar") continue;
   const object = resolve(native, name + ".o");
   run(cxx, [
     "-std=c++17",
@@ -203,7 +272,9 @@ function buildNative(
 ): { executable: string; result: string; backend: string } {
   const name = backend + (rc ? "-rc" : "");
   const directory =
-    backend === "c" && rc ? native : resolve(out, "native-" + (duration ? "duration-" : "") + name);
+    backend === "c" && rc
+      ? native
+      : resolve(out, "native-" + (witnessScope ? witnessScope + "-" : "") + name);
   mkdirSync(directory, { recursive: true });
   const program = resolve(directory, backend === "c" ? "program.c" : "program.ll");
   if (backend === "c")
@@ -223,7 +294,7 @@ function buildNative(
   for (const [file, input] of [
     ["program", program],
     ["runtime", resolve(root, "runtime/c/nts_runtime.c")],
-    ["drive", resolve(fixture, duration ? "duration-drive.c" : "drive.c")],
+    ["drive", resolve(fixture, cDriver)],
   ] as const) {
     const object = resolve(directory, file + ".o");
     run(cc, [
@@ -236,6 +307,7 @@ function buildNative(
       // LLVM exports the same C ABI; the driver uses only export declarations
       // from C's generated header, never its generated class layouts or body.
       "-I" + (backend === "c" ? directory : native),
+      ...(calendar ? ["-I" + native] : []),
       "-I" + resolve(root, "runtime/c"),
       "-I" + resolve(provider, "c"),
       "-c",
@@ -248,7 +320,18 @@ function buildNative(
   const executable = resolve(directory, "drive");
   // ICU's C ABI still needs the platform's C++ runtime for static linking.
   run(cxx, [...sanitize, ...objects, ...libs, "-lm", "-o", executable]);
-  return { executable, result: run(executable, []), backend: name };
+  // NoGC deliberately retains its bump-allocated heap until process exit.
+  // Check leaks in RC, where destruction is part of the contract. ASan/UBSan
+  // still check memory access and arithmetic in every native configuration.
+  const executionEnv =
+    sanitize.length > 0
+      ? { ...env, ASAN_OPTIONS: (env.ASAN_OPTIONS ?? "") + ":detect_leaks=" + (rc ? "1" : "0") }
+      : env;
+  return {
+    executable,
+    result: run(executable, [], root, executionEnv, resolve(directory, "result.log")),
+    backend: name,
+  };
 }
 const primary = buildNative("c", true);
 const executable = primary.executable;
@@ -356,6 +439,33 @@ if (duration)
     "7.08.09",
     "𝟕:𝟎𝟖:𝟎𝟗",
   ].join("\n");
+const extendedFailures: { calendar: string; firstMismatchDay: number }[] = [];
+if (calendar) {
+  const rows = jvmResult.split("\n");
+  if (rows.length !== calendarCases.length + calendarIdentifiers.length)
+    throw new Error("Calendar witness omitted a result");
+  for (let index = 0; index < calendarCases.length; index++)
+    if (rows[index] !== calendarCases[index]!.expected)
+      throw new Error("Calendar golden mismatch at " + index);
+  for (let index = 0; index < calendarIdentifiers.length; index++) {
+    const id = calendarIdentifiers[index]!;
+    const prefix = id + ":roundtrips:55000:invalid:true:extended:";
+    const row = rows[calendarCases.length + index]!;
+    if (!row.startsWith(prefix)) throw new Error("Calendar witness omitted " + id);
+    const failure = Number(row.slice(prefix.length));
+    if (!Number.isInteger(failure) || failure > 0 || failure < -1001)
+      throw new Error("Invalid calendar range result: " + row);
+    if (failure < 0)
+      extendedFailures.push({
+        calendar: id,
+        firstMismatchDay: -100000000 + (-failure - 1) * 200000,
+      });
+  }
+  // Fixed goldens and modern-day round trips are checked above and in the
+  // drivers. Keep the wider failures in the C/JVM parity result, then fail the
+  // full-range gate below; agreement on a failure is not acceptance.
+  expected = jvmResult;
+}
 if (jvmResult !== expected) throw new Error("ICU compiled ABI mismatch on JVM:\n" + jvmResult);
 // ICU4C supplies contextual script names; ICU4J supplies standalone names.
 // ICU4J also drops a short region name equal to the code (US) and uses the
@@ -374,39 +484,63 @@ for (const result of nativeResults)
     throw new Error("ICU compiled ABI mismatch on " + result.backend + ":\n" + result.result);
 console.log(
   JSON.stringify({
-    mode: duration ? "compiled-ICU-duration-text" : "compiled-ICU-ABI",
+    mode: calendar
+      ? "compiled-ICU-calendar-data"
+      : duration
+        ? "compiled-ICU-duration-text"
+        : "compiled-ICU-ABI",
     icu: version,
     backends: [...nativeResults.map((result) => result.backend), "jvm"],
-    ...(duration
-      ? { durationText: true, durationParts: false, compiledPublicApi: false }
-      : {
-          exactDecimal: true,
-          utf16Parts: true,
-          dst: true,
-          temporalTimeZones: true,
-          temporalTimeZoneCache: true,
-          temporalZonedISOArithmetic: true,
-          temporalTimeZoneErrors: false,
-          numberOptions: true,
-          numberRanges: true,
-          localeData: true,
-          localePreferences: true,
-          collation: true,
-          datePatterns: true,
-          dateText: true,
-          dateRanges: true,
-          timeZoneIdentifiers: true,
-          supportedValues: true,
-          primaryTimeZoneIdentifiers: true,
-          displayNames: true,
-          segmenter: true,
-          listPatterns: true,
-          relativeTime: true,
-          pluralRules: true,
-        }),
+    ...(calendar
+      ? {
+          calendarData: true,
+          goldenCases: calendarCases.length,
+          modernRoundTripsPerBackend: calendarIdentifiers.length * 55000,
+          hebrewSharedAgreementDaysPerBackend: 55000,
+          arithmeticSharedAgreementDaysPerBackend: 550000,
+          extendedHebrewProvider: "shared-arithmetic",
+          extendedArithmeticProvider: "shared-arithmetic",
+          extendedSamplesRequestedPerBackend: calendarIdentifiers.length * 1001,
+          extendedRange: extendedFailures.length === 0,
+          extendedFailures,
+          compiledPublicApi: false,
+        }
+      : duration
+        ? { durationText: true, durationParts: false, compiledPublicApi: false }
+        : {
+            exactDecimal: true,
+            utf16Parts: true,
+            dst: true,
+            temporalTimeZones: true,
+            temporalTimeZoneCache: true,
+            temporalZonedISOArithmetic: true,
+            temporalTimeZoneErrors: false,
+            numberOptions: true,
+            numberRanges: true,
+            localeData: true,
+            localePreferences: true,
+            collation: true,
+            datePatterns: true,
+            dateText: true,
+            dateRanges: true,
+            timeZoneIdentifiers: true,
+            supportedValues: true,
+            primaryTimeZoneIdentifiers: true,
+            displayNames: true,
+            segmenter: true,
+            listPatterns: true,
+            relativeTime: true,
+            pluralRules: true,
+          }),
     sanitize: sanitize.length > 0,
+    ...(sanitize.length > 0 ? { leakDetection: "RC; NoGC intentionally retains its heap" } : {}),
   }),
 );
+if (calendar && extendedFailures.length > 0)
+  throw new Error(
+    "Calendar conversion estimates require shared full-range boundary resolution; retained failures: " +
+      JSON.stringify(extendedFailures),
+  );
 if (process.argv.includes("--bench")) {
   for (const kind of ["fields", "currency"]) {
     console.log("C", run(executable, ["250000", "display", kind]));

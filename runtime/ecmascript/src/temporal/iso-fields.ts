@@ -1,4 +1,4 @@
-import { integerWithTruncation, requiredString } from "./options.ts";
+import { integerWithTruncation } from "./options.ts";
 import { yearFromDays, monthFromTime, dateFromTime, MS_PER_DAY } from "../date/calendar.ts";
 import { regulateISODate } from "./iso-date.ts";
 
@@ -6,21 +6,6 @@ export function positiveDateField(value: number): number {
   const result = integerWithTruncation(value);
   if (result < 1) throw new RangeError("Date field must be positive");
   return result;
-}
-// Syntactic parsing precedes calendar suitability checks. The leap flag is
-// encoded in this internal scalar, keeping prepared fields out of allocations.
-export function isoMonthCode(value: string): number {
-  const code = requiredString(value);
-  if (
-    (code.length !== 3 && !(code.length === 4 && code.charAt(3) === "L")) ||
-    code.charAt(0) !== "M" ||
-    code.charCodeAt(1) < 48 ||
-    code.charCodeAt(1) > 57 ||
-    code.charCodeAt(2) < 48 ||
-    code.charCodeAt(2) > 57
-  )
-    throw new RangeError("Invalid month code syntax");
-  return Number(code.slice(1, 3)) + (code.length === 4 ? 100 : 0);
 }
 export function resolveISOFields(
   year: number | undefined,

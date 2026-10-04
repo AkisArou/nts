@@ -10,6 +10,7 @@ declare const relativeHandle: unique symbol;
 declare const pluralHandle: unique symbol;
 declare const displayHandle: unique symbol;
 declare const segmentHandle: unique symbol;
+declare const calendarHandle: unique symbol;
 export interface TimeZoneHandleBrand {
   readonly [timeZoneHandle]: never;
 }
@@ -42,4 +43,7 @@ export interface DisplayHandleBrand {
 }
 export interface SegmentHandleBrand {
   readonly [segmentHandle]: never;
+}
+export interface CalendarHandleBrand {
+  readonly [calendarHandle]: never;
 }

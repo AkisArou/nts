@@ -3,6 +3,11 @@
 #include "nts_runtime.h"
 
 bool nts_icu_versions_match(void);
+NtsHeader *nts_icu_calendar_open(NtsString *identifier);
+bool nts_icu_calendar_load(NtsHeader *handle, double epoch_day);
+double nts_icu_calendar_field(NtsHeader *handle, double index);
+NtsString *nts_icu_calendar_month_code(NtsHeader *handle);
+double nts_icu_calendar_to_day(NtsHeader *handle, double year, double month, double day);
 NtsHeader *nts_icu_segment_open(NtsString *locale, double granularity);
 NtsHeader *nts_icu_segment_text(NtsHeader *handle, NtsString *input);
 double nts_icu_segment_boundary(NtsHeader *handle, double index, double direction);

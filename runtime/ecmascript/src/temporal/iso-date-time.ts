@@ -1,5 +1,5 @@
 import { addISODate } from "./iso-date.ts";
-import { differenceISODate } from "./iso-date-duration.ts";
+import { differenceDate } from "./date-duration.ts";
 import { Duration, balanceDuration, timeUnitIndex, unitNanoseconds } from "./duration.ts";
 import { NS_PER_DAY, roundNanoseconds } from "./exact.ts";
 import type { RoundingMode } from "./exact.ts";
@@ -33,7 +33,7 @@ function difference(
     return balanceDuration(BigInt(endDay - startDay) * NS_PER_DAY + BigInt(time), largest);
   const sign = endDay > startDay ? 1 : endDay < startDay ? -1 : 0;
   const adjustment = sign * time < 0 ? -sign : 0;
-  const date = differenceISODate(startDay, endDay + adjustment, largest);
+  const date = differenceDate(startDay, endDay + adjustment, largest);
   return balanceDuration(
     BigInt(date.days - adjustment) * NS_PER_DAY + BigInt(time),
     3,

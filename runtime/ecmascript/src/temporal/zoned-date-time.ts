@@ -1,3 +1,4 @@
+import { parseMonthCode } from "./month-code.ts";
 import type { TimeLocaleSource } from "../time/locale-source.ts";
 import type { ResolvedTimeZone, TimeZoneSource } from "../time/zone-data.ts";
 import {
@@ -24,12 +25,7 @@ import { ISOParser } from "./iso-parser.ts";
 import { requireISOCalendar, calendarName, isoCalendarAnnotation } from "./calendar-id.ts";
 import { requireISOCalendarLike, isPlainCalendar } from "./plain-calendar.ts";
 import { formatISODate, isoWeek, isoWeekYear, checkDateTime } from "./iso-date.ts";
-import {
-  positiveDateField,
-  isoMonthCode,
-  resolveISOFields,
-  regulateTimeField,
-} from "./iso-fields.ts";
+import { positiveDateField, resolveISOFields, regulateTimeField } from "./iso-fields.ts";
 import { formatPlainTime, timeNanoseconds } from "./iso-time.ts";
 import { dateTimeUnitIndex } from "./iso-date-time.ts";
 import {
@@ -298,7 +294,7 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
     const rawMonth = fields.month;
     const month = rawMonth === undefined ? undefined : positiveDateField(rawMonth);
     const rawCode = fields.monthCode;
-    const code = rawCode === undefined ? undefined : isoMonthCode(rawCode);
+    const code = rawCode === undefined ? undefined : parseMonthCode(rawCode);
     const rawNanosecond = fields.nanosecond;
     const nanosecond =
       rawNanosecond === undefined ? previousTime % 1000 : integerWithTruncation(rawNanosecond);

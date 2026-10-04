@@ -1,10 +1,6 @@
+import { parseMonthCode } from "./month-code.ts";
 import type { ResolvedTimeZone, TimeZoneSource } from "../time/zone-data.ts";
-import {
-  positiveDateField,
-  isoMonthCode,
-  resolveISOFields,
-  regulateTimeField,
-} from "./iso-fields.ts";
+import { positiveDateField, resolveISOFields, regulateTimeField } from "./iso-fields.ts";
 import {
   integerWithTruncation,
   requiredString,
@@ -57,7 +53,7 @@ export function fromDateTimeFields(
   const rawMonth = fields.month;
   const month = rawMonth === undefined ? undefined : positiveDateField(rawMonth);
   const rawCode = fields.monthCode;
-  const code = rawCode === undefined ? undefined : isoMonthCode(rawCode);
+  const code = rawCode === undefined ? undefined : parseMonthCode(rawCode);
   const nanosecond = numericField(fields.nanosecond);
   const rawOffset = fields.offset;
   const offset =
