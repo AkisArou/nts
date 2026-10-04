@@ -66734,7 +66734,7 @@ impl<'a> FuncBuilder<'a> {
 
         let (lhs, rhs) = self.relational_operands(id, op, *lhs_node, *rhs_node, lhs, rhs)?;
 
-        if let Some(comparison) = self.bigint_string_comparison(id, op, lhs, rhs) {
+        if let Some(comparison) = self.bigint_string_comparison(id, op, *lhs_node, *rhs_node, lhs, rhs) {
             return Ok(comparison);
         }
 

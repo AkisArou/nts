@@ -115,3 +115,69 @@ export function evaluationOrder(n: number): number {
   const second = string() < integer();
   return forward * 100 + trace + (first || second ? 10000 : 0) + (n < 0 ? 0 : 1);
 }
+
+function compareNullable(value: bigint, text: string | null): number {
+  let bits = 0;
+  // @ts-expect-error -- JavaScript compares BigInt and String with StringToBigInt.
+  if (value < text) bits += 1;
+  // @ts-expect-error -- JavaScript compares BigInt and String with StringToBigInt.
+  if (value <= text) bits += 2;
+  // @ts-expect-error -- JavaScript compares BigInt and String with StringToBigInt.
+  if (value > text) bits += 4;
+  // @ts-expect-error -- JavaScript compares BigInt and String with StringToBigInt.
+  if (value >= text) bits += 8;
+  // @ts-expect-error -- JavaScript compares BigInt and String with StringToBigInt.
+  if (text < value) bits += 16;
+  // @ts-expect-error -- JavaScript compares BigInt and String with StringToBigInt.
+  if (text <= value) bits += 32;
+  // @ts-expect-error -- JavaScript compares BigInt and String with StringToBigInt.
+  if (text > value) bits += 64;
+  // @ts-expect-error -- JavaScript compares BigInt and String with StringToBigInt.
+  if (text >= value) bits += 128;
+  return bits;
+}
+
+function compareUndefined(value: bigint, text: string | undefined): number {
+  let bits = 0;
+  // @ts-expect-error -- JavaScript compares BigInt and String with StringToBigInt.
+  if (value < text) bits += 1;
+  // @ts-expect-error -- JavaScript compares BigInt and String with StringToBigInt.
+  if (value <= text) bits += 2;
+  // @ts-expect-error -- JavaScript compares BigInt and String with StringToBigInt.
+  if (value > text) bits += 4;
+  // @ts-expect-error -- JavaScript compares BigInt and String with StringToBigInt.
+  if (value >= text) bits += 8;
+  // @ts-expect-error -- JavaScript compares BigInt and String with StringToBigInt.
+  if (text < value) bits += 16;
+  // @ts-expect-error -- JavaScript compares BigInt and String with StringToBigInt.
+  if (text <= value) bits += 32;
+  // @ts-expect-error -- JavaScript compares BigInt and String with StringToBigInt.
+  if (text > value) bits += 64;
+  // @ts-expect-error -- JavaScript compares BigInt and String with StringToBigInt.
+  if (text >= value) bits += 128;
+  return bits;
+}
+
+
+export function nullableString(n: number): number {
+  const value = n < 0 ? -1n : n > 0 ? 1n : 0n;
+  return compareNullable(value, n > 0 ? "0." : null);
+}
+
+export function undefinedString(n: number): number {
+  const value = n < 0 ? -1n : n > 0 ? 1n : 0n;
+  return compareUndefined(value, n > 0 ? "0." : undefined);
+}
+
+function absentString(): string | null { trace = trace * 10 + 2; return null; }
+
+export function nullableEvaluationOrder(n: number): number {
+  trace = 0;
+  // @ts-expect-error -- JavaScript compares BigInt and null as zero.
+  const first = integer() > absentString();
+  const forward = trace;
+  trace = 0;
+  // @ts-expect-error -- JavaScript compares null as zero and BigInt.
+  const second = absentString() < integer();
+  return forward * 100 + trace + (first && second ? 10000 : 0) + (n < 0 ? 0 : 1);
+}
