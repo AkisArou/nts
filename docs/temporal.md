@@ -19,10 +19,12 @@ independent of ICU.
 Chinese/Korean modern year tables are generated in TypeScript from licensed,
 pinned ICU4X data. No ICU4X execution engine or Rust dependency is imported.
 The calendar context is shared by all calendar-bearing Temporal values and
-relative Duration operations. Intl now supplies the same shared Chinese/Korean
-fields to both text providers, including ranges selected in TS. The original
-lunisolar formatting consistency test passes; other calendars and compiled
-public formatting acceptance remain open. Shared same-day datetime ranges
+relative Duration operations. Intl supplies the same shared non-ISO calendar
+fields to both text providers, including era years, ordinal/leap months and
+ranges selected in TS. Public ICU symbol arrays supply localized labels in
+canonical era order. All 2,029 original Intl Temporal host cases pass;
+complete range/data coverage and compiled public formatting remain open.
+Shared same-day datetime ranges
 format one date and select the time interval separately. Date spans use public
 ICU APIs, with cached locator handles only where stable field identifiers are
 unavailable. Datetime connectors and interval fallbacks retain their respective

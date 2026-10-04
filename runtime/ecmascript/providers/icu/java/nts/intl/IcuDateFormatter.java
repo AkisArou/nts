@@ -2,6 +2,7 @@ package nts.intl;
 
 import com.ibm.icu.text.DateFormat;
 import com.ibm.icu.text.SimpleDateFormat;
+import com.ibm.icu.text.DateFormatSymbols;
 import com.ibm.icu.text.DateIntervalFormat;
 import com.ibm.icu.text.DateTimePatternGenerator;
 import com.ibm.icu.text.ConstrainedFieldPosition;
@@ -22,6 +23,7 @@ public final class IcuDateFormatter {
     private Calendar calendar;
     private CalendarFields prepared;
     private final ULocale locale;
+    private final String calendarType;
     private DateIntervalFormat range;
     private Calendar from, to;
     private final ConstrainedFieldPosition rangePosition = new ConstrainedFieldPosition();
@@ -43,9 +45,11 @@ public final class IcuDateFormatter {
         formatter = new SimpleDateFormat(pattern, this.locale);
         formatter.setTimeZone(zone);
         calendar = formatter.getCalendar();
+        calendarType = calendar.getType();
         if (calendar instanceof GregorianCalendar)
             ((GregorianCalendar)calendar).setGregorianChange(new Date(-(1L << 53)));
     }
+    public String calendarType() { return calendarType; }
     public String format(double milliseconds, boolean fields) {
         if (!Double.isFinite(milliseconds)) throw new IllegalArgumentException("Invalid date/time");
         calendar.setTimeInMillis((long)milliseconds);
@@ -150,14 +154,41 @@ public final class IcuDateFormatter {
         if (!Double.isFinite(milliseconds)) throw new IllegalArgumentException("Invalid date/time");
         return formatter.getTimeZone().getOffset((long)milliseconds);
     }
-    public boolean setCalendarFields(int relatedYear, int year, int month, boolean leap, int day, int dayOfYear) {
-        String type = calendar.getType();
-        if (!(type.equals("chinese") || type.equals("dangi")) || year < 1 || year > 60
-            || month < 0 || month > 11 || day < 1 || day > 30 || dayOfYear < 1 || dayOfYear > 400)
+    private static String[] projectEras(String[] original, String[] gregorian) {
+        if (original.length < 5 || gregorian.length < 2)
+            throw new IllegalStateException("Pinned calendar era symbols are unavailable");
+        String[] projected = new String[7];
+        projected[0] = gregorian[0];
+        projected[1] = gregorian[1];
+        System.arraycopy(original, original.length - 5, projected, 2, 5);
+        return projected;
+    }
+    private DateFormatSymbols preparedSymbols() {
+        DateFormatSymbols symbols = formatter.getDateFormatSymbols();
+        if (calendarType.equals("coptic")) {
+            symbols.setEras(new String[] {symbols.getEras()[1]});
+            symbols.setEraNames(new String[] {symbols.getEraNames()[1]});
+            symbols.setNarrowEras(new String[] {symbols.getNarrowEras()[1]});
+        } else if (calendarType.equals("japanese")) {
+            ULocale gregory = new ULocale.Builder().setLocale(locale)
+                .setUnicodeLocaleKeyword("ca", "gregory").build();
+            DateFormatSymbols base = new DateFormatSymbols(gregory);
+            symbols.setEras(projectEras(symbols.getEras(), base.getEras()));
+            symbols.setEraNames(projectEras(symbols.getEraNames(), base.getEraNames()));
+            symbols.setNarrowEras(projectEras(symbols.getNarrowEras(), base.getNarrowEras()));
+        }
+        return symbols;
+    }
+    public boolean setCalendarFields(int relatedYear, int year, int era, int month, boolean leap, int day, int dayOfYear) {
+        if (era < 0 || era > 6 || month < 0 || month > 13 || day < 1 || day > 31 || dayOfYear < 1 || dayOfYear > 400)
             return false;
         if (prepared == null) {
+            boolean lunisolar = calendarType.equals("chinese") || calendarType.equals("dangi");
+            DateFormatSymbols symbols = lunisolar ? null : preparedSymbols();
+            String type = lunisolar ? calendarType : "gregorian";
             prepared = new CalendarFields(formatter.getTimeZone(), locale, type);
             formatter.setCalendar(prepared);
+            if (symbols != null) formatter.setDateFormatSymbols(symbols);
             calendar = prepared;
             if (locators != null) for (DateFieldLocator locator : locators) {
                 locator.value = null;
@@ -166,6 +197,7 @@ public final class IcuDateFormatter {
         }
         prepared.relatedYear = relatedYear;
         prepared.year = year;
+        prepared.era = era;
         prepared.month = month;
         prepared.leap = leap;
         prepared.day = day;
@@ -175,11 +207,11 @@ public final class IcuDateFormatter {
         return true;
     }
 
-    /** Data adapter only: shared TypeScript supplies all lunisolar date fields. */
+    /** Data adapter only: shared TypeScript supplies all calendar date fields. */
     private static final class CalendarFields extends GregorianCalendar {
         private static final long serialVersionUID = 1L;
         private final String type;
-        int relatedYear, year, month, day, dayOfYear;
+        int relatedYear, year, era, month, day, dayOfYear;
         boolean leap;
         CalendarFields(TimeZone zone, ULocale locale, String type) {
             super(zone, locale);
@@ -189,7 +221,7 @@ public final class IcuDateFormatter {
         @Override public String getType() { return type == null ? "gregorian" : type; }
         @Override protected void computeFields() {
             super.computeFields();
-            internalSet(ERA, 0);
+            internalSet(ERA, era);
             internalSet(YEAR, year);
             internalSet(EXTENDED_YEAR, relatedYear);
             internalSet(MONTH, month);

@@ -23,14 +23,14 @@ import { CalendarDateFormatter } from "./calendar-format.ts";
 import { DateTimeRangeFormatter } from "./date-time-range.ts";
 import type { DateTimePattern } from "./date-pattern.ts";
 import { resolveCalendar } from "../temporal/calendar-environment.ts";
+import type { CalendarEnvironment } from "../temporal/calendar-environment.ts";
 import type { CalendarContext } from "../temporal/calendar-context.ts";
 import { MS_PER_DAY } from "../date/calendar.ts";
 import { LocaleIdentifier } from "./locale-id.ts";
 
 const dateFields = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 8) | (1 << 11) | (1 << 12);
 const timeFields = (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 9);
-const calendarFields = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 11) | (1 << 12);
-const calendarDataFields = calendarFields | (1 << 0);
+const calendarFields = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 11) | (1 << 12);
 
 function calendarText<P extends DateTimeFormatterPrimitive>(
   primitive: P,
@@ -67,6 +67,7 @@ export class NtsDateTimeFormat<
   #plainMonthDay: DateTimeFormatter<DateTimeTextPrimitive> | undefined;
   #bound: Intl.DateTimeFormat["format"] | undefined;
   #calendar: CalendarContext | undefined;
+  readonly #environment: CalendarEnvironment | undefined;
 
   constructor(
     resolver: LocaleResolver<D>,
@@ -79,6 +80,7 @@ export class NtsDateTimeFormat<
     required: number = 0,
     defaults: number = 0,
     timeZoneOverride: string | undefined = undefined,
+    environment: CalendarEnvironment | undefined = undefined,
   ) {
     const requested = getCanonicalLocales(resolver.data, locales);
     const configuration = new DateTimeFormatConfiguration(
@@ -94,6 +96,7 @@ export class NtsDateTimeFormat<
     this.#configuration = configuration;
     this.#clock = clock;
     this.#open = open;
+    this.#environment = environment;
   }
   #number(value: Date | number | bigint | Intl.FormattableTemporalObject | undefined): number {
     if (typeof value === "bigint" || typeof value === "symbol")
@@ -158,16 +161,18 @@ export class NtsDateTimeFormat<
         ? locale
         : new LocaleIdentifier(locale).withKeyword("ca", "gregory");
     if (
-      (config.calendar === "chinese" || config.calendar === "dangi") &&
+      config.calendar !== "gregory" &&
+      config.calendar !== "iso8601" &&
       (pattern.fieldMask & calendarFields) !== 0
     ) {
-      if (this.#calendar === undefined) this.#calendar = resolveCalendar(config.calendar);
+      if (this.#calendar === undefined)
+        this.#calendar = resolveCalendar(config.calendar, this.#environment);
       if (this.#calendar === undefined)
         throw new RangeError("Calendar formatting data unavailable");
     }
     const calendar = this.#calendar;
     const data = config.patterns;
-    const selectedLocale = pattern.fieldMask & calendarDataFields ? locale : timeLocale;
+    const selectedLocale = pattern.fieldMask & calendarFields ? locale : timeLocale;
     const primitive = open(selectedLocale, pattern.pattern, zone);
     const text = calendarText(primitive, calendar, pattern, data, (selected) =>
       open(selectedLocale, selected, zone),
@@ -177,7 +182,7 @@ export class NtsDateTimeFormat<
     // Capture immutable capabilities, never the owner: retained range factories
     // must not introduce an RC cycle back to their containing builtin.
     const openText = (selected: DateTimePattern): DateTimeTextPrimitive => {
-      const tag = selected.fieldMask & calendarDataFields ? locale : timeLocale;
+      const tag = selected.fieldMask & calendarFields ? locale : timeLocale;
       return calendarText(open(tag, selected.pattern, zone), calendar, selected, data, (value) =>
         open(tag, value, zone),
       );

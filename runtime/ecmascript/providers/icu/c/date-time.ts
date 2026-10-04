@@ -1,5 +1,6 @@
 import {
   nts_icu_date_open,
+  nts_icu_date_calendar,
   nts_icu_date_format,
   nts_icu_date_range,
   nts_icu_date_field_count,
@@ -10,15 +11,25 @@ import {
   nts_icu_date_range_collapsed,
 } from "c:nts_icu";
 import type { IcuDateHandle } from "c:nts_icu";
-import { DateFieldPatterns } from "../shared/date-fields.ts";
+import {
+  DateFieldPatterns,
+  presentationCalendar,
+  presentationMonth,
+} from "../shared/date-fields.ts";
 
 export class IcuDateFormatter {
   private readonly handle: IcuDateHandle;
+  readonly #calendar: string;
+  readonly #monthNames: boolean;
   constructor(locale: string, pattern: string, timeZone: string) {
     const handle = nts_icu_date_open(locale, pattern, timeZone);
     if (handle === null) throw new RangeError("ICU date formatter could not be opened");
     this.handle = handle;
-    if (pattern.includes("r") || pattern.includes("U")) {
+    const calendar = nts_icu_date_calendar(handle);
+    if (calendar === null) throw new RangeError("ICU calendar identity unavailable");
+    this.#calendar = presentationCalendar(calendar);
+    this.#monthNames = this.#calendar === "hebrew" && new DateFieldPatterns(pattern).monthNames;
+    if (pattern.includes("r")) {
       const fields = new DateFieldPatterns(pattern);
       while (fields.next())
         if (
@@ -51,12 +62,25 @@ export class IcuDateFormatter {
   setCalendarFields(
     relatedYear: number,
     year: number,
+    era: number,
     month: number,
-    leap: boolean,
+    monthCode: number,
     day: number,
     dayOfYear: number,
   ): void {
-    if (!nts_icu_date_calendar_fields(this.handle, relatedYear, year, month, leap, day, dayOfYear))
+    const slot = presentationMonth(this.#calendar, month, monthCode, this.#monthNames);
+    if (
+      !nts_icu_date_calendar_fields(
+        this.handle,
+        relatedYear,
+        year,
+        era,
+        slot,
+        monthCode > 100,
+        day,
+        dayOfYear,
+      )
+    )
       throw new RangeError("ICU prepared calendar fields failed");
   }
   fieldCount(): number {

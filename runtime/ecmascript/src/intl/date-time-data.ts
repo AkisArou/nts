@@ -26,13 +26,18 @@ export interface DateTimeTextPrimitive {
 // Raw providers expose zone offsets and accept calendar presentation fields.
 // Parts partitioning only needs DateTimeTextPrimitive, so calendar adaptation
 // composes outside that layer and cannot pull chronology into its raw path.
+// Months are zero-based ordinals; monthCode uses the shared numeric encoding
+// (M01 = 1, M05L = 105). Era ordinals use canonical presentation symbol order:
+// Gregorian BCE/CE; Hijri AH/BH; ROC before/current; Ethiopic AA/AM; Japanese
+// BCE/CE followed by Meiji, Taisho, Showa, Heisei, Reiwa; single eras use zero.
 export interface DateTimeFormatterPrimitive extends DateTimeTextPrimitive {
   offsetMilliseconds(milliseconds: number): number;
   setCalendarFields(
     relatedYear: number,
     year: number,
+    era: number,
     month: number,
-    leap: boolean,
+    monthCode: number,
     day: number,
     dayOfYear: number,
   ): void;

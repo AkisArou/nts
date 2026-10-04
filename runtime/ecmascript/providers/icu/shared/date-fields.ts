@@ -10,6 +10,7 @@ export class DateFieldPatterns {
   #start = 0;
   #end = 0;
   readonly yearNameOnly: boolean;
+  readonly monthNames: boolean;
   field = 0;
 
   constructor(pattern: string) {
@@ -19,6 +20,7 @@ export class DateFieldPatterns {
     let relatedYear = false;
     let cyclicYear = false;
     let numericYear = false;
+    let monthNames = false;
     for (let index = 0; index < pattern.length; index++) {
       const symbol = pattern.charAt(index);
       if (symbol === "'") {
@@ -31,6 +33,12 @@ export class DateFieldPatterns {
           if (symbol === "r") relatedYear = true;
           if (symbol === "U") cyclicYear = true;
         } else if (symbol === "y") numericYear = true;
+        else if (
+          (symbol === "M" || symbol === "L") &&
+          pattern.charAt(index + 1) === symbol &&
+          pattern.charAt(index + 2) === symbol
+        )
+          monthNames = true;
       }
     }
     if ((relatedYear || (cyclicYear && numericYear)) && occupied === 3)
@@ -39,6 +47,7 @@ export class DateFieldPatterns {
     // ECMA-402-selected patterns use neither; g also supports raw A patterns.
     this.#marker = occupied & 1 ? "g" : "A";
     this.yearNameOnly = cyclicYear && !numericYear;
+    this.monthNames = monthNames;
   }
   next(): boolean {
     const pattern = this.#pattern;
@@ -69,4 +78,23 @@ export class DateFieldPatterns {
   fieldPattern(): string {
     return this.#pattern.slice(this.#start, this.#end);
   }
+}
+
+// Public ICU calendar names and month-symbol slots are data adapter details.
+// Arithmetic, ordinal months and canonical month codes come from shared TS.
+export function presentationCalendar(type: string): string {
+  return type === "gregorian" ? "gregory" : type === "ethiopic-amete-alem" ? "ethioaa" : type;
+}
+export function presentationMonth(
+  calendar: string,
+  ordinal: number,
+  code: number,
+  names: boolean,
+): number {
+  if (calendar === "chinese" || calendar === "dangi") return (code % 100) - 1;
+  if (calendar !== "hebrew") return code - 1;
+  if (!names) return ordinal;
+  if (code === 105) return 5; // Adar I.
+  if (code === 6 && ordinal === 6) return 13; // Adar II.
+  return code < 6 ? code - 1 : code;
 }

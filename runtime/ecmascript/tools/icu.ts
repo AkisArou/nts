@@ -476,6 +476,7 @@ if (dateFields)
     "mixed:U'r 1 29 2030 年 geng-xu 00:00 0047;2=4:5;3=6:8;11=9:13;12=16:23;4=24:26;5=27:29;1=30:34",
     "offset:-14400000",
     "interval-data:order:fields:fallback:connector",
+    "calendar-symbols:era:month-code:ordinal-month",
   ].join("\n");
 if (duration)
   expected = [

@@ -7,6 +7,7 @@ import type { NumberFormatterPrimitive } from "./number-data.ts";
 import type { ListPatternData } from "./list-data.ts";
 import type { DurationPatternData } from "./duration-data.ts";
 import type { Duration } from "../temporal/duration.ts";
+import type { CalendarEnvironment } from "../temporal/calendar-environment.ts";
 import { NtsDateTimeFormat } from "./date-time-builtins.ts";
 import { NtsDurationFormat } from "./duration.ts";
 
@@ -22,6 +23,7 @@ export class TimeLocaleContext<
   readonly #openDate: (locale: string, pattern: string, timeZone: string) => P;
   readonly #openNumber: (locale: string, skeleton: string, negativeSkeleton: string) => N;
   readonly #clock: () => number;
+  readonly #environment: CalendarEnvironment | undefined;
   constructor(
     resolver: LocaleResolver<D>,
     zones: TimeZoneRegistry<D>,
@@ -29,6 +31,7 @@ export class TimeLocaleContext<
     openDate: (locale: string, pattern: string, timeZone: string) => P,
     openNumber: (locale: string, skeleton: string, negativeSkeleton: string) => N,
     clock: () => number,
+    environment: CalendarEnvironment | undefined = undefined,
   ) {
     this.#resolver = resolver;
     this.#zones = zones;
@@ -36,6 +39,7 @@ export class TimeLocaleContext<
     this.#openDate = openDate;
     this.#openNumber = openNumber;
     this.#clock = clock;
+    this.#environment = environment;
   }
   formatDateTime(
     kind: number,
@@ -59,6 +63,7 @@ export class TimeLocaleContext<
       required,
       defaults,
       kind === 6 ? timeZone : undefined,
+      this.#environment,
     );
     return formatter.formatTemporal(kind, milliseconds, calendar);
   }

@@ -70,9 +70,10 @@ and artifact-size evidence before becoming another provider.
    acceptance remains open. DateTimeFormat pattern metadata, basic matching,
    construction, single/range formatting and UTF-16 parts exist on both providers.
    Instant and all plain Temporal types are integrated, including calendar
-   identity validation. Shared prepared Chinese/Korean fields and interval
-   selection now exist. Other calendar presentation, complete range selection
-   and compiled public acceptance remain open.
+   identity validation. All non-ISO date fields now come from the shared calendar
+   contexts, including era years and ordinal/leap months. Shared interval
+   selection exists; complete range/data coverage and compiled public acceptance
+   remain open.
 4. **Date.** Complete standard constructor/call behavior, local operations,
    setters, localization and the Temporal bridge. Core arithmetic, parsing and
    serialization exist. UTC and multi-component setters distinguish omission
@@ -453,12 +454,12 @@ remain in temporal-localization-all-intl-test262.jsonl and
 zoned-intl-edge-test262.jsonl under target/ecmascript/icu-check. This historical
 partial result is superseded by the complete 2,029/2,029 calendar rerun above.
 
-DateTimeFormat now prepares Chinese/Korean fields in TS, selects/splits public
+DateTimeFormat now prepares non-ISO fields in TS, selects/splits public
 interval-pattern data in shared code and reuses provider text/span buffers.
 Single dates and ranges use the same CalendarContext. A small presentation
 adapter derives from each provider's public GregorianCalendar: its documented
 field computation supplies the actual instant's time/weekday, then accepts
-the shared calendar's date fields. It contains no lunisolar arithmetic.
+the shared calendar's date fields. It contains no non-ISO calendar arithmetic.
 ICU4C's interval formatter replaces prepared Calendar fields with its own
 calendar calculation, so prepared ranges use shared selection and independent
 cached single-pattern text handles. Raw prepared provider ranges are refused.
@@ -498,8 +499,50 @@ template grammars. Native ASan/UBSan and RC leak checks pass;
 JVM runs with `-Xverify:all`. Receipts are under
 target/ecmascript/audit/date-fields and target/ecmascript/icu-check/*-date-fields.
 This verifies actual compiled adapters, not compiled public DateTimeFormat.
-Other calendar presentation, complete interval selection across styles,
-public execution and performance/artifact measurements remain required.
+Complete interval/data coverage across styles, public execution and
+performance/artifact measurements remain required.
+
+All supported non-ISO calendars now share the Temporal calendar context for
+Intl presentation. Era identity and display years use the same canonical rules;
+providers project public localized symbol arrays once, including Coptic AM and
+Japanese BCE/CE followed by the five modern eras. Hebrew numeric months use
+ordinal positions; named months use the public Adar/Adar I/Adar II symbol slots.
+The physical provider contract carries seven numeric fields, with month codes
+mapped by shared adapter code. CalendarEnvironment is injected into
+NtsDateTimeFormat and TimeLocaleContext, supplying Persian and Umm al-Qura data
+without global production state. Gregorian and time/weekday-only paths retain
+their raw fast path. Chinese/Korean preparation retains its original symbols
+and skips unrelated era calculations and symbol copies.
+
+The original DateTimeFormat host suite is now 220/244, improving era.js with no
+regressions from the 219/244 checkpoint. All 2,029 Intl Temporal cases still pass;
+the final localization rerun passes 97/97. A supplementary parts/identity/range
+matrix covers 2,100 cases across seven locales and fifteen calendar identities.
+Another 180 parts/identity cases cover Date's positive/negative range endpoints
+in UTC and both 23:59 fixed offsets; all retain available calendar data.
+The compiled field witness additionally verifies twelve era/month symbol cases
+on all five configurations, with native sanitizers, RC leak checks and JVM
+verification. These receipts are in target/ecmascript/audit/calendar-presentation
+and target/ecmascript/icu-check/*calendar-presentation*.
+The complete compiled provider/public gate still refuses implicit calendar/zone
+dispatch and the DateTimeFormatter range storage layout; its diagnostics are
+general-public-gate.log. Canonical public unions and standard binding remain
+compiler-lane dependencies. No implements clause or erased cast masks them.
+
+The native adapter adds 2,774 allocated object-section bytes (16,772 total), using
+ordinary pinned headers at -O2 without sanitizers. This adds no translation unit
+or localized data table; native-size-final-report.json retains commands/hashes.
+In a common-ICU-binary comparison, three alternating pairs of 1,000,000 calls
+after 300,000 warmup calls have matching checksums. Gregorian text takes
+639–641 ns versus 628–632 ns; Gregorian parts take 829–837 ns versus 775–784 ns.
+Prepared Chinese text/parts remain close within the samples. The Gregorian
+parts cost is retained as performance follow-up, alongside construction,
+allocation, standalone linking and compiled public measurements. Independently
+linked binaries show larger layout-sensitive differences despite essentially
+unchanged instruction counts, so those samples are retained separately rather
+than used to infer an algorithmic change. Reports are under
+calendar-presentation/performance; common-binary-final-report.json records the
+shared caller/ICU linkage and excludes public Intl execution.
 
 The date-span mapping now uses stable public APIs exclusively. Shared,
 quote-aware pattern metadata locates related-year starts through an otherwise

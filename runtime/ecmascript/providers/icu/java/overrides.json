@@ -15,6 +15,7 @@
   },
   "nts.intl.IcuDateFormatter": {
     "nullability": {
+      "calendarType()Ljava/lang/String;": "nonnull",
       "format(DZ)Ljava/lang/String;": "nonnull",
       "formatRange(DDZ)Ljava/lang/String;": "nonnull"
     }

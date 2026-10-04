@@ -113,6 +113,8 @@ declare module "c:nts_icu" {
     timeZone: string,
   ): IcuDateHandle | null;
   /** @ntsAbi managed */
+  export function nts_icu_date_calendar(handle: IcuDateHandle): string | null;
+  /** @ntsAbi managed */
   export function nts_icu_date_format(
     handle: IcuDateHandle,
     milliseconds: number,
@@ -143,6 +145,7 @@ declare module "c:nts_icu" {
     handle: IcuDateHandle,
     relatedYear: number,
     year: number,
+    era: number,
     month: number,
     leap: boolean,
     day: number,

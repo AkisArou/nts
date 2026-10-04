@@ -1,14 +1,41 @@
-import { MS_PER_DAY, modulo } from "../date/calendar.ts";
+import { MS_PER_DAY, modulo, yearFromDays } from "../date/calendar.ts";
 import type { CalendarContext } from "../temporal/calendar-context.ts";
+import { calendarEra, calendarEraYear } from "../temporal/calendar-eras.ts";
 import { DateTimePattern, datePatternField, dateTimeSkeleton } from "./date-pattern.ts";
 import type { DateTimeFormatterPrimitive, DateTimePatternData } from "./date-time-data.ts";
 import { DateTimeTemplate } from "./date-time-template.ts";
 import { FieldSpans } from "./parts.ts";
 
+// Presentation order is independent of ICU's historical era indices. Providers
+// project their public localized symbol arrays into this order once on prepare.
+function eraIndex(calendar: string, era: string | undefined): number {
+  if (calendar === "japanese") {
+    switch (era) {
+      case "meiji":
+        return 2;
+      case "taisho":
+        return 3;
+      case "showa":
+        return 4;
+      case "heisei":
+        return 5;
+      case "reiwa":
+        return 6;
+    }
+  }
+  return era === "ce" || era === "bh" || era === "roc" || (calendar === "ethiopic" && era === "am")
+    ? 1
+    : 0;
+}
+
 class CalendarDate {
   milliseconds = 0;
   time = 0;
   year = 0;
+  relatedYear = 0;
+  displayYear = 0;
+  era = 0;
+  month = 0;
   code = 0;
   day = 0;
   dayOfYear = 0;
@@ -23,6 +50,20 @@ class CalendarDate {
     const month = year.monthAt(day);
     this.time = local - day * MS_PER_DAY;
     this.year = year.year;
+    const identifier = calendar.identifier;
+    const lunisolar = identifier === "chinese" || identifier === "dangi";
+    if (lunisolar) {
+      this.relatedYear = year.year;
+      this.displayYear = modulo(year.year - 4, 60) + 1;
+      this.era = 0;
+    } else {
+      const era = calendarEra(identifier, year.year, day);
+      if (era === undefined) throw new RangeError("Calendar has no presentation era");
+      this.relatedYear = yearFromDays(day);
+      this.displayYear = calendarEraYear(identifier, era, year.year);
+      this.era = eraIndex(identifier, era);
+    }
+    this.month = month;
     this.code = year.monthCodeNumber(month);
     this.day = day - year.monthStart(month) + 1;
     this.dayOfYear = day - year.firstDay + 1;
@@ -71,7 +112,7 @@ class CalendarInterval<P extends DateTimeFormatterPrimitive> {
 }
 
 // One chronology for single dates and ranges. Providers receive presentation
-// fields, never recalculate a lunisolar date or choose the public range shape.
+// fields, never recalculate a date or choose the public range shape.
 export class CalendarDateFormatter<P extends DateTimeFormatterPrimitive> {
   readonly #primitive: P;
   readonly #calendar: CalendarContext;
@@ -94,8 +135,6 @@ export class CalendarDateFormatter<P extends DateTimeFormatterPrimitive> {
     data: DateTimePatternData,
     open: (pattern: string) => P,
   ) {
-    if (calendar.identifier !== "chinese" && calendar.identifier !== "dangi")
-      throw new RangeError("Prepared lunisolar formatting requires Chinese or Korean data");
     this.#primitive = primitive;
     this.#calendar = calendar;
     this.#pattern = pattern;
@@ -104,10 +143,11 @@ export class CalendarDateFormatter<P extends DateTimeFormatterPrimitive> {
   }
   private render(primitive: P, date: CalendarDate, fields: boolean): string {
     primitive.setCalendarFields(
-      date.year,
-      modulo(date.year - 4, 60) + 1,
-      (date.code % 100) - 1,
-      date.code > 100,
+      date.relatedYear,
+      date.displayYear,
+      date.era,
+      date.month,
+      date.code,
       date.day,
       date.dayOfYear,
     );
@@ -124,7 +164,7 @@ export class CalendarDateFormatter<P extends DateTimeFormatterPrimitive> {
   }
   private difference(first: CalendarDate, last: CalendarDate): number {
     const mask = this.#pattern.fieldMask;
-    let lastField = 1;
+    let lastField = mask & ((1 << 1) | (1 << 11) | (1 << 12)) ? 1 : 0;
     if (mask & (1 << 2)) lastField = 2;
     if (mask & ((1 << 3) | (1 << 8))) lastField = 3;
     if (mask & (1 << 9)) lastField = 4;
@@ -132,7 +172,8 @@ export class CalendarDateFormatter<P extends DateTimeFormatterPrimitive> {
     if (mask & (1 << 5)) lastField = 6;
     if (mask & (1 << 6)) lastField = 7;
     if (mask & (1 << 7)) lastField = 8;
-    if (first.year !== last.year) return 1;
+    if (first.era !== last.era) return 0;
+    if (lastField >= 1 && first.year !== last.year) return 1;
     if (lastField >= 2 && first.code !== last.code) return 2;
     if (lastField >= 3 && first.day !== last.day) return 3;
     if (lastField >= 4 && mask & (1 << 9)) {

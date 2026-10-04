@@ -201,6 +201,9 @@ public final class Host {
                         case "dateOffset":
                             result = Integer.toString(dates.get(Integer.parseInt(first)).offsetMilliseconds(Double.parseDouble(decode(fields[2]))));
                             break;
+                        case "dateCalendar":
+                            result = dates.get(Integer.parseInt(first)).calendarType();
+                            break;
                         case "dateRangeCollapsed":
                             result = Boolean.toString(dates.get(Integer.parseInt(first)).rangeCollapsed());
                             break;
@@ -216,8 +219,9 @@ public final class Host {
                         case "dateCalendarFields":
                             result = Boolean.toString(dates.get(Integer.parseInt(first)).setCalendarFields(
                                 Integer.parseInt(decode(fields[2])), Integer.parseInt(decode(fields[3])),
-                                Integer.parseInt(decode(fields[4])), Boolean.parseBoolean(decode(fields[5])),
-                                Integer.parseInt(decode(fields[6])), Integer.parseInt(decode(fields[7]))));
+                                Integer.parseInt(decode(fields[4])), Integer.parseInt(decode(fields[5])),
+                                Boolean.parseBoolean(decode(fields[6])), Integer.parseInt(decode(fields[7])),
+                                Integer.parseInt(decode(fields[8]))));
                             break;
                         case "dateFormat":
                         case "dateRange": {

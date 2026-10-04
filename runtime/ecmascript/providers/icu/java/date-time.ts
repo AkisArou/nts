@@ -1,10 +1,18 @@
 import { IcuDateFormatter as NativeFormatter } from "java:nts.intl";
-import { DateFieldPatterns } from "../shared/date-fields.ts";
+import {
+  DateFieldPatterns,
+  presentationCalendar,
+  presentationMonth,
+} from "../shared/date-fields.ts";
 
 export class IcuDateFormatter {
   private readonly handle: NativeFormatter;
+  readonly #calendar: string;
+  readonly #monthNames: boolean;
   constructor(locale: string, pattern: string, timeZone: string) {
     this.handle = new NativeFormatter(locale, pattern, timeZone);
+    this.#calendar = presentationCalendar(this.handle.calendarType());
+    this.#monthNames = this.#calendar === "hebrew" && new DateFieldPatterns(pattern).monthNames;
     if (pattern.includes("r") || pattern.includes("U")) {
       const fields = new DateFieldPatterns(pattern);
       this.handle.setYearNameOnly(fields.yearNameOnly);
@@ -30,12 +38,16 @@ export class IcuDateFormatter {
   setCalendarFields(
     relatedYear: number,
     year: number,
+    era: number,
     month: number,
-    leap: boolean,
+    monthCode: number,
     day: number,
     dayOfYear: number,
   ): void {
-    if (!this.handle.setCalendarFields(relatedYear, year, month, leap, day, dayOfYear))
+    const slot = presentationMonth(this.#calendar, month, monthCode, this.#monthNames);
+    if (
+      !this.handle.setCalendarFields(relatedYear, year, era, slot, monthCode > 100, day, dayOfYear)
+    )
       throw new RangeError("ICU prepared calendar fields failed");
   }
   fieldCount(): number {

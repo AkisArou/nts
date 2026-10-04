@@ -32,7 +32,11 @@ import {
   calendarMonthIndex,
   calendarYearFromMonthIndex,
 } from "../../../runtime/ecmascript/src/temporal/calendar-month-index.ts";
-import { DateFieldPatterns } from "../../../runtime/ecmascript/providers/icu/shared/date-fields.ts";
+import {
+  DateFieldPatterns,
+  presentationCalendar,
+  presentationMonth,
+} from "../../../runtime/ecmascript/providers/icu/shared/date-fields.ts";
 import {
   hasCalendarPreferences,
   hasWeekPreferences,
@@ -204,6 +208,8 @@ export function icuHost(root: string) {
   }
   function openDate(locale: string, pattern: string, timeZone: string): DateTimeFormatterPrimitive {
     const handle = Number(required("dateOpen", locale, pattern, timeZone));
+    const calendar = presentationCalendar(required("dateCalendar", handle));
+    const monthNames = calendar === "hebrew" && new DateFieldPatterns(pattern).monthNames;
     if (pattern.includes("r") || pattern.includes("U")) {
       const fields = new DateFieldPatterns(pattern);
       required("dateYearNameOnly", handle, fields.yearNameOnly);
@@ -229,10 +235,20 @@ export function icuHost(root: string) {
       formatRange: (start, end, fields) => format("dateRange", start, end, fields),
       rangeCollapsed: () => required("dateRangeCollapsed", handle) === "true",
       offsetMilliseconds: (milliseconds) => Number(required("dateOffset", handle, milliseconds)),
-      setCalendarFields: (relatedYear, year, month, leap, day, dayOfYear) => {
+      setCalendarFields: (relatedYear, year, era, month, code, day, dayOfYear) => {
+        const slot = presentationMonth(calendar, month, code, monthNames);
         if (
-          required("dateCalendarFields", handle, relatedYear, year, month, leap, day, dayOfYear) !==
-          "true"
+          required(
+            "dateCalendarFields",
+            handle,
+            relatedYear,
+            year,
+            era,
+            slot,
+            code > 100,
+            day,
+            dayOfYear,
+          ) !== "true"
         )
           throw new RangeError("ICU prepared calendar fields failed");
       },

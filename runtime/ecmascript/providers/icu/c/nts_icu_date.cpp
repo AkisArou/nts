@@ -2,6 +2,7 @@ extern "C" {
 #include "nts_icu.h"
 }
 #include <unicode/smpdtfmt.h>
+#include <unicode/dtfmtsym.h>
 #include <unicode/gregocal.h>
 #include <unicode/fpositer.h>
 #include <unicode/timezone.h>
@@ -10,9 +11,10 @@ extern "C" {
 #include <unicode/dtptngen.h>
 #include <unicode/uformattedvalue.h>
 #include <memory>
-#include <cstring>
 #include <string>
 #include <vector>
+#include <array>
+#include <optional>
 
 struct DateSpan { int32_t field, start, end; };
 struct DateFieldLocator {
@@ -23,14 +25,15 @@ struct DateFieldLocator {
       : marker_pattern(std::move(marker_pattern)), field_pattern(std::move(field_pattern)), marker(marker) {}
 };
 // Presentation adapter, not a second calendar engine. Gregorian computes the
-// actual instant's time/weekday; shared TS supplies every lunisolar date field.
+// actual instant's time/weekday; shared TS supplies every calendar date field.
 class CalendarFields final : public icu::GregorianCalendar {
-  std::string type;
+  std::string original_type;
+  const char *type;
 protected:
   void computeFields(UErrorCode &status) override {
     icu::GregorianCalendar::computeFields(status);
     if (U_FAILURE(status)) return;
-    internalSet(UCAL_ERA, 0);
+    internalSet(UCAL_ERA, era);
     internalSet(UCAL_YEAR, year);
     internalSet(UCAL_EXTENDED_YEAR, related_year);
     internalSet(UCAL_MONTH, month);
@@ -39,14 +42,16 @@ protected:
     internalSet(UCAL_DAY_OF_YEAR, day_of_year);
   }
 public:
-  int32_t related_year = 0, year = 0, month = 0, day = 0, day_of_year = 0;
+  int32_t related_year = 0, year = 0, era = 0, month = 0, day = 0, day_of_year = 0;
   bool leap = false;
   CalendarFields(const icu::TimeZone &zone, const icu::Locale &locale, const char *name, UErrorCode &status)
-      : icu::GregorianCalendar(zone, locale, status), type(name) {
+      : icu::GregorianCalendar(zone, locale, status), original_type(name),
+        type(original_type == "chinese" ? "chinese" : original_type == "dangi" ? "dangi" : "gregorian") {
     setGregorianChange(-9007199254740992.0, status);
   }
   CalendarFields *clone() const override { return new CalendarFields(*this); }
-  const char *getType() const override { return type.c_str(); }
+  const char *getType() const override { return type; }
+  const char *originalType() const { return original_type.c_str(); }
 };
 struct DateFormatter {
   icu::SimpleDateFormat formatter;
@@ -132,6 +137,47 @@ extern "C" NtsHeader *nts_icu_date_open(NtsString *locale, NtsString *pattern, N
   state->calendar = calendar.get();
   state->formatter.adoptCalendar(calendar.release());
   return nts_boxed_new(state.release(), close_date, 0);
+}
+
+extern "C" NtsString *nts_icu_date_calendar(NtsHeader *handle) {
+  DateFormatter *state = date_state(handle);
+  // The already owned calendar supplies identity. Only its presentation
+  // replacement needs to retain the original name; text state stays unchanged.
+  return nts_string_from_cstring(state->prepared == nullptr ?
+      state->calendar->getType() : state->prepared->originalType());
+}
+
+static bool prepare_eras(icu::DateFormatSymbols &symbols, const std::string &type,
+    const icu::Locale &locale, UErrorCode &status) {
+  if (type != "coptic" && type != "japanese") return true;
+  icu::Locale gregory(locale);
+  gregory.setKeywordValue("calendar", "gregorian", status);
+  icu::DateFormatSymbols base(gregory, status);
+  if (U_FAILURE(status)) return false;
+  for (int width = 0; width < 3; width++) {
+    int32_t count, base_count;
+    const auto *source = width == 0 ? symbols.getEras(count) :
+        width == 1 ? symbols.getEraNames(count) : symbols.getNarrowEras(count);
+    std::array<icu::UnicodeString, 7> projected;
+    int32_t size = 1;
+    if (type == "coptic") {
+      if (count < 2) return false;
+      projected[0] = source[1]; // The single canonical AM era.
+    } else {
+      const auto *gregorian = width == 0 ? base.getEras(base_count) :
+          width == 1 ? base.getEraNames(base_count) : base.getNarrowEras(base_count);
+      if (count < 5 || base_count < 2) return false;
+      projected[0] = gregorian[0];
+      projected[1] = gregorian[1];
+      // Pinned ICU data ends with the five modern Japanese era symbols.
+      for (int index = 0; index < 5; index++) projected[index + 2] = source[count - 5 + index];
+      size = 7;
+    }
+    if (width == 0) symbols.setEras(projected.data(), size);
+    else if (width == 1) symbols.setEraNames(projected.data(), size);
+    else symbols.setNarrowEras(projected.data(), size);
+  }
+  return true;
 }
 
 extern "C" bool nts_icu_date_field_locator(NtsHeader *handle, NtsString *marker, NtsString *pattern, double marker_code) {
@@ -228,21 +274,29 @@ extern "C" double nts_icu_date_offset(NtsHeader *handle, double milliseconds) {
   state->formatter.getTimeZone().getOffset(milliseconds, false, raw, daylight, status);
   return U_SUCCESS(status) ? static_cast<double>(raw) + daylight : NAN;
 }
-extern "C" bool nts_icu_date_calendar_fields(NtsHeader *handle, double related_year, double year, double month,
+extern "C" bool nts_icu_date_calendar_fields(NtsHeader *handle, double related_year, double year, double era, double month,
     bool leap, double day, double day_of_year) {
   if (!isfinite(related_year) || related_year != floor(related_year) || related_year < INT32_MIN || related_year > INT32_MAX ||
-      year < 1 || year > 60 || year != floor(year) || month < 0 || month > 11 || month != floor(month) ||
-      day < 1 || day > 30 || day != floor(day) || day_of_year < 1 || day_of_year > 400 || day_of_year != floor(day_of_year)) return false;
+      !isfinite(year) || year < INT32_MIN || year > INT32_MAX || year != floor(year) ||
+      era < 0 || era > 6 || era != floor(era) || month < 0 || month > 13 || month != floor(month) ||
+      day < 1 || day > 31 || day != floor(day) || day_of_year < 1 || day_of_year > 400 || day_of_year != floor(day_of_year)) return false;
   DateFormatter *state = date_state(handle);
   if (state->prepared == nullptr) {
-    const char *type = state->formatter.getCalendar()->getType();
-    if (std::strcmp(type, "chinese") != 0 && std::strcmp(type, "dangi") != 0) return false;
+    const std::string type(state->calendar->getType());
     UErrorCode status = U_ZERO_ERROR;
-    auto prepared = std::make_unique<CalendarFields>(state->formatter.getTimeZone(), state->locale, type, status);
+    std::optional<icu::DateFormatSymbols> symbols;
+    if (type != "chinese" && type != "dangi") {
+      symbols.emplace(*state->formatter.getDateFormatSymbols());
+      if (!prepare_eras(*symbols, type, state->locale, status)) return false;
+    }
+    // Keep the selected symbol data without invoking Hebrew/Japanese calendar
+    // branches in ICU's formatter. Sino calendars retain leap-month markers.
+    auto prepared = std::make_unique<CalendarFields>(state->formatter.getTimeZone(), state->locale, type.c_str(), status);
     if (U_FAILURE(status)) return false;
     state->prepared = prepared.get();
     state->calendar = prepared.get();
     state->formatter.adoptCalendar(prepared.release());
+    if (symbols) state->formatter.setDateFormatSymbols(*symbols);
     // Locators opened before preparation still own the original chronology.
     for (auto &locator : state->locators) {
       locator.field_formatter.reset();
@@ -251,6 +305,7 @@ extern "C" bool nts_icu_date_calendar_fields(NtsHeader *handle, double related_y
   }
   state->prepared->related_year = static_cast<int32_t>(related_year);
   state->prepared->year = static_cast<int32_t>(year);
+  state->prepared->era = static_cast<int32_t>(era);
   state->prepared->month = static_cast<int32_t>(month);
   state->prepared->leap = leap;
   state->prepared->day = static_cast<int32_t>(day);

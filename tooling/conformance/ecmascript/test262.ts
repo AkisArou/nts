@@ -143,10 +143,18 @@ async function candidate(context: vm.Context): Promise<vm.Module["namespace"]> {
       resolve(root, "runtime/ecmascript/src/temporal/builtins.ts"),
     ).namespace;
   if (profile === "temporal") context.__temporal = builtins.namespace;
-  if (profile === "temporal" || profile === "intl") {
-    context.__calendar = moduleFor(
+  if (profile === "temporal" || profile === "intl" || (profile === "date" && intlProvider)) {
+    const calendars = moduleFor(
       resolve(root, "runtime/ecmascript/src/temporal/calendar-environment.ts"),
-    ).namespace;
+    );
+    if (calendars.status === "unlinked")
+      await calendars.link((specifier, importer) =>
+        moduleFor(resolve(dirname(importer.identifier), specifier)),
+      );
+    await calendars.evaluate({ timeout });
+    context.__calendar = calendars.namespace;
+  }
+  if (profile === "temporal" || profile === "intl") {
     context.__timeBindings = {
       checkInstant: moduleFor(resolve(root, "runtime/ecmascript/src/temporal/exact.ts")).namespace
         .checkInstant,
@@ -162,7 +170,6 @@ async function candidate(context: vm.Context): Promise<vm.Module["namespace"]> {
 // Public results retain the candidate's actual private slots and prototype.
 const temporalBinding = `
   (() => {
-    globalThis.__calendarEnvironment = new __calendar.CalendarEnvironment(__calendarOpen);
     const registry = __timeZoneOpen ? new __time.TimeZoneRegistry(__intlData) : undefined;
     const source = registry ? new __time.TimeZoneContext(registry, __timeZoneOpen) : undefined;
     const now = new __temporal.NtsNow(__clockNanoseconds, () => registry ? registry.primaryIdentifier(registry.defaultIdentifier()) : __defaultZoneIdentifier(), source);
@@ -346,11 +353,15 @@ for (const selected of selection) {
   });
   context.__impl = await candidate(context);
   if (intlProvider)
+    new vm.Script(
+      "globalThis.__calendarEnvironment = new __calendar.CalendarEnvironment(__calendarOpen);",
+    ).runInContext(context, { timeout });
+  if (intlProvider)
     new vm.Script(`
       globalThis.__localeSource = new __localeCapabilities.TimeLocaleContext(
         new __localeCapabilities.LocaleResolver(__intlData),
         new __localeCapabilities.TimeZoneRegistry(__intlData),
-        __intlPatternOpen, __intlDateOpen, __intlNumberOpen, __clock,
+        __intlPatternOpen, __intlDateOpen, __intlNumberOpen, __clock, __calendarEnvironment,
       );
     `).runInContext(context, { timeout });
   else context.__localeSource = undefined;
@@ -388,7 +399,7 @@ for (const selected of selection) {
         static supportedLocalesOf(locales, options) { return __impl.supportedLocalesOf(resolver, locales, options); }
       }
       class DateTimeFormat extends __impl.NtsDateTimeFormat {
-        constructor(locales, options) { super(resolver, timeZones, __intlPatternOpen, __intlDateOpen, __clock, locales, options); }
+        constructor(locales, options) { super(resolver, timeZones, __intlPatternOpen, __intlDateOpen, __clock, locales, options, 0, 0, undefined, __calendarEnvironment); }
         static supportedLocalesOf(locales, options) { return __impl.supportedLocalesOf(resolver, locales, options); }
       }
       class ListFormat extends __impl.NtsListFormat {
