@@ -168,6 +168,12 @@ pub struct Templates<'a> {
     /// `substitute` answers `None`, nothing is recorded, and the behaviour is
     /// what it was.
     function_forms: FxHashMap<Owner, Vec<TypeId>>,
+    /// Composite types a recorded call needs in a concrete generic function.
+    /// These roots can be absent even when that caller has a real copy: the
+    /// checker records `Action<S>`, not every `Action<number>` its copies need.
+    /// Separate from the lookup-only function forms so a declaration's entire
+    /// signature is never materialised merely because it is generic.
+    required_call_forms: OnceCell<FxHashMap<Owner, Vec<TypeId>>>,
     /// Which generic declares each type parameter.
     owners: FxHashMap<TypeId, Owner>,
     /// Built on the first composite lookup and reused by every local walk.
@@ -271,6 +277,7 @@ impl<'a> Templates<'a> {
             declarations,
             by_owner: templates,
             function_forms,
+            required_call_forms: OnceCell::new(),
             owners,
             lookup_index: OnceCell::new(),
             resolved: RefCell::new(FxHashMap::default()),
@@ -370,18 +377,24 @@ impl<'a> Templates<'a> {
     /// its owner's instantiations, where the result does not exist yet.
     fn plan(&self) -> Vec<(TypeId, Sigma)> {
         let functions = super::generics::function_instantiations(self.snapshot);
+        // Lowering's lookup-only Templates never pays for this collection.
+        let required = self.required_call_forms.get_or_init(||
+            required_call_forms(self.snapshot, &self.owners));
         let mut plan = Vec::new();
-        let mut owners: Vec<Owner> = self.by_owner.keys().copied().collect();
+        let mut owners: Vec<Owner> = self.by_owner.keys()
+            .chain(required.keys()).copied().collect();
         owners.sort_by_key(|owner| match owner {
             Owner::Type(symbol) => (0, symbol.0),
             Owner::Function(node) => (1, node.0),
         });
+        owners.dedup();
         // One walk for the whole plan: its memo is keyed by the sigma as well
         // as the type, so an answer is reusable across owners and sigmas alike.
         let mut lookup = Lookup::new(self);
         for owner in owners {
             for sigma in self.sigmas_of(owner, &functions) {
-                for template in self.by_owner.get(&owner).into_iter().flatten() {
+                for template in self.by_owner.get(&owner).into_iter().flatten()
+                    .chain(required.get(&owner).into_iter().flatten()) {
                     if substitute(&mut lookup, *template, &sigma, 0).is_none() {
                         plan.push((*template, sigma.clone()));
                     }
@@ -457,6 +470,34 @@ impl<'a> Templates<'a> {
         sigmas.dedup();
         sigmas
     }
+}
+
+/// Only the dependency roots of actual recorded calls, never all generic types.
+/// Each unique root gets one bounded ownership walk. An owner with no concrete
+/// offered copy has no sigma in `plan` and therefore materialises nothing.
+fn required_call_forms(
+    snapshot: &SemanticSnapshot, owners: &FxHashMap<TypeId, Owner>,
+) -> FxHashMap<Owner, Vec<TypeId>> {
+    let mut roots = rustc_hash::FxHashSet::default();
+    for target in snapshot.call_targets.values() {
+        let Some(signature) = snapshot.signatures.get(target.signature.0 as usize) else { continue; };
+        roots.extend(signature.parameters.iter().map(|param| param.ty));
+        roots.insert(signature.return_type);
+    }
+    let mut roots: Vec<TypeId> = roots.into_iter().collect();
+    roots.sort();
+    let mut found: FxHashMap<Owner, Vec<TypeId>> = FxHashMap::default();
+    for ty in roots {
+        if !snapshot.types.get(ty.0 as usize).is_some_and(|record| matches!(record.kind,
+            TypeKind::Function(_) | TypeKind::Union(_) | TypeKind::Array(_)
+            | TypeKind::Tuple(_) | TypeKind::Intersection(_) | TypeKind::Object { .. })) {
+            continue;
+        }
+        if let Some(owner @ Owner::Function(_)) = one_owner_of(snapshot, owners, ty) {
+            found.entry(owner).or_default().push(ty);
+        }
+    }
+    found
 }
 /// One substitution walk, over a snapshot that either answers or grows.
 ///
@@ -1288,6 +1329,37 @@ mod tests {
         assert_eq!(templates.resolve(TypeId(1), &string), Some(TypeId(5)));
         assert_eq!(templates.resolve(TypeId(1), &number), Some(TypeId(4)));
         assert_eq!(templates.resolved.borrow().len(), 2);
+    }
+
+    #[test]
+    fn call_form_roots_exclude_unused_class_and_mixed_owners() {
+        let parameter = |name: &str| TypeKind::TypeParameter { name: name.to_owned(), constraint: None };
+        let mut snapshot = snapshot(vec![
+            parameter("T"), parameter("U"), parameter("ClassT"), TypeKind::Number,
+            TypeKind::Union(vec![TypeId(0), TypeId(3)]),
+            TypeKind::Tuple(vec![TypeId(0), TypeId(1)]),
+            TypeKind::Function(SignatureId(0)),
+            TypeKind::Array(TypeId(1)), // Not mentioned by any recorded call.
+        ]);
+        let signature = |types: &[TypeId]| SignatureRecord {
+            parameters: types.iter().enumerate().map(|(at, ty)| ParameterRecord {
+                name: format!("p{at}"), ty: *ty, optional: false, rest: false,
+            }).collect(),
+            return_type: TypeId(3), type_parameters: Vec::new(),
+            is_construct: false, type_predicate: None, this_type: None,
+        };
+        snapshot.signatures = vec![signature(&[TypeId(2)]),
+            signature(&[TypeId(4), TypeId(5), TypeId(6), TypeId(4)])];
+        snapshot.call_targets.insert(NodeId(0), nts_semantic_schema::CallTarget {
+            signature: SignatureId(1), callee: None,
+        });
+        let owner = Owner::Function(NodeId(10));
+        let owners = FxHashMap::from_iter([
+            (TypeId(0), owner), (TypeId(1), Owner::Function(NodeId(11))),
+            (TypeId(2), Owner::Type(SymbolId(0))),
+        ]);
+        assert_eq!(required_call_forms(&snapshot, &owners),
+            FxHashMap::from_iter([(owner, vec![TypeId(4)])]));
     }
 
 }
