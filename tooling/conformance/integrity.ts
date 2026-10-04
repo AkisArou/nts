@@ -416,7 +416,23 @@ export function unbuiltUnerases(prepared, { byName, byId }) {
   // the `nts check` harness -- and so is a parameter every direct caller
   // fills from one of those. Such a value arrives from outside, as a runtime
   // module's do, and is not judged. Depth-bounded; a cycle is not boundary.
+  // **An element of an aggregate that arrived from outside arrived from outside
+  // too.** An exported rest parameter is a `managed<[erased]>` the caller built,
+  // and `array.get` of it unerased to obj#N is the same unjudgeable arrival as
+  // the parameter itself (2026-10-04, blockers/a-rest-parameter-that-is-a-union-
+  // of-tuples). Element reads only -- `array.get`, or `nts_array_element` of an
+  // `erase` -- and only when the array is itself boundary; a field read, or an
+  // array this program built, is judged as before.
+  const elementSource = (f, value) => {
+    const op = f.values.get(value)?.op ?? "";
+    const direct = /^array\.get (%\d+)\[%\d+\]$/.exec(op)?.[1];
+    if (direct !== undefined) return direct;
+    const erased = /^call\.extern nts_array_element\((%\d+), %\d+\)$/.exec(op)?.[1];
+    return /^erase (%\d+)$/.exec(f.values.get(erased)?.op ?? "")?.[1];
+  };
   const boundary = (f, value, left = 6, seen = new Set()) => {
+    const array = elementSource(f, value);
+    if (array !== undefined) return boundary(f, array, left, seen);
     const index = f.params.get(value);
     if (index === undefined) return false;
     if (f.exported) return true;
@@ -722,6 +738,17 @@ function selfTest() {
   const through = `${unerase(10)}\nexport func g(y: erased) -> void {\nb0:\n  %0 = param 0 : erased\n  call f(%0)\n}`;
   if (unbuiltUnerases(through, lay).length !== 0) return "a parameter filled only by an export's parameter was judged";
   if (unbuiltUnerases(`${through.replace("export func g", "func g")}`, lay).length !== 1) return "a parameter filled by an unexported caller's parameter was not judged";
+  // An element read out of an exported parameter's array arrives from outside; out
+  // of an unexported one with no caller, or out of an array built here, it does not.
+  const restElement = (exported, source) => [
+    `${exported ? "export " : ""}func r(given: managed<[erased]>) -> void {`, "b0:", "  %0 = param 0 : managed<[erased]>",
+    ...(source === "built" ? ["  %9 = const 0 : f64", "  %1 = array.new %9 : managed<[erased]>"] : []),
+    "  %2 = const 1 : f64", `  %3 = array.get ${source === "built" ? "%1" : "%0"}[%2] : erased`,
+    "  %4 = unerase %3 : managed<obj#10>", "}",
+  ].join("\n");
+  if (unbuiltUnerases(restElement(true, "param"), lay).length !== 0) return "an element of an exported parameter's array was judged";
+  if (unbuiltUnerases(restElement(false, "param"), lay).length !== 1) return "an element of an unexported, uncalled parameter's array was not judged";
+  if (unbuiltUnerases(restElement(true, "built"), lay).length !== 1) return "an element of an array this program built was exempted as boundary";
   const arrays = readLayouts(`${shapes}Element [20 21]\n  value: Erased\nOtherElement [22]\n  value: Erased\n`);
   const fromArray = [
     "func element(xs: managed<[managed<obj#20>]>) -> void {", "b0:",
