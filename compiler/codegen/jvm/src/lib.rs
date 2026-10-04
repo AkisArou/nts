@@ -222,10 +222,8 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
     // layout at a time. `LambdaMetafactory` is wrong here for a reason no
     // API level reaches: it does not promise one instance. The floor is 29 and
     // would run an `invoke-custom` happily; identity is what rules it out.
-    if let Err(error) = initialize_statics(package, program, &mut builder, &mut pool) {
-        diagnostics.push(error);
-        return Emitted { classes: Vec::new(), diagnostics };
-    }
+    // Built after the functions, below: which closures need one is a fact about
+    // the functions that *render*, not every function the program carries.
     if let Err(error) = builder.default_constructor(&program_origin(program), &mut pool) {
         diagnostics.push(Diagnostic::error(
             "NTS4003",
@@ -283,6 +281,17 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
             }
             Err(diagnostic) => declined.push((func, diagnostic)),
         }
+    }
+    // A singleton only for a closure a rendered function names. A declined
+    // function becomes a stub that refuses by name, so its `ClosureStatic`
+    // reads nothing; building its closure anyway allocated, in `<clinit>`, an
+    // instance of a class whose every body lowering had refused -- no method at
+    // all, and an `abstract erased_call$raises` it never implements (timers'
+    // `Closure59`, built only for a declined `emitDestroy@raises`, 2026-10-04).
+    let skipped: rustc_hash::FxHashSet<&str> = declined.iter().map(|(func, _)| func.name.as_str()).collect();
+    if let Err(error) = initialize_statics(package, program, &skipped, &mut builder, &mut pool) {
+        diagnostics.push(error);
+        return Emitted { classes: Vec::new(), diagnostics };
     }
 
     // Which bound interfaces each closure is handed to; see
@@ -750,7 +759,15 @@ fn interface_instance(package: &str, program: &Program, layout: &nts_core::hir::
 /// and a second derivation of that shape is the thing that would drift. Each
 /// slot is read from `Program` at use -- removing the unread `closure_slot`
 /// renumbers the table.
-fn callable_root(package: &str, program: &Program) -> Result<Option<Class>, Diagnostic> {
+/// The uniform entries the callable root declares, as `(member, descriptor)`:
+/// the erased entry and, where some callable has a raising body, its raising
+/// variant. One derivation for the root and for every class that must fill
+/// them (`unfilled_uniform_stubs`, the lambda adapter).
+///
+/// Either entry makes a program need the root: a closure every call to which
+/// is inside a `try` fills only the raising one, and is callable all the same
+/// (`types::is_callable`).
+fn uniform_entries(package: &str, program: &Program) -> Vec<(String, String)> {
     let entry_at = |slot: u32| {
         program.layouts.iter().find_map(|layout| {
             let name = layout.methods.get(slot as usize)?.as_ref()?;
@@ -760,15 +777,61 @@ fn callable_root(package: &str, program: &Program) -> Result<Option<Class>, Diag
             Some((member, instance_descriptor(package, program, func)?))
         })
     };
-    // Either uniform entry makes a program need the root: a closure every call
-    // to which is inside a `try` fills only the raising one, and is callable
-    // all the same (`types::is_callable`).
     let mut entries = Vec::new();
     for entry in [program.erased_call_slot, program.raising_call_slot].into_iter().flatten().filter_map(entry_at) {
         if !entries.contains(&entry) {
             entries.push(entry);
         }
     }
+    entries
+}
+
+/// A concrete class under the callable root that does not fill a uniform
+/// entry gets one that refuses by name, the way a declined function's stub
+/// does. Two shapes reach this, and neither may be given a body: a closure
+/// every body of which lowering refused (`dns`' `Closure122`, timers'
+/// `Closure59` -- refused honestly, so its raising entry must not become its
+/// ordinary one), and a class-value token whose calls are refused
+/// (`Ctor_PromiseResolver`). Left abstract, either is an `AbstractMethodError`
+/// the first time a dispatch reaches it, and UNFILLED in `jvm-verifies`.
+fn unfilled_uniform_stubs(
+    package: &str,
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+    builder: &mut ClassBuilder,
+    pool: &mut Pool,
+    origin: &nts_semantic_schema::Origin,
+) -> Result<(), Diagnostic> {
+    if builder.access & access::ABSTRACT != 0
+        || !hierarchy::ancestry(program, layout).iter().skip(1).any(|at| types::is_callable(program, at))
+    {
+        return Ok(());
+    }
+    let class = types::class_name(package, layout);
+    for (member, descriptor) in uniform_entries(package, program) {
+        if builder.methods.iter().any(|m| m.name == member && m.descriptor == descriptor) {
+            continue;
+        }
+        let width = nts_jvm_emitter::descriptor::parameters(&descriptor).map_or(0, |list| list.len());
+        let mut locals = vec![VType::Object(class.clone())];
+        locals.extend((0..width).map(|_| VType::Object(types::VALUE.to_owned())));
+        let slots = u16::try_from(locals.len()).unwrap_or(u16::MAX);
+        let mut code = Code::new(locals, slots);
+        let why = format!("`{}` has no `{member}` to call: lowering refused every body it would have", layout.name);
+        code.const_string(origin, pool, &why);
+        code.invoke_static(origin, pool, body::RUNTIME, "refused", "(Ljava/lang/String;)V");
+        code.const_null(origin);
+        code.athrow(origin);
+        let stub = code.finish(pool).map_err(|error| {
+            Diagnostic::error("NTS4003", format!("the refusing `{member}` of `{}`: {error}", layout.name), origin.location)
+        })?;
+        builder.method(access::PUBLIC, member, descriptor, Some(stub));
+    }
+    Ok(())
+}
+
+fn callable_root(package: &str, program: &Program) -> Result<Option<Class>, Diagnostic> {
+    let entries = uniform_entries(package, program);
     if entries.is_empty() {
         return Ok(None);
     }
@@ -1073,6 +1136,7 @@ fn object_class(
     // eventually and the disagreement here is a class that does not load.
     dispatch_forwarders(package, program, layout, &mut builder, &mut pool)?;
     member_forwarders(package, program, layout, &mut builder, &mut pool)?;
+    unfilled_uniform_stubs(package, program, layout, &mut builder, &mut pool, &origin)?;
     typed_face(package, program, layout, &mut builder, &mut pool, &origin)?;
     // A bound interface declares its own widths; see `foreign_bridges`.
     foreign_bridges(package, program, layout, handed_to, &mut pool, &mut builder, &origin)?;
@@ -1855,23 +1919,37 @@ fn lambda_adapter(
             Diagnostic::error("NTS4003", format!("the lambda adapter for `{base}` has no typed face"), origin.location)
         })?;
     let width = nts_jvm_emitter::descriptor::parameters(&face.erased).map_or(0, |list| list.len());
-    let mut locals = vec![VType::Object(name.clone())];
-    locals.extend((0..width).map(|_| VType::Object(types::VALUE.to_owned())));
-    let slots = u16::try_from(locals.len()).unwrap_or(u16::MAX);
-    let mut code = Code::new(locals, slots);
-    code.load(origin, Kind::Ref, 0);
-    code.get_field(origin, &mut pool, &name, "it", &held);
-    for (at, ty) in face.params.iter().enumerate() {
-        code.load(origin, Kind::Ref, u16::try_from(at + 1).unwrap_or(u16::MAX));
-        face::unboxed(&mut code, &mut pool, origin, ty);
+    // The ordinary uniform entry, and its raising variant where the root
+    // declares one, with **one body**: a Java lambda cannot raise a JavaScript
+    // error -- it fails by a Java exception, which propagates as one -- so the
+    // raising entry is the ordinary entry and never sets the flag. Leaving it
+    // abstract was UNFILLED (`dns`' `Fn25__188$Lambda`, 2026-10-04).
+    let mut members = vec![face.member.clone()];
+    members.extend(
+        uniform_entries(package, program)
+            .into_iter()
+            .filter(|(member, descriptor)| member != &face.member && descriptor == &face.erased)
+            .map(|(member, _)| member),
+    );
+    for member in members {
+        let mut locals = vec![VType::Object(name.clone())];
+        locals.extend((0..width).map(|_| VType::Object(types::VALUE.to_owned())));
+        let slots = u16::try_from(locals.len()).unwrap_or(u16::MAX);
+        let mut code = Code::new(locals, slots);
+        code.load(origin, Kind::Ref, 0);
+        code.get_field(origin, &mut pool, &name, "it", &held);
+        for (at, ty) in face.params.iter().enumerate() {
+            code.load(origin, Kind::Ref, u16::try_from(at + 1).unwrap_or(u16::MAX));
+            face::unboxed(&mut code, &mut pool, origin, ty);
+        }
+        code.invoke_interface(origin, &mut pool, interface, "call", call);
+        code.get_static(origin, &mut pool, types::VALUE, "UNDEFINED_VALUE", types::VALUE_DESCRIPTOR);
+        code.ret(origin, Some(Kind::Ref));
+        let body = code.finish(&pool).map_err(|error| {
+            Diagnostic::error("NTS4003", format!("the lambda adapter's entry: {error}"), origin.location)
+        })?;
+        builder.method(access::PUBLIC, member, face.erased.clone(), Some(body));
     }
-    code.invoke_interface(origin, &mut pool, interface, "call", call);
-    code.get_static(origin, &mut pool, types::VALUE, "UNDEFINED_VALUE", types::VALUE_DESCRIPTOR);
-    code.ret(origin, Some(Kind::Ref));
-    let body = code.finish(&pool).map_err(|error| {
-        Diagnostic::error("NTS4003", format!("the lambda adapter's entry: {error}"), origin.location)
-    })?;
-    builder.method(access::PUBLIC, face.member, face.erased, Some(body));
 
     builder.build(pool).map_err(|error| {
         Diagnostic::error("NTS4003", format!("the lambda adapter `{name}`: {error}"), origin.location)
@@ -2582,7 +2660,7 @@ fn resumes(package: &str, program: &Program, layout: &nts_core::hir::Layout) -> 
 /// Identity is not the reason to do this, but it is a reason it is safe: two
 /// erasures of one closure are now the same `NtsValue` where they were equal
 /// ones.
-fn erased_closures(package: &str, program: &Program) -> Vec<(String, String)> {
+fn erased_closures(package: &str, program: &Program, skipped: &rustc_hash::FxHashSet<&str>) -> Vec<(String, String)> {
     // **One per closure singleton, whether or not an `Erase` names it.**
     //
     // This scanned for `Erase { value }` over a `ClosureStatic` and declared a
@@ -2603,7 +2681,7 @@ fn erased_closures(package: &str, program: &Program) -> Vec<(String, String)> {
     // the set from `closure_singletons` makes the two identical *by
     // construction* -- `erased$X` exists exactly when `closure$X` does -- and
     // its failure mode is an unused static field holding a constant.
-    closure_singletons(package, program)
+    closure_singletons(package, program, skipped)
         .into_iter()
         .map(|(_, class)| (erased_field(&class), class))
         .collect()
@@ -2620,11 +2698,27 @@ pub(crate) fn closure_field(class: &str) -> String {
     format!("closure${}", class.rsplit('/').next().unwrap_or(class))
 }
 
-fn closure_singletons(package: &str, program: &Program) -> Vec<(String, String)> {
+fn closure_singletons(package: &str, program: &Program, skipped: &rustc_hash::FxHashSet<&str>) -> Vec<(String, String)> {
     let mut found = std::collections::BTreeSet::new();
-    for func in &program.funcs {
-        for op in &func.values {
-            if !matches!(op.kind, nts_core::hir::OpKind::ClosureStatic) {
+    for func in program.funcs.iter().filter(|func| !skipped.contains(func.name.as_str())) {
+        // And only a *live* `ClosureStatic`: one a block holds, read by an
+        // operation a block holds or by a terminator. `func.values` is the
+        // arena, so it keeps ops a dropped module-scope statement left behind
+        // after they were excised from every block; scanning it built a
+        // singleton -- in `<clinit>` -- for timers' `Closure59` and dns'
+        // `Closure122`/`123`/`206`/`207`, whose every body lowering had refused
+        // and which nothing executable allocates (2026-10-04, traced by the
+        // compiler lane's effects worker).
+        let held: Vec<nts_core::hir::ValueId> = func.blocks.iter().flat_map(|block| block.ops.iter().copied()).collect();
+        let read: rustc_hash::FxHashSet<nts_core::hir::ValueId> = held
+            .iter()
+            .filter_map(|value| func.values.get(value.0 as usize))
+            .flat_map(|op| nts_core::hir::operands_of(&op.kind))
+            .chain(func.blocks.iter().flat_map(|block| nts_core::hir::operands_of_terminator(&block.terminator)))
+            .collect();
+        for value in &held {
+            let Some(op) = func.values.get(value.0 as usize) else { continue };
+            if !matches!(op.kind, nts_core::hir::OpKind::ClosureStatic) || !read.contains(value) {
                 continue;
             }
             if let nts_core::hir::HirType::Managed(nts_core::hir::ManagedType::Object(id)) = op.ty
@@ -2641,10 +2735,11 @@ fn closure_singletons(package: &str, program: &Program) -> Vec<(String, String)>
 fn initialize_statics(
     package: &str,
     program: &Program,
+    skipped: &rustc_hash::FxHashSet<&str>,
     builder: &mut ClassBuilder,
     pool: &mut Pool,
 ) -> Result<(), Diagnostic> {
-    let singletons = closure_singletons(package, program);
+    let singletons = closure_singletons(package, program, skipped);
     for (field, class) in &singletons {
         builder.field(
             access::PRIVATE | access::STATIC | access::FINAL,
@@ -2652,7 +2747,7 @@ fn initialize_statics(
             format!("L{class};"),
         );
     }
-    let erased = erased_closures(package, program);
+    let erased = erased_closures(package, program, skipped);
     for (field, _) in &erased {
         builder.field(
             access::PRIVATE | access::STATIC | access::FINAL,
