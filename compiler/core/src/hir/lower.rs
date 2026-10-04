@@ -307,6 +307,9 @@ impl ModuleScope {
 struct Hierarchy {
     /// A class's superclass, by instance type.
     base: rustc_hash::FxHashMap<TypeId, TypeId>,
+    /// Checker and synthesized identities for the runtime-provided errors.
+    /// Their declarations in lib.d.ts do not express the nominal ancestry.
+    provided_errors: rustc_hash::FxHashMap<TypeId, usize>,
     /// The interfaces a class `implements`, and the interfaces an interface
     /// `extends`.
     ///
@@ -644,6 +647,12 @@ impl Hierarchy {
         for _ in 0..64 {
             let Some(here) = at else { return false };
             if here == ancestor {
+                return true;
+            }
+            if let (Some(child), Some(parent)) = (
+                self.provided_errors.get(&here),
+                self.provided_errors.get(&ancestor),
+            ) && (*parent == 0 || child == parent) {
                 return true;
             }
             // An interface reached from this class, or from one above it.
@@ -1666,6 +1675,23 @@ fn widest_closure(snapshot: &SemanticSnapshot, closures: &[ClosureInfo]) -> usiz
         .unwrap_or(0)
 }
 
+/// The runtime-provided errors by checker identity and by synthesized one, each
+/// to its index in [`super::builtin::ERRORS`]. Their `lib.d.ts` declarations do
+/// not state the nominal ancestry, so it is this table that does.
+fn provided_error_identities(snapshot: &SemanticSnapshot) -> rustc_hash::FxHashMap<TypeId, usize> {
+    let mut identities = rustc_hash::FxHashMap::default();
+    for (at, _) in snapshot.types.iter().enumerate() {
+        let Some(ty) = u32::try_from(at).ok().map(TypeId) else { continue };
+        if let Some(index) = named(snapshot, ty).and_then(super::builtin::error_index) {
+            identities.insert(ty, index);
+        }
+    }
+    for index in 0..super::builtin::ERRORS.len() {
+        identities.insert(super::provided_error_type(index), index);
+    }
+    identities
+}
+
 fn collect_hierarchy(
     snapshot: &SemanticSnapshot,
     foreign: &super::runtime::ForeignTable,
@@ -1675,6 +1701,7 @@ fn collect_hierarchy(
     let mut hierarchy = Hierarchy::default();
     let mut probe = FuncBuilder::new(snapshot, foreign);
     let instantiations = super::generics::instantiations(snapshot);
+    hierarchy.provided_errors = provided_error_identities(snapshot);
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
         if !matches!(node.kind, NodeKind::Syntax(kind) if declares_a_class(kind)) {
@@ -37702,20 +37729,12 @@ impl<'a> FuncBuilder<'a> {
 
     /// The provided error classes that satisfy `instanceof class`.
     ///
-    /// `Error` is the base of the other three, so it admits all of them; each
-    /// of the others admits only itself. That is the whole hierarchy, and it is
-    /// four names rather than a structure because [`super::builtin`] provides
-    /// exactly four.
+    /// Both checker-interned and synthesized identities come from the shared
+    /// hierarchy. A generated `ReferenceError` exists even if only `Error` was
+    /// mentioned in the source.
     fn provided_errors_under(&self, class: TypeId) -> Vec<TypeId> {
-        if self.name_of_type(class) != Some("Error") {
-            return Vec::new();
-        }
-        self.snapshot
-            .types
-            .iter()
-            .enumerate()
-            .filter_map(|(at, _)| u32::try_from(at).ok().map(TypeId))
-            .filter(|ty| self.name_of_type(*ty).is_some_and(super::builtin::is_error))
+        self.hierarchy.provided_errors.keys().copied()
+            .filter(|ty| self.descends_from(*ty, class))
             .collect()
     }
 
@@ -45133,9 +45152,7 @@ impl<'a> FuncBuilder<'a> {
                 .copied()
                 .filter(|ty| *ty != class && self.descends_from(*ty, class)),
         );
-        if super::builtin::is_error(self.name_of_type(class).unwrap_or_default()) {
-            classes.extend(self.provided_errors_under(class));
-        }
+        classes.extend(self.provided_errors_under(class));
         classes.sort_unstable_by_key(|ty| ty.0);
         classes.dedup();
         classes
