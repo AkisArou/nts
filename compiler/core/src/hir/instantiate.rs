@@ -56,6 +56,7 @@ use nts_semantic_schema::{
 };
 use rustc_hash::FxHashMap;
 use std::collections::BTreeMap;
+use std::cell::{OnceCell, RefCell};
 
 /// How deep into a type's structure substitution follows before giving up on
 /// a template: the nesting of `Node<Node<Node<T>>>`, not the size of the
@@ -169,6 +170,10 @@ pub struct Templates<'a> {
     function_forms: FxHashMap<Owner, Vec<TypeId>>,
     /// Which generic declares each type parameter.
     owners: FxHashMap<TypeId, Owner>,
+    /// Built on the first composite lookup and reused by every local walk.
+    lookup_index: OnceCell<LookupIndex>,
+    /// Only complete root queries are cached; nested depth limits remain local.
+    resolved: RefCell<Memo>,
 }
 
 impl<'a> Templates<'a> {
@@ -267,6 +272,8 @@ impl<'a> Templates<'a> {
             by_owner: templates,
             function_forms,
             owners,
+            lookup_index: OnceCell::new(),
+            resolved: RefCell::new(FxHashMap::default()),
         }
     }
 
@@ -287,7 +294,11 @@ impl<'a> Templates<'a> {
     /// needs the whole substitution, rather than a lookup of `S` alone.
     #[must_use]
     pub fn resolve(&self, ty: TypeId, sigma: &Sigma) -> Option<TypeId> {
-        substitute(&mut Lookup::new(self), ty, sigma, 0)
+        let key = (ty, sigma.iter().map(|(k, v)| (*k, *v)).collect());
+        if let Some(found) = self.resolved.borrow().get(&key) { return *found; }
+        let found = substitute(&mut Lookup::new(self), ty, sigma, 0);
+        self.resolved.borrow_mut().insert(key, found);
+        found
     }
 
     /// Every instantiation of the single generic whose parameters `ty` mentions,
@@ -574,6 +585,111 @@ fn substitute_properties(
         .collect()
 }
 
+/// A cheap exact-equality bucket, followed by full `SignatureRecord` equality.
+/// Parameter names, optional/rest flags and predicates still participate in the
+/// final comparison; a bucket never supplies semantic equivalence by itself.
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct SignatureBucket {
+    parameters: Vec<TypeId>,
+    returns: TypeId,
+    type_parameters: Vec<TypeId>,
+    construct: bool,
+    this: Option<TypeId>,
+}
+
+impl From<&SignatureRecord> for SignatureBucket {
+    fn from(signature: &SignatureRecord) -> Self {
+        Self {
+            parameters: signature.parameters.iter().map(|param| param.ty).collect(),
+            returns: signature.return_type, type_parameters: signature.type_parameters.clone(),
+            construct: signature.is_construct, this: signature.this_type,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+enum CompositeBucket {
+    Array(TypeId),
+    Tuple(Vec<TypeId>),
+    Intersection(Vec<TypeId>),
+    Object(Vec<TypeId>),
+    Other(std::mem::Discriminant<TypeKind>),
+}
+
+impl From<&TypeKind> for CompositeBucket {
+    fn from(kind: &TypeKind) -> Self {
+        match kind {
+            TypeKind::Array(element) => Self::Array(*element),
+            TypeKind::Tuple(items) => Self::Tuple(items.clone()),
+            TypeKind::Intersection(items) => Self::Intersection(items.clone()),
+            TypeKind::Object { properties } => Self::Object(properties.iter().map(|prop| prop.ty).collect()),
+            _ => Self::Other(std::mem::discriminant(kind)),
+        }
+    }
+}
+
+/// Immutable snapshot indices. Duplicate records retain the first match, just
+/// as the former table scan did; nominal symbols remain part of every key.
+#[derive(Debug, Default)]
+struct LookupIndex {
+    signatures: FxHashMap<SignatureBucket, Vec<SignatureId>>,
+    functions: FxHashMap<(Option<SymbolId>, SignatureId), TypeId>,
+    unions: FxHashMap<(Option<SymbolId>, Vec<UnionMember>), TypeId>,
+    composites: FxHashMap<(Option<SymbolId>, CompositeBucket), Vec<TypeId>>,
+}
+
+impl LookupIndex {
+    fn new(snapshot: &SemanticSnapshot) -> Self {
+        let mut index = Self::default();
+        let mut canonical = Vec::with_capacity(snapshot.signatures.len());
+        for (at, signature) in snapshot.signatures.iter().enumerate() {
+            let id = SignatureId(u32::try_from(at).unwrap_or(u32::MAX));
+            let bucket = index.signatures.entry(SignatureBucket::from(signature)).or_default();
+            let first = bucket.iter().copied().find(|found|
+                snapshot.signatures.get(found.0 as usize) == Some(signature)).unwrap_or(id);
+            if first == id { bucket.push(id); }
+            canonical.push(first);
+        }
+        for (at, record) in snapshot.types.iter().enumerate() {
+            let id = TypeId(u32::try_from(at).unwrap_or(u32::MAX));
+            match &record.kind {
+                TypeKind::Function(signature) => {
+                    if let Some(first) = canonical.get(signature.0 as usize) {
+                        index.functions.entry((record.symbol, *first)).or_insert(id);
+                    }
+                }
+                TypeKind::Union(members) => {
+                    if let Some(members) = union_members(snapshot, members) {
+                        index.unions.entry((record.symbol, members)).or_insert(id);
+                    }
+                }
+                _ => index.composites.entry((record.symbol, CompositeBucket::from(&record.kind)))
+                    .or_default().push(id),
+            }
+        }
+        index
+    }
+
+    fn signature(&self, snapshot: &SemanticSnapshot, wanted: &SignatureRecord) -> Option<SignatureId> {
+        self.signatures.get(&SignatureBucket::from(wanted))?.iter().copied()
+            .find(|id| snapshot.signatures.get(id.0 as usize) == Some(wanted))
+    }
+
+    fn composite(&self, snapshot: &SemanticSnapshot, wanted: &TypeKind, symbol: Option<SymbolId>) -> Option<TypeId> {
+        match wanted {
+            TypeKind::Function(signature) => {
+                let wanted = snapshot.signatures.get(signature.0 as usize)?;
+                let canonical = self.signature(snapshot, wanted)?;
+                self.functions.get(&(symbol, canonical)).copied()
+            }
+            TypeKind::Union(members) => self.unions.get(&(symbol, union_members(snapshot, members)?)).copied(),
+            _ => self.composites.get(&(symbol, CompositeBucket::from(wanted)))?.iter().copied()
+                .find(|id| snapshot.types.get(id.0 as usize)
+                    .is_some_and(|record| record.kind == *wanted)),
+        }
+    }
+}
+
 /// The site that only answers: the id a type has under a sigma, where every
 /// record it needs already exists. `None` where one does not.
 struct Lookup<'t, 'a> {
@@ -604,26 +720,8 @@ impl Site for Lookup<'_, '_> {
     }
 
     fn composite(&mut self, wanted: TypeKind, symbol: Option<SymbolId>) -> Option<TypeId> {
-        // The checker can record one signature under several ids, including a
-        // declaration's and an anonymous callback's. The signature lookup above
-        // may choose the declaration's id even when only the anonymous type has
-        // the symbol this form requires. Match their complete signatures, rather
-        // than requiring those duplicate ids to be identical.
-        if let TypeKind::Function(signature) = wanted {
-            let wanted = self.templates.snapshot.signatures.get(signature.0 as usize)?;
-            return self.templates.snapshot.types.iter().position(|record| {
-                record.symbol == symbol && matches!(record.kind, TypeKind::Function(found)
-                    if self.templates.snapshot.signatures.get(found.0 as usize) == Some(wanted))
-            }).map(|at| TypeId(u32::try_from(at).unwrap_or(u32::MAX)));
-        }
-        if let TypeKind::Union(ref members) = wanted {
-            let wanted = union_members(self.templates.snapshot, members)?;
-            return self.templates.snapshot.types.iter().position(|record| {
-                record.symbol == symbol && matches!(&record.kind, TypeKind::Union(members)
-                    if union_members(self.templates.snapshot, members).as_ref() == Some(&wanted))
-            }).map(|at| TypeId(u32::try_from(at).unwrap_or(u32::MAX)));
-        }
-        find_record(self.templates.snapshot, &wanted, symbol)
+        self.templates.lookup_index.get_or_init(|| LookupIndex::new(self.templates.snapshot))
+            .composite(self.templates.snapshot, &wanted, symbol)
     }
 
     fn instance(
@@ -637,7 +735,8 @@ impl Site for Lookup<'_, '_> {
     }
 
     fn signature(&mut self, wanted: SignatureRecord) -> Option<SignatureId> {
-        find_signature(self.templates.snapshot, &wanted)
+        self.templates.lookup_index.get_or_init(|| LookupIndex::new(self.templates.snapshot))
+            .signature(self.templates.snapshot, &wanted)
     }
 
     fn declarations(&self) -> &FxHashMap<SymbolId, TypeId> {
@@ -650,7 +749,7 @@ impl Site for Lookup<'_, '_> {
 /// `boolean` is stored on its own and as `false | true` inside a wider union.
 /// Only those two equivalences are used: references and function shapes retain
 /// their type identities, and `null` and `undefined` remain separate members.
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum UnionMember {
     Type(TypeId),
     False,
@@ -1151,4 +1250,44 @@ mod tests {
         assert_eq!(lookup.composite(TypeKind::Function(SignatureId(2)), None), Some(TypeId(3)));
         assert_eq!(lookup.composite(TypeKind::Function(SignatureId(2)), Some(SymbolId(0))), None);
     }
+
+    #[test]
+    fn coarse_object_bucket_preserves_member_flags_and_identity() {
+        let property = PropertyRecord {
+            name: "value".to_owned(), ty: TypeId(0), readonly: false, optional: false,
+            declaration: None, kind: nts_semantic_schema::MemberKind::Field, own: true,
+        };
+        let mut optional = property.clone(); optional.optional = true;
+        let mut readonly = property.clone(); readonly.readonly = true;
+        let mut renamed = property.clone(); renamed.name = "other".to_owned();
+        let snapshot = snapshot(vec![TypeKind::Number,
+            TypeKind::Object { properties: vec![property.clone()] },
+            TypeKind::Object { properties: vec![optional] },
+            TypeKind::Object { properties: vec![readonly] },
+            TypeKind::Object { properties: vec![renamed] },
+        ]);
+        let index = LookupIndex::new(&snapshot);
+        for at in 1..5 {
+            let kind = &snapshot.types[at].kind;
+            assert_eq!(index.composite(&snapshot, kind, None), Some(TypeId(u32::try_from(at).expect("four records"))));
+            assert_eq!(index.composite(&snapshot, kind, Some(SymbolId(0))), None);
+        }
+    }
+
+    #[test]
+    fn root_resolution_cache_is_separate_for_each_sigma() {
+        let snapshot = snapshot(vec![
+            TypeKind::TypeParameter { name: "T".to_owned(), constraint: None },
+            TypeKind::Array(TypeId(0)), TypeKind::Number, TypeKind::String,
+            TypeKind::Array(TypeId(2)), TypeKind::Array(TypeId(3)),
+        ]);
+        let templates = Templates::new(&snapshot);
+        let number = Sigma::from([(TypeId(0), TypeId(2))]);
+        let string = Sigma::from([(TypeId(0), TypeId(3))]);
+        assert_eq!(templates.resolve(TypeId(1), &number), Some(TypeId(4)));
+        assert_eq!(templates.resolve(TypeId(1), &string), Some(TypeId(5)));
+        assert_eq!(templates.resolve(TypeId(1), &number), Some(TypeId(4)));
+        assert_eq!(templates.resolved.borrow().len(), 2);
+    }
+
 }
