@@ -6671,6 +6671,8 @@ mod tests {
             "nts_array_at_foreign",
             "nts_array_at_value",
             "nts_array_element",
+            // Reads the actual storage count without resizing or allocating.
+            "nts_array_length",
             "nts_array_index_of",
             "nts_array_index_of_ref",
             "nts_array_index_of_str",
