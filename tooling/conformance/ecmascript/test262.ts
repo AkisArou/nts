@@ -35,7 +35,7 @@ function option(name: string, fallback: string): string {
 const under = option("--under", "test/built-ins/RegExp");
 const profile = option(
   "--profile",
-  under.includes("/intl402/")
+  under === "test/intl402" || under.includes("/intl402/")
     ? "intl"
     : under.includes("/Temporal")
       ? "temporal"
@@ -300,6 +300,9 @@ const selection: Selection[] = execFileSync(
   .filter(Boolean)
   .map((line) => JSON.parse(line) as Selection);
 const rows: Row[] = [];
+// These locale methods still use Node intrinsics in this supplementary adapter.
+// Keep their original cases visible without counting that fallback as evidence.
+const unboundLocaleMethods = new Set(["Array", "BigInt", "Number", "String", "TypedArray"]);
 let attempted = 0;
 for (const selected of selection) {
   if (!selected.path.includes(filter)) continue;
@@ -314,6 +317,13 @@ for (const selected of selection) {
   if (selected.schedule !== "planned") {
     row.verdict = selected.schedule;
     row.reason = selected.reason;
+    continue;
+  }
+  if (
+    profile === "intl" &&
+    unboundLocaleMethods.has(selected.path.split("/")[2]!)
+  ) {
+    row.reason = "adapter:locale-method-not-bound";
     continue;
   }
   if (selected.variant_id?.endsWith("#module")) {

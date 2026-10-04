@@ -1,6 +1,7 @@
 import { canonicalizeLocale, LocaleResolver } from "./locale.ts";
 import type { LocaleData } from "./locale.ts";
 import { LocaleIdentifier } from "./locale-id.ts";
+import { NtsLocale } from "./locale-object.ts";
 import { stringOption } from "./options.ts";
 
 // Keep standard list conversion separate from scalar locale/data operations.
@@ -20,7 +21,10 @@ export function getCanonicalLocales<D extends LocaleData>(
     const value = list[index];
     if (value === null || (typeof value !== "string" && typeof value !== "object"))
       throw new TypeError("Locale list entries must be strings or Locale objects");
-    const tag = canonicalizeLocale(data, typeof value === "string" ? value : value.toString());
+    const tag =
+      value instanceof NtsLocale
+        ? NtsLocale.canonicalTag(value)
+        : canonicalizeLocale(data, typeof value === "string" ? value : value.toString());
     if (!seen.has(tag)) {
       seen.add(tag);
       result.push(tag);

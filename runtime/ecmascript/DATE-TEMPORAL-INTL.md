@@ -118,7 +118,9 @@ and artifact-size evidence before becoming another provider.
    containment and iteration now exist through public C/JVM primitives.
    Locale's calendar/hour/week fallback and country zone identity now share
    cached algorithms. Common iterator helpers and compiled public acceptance
-   remain open.
+   remain open. Number/BigInt localization, String locale comparison/casing and
+   Array/TypedArray locale-method binding also remain open; they must consume
+   the shared services rather than execute a host implementation in validation.
 8. **Packaging and performance.** Finish reachability-controlled acquisition,
    platform/device acceptance and construction, format, parts, range, startup,
    heap and artifact-size measurements.
@@ -710,7 +712,7 @@ It is supplementary POSIX host tooling, not a production transport or a native
 formatter fallback. Reports say host-pass; they never claim compiled standard
 builtin conformance.
 
-Current host results against Test262
+The earlier full-service host snapshot against Test262
 `14e8c908e54ae2e770e473bcacf536f8cb654929` (2026-10-04):
 
 | Slice                    | Host passes | Retained failures |
@@ -741,6 +743,28 @@ Current host results against Test262
 Failures include missing supported semantics/APIs, adapter limitations and
 documented metadata/realm non-goals. These counts do not establish completeness.
 Earlier reflective-facade results are superseded.
+
+The Locale private-slot follow-up reads a branded Locale's stored canonical tag
+for locale-list conversion and construction, ignoring subclass `toString`
+overrides. The original `canonicalize-locale-list-take-locale.js` now passes;
+the typed host probe also preserves the tag when cloning and applying options.
+Ten thousand direct slot reads make zero provider canonicalization calls.
+The full host service comparison records Locale **129/168**, with one new pass
+and no regressions across nine compared service slices. Intl/Temporal remains
+**2029/2029**. The derived `locale-slots-intl-candidate-report.json` explicitly
+excludes the forty Node locale-method rows from its discovery run and references
+their separate unsupported receipts below; the raw rows are retained.
+Receipts are `locale-slots-{host,root-profile-test262}.log` in
+`target/ecmascript/audit`. Shipping C/JVM public Locale witnesses still refuse
+the canonical constructor union and structural data dispatch; neither is accepted
+as compiled evidence by this follow-up.
+
+The host adapter now selects the Intl profile for the exact `test/intl402` root.
+It retains all forty original Array, BigInt, Number, String and TypedArray locale
+method cases as `unsupported: adapter:locale-method-not-bound`, because those
+methods have no shared binding in this adapter. Their Node results cannot count
+as NTS evidence. Focused original-suite receipts are
+`locale-slots-unbound-*-test262.{jsonl,log}` in the same audit directory.
 
 The scalar ISO parser fixture agrees on **812 cases across 18 functions** on C,
 LLVM, JVM, C+RC and LLVM+RC. RC differential checks use `NTS_RC=1`. Separate

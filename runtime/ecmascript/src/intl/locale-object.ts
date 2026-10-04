@@ -41,7 +41,12 @@ export class NtsLocale<D extends LocaleInfoData> {
   ) {
     if (typeof tag !== "string" && (tag === null || typeof tag !== "object"))
       throw new TypeError("Locale requires a string or locale object");
-    const text = typeof tag === "string" ? tag : tag.toString();
+    const text =
+      typeof tag === "string"
+        ? tag
+        : tag instanceof NtsLocale
+          ? NtsLocale.canonicalTag(tag)
+          : tag.toString();
     if (options === null) throw new TypeError("Locale options must not be null");
     let identifier = new LocaleIdentifier(canonicalizeLocale(data, text));
     const language = optionalString(options.language) ?? identifier.language;
@@ -153,6 +158,11 @@ export class NtsLocale<D extends LocaleInfoData> {
   }
   toString(): string {
     return this.#tag;
+  }
+
+  // Intl locale conversion reads the stored tag, ignoring subclass overrides.
+  static canonicalTag<D extends LocaleInfoData>(locale: NtsLocale<D>): string {
+    return locale.#tag;
   }
 
   private preferences(): LocalePreferences<D> {
