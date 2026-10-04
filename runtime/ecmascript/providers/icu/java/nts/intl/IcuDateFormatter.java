@@ -19,7 +19,8 @@ import java.util.Map;
 /** Reused text/field primitive. TypeScript owns ECMA-402 option and parts semantics. */
 public final class IcuDateFormatter {
     private final SimpleDateFormat formatter;
-    private final Calendar calendar;
+    private Calendar calendar;
+    private CalendarFields prepared;
     private final ULocale locale;
     private DateIntervalFormat range;
     private Calendar from, to;
@@ -73,14 +74,64 @@ public final class IcuDateFormatter {
     public int start(int index) { return spans[index * 3 + 1]; }
     public int end(int index) { return spans[index * 3 + 2]; }
 
+    public int offsetMilliseconds(double milliseconds) {
+        if (!Double.isFinite(milliseconds)) throw new IllegalArgumentException("Invalid date/time");
+        return formatter.getTimeZone().getOffset((long)milliseconds);
+    }
+    public boolean setCalendarFields(int relatedYear, int year, int month, boolean leap, int day, int dayOfYear) {
+        String type = calendar.getType();
+        if (!(type.equals("chinese") || type.equals("dangi")) || year < 1 || year > 60
+            || month < 0 || month > 11 || day < 1 || day > 30 || dayOfYear < 1 || dayOfYear > 400)
+            return false;
+        if (prepared == null) {
+            prepared = new CalendarFields(formatter.getTimeZone(), locale, type);
+            formatter.setCalendar(prepared);
+            calendar = prepared;
+        }
+        prepared.relatedYear = relatedYear;
+        prepared.year = year;
+        prepared.month = month;
+        prepared.leap = leap;
+        prepared.day = day;
+        prepared.dayOfYear = dayOfYear;
+        // Even repeated timestamps must recompute after replacing their fields.
+        prepared.clear();
+        return true;
+    }
+
+    /** Data adapter only: shared TypeScript supplies all lunisolar date fields. */
+    private static final class CalendarFields extends GregorianCalendar {
+        private static final long serialVersionUID = 1L;
+        private final String type;
+        int relatedYear, year, month, day, dayOfYear;
+        boolean leap;
+        CalendarFields(TimeZone zone, ULocale locale, String type) {
+            super(zone, locale);
+            this.type = type;
+            setGregorianChange(new Date(-(1L << 53)));
+        }
+        @Override public String getType() { return type == null ? "gregorian" : type; }
+        @Override protected void computeFields() {
+            super.computeFields();
+            internalSet(ERA, 0);
+            internalSet(YEAR, year);
+            internalSet(EXTENDED_YEAR, relatedYear);
+            internalSet(MONTH, month);
+            internalSet(IS_LEAP_MONTH, leap ? 1 : 0);
+            internalSet(DAY_OF_MONTH, day);
+            internalSet(DAY_OF_YEAR, dayOfYear);
+        }
+    }
+
     public String formatRange(double start, double end, boolean fields) {
+        if (prepared != null) throw new IllegalStateException("Prepared calendar ranges require shared pattern selection");
         if (!Double.isFinite(start) || !Double.isFinite(end)) throw new IllegalArgumentException("Invalid date/time");
         if (range == null) {
             String skeleton = DateTimePatternGenerator.getInstance(locale).getSkeleton(formatter.toPattern());
             range = DateIntervalFormat.getInstance(skeleton, locale);
             range.setTimeZone(formatter.getTimeZone());
-            from = (Calendar)calendar.clone();
-            to = (Calendar)calendar.clone();
+            from = calendar.clone();
+            to = calendar.clone();
         }
         from.setTimeInMillis((long)start);
         to.setTimeInMillis((long)end);

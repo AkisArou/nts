@@ -128,6 +128,18 @@ declare module "c:nts_icu" {
   /** @ntsAbi managed */
   export function nts_icu_date_field_count(handle: IcuDateHandle): number;
   /** @ntsAbi managed */
+  export function nts_icu_date_offset(handle: IcuDateHandle, milliseconds: number): number;
+  /** @ntsAbi managed */
+  export function nts_icu_date_calendar_fields(
+    handle: IcuDateHandle,
+    relatedYear: number,
+    year: number,
+    month: number,
+    leap: boolean,
+    day: number,
+    dayOfYear: number,
+  ): boolean;
+  /** @ntsAbi managed */
   export function nts_icu_date_field(
     handle: IcuDateHandle,
     index: number,
@@ -148,6 +160,19 @@ declare module "c:nts_icu" {
   ): string | null;
   /** @ntsAbi managed */
   export function nts_icu_date_patterns(handle: IcuDatePatternHandle): string[] | null;
+  /** @ntsAbi managed */
+  export function nts_icu_date_interval_pattern(
+    handle: IcuDatePatternHandle,
+    skeleton: string,
+    field: number,
+  ): string | null;
+  /** @ntsAbi managed */
+  export function nts_icu_date_interval_fallback(handle: IcuDatePatternHandle): string | null;
+  /** @ntsAbi managed */
+  export function nts_icu_date_time_connector(
+    handle: IcuDatePatternHandle,
+    dateStyle: number,
+  ): string | null;
   /** @ntsAbi managed */
   export function nts_icu_collation_defaults(locale: string): number;
   /** @ntsAbi managed */

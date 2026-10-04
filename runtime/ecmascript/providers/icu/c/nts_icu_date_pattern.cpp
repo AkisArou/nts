@@ -5,6 +5,7 @@ extern "C" {
 #include <unicode/udat.h>
 #include <unicode/udatpg.h>
 #include <unicode/uenum.h>
+#include <unicode/dtitvinf.h>
 #include <memory>
 #include <string>
 #include <vector>
@@ -16,6 +17,7 @@ struct DatePatterns {
   Generator generator;
   std::vector<UChar> skeleton;
   std::vector<UChar> output;
+  std::unique_ptr<icu::DateIntervalInfo> intervals;
   DatePatterns(std::string name, UErrorCode &status)
       : locale(std::move(name)), generator(udatpg_open(locale.c_str(), &status), udatpg_close), skeleton(32), output(128) {}
 };
@@ -33,6 +35,48 @@ static NtsString *pattern_result(const UChar *units, int32_t length) {
   uint16_t *output = NTS_ELEMENTS(result, uint16_t);
   for (int32_t index = 0; index < length; index++) output[index] = units[index];
   return result;
+}
+static icu::DateIntervalInfo *intervals(DatePatterns *state, UErrorCode &status) {
+  if (!state->intervals) {
+    auto data = std::make_unique<icu::DateIntervalInfo>(icu::Locale(state->locale.c_str()), status);
+    if (U_FAILURE(status)) return nullptr;
+    state->intervals = std::move(data);
+  }
+  return state->intervals.get();
+}
+
+extern "C" NtsString *nts_icu_date_interval_pattern(NtsHeader *handle, NtsString *skeleton, double field) {
+  static const UCalendarDateFields fields[] = {
+    UCAL_ERA, UCAL_YEAR, UCAL_MONTH, UCAL_DATE, UCAL_AM_PM, UCAL_HOUR, UCAL_MINUTE
+  };
+  if (!isfinite(field) || field < 0 || field >= 7 || field != floor(field) || skeleton->length > INT32_MAX) return nullptr;
+  DatePatterns *state = pattern_state(handle);
+  UErrorCode status = U_ZERO_ERROR;
+  icu::DateIntervalInfo *data = intervals(state, status);
+  if (data == nullptr) return nullptr;
+  icu::UnicodeString key, pattern;
+  for (uint32_t index = 0; index < skeleton->length; index++) key.append(static_cast<char16_t>(nts_unit(skeleton, index)));
+  data->getIntervalPattern(key, fields[static_cast<size_t>(field)], pattern, status);
+  if (U_FAILURE(status)) return nullptr;
+  if (!pattern.isEmpty() && !pattern.startsWith(icu::UnicodeString("earliestFirst:")) && !pattern.startsWith(icu::UnicodeString("latestFirst:")))
+    pattern.insert(0, icu::UnicodeString(data->getDefaultOrder() ? "latestFirst:" : "earliestFirst:"));
+  return pattern_result(pattern.getBuffer(), pattern.length());
+}
+extern "C" NtsString *nts_icu_date_interval_fallback(NtsHeader *handle) {
+  UErrorCode status = U_ZERO_ERROR;
+  icu::DateIntervalInfo *data = intervals(pattern_state(handle), status);
+  if (data == nullptr) return nullptr;
+  icu::UnicodeString pattern;
+  data->getFallbackIntervalPattern(pattern);
+  return pattern_result(pattern.getBuffer(), pattern.length());
+}
+extern "C" NtsString *nts_icu_date_time_connector(NtsHeader *handle, double date_style) {
+  if (!isfinite(date_style) || date_style < 0 || date_style > 3 || date_style != floor(date_style)) return nullptr;
+  DatePatterns *state = pattern_state(handle);
+  UErrorCode status = U_ZERO_ERROR;
+  int32_t length;
+  const UChar *pattern = udatpg_getDateTimeFormatForStyle(state->generator.get(), static_cast<UDateFormatStyle>(static_cast<int32_t>(date_style)), &length, &status);
+  return U_SUCCESS(status) ? pattern_result(pattern, length) : nullptr;
 }
 
 extern "C" NtsHeader *nts_icu_date_patterns_open(NtsString *tag) {

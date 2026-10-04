@@ -19,8 +19,10 @@ independent of ICU.
 Chinese/Korean modern year tables are generated in TypeScript from licensed,
 pinned ICU4X data. No ICU4X execution engine or Rust dependency is imported.
 The calendar context is shared by all calendar-bearing Temporal values and
-relative Duration operations. Intl formatting must consume consistent calendar
-fields; its current independent ICU calendar calculation remains an open gap.
+relative Duration operations. Intl now supplies the same shared Chinese/Korean
+fields to both text providers, including ranges selected in TS. The original
+lunisolar formatting consistency test passes; other calendars and compiled
+public formatting acceptance remain open.
 
 Best architecture, clean code and performance are standing requirements.
 Use the pinned TypeScript library contracts directly, private instance state,

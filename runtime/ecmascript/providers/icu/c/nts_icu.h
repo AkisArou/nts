@@ -24,12 +24,17 @@ double nts_icu_relative_field(NtsHeader *handle, double index, double component)
 NtsHeader *nts_icu_date_open(NtsString *locale, NtsString *pattern, NtsString *time_zone);
 NtsString *nts_icu_date_format(NtsHeader *handle, double milliseconds, bool fields);
 NtsString *nts_icu_date_range(NtsHeader *handle, double start, double end, bool fields);
+double nts_icu_date_offset(NtsHeader *handle, double milliseconds);
+bool nts_icu_date_calendar_fields(NtsHeader *handle, double related_year, double year, double month, bool leap, double day, double day_of_year);
 double nts_icu_date_field_count(NtsHeader *handle);
 double nts_icu_date_field(NtsHeader *handle, double index, double component);
 NtsHeader *nts_icu_date_patterns_open(NtsString *locale);
 NtsString *nts_icu_date_best_pattern(NtsHeader *handle, NtsString *skeleton);
 NtsString *nts_icu_date_style_pattern(NtsHeader *handle, double date_style, double time_style);
 NtsArray *nts_icu_date_patterns(NtsHeader *handle);
+NtsString *nts_icu_date_interval_pattern(NtsHeader *handle, NtsString *skeleton, double field);
+NtsString *nts_icu_date_interval_fallback(NtsHeader *handle);
+NtsString *nts_icu_date_time_connector(NtsHeader *handle, double date_style);
 double nts_icu_collation_defaults(NtsString *locale);
 NtsHeader *nts_icu_collator_open(NtsString *locale, double sensitivity, bool punctuation, bool numeric, double case_first);
 double nts_icu_collator_compare(NtsHeader *handle, NtsString *one, NtsString *two);

@@ -70,8 +70,9 @@ and artifact-size evidence before becoming another provider.
    acceptance remains open. DateTimeFormat pattern metadata, basic matching,
    construction, single/range formatting and UTF-16 parts exist on both providers.
    Instant and all plain Temporal types are integrated, including calendar
-   identity validation. Shared prepared calendar fields for formatting, range
-   pattern selection and compiled public acceptance remain open.
+   identity validation. Shared prepared Chinese/Korean fields and interval
+   selection now exist. Other calendar presentation, complete range selection
+   and compiled public acceptance remain open.
 4. **Date.** Complete standard constructor/call behavior, local operations,
    setters, localization and the Temporal bridge. Core arithmetic, parsing and
    serialization exist. UTC and multi-component setters distinguish omission
@@ -411,12 +412,13 @@ All 56 original builtin Temporal locale tests pass with and without Intl.
 The builtin run retains 35 excluded metadata failures and one standard Instant
 constructor-conversion gap. All 97 Intl-specific locale cases pass within the
 complete 2,029-case rerun. Date's latest environment/slot checkpoint is 543/594;
-DurationFormat remains 101/110. DateTimeFormat now passes 217/244, including the
-two corrected mixed-range conversion-order cases. That scoped result improves
-215/244 without regressing a previously passing case; receipts are
-date-time-format-calendar-regression-test262.*. Its remaining supported gaps
-include Chinese field-data consistency, era labels, same-day datetime range
-sharing and the pinned hanidec pattern's AM/PM spacing.
+DurationFormat remains 101/110. DateTimeFormat now passes 218/244, including the
+two corrected mixed-range conversion-order cases and the complete original
+1950–2050 lunisolar field consistency test. Only that consistency verdict
+changes from 217/244; receipts are
+date-time-format-prepared-calendar-test262.*. Its remaining supported gaps
+include era labels, same-day datetime range sharing and the pinned hanidec
+pattern's AM/PM spacing. All 97 Intl Temporal localization cases still pass.
 The host adapter binds Date localization to the shared formatter too, so the
 original Date/Temporal comparison tests use the same algorithms and pinned data.
 It does not normalize output or compare shared ICU text to Node's separate
@@ -450,18 +452,40 @@ remain in temporal-localization-all-intl-test262.jsonl and
 zoned-intl-edge-test262.jsonl under target/ecmascript/icu-check. This historical
 partial result is superseded by the complete 2,029/2,029 calendar rerun above.
 
-DateTimeFormat's next semantic step is a shared calendar-field and range-pattern
-path. A public prepared-Calendar probe preserves corrected fields for single
-dates on ICU4C and ICU4J, but ICU4C's interval formatter clones those fields back
-into its own calendar type. The retained probes are under
-target/ecmascript/audit/date-fields; they are not production adapters or accepted
-compiled public witnesses. The implementation must prepare calendar fields in
-TS, select/split public interval-pattern data in shared code and reuse provider
-text/span buffers for those prepared fields. Both single and range formatting
-must use the same calendar source. Private ICU hooks, a duplicate native/JVM
-calendar engine, shifted surrogate timestamps and localized-output scraping
-are not acceptable shortcuts. Pattern selection and formatter construction
-belong outside hot loops; range scratch and immutable year caches stay bounded.
+DateTimeFormat now prepares Chinese/Korean fields in TS, selects/splits public
+interval-pattern data in shared code and reuses provider text/span buffers.
+Single dates and ranges use the same CalendarContext. A small presentation
+adapter derives from each provider's public GregorianCalendar: its documented
+field computation supplies the actual instant's time/weekday, then accepts
+the shared calendar's date fields. It contains no lunisolar arithmetic.
+ICU4C's interval formatter replaces prepared Calendar fields with its own
+calendar calculation, so prepared ranges use shared selection and independent
+cached single-pattern text handles. Raw prepared provider ranges are refused.
+The text/parts layer accepts its own narrow boundary and stays independent of
+calendar construction. Flexible day-period comparison uses a lazily opened
+single-field text primitive, preserving the locale's period identity.
+
+Interval handles are opened once per selected difference; endpoint cursors,
+typed spans and bounded calendar-year caches are reused. Default range source
+spans include each endpoint's leading/trailing literals. Private ICU hooks,
+duplicate native/JVM calendar engines, shifted surrogate timestamps and
+localized-output scraping are not acceptable shortcuts.
+
+The supplementary compiled prepared-field witness runs with
+`node runtime/ecmascript/tools/icu.ts --date-fields --pinned-native --all-backends --sanitize`
+and passes on C, C/RC, LLVM, LLVM/RC and JVM. It checks supplied fields, UTF-16
+span codes, 2,000 field replacements at one timestamp, offsets and public
+interval/fallback/connector data. Native ASan/UBSan and RC leak checks pass;
+JVM runs with `-Xverify:all`. Receipts are under
+target/ecmascript/audit/date-fields and target/ecmascript/icu-check/*-date-fields.
+This verifies actual compiled adapters, not compiled public DateTimeFormat.
+Other calendar presentation, complete style/date-time interval composition,
+public execution and performance/artifact measurements remain required.
+The earlier date-span mapping also still names ICU's internal/deprecated
+related-year and time-separator field constants. The new presentation adapter
+adds no private hooks, but replacing that existing mapping with a stable
+documented boundary remains an acceptance requirement. The complete formatter
+does not yet meet the target of using public ICU APIs exclusively.
 
 The compiled fixture compares cached and raw ICU offsets across all 446 primary
 zones and every one of 42,806 transitions from 1800 through 2099, including

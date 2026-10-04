@@ -1,5 +1,5 @@
 // Reproducible provider/ABI validation, independent of the Java-8 core runtime.
-// node runtime/ecmascript/tools/icu.ts [--regenerate-bindings] [--all-backends] [--sanitize] [--duration|--calendar]
+// node runtime/ecmascript/tools/icu.ts [--regenerate-bindings] [--all-backends] [--sanitize] [--duration|--calendar|--date-fields]
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
@@ -38,15 +38,18 @@ for (const option of process.argv.slice(2)) {
       "--all-backends",
       "--duration",
       "--calendar",
+      "--date-fields",
     ].includes(option)
   )
     throw new Error("Unknown option: " + option);
 }
 const duration = process.argv.includes("--duration");
 const calendar = process.argv.includes("--calendar");
-if (duration && calendar) throw new Error("Choose one ICU witness: --duration or --calendar");
+const dateFields = process.argv.includes("--date-fields");
+if (Number(duration) + Number(calendar) + Number(dateFields) > 1)
+  throw new Error("Choose one ICU witness: --duration, --calendar or --date-fields");
 if (
-  (duration || calendar) &&
+  (duration || calendar || dateFields) &&
   (process.argv.includes("--bench") || process.argv.includes("--android"))
 )
   throw new Error(
@@ -56,10 +59,30 @@ const configuration = calendar
   ? "tsconfig.calendar-data."
   : duration
     ? "tsconfig.duration."
-    : "tsconfig.";
-const javaDriver = calendar ? "CalendarDrive" : duration ? "DurationDrive" : "Drive";
-const cDriver = calendar ? "calendar-drive.c" : duration ? "duration-drive.c" : "drive.c";
-const witnessScope = calendar ? "calendar" : duration ? "duration" : "";
+    : dateFields
+      ? "tsconfig.date-fields."
+      : "tsconfig.";
+const javaDriver = calendar
+  ? "CalendarDrive"
+  : duration
+    ? "DurationDrive"
+    : dateFields
+      ? "DateFieldsDrive"
+      : "Drive";
+const cDriver = calendar
+  ? "calendar-drive.c"
+  : duration
+    ? "duration-drive.c"
+    : dateFields
+      ? "date-fields-drive.c"
+      : "drive.c";
+const witnessScope = calendar
+  ? "calendar"
+  : duration
+    ? "duration"
+    : dateFields
+      ? "date-fields"
+      : "";
 if (process.argv.includes("--pinned-native")) {
   env.PKG_CONFIG_LIBDIR = resolve(root, "target/ecmascript/icu-native-pin/install/lib/pkgconfig");
 }
@@ -244,6 +267,7 @@ for (const [name, source] of [
   ["segment", resolve(provider, "c/nts_icu_segment.c")],
 ] as const) {
   if (calendar && name !== "unicode" && name !== "provider") continue;
+  if (dateFields && name !== "unicode" && name !== "provider") continue;
   const object = resolve(native, name + ".o");
   run(cc, [
     "-std=c11",
@@ -263,6 +287,7 @@ for (const [name, source] of [
 }
 for (const name of ["locale", "number_range", "date_pattern", "date", "plural", "calendar"]) {
   if (calendar && name !== "calendar") continue;
+  if (dateFields && name !== "date" && name !== "date_pattern") continue;
   const object = resolve(native, name + ".o");
   run(cxx, [
     "-std=c++17",
@@ -443,6 +468,14 @@ expected += "\nza 1000 dni\nin 𝟏𝟐.𝟓 days;0=3:7;2=7:8;1=8:10";
 expected += "\none,other:one:one:other:one:other";
 expected += "\none,two,few,other:other:one:two:few:other:other:one:one:other";
 expected += "\nother:one\none:few\nmany:many:one\none:other:one\nother:other";
+if (dateFields)
+  expected = [
+    "0:2030|2|29|Sunday|00:00:00.000:8:2556",
+    "same-instant:2000",
+    "utf16:𝟐𝟎𝟑𝟎|𝟏|𝟐𝟗:16;11=0:8;2=9:11;3=12:16",
+    "offset:-14400000",
+    "interval-data:order:fields:fallback:connector",
+  ].join("\n");
 if (duration)
   expected = [
     "1 yr, 2 mths, 3 wks, 4 days, 5 hr, 6 min, 7 sec, 8 ms, 9 μs, 10 ns",
@@ -512,7 +545,9 @@ console.log(
       ? "compiled-ICU-calendar-data"
       : duration
         ? "compiled-ICU-duration-text"
-        : "compiled-ICU-ABI",
+        : dateFields
+          ? "compiled-ICU-date-fields"
+          : "compiled-ICU-ABI",
     icu: version,
     backends: [...nativeResults.map((result) => result.backend), "jvm"],
     ...(calendar
@@ -533,31 +568,38 @@ console.log(
         }
       : duration
         ? { durationText: true, durationParts: false, compiledPublicApi: false }
-        : {
-            exactDecimal: true,
-            utf16Parts: true,
-            dst: true,
-            temporalTimeZones: true,
-            temporalTimeZoneCache: true,
-            temporalZonedISOArithmetic: true,
-            temporalTimeZoneErrors: false,
-            numberOptions: true,
-            numberRanges: true,
-            localeData: true,
-            localePreferences: true,
-            collation: true,
-            datePatterns: true,
-            dateText: true,
-            dateRanges: true,
-            timeZoneIdentifiers: true,
-            supportedValues: true,
-            primaryTimeZoneIdentifiers: true,
-            displayNames: true,
-            segmenter: true,
-            listPatterns: true,
-            relativeTime: true,
-            pluralRules: true,
-          }),
+        : dateFields
+          ? {
+              preparedDateFields: true,
+              utf16Spans: true,
+              intervalPatternData: true,
+              compiledPublicApi: false,
+            }
+          : {
+              exactDecimal: true,
+              utf16Parts: true,
+              dst: true,
+              temporalTimeZones: true,
+              temporalTimeZoneCache: true,
+              temporalZonedISOArithmetic: true,
+              temporalTimeZoneErrors: false,
+              numberOptions: true,
+              numberRanges: true,
+              localeData: true,
+              localePreferences: true,
+              collation: true,
+              datePatterns: true,
+              dateText: true,
+              dateRanges: true,
+              timeZoneIdentifiers: true,
+              supportedValues: true,
+              primaryTimeZoneIdentifiers: true,
+              displayNames: true,
+              segmenter: true,
+              listPatterns: true,
+              relativeTime: true,
+              pluralRules: true,
+            }),
     sanitize: sanitize.length > 0,
     ...(sanitize.length > 0 ? { leakDetection: "RC; NoGC intentionally retains its heap" } : {}),
   }),

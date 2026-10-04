@@ -196,6 +196,9 @@ export function icuHost(root: string) {
       stylePattern: (dateStyle, timeStyle) =>
         required("stylePattern", handle, dateStyle, timeStyle),
       patterns: () => required("patterns", handle).split(";"),
+      intervalPattern: (skeleton, field) => required("intervalPattern", handle, skeleton, field),
+      intervalFallback: () => required("intervalFallback", handle),
+      dateTimeConnector: (dateStyle) => required("dateTimeConnector", handle, dateStyle),
     };
   }
   function openDate(locale: string, pattern: string, timeZone: string): DateTimeFormatterPrimitive {
@@ -209,6 +212,14 @@ export function icuHost(root: string) {
     return {
       format: (milliseconds, fields) => format("dateFormat", milliseconds, fields),
       formatRange: (start, end, fields) => format("dateRange", start, end, fields),
+      offsetMilliseconds: (milliseconds) => Number(required("dateOffset", handle, milliseconds)),
+      setCalendarFields: (relatedYear, year, month, leap, day, dayOfYear) => {
+        if (
+          required("dateCalendarFields", handle, relatedYear, year, month, leap, day, dayOfYear) !==
+          "true"
+        )
+          throw new RangeError("ICU prepared calendar fields failed");
+      },
       fieldCount: () => spans.length,
       field: (index) => spans[index]![0]!,
       start: (index) => spans[index]![1]!,

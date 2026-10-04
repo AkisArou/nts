@@ -1,5 +1,21 @@
 // ICU/CLDR pattern metadata, parsed once during formatter construction. This
 // reads pattern syntax; it never infers fields by scraping localized output.
+export function datePatternField(symbol: string): number {
+  if (symbol === "G") return 0;
+  if (symbol === "y" || symbol === "u") return 1;
+  if (symbol === "M" || symbol === "L") return 2;
+  if (symbol === "d") return 3;
+  if (symbol === "h" || symbol === "H" || symbol === "k" || symbol === "K") return 4;
+  if (symbol === "m") return 5;
+  if (symbol === "s") return 6;
+  if (symbol === "S") return 7;
+  if (symbol === "E" || symbol === "e" || symbol === "c") return 8;
+  if (symbol === "a" || symbol === "b" || symbol === "B") return 9;
+  if (symbol === "z" || symbol === "v" || symbol === "O" || symbol === "Z") return 10;
+  if (symbol === "r") return 11;
+  if (symbol === "U") return 12;
+  return -1;
+}
 function wordWidth(count: number): NonNullable<Intl.DateTimeFormatOptions["weekday"]> {
   return count === 4 ? "long" : count === 5 ? "narrow" : "short";
 }
@@ -18,6 +34,8 @@ export class DateTimePattern {
   readonly components: Readonly<Intl.DateTimeFormatOptions>;
   readonly hourCycle: Intl.LocaleHourCycleKey | undefined;
   readonly supported: boolean;
+  readonly fieldMask: number;
+  readonly dayPeriodPattern: string | undefined;
 
   constructor(pattern: string) {
     let weekday: Intl.DateTimeFormatOptions["weekday"];
@@ -34,6 +52,8 @@ export class DateTimePattern {
     let cycle: Intl.LocaleHourCycleKey | undefined;
     let quoted = false;
     let supported = true;
+    let fieldMask = 0;
+    let dayPeriodPattern: string | undefined;
     let index = 0;
     while (index < pattern.length) {
       const symbol = pattern.charAt(index++);
@@ -48,6 +68,8 @@ export class DateTimePattern {
       const start = index - 1;
       while (pattern.charAt(index) === symbol) index++;
       const count = index - start;
+      const field = datePatternField(symbol);
+      if (field >= 0) fieldMask |= 1 << field;
       if (symbol === "G") era = wordWidth(count);
       else if (symbol === "y") year = numericWidth(count);
       else if (symbol === "U" || symbol === "r" || symbol === "u") year = "numeric";
@@ -71,8 +93,10 @@ export class DateTimePattern {
       else if (symbol === "S") {
         if (count === 1 || count === 2 || count === 3) fractionalSecondDigits = count;
         else supported = false;
-      } else if (symbol === "B" || symbol === "b") dayPeriod = wordWidth(count);
-      else if (symbol === "z") timeZoneName = count < 4 ? "short" : "long";
+      } else if (symbol === "B" || symbol === "b") {
+        dayPeriod = wordWidth(count);
+        dayPeriodPattern = symbol.repeat(count);
+      } else if (symbol === "z") timeZoneName = count < 4 ? "short" : "long";
       else if (symbol === "v") timeZoneName = count < 4 ? "shortGeneric" : "longGeneric";
       else if (symbol === "O") timeZoneName = count < 4 ? "shortOffset" : "longOffset";
       else if (symbol === "Z") timeZoneName = count < 4 ? "shortOffset" : "longOffset";
@@ -96,6 +120,8 @@ export class DateTimePattern {
     };
     this.hourCycle = cycle;
     this.supported = supported;
+    this.fieldMask = fieldMask;
+    this.dayPeriodPattern = dayPeriodPattern;
     this.pattern = pattern;
   }
 
@@ -115,6 +141,24 @@ export class DateTimePattern {
         symbol !== replacement
       ) {
         result += this.pattern.slice(from, index) + replacement;
+        from = index + 1;
+      }
+    }
+    return from === 0 ? this.pattern : result + this.pattern.slice(from);
+  }
+  withRelatedYear(): string {
+    let result = "";
+    let from = 0;
+    let quoted = false;
+    for (let index = 0; index < this.pattern.length; index++) {
+      const symbol = this.pattern.charAt(index);
+      if (symbol === "'") {
+        if (this.pattern.charAt(index + 1) === "'") index++;
+        else quoted = !quoted;
+      } else if (!quoted && (symbol === "y" || symbol === "u" || symbol === "U")) {
+        const start = index;
+        while (this.pattern.charAt(index + 1) === symbol) index++;
+        result += this.pattern.slice(from, start) + "r";
         from = index + 1;
       }
     }

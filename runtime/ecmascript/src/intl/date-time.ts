@@ -1,4 +1,4 @@
-import type { DateTimeFormatterPrimitive } from "./date-time-data.ts";
+import type { DateTimeTextPrimitive } from "./date-time-data.ts";
 import { FieldSpans } from "./parts.ts";
 
 // Internal ABI codes, independent of either ICU's field enum or JS key order.
@@ -107,7 +107,7 @@ class DatePartBuffer {
   }
 }
 
-export class DateTimeFormatter<P extends DateTimeFormatterPrimitive> {
+export class DateTimeFormatter<P extends DateTimeTextPrimitive> {
   private readonly primitive: P;
   private parts: DatePartBuffer | undefined;
   private spans: FieldSpans | undefined;
@@ -123,27 +123,28 @@ export class DateTimeFormatter<P extends DateTimeFormatterPrimitive> {
     return this.parts.partition(text, this.readSpans());
   }
   private readSpans(): FieldSpans {
-    const count = this.primitive.fieldCount();
+    const primitive = this.primitive;
+    const count = primitive.fieldCount();
     if (this.spans === undefined || this.spans.fields.length < count)
       this.spans = new FieldSpans(Math.max(count, (this.spans?.fields.length ?? 8) * 2));
     this.spans.count = count;
     for (let index = 0; index < count; index++) {
-      this.spans.fields[index] = this.primitive.field(index);
-      this.spans.starts[index] = this.primitive.start(index);
-      this.spans.ends[index] = this.primitive.end(index);
+      this.spans.fields[index] = primitive.field(index);
+      this.spans.starts[index] = primitive.start(index);
+      this.spans.ends[index] = primitive.end(index);
     }
     return this.spans;
   }
   formatRange(start: number, end: number): string {
+    const primitive = this.primitive;
     return start === end
-      ? this.primitive.format(start, false)
-      : this.primitive.formatRange(start, end, false);
+      ? primitive.format(start, false)
+      : primitive.formatRange(start, end, false);
   }
   formatRangeToParts(start: number, end: number): DateTimeRangeFormatPart[] {
+    const primitive = this.primitive;
     const text =
-      start === end
-        ? this.primitive.format(start, true)
-        : this.primitive.formatRange(start, end, true);
+      start === end ? primitive.format(start, true) : primitive.formatRange(start, end, true);
     if (this.parts === undefined) this.parts = new DatePartBuffer();
     return this.parts.partitionRange(text, this.readSpans());
   }

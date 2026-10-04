@@ -4,6 +4,8 @@ import {
   nts_icu_date_range,
   nts_icu_date_field_count,
   nts_icu_date_field,
+  nts_icu_date_offset,
+  nts_icu_date_calendar_fields,
 } from "c:nts_icu";
 import type { IcuDateHandle } from "c:nts_icu";
 
@@ -23,6 +25,22 @@ export class IcuDateFormatter {
     const text = nts_icu_date_range(this.handle, start, end, fields);
     if (text === null) throw new RangeError("ICU date-range formatting failed");
     return text;
+  }
+  offsetMilliseconds(milliseconds: number): number {
+    const offset = nts_icu_date_offset(this.handle, milliseconds);
+    if (!Number.isFinite(offset)) throw new RangeError("ICU date offset query failed");
+    return offset;
+  }
+  setCalendarFields(
+    relatedYear: number,
+    year: number,
+    month: number,
+    leap: boolean,
+    day: number,
+    dayOfYear: number,
+  ): void {
+    if (!nts_icu_date_calendar_fields(this.handle, relatedYear, year, month, leap, day, dayOfYear))
+      throw new RangeError("ICU prepared calendar fields failed");
   }
   fieldCount(): number {
     return nts_icu_date_field_count(this.handle);

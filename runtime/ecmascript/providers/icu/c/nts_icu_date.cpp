@@ -10,10 +10,37 @@ extern "C" {
 #include <unicode/dtptngen.h>
 #include <unicode/uformattedvalue.h>
 #include <memory>
+#include <cstring>
 #include <string>
 #include <vector>
 
 struct DateSpan { int32_t field, start, end; };
+// Presentation adapter, not a second calendar engine. Gregorian computes the
+// actual instant's time/weekday; shared TS supplies every lunisolar date field.
+class CalendarFields final : public icu::GregorianCalendar {
+  std::string type;
+protected:
+  void computeFields(UErrorCode &status) override {
+    icu::GregorianCalendar::computeFields(status);
+    if (U_FAILURE(status)) return;
+    internalSet(UCAL_ERA, 0);
+    internalSet(UCAL_YEAR, year);
+    internalSet(UCAL_EXTENDED_YEAR, related_year);
+    internalSet(UCAL_MONTH, month);
+    internalSet(UCAL_IS_LEAP_MONTH, leap ? 1 : 0);
+    internalSet(UCAL_DATE, day);
+    internalSet(UCAL_DAY_OF_YEAR, day_of_year);
+  }
+public:
+  int32_t related_year = 0, year = 0, month = 0, day = 0, day_of_year = 0;
+  bool leap = false;
+  CalendarFields(const icu::TimeZone &zone, const icu::Locale &locale, const char *name, UErrorCode &status)
+      : icu::GregorianCalendar(zone, locale, status), type(name) {
+    setGregorianChange(-9007199254740992.0, status);
+  }
+  CalendarFields *clone() const override { return new CalendarFields(*this); }
+  const char *getType() const override { return type.c_str(); }
+};
 struct DateFormatter {
   icu::SimpleDateFormat formatter;
   icu::Locale locale;
@@ -23,6 +50,7 @@ struct DateFormatter {
   std::unique_ptr<icu::DateIntervalFormat> range;
   std::unique_ptr<icu::Calendar> from, to;
   icu::ConstrainedFieldPosition range_position;
+  CalendarFields *prepared = nullptr; // Borrowed from formatter's owned calendar.
   DateFormatter(const icu::UnicodeString &pattern, const icu::Locale &locale, UErrorCode &status)
       : formatter(pattern, locale, status), locale(locale) { spans.reserve(16); }
 };
@@ -120,9 +148,42 @@ extern "C" NtsString *nts_icu_date_format(NtsHeader *handle, double milliseconds
   }
   return date_text(state);
 }
+extern "C" double nts_icu_date_offset(NtsHeader *handle, double milliseconds) {
+  if (!isfinite(milliseconds)) return NAN;
+  DateFormatter *state = date_state(handle);
+  UErrorCode status = U_ZERO_ERROR;
+  int32_t raw, daylight;
+  state->formatter.getTimeZone().getOffset(milliseconds, false, raw, daylight, status);
+  return U_SUCCESS(status) ? static_cast<double>(raw) + daylight : NAN;
+}
+extern "C" bool nts_icu_date_calendar_fields(NtsHeader *handle, double related_year, double year, double month,
+    bool leap, double day, double day_of_year) {
+  if (!isfinite(related_year) || related_year != floor(related_year) || related_year < INT32_MIN || related_year > INT32_MAX ||
+      year < 1 || year > 60 || year != floor(year) || month < 0 || month > 11 || month != floor(month) ||
+      day < 1 || day > 30 || day != floor(day) || day_of_year < 1 || day_of_year > 400 || day_of_year != floor(day_of_year)) return false;
+  DateFormatter *state = date_state(handle);
+  if (state->prepared == nullptr) {
+    const char *type = state->formatter.getCalendar()->getType();
+    if (std::strcmp(type, "chinese") != 0 && std::strcmp(type, "dangi") != 0) return false;
+    UErrorCode status = U_ZERO_ERROR;
+    auto prepared = std::make_unique<CalendarFields>(state->formatter.getTimeZone(), state->locale, type, status);
+    if (U_FAILURE(status)) return false;
+    state->prepared = prepared.get();
+    state->formatter.adoptCalendar(prepared.release());
+  }
+  state->prepared->related_year = static_cast<int32_t>(related_year);
+  state->prepared->year = static_cast<int32_t>(year);
+  state->prepared->month = static_cast<int32_t>(month);
+  state->prepared->leap = leap;
+  state->prepared->day = static_cast<int32_t>(day);
+  state->prepared->day_of_year = static_cast<int32_t>(day_of_year);
+  state->prepared->clear(); // Also invalidate when the next timestamp is equal.
+  return true;
+}
 extern "C" NtsString *nts_icu_date_range(NtsHeader *handle, double start, double end, bool fields) {
   if (!isfinite(start) || !isfinite(end)) return nullptr;
   DateFormatter *state = date_state(handle);
+  if (state->prepared != nullptr) return nullptr;
   UErrorCode status = U_ZERO_ERROR;
   if (!state->range) {
     icu::UnicodeString pattern;

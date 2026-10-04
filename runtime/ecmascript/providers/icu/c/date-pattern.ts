@@ -3,6 +3,9 @@ import {
   nts_icu_date_best_pattern,
   nts_icu_date_style_pattern,
   nts_icu_date_patterns,
+  nts_icu_date_interval_pattern,
+  nts_icu_date_interval_fallback,
+  nts_icu_date_time_connector,
 } from "c:nts_icu";
 import type { IcuDatePatternHandle } from "c:nts_icu";
 
@@ -27,5 +30,14 @@ export class IcuDatePatterns {
     const patterns = nts_icu_date_patterns(this.handle);
     if (patterns === null) throw new RangeError("ICU date patterns could not be enumerated");
     return patterns;
+  }
+  intervalPattern(skeleton: string, field: number): string {
+    return required(nts_icu_date_interval_pattern(this.handle, skeleton, field));
+  }
+  intervalFallback(): string {
+    return required(nts_icu_date_interval_fallback(this.handle));
+  }
+  dateTimeConnector(dateStyle: number): string {
+    return required(nts_icu_date_time_connector(this.handle, dateStyle));
   }
 }

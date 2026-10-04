@@ -23,7 +23,10 @@
     "nullability": {
       "bestPattern(Ljava/lang/String;)Ljava/lang/String;": "nonnull",
       "stylePattern(II)Ljava/lang/String;": "nonnull",
-      "patterns()[Ljava/lang/String;": "nonnull"
+      "patterns()[Ljava/lang/String;": "nonnull",
+      "intervalPattern(Ljava/lang/String;I)Ljava/lang/String;": "nonnull",
+      "intervalFallback()Ljava/lang/String;": "nonnull",
+      "dateTimeConnector(I)Ljava/lang/String;": "nonnull"
     }
   },
   "nts.intl.IcuLocaleData": {

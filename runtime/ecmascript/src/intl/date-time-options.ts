@@ -81,7 +81,7 @@ export class DateTimeFormatConfiguration<
   readonly timeStyle: Intl.DateTimeFormatOptions["timeStyle"];
   readonly components: Readonly<Intl.DateTimeFormatOptions>;
   readonly pattern: DateTimePattern;
-  private readonly patterns: P;
+  readonly patterns: P;
   private readonly matcher: NonNullable<Intl.DateTimeFormatOptions["formatMatcher"]>;
   private candidates: DateTimePattern[] | undefined;
   private readonly zoned: boolean;

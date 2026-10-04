@@ -14,4 +14,13 @@ export class IcuDatePatterns {
   patterns(): string[] {
     return this.handle.patterns();
   }
+  intervalPattern(skeleton: string, field: number): string {
+    return this.handle.intervalPattern(skeleton, field);
+  }
+  intervalFallback(): string {
+    return this.handle.intervalFallback();
+  }
+  dateTimeConnector(dateStyle: number): string {
+    return this.handle.dateTimeConnector(dateStyle);
+  }
 }

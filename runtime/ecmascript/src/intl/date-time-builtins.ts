@@ -1,7 +1,11 @@
 import { DateTimeFormatConfiguration } from "./date-time-options.ts";
 import { DateTimeFormatter } from "./date-time.ts";
 import type { DateTimeFormatPart, DateTimeRangeFormatPart } from "./date-time.ts";
-import type { DateTimePatternData, DateTimeFormatterPrimitive } from "./date-time-data.ts";
+import type {
+  DateTimePatternData,
+  DateTimeFormatterPrimitive,
+  DateTimeTextPrimitive,
+} from "./date-time-data.ts";
 import { LocaleResolver } from "./locale.ts";
 import type { DateTimeLocaleData } from "./locale-data.ts";
 import { getCanonicalLocales } from "./locale-list.ts";
@@ -15,6 +19,10 @@ import { PlainDateTime } from "../temporal/plain-date-time.ts";
 import { PlainYearMonth } from "../temporal/plain-year-month.ts";
 import { PlainMonthDay } from "../temporal/plain-month-day.ts";
 import { ZonedDateTime } from "../temporal/zoned-date-time.ts";
+import { CalendarDateFormatter } from "./calendar-format.ts";
+import type { DateTimePattern } from "./date-pattern.ts";
+import { resolveCalendar } from "../temporal/calendar-environment.ts";
+import type { CalendarContext } from "../temporal/calendar-context.ts";
 import { MS_PER_DAY } from "../date/calendar.ts";
 
 function clip(value: number): number {
@@ -29,16 +37,17 @@ export class NtsDateTimeFormat<
   P extends DateTimeFormatterPrimitive,
 > {
   readonly #configuration: DateTimeFormatConfiguration<D, G>;
-  #formatter: DateTimeFormatter<P> | undefined;
+  #formatter: DateTimeFormatter<DateTimeTextPrimitive> | undefined;
   readonly #clock: () => number;
   readonly #open: (locale: string, pattern: string, timeZone: string) => P;
-  #instant: DateTimeFormatter<P> | undefined;
-  #plainTime: DateTimeFormatter<P> | undefined;
-  #plainDate: DateTimeFormatter<P> | undefined;
-  #plainDateTime: DateTimeFormatter<P> | undefined;
-  #plainYearMonth: DateTimeFormatter<P> | undefined;
-  #plainMonthDay: DateTimeFormatter<P> | undefined;
+  #instant: DateTimeFormatter<DateTimeTextPrimitive> | undefined;
+  #plainTime: DateTimeFormatter<DateTimeTextPrimitive> | undefined;
+  #plainDate: DateTimeFormatter<DateTimeTextPrimitive> | undefined;
+  #plainDateTime: DateTimeFormatter<DateTimeTextPrimitive> | undefined;
+  #plainYearMonth: DateTimeFormatter<DateTimeTextPrimitive> | undefined;
+  #plainMonthDay: DateTimeFormatter<DateTimeTextPrimitive> | undefined;
   #bound: Intl.DateTimeFormat["format"] | undefined;
+  #calendar: CalendarContext | undefined;
 
   constructor(
     resolver: LocaleResolver<D>,
@@ -112,14 +121,32 @@ export class NtsDateTimeFormat<
       };
     return this.#bound;
   }
-  #defaultFormatter(): DateTimeFormatter<P> {
+  #defaultFormatter(): DateTimeFormatter<DateTimeTextPrimitive> {
     if (this.#formatter === undefined) {
       const config = this.#configuration;
-      this.#formatter = new DateTimeFormatter(
-        this.#open(config.dataLocale, config.pattern.pattern, config.timeZone),
-      );
+      this.#formatter = this.#create(config.pattern, config.timeZone);
     }
     return this.#formatter;
+  }
+  #create(pattern: DateTimePattern, zone: string): DateTimeFormatter<DateTimeTextPrimitive> {
+    const config = this.#configuration;
+    const open = this.#open;
+    const locale = config.dataLocale;
+    const primitive = open(locale, pattern.pattern, zone);
+    if (
+      (config.calendar === "chinese" || config.calendar === "dangi") &&
+      (pattern.fieldMask & ((1 << 1) | (1 << 2) | (1 << 3) | (1 << 11) | (1 << 12))) !== 0
+    ) {
+      if (this.#calendar === undefined) this.#calendar = resolveCalendar(config.calendar);
+      if (this.#calendar === undefined)
+        throw new RangeError("Calendar formatting data unavailable");
+      return new DateTimeFormatter(
+        new CalendarDateFormatter(primitive, this.#calendar, pattern, config.patterns, (selected) =>
+          open(locale, selected, zone),
+        ),
+      );
+    }
+    return new DateTimeFormatter(primitive);
   }
   // Slot entry point for Temporal/Date localization. It uses exactly the same
   // pattern selection, calendar validation and provider as public formatting.
@@ -140,61 +167,49 @@ export class NtsDateTimeFormat<
     if ((partial || calendar !== "iso8601") && calendar !== this.#configuration.calendar)
       throw new RangeError("Temporal calendars must match the formatter");
   }
-  private instantFormatter(): DateTimeFormatter<P> {
+  private instantFormatter(): DateTimeFormatter<DateTimeTextPrimitive> {
     if (this.#instant === undefined) {
       const config = this.#configuration;
-      this.#instant = new DateTimeFormatter(
-        this.#open(config.dataLocale, config.instantPattern().pattern, config.timeZone),
-      );
+      this.#instant = this.#create(config.instantPattern(), config.timeZone);
     }
     return this.#instant;
   }
-  private timeFormatter(): DateTimeFormatter<P> {
+  private timeFormatter(): DateTimeFormatter<DateTimeTextPrimitive> {
     if (this.#plainTime === undefined) {
       const config = this.#configuration;
-      this.#plainTime = new DateTimeFormatter(
-        this.#open(config.dataLocale, config.plainTimePattern().pattern, "UTC"),
-      );
+      this.#plainTime = this.#create(config.plainTimePattern(), "UTC");
     }
     return this.#plainTime;
   }
-  private dateFormatter(calendar: string): DateTimeFormatter<P> {
+  private dateFormatter(calendar: string): DateTimeFormatter<DateTimeTextPrimitive> {
     this.requireCalendar(calendar, false);
     if (this.#plainDate === undefined) {
       const config = this.#configuration;
-      this.#plainDate = new DateTimeFormatter(
-        this.#open(config.dataLocale, config.plainDatePattern().pattern, "UTC"),
-      );
+      this.#plainDate = this.#create(config.plainDatePattern(), "UTC");
     }
     return this.#plainDate;
   }
-  private dateTimeFormatter(calendar: string): DateTimeFormatter<P> {
+  private dateTimeFormatter(calendar: string): DateTimeFormatter<DateTimeTextPrimitive> {
     this.requireCalendar(calendar, false);
     if (this.#plainDateTime === undefined) {
       const config = this.#configuration;
-      this.#plainDateTime = new DateTimeFormatter(
-        this.#open(config.dataLocale, config.plainDateTimePattern().pattern, "UTC"),
-      );
+      this.#plainDateTime = this.#create(config.plainDateTimePattern(), "UTC");
     }
     return this.#plainDateTime;
   }
-  private yearMonthFormatter(calendar: string): DateTimeFormatter<P> {
+  private yearMonthFormatter(calendar: string): DateTimeFormatter<DateTimeTextPrimitive> {
     this.requireCalendar(calendar, true);
     if (this.#plainYearMonth === undefined) {
       const config = this.#configuration;
-      this.#plainYearMonth = new DateTimeFormatter(
-        this.#open(config.dataLocale, config.plainPartialDatePattern(true).pattern, "UTC"),
-      );
+      this.#plainYearMonth = this.#create(config.plainPartialDatePattern(true), "UTC");
     }
     return this.#plainYearMonth;
   }
-  private monthDayFormatter(calendar: string): DateTimeFormatter<P> {
+  private monthDayFormatter(calendar: string): DateTimeFormatter<DateTimeTextPrimitive> {
     this.requireCalendar(calendar, true);
     if (this.#plainMonthDay === undefined) {
       const config = this.#configuration;
-      this.#plainMonthDay = new DateTimeFormatter(
-        this.#open(config.dataLocale, config.plainPartialDatePattern(false).pattern, "UTC"),
-      );
+      this.#plainMonthDay = this.#create(config.plainPartialDatePattern(false), "UTC");
     }
     return this.#plainMonthDay;
   }

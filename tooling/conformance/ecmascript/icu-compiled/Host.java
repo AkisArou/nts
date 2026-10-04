@@ -187,9 +187,25 @@ public final class Host {
                             result = patterns.get(Integer.parseInt(first)).stylePattern(Integer.parseInt(decode(fields[2])), Integer.parseInt(decode(fields[3])));
                             break;
                         case "patterns": result = String.join(";", patterns.get(Integer.parseInt(first)).patterns()); break;
+                        case "intervalPattern":
+                            result = patterns.get(Integer.parseInt(first)).intervalPattern(decode(fields[2]), Integer.parseInt(decode(fields[3])));
+                            break;
+                        case "intervalFallback": result = patterns.get(Integer.parseInt(first)).intervalFallback(); break;
+                        case "dateTimeConnector":
+                            result = patterns.get(Integer.parseInt(first)).dateTimeConnector(Integer.parseInt(decode(fields[2])));
+                            break;
                         case "dateOpen":
                             dates.add(new IcuDateFormatter(first, decode(fields[2]), decode(fields[3])));
                             result = Integer.toString(dates.size() - 1);
+                            break;
+                        case "dateOffset":
+                            result = Integer.toString(dates.get(Integer.parseInt(first)).offsetMilliseconds(Double.parseDouble(decode(fields[2]))));
+                            break;
+                        case "dateCalendarFields":
+                            result = Boolean.toString(dates.get(Integer.parseInt(first)).setCalendarFields(
+                                Integer.parseInt(decode(fields[2])), Integer.parseInt(decode(fields[3])),
+                                Integer.parseInt(decode(fields[4])), Boolean.parseBoolean(decode(fields[5])),
+                                Integer.parseInt(decode(fields[6])), Integer.parseInt(decode(fields[7]))));
                             break;
                         case "dateFormat":
                         case "dateRange": {

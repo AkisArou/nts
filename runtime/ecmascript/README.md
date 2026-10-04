@@ -21,8 +21,11 @@ and continuity. The compiled table witness passes corrected goldens and 128,635
 round trips on every backend/memory configuration. Bounded full-range strategies
 and exact month coordinates pass supplementary checks; their actual compiled
 strategy/value acceptance remains open. `--calendar` retains three raw-provider
-full-range failures. DateTimeFormat still needs calendar fields consistent with
-these corrected tables; its independent ICU formatting data has a known mismatch.
+full-range failures. DateTimeFormat now supplies shared Chinese/Korean fields
+to both text providers and selects calendar intervals in TS. The original
+1950–2050 lunisolar formatting consistency test passes. The prepared-field ABI
+witness passes all five configurations with native sanitizers and JVM
+verification; compiled public formatting and the other calendars remain open.
 
 Intl number options now normalize in shared TypeScript and produce the same ICU
 configuration on C and JVM. Currency precision uses pinned provider data;
@@ -79,7 +82,7 @@ Intl-specific locale slice now passes 97/97 within the complete
 2,029/2,029 Intl Temporal checkpoint above.
 The full builtin Temporal host result is 4,567/4,603, with all verdicts and failure
 reasons unchanged in the calendar integration. Date is at 543/594 and
-DateTimeFormat at 217/244. Date's
+DateTimeFormat at 218/244. Date's
 environment/slot follow-up fixes 149 original cases and retains two new excluded
 descriptor failures; its full compiled state witness remains refused. The actual
 C/JVM localization witness typechecks but retains compiler refusals for canonical
