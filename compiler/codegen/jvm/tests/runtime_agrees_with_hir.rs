@@ -123,7 +123,14 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
     let mut refused = 0usize;
     let mut typos: Vec<String> = Vec::new();
     let mut reached: BTreeSet<String> = BTreeSet::new();
+    let mut inline = 0usize;
     for name in nts_core::hir::runtime::declared_names() {
+        // Rendered with no runtime method at all, so there is no jar member
+        // for the checks below to find.
+        if nts_codegen_jvm::ops::inline(name).is_some() {
+            inline += 1;
+            continue;
+        }
         let found = resolve(name);
         if found.is_empty() {
             refused += 1;
@@ -175,7 +182,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
     // It may fall and it may not rise, which means a new runtime helper reds
     // this test until this lane maps it. That is deliberate: the alternative is
     // the lane quietly refusing a call it could render.
-    eprintln!("runtime_agrees_with_hir: {rendered} rendered, {refused} refused by name");
+    eprintln!("runtime_agrees_with_hir: {rendered} rendered, {inline} inline, {refused} refused by name");
     assert!(
         rendered >= 1,
         "this lane rendered no runtime names at all, which means `resolve` is broken rather \
@@ -313,4 +320,11 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 ///
 /// 132 for `nts_string_from_view` and `nts_string_from_required_view`, which
 /// copy a `StringView` a C function returned: native calls again.
-const REFUSED_FLOOR: usize = 132;
+///
+/// 123 when the names this lane renders **inline** stopped being counted as
+/// refused: the nine `nts_presence_*` bits had always been, and
+/// `nts_bigint_box` / `nts_bigint_unbox` (identity here) would have reddened
+/// the test the day `hir::runtime` declared them. `ops::inline` is now the
+/// list, read by the renderer and here; the floor drops to the exact count
+/// rather than leaving nine refusals' room.
+const REFUSED_FLOOR: usize = 123;

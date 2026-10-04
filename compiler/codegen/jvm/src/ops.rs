@@ -1159,6 +1159,28 @@ fn view_external(name: &str, class: &str) -> Option<(&'static str, &'static str,
     })
 }
 
+/// How this lane renders a runtime name it emits inline rather than calls.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Inline {
+    /// The presence bits, which are a generated class's *field* here and so
+    /// out of `runtime/jvm`'s reach without reflection.
+    Presence,
+    /// `nts_bigint_box` / `nts_bigint_unbox`: identity, since a bigint is
+    /// already an immutable `NtsBigInt` reference on this lane.
+    BigIntBox,
+}
+
+/// The runtime names this lane renders inline: the one derivation, read by
+/// the renderer and by `tests/runtime_agrees_with_hir.rs`, which otherwise
+/// counted these as refused because no runtime table names them.
+#[must_use]
+pub fn inline(name: &str) -> Option<Inline> {
+    if name.starts_with("nts_presence_") {
+        return Some(Inline::Presence);
+    }
+    matches!(name, "nts_bigint_box" | "nts_bigint_unbox").then_some(Inline::BigIntBox)
+}
+
 #[must_use]
 pub fn external(name: &str) -> Option<(&'static str, &'static str, String)> {
     let found = core_external(name)
@@ -2564,10 +2586,7 @@ impl Emitter<'_> {
         Ok(Placed::OnStack)
     }
 
-    /// The externals this lane emits inline rather than calls: the presence
-    /// bits, which are a generated class's *field* here and so out of
-    /// `runtime/jvm`'s reach without reflection, and the bigint box, which is
-    /// identity. `None` for every other name.
+    /// Render an external [`inline`] names; `None` for every other name.
     fn inline_external(
         &mut self,
         code: &mut Code,
@@ -2576,13 +2595,10 @@ impl Emitter<'_> {
         args: &[ValueId],
         origin: &nts_semantic_schema::Origin,
     ) -> Option<Result<Placed, Diagnostic>> {
-        if name.starts_with("nts_presence_") {
-            return Some(self.presence(code, pool, name, args, origin));
-        }
-        if matches!(name, "nts_bigint_box" | "nts_bigint_unbox") {
-            return Some(self.bigint_box_identity(code, pool, name, args));
-        }
-        None
+        Some(match inline(name)? {
+            Inline::Presence => self.presence(code, pool, name, args, origin),
+            Inline::BigIntBox => self.bigint_box_identity(code, pool, name, args),
+        })
     }
 
     /// Subscribe a frame to the promise it is waiting on.
