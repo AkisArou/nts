@@ -212,7 +212,7 @@ export function readLayouts(text) {
   for (const line of text.split("\n")) {
     const head = /^(\S.*?) \[([\d ]+)\]$/.exec(line);
     if (head) {
-      current = { name: head[1], base: null, methods: [], ids: head[2].split(" ") };
+      current = { name: head[1], base: null, methods: [], implements: [], fields: 0, ids: head[2].split(" ") };
       byName.set(head[1], current);
       for (const id of head[2].split(" ")) byId.set(id, current);
       continue;
@@ -220,6 +220,9 @@ export function readLayouts(text) {
     if (!current) continue;
     const base = /^ {2}base \d+ -> (.+)$/.exec(line);
     if (base) current.base = base[1];
+    const implemented = /^ {2}implements (.+)$/.exec(line);
+    if (implemented) current.implements.push(...implemented[1].split(/,\s*|\s+/).filter(Boolean));
+    if (/^ {2}\S+ : /.test(line)) current.fields += 1;
     const table = /^ {2}methods (?!:)(.+)$/.exec(line);
     if (table && table[1].includes("#")) current.methods.push(...table[1].split(/ (?=\S+#)/));
   }
@@ -396,7 +399,18 @@ export function unbuiltUnerases(prepared, { byName, byId }) {
   const madeIds = new Set([...prepared.matchAll(/object\.new \S+ : managed<obj#(\d+)>/g)].map((m) => m[1]));
   const covered = new Set();
   for (const id of madeIds) {
-    for (let at = byId.get(id), seen = 0; at && seen < 64; at = byName.get(at.base), seen++) covered.add(at.name);
+    for (let at = byId.get(id), seen = 0; at && seen < 64; at = byName.get(at.base), seen++) {
+      covered.add(at.name);
+      // **An interface a built class implements, if it declares no fields.**
+      // Unerased to it, a value is only dispatched on, and dispatch reads the
+      // object's own descriptor -- so nothing lands at a wrong offset. The case
+      // this rule was first written for, a conditional of two classes unerased
+      // to their interface, was not that defect after all: its segfault was a
+      // frame escape (be4e79d81). An interface *with* fields is still judged,
+      // since a field read at its offsets is the record-misread this rule exists
+      // for (`pendingProps as SuspenseProps`).
+      for (const name of at.implements) if ((byName.get(name)?.fields ?? 1) === 0) covered.add(name);
+    }
   }
   const fns = new Map();
   for (const chunk of prepared.split(/\n(?=(?:export )?(?:declare )?func )/)) {
@@ -731,13 +745,19 @@ function selfTest() {
     ...(guard ? ["  %2 = instanceof %0 against 1 class(es) : bool", "  br %2, b1, b2", "b1:"] : []),
     `  %3 = unerase %0 : managed<obj#${target}>`, "}",
   ].join("\n");
-  if (unbuiltUnerases(unerase(10), lay).length !== 1) return "an unerase to an interface nothing builds was not caught";
-  if (unbuiltUnerases(unerase(10, true), lay).length !== 0) return "an instanceof-guarded unerase was caught";
+  // `Shape` is field-free and implemented by the built `Square`: dispatch only,
+  // so accepted. With a field, or with no built implementor, it is judged.
+  if (unbuiltUnerases(unerase(10), lay).length !== 0) return "an unerase to a field-free interface a built class implements was caught";
+  const withField = readLayouts(shapes.replace("Shape [10]\n", "Shape [10]\n  width : Int { bits: 32, signed: true }\n"));
+  if (unbuiltUnerases(unerase(10), withField).length !== 1) return "an unerase to an interface with fields was not caught";
+  const unbuiltImplementor = readLayouts(shapes.replace("  implements Shape\n", ""));
+  if (unbuiltUnerases(unerase(10), unbuiltImplementor).length !== 1) return "an unerase to an interface nothing built implements was not caught";
+  if (unbuiltUnerases(unerase(10, true), withField).length !== 0) return "an instanceof-guarded unerase was caught";
   if (unbuiltUnerases(unerase(13), lay).length !== 0 || unbuiltUnerases(unerase(6), lay).length !== 0) return "an unerase to a built class or a signature layout was caught";
-  if (unbuiltUnerases(`export ${unerase(10)}`, lay).length !== 0) return "an unerase of an exported function's own parameter was judged";
+  if (unbuiltUnerases(`export ${unerase(10)}`, withField).length !== 0) return "an unerase of an exported function's own parameter was judged";
   const through = `${unerase(10)}\nexport func g(y: erased) -> void {\nb0:\n  %0 = param 0 : erased\n  call f(%0)\n}`;
-  if (unbuiltUnerases(through, lay).length !== 0) return "a parameter filled only by an export's parameter was judged";
-  if (unbuiltUnerases(`${through.replace("export func g", "func g")}`, lay).length !== 1) return "a parameter filled by an unexported caller's parameter was not judged";
+  if (unbuiltUnerases(through, withField).length !== 0) return "a parameter filled only by an export's parameter was judged";
+  if (unbuiltUnerases(`${through.replace("export func g", "func g")}`, withField).length !== 1) return "a parameter filled by an unexported caller's parameter was not judged";
   // An element read out of an exported parameter's array arrives from outside; out
   // of an unexported one with no caller, or out of an array built here, it does not.
   const restElement = (exported, source) => [
@@ -746,9 +766,9 @@ function selfTest() {
     "  %2 = const 1 : f64", `  %3 = array.get ${source === "built" ? "%1" : "%0"}[%2] : erased`,
     "  %4 = unerase %3 : managed<obj#10>", "}",
   ].join("\n");
-  if (unbuiltUnerases(restElement(true, "param"), lay).length !== 0) return "an element of an exported parameter's array was judged";
-  if (unbuiltUnerases(restElement(false, "param"), lay).length !== 1) return "an element of an unexported, uncalled parameter's array was not judged";
-  if (unbuiltUnerases(restElement(true, "built"), lay).length !== 1) return "an element of an array this program built was exempted as boundary";
+  if (unbuiltUnerases(restElement(true, "param"), withField).length !== 0) return "an element of an exported parameter's array was judged";
+  if (unbuiltUnerases(restElement(false, "param"), withField).length !== 1) return "an element of an unexported, uncalled parameter's array was not judged";
+  if (unbuiltUnerases(restElement(true, "built"), withField).length !== 1) return "an element of an array this program built was exempted as boundary";
   const arrays = readLayouts(`${shapes}Element [20 21]\n  value: Erased\nOtherElement [22]\n  value: Erased\n`);
   const fromArray = [
     "func element(xs: managed<[managed<obj#20>]>) -> void {", "b0:",
