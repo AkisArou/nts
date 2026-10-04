@@ -31,7 +31,18 @@
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::escape::Escapes;
-use super::{Callee, Func, HirType, ManagedType, OpKind, Program, ValueId};
+use super::{Absent, Callee, Func, HirType, ManagedType, OpKind, Program, ValueId};
+
+/// Removing an erasure must preserve its tag as well as its payload storage.
+/// A nullable reference carries an absence that its machine type alone cannot
+/// distinguish. Keep that value erased. Valid primitive erasures already carry
+/// `Impossible`, so zero and false can still recover their concrete storage.
+fn payload_without_absence(func: &Func, erased: ValueId) -> Option<ValueId> {
+    let OpKind::Erase { value, absent } = func.value(erased).kind else {
+        return None;
+    };
+    (absent == Absent::Impossible).then_some(value)
+}
 
 /// Specialize the erased arrays a function allocates and keeps. Reports how
 /// many.
@@ -80,9 +91,7 @@ fn single_representation(func: &Func, array: ValueId) -> Option<HirType> {
                 // Only a *fresh* erasure. A value that was already erased
                 // elsewhere has a tag this pass did not choose, and unwrapping
                 // it would be asserting something about the other site.
-                let OpKind::Erase { value: source, .. } = func.value(*value).kind else {
-                    return None;
-                };
+                let source = payload_without_absence(func, *value)?;
                 let representation = func.value(source).ty.clone();
                 match &found {
                     Some(seen) if *seen != representation => return None,
@@ -471,9 +480,7 @@ fn returned_representation(func: &Func) -> Option<HirType> {
         let super::Terminator::Return(Some(returned)) = block.terminator else {
             continue;
         };
-        let OpKind::Erase { value, .. } = func.value(returned).kind else {
-            return None;
-        };
+        let value = payload_without_absence(func, returned)?;
         let representation = func.value(value).ty.clone();
         if representation == HirType::Erased {
             return None;
@@ -565,7 +572,7 @@ fn survey_callers(
                 if program.funcs[at].params.get(position).map(|p| &p.ty) != Some(&HirType::Erased) {
                     continue;
                 }
-                let OpKind::Erase { value, .. } = caller.value(*argument).kind else {
+                let Some(value) = payload_without_absence(caller, *argument) else {
                     sunk.insert(at);
                     continue;
                 };

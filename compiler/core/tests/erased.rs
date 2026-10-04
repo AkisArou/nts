@@ -516,3 +516,31 @@ fn the_narrowing_count_matches_what_changed() {
         prepared.narrowed,
     );
 }
+
+/// Equal payload storage cannot remove the independently carried absence tag.
+#[test]
+fn nullable_reference_recovery_keeps_its_tags_at_every_boundary() {
+    let Some(prepared) = prepared_at(
+        "../../examples/a-recovered-erased-value-keeps-its-absence",
+    ) else {
+        return;
+    };
+    let named = |name: &str| {
+        prepared.program.funcs.iter().find(|func| func.name == name)
+            .unwrap_or_else(|| panic!("no function {name}"))
+    };
+    assert_eq!(named("describe").params[0].ty, HirType::Erased,
+        "a string payload may also carry null or undefined at the call");
+    for name in ["erasedMaybe", "erasedNull"] {
+        assert_eq!(named(name).return_type, HirType::Erased,
+            "{name} must preserve the producer's absence on return");
+    }
+    for name in ["arrayUndefined", "arrayNull"] {
+        assert!(named(name).values.iter().any(|value| matches!(&value.ty,
+            HirType::Managed(hir::ManagedType::Array(element)) if **element == HirType::Erased)),
+            "{name} must keep the element tag beside its string storage");
+    }
+    assert_eq!(named("describeKnown").params[0].ty,
+        HirType::Managed(hir::ManagedType::String),
+        "the nonnullable control still recovers string storage");
+}
