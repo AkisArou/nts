@@ -680,7 +680,7 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
         // two would then disagree on precisely the inputs that matter, with
         // `agrees_with_c` as the oracle because node's arbitrary precision is
         // not one.
-        HirType::BigInt => BIGINT_DESCRIPTOR.to_owned(),
+        HirType::BigInt | HirType::Managed(ManagedType::BoxedBigInt) => BIGINT_DESCRIPTOR.to_owned(),
         // `Map` and `Table` are one runtime class, and their keys and values
         // are erased -- which is why the payload types in `ManagedType::Map` are
         // for the compiler rather than the runtime, exactly as that type's own
@@ -793,6 +793,7 @@ pub fn kind(ty: &HirType) -> Option<Kind> {
             ManagedType::Object(_)
             | ManagedType::String
             | ManagedType::Template
+            | ManagedType::BoxedBigInt
             | ManagedType::Symbol
             | ManagedType::Date
             | ManagedType::Buffer
@@ -835,7 +836,7 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
         Kind::Double => VType::Double,
         Kind::Ref => match ty {
             HirType::Erased => VType::Object(VALUE.to_owned()),
-            HirType::BigInt => VType::Object(BIGINT.to_owned()),
+            HirType::BigInt | HirType::Managed(ManagedType::BoxedBigInt) => VType::Object(BIGINT.to_owned()),
             // **The same split as `descriptor`'s, and the second place it had
             // to be made.** Leaving `Set` on `MAP` here while `descriptor`
             // answered `NtsSet` produced `VerifyError: Type 'nts/rt/NtsSet' is
@@ -920,6 +921,7 @@ pub fn describe(ty: &HirType) -> String {
         HirType::Never => "a value of type `never`".to_owned(),
         HirType::NativePointer(name) => format!("a native pointer to {name}"),
         HirType::BigInt => "a bigint".to_owned(),
+        HirType::Managed(ManagedType::BoxedBigInt) => "a boxed bigint".to_owned(),
         HirType::Erased => "an erased value".to_owned(),
         HirType::Managed(ManagedType::String) => "a string".to_owned(),
         HirType::Managed(ManagedType::Template) => "an immutable template object".to_owned(),

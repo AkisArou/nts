@@ -2373,6 +2373,7 @@ fn render(ty: &HirType) -> String {
         HirType::Float { bits } => format!("f{bits}"),
         HirType::Managed(ManagedType::String) => "managed<str>".to_owned(),
         HirType::Managed(ManagedType::Template) => "managed<template>".to_owned(),
+        HirType::Managed(ManagedType::BoxedBigInt) => "managed<bigint-box>".to_owned(),
         HirType::Managed(ManagedType::Symbol) => "managed<sym>".to_owned(),
         HirType::Managed(ManagedType::Date) => "managed<date>".to_owned(),
         HirType::Managed(ManagedType::Buffer) => "managed<buffer>".to_owned(),

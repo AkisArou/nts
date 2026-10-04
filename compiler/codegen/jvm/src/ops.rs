@@ -2550,6 +2550,41 @@ impl Emitter<'_> {
         Ok(Placed::OnStack)
     }
 
+    /// `nts_bigint_box` and `nts_bigint_unbox`, which are **identity on this
+    /// lane**: a bigint is already an immutable `NtsBigInt` reference, so the
+    /// box `hir::boxing` inserts for C's owned 128-bit payload is the same
+    /// object, and so is its unbox -- the operand is the answer.
+    /// `Erase(BoxedBigInt)` is then `ofTagged(BIGINT, ref)` through
+    /// `tags::of_reference`, and `Unerase` a tag-16 proof and a checkcast.
+    fn bigint_box_identity(&mut self, code: &mut Code, pool: &mut Pool, name: &str, args: &[ValueId]) -> Result<Placed, Diagnostic> {
+        let [operand] = args else {
+            return Err(refuse(self.func, &format!("`{name}` with other than one operand")));
+        };
+        self.load(code, pool, *operand)?;
+        Ok(Placed::OnStack)
+    }
+
+    /// The externals this lane emits inline rather than calls: the presence
+    /// bits, which are a generated class's *field* here and so out of
+    /// `runtime/jvm`'s reach without reflection, and the bigint box, which is
+    /// identity. `None` for every other name.
+    fn inline_external(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        name: &str,
+        args: &[ValueId],
+        origin: &nts_semantic_schema::Origin,
+    ) -> Option<Result<Placed, Diagnostic>> {
+        if name.starts_with("nts_presence_") {
+            return Some(self.presence(code, pool, name, args, origin));
+        }
+        if matches!(name, "nts_bigint_box" | "nts_bigint_unbox") {
+            return Some(self.bigint_box_identity(code, pool, name, args));
+        }
+        None
+    }
+
     /// Subscribe a frame to the promise it is waiting on.
     ///
     /// The `Return` that follows is the suspension itself; this only records
@@ -5821,8 +5856,8 @@ impl Emitter<'_> {
                 // word, so these four are emitted rather than called: a method
                 // in `runtime/jvm` could not reach a generated class's field
                 // without reflection. Six instructions each and no call.
-                if name.starts_with("nts_presence_") {
-                    return self.presence(code, pool, name, args, origin);
+                if let Some(placed) = self.inline_external(code, pool, name, args, origin) {
+                    return placed;
                 }
                 let name = &if self.fused.contains(&value) {
                     crate::fuse::scalar_form(name).unwrap_or(name).to_owned()
