@@ -21,12 +21,23 @@ export { NtsDate, dateNow } from "./date/builtins.ts";
 export type { DateComponent } from "./date/operations.ts";
 export { FixedTimeZone, UTC, disambiguate } from "./time/provider.ts";
 export type { TimeHost, TimeZoneRules } from "./time/provider.ts";
-export { Duration, Instant, PlainTime, PlainDate, dateToInstant } from "./temporal/builtins.ts";
+export {
+  Duration,
+  Instant,
+  PlainTime,
+  PlainDate,
+  PlainDateTime,
+  dateToInstant,
+} from "./temporal/builtins.ts";
 export * as Temporal from "./temporal/builtins.ts";
+export { PlainYearMonth, PlainMonthDay } from "./temporal/builtins.ts";
 export { NumberFormatter } from "./intl/number.ts";
 export { NtsNumberFormat } from "./intl/builtins.ts";
 export { NtsCollator, CollatorConfiguration } from "./intl/collator.ts";
 export { NtsDateTimeFormat } from "./intl/date-time-builtins.ts";
+export { NtsListFormat } from "./intl/list.ts";
+export { NtsRelativeTimeFormat } from "./intl/relative.ts";
+export { NtsPluralRules } from "./intl/plural.ts";
 export { TimeZoneRegistry } from "./time/zone-id.ts";
 export type { NumberFormatterPrimitive } from "./intl/number.ts";
 export { NumberFormatConfiguration } from "./intl/number-options.ts";

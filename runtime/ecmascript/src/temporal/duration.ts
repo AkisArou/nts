@@ -10,7 +10,8 @@ import { roundNanoseconds, checkTimeDuration, divideExact, floorDivide } from ".
 import type { RoundingMode } from "./exact.ts";
 import type { WithResult } from "../contract.ts";
 import { PlainDate } from "./plain-date.ts";
-import { checkDateDay } from "./iso-date.ts";
+import { checkDateDay, addISODate } from "./iso-date.ts";
+import { checkDateTime, roundISODateTimeDifference } from "./iso-date-time.ts";
 import {
   relativePlainDate,
   relativeISODuration,
@@ -111,12 +112,12 @@ export class Duration implements WithResult<
   static compare(
     one: Temporal.DurationLike,
     two: Temporal.DurationLike,
-    opts: Readonly<Temporal.DurationRelativeToOptions> = {},
+    opts: Readonly<Temporal.DurationRelativeToOptions> | undefined = undefined,
   ): number {
     const a = toDuration(one);
     const b = toDuration(two);
-    requireOptions(opts);
-    const relativeTo = opts.relativeTo;
+    if (opts !== undefined) requireOptions(opts);
+    const relativeTo = opts?.relativeTo;
     const relative = relativePlainDate(relativeTo);
     if (
       a.years === b.years &&
@@ -264,6 +265,7 @@ export class Duration implements WithResult<
     const largestText = rawLargest === undefined ? "auto" : String(rawLargest);
     const largest = largestText === "auto" ? -1 : durationUnitIndex(largestText);
     const relativeTo = value.relativeTo;
+    const relative = relativePlainDate(relativeTo);
     const increment = roundingIncrement(value.roundingIncrement);
     const rawMode = value.roundingMode;
     const mode = roundingMode(rawMode === undefined ? "halfExpand" : rawMode);
@@ -271,14 +273,39 @@ export class Duration implements WithResult<
     const smallest = rawSmallest === undefined ? 9 : durationUnitIndex(rawSmallest);
     if (rawLargest === undefined && rawSmallest === undefined)
       throw new RangeError("A rounding unit is required");
+    const actualLargest = largest < 0 ? Math.min(existingLargest, smallest) : largest;
+    if (actualLargest > smallest) throw new RangeError("Invalid duration unit order");
+    if (smallest >= 4) validateIncrement(smallest, increment);
+    if (increment > 1 && smallest <= 3 && actualLargest !== smallest)
+      throw new RangeError("Calendar increments require matching largest and smallest units");
+    if (relative !== undefined) {
+      const day = PlainDate.epochDay(relative);
+      const days = floorDivide(time, NS_PER_DAY);
+      const targetDay = addISODate(
+        day,
+        this.years,
+        this.months,
+        this.weeks,
+        Number(days),
+        "constrain",
+      );
+      const targetTime = Number(time - days * NS_PER_DAY);
+      if (day === targetDay && targetTime === 0) return new Duration();
+      checkDateTime(day, 0);
+      checkDateTime(targetDay, targetTime);
+      return roundISODateTimeDifference(
+        day,
+        0,
+        targetDay,
+        targetTime,
+        actualLargest,
+        smallest,
+        increment,
+        mode,
+      );
+    }
     requireFixedDays(this, relativeTo);
-    return roundDuration(
-      time,
-      smallest,
-      largest < 0 ? Math.min(existingLargest, smallest) : largest,
-      increment,
-      mode,
-    );
+    return roundDuration(time, smallest, actualLargest, increment, mode);
   }
   total(
     value:
@@ -308,12 +335,12 @@ export class Duration implements WithResult<
     requireFixedDays(this);
     return durationTotal(time, unit);
   }
-  toString(opts: Readonly<Temporal.DurationToStringOptions> = {}): string {
+  toString(opts: Readonly<Temporal.DurationToStringOptions> | undefined = undefined): string {
     const time = this.#time;
-    requireOptions(opts);
-    const digits = fractionalSecondDigits(opts.fractionalSecondDigits);
-    const mode = roundingMode(opts.roundingMode);
-    const precision = secondsStringPrecision(opts.smallestUnit, digits);
+    if (opts !== undefined) requireOptions(opts);
+    const digits = fractionalSecondDigits(opts?.fractionalSecondDigits);
+    const mode = roundingMode(opts?.roundingMode);
+    const precision = secondsStringPrecision(opts?.smallestUnit, digits);
     if (precision === -2)
       throw new RangeError("Duration strings require second precision or smaller");
     if (precision < 0 || precision === 9) return formatDuration(this, precision);
@@ -476,7 +503,13 @@ export function unitNanoseconds(index: number): bigint {
 
 // Divide in bigint before converting each result field to Number. This avoids
 // rounding the entire duration before its nanosecond remainder is computed.
-export function balanceDuration(value: bigint, largestUnit: number, years = 0, months = 0, weeks = 0): Duration {
+export function balanceDuration(
+  value: bigint,
+  largestUnit: number,
+  years = 0,
+  months = 0,
+  weeks = 0,
+): Duration {
   let remainder = value;
   let days = 0;
   let hours = 0;

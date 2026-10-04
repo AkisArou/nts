@@ -39,7 +39,11 @@ export class ISOParser {
               this.input.charAt(8) === "t" ||
               this.input.charAt(8) === " "))));
     if (date) {
-      const monthDay = allowShortDate && (input.startsWith("--") || input.charAt(2) === "-");
+      const monthDay =
+        allowShortDate &&
+        (input.startsWith("--") ||
+          input.charAt(2) === "-" ||
+          (this.digitsAtStart(4) && (input.length === 4 || input.charAt(4) === "[")));
       if (monthDay) {
         if (this.take("-") && !this.take("-")) this.fail();
         this.year = 1972;

@@ -11,8 +11,11 @@ compile under NTS's typed object model. No WeakMap is needed for these values.
 
 Intl number options now normalize in shared TypeScript and produce the same ICU
 configuration on C and JVM. Currency precision uses pinned provider data;
-formatting reuses its state and buffers. Locale resolution and the complete
-standard Intl constructors remain in progress.
+formatting reuses its state and buffers. PluralRules shares the digit algorithm
+and supports cardinal/ordinal selection, notation, exact inputs and ranges.
+ListFormat and RelativeTimeFormat have typed implementations and pinned providers.
+Provider/shared assembly probes execute on C, LLVM, JVM and both native memory
+modes. Complete standard bindings and public conformance remain in progress.
 
 ## Regexp
 

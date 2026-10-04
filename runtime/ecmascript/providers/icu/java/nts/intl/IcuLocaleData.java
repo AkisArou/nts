@@ -3,6 +3,12 @@ package nts.intl;
 import com.ibm.icu.text.NumberingSystem;
 import com.ibm.icu.text.Collator;
 import com.ibm.icu.text.DateTimePatternGenerator;
+import com.ibm.icu.text.ListFormatter;
+import com.ibm.icu.text.MeasureFormat;
+import com.ibm.icu.number.NumberFormatter;
+import com.ibm.icu.number.LocalizedNumberFormatter;
+import com.ibm.icu.util.Measure;
+import com.ibm.icu.util.MeasureUnit;
 import com.ibm.icu.lang.UScript;
 import com.ibm.icu.util.Calendar;
 import com.ibm.icu.util.TimeZone;
@@ -84,6 +90,30 @@ public final class IcuLocaleData {
         int code = UScript.getCodeFromName(script);
         if (code < 0 || code == UScript.UNKNOWN || code == UScript.COMMON || code == UScript.INHERITED) return -1;
         return UScript.isRightToLeft(code) ? 1 : 0;
+    }
+    public boolean isHebrew(int codePoint) {
+        return codePoint >= 0 && codePoint <= 0x10ffff && UScript.getScript(codePoint) == UScript.HEBREW;
+    }
+    public String[] durationSamples(String tag) {
+        ULocale locale = ULocale.forLanguageTag(tag);
+        MeasureFormat measures = MeasureFormat.getInstance(locale, MeasureFormat.FormatWidth.NUMERIC);
+        Measure hours = new Measure(7, MeasureUnit.HOUR), minutes = new Measure(8, MeasureUnit.MINUTE), seconds = new Measure(9, MeasureUnit.SECOND);
+        LocalizedNumberFormatter oneDigit = NumberFormatter.forSkeleton("precision-integer group-off integer-width/*0").locale(locale);
+        LocalizedNumberFormatter twoDigits = NumberFormatter.forSkeleton("precision-integer group-off integer-width/*00").locale(locale);
+        return new String[] { measures.formatMeasures(hours, minutes, seconds), measures.formatMeasures(hours, minutes), measures.formatMeasures(minutes, seconds),
+            oneDigit.format(7).toString(), twoDigits.format(7).toString(), twoDigits.format(8).toString(), twoDigits.format(9).toString() };
+    }
+    public String[] listSamples(String tag, int type, int style, String[] tokens) {
+        if (tokens.length != 4 || type < 0 || type > 2 || style < 0 || style > 2)
+            throw new IllegalArgumentException("Invalid list data request");
+        ListFormatter formatter = ListFormatter.getInstance(ULocale.forLanguageTag(tag),
+            ListFormatter.Type.values()[type], ListFormatter.Width.values()[style]);
+        java.util.List<String> items = Arrays.asList(tokens);
+        return new String[] {
+            formatter.format(items.subList(0, 2)),
+            formatter.format(items.subList(0, 3)),
+            formatter.format(items)
+        };
     }
     public int weekData(String region) {
         Calendar calendar = Calendar.getInstance(TimeZone.GMT_ZONE, ULocale.forLanguageTag("und-" + region));

@@ -1,5 +1,5 @@
 // Reproducible provider/ABI validation, independent of the Java-8 core runtime.
-// node runtime/ecmascript/tools/icu.ts [--regenerate-bindings] [--sanitize]
+// node runtime/ecmascript/tools/icu.ts [--regenerate-bindings] [--all-backends] [--sanitize]
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
@@ -24,9 +24,14 @@ const env: NodeJS.ProcessEnv = {
 };
 for (const option of process.argv.slice(2)) {
   if (
-    !["--pinned-native", "--regenerate-bindings", "--sanitize", "--bench", "--android"].includes(
-      option,
-    )
+    ![
+      "--pinned-native",
+      "--regenerate-bindings",
+      "--sanitize",
+      "--bench",
+      "--android",
+      "--all-backends",
+    ].includes(option)
   )
     throw new Error("Unknown option: " + option);
 }
@@ -117,50 +122,33 @@ run("javac", ["--release", "11", "-cp", classpath, "-d", jvm, resolve(fixture, "
 const jvmResult = run("java", ["-Xverify:all", "-cp", classpath, "Drive"]);
 
 const native = resolve(out, "native");
-run(nts, ["emit-c", resolve(fixture, "tsconfig.c.json"), "--rc", "--out", native]);
+mkdirSync(native, { recursive: true });
 const cc = process.env.CC ?? "clang";
+const cxx = process.env.CXX ?? "clang++";
 const cflags = run("pkg-config", ["--cflags", "icu-i18n", "icu-uc"]).split(/\s+/).filter(Boolean);
 const libs = run("pkg-config", ["--static", "--libs", "icu-i18n", "icu-uc"])
   .split(/\s+/)
   .filter(Boolean);
-// Provider code is checked with strict warnings separately from the compiler's
-// emitted code and the existing runtime/vendor sources.
-const object = resolve(native, "nts_icu.o");
-run(cc, [
-  "-std=c11",
-  "-Wall",
-  "-Wextra",
-  "-Werror",
-  ...cflags,
-  "-I" + resolve(root, "runtime/c"),
-  "-c",
-  resolve(provider, "c/nts_icu.c"),
-  "-o",
-  object,
-]);
-const executable = resolve(native, "drive");
 const sanitize = process.argv.includes("--sanitize")
   ? ["-fsanitize=address,undefined", "-fno-omit-frame-pointer"]
   : [];
-const objects: string[] = [];
+// The provider ABI and Unicode source do not depend on the memory mode. Build
+// them once; each backend links its own emitted program and runtime mode.
+const providerObjects: string[] = [];
 for (const [name, source] of [
-  ["program", resolve(native, "program.c")],
-  ["runtime", resolve(root, "runtime/c/nts_runtime.c")],
   ["unicode", resolve(root, "runtime/c/nts_unicode.c")],
   ["provider", resolve(provider, "c/nts_icu.c")],
   ["collator", resolve(provider, "c/nts_icu_collator.c")],
-  ["drive", resolve(fixture, "drive.c")],
+  ["relative", resolve(provider, "c/nts_icu_relative.c")],
 ] as const) {
   const object = resolve(native, name + ".o");
   run(cc, [
     "-std=c11",
     "-O2",
     "-D_GNU_SOURCE",
-    "-DNTS_PROVIDER_RC",
-    ...(name === "collator" ? ["-Wall", "-Wextra", "-Werror"] : []),
+    ...(name === "unicode" ? [] : ["-Wall", "-Wextra", "-Werror"]),
     ...sanitize,
     ...cflags,
-    "-I" + native,
     "-I" + resolve(root, "runtime/c"),
     "-I" + resolve(provider, "c"),
     "-c",
@@ -168,11 +156,11 @@ for (const [name, source] of [
     "-o",
     object,
   ]);
-  objects.push(object);
+  providerObjects.push(object);
 }
-for (const name of ["locale", "number_range", "date_pattern", "date"]) {
+for (const name of ["locale", "number_range", "date_pattern", "date", "plural"]) {
   const object = resolve(native, name + ".o");
-  run(process.env.CXX ?? "clang++", [
+  run(cxx, [
     "-std=c++17",
     "-O2",
     "-Wall",
@@ -187,13 +175,68 @@ for (const name of ["locale", "number_range", "date_pattern", "date"]) {
     "-o",
     object,
   ]);
-  objects.push(object);
+  providerObjects.push(object);
 }
-// ICU's implementation uses C++; its C ABI does not remove the need to link
-// the C++ standard library when consuming a static build. Compile NTS as C,
-// then use the C++ driver for the final link so the platform selects that ABI.
-run(process.env.CXX ?? "clang++", [...sanitize, ...objects, ...libs, "-lm", "-o", executable]);
-const cResult = run(executable, []);
+function buildNative(
+  backend: "c" | "llvm",
+  rc: boolean,
+): { executable: string; result: string; backend: string } {
+  const name = backend + (rc ? "-rc" : "");
+  const directory = backend === "c" && rc ? native : resolve(out, "native-" + name);
+  mkdirSync(directory, { recursive: true });
+  const program = resolve(directory, backend === "c" ? "program.c" : "program.ll");
+  if (backend === "c")
+    run(nts, [
+      "emit-c",
+      resolve(fixture, "tsconfig.c.json"),
+      ...(rc ? ["--rc"] : []),
+      "--out",
+      directory,
+    ]);
+  else
+    writeFileSync(
+      program,
+      run(nts, ["emit-llvm", resolve(fixture, "tsconfig.c.json"), ...(rc ? ["--rc"] : [])]),
+    );
+  const objects = [...providerObjects];
+  for (const [file, input] of [
+    ["program", program],
+    ["runtime", resolve(root, "runtime/c/nts_runtime.c")],
+    ["drive", resolve(fixture, "drive.c")],
+  ] as const) {
+    const object = resolve(directory, file + ".o");
+    run(cc, [
+      "-O2",
+      ...(file === "program" && backend === "llvm"
+        ? []
+        : ["-std=c11", "-D_GNU_SOURCE", ...(rc ? ["-DNTS_PROVIDER_RC"] : [])]),
+      ...sanitize,
+      ...cflags,
+      // LLVM exports the same C ABI; the driver uses only export declarations
+      // from C's generated header, never its generated class layouts or body.
+      "-I" + (backend === "c" ? directory : native),
+      "-I" + resolve(root, "runtime/c"),
+      "-I" + resolve(provider, "c"),
+      "-c",
+      input,
+      "-o",
+      object,
+    ]);
+    objects.push(object);
+  }
+  const executable = resolve(directory, "drive");
+  // ICU's C ABI still needs the platform's C++ runtime for static linking.
+  run(cxx, [...sanitize, ...objects, ...libs, "-lm", "-o", executable]);
+  return { executable, result: run(executable, []), backend: name };
+}
+const primary = buildNative("c", true);
+const executable = primary.executable;
+const nativeResults = [primary];
+if (process.argv.includes("--all-backends")) {
+  nativeResults.push(buildNative("c", false));
+  nativeResults.push(buildNative("llvm", true));
+  nativeResults.push(buildNative("llvm", false));
+}
 let expected =
   "America/New_York:-18000000:1710055800000:1730611800000:1710054000000\n900,719,925,474,099,312,345.00;minusSign=-;integer=12;group=,;integer=345;decimal=.;fraction=678\n𝟗𝟎𝟎,𝟕𝟏𝟗,𝟗𝟐𝟓,𝟒𝟕𝟒,𝟎𝟗𝟗,𝟑𝟏𝟐,𝟑𝟒𝟓.𝟎𝟎;minusSign=-;integer=𝟏𝟐;group=,;integer=𝟑𝟒𝟓;decimal=.;fraction=𝟔𝟕𝟖\n+1.3%\n($1.05)\n¥1,235\nKWD 1.235\n1.2K\n12.4 meters per second\n001\n13\n0.10\nZZZ 1.23\n~$1;currency=$=startRange;integer=3=startRange;literal= – =shared;currency=$=endRange;integer=5=endRange\n1:2:~0\n987,654,321,987,654,321–987,654,321,987,654,322\nbuddhist,gregory;standard,phonebk,search,emoji,eor;h12;h23;Asia/Tokyo;521;522;1;0;-1";
 expected += "\n3:7:0:0:-1:-1:0:-1:-1:-1:-1";
@@ -210,13 +253,24 @@ expected +=
 expected +=
   "\nJan 1, 1970;month=Jan=shared;literal= =shared;day=1=shared;literal=, =shared;year=1970=shared";
 expected += "\nAmerica/New_York:true:true:-04:00:+05:30:+00:00";
-if (jvmResult !== expected || cResult !== expected)
-  throw new Error("ICU compiled ABI mismatch:\nC: " + cResult + "\nJVM: " + jvmResult);
+expected += "\nA, , and B;element=2;literal=2;element=0;literal=6;element=1";
+expected += "\nA e iglesia:A y hielo:A u 11:A o 110\nA וב:A ו-😀\nA, B, C, D rānei";
+expected += "\n0 days ago:in 0 days:today:in 0.001 days:in 0.999 days";
+expected +=
+  "\nin 1,234.5 days;literal=in ;integer=1=day;group=,=day;integer=234=day;decimal=.=day;fraction=5=day;literal= days";
+expected += "\nza 1000 dni\nin 𝟏𝟐.𝟓 days;0=3:7;2=7:8;1=8:10";
+expected += "\none,other:one:one:other:one:other";
+expected += "\none,two,few,other:other:one:two:few:other:other:one:one:other";
+expected += "\nother:one\none:few\nmany:many:one\none:other:one\nother:other";
+if (jvmResult !== expected) throw new Error("ICU compiled ABI mismatch on JVM:\n" + jvmResult);
+for (const result of nativeResults)
+  if (result.result !== expected)
+    throw new Error("ICU compiled ABI mismatch on " + result.backend + ":\n" + result.result);
 console.log(
   JSON.stringify({
     mode: "compiled-ICU-ABI",
     icu: version,
-    backends: ["c-rc", "jvm"],
+    backends: [...nativeResults.map((result) => result.backend), "jvm"],
     exactDecimal: true,
     utf16Parts: true,
     dst: true,
@@ -228,12 +282,27 @@ console.log(
     dateText: true,
     dateRanges: true,
     timeZoneIdentifiers: true,
+    listPatterns: true,
+    relativeTime: true,
+    pluralRules: true,
     sanitize: sanitize.length > 0,
   }),
 );
 if (process.argv.includes("--bench")) {
+  for (const mode of ["scalar", "range"]) {
+    const arguments_ = [mode === "scalar" ? "500000" : "100000", "plural", mode];
+    console.log(run(executable, arguments_));
+    console.log(run("java", ["-Xverify:all", "-cp", classpath, "Drive", ...arguments_]));
+  }
   console.log(run(executable, ["50000"]));
   console.log(run("java", ["-Xverify:all", "-cp", classpath, "Drive", "50000"]));
+  for (const count of [3, 100, 1000]) {
+    const iterations = count === 3 ? "50000" : "2000";
+    console.log(run(executable, [iterations, String(count)]));
+    console.log(
+      run("java", ["-Xverify:all", "-cp", classpath, "Drive", iterations, String(count)]),
+    );
+  }
 }
 if (process.argv.includes("--android")) {
   const sdk = env.ANDROID_HOME ?? env.ANDROID_SDK_ROOT;

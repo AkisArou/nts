@@ -1,0 +1,8 @@
+{
+  "extends": "../../../../tsconfig.fixtures.json",
+  "include": [
+    "src/list-public-c.ts",
+    "handle-types.d.ts",
+    "../../../../runtime/ecmascript/providers/icu/c/bindings.d.ts"
+  ]
+}

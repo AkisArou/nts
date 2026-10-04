@@ -6,6 +6,8 @@ import type {
   CollatorHandleBrand,
   DatePatternHandleBrand,
   DateHandleBrand,
+  RelativeHandleBrand,
+  PluralHandleBrand,
 } from "./handle-brands.d.ts";
 
 // Empty classes describe managed references, whose actual descriptor and
@@ -37,5 +39,13 @@ export class IcuDatePatternHandle {
 }
 export interface IcuDateHandle extends DateHandleBrand {}
 export class IcuDateHandle {
+  private constructor() {}
+}
+export interface IcuRelativeHandle extends RelativeHandleBrand {}
+export class IcuRelativeHandle {
+  private constructor() {}
+}
+export interface IcuPluralHandle extends PluralHandleBrand {}
+export class IcuPluralHandle {
   private constructor() {}
 }

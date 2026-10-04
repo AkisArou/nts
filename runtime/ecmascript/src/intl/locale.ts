@@ -95,7 +95,7 @@ export class LocaleResolver<D extends LocaleData> {
 
   numberLocale(
     requested: readonly string[],
-    options?: Readonly<Intl.NumberFormatOptions>,
+    options?: Readonly<Pick<Intl.NumberFormatOptions, "localeMatcher" | "numberingSystem">>,
   ): NumberLocale {
     if (options === null) throw new TypeError("Intl options must not be null");
     const matcher = stringOption(options?.localeMatcher, matchers, "best fit");

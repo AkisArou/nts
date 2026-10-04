@@ -6,6 +6,55 @@ declare module "c:nts_icu" {
   export type IcuCollatorHandle = import("./handle.ts").IcuCollatorHandle;
   export type IcuDatePatternHandle = import("./handle.ts").IcuDatePatternHandle;
   export type IcuDateHandle = import("./handle.ts").IcuDateHandle;
+  export type IcuRelativeHandle = import("./handle.ts").IcuRelativeHandle;
+  export type IcuPluralHandle = import("./handle.ts").IcuPluralHandle;
+  /** @ntsAbi managed */
+  export function nts_icu_plural_open(
+    locale: string,
+    ordinal: boolean,
+    skeleton: string,
+    negativeSkeleton: string,
+  ): IcuPluralHandle | null;
+  /** @ntsAbi managed */
+  export function nts_icu_plural_categories(handle: IcuPluralHandle): number;
+  /** @ntsAbi managed */
+  export function nts_icu_plural_select(
+    handle: IcuPluralHandle,
+    value: number,
+    negative: boolean,
+  ): number;
+  /** @ntsAbi managed */
+  export function nts_icu_plural_decimal(
+    handle: IcuPluralHandle,
+    value: string,
+    negative: boolean,
+  ): number;
+  /** @ntsAbi managed */
+  export function nts_icu_plural_range(
+    handle: IcuPluralHandle,
+    start: string,
+    end: string,
+    negativeStart: boolean,
+    negativeEnd: boolean,
+  ): number;
+  /** @ntsAbi managed */
+  export function nts_icu_relative_open(locale: string, style: number): IcuRelativeHandle | null;
+  /** @ntsAbi managed */
+  export function nts_icu_relative_format(
+    handle: IcuRelativeHandle,
+    value: number,
+    unit: number,
+    auto: boolean,
+    fields: boolean,
+  ): string | null;
+  /** @ntsAbi managed */
+  export function nts_icu_relative_field_count(handle: IcuRelativeHandle): number;
+  /** @ntsAbi managed */
+  export function nts_icu_relative_field(
+    handle: IcuRelativeHandle,
+    index: number,
+    component: number,
+  ): number;
   /** @ntsAbi managed */
   export function nts_icu_date_open(
     locale: string,
@@ -19,7 +68,12 @@ declare module "c:nts_icu" {
     fields: boolean,
   ): string | null;
   /** @ntsAbi managed */
-  export function nts_icu_date_range(handle: IcuDateHandle, start: number, end: number, fields: boolean): string | null;
+  export function nts_icu_date_range(
+    handle: IcuDateHandle,
+    start: number,
+    end: number,
+    fields: boolean,
+  ): string | null;
   /** @ntsAbi managed */
   export function nts_icu_date_field_count(handle: IcuDateHandle): number;
   /** @ntsAbi managed */
@@ -77,6 +131,17 @@ declare module "c:nts_icu" {
   export function nts_icu_numbering_supported(name: string): boolean;
   /** @ntsAbi managed */
   export function nts_icu_locale_type(key: string, value: string): string | null;
+  /** @ntsAbi managed */
+  export function nts_icu_script_is_hebrew(codePoint: number): boolean;
+  /** @ntsAbi managed */
+  export function nts_icu_locale_list_samples(
+    locale: string,
+    type: number,
+    style: number,
+    tokens: string[],
+  ): string[] | null;
+  /** @ntsAbi managed */
+  export function nts_icu_locale_duration_samples(locale: string): string[] | null;
   /** @ntsAbi managed */
   export function nts_icu_locale_values(tag: string, kind: number): string[] | null;
   /** @ntsAbi managed */

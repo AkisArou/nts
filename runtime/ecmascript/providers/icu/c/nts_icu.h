@@ -3,6 +3,15 @@
 #include "nts_runtime.h"
 
 bool nts_icu_versions_match(void);
+NtsHeader *nts_icu_plural_open(NtsString *locale, bool ordinal, NtsString *skeleton, NtsString *negative_skeleton);
+double nts_icu_plural_categories(NtsHeader *handle);
+double nts_icu_plural_select(NtsHeader *handle, double value, bool negative);
+double nts_icu_plural_decimal(NtsHeader *handle, NtsString *value, bool negative);
+double nts_icu_plural_range(NtsHeader *handle, NtsString *start, NtsString *end, bool negative_start, bool negative_end);
+NtsHeader *nts_icu_relative_open(NtsString *locale, double style);
+NtsString *nts_icu_relative_format(NtsHeader *handle, double value, double unit, bool automatic, bool fields);
+double nts_icu_relative_field_count(NtsHeader *handle);
+double nts_icu_relative_field(NtsHeader *handle, double index, double component);
 NtsHeader *nts_icu_date_open(NtsString *locale, NtsString *pattern, NtsString *time_zone);
 NtsString *nts_icu_date_format(NtsHeader *handle, double milliseconds, bool fields);
 NtsString *nts_icu_date_range(NtsHeader *handle, double start, double end, bool fields);
@@ -27,6 +36,9 @@ NtsString *nts_icu_locale_type(NtsString *key, NtsString *value);
 NtsArray *nts_icu_locale_values(NtsString *tag, double kind);
 NtsString *nts_icu_locale_hour_cycle(NtsString *tag);
 double nts_icu_script_direction(NtsString *script);
+bool nts_icu_script_is_hebrew(double code_point);
+NtsArray *nts_icu_locale_list_samples(NtsString *locale, double type, double style, NtsArray *tokens);
+NtsArray *nts_icu_locale_duration_samples(NtsString *locale);
 double nts_icu_locale_week(NtsString *region);
 NtsString *nts_icu_timezone_canonical(NtsString *name);
 NtsString *nts_icu_timezone_default(void);

@@ -15,6 +15,10 @@ import type {
   DateTimeFormatterPrimitive,
 } from "../../../runtime/ecmascript/src/intl/date-time-data.ts";
 import type { TimeZoneIdentifierData } from "../../../runtime/ecmascript/src/time/zone-data.ts";
+import type { ListPatternData } from "../../../runtime/ecmascript/src/intl/list-data.ts";
+import type { RelativeTimePrimitive } from "../../../runtime/ecmascript/src/intl/relative-data.ts";
+import type { PluralRulesPrimitive } from "../../../runtime/ecmascript/src/intl/plural-data.ts";
+import type { DurationPatternData } from "../../../runtime/ecmascript/src/intl/duration-data.ts";
 
 // Supplementary host validation only. Production adapters call ICU directly;
 // this synchronous bridge lets original Test262 run shared TS inside its realm.
@@ -82,8 +86,14 @@ export function icuHost(root: string) {
     DateTimeLocaleData &
     NumberFormatData &
     CollationData &
+    ListPatternData &
+    DurationPatternData &
     TimeZoneIdentifierData = {
     canonicalize: (tag) => required("canonicalize", tag),
+    durationSamples: (tag) =>
+      required("durationSamples", tag)
+        .split(";")
+        .map((sample) => Buffer.from(sample, "base64").toString("utf16le")),
     maximize: (tag) => required("maximize", tag),
     minimize: (tag) => required("minimize", tag),
     defaultLocale: () => required("defaultLocale"),
@@ -109,6 +119,11 @@ export function icuHost(root: string) {
     timeZones: (region) => values("timeZones", region),
     textDirection: (script) => Number(required("textDirection", script)),
     weekData: (region) => Number(required("weekData", region)),
+    isHebrew: (codePoint) => required("isHebrew", codePoint) === "true",
+    listSamples: (locale, type, style, tokens) =>
+      required("listSamples", locale, type, style, ...tokens)
+        .split(";")
+        .map((value) => Buffer.from(value, "base64").toString("utf16le")),
     timeZoneNames: () => zoneNames,
     canonicalTimeZone: (identifier) => call("canonicalTimeZone", identifier) ?? undefined,
     defaultTimeZoneIdentifier: () => required("defaultTimeZoneIdentifier"),
@@ -176,6 +191,47 @@ export function icuHost(root: string) {
       end: (index) => spans[index]![2]!,
     };
   }
+  function openPlural(
+    locale: string,
+    ordinal: boolean,
+    skeleton: string,
+    negativeSkeleton: string,
+  ): PluralRulesPrimitive {
+    const handle = Number(required("pluralOpen", locale, ordinal, skeleton, negativeSkeleton));
+    return {
+      categories: () => Number(required("pluralCategories", handle)),
+      select: (value, negative) =>
+        Number(
+          required("pluralSelect", handle, Object.is(value, -0) ? "-0" : String(value), negative),
+        ),
+      selectDecimal: (value, negative) =>
+        Number(required("pluralDecimal", handle, value, negative)),
+      selectRange: (start, end, negativeStart, negativeEnd) =>
+        Number(required("pluralRange", handle, start, end, negativeStart, negativeEnd)),
+    };
+  }
+  function openRelative(locale: string, style: number): RelativeTimePrimitive {
+    const handle = Number(required("relativeOpen", locale, style));
+    let spans: number[][] = [];
+    return {
+      format: (value, unit, auto, fields) => {
+        const response = required(
+          "relativeFormat",
+          handle,
+          Object.is(value, -0) ? "-0" : String(value),
+          unit,
+          auto,
+          fields,
+        ).split(";");
+        spans = response.slice(1).map((span) => span.split(",").map(Number));
+        return Buffer.from(response[0]!, "base64").toString("utf16le");
+      },
+      fieldCount: () => spans.length,
+      field: (index) => spans[index]![0]!,
+      start: (index) => spans[index]![1]!,
+      end: (index) => spans[index]![2]!,
+    };
+  }
   let closed = false;
   return {
     data,
@@ -183,6 +239,8 @@ export function icuHost(root: string) {
     openCollator,
     openPatterns,
     openDate,
+    openRelative,
+    openPlural,
     reset: () => {
       required("reset");
     },

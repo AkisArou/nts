@@ -20,6 +20,8 @@ import {
 import { formatPlainTime, timeNanoseconds } from "./iso-time.ts";
 import { regulateTimeField } from "./iso-fields.ts";
 import type { WithResult } from "../contract.ts";
+import { PlainDateTime } from "./plain-date-time.ts";
+import { isPlainCalendar } from "./plain-calendar.ts";
 
 function withinDay(value: bigint): number {
   const remainder = value % NS_PER_DAY;
@@ -28,7 +30,7 @@ function withinDay(value: bigint): number {
 
 function timeFields(
   value: Readonly<Temporal.TimeLikeObject>,
-  options: Readonly<Temporal.OverflowOptions>,
+  options: Readonly<Temporal.OverflowOptions> | undefined,
   previous = 0,
 ): PlainTime {
   // Convert each field as it is read, in the specification's alphabetical
@@ -111,11 +113,15 @@ export class PlainTime implements WithResult<
   }
   static from(
     item: Temporal.PlainTimeLike,
-    options: Readonly<Temporal.OverflowOptions> = {},
+    options: Readonly<Temporal.OverflowOptions> | undefined = undefined,
   ): PlainTime {
     if (item instanceof PlainTime) {
       overflowOption(options);
       return PlainTime.fromNanoseconds(item.#time);
+    }
+    if (item instanceof PlainDateTime) {
+      overflowOption(options);
+      return PlainTime.fromNanoseconds(PlainDateTime.nanoseconds(item));
     }
     if (typeof item === "string") {
       const parsed = new ISOParser(item, true);
@@ -167,34 +173,40 @@ export class PlainTime implements WithResult<
   }
   with(
     timeLike: Readonly<Temporal.PartialTemporalLike<Temporal.TimeLikeObject>>,
-    options: Readonly<Temporal.OverflowOptions> = {},
+    options: Readonly<Temporal.OverflowOptions> | undefined = undefined,
   ): PlainTime {
     // Reading owned state before any input getters also validates the receiver.
     const time = this.#time;
-    if (timeLike === null || typeof timeLike !== "object" || timeLike instanceof PlainTime)
-      throw new TypeError("with requires a partial time field object");
     if (
-      ("calendar" in timeLike && timeLike.calendar !== undefined) ||
-      ("timeZone" in timeLike && timeLike.timeZone !== undefined)
+      timeLike === null ||
+      typeof timeLike !== "object" ||
+      timeLike instanceof PlainTime ||
+      isPlainCalendar(timeLike)
     )
+      throw new TypeError("with requires a partial time field object");
+    const fields: Readonly<
+      Temporal.PartialTemporalLike<Temporal.TimeLikeObject> &
+        Partial<Pick<Temporal.ZonedDateTimeLikeObject, "calendar" | "timeZone">>
+    > = timeLike;
+    if (fields.calendar !== undefined || fields.timeZone !== undefined)
       throw new TypeError("Partial Temporal objects must not include calendar or timeZone");
     return timeFields(timeLike, options, time);
   }
   private difference(
     other: Temporal.PlainTimeLike,
-    options: Readonly<Temporal.RoundingOptionsWithLargestUnit<Temporal.TimeUnit>>,
+    options: Readonly<Temporal.RoundingOptionsWithLargestUnit<Temporal.TimeUnit>> | undefined,
     since: boolean,
   ): Duration {
     const time = this.#time;
     const target = other instanceof PlainTime ? other.#time : PlainTime.from(other).#time;
-    requireOptions(options);
-    const largestOption = options.largestUnit;
+    if (options !== undefined) requireOptions(options);
+    const largestOption = options?.largestUnit;
     if (typeof largestOption === "symbol")
       throw new TypeError("Temporal string options reject Symbols");
     const largestText = largestOption === undefined ? "auto" : String(largestOption);
-    const increment = roundingIncrement(options.roundingIncrement);
-    const mode = roundingMode(options.roundingMode);
-    const smallestOption = options.smallestUnit;
+    const increment = roundingIncrement(options?.roundingIncrement);
+    const mode = roundingMode(options?.roundingMode);
+    const smallestOption = options?.smallestUnit;
     const smallest = timeUnitIndex(smallestOption === undefined ? "nanosecond" : smallestOption);
     const largest = largestText === "auto" ? 4 : timeUnitIndex(largestText);
     if (largest < 4 || smallest < 4 || largest > smallest)
@@ -208,13 +220,17 @@ export class PlainTime implements WithResult<
   }
   until(
     other: Temporal.PlainTimeLike,
-    options: Readonly<Temporal.RoundingOptionsWithLargestUnit<Temporal.TimeUnit>> = {},
+    options:
+      | Readonly<Temporal.RoundingOptionsWithLargestUnit<Temporal.TimeUnit>>
+      | undefined = undefined,
   ): Duration {
     return this.difference(other, options, false);
   }
   since(
     other: Temporal.PlainTimeLike,
-    options: Readonly<Temporal.RoundingOptionsWithLargestUnit<Temporal.TimeUnit>> = {},
+    options:
+      | Readonly<Temporal.RoundingOptionsWithLargestUnit<Temporal.TimeUnit>>
+      | undefined = undefined,
   ): Duration {
     return this.difference(other, options, true);
   }
@@ -250,12 +266,12 @@ export class PlainTime implements WithResult<
       withinDay(roundNanoseconds(BigInt(time), unitNanoseconds(index) * BigInt(increment), mode)),
     );
   }
-  toString(options: Readonly<Temporal.PlainTimeToStringOptions> = {}): string {
+  toString(options: Readonly<Temporal.PlainTimeToStringOptions> | undefined = undefined): string {
     const time = this.#time;
-    requireOptions(options);
-    const digits = fractionalSecondDigits(options.fractionalSecondDigits);
-    const mode = roundingMode(options.roundingMode);
-    const precision = secondsStringPrecision(options.smallestUnit, digits);
+    if (options !== undefined) requireOptions(options);
+    const digits = fractionalSecondDigits(options?.fractionalSecondDigits);
+    const mode = roundingMode(options?.roundingMode);
+    const precision = secondsStringPrecision(options?.smallestUnit, digits);
     const increment =
       precision === -2 ? 60000000000n : BigInt(precision < 0 ? 1 : 10 ** (9 - precision));
     return formatPlainTime(withinDay(roundNanoseconds(BigInt(time), increment, mode)), precision);

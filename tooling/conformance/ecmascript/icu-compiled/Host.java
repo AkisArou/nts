@@ -10,6 +10,8 @@ import nts.intl.IcuNumberFormatter;
 import nts.intl.IcuCollator;
 import nts.intl.IcuDatePatterns;
 import nts.intl.IcuDateFormatter;
+import nts.intl.IcuRelativeFormatter;
+import nts.intl.IcuPluralRules;
 
 /** Host Test262 driver only: calls the same pinned provider as compiled TS. */
 public final class Host {
@@ -37,6 +39,8 @@ public final class Host {
         ArrayList<IcuCollator> collators = new ArrayList<>();
         ArrayList<IcuDatePatterns> patterns = new ArrayList<>();
         ArrayList<IcuDateFormatter> dates = new ArrayList<>();
+        ArrayList<IcuRelativeFormatter> relatives = new ArrayList<>();
+        ArrayList<IcuPluralRules> plurals = new ArrayList<>();
         try (BufferedReader input = new BufferedReader(new FileReader(args[0]));
              PrintWriter output = new PrintWriter(new FileWriter(args[1]), true)) {
             String line;
@@ -64,11 +68,47 @@ public final class Host {
                         case "hourCycle": result = data.hourCycle(first); break;
                         case "timeZones": result = String.join(";", data.timeZones(first)); break;
                         case "textDirection": result = Integer.toString(data.textDirection(first)); break;
+                        case "isHebrew": result = Boolean.toString(data.isHebrew(Integer.parseInt(first))); break;
+                        case "durationSamples": {
+                            String[] samples = data.durationSamples(first);
+                            for (int index = 0; index < samples.length; index++) samples[index] = encode(samples[index]);
+                            result = String.join(";", samples);
+                            break;
+                        }
+                        case "listSamples": {
+                            String[] tokens = { decode(fields[4]), decode(fields[5]), decode(fields[6]), decode(fields[7]) };
+                            String[] samples = data.listSamples(first, Integer.parseInt(decode(fields[2])), Integer.parseInt(decode(fields[3])), tokens);
+                            for (int index = 0; index < samples.length; index++) samples[index] = encode(samples[index]);
+                            result = String.join(";", samples);
+                            break;
+                        }
                         case "weekData": result = Integer.toString(data.weekData(first)); break;
                         case "timeZoneNames": result = String.join(";", data.timeZoneNames()); break;
                         case "canonicalTimeZone": result = data.canonicalTimeZone(first); break;
                         case "defaultTimeZoneIdentifier": result = data.defaultTimeZoneIdentifier(); break;
-                        case "reset": formatters.clear(); collators.clear(); patterns.clear(); dates.clear(); result = ""; break;
+                        case "reset": formatters.clear(); collators.clear(); patterns.clear(); dates.clear(); relatives.clear(); plurals.clear(); result = ""; break;
+                        case "pluralOpen":
+                            plurals.add(new IcuPluralRules(first, Boolean.parseBoolean(decode(fields[2])), decode(fields[3]), decode(fields[4])));
+                            result = Integer.toString(plurals.size() - 1);
+                            break;
+                        case "pluralCategories": result = Integer.toString(plurals.get(Integer.parseInt(first)).categories()); break;
+                        case "pluralSelect": result = Integer.toString(plurals.get(Integer.parseInt(first)).select(Double.parseDouble(decode(fields[2])), Boolean.parseBoolean(decode(fields[3])))); break;
+                        case "pluralDecimal": result = Integer.toString(plurals.get(Integer.parseInt(first)).selectDecimal(decode(fields[2]), Boolean.parseBoolean(decode(fields[3])))); break;
+                        case "pluralRange": result = Integer.toString(plurals.get(Integer.parseInt(first)).selectRange(decode(fields[2]), decode(fields[3]), Boolean.parseBoolean(decode(fields[4])), Boolean.parseBoolean(decode(fields[5])))); break;
+                        case "relativeOpen":
+                            relatives.add(new IcuRelativeFormatter(first, Integer.parseInt(decode(fields[2]))));
+                            result = Integer.toString(relatives.size() - 1);
+                            break;
+                        case "relativeFormat": {
+                            IcuRelativeFormatter formatter = relatives.get(Integer.parseInt(first));
+                            String formatted = formatter.format(Double.parseDouble(decode(fields[2])), Integer.parseInt(decode(fields[3])),
+                                Boolean.parseBoolean(decode(fields[4])), Boolean.parseBoolean(decode(fields[5])));
+                            StringBuilder encoded = new StringBuilder(encode(formatted));
+                            for (int index = 0; index < formatter.fieldCount(); index++)
+                                encoded.append(';').append(formatter.field(index)).append(',').append(formatter.start(index)).append(',').append(formatter.end(index));
+                            result = encoded.toString();
+                            break;
+                        }
                         case "patternOpen":
                             patterns.add(new IcuDatePatterns(first));
                             result = Integer.toString(patterns.size() - 1);

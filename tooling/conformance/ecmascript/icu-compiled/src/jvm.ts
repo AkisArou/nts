@@ -3,6 +3,8 @@ import { IcuLocaleData } from "../../../../../runtime/ecmascript/providers/icu/j
 import { IcuCollator } from "../../../../../runtime/ecmascript/providers/icu/java/collator.ts";
 import { IcuDatePatterns } from "../../../../../runtime/ecmascript/providers/icu/java/date-pattern.ts";
 import { IcuDateFormatter } from "../../../../../runtime/ecmascript/providers/icu/java/date-time.ts";
+import { IcuRelativeFormatter } from "../../../../../runtime/ecmascript/providers/icu/java/relative.ts";
+import { IcuPluralRules } from "../../../../../runtime/ecmascript/providers/icu/java/plural.ts";
 import {
   IcuNumberData,
   IcuNumberFormatter,
@@ -17,6 +19,11 @@ import {
   datePatternDigest,
   dateTextDigest,
   timeZoneDataDigest,
+  listDigest,
+  listBenchmark,
+  relativeDigest,
+  pluralDigest,
+  pluralBenchmark,
   formatBenchmark,
 } from "./common.ts";
 export function main(): string {
@@ -49,9 +56,28 @@ export function main(): string {
     "\n" +
     dateTextDigest((locale, pattern, timeZone) => new IcuDateFormatter(locale, pattern, timeZone)) +
     "\n" +
-    timeZoneDataDigest(new IcuLocaleData())
+    timeZoneDataDigest(new IcuLocaleData()) +
+    "\n" +
+    listDigest(new IcuLocaleData()) +
+    "\n" +
+    relativeDigest((locale, style) => new IcuRelativeFormatter(locale, style)) +
+    "\n" +
+    pluralDigest(
+      (locale, ordinal, skeleton, negativeSkeleton) =>
+        new IcuPluralRules(locale, ordinal, skeleton, negativeSkeleton),
+    )
   );
 }
 export function benchmark(iterations: number): number {
   return formatBenchmark(new IcuNumberFormatter("en-US", ".00##"), iterations);
+}
+export function benchmarkList(iterations: number, count: number): number {
+  return listBenchmark(new IcuLocaleData(), iterations, count);
+}
+export function benchmarkPlural(iterations: number, range: boolean): number {
+  return pluralBenchmark(
+    new IcuPluralRules("pl", false, ".### rounding-mode-half-up group-off", ""),
+    iterations,
+    range,
+  );
 }

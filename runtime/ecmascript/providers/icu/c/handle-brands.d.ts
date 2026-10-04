@@ -6,6 +6,8 @@ declare const rangeHandle: unique symbol;
 declare const collatorHandle: unique symbol;
 declare const datePatternHandle: unique symbol;
 declare const dateHandle: unique symbol;
+declare const relativeHandle: unique symbol;
+declare const pluralHandle: unique symbol;
 export interface TimeZoneHandleBrand {
   readonly [timeZoneHandle]: never;
 }
@@ -26,4 +28,10 @@ export interface DatePatternHandleBrand {
 }
 export interface DateHandleBrand {
   readonly [dateHandle]: never;
+}
+export interface RelativeHandleBrand {
+  readonly [relativeHandle]: never;
+}
+export interface PluralHandleBrand {
+  readonly [pluralHandle]: never;
 }

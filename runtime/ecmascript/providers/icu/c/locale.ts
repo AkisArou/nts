@@ -11,21 +11,38 @@ import {
   nts_icu_locale_values,
   nts_icu_locale_hour_cycle,
   nts_icu_script_direction,
+  nts_icu_script_is_hebrew,
+  nts_icu_locale_list_samples,
+  nts_icu_locale_duration_samples,
   nts_icu_locale_week,
   nts_icu_collation_defaults,
   nts_icu_timezone_canonical,
   nts_icu_timezone_default,
 } from "c:nts_icu";
 import type { IcuLocaleHandle } from "c:nts_icu";
-import type { CollationData, LocaleInfoData, DateTimeLocaleData } from "../../../src/intl/locale-data.ts";
+import type {
+  CollationData,
+  LocaleInfoData,
+  DateTimeLocaleData,
+} from "../../../src/intl/locale-data.ts";
 import type { TimeZoneIdentifierData } from "../../../src/time/zone-data.ts";
+import type { ListPatternData } from "../../../src/intl/list-data.ts";
+import type { DurationPatternData } from "../../../src/intl/duration-data.ts";
 
 function required(value: string | null): string {
   if (value === null) throw new RangeError("ICU locale data operation failed");
   return value;
 }
 
-export class IcuLocaleData implements LocaleInfoData, DateTimeLocaleData, CollationData, TimeZoneIdentifierData {
+export class IcuLocaleData
+  implements
+    LocaleInfoData,
+    DateTimeLocaleData,
+    CollationData,
+    TimeZoneIdentifierData,
+    ListPatternData,
+    DurationPatternData
+{
   private readonly handle: IcuLocaleHandle;
   constructor() {
     const handle = nts_icu_locale_open();
@@ -34,6 +51,11 @@ export class IcuLocaleData implements LocaleInfoData, DateTimeLocaleData, Collat
   }
   canonicalize(tag: string): string {
     return required(nts_icu_locale_transform(tag, 0));
+  }
+  durationSamples(locale: string): readonly string[] {
+    const samples = nts_icu_locale_duration_samples(locale);
+    if (samples === null) throw new Error("ICU duration samples could not be read");
+    return samples;
   }
   maximize(tag: string): string {
     return required(nts_icu_locale_transform(tag, 1));
@@ -103,6 +125,14 @@ export class IcuLocaleData implements LocaleInfoData, DateTimeLocaleData, Collat
   }
   textDirection(script: string): number {
     return nts_icu_script_direction(script);
+  }
+  isHebrew(codePoint: number): boolean {
+    return nts_icu_script_is_hebrew(codePoint);
+  }
+  listSamples(locale: string, type: number, style: number, tokens: string[]): string[] {
+    const samples = nts_icu_locale_list_samples(locale, type, style, tokens);
+    if (samples === null) throw new RangeError("ICU list data operation failed");
+    return samples;
   }
   weekData(region: string): number {
     const value = nts_icu_locale_week(region);

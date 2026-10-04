@@ -3,6 +3,9 @@ extern "C" {
 }
 #include <unicode/locid.h>
 #include <unicode/localematcher.h>
+#include <unicode/listformatter.h>
+#include <unicode/measfmt.h>
+#include <unicode/numberformatter.h>
 #include <unicode/numsys.h>
 #include <unicode/uloc.h>
 #include <unicode/ucal.h>
@@ -142,6 +145,77 @@ extern "C" NtsString *nts_icu_locale_type(NtsString *key, NtsString *value) {
 static const NtsDescriptor strings = {
     NTS_KIND_ARRAY, sizeof(NtsString *), 1, 0, nullptr, nullptr, "ICU strings",
     0, nullptr, NTS_ARRAY_REFERENCE, 0, nullptr};
+
+extern "C" NtsArray *nts_icu_locale_duration_samples(NtsString *tag) {
+  if (!nts_icu_versions_match()) return nullptr;
+  std::string text;
+  if (!ascii(tag, text)) return nullptr;
+  UErrorCode status = U_ZERO_ERROR;
+  const Locale locale = Locale::forLanguageTag(text, status);
+  icu::MeasureFormat formatter(locale, UMEASFMT_WIDTH_NUMERIC, status);
+  const icu::Measure measures[] = {
+      icu::Measure(icu::Formattable(7), icu::MeasureUnit::createHour(status), status),
+      icu::Measure(icu::Formattable(8), icu::MeasureUnit::createMinute(status), status),
+      icu::Measure(icu::Formattable(9), icu::MeasureUnit::createSecond(status), status)};
+  icu::UnicodeString samples[7];
+  icu::FieldPosition position(UNUM_INTEGER_FIELD);
+  formatter.formatMeasures(measures, 3, samples[0], position, status);
+  formatter.formatMeasures(measures, 2, samples[1], position, status);
+  formatter.formatMeasures(measures + 1, 2, samples[2], position, status);
+  const auto one = icu::number::NumberFormatter::forSkeleton(u"precision-integer group-off integer-width/*0", status).locale(locale);
+  const auto two = icu::number::NumberFormatter::forSkeleton(u"precision-integer group-off integer-width/*00", status).locale(locale);
+  samples[3] = one.formatInt(7, status).toString(status);
+  for (int32_t index = 4; index < 7; index++) samples[index] = two.formatInt(index + 3, status).toString(status);
+  if (U_FAILURE(status)) return nullptr;
+  NtsArray *result = nts_array_new(&strings, 7);
+  for (int32_t index = 0; index < 7; index++) {
+    const icu::UnicodeString &sample = samples[index];
+    if (sample.isBogus()) { nts_release(reinterpret_cast<NtsHeader *>(result)); return nullptr; }
+    NtsString *value = nts_str_raw(static_cast<uint32_t>(sample.length()), 1);
+    for (int32_t unit = 0; unit < sample.length(); unit++) NTS_ELEMENTS(value, uint16_t)[unit] = sample.charAt(unit);
+    NTS_ITEMS(result, NtsString *)[index] = value;
+  }
+  return result;
+}
+
+extern "C" bool nts_icu_script_is_hebrew(double code_point) {
+  if (!isfinite(code_point) || code_point < 0 || code_point > 0x10ffff || code_point != floor(code_point)) return false;
+  UErrorCode status = U_ZERO_ERROR;
+  const UScriptCode script = uscript_getScript(static_cast<UChar32>(code_point), &status);
+  return U_SUCCESS(status) && script == USCRIPT_HEBREW;
+}
+
+extern "C" NtsArray *nts_icu_locale_list_samples(NtsString *tag, double type, double style, NtsArray *tokens) {
+  if (!nts_icu_versions_match() || tokens->header.length != 4 || !isfinite(type) || !isfinite(style)
+      || type < 0 || type > 2 || style < 0 || style > 2 || type != floor(type) || style != floor(style)) return nullptr;
+  std::string text;
+  if (!ascii(tag, text)) return nullptr;
+  UErrorCode status = U_ZERO_ERROR;
+  const Locale locale = Locale::forLanguageTag(text, status);
+  std::unique_ptr<icu::ListFormatter> formatter(icu::ListFormatter::createInstance(locale,
+      static_cast<UListFormatterType>(static_cast<int32_t>(type)),
+      static_cast<UListFormatterWidth>(static_cast<int32_t>(style)), status));
+  if (U_FAILURE(status) || !formatter) return nullptr;
+  icu::UnicodeString items[4];
+  for (int32_t index = 0; index < 4; index++) {
+    const NtsString *token = NTS_ITEMS(tokens, NtsString *)[index];
+    if (token == nullptr || token->length > INT32_MAX) return nullptr;
+    for (uint32_t unit = 0; unit < token->length; unit++) items[index].append(static_cast<char16_t>(nts_unit(token, unit)));
+  }
+  NtsArray *result = nts_array_new(&strings, 3);
+  for (int32_t index = 0; index < 3; index++) {
+    icu::UnicodeString formatted;
+    formatter->format(items, index + 2, formatted, status);
+    if (U_FAILURE(status) || formatted.isBogus()) {
+      nts_release(reinterpret_cast<NtsHeader *>(result));
+      return nullptr;
+    }
+    NtsString *value = nts_str_raw(static_cast<uint32_t>(formatted.length()), 1);
+    for (int32_t unit = 0; unit < formatted.length(); unit++) NTS_ELEMENTS(value, uint16_t)[unit] = formatted.charAt(unit);
+    NTS_ITEMS(result, NtsString *)[index] = value;
+  }
+  return result;
+}
 
 extern "C" NtsArray *nts_icu_locale_values(NtsString *tag, double kind) {
   std::string text;

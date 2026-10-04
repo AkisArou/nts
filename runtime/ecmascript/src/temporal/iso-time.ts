@@ -1,14 +1,34 @@
 import { integerWithTruncation } from "./options.ts";
 import { pad } from "../date/format.ts";
 
-export function timeNanoseconds(hour: number, minute: number, second: number, millisecond: number, microsecond: number, nanosecond: number): number {
+export function timeNanoseconds(
+  hour: number,
+  minute: number,
+  second: number,
+  millisecond: number,
+  microsecond: number,
+  nanosecond: number,
+): number {
   const h = integerWithTruncation(hour);
   const m = integerWithTruncation(minute);
   const s = integerWithTruncation(second);
   const ms = integerWithTruncation(millisecond);
   const us = integerWithTruncation(microsecond);
   const ns = integerWithTruncation(nanosecond);
-  if (h < 0 || h > 23 || m < 0 || m > 59 || s < 0 || s > 59 || ms < 0 || ms > 999 || us < 0 || us > 999 || ns < 0 || ns > 999)
+  if (
+    h < 0 ||
+    h > 23 ||
+    m < 0 ||
+    m > 59 ||
+    s < 0 ||
+    s > 59 ||
+    ms < 0 ||
+    ms > 999 ||
+    us < 0 ||
+    us > 999 ||
+    ns < 0 ||
+    ns > 999
+  )
     throw new RangeError("Temporal time field outside range");
   return ((h * 60 + m) * 60 + s) * 1e9 + ms * 1e6 + us * 1000 + ns;
 }

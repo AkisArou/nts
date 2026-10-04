@@ -361,6 +361,39 @@ export class DateTimeFormatConfiguration<
     return this.match(this.withDefaults({ ...this.components, timeZoneName: undefined }, 0, 2));
   }
 
+  plainPartialDatePattern(yearMonth: boolean): DateTimePattern {
+    if (this.dateStyle === undefined && this.timeStyle !== undefined)
+      throw new TypeError("A time style cannot format a partial date");
+    const styles = this.dateStyle !== undefined;
+    const fields = styles ? this.pattern.components : this.components;
+    const relevant =
+      fields.month !== undefined ||
+      (yearMonth ? fields.year !== undefined : fields.day !== undefined);
+    const others =
+      fields.weekday !== undefined ||
+      (yearMonth ? fields.day !== undefined : fields.year !== undefined) ||
+      fields.dayPeriod !== undefined ||
+      fields.hour !== undefined ||
+      fields.minute !== undefined ||
+      fields.second !== undefined ||
+      fields.fractionalSecondDigits !== undefined;
+    if (!styles && !relevant && others)
+      throw new TypeError("Components cannot format this partial date");
+    if (
+      styles &&
+      !others &&
+      fields.timeZoneName === undefined &&
+      (yearMonth || fields.era === undefined)
+    )
+      return this.pattern;
+    return this.match({
+      era: yearMonth ? fields.era : undefined,
+      year: yearMonth ? (relevant || styles ? fields.year : "numeric") : undefined,
+      month: relevant || styles ? fields.month : "numeric",
+      day: !yearMonth ? (relevant || styles ? fields.day : "numeric") : undefined,
+    });
+  }
+
   private match(fields: Readonly<Intl.DateTimeFormatOptions>): DateTimePattern {
     let pattern: DateTimePattern;
     if (this.matcher === "basic") {

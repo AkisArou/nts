@@ -194,6 +194,8 @@ for (const selected of selection) {
     __intlCollatorOpen: intlProvider?.openCollator,
     __intlPatternOpen: intlProvider?.openPatterns,
     __intlDateOpen: intlProvider?.openDate,
+    __intlRelativeOpen: intlProvider?.openRelative,
+    __intlPluralOpen: intlProvider?.openPlural,
   });
   context.__impl = await candidate(context);
   if (profile === "intl") {
@@ -217,8 +219,20 @@ for (const selected of selection) {
         constructor(locales, options) { super(resolver, timeZones, __intlPatternOpen, __intlDateOpen, __clock, locales, options); }
         static supportedLocalesOf(locales, options) { return __impl.supportedLocalesOf(resolver, locales, options); }
       }
+      class ListFormat extends __impl.NtsListFormat {
+        constructor(locales = undefined, options) { super(resolver, locales, options); }
+        static supportedLocalesOf(locales, options = undefined) { return __impl.supportedLocalesOf(resolver, locales, options); }
+      }
+      class RelativeTimeFormat extends __impl.NtsRelativeTimeFormat {
+        constructor(locales = undefined, options) { super(resolver, __intlRelativeOpen, locales, options); }
+        static supportedLocalesOf(locales, options = undefined) { return __impl.supportedLocalesOf(resolver, locales, options); }
+      }
+      class PluralRules extends __impl.NtsPluralRules {
+        constructor(locales = undefined, options) { super(resolver, __intlPluralOpen, locales, options); }
+        static supportedLocalesOf(locales, options = undefined) { return __impl.supportedLocalesOf(resolver, locales, options); }
+      }
       globalThis.Intl = {
-        NumberFormat, Locale, Collator, DateTimeFormat,
+        NumberFormat, Locale, Collator, DateTimeFormat, ListFormat, RelativeTimeFormat, PluralRules,
         getCanonicalLocales(locales) { return __impl.getCanonicalLocales(__intlData, locales); },
       };
       globalThis.Temporal = __temporal;

@@ -1,6 +1,12 @@
 {
+  "nts.intl.IcuRelativeFormatter": {
+    "nullability": { "format(DIZZ)Ljava/lang/String;": "nonnull" }
+  },
   "nts.intl.IcuDateFormatter": {
-    "nullability": { "format(DZ)Ljava/lang/String;": "nonnull", "formatRange(DDZ)Ljava/lang/String;": "nonnull" }
+    "nullability": {
+      "format(DZ)Ljava/lang/String;": "nonnull",
+      "formatRange(DDZ)Ljava/lang/String;": "nonnull"
+    }
   },
   "nts.intl.IcuDatePatterns": {
     "nullability": {
@@ -26,7 +32,9 @@
       "timeZones(Ljava/lang/String;)[Ljava/lang/String;": "nonnull",
       "timeZoneNames()[Ljava/lang/String;": "nonnull",
       "canonicalTimeZone(Ljava/lang/String;)Ljava/lang/String;": "nullable",
-      "defaultTimeZoneIdentifier()Ljava/lang/String;": "nonnull"
+      "defaultTimeZoneIdentifier()Ljava/lang/String;": "nonnull",
+      "listSamples(Ljava/lang/String;II[Ljava/lang/String;)[Ljava/lang/String;": "nonnull",
+      "durationSamples(Ljava/lang/String;)[Ljava/lang/String;": "nonnull"
     }
   },
   "nts.intl.IcuTimeZone": {

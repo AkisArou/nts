@@ -6,10 +6,7 @@ export function stringOption<T extends string>(
   fallback: T,
 ): T {
   if (value === undefined) return fallback;
-  // String(symbol) is a special constructor case, whereas ECMA-402's
-  // abstract ToString conversion must reject a Symbol.
-  if (typeof value === "symbol") throw new TypeError("Intl string options reject Symbols");
-  const text = String(value);
+  const text = stringValue(value);
   for (let i = 0; i < allowed.length; i++) {
     const candidate = allowed[i]!;
     if (text === candidate) return candidate;
@@ -19,8 +16,21 @@ export function stringOption<T extends string>(
 
 export function optionalString(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
+  return stringValue(value);
+}
+
+export function stringValue(value: string): string {
+  // String(symbol) permits a special constructor conversion; abstract ToString
+  // rejects it. Public typed inputs generally rule it out before this boundary.
   if (typeof value === "symbol") throw new TypeError("Intl string options reject Symbols");
   return String(value);
+}
+
+export function numberValue(value: number): number {
+  // Explicit Number(bigint) is permitted, unlike the abstract ToNumber operation.
+  if (typeof value === "bigint" || typeof value === "symbol")
+    throw new TypeError("Intl numeric inputs reject BigInts and Symbols");
+  return Number(value);
 }
 
 export function numberOption(
@@ -30,11 +40,7 @@ export function numberOption(
   fallback: number,
 ): number {
   if (value === undefined) return fallback;
-  // Number(bigint) permits an explicit conversion that abstract ToNumber does
-  // not. The public typed options normally rule these inputs out already.
-  if (typeof value === "bigint" || typeof value === "symbol")
-    throw new TypeError("Intl numeric options reject BigInts and Symbols");
-  const number = Number(value);
+  const number = numberValue(value);
   if (!(number >= minimum && number <= maximum))
     throw new RangeError("Intl numeric option is out of range");
   return Math.floor(number);

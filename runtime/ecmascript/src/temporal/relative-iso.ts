@@ -1,6 +1,7 @@
 import { PlainDate } from "./plain-date.ts";
 import { ISOParser } from "./iso-parser.ts";
-import { addISODate, checkDateDay, differenceISODate } from "./iso-date.ts";
+import { addISODate, checkDateDay } from "./iso-date.ts";
+import { differenceISODate } from "./iso-date-duration.ts";
 import { floorDivide, NS_PER_DAY, checkTimeDuration, divideExact } from "./exact.ts";
 
 export function relativePlainDate(

@@ -24,14 +24,19 @@ import {
   regulateISODate,
   addISODate,
   dateUnitIndex,
-  roundISODateDifference,
   isoWeek,
   isoWeekYear,
   formatISODate,
 } from "./iso-date.ts";
 import type { WithResult } from "../contract.ts";
+import { roundISODateDifference } from "./iso-date-duration.ts";
 import { positiveDateField, isoMonthCode, resolveISOFields } from "./iso-fields.ts";
-import { requireISOCalendar, requireISOCalendarString, calendarName, isoCalendarAnnotation } from "./calendar-id.ts";
+import { requireISOCalendar, calendarName, isoCalendarAnnotation } from "./calendar-id.ts";
+import { PlainDateTime } from "./plain-date-time.ts";
+import { PlainTime } from "./plain-time.ts";
+import { requireISOCalendarLike, isPlainCalendar } from "./plain-calendar.ts";
+import { PlainYearMonth } from "./plain-year-month.ts";
+import { PlainMonthDay } from "./plain-month-day.ts";
 function fieldsDay(
   value: Readonly<Temporal.PartialTemporalLike<Temporal.DateLikeObject>>,
   options: Readonly<Temporal.OverflowOptions> | undefined,
@@ -66,20 +71,27 @@ function dateString(day: number, options?: Readonly<Temporal.PlainDateToStringOp
 // extend this contract as they become executable; missing APIs stay visible.
 export class PlainDate implements WithResult<
   WithResult<
-    Omit<
-      Temporal.PlainDate,
-      | "toPlainYearMonth"
-      | "toPlainMonthDay"
-      | "toPlainDateTime"
-      | "toZonedDateTime"
-      | "toLocaleString"
-      | typeof Symbol.toStringTag
+    WithResult<
+      WithResult<
+        WithResult<
+          Omit<
+            Temporal.PlainDate,
+            "toZonedDateTime" | "toLocaleString" | typeof Symbol.toStringTag
+          >,
+          Temporal.PlainDate,
+          PlainDate
+        >,
+        Temporal.Duration,
+        Duration
+      >,
+      Temporal.PlainDateTime,
+      PlainDateTime
     >,
-    Temporal.PlainDate,
-    PlainDate
+    Temporal.PlainYearMonth,
+    PlainYearMonth
   >,
-  Temporal.Duration,
-  Duration
+  Temporal.PlainMonthDay,
+  PlainMonthDay
 > {
   readonly #day: number;
   constructor(isoYear: number, isoMonth: number, isoDay: number, calendar = "iso8601") {
@@ -98,11 +110,15 @@ export class PlainDate implements WithResult<
   }
   static from(
     value: Temporal.PlainDateLike,
-    options?: Readonly<Temporal.OverflowOptions>,
+    options: Readonly<Temporal.OverflowOptions> | undefined = undefined,
   ): PlainDate {
     if (value instanceof PlainDate) {
       overflowOption(options);
       return PlainDate.fromDay(value.#day);
+    }
+    if (value instanceof PlainDateTime) {
+      overflowOption(options);
+      return PlainDate.fromDay(PlainDateTime.epochDay(value));
     }
     if (typeof value === "string") {
       const parsed = new ISOParser(value, false, true);
@@ -115,7 +131,7 @@ export class PlainDate implements WithResult<
       throw new TypeError("Date requires a date, fields or string");
     const fields: Readonly<Temporal.DateLikeObject> = value;
     const calendar = fields.calendar;
-    if (calendar !== undefined) requireISOCalendarString(calendar);
+    if (calendar !== undefined) requireISOCalendarLike(calendar);
     return PlainDate.fromDay(fieldsDay(value, options));
   }
   static compare(one: Temporal.PlainDateLike, two: Temporal.PlainDateLike): number {
@@ -178,7 +194,7 @@ export class PlainDate implements WithResult<
   }
   with(
     value: Readonly<Temporal.PartialTemporalLike<Temporal.DateLikeObject>>,
-    options?: Readonly<Temporal.OverflowOptions>,
+    options: Readonly<Temporal.OverflowOptions> | undefined = undefined,
   ): PlainDate {
     const previous = this.#day;
     if (value === null || typeof value !== "object")
@@ -188,7 +204,8 @@ export class PlainDate implements WithResult<
         Partial<Pick<Temporal.ZonedDateTimeLikeObject, "calendar" | "timeZone">>
     > = value;
     if (
-      value instanceof PlainDate ||
+      isPlainCalendar(value) ||
+      value instanceof PlainTime ||
       fields.calendar !== undefined ||
       fields.timeZone !== undefined
     )
@@ -197,10 +214,7 @@ export class PlainDate implements WithResult<
   }
   withCalendar(calendar: Temporal.CalendarLike): PlainDate {
     const day = this.#day;
-    if (calendar instanceof PlainDate) return PlainDate.fromDay(day);
-    if (typeof calendar !== "string")
-      throw new TypeError("Calendar requires a string or Temporal date");
-    requireISOCalendarString(calendar);
+    requireISOCalendarLike(calendar);
     return PlainDate.fromDay(day);
   }
   private addDuration(
@@ -223,10 +237,16 @@ export class PlainDate implements WithResult<
       ),
     );
   }
-  add(value: Temporal.DurationLike, options?: Readonly<Temporal.OverflowOptions>): PlainDate {
+  add(
+    value: Temporal.DurationLike,
+    options: Readonly<Temporal.OverflowOptions> | undefined = undefined,
+  ): PlainDate {
     return this.addDuration(value, options, 1);
   }
-  subtract(value: Temporal.DurationLike, options?: Readonly<Temporal.OverflowOptions>): PlainDate {
+  subtract(
+    value: Temporal.DurationLike,
+    options: Readonly<Temporal.OverflowOptions> | undefined = undefined,
+  ): PlainDate {
     return this.addDuration(value, options, -1);
   }
   private difference(
@@ -269,13 +289,17 @@ export class PlainDate implements WithResult<
   }
   until(
     other: Temporal.PlainDateLike,
-    options?: Readonly<Temporal.RoundingOptionsWithLargestUnit<Temporal.DateUnit>>,
+    options:
+      | Readonly<Temporal.RoundingOptionsWithLargestUnit<Temporal.DateUnit>>
+      | undefined = undefined,
   ): Duration {
     return this.difference(other, options, false);
   }
   since(
     other: Temporal.PlainDateLike,
-    options?: Readonly<Temporal.RoundingOptionsWithLargestUnit<Temporal.DateUnit>>,
+    options:
+      | Readonly<Temporal.RoundingOptionsWithLargestUnit<Temporal.DateUnit>>
+      | undefined = undefined,
   ): Duration {
     return this.difference(other, options, true);
   }
@@ -283,11 +307,35 @@ export class PlainDate implements WithResult<
     const day = this.#day;
     return day === PlainDate.from(other).#day;
   }
-  toString(options?: Readonly<Temporal.PlainDateToStringOptions>): string {
+  toString(options: Readonly<Temporal.PlainDateToStringOptions> | undefined = undefined): string {
     return dateString(this.#day, options);
   }
   toJSON(): string {
     return dateString(this.#day);
+  }
+  toPlainDateTime(value: Temporal.PlainTimeLike | undefined = undefined): PlainDateTime {
+    const day = this.#day;
+    const time = value === undefined ? 0 : PlainTime.nanoseconds(PlainTime.from(value));
+    const milliseconds = day * MS_PER_DAY;
+    return new PlainDateTime(
+      yearFromDays(day),
+      monthFromTime(milliseconds) + 1,
+      dateFromTime(milliseconds),
+      Math.floor(time / 3600000000000),
+      Math.floor(time / 60000000000) % 60,
+      Math.floor(time / 1e9) % 60,
+      Math.floor(time / 1e6) % 1000,
+      Math.floor(time / 1000) % 1000,
+      time % 1000,
+    );
+  }
+  toPlainYearMonth(): PlainYearMonth {
+    const day = this.#day;
+    return new PlainYearMonth(yearFromDays(day), monthFromTime(day * MS_PER_DAY) + 1);
+  }
+  toPlainMonthDay(): PlainMonthDay {
+    const day = this.#day;
+    return new PlainMonthDay(monthFromTime(day * MS_PER_DAY) + 1, dateFromTime(day * MS_PER_DAY));
   }
   valueOf(): never {
     throw new TypeError("Temporal.PlainDate cannot be converted to a primitive value");

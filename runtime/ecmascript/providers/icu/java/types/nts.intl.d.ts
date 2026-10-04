@@ -55,6 +55,9 @@ declare module "java:nts.intl" {
     canonicalTimeZone(a0: string): string | null;
     defaultTimeZoneIdentifier(): string;
     textDirection(a0: string): number;
+    isHebrew(a0: number): boolean;
+    durationSamples(a0: string): string[];
+    listSamples(a0: string, a1: number, a2: number, a3: string[]): string[];
     weekData(a0: string): number;
   }
 
@@ -70,6 +73,25 @@ declare module "java:nts.intl" {
     format(a0: number, a1: boolean, a2: boolean): string;
     formatDecimal(a0: string, a1: boolean, a2: boolean): string;
     formatRange(a0: string, a1: string, a2: boolean, a3: boolean, a4: boolean): string;
+    fieldCount(): number;
+    field(a0: number): number;
+    start(a0: number): number;
+    end(a0: number): number;
+  }
+
+  /** nts.intl.IcuPluralRules Final: cannot be extended. */
+  export class IcuPluralRules {
+    constructor(a0: string, a1: boolean, a2: string, a3: string);
+    categories(): number;
+    select(a0: number, a1: boolean): number;
+    selectDecimal(a0: string, a1: boolean): number;
+    selectRange(a0: string, a1: string, a2: boolean, a3: boolean): number;
+  }
+
+  /** nts.intl.IcuRelativeFormatter Final: cannot be extended. */
+  export class IcuRelativeFormatter {
+    constructor(a0: string, a1: number);
+    format(a0: number, a1: number, a2: boolean, a3: boolean): string;
     fieldCount(): number;
     field(a0: number): number;
     start(a0: number): number;

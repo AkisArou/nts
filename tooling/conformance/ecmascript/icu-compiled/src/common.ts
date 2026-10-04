@@ -20,6 +20,199 @@ import {
   basicDateTimePattern,
   dateTimeSkeleton,
 } from "../../../../../runtime/ecmascript/src/intl/date-pattern.ts";
+import { ListPatterns } from "../../../../../runtime/ecmascript/src/intl/list-pattern.ts";
+import type { ListPatternData } from "../../../../../runtime/ecmascript/src/intl/list-data.ts";
+import type { RelativeTimePrimitive } from "../../../../../runtime/ecmascript/src/intl/relative-data.ts";
+import {
+  relativeAuto,
+  relativeUnit,
+} from "../../../../../runtime/ecmascript/src/intl/relative-unit.ts";
+import { RelativePartBuffer } from "../../../../../runtime/ecmascript/src/intl/relative-parts.ts";
+import { FieldSpans } from "../../../../../runtime/ecmascript/src/intl/parts.ts";
+import { NumberDigits } from "../../../../../runtime/ecmascript/src/intl/number-digits.ts";
+import type { PluralRulesPrimitive } from "../../../../../runtime/ecmascript/src/intl/plural-data.ts";
+import {
+  pluralCategory,
+  pluralCategories,
+} from "../../../../../runtime/ecmascript/src/intl/plural-category.ts";
+
+export function pluralDigest<P extends PluralRulesPrimitive>(
+  open: (locale: string, ordinal: boolean, skeleton: string, negativeSkeleton: string) => P,
+): string {
+  const digits = new NumberDigits<Readonly<Intl.NumberFormatOptions>>({}, 0, 3, "standard");
+  const english = open("en-US", false, digits.skeleton() + " group-off", "");
+  let result =
+    pluralCategories(english.categories()).join(",") +
+    ":" +
+    pluralCategory(english.select(1, false)) +
+    ":" +
+    pluralCategory(english.select(1.0004, false)) +
+    ":" +
+    pluralCategory(english.select(1.0009, false));
+  result +=
+    ":" +
+    pluralCategory(english.selectRange("1.0001", "1.0002", false, false)) +
+    ":" +
+    pluralCategory(english.selectRange("-1", "1", false, false));
+  const ordinal = open("en-US", true, digits.skeleton() + " group-off", "");
+  result += "\n" + pluralCategories(ordinal.categories()).join(",");
+  for (const number of [0, 1, 2, 3, 4, 11, 21])
+    result += ":" + pluralCategory(ordinal.select(number, false));
+  result +=
+    ":" +
+    pluralCategory(ordinal.selectRange("1", "1", false, false)) +
+    ":" +
+    pluralCategory(ordinal.selectRange("1", "2", false, false));
+  const padded = new NumberDigits<Readonly<Intl.NumberFormatOptions>>(
+    { minimumFractionDigits: 2 },
+    0,
+    3,
+    "standard",
+  );
+  const stripped = new NumberDigits<Readonly<Intl.NumberFormatOptions>>(
+    { minimumFractionDigits: 2, trailingZeroDisplay: "stripIfInteger" },
+    0,
+    3,
+    "standard",
+  );
+  result +=
+    "\n" +
+    pluralCategory(open("en-US", false, padded.skeleton(), "").select(1, false)) +
+    ":" +
+    pluralCategory(open("en-US", false, stripped.skeleton(), "").select(1, false));
+  const russian = open("ru", false, digits.skeleton() + " group-off", "");
+  result +=
+    "\n" +
+    pluralCategory(russian.selectDecimal("9007199254740991", false)) +
+    ":" +
+    pluralCategory(russian.selectDecimal("9007199254740993", false));
+  const compact = new NumberDigits<Readonly<Intl.NumberFormatOptions>>({}, 0, 3, "compact");
+  const french = open("fr", false, "compact-short " + compact.skeleton(), "");
+  result +=
+    "\n" +
+    pluralCategory(french.select(1e6, false)) +
+    ":" +
+    pluralCategory(french.select(1.5e6, false)) +
+    ":" +
+    pluralCategory(french.select(1e-6, false));
+  const rounding = new NumberDigits<Readonly<Intl.NumberFormatOptions>>(
+    { maximumFractionDigits: 0, roundingMode: "halfCeil" },
+    0,
+    3,
+    "standard",
+  );
+  const half = open("en-US", false, rounding.skeleton(), rounding.skeleton(true));
+  result +=
+    "\n" +
+    pluralCategory(half.select(-1.5, true)) +
+    ":" +
+    pluralCategory(half.select(1.5, false)) +
+    ":" +
+    pluralCategory(half.selectRange("-1.5", "-1.1", true, true));
+  result +=
+    "\n" +
+    pluralCategory(english.selectRange("Infinity", "Infinity", false, false)) +
+    ":" +
+    pluralCategory(english.selectRange("Infinity", "1", false, false));
+  return result;
+}
+
+export function pluralBenchmark<P extends PluralRulesPrimitive>(
+  rules: P,
+  iterations: number,
+  range: boolean,
+): number {
+  let checksum = 0;
+  if (range) {
+    for (let index = 0; index < iterations; index++)
+      checksum += rules.selectRange(String(index % 100), String((index + 1) % 100), false, false);
+  } else {
+    for (let index = 0; index < iterations; index++) checksum += rules.select(index % 100, false);
+  }
+  return checksum;
+}
+
+export function relativeDigest<P extends RelativeTimePrimitive>(
+  open: (locale: string, style: number) => P,
+): string {
+  const english = open("en-US-u-nu-latn", 0);
+  const code = relativeUnit("days");
+  let result = english.format(-0, code, false, false) + ":" + english.format(0, code, false, false);
+  result += ":" + english.format(0, code, relativeAuto(0, "auto"), false);
+  result += ":" + english.format(0.001, code, relativeAuto(0.001, "auto"), false);
+  result += ":" + english.format(0.999, code, relativeAuto(0.999, "auto"), false);
+  const text = english.format(1234.5, code, false, true);
+  const spans = new FieldSpans(english.fieldCount());
+  spans.count = english.fieldCount();
+  for (let index = 0; index < spans.count; index++) {
+    spans.fields[index] = english.field(index);
+    spans.starts[index] = english.start(index);
+    spans.ends[index] = english.end(index);
+  }
+  const parts = new RelativePartBuffer().partition(text, spans, "day");
+  result += "\n" + text;
+  for (let index = 0; index < parts.length; index++) {
+    const part = parts[index]!;
+    result += ";" + part.type + "=" + part.value;
+    if (part.type !== "literal") result += "=" + part.unit;
+  }
+  result += "\n" + open("pl-PL-u-nu-latn", 0).format(1000, code, false, false);
+  const digits = open("en-US-u-nu-mathbold", 0);
+  result += "\n" + digits.format(12.5, code, false, true);
+  for (let index = 0; index < digits.fieldCount(); index++)
+    if (digits.field(index) !== 14)
+      result += ";" + digits.field(index) + "=" + digits.start(index) + ":" + digits.end(index);
+  return result;
+}
+
+export function listDigest<D extends ListPatternData>(data: D): string {
+  const english = new ListPatterns(data, "en-US", 0, 0);
+  // Construct the unpaired UTF-16 unit at runtime: the separately recorded
+  // frontend literal transport defect must not substitute three U+FFFDs here.
+  const parts = english.formatToParts(["😀", "", String.fromCharCode(0xd800)]);
+  let result = english.format(["A", "", "B"]);
+  for (let index = 0; index < parts.length; index++) {
+    const part = parts[index]!;
+    result += ";" + part.type + "=" + part.value.length;
+  }
+  const spanish = new ListPatterns(data, "es", 0, 0);
+  const or = new ListPatterns(data, "es", 1, 0);
+  const hebrew = new ListPatterns(data, "he", 0, 0);
+  const maori = new ListPatterns(data, "mi", 1, 0);
+  return (
+    result +
+    "\n" +
+    spanish.format(["A", "iglesia"]) +
+    ":" +
+    spanish.format(["A", "hielo"]) +
+    ":" +
+    or.format(["A", "11"]) +
+    ":" +
+    or.format(["A", "110"]) +
+    "\n" +
+    hebrew.format(["A", "ב"]) +
+    ":" +
+    hebrew.format(["A", "😀"]) +
+    "\n" +
+    maori.format(["A", "B", "C", "D"])
+  );
+}
+
+export function listBenchmark<D extends ListPatternData>(
+  data: D,
+  iterations: number,
+  count: number,
+): number {
+  const formatter = new ListPatterns(data, "en-US", 0, 0);
+  const items = new Array<string>(count);
+  for (let index = 0; index < count; index++) items[index] = String(index);
+  let checksum = 0;
+  for (let index = 0; index < iterations; index++) {
+    items[0] = String(index);
+    checksum += formatter.format(items).length;
+  }
+  return checksum;
+}
 
 export function dateTextDigest<P extends DateTimeFormatterPrimitive>(
   open: (locale: string, pattern: string, timeZone: string) => P,
