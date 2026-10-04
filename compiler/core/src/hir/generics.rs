@@ -33,7 +33,7 @@ use nts_semantic_schema::{
 use rustc_hash::FxHashMap;
 
 use super::HirType;
-use super::instantiate::{Owner, Sigma, Templates, sigma_of_instance};
+use super::instantiate::{Owner, Sigma, Templates, mentions_a_parameter, sigma_of_instance};
 use super::lower::representation;
 
 /// What a copy stands for.
@@ -655,12 +655,15 @@ fn unify(
         let actual = concrete(snapshot, actual);
         // **Pinned to a type parameter is pinned, one copy short.** A call
         // written inside a generic body binds the callee's `T` to the
-        // enclosing `W`, which has no representation and so never reached
+        // enclosing `W`, or a type built from it such as `W[] | (() => W)`.
+        // Neither is concrete until the enclosing copy is known, so it must not
+        // be pinned just because a union happens to have an erased representation.
+        // A bare `W` has no representation and so never reached
         // `into` -- the call counted as unpinned and the callee was refused as
         // `a generic function no call pins down`. It is recorded here instead,
         // and `function_instantiations` makes one copy per instantiation of
         // whatever declares `W`. See `Templates::bindings_of`.
-        if is_parameter(snapshot, actual) {
+        if mentions_a_parameter(snapshot, actual) {
             deferred.insert(generic, actual);
             return;
         }
@@ -813,7 +816,7 @@ fn unify(
 struct Pinned {
     substitution: Substitution,
     sources: Sources,
-    /// Pinned to an *enclosing* generic's parameter rather than to a type:
+    /// Pinned to a type mentioning an *enclosing* generic's parameter:
     /// one copy short of a copy. See `unify`.
     deferred: Sources,
 }
@@ -863,7 +866,7 @@ struct Deferred<'a> {
     parameters: &'a [TypeId],
     substitution: &'a Substitution,
     sources: &'a Sources,
-    /// Each of the callee's parameters that is bound to an enclosing one.
+    /// Each callee parameter bound to a type built from an enclosing generic's.
     bound_to: &'a Sources,
 }
 
@@ -897,12 +900,17 @@ fn expand_within_a_generic(
     // pass* is in the middle of making -- so one is a lookup and the other is a
     // read of the answer so far, which is what makes the fixpoint in
     // `function_instantiations` necessary rather than decorative.
-    match templates.owner_of(first) {
-        Some(Owner::Type(_)) => within_a_class(snapshot, templates, found, call, &deferred),
-        Some(Owner::Function(of)) => {
+    let Some(owner) = templates.owner_of(first) else {
+        return;
+    };
+    if deferred.iter().any(|(_, ty)| templates.owner_of(*ty) != Some(owner)) {
+        return;
+    }
+    match owner {
+        Owner::Type(_) => within_a_class(snapshot, templates, found, call, &deferred),
+        Owner::Function(of) => {
             within_a_function(snapshot, templates, found, call, &deferred, of);
         }
-        None => {}
     }
 }
 
@@ -960,9 +968,10 @@ fn within_a_function(
         return;
     };
     for enclosing in &around {
+        let sigma = enclosing.sources.iter().map(|(k, v)| (*k, *v)).collect();
         let mut bound = Bindings::new(call);
         for (parameter, within) in deferred {
-            if !bound.pin(snapshot, *parameter, enclosing.sources.get(within).copied()) {
+            if !bound.pin(snapshot, *parameter, templates.resolve(*within, &sigma)) {
                 break;
             }
         }

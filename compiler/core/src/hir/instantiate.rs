@@ -270,7 +270,7 @@ impl<'a> Templates<'a> {
         }
     }
 
-    /// Which generic declares `parameter`.
+    /// The single generic whose parameters `ty` mentions.
     ///
     /// Asked by the caller of [`Self::bindings_of`], which answers for a class
     /// and deliberately not for a function: the two are found in different
@@ -278,12 +278,20 @@ impl<'a> Templates<'a> {
     /// keyed by a suffix -- and the caller has to know which question it is
     /// asking before it asks.
     #[must_use]
-    pub fn owner_of(&self, parameter: TypeId) -> Option<Owner> {
-        self.owners.get(&parameter).copied()
+    pub fn owner_of(&self, ty: TypeId) -> Option<Owner> {
+        one_owner_of(self.snapshot, &self.owners, ty)
     }
 
-    /// Every instantiation of the generic that declares `parameter`, with what
-    /// that parameter is bound to in each.
+    /// Resolve a type under a caller's concrete bindings, by the same lookup
+    /// used for its templates. A nested argument such as `S | ((s: S) => S)`
+    /// needs the whole substitution, rather than a lookup of `S` alone.
+    #[must_use]
+    pub fn resolve(&self, ty: TypeId, sigma: &Sigma) -> Option<TypeId> {
+        substitute(&mut Lookup::new(self), ty, sigma, 0)
+    }
+
+    /// Every instantiation of the single generic whose parameters `ty` mentions,
+    /// with the concrete type the entire argument resolves to in each.
     ///
     /// The question a *call* inside a generic body asks: `extractSize(strategy)`
     /// written in `WritableStream<W>` pins the callee's `T` to `W`, which is
@@ -294,26 +302,24 @@ impl<'a> Templates<'a> {
     /// by its own call sites, which is the mechanism this one is an extension
     /// of rather than a case of.
     #[must_use]
-    pub fn bindings_of(&self, parameter: TypeId) -> Vec<(TypeId, TypeId)> {
-        let Some(Owner::Type(symbol)) = self.owners.get(&parameter).copied() else {
+    pub fn bindings_of(&self, ty: TypeId) -> Vec<(TypeId, TypeId)> {
+        let Some(Owner::Type(symbol)) = self.owner_of(ty) else {
             return Vec::new();
         };
         let Some(&declaration) = self.declarations.get(&symbol) else {
             return Vec::new();
         };
         let parameters = arguments(self.snapshot, declaration);
-        let Some(at) = parameters.iter().position(|p| *p == parameter) else {
-            return Vec::new();
-        };
         let mut found: Vec<(TypeId, TypeId)> = self
             .index
             .iter()
             .filter(|((of, args), ty)| {
                 *of == symbol && **ty != declaration && args.len() == parameters.len()
             })
-            .filter_map(|((_, args), ty)| {
-                let bound = *args.get(at)?;
-                (!mentions_a_parameter(self.snapshot, bound)).then_some((*ty, bound))
+            .filter_map(|((_, args), instance)| {
+                let sigma = parameters.iter().copied().zip(args.iter().copied()).collect();
+                let bound = self.resolve(ty, &sigma)?;
+                (!mentions_a_parameter(self.snapshot, bound)).then_some((*instance, bound))
             })
             .collect();
         // Sorted, so one compiler on one input makes the copies in one order.
@@ -598,6 +604,25 @@ impl Site for Lookup<'_, '_> {
     }
 
     fn composite(&mut self, wanted: TypeKind, symbol: Option<SymbolId>) -> Option<TypeId> {
+        // The checker can record one signature under several ids, including a
+        // declaration's and an anonymous callback's. The signature lookup above
+        // may choose the declaration's id even when only the anonymous type has
+        // the symbol this form requires. Match their complete signatures, rather
+        // than requiring those duplicate ids to be identical.
+        if let TypeKind::Function(signature) = wanted {
+            let wanted = self.templates.snapshot.signatures.get(signature.0 as usize)?;
+            return self.templates.snapshot.types.iter().position(|record| {
+                record.symbol == symbol && matches!(record.kind, TypeKind::Function(found)
+                    if self.templates.snapshot.signatures.get(found.0 as usize) == Some(wanted))
+            }).map(|at| TypeId(u32::try_from(at).unwrap_or(u32::MAX)));
+        }
+        if let TypeKind::Union(ref members) = wanted {
+            let wanted = union_members(self.templates.snapshot, members)?;
+            return self.templates.snapshot.types.iter().position(|record| {
+                record.symbol == symbol && matches!(&record.kind, TypeKind::Union(members)
+                    if union_members(self.templates.snapshot, members).as_ref() == Some(&wanted))
+            }).map(|at| TypeId(u32::try_from(at).unwrap_or(u32::MAX)));
+        }
         find_record(self.templates.snapshot, &wanted, symbol)
     }
 
@@ -618,6 +643,54 @@ impl Site for Lookup<'_, '_> {
     fn declarations(&self) -> &FxHashMap<SymbolId, TypeId> {
         &self.templates.declarations
     }
+}
+
+/// The semantic members of a finite union, in a stable order. Substitution can
+/// put a union inside another union, while the checker flattens it; likewise
+/// `boolean` is stored on its own and as `false | true` inside a wider union.
+/// Only those two equivalences are used: references and function shapes retain
+/// their type identities, and `null` and `undefined` remain separate members.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+enum UnionMember {
+    Type(TypeId),
+    False,
+    True,
+}
+
+fn union_members(snapshot: &SemanticSnapshot, members: &[TypeId]) -> Option<Vec<UnionMember>> {
+    let mut work: Vec<_> = members.iter().map(|ty| (*ty, 0, false)).collect();
+    let mut active = rustc_hash::FxHashSet::default();
+    let mut done = rustc_hash::FxHashSet::default();
+    let mut found = Vec::new();
+    while let Some((ty, depth, leaving)) = work.pop() {
+        if leaving {
+            active.remove(&ty);
+            done.insert(ty);
+            continue;
+        }
+        if depth > DEPTH {
+            return None;
+        }
+        match &snapshot.types.get(ty.0 as usize)?.kind {
+            TypeKind::Union(items) => {
+                if done.contains(&ty) {
+                    continue;
+                }
+                if !active.insert(ty) {
+                    return None;
+                }
+                work.push((ty, depth, true));
+                work.extend(items.iter().map(|item| (*item, depth + 1, false)));
+            }
+            TypeKind::Boolean => found.extend([UnionMember::False, UnionMember::True]),
+            TypeKind::Literal(nts_semantic_schema::LiteralValue::Boolean(false)) => found.push(UnionMember::False),
+            TypeKind::Literal(nts_semantic_schema::LiteralValue::Boolean(true)) => found.push(UnionMember::True),
+            _ => found.push(UnionMember::Type(ty)),
+        }
+    }
+    found.sort();
+    found.dedup();
+    Some(found)
 }
 
 /// The site that creates: the same walk, appending the records that do not
@@ -930,7 +1003,7 @@ fn instantiation_arguments(snapshot: &SemanticSnapshot, ty: TypeId, declaration:
 ///   the unsubstituted form, which is the behaviour that existed before
 ///   `function_forms`.
 ///
-/// Used only by the `function_forms` branch. The template loop keeps its own
+/// Used by `function_forms` and deferred argument resolution. The template loop keeps its own
 /// inline test, because changing what counts as a template is the change this
 /// was written to avoid.
 fn one_owner_of(
@@ -992,7 +1065,7 @@ fn parameters_in(snapshot: &SemanticSnapshot, ty: TypeId, into: &mut Vec<TypeId>
     }
 }
 
-fn mentions_a_parameter(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+pub(super) fn mentions_a_parameter(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
     let mut found = Vec::new();
     parameters_in(snapshot, ty, &mut found, 0);
     !found.is_empty()
@@ -1013,4 +1086,69 @@ fn find_signature(snapshot: &SemanticSnapshot, wanted: &SignatureRecord) -> Opti
         .iter()
         .position(|signature| signature == wanted)
         .map(|at| SignatureId(u32::try_from(at).unwrap_or(u32::MAX)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nts_semantic_schema::{LiteralValue, ParameterRecord, TypeRecord};
+
+    fn snapshot(kinds: Vec<TypeKind>) -> SemanticSnapshot {
+        SemanticSnapshot {
+            types: kinds.into_iter().map(|kind| TypeRecord { kind, symbol: None }).collect(),
+            ..SemanticSnapshot::default()
+        }
+    }
+
+    #[test]
+    fn union_lookup_preserves_absences_symbols_and_distinct_shapes() {
+        let mut snapshot = snapshot(vec![
+            TypeKind::Boolean,
+            TypeKind::Literal(LiteralValue::Boolean(false)),
+            TypeKind::Literal(LiteralValue::Boolean(true)),
+            TypeKind::Null,
+            TypeKind::Undefined,
+            TypeKind::Union(vec![TypeId(1), TypeId(2), TypeId(3)]),
+            TypeKind::Union(vec![TypeId(1), TypeId(2), TypeId(4)]),
+            TypeKind::Union(vec![TypeId(0), TypeId(3)]),
+        ]);
+        snapshot.types[7].symbol = Some(SymbolId(0));
+        let templates = Templates::new(&snapshot);
+        let mut lookup = Lookup::new(&templates);
+        assert_eq!(lookup.composite(TypeKind::Union(vec![TypeId(0), TypeId(3)]), None), Some(TypeId(5)));
+        assert_eq!(lookup.composite(TypeKind::Union(vec![TypeId(0), TypeId(4)]), None), Some(TypeId(6)));
+        assert_eq!(lookup.composite(TypeKind::Union(vec![TypeId(5), TypeId(3)]), Some(SymbolId(0))), Some(TypeId(7)));
+        assert_eq!(lookup.composite(TypeKind::Union(vec![TypeId(3), TypeId(4)]), None), None);
+    }
+
+    #[test]
+    fn recursive_union_is_not_replaced_by_its_finite_leaves() {
+        let snapshot = snapshot(vec![TypeKind::Number, TypeKind::Union(vec![TypeId(0), TypeId(1)])]);
+        assert!(union_members(&snapshot, &[TypeId(1)]).is_none());
+        let templates = Templates::new(&snapshot);
+        assert_eq!(Lookup::new(&templates).composite(TypeKind::Union(vec![TypeId(0)]), None), None);
+    }
+
+    #[test]
+    fn callback_lookup_compares_the_full_signature_and_original_symbol() {
+        let mut snapshot = snapshot(vec![
+            TypeKind::Number,
+            TypeKind::Function(SignatureId(0)),
+            TypeKind::Function(SignatureId(1)),
+            TypeKind::Function(SignatureId(2)),
+        ]);
+        let signature = SignatureRecord {
+            parameters: vec![ParameterRecord { name: "value".to_owned(), ty: TypeId(0), optional: false, rest: false }],
+            return_type: TypeId(0), type_parameters: Vec::new(), is_construct: false,
+            type_predicate: None, this_type: None,
+        };
+        snapshot.signatures = vec![signature.clone(), signature.clone(), signature];
+        snapshot.signatures[2].parameters[0].optional = true;
+        snapshot.types[1].symbol = Some(SymbolId(0));
+        let templates = Templates::new(&snapshot);
+        let mut lookup = Lookup::new(&templates);
+        assert_eq!(lookup.composite(TypeKind::Function(SignatureId(0)), None), Some(TypeId(2)));
+        assert_eq!(lookup.composite(TypeKind::Function(SignatureId(2)), None), Some(TypeId(3)));
+        assert_eq!(lookup.composite(TypeKind::Function(SignatureId(2)), Some(SymbolId(0))), None);
+    }
 }
