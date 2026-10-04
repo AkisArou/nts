@@ -816,6 +816,9 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
 
         "nts_bigint_from_number" => (types::BIGINT, "fromNumber", "(D)Lnts/rt/NtsBigInt;"),
         "nts_bigint_to_string" => (types::BIGINT, "toText", "(Lnts/rt/NtsBigInt;)Ljava/lang/String;"),
+        "nts_bigint_compare_string" => {
+            (types::BIGINT, "compareString", "(Lnts/rt/NtsBigInt;Ljava/lang/String;)D")
+        }
         "nts_bigint_shl" => (types::BIGINT, "shl", BIGINT_BINARY),
         "nts_bigint_shr" => (types::BIGINT, "shr", BIGINT_BINARY),
         "nts_bigint_as_intn" => (types::BIGINT, "asIntN", BIGINT_BITS),

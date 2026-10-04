@@ -38,6 +38,39 @@ public final class RuntimeRegression {
     private static void bigint(NtsBigInt a, BigInteger expected, String operation) {
         equal(wide(a), wrap(expected), operation);
     }
+    /** `compareString` against ECMA-262 StringToBigInt, and exact past 2^53 and past 128 bits. */
+    private static void testBigIntCompareString() {
+        NtsBigInt big = NtsBigInt.fromLong(9007199254740993L);
+        check(NtsBigInt.compareString(big, "9007199254740992") == 1, "2^53+1 > \"2^53\" exactly");
+        check(NtsBigInt.compareString(big, "9007199254740993") == 0, "2^53+1 == \"2^53+1\"");
+        check(NtsBigInt.compareString(big, "9007199254740994") == -1, "2^53+1 < \"2^53+2\"");
+        String huge = "1" + "0".repeat(60);
+        NtsBigInt max = NtsBigInt.of(Long.MAX_VALUE, -1L);
+        check(NtsBigInt.compareString(max, huge) == -1, "2^127-1 < 10^60");
+        check(NtsBigInt.compareString(max, "-" + huge) == 1, "2^127-1 > -10^60");
+        NtsBigInt five = NtsBigInt.fromLong(5);
+        String[][] cases = {
+            {"", "1"}, {"   ", "1"}, {" \t\n\u00a0\ufeff\u2028\u3000 5 \r", "0"}, {"+5", "0"}, {"-5", "1"},
+            {"0x5", "0"}, {"0X05", "0"}, {"0o7", "-1"}, {"0b101", "0"}, {"0B110", "-1"}, {"6", "-1"}, {"4", "1"},
+        };
+        for (String[] c : cases) {
+            check(NtsBigInt.compareString(five, c[0]) == Double.parseDouble(c[1]), "compareString(5n, " + c[0].replace("\n", "\\n") + ")");
+        }
+        String[] invalid = {"0.", "5.0", "1e3", "5n", "1_000", "-0x5", "+0x5", "0x", "0b2", "0o8", "+", "-", "abc", "5 5", "\u0665"};
+        for (String bad : invalid) {
+            check(Double.isNaN(NtsBigInt.compareString(five, bad)), "compareString(5n, " + bad + ") is NaN");
+        }
+        Random random = new Random(0x5EED5);
+        for (int round = 0; round < 5000; ++round) {
+            NtsBigInt a = NtsBigInt.of(random.nextLong(), random.nextLong());
+            BigInteger b = new BigInteger(130, random).subtract(BigInteger.ONE.shiftLeft(129));
+            int radix = new int[] {2, 8, 10, 16}[round % 4];
+            String text = radix == 10 ? b.toString() : (b.signum() < 0 ? null : (radix == 16 ? "0x" : radix == 8 ? "0o" : "0b") + b.toString(radix));
+            if (text == null) { continue; }
+            check(NtsBigInt.compareString(a, text) == wide(a).compareTo(b), "compareString random " + radix);
+        }
+    }
+
     private static void testBigInt() {
         Random random = new Random(0x1234ABCD);
         long[] edges = {0, 1, -1, Long.MIN_VALUE, Long.MAX_VALUE, 0xffffffffL, 0x100000000L};
@@ -782,7 +815,8 @@ public final class RuntimeRegression {
     }
 
     public static void main(String[] args) throws Exception {
-        testBigInt(); System.out.println("bigint randomized tests passed");
+        testBigInt();
+        testBigIntCompareString(); System.out.println("bigint randomized tests passed");
         testMap(); System.out.println("map randomized and cursor tests passed");
         testMapAsJavaMap(); System.out.println("NtsMap as java.util.Map passed");
         testForeignCallbacks(); System.out.println("foreign-thread callbacks passed");

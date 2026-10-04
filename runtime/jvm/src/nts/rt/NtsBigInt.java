@@ -140,6 +140,51 @@ public final class NtsBigInt {
     }
     public static boolean eq(NtsBigInt a, NtsBigInt b) { return a.hi == b.hi && a.lo == b.lo; }
 
+    /**
+     * `nts_bigint_compare_string`: the ordering of `a` against the bigint a
+     * string denotes -- -1, 0 or 1 -- or NaN where the string is not a
+     * `StringIntegerLiteral`, which makes every relational comparison false.
+     *
+     * <p>ECMA-262 StringToBigInt: whitespace and line terminators trimmed from
+     * both ends; empty is 0n; `0x`/`0o`/`0b` (either case) take one or more
+     * digits of that radix and no sign; otherwise an optional `+` or `-` and
+     * one or more decimal digits. No separators, no fraction, no exponent, no
+     * `n` suffix. The string's magnitude is unbounded, so it is parsed exactly
+     * (a `BigInteger`, allocated only on this path) rather than into 128 bits:
+     * a 200-digit string still compares exactly against any operand.
+     */
+    public static double compareString(NtsBigInt a, String text) {
+        int start = 0;
+        int end = text.length();
+        while (start < end && stringWhiteSpace(text.charAt(start))) { start++; }
+        while (end > start && stringWhiteSpace(text.charAt(end - 1))) { end--; }
+        if (start == end) { return Integer.signum(compare(a, ZERO)); }
+        int radix = 10;
+        boolean negative = false;
+        if (end - start > 2 && text.charAt(start) == '0') {
+            char marker = text.charAt(start + 1);
+            if (marker == 'x' || marker == 'X') { radix = 16; } else if (marker == 'o' || marker == 'O') { radix = 8; } else if (marker == 'b' || marker == 'B') { radix = 2; }
+            if (radix != 10) { start += 2; }
+        }
+        if (radix == 10 && (text.charAt(start) == '+' || text.charAt(start) == '-')) {
+            negative = text.charAt(start) == '-';
+            start++;
+        }
+        if (start == end) { return Double.NaN; }
+        for (int at = start; at < end; at++) {
+            if (Character.digit(text.charAt(at), radix) < 0 || text.charAt(at) > 0x7f) { return Double.NaN; }
+        }
+        BigInteger magnitude = new BigInteger(text.substring(start, end), radix);
+        return Integer.signum(toBigInteger(a).compareTo(negative ? magnitude.negate() : magnitude));
+    }
+
+    /** ECMA-262 StrWhiteSpaceChar: WhiteSpace (incl. U+FEFF and every Zs) and LineTerminator. */
+    private static boolean stringWhiteSpace(char c) {
+        return c == '\t' || c == 0x0b || c == '\f' || c == ' ' || c == 0xa0 || c == 0xfeff
+            || c == '\n' || c == '\r' || c == 0x2028 || c == 0x2029
+            || Character.getType(c) == Character.SPACE_SEPARATOR;
+    }
+
     public static BigInteger toBigInteger(NtsBigInt a) {
         if (a.hi == (a.lo >> 63)) { return BigInteger.valueOf(a.lo); }
         byte[] bytes = new byte[16];
