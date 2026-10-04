@@ -84,7 +84,7 @@ export function roundISODateTimeDifference(
   const origin = BigInt(startDay) * NS_PER_DAY + BigInt(startTime);
   const destination = BigInt(endDay) * NS_PER_DAY + BigInt(endTime);
   if (smallest >= 3) {
-    const time = raw.timeNanoseconds();
+    const time = Duration.timeNanoseconds(raw);
     const rounded = roundNanoseconds(time, unitNanoseconds(smallest) * BigInt(increment), mode);
     const result = balanceDuration(
       rounded,

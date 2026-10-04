@@ -28,7 +28,7 @@ export class NtsDateTimeFormat<
   P extends DateTimeFormatterPrimitive,
 > {
   readonly #configuration: DateTimeFormatConfiguration<D, G>;
-  readonly #formatter: DateTimeFormatter<P>;
+  #formatter: DateTimeFormatter<P> | undefined;
   readonly #clock: () => number;
   readonly #open: (locale: string, pattern: string, timeZone: string) => P;
   #instant: DateTimeFormatter<P> | undefined;
@@ -49,6 +49,7 @@ export class NtsDateTimeFormat<
     options?: Readonly<Intl.DateTimeFormatOptions>,
     required: number = 0,
     defaults: number = 0,
+    timeZoneOverride: string | undefined = undefined,
   ) {
     const requested = getCanonicalLocales(resolver.data, locales);
     const configuration = new DateTimeFormatConfiguration(
@@ -59,9 +60,7 @@ export class NtsDateTimeFormat<
       options,
       required,
       defaults,
-    );
-    this.#formatter = new DateTimeFormatter(
-      open(configuration.dataLocale, configuration.pattern.pattern, configuration.timeZone),
+      timeZoneOverride,
     );
     this.#configuration = configuration;
     this.#clock = clock;
@@ -93,11 +92,39 @@ export class NtsDateTimeFormat<
           return this.dateFormatter().format(
             PlainDate.epochDay(date) * MS_PER_DAY + MS_PER_DAY / 2,
           );
-        return this.#formatter.format(
+        return this.#defaultFormatter().format(
           clip(date === undefined ? this.#clock() : this.#number(date)),
         );
       };
     return this.#bound;
+  }
+  #defaultFormatter(): DateTimeFormatter<P> {
+    if (this.#formatter === undefined) {
+      const config = this.#configuration;
+      this.#formatter = new DateTimeFormatter(
+        this.#open(config.dataLocale, config.pattern.pattern, config.timeZone),
+      );
+    }
+    return this.#formatter;
+  }
+  // Slot entry point for Temporal/Date localization. It uses exactly the same
+  // pattern selection, calendar validation and provider as public formatting.
+  formatTemporal(kind: number, milliseconds: number, calendar: string): string {
+    const config = this.#configuration;
+    if (kind === 4 || kind === 5) {
+      if (calendar !== config.calendar)
+        throw new RangeError("Partial-date calendars must match the formatter");
+      return (kind === 4 ? this.yearMonthFormatter() : this.monthDayFormatter()).format(
+        milliseconds,
+      );
+    }
+    if (kind !== 0 && kind < 7 && calendar !== "iso8601" && calendar !== config.calendar)
+      throw new RangeError("Temporal calendars must match the formatter");
+    if (kind === 0 || kind === 6) return this.instantFormatter().format(milliseconds);
+    if (kind === 1) return this.timeFormatter().format(milliseconds);
+    if (kind === 2) return this.dateFormatter().format(milliseconds);
+    if (kind === 3) return this.dateTimeFormatter().format(milliseconds);
+    return this.#defaultFormatter().format(milliseconds);
   }
   private instantFormatter(): DateTimeFormatter<P> {
     if (this.#instant === undefined) {
@@ -176,14 +203,14 @@ export class NtsDateTimeFormat<
       return this.dateFormatter().formatToParts(
         PlainDate.epochDay(date) * MS_PER_DAY + MS_PER_DAY / 2,
       );
-    const formatter = this.#formatter;
+    const formatter = this.#defaultFormatter();
     return formatter.formatToParts(clip(date === undefined ? this.#clock() : this.#number(date)));
   }
   formatRange(
     start: Parameters<Intl.DateTimeFormat["formatRange"]>[0] | bigint,
     end: Parameters<Intl.DateTimeFormat["formatRange"]>[1] | bigint,
   ): string {
-    const formatter = this.#formatter;
+    const formatter = this.#defaultFormatter();
     if (start === undefined || end === undefined)
       throw new TypeError("Date/time range endpoints are required");
     if (start instanceof PlainYearMonth || end instanceof PlainYearMonth) {
@@ -242,7 +269,7 @@ export class NtsDateTimeFormat<
     start: Parameters<Intl.DateTimeFormat["formatRangeToParts"]>[0] | bigint,
     end: Parameters<Intl.DateTimeFormat["formatRangeToParts"]>[1] | bigint,
   ): DateTimeRangeFormatPart[] {
-    const formatter = this.#formatter;
+    const formatter = this.#defaultFormatter();
     if (start === undefined || end === undefined)
       throw new TypeError("Date/time range endpoints are required");
     if (start instanceof PlainYearMonth || end instanceof PlainYearMonth) {

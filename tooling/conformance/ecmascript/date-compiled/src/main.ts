@@ -97,7 +97,7 @@ export function durationTotalProbe(caseId: number): number {
       : caseId < 3
         ? new Duration(0, 0, 0, 0, 816, 0, 0, 0, 0, 2049187497660)
         : new Duration(0, 0, 0, 0, 0, 0, 0, 9007199254740992, 1999, 0);
-  return durationTotal(record.timeNanoseconds(), caseId < 3 ? 4 : 7);
+  return durationTotal(Duration.timeNanoseconds(record), caseId < 3 ? 4 : 7);
 }
 
 // Exercise the production classes and library-derived option layouts, rather

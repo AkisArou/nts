@@ -1,3 +1,4 @@
+import type { TimeLocaleSource } from "../time/locale-source.ts";
 import { checkInstant, epochMilliseconds, NS_PER_MILLISECOND, roundNanoseconds } from "./exact.ts";
 import { formatInstant, parseInstant, roundInstant } from "./instant.ts";
 import {
@@ -156,6 +157,22 @@ export class Instant {
       roundInstant(this.#epochNanoseconds, "nanosecond", Number(increment), mode),
       precision,
       zone,
+    );
+  }
+  toLocaleString(
+    locales: Intl.LocalesArgument = undefined,
+    options: Readonly<Intl.DateTimeFormatOptions> | undefined = undefined,
+    source: TimeLocaleSource | undefined = undefined,
+  ): string {
+    this.#epochNanoseconds;
+    if (source === undefined) return formatInstant(this.#epochNanoseconds);
+    return source.formatDateTime(
+      0,
+      epochMilliseconds(this.#epochNanoseconds),
+      "iso8601",
+      locales,
+      options,
+      undefined,
     );
   }
   toJSON(): string {

@@ -1,3 +1,4 @@
+import type { TimeLocaleSource } from "../time/locale-source.ts";
 import {
   epochDays,
   yearFromDays,
@@ -70,6 +71,11 @@ function dateString(day: number, options?: Readonly<Temporal.PlainDateToStringOp
   return formatISODate(day) + isoCalendarAnnotation(show);
 }
 
+export function createPlainDate(day: number): PlainDate {
+  const time = day * MS_PER_DAY;
+  return new PlainDate(yearFromDays(day), monthFromTime(time) + 1, dateFromTime(time));
+}
+
 // Immutable ISO date stage. Calendar adapters and cross-type/localized methods
 // extend this contract as they become executable; missing APIs stay visible.
 export class PlainDate {
@@ -81,10 +87,6 @@ export class PlainDate {
     requireISOCalendar(calendar);
     this.#day = checkDateDay(regulateISODate(year, month, day, "reject"));
   }
-  private static fromDay(day: number): PlainDate {
-    const time = day * MS_PER_DAY;
-    return new PlainDate(yearFromDays(day), monthFromTime(time) + 1, dateFromTime(time));
-  }
   static epochDay(value: PlainDate): number {
     return value.#day;
   }
@@ -95,15 +97,15 @@ export class PlainDate {
     if (value instanceof ZonedDateTime) {
       const day = ZonedDateTime.epochDay(value);
       overflowOption(options);
-      return PlainDate.fromDay(day);
+      return createPlainDate(day);
     }
     if (value instanceof PlainDate) {
       overflowOption(options);
-      return PlainDate.fromDay(value.#day);
+      return createPlainDate(value.#day);
     }
     if (value instanceof PlainDateTime) {
       overflowOption(options);
-      return PlainDate.fromDay(PlainDateTime.epochDay(value));
+      return createPlainDate(PlainDateTime.epochDay(value));
     }
     if (typeof value === "string") {
       const parsed = new ISOParser(value, false, true);
@@ -117,7 +119,7 @@ export class PlainDate {
     const fields: Readonly<Temporal.DateLikeObject> = value;
     const calendar = fields.calendar;
     if (calendar !== undefined) requireISOCalendarLike(calendar);
-    return PlainDate.fromDay(fieldsDay(value, options));
+    return createPlainDate(fieldsDay(value, options));
   }
   toZonedDateTime(
     value:
@@ -228,12 +230,12 @@ export class PlainDate {
       fields.timeZone !== undefined
     )
       throw new TypeError("with requires date fields without a calendar or time zone");
-    return PlainDate.fromDay(fieldsDay(value, options, previous));
+    return createPlainDate(fieldsDay(value, options, previous));
   }
   withCalendar(calendar: Temporal.CalendarLike): PlainDate {
     const day = this.#day;
     requireISOCalendarLike(calendar);
-    return PlainDate.fromDay(day);
+    return createPlainDate(day);
   }
   private addDuration(
     value: Temporal.DurationLike,
@@ -242,9 +244,9 @@ export class PlainDate {
   ): PlainDate {
     const day = this.#day;
     const duration = toDuration(value);
-    const days = Number(duration.timeNanoseconds() / NS_PER_DAY);
+    const days = Number(Duration.timeNanoseconds(duration) / NS_PER_DAY);
     const overflow = overflowOption(options);
-    return PlainDate.fromDay(
+    return createPlainDate(
       addISODate(
         day,
         duration.years * sign,
@@ -327,6 +329,22 @@ export class PlainDate {
   }
   toString(options: Readonly<Temporal.PlainDateToStringOptions> | undefined = undefined): string {
     return dateString(this.#day, options);
+  }
+  toLocaleString(
+    locales: Intl.LocalesArgument = undefined,
+    options: Readonly<Intl.DateTimeFormatOptions> | undefined = undefined,
+    source: TimeLocaleSource | undefined = undefined,
+  ): string {
+    this.#day;
+    if (source === undefined) return dateString(this.#day);
+    return source.formatDateTime(
+      2,
+      this.#day * MS_PER_DAY + MS_PER_DAY / 2,
+      "iso8601",
+      locales,
+      options,
+      undefined,
+    );
   }
   toJSON(): string {
     return dateString(this.#day);

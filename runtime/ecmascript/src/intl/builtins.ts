@@ -11,6 +11,7 @@ export { getCanonicalLocales, supportedLocalesOf } from "./locale-list.ts";
 export { NtsLocale } from "./locale-object.ts";
 export { NtsCollator } from "./collator.ts";
 export { NtsDateTimeFormat } from "./date-time-builtins.ts";
+export { TimeLocaleContext } from "./time-locale.ts";
 export { NtsListFormat } from "./list.ts";
 export { NtsRelativeTimeFormat } from "./relative.ts";
 export { NtsPluralRules } from "./plural.ts";

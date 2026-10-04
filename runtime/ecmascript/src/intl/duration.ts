@@ -42,7 +42,7 @@ export class NtsDurationFormat<
     );
   }
 
-  private duration(value: Temporal.DurationLike): boolean {
+  private duration(value: Temporal.DurationLike | Duration): boolean {
     if (
       value === null ||
       (typeof value !== "object" && typeof value !== "function" && typeof value !== "string")
@@ -52,12 +52,12 @@ export class NtsDurationFormat<
   }
   // Temporal's Intl amendment also accepts duration strings; the pinned
   // DurationFormat library still declares only the field-bag input.
-  format(value: Temporal.DurationLike): string {
+  format(value: Temporal.DurationLike | Duration): string {
     const formatter = this.#formatter;
     const negative = this.duration(value);
     return formatter.format(this.#values, negative);
   }
-  formatToParts(value: Temporal.DurationLike): Intl.DurationFormatPart[] {
+  formatToParts(value: Temporal.DurationLike | Duration): Intl.DurationFormatPart[] {
     const formatter = this.#formatter;
     const negative = this.duration(value);
     return formatter.formatToParts(this.#values, negative);

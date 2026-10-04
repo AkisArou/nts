@@ -1,3 +1,4 @@
+import type { TimeLocaleSource } from "../time/locale-source.ts";
 import {
   dateFromTime,
   hourFromTime,
@@ -16,6 +17,10 @@ import { localTime, UTC } from "../time/provider.ts";
 import type { TimeHost, TimeZoneRules } from "../time/provider.ts";
 import type { DateComponent } from "./operations.ts";
 
+function number(value: number | undefined): number {
+  return value === undefined ? NaN : +value;
+}
+
 // Standard builtin lowering supplies the host zone and already-converted
 // numeric arguments. Each value owns only its mutable clipped timestamp;
 // clock, locale and zone capabilities are kept outside individual dates.
@@ -23,6 +28,9 @@ export class NtsDate {
   #milliseconds: number;
   constructor(milliseconds: number) {
     this.#milliseconds = timeClip(milliseconds);
+  }
+  static milliseconds(value: NtsDate): number {
+    return value.#milliseconds;
   }
   static from(value: number | string | NtsDate, zone: TimeZoneRules = UTC): NtsDate {
     return new NtsDate(
@@ -50,13 +58,13 @@ export class NtsDate {
   }
   static UTC(...args: Parameters<DateConstructor["UTC"]>): number {
     return dateUTC(
-      Number(args[0]),
-      args.length > 1 ? Number(args[1]) : 0,
-      args.length > 2 ? Number(args[2]) : 1,
-      args.length > 3 ? Number(args[3]) : 0,
-      args.length > 4 ? Number(args[4]) : 0,
-      args.length > 5 ? Number(args[5]) : 0,
-      args.length > 6 ? Number(args[6]) : 0,
+      number(args[0]),
+      args.length > 1 ? number(args[1]) : 0,
+      args.length > 2 ? number(args[2]) : 1,
+      args.length > 3 ? number(args[3]) : 0,
+      args.length > 4 ? number(args[4]) : 0,
+      args.length > 5 ? number(args[5]) : 0,
+      args.length > 6 ? number(args[6]) : 0,
     );
   }
   getTime(): number {
@@ -119,7 +127,8 @@ export class NtsDate {
     return offset === 0 ? 0 : -offset / 60000;
   }
   setTime(milliseconds: number): number {
-    this.#milliseconds = timeClip(milliseconds);
+    this.#milliseconds;
+    this.#milliseconds = timeClip(number(milliseconds));
     return this.#milliseconds;
   }
   // Scalar entry point preserves supplied-argument count for standard lowering,
@@ -134,8 +143,24 @@ export class NtsDate {
     local: boolean,
     zone: TimeZoneRules,
   ): number {
+    return this.#change(this.#milliseconds, kind, first, second, third, fourth, count, local, zone);
+  }
+  #change(
+    current: number,
+    kind: DateComponent,
+    first: number,
+    second: number,
+    third: number,
+    fourth: number,
+    count: number,
+    local = false,
+    zone: TimeZoneRules = UTC,
+  ): number {
+    // Conversion can mutate the receiver. An invalid original value returns
+    // without committing, except for setFullYear's specified epoch fallback.
+    if (Number.isNaN(current) && kind !== "year") return NaN;
     this.#milliseconds = setComponent(
-      this.#milliseconds,
+      current,
       kind,
       first,
       second,
@@ -147,34 +172,24 @@ export class NtsDate {
     );
     return this.#milliseconds;
   }
-  #setUTCComponent(
-    kind: DateComponent,
-    first: number,
-    second: number,
-    third: number,
-    fourth: number,
-    count: number,
-  ): number {
-    return this.setTime(
-      setComponent(this.#milliseconds, kind, first, second, third, fourth, count, false, UTC),
-    );
-  }
   setUTCFullYear(...args: Parameters<Date["setUTCFullYear"]>): number {
-    return this.#setUTCComponent(
+    return this.#change(
+      this.#milliseconds,
       "year",
-      Number(args[0]),
-      Number(args[1]),
-      Number(args[2]),
+      number(args[0]),
+      number(args[1]),
+      number(args[2]),
       0,
       args.length,
     );
   }
   setFullYear(...args: Parameters<Date["setFullYear"]>): number {
-    return this.setComponent(
+    return this.#change(
+      this.#milliseconds,
       "year",
-      Number(args[0]),
-      Number(args[1]),
-      Number(args[2]),
+      number(args[0]),
+      number(args[1]),
+      number(args[2]),
       0,
       args.length,
       true,
@@ -182,13 +197,22 @@ export class NtsDate {
     );
   }
   setUTCMonth(...args: Parameters<Date["setUTCMonth"]>): number {
-    return this.#setUTCComponent("month", Number(args[0]), Number(args[1]), 0, 0, args.length);
+    return this.#change(
+      this.#milliseconds,
+      "month",
+      number(args[0]),
+      number(args[1]),
+      0,
+      0,
+      args.length,
+    );
   }
   setMonth(...args: Parameters<Date["setMonth"]>): number {
-    return this.setComponent(
+    return this.#change(
+      this.#milliseconds,
       "month",
-      Number(args[0]),
-      Number(args[1]),
+      number(args[0]),
+      number(args[1]),
       0,
       0,
       args.length,
@@ -197,49 +221,53 @@ export class NtsDate {
     );
   }
   setUTCDate(day: number): number {
-    return this.#setUTCComponent("day", day, 0, 0, 0, 1);
+    return this.#change(this.#milliseconds, "day", number(day), 0, 0, 0, 1);
   }
   setDate(day: number, zone: TimeZoneRules = UTC): number {
-    return this.setComponent("day", day, 0, 0, 0, 1, true, zone);
+    return this.#change(this.#milliseconds, "day", number(day), 0, 0, 0, 1, true, zone);
   }
   setUTCHours(...args: Parameters<Date["setUTCHours"]>): number {
-    return this.#setUTCComponent(
+    return this.#change(
+      this.#milliseconds,
       "hour",
-      Number(args[0]),
-      Number(args[1]),
-      Number(args[2]),
-      Number(args[3]),
+      number(args[0]),
+      number(args[1]),
+      number(args[2]),
+      number(args[3]),
       args.length,
     );
   }
   setHours(...args: Parameters<Date["setHours"]>): number {
-    return this.setComponent(
+    return this.#change(
+      this.#milliseconds,
       "hour",
-      Number(args[0]),
-      Number(args[1]),
-      Number(args[2]),
-      Number(args[3]),
+      number(args[0]),
+      number(args[1]),
+      number(args[2]),
+      number(args[3]),
       args.length,
       true,
       UTC,
     );
   }
   setUTCMinutes(...args: Parameters<Date["setUTCMinutes"]>): number {
-    return this.#setUTCComponent(
+    return this.#change(
+      this.#milliseconds,
       "minute",
-      Number(args[0]),
-      Number(args[1]),
-      Number(args[2]),
+      number(args[0]),
+      number(args[1]),
+      number(args[2]),
       0,
       args.length,
     );
   }
   setMinutes(...args: Parameters<Date["setMinutes"]>): number {
-    return this.setComponent(
+    return this.#change(
+      this.#milliseconds,
       "minute",
-      Number(args[0]),
-      Number(args[1]),
-      Number(args[2]),
+      number(args[0]),
+      number(args[1]),
+      number(args[2]),
       0,
       args.length,
       true,
@@ -247,13 +275,22 @@ export class NtsDate {
     );
   }
   setUTCSeconds(...args: Parameters<Date["setUTCSeconds"]>): number {
-    return this.#setUTCComponent("second", Number(args[0]), Number(args[1]), 0, 0, args.length);
+    return this.#change(
+      this.#milliseconds,
+      "second",
+      number(args[0]),
+      number(args[1]),
+      0,
+      0,
+      args.length,
+    );
   }
   setSeconds(...args: Parameters<Date["setSeconds"]>): number {
-    return this.setComponent(
+    return this.#change(
+      this.#milliseconds,
       "second",
-      Number(args[0]),
-      Number(args[1]),
+      number(args[0]),
+      number(args[1]),
       0,
       0,
       args.length,
@@ -262,10 +299,20 @@ export class NtsDate {
     );
   }
   setUTCMilliseconds(millisecond: number): number {
-    return this.#setUTCComponent("millisecond", millisecond, 0, 0, 0, 1);
+    return this.#change(this.#milliseconds, "millisecond", number(millisecond), 0, 0, 0, 1);
   }
   setMilliseconds(millisecond: number, zone: TimeZoneRules = UTC): number {
-    return this.setComponent("millisecond", millisecond, 0, 0, 0, 1, true, zone);
+    return this.#change(
+      this.#milliseconds,
+      "millisecond",
+      number(millisecond),
+      0,
+      0,
+      0,
+      1,
+      true,
+      zone,
+    );
   }
   toISOString(): string {
     return formatISO(this.#milliseconds);
@@ -282,8 +329,40 @@ export class NtsDate {
   toTimeString(zone: TimeZoneRules = UTC): string {
     return formatTime(this.#milliseconds, zone);
   }
-  toJSON(): string | null {
-    return Number.isFinite(this.#milliseconds) ? formatISO(this.#milliseconds) : null;
+  toLocaleString(
+    locales: Intl.LocalesArgument = undefined,
+    options: Readonly<Intl.DateTimeFormatOptions> | undefined = undefined,
+    source: TimeLocaleSource | undefined = undefined,
+  ): string {
+    const milliseconds = this.#milliseconds;
+    if (Number.isNaN(milliseconds)) return "Invalid Date";
+    if (source === undefined) return formatLocal(milliseconds, UTC);
+    return source.formatDateTime(7, milliseconds, "iso8601", locales, options, undefined);
+  }
+  toLocaleDateString(
+    locales: Intl.LocalesArgument = undefined,
+    options: Readonly<Intl.DateTimeFormatOptions> | undefined = undefined,
+    source: TimeLocaleSource | undefined = undefined,
+  ): string {
+    const milliseconds = this.#milliseconds;
+    if (Number.isNaN(milliseconds)) return "Invalid Date";
+    if (source === undefined) return formatDate(milliseconds, UTC);
+    return source.formatDateTime(8, milliseconds, "iso8601", locales, options, undefined);
+  }
+  toLocaleTimeString(
+    locales: Intl.LocalesArgument = undefined,
+    options: Readonly<Intl.DateTimeFormatOptions> | undefined = undefined,
+    source: TimeLocaleSource | undefined = undefined,
+  ): string {
+    const milliseconds = this.#milliseconds;
+    if (Number.isNaN(milliseconds)) return "Invalid Date";
+    if (source === undefined) return formatTime(milliseconds, UTC);
+    return source.formatDateTime(9, milliseconds, "iso8601", locales, options, undefined);
+  }
+  toJSON(_key?: unknown): string | null {
+    const primitive = this.valueOf();
+    if (typeof primitive === "number" && !Number.isFinite(primitive)) return null;
+    return this.toISOString();
   }
 }
 

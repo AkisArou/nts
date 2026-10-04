@@ -184,14 +184,23 @@ export function timeZoneTransitionMilliseconds(
   // The provider's transition search is exclusive and has millisecond
   // precision. A previous search after a fractional millisecond must include
   // the transition at its floor; a next search already has the correct bound.
-  const query = !forward && epoch % NS_PER_MILLISECOND !== 0n ? milliseconds + 1 : milliseconds;
-  const next = zone.transition(query, forward);
-  if (next === null) return null;
-  if (!Number.isInteger(next)) throw new Error("Time-zone provider returned an invalid transition");
-  const result = BigInt(next) * NS_PER_MILLISECOND;
-  if (forward ? result <= epoch : result >= epoch)
-    throw new Error("Time-zone provider returned an invalid transition");
-  return result < -INSTANT_LIMIT || result > INSTANT_LIMIT ? null : next;
+  let query = !forward && epoch % NS_PER_MILLISECOND !== 0n ? milliseconds + 1 : milliseconds;
+  for (;;) {
+    const next = zone.transition(query, forward);
+    if (next === null) return null;
+    if (!Number.isInteger(next) || (forward ? next <= query : next >= query))
+      throw new Error("Time-zone provider returned an invalid transition");
+    const result = BigInt(next) * NS_PER_MILLISECOND;
+    if (result < -INSTANT_LIMIT || result > INSTANT_LIMIT) return null;
+    // ICU also reports abbreviation/DST-rule changes with an unchanged total
+    // offset. Temporal transitions require an actual UTC offset change.
+    if (
+      offsetMilliseconds(zone.offsetMilliseconds(next - 1)) !==
+      offsetMilliseconds(zone.offsetMilliseconds(next))
+    )
+      return next;
+    query = next;
+  }
 }
 
 export function formatOffsetNanoseconds(offset: bigint): string {

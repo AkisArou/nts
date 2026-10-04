@@ -1,3 +1,4 @@
+import type { TimeLocaleSource } from "../time/locale-source.ts";
 import {
   yearFromDays,
   monthFromTime,
@@ -181,7 +182,7 @@ export class PlainYearMonth {
     const day = this.#day;
     const duration = toDuration(value);
     const overflow = overflowOption(options);
-    if (duration.weeks !== 0 || duration.timeNanoseconds() !== 0n)
+    if (duration.weeks !== 0 || Duration.timeNanoseconds(duration) !== 0n)
       throw new RangeError("Year-month arithmetic only accepts years and months");
     const start = checkDateDay(epochDays(yearFromDays(day), monthFromTime(day * MS_PER_DAY), 1));
     return fromDay(
@@ -283,6 +284,22 @@ export class PlainYearMonth {
   }
   toString(options: Readonly<Temporal.PlainDateToStringOptions> | undefined = undefined): string {
     return yearMonthString(this.#day, options);
+  }
+  toLocaleString(
+    locales: Intl.LocalesArgument = undefined,
+    options: Readonly<Intl.DateTimeFormatOptions> | undefined = undefined,
+    source: TimeLocaleSource | undefined = undefined,
+  ): string {
+    this.#day;
+    if (source === undefined) return yearMonthString(this.#day);
+    return source.formatDateTime(
+      4,
+      this.#day * MS_PER_DAY + MS_PER_DAY / 2,
+      "iso8601",
+      locales,
+      options,
+      undefined,
+    );
   }
   toJSON(): string {
     return yearMonthString(this.#day);

@@ -84,6 +84,7 @@ export class DateTimeFormatConfiguration<
   private readonly patterns: P;
   private readonly matcher: NonNullable<Intl.DateTimeFormatOptions["formatMatcher"]>;
   private candidates: DateTimePattern[] | undefined;
+  private readonly zoned: boolean;
 
   constructor(
     resolver: LocaleResolver<D>,
@@ -93,6 +94,7 @@ export class DateTimeFormatConfiguration<
     options?: Readonly<Intl.DateTimeFormatOptions>,
     required: number = 0,
     defaults: number = 0,
+    timeZoneOverride: string | undefined = undefined,
   ) {
     if (options === null) throw new TypeError("Intl options must not be null");
     const matcher = stringOption(options?.localeMatcher, matchers, "best fit");
@@ -172,9 +174,17 @@ export class DateTimeFormatConfiguration<
         ? baseLocale
         : new LocaleIdentifier(baseLocale).withKeyword("hc", cycle);
     this.patterns = cycle === defaultCycle ? basePatterns : open(this.dataLocale);
-    const timeZone = optionalString(options?.timeZone);
+    const rawTimeZone = options?.timeZone;
+    if (timeZoneOverride !== undefined && rawTimeZone !== undefined)
+      throw new TypeError("Zoned localization does not accept a timeZone option");
+    const timeZone = optionalString(rawTimeZone);
+    this.zoned = timeZoneOverride !== undefined;
     this.timeZone =
-      timeZone === undefined ? timeZones.defaultIdentifier() : timeZones.resolve(timeZone);
+      timeZoneOverride !== undefined
+        ? timeZones.resolve(timeZoneOverride)
+        : timeZone === undefined
+          ? timeZones.defaultIdentifier()
+          : timeZones.resolve(timeZone);
     // Read each component exactly once, in specification table order.
     const weekday = option(options?.weekday, words);
     const era = option(options?.era, words);
@@ -253,19 +263,20 @@ export class DateTimeFormatConfiguration<
     if ((required !== 2 && date) || (required !== 1 && time)) return fields;
     return {
       ...fields,
-      ...(defaults === 0 || defaults === 2
+      ...(defaults === 0 || defaults >= 2
         ? { year: "numeric", month: "numeric", day: "numeric" }
         : {}),
-      ...(defaults === 1 || defaults === 2
+      ...(defaults === 1 || defaults >= 2
         ? { hour: "numeric", minute: "numeric", second: "numeric" }
         : {}),
+      ...(defaults === 3 && fields.timeZoneName === undefined ? { timeZoneName: "short" } : {}),
     };
   }
 
   instantPattern(): DateTimePattern {
     return this.dateStyle !== undefined || this.timeStyle !== undefined
       ? this.pattern
-      : this.match(this.withDefaults(this.components, 0, 2));
+      : this.match(this.withDefaults(this.components, 0, this.zoned ? 3 : 2));
   }
 
   plainTimePattern(): DateTimePattern {

@@ -1,3 +1,4 @@
+import type { TimeLocaleSource } from "../time/locale-source.ts";
 import {
   fractionalSecondDigits,
   roundingIncrement,
@@ -15,14 +16,14 @@ import {
 } from "./exact.ts";
 export { unitNanoseconds } from "./exact.ts";
 import type { RoundingMode } from "./exact.ts";
+import type { ResolvedTimeZone, TimeZoneSource } from "../time/zone-data.ts";
 import { PlainDate } from "./plain-date.ts";
+import { ZonedDateTime } from "./zoned-date-time.ts";
+import { addISOZonedDateTime } from "./zoned-iso.ts";
+import { roundISOZonedDifference, totalISOZonedDifference } from "./zoned-difference.ts";
 import { checkDateDay, addISODate } from "./iso-date.ts";
 import { checkDateTime, roundISODateTimeDifference } from "./iso-date-time.ts";
-import {
-  relativePlainDate,
-  relativeISODuration,
-  relativeISOCalendarTotal,
-} from "./relative-iso.ts";
+import { relativeDate, relativeISODuration, relativeISOCalendarTotal } from "./relative-iso.ts";
 import { pad } from "../date/format.ts";
 import {
   NS_PER_DAY,
@@ -76,7 +77,7 @@ export class Duration {
     this.#nanoseconds = integer(nanoseconds);
     let sign = 0;
     for (let index = 0; index < 10; index++) {
-      const value = this.#field(index);
+      const value = this.#component(index);
       const current = value < 0 ? -1 : value > 0 ? 1 : 0;
       if (current !== 0) {
         if (sign !== 0 && sign !== current) throw new RangeError("Duration has mixed signs");
@@ -113,32 +114,41 @@ export class Duration {
   }
   // Intrinsic snapshot for shared formatting; public getters are overridable.
   static copyFields(value: Duration, destination: Float64Array): number {
-    for (let index = 0; index < 10; index++) destination[index] = value.#field(index);
+    for (let index = 0; index < 10; index++) destination[index] = value.#component(index);
     return value.#sign;
   }
   static compare(
     one: Temporal.DurationLike,
     two: Temporal.DurationLike,
     opts: Readonly<Temporal.DurationRelativeToOptions> | undefined = undefined,
+    source: TimeZoneSource | undefined = undefined,
   ): number {
     const a = toDuration(one);
     const b = toDuration(two);
     if (opts !== undefined) requireOptions(opts);
     const relativeTo = opts?.relativeTo;
-    const relative = relativePlainDate(relativeTo);
+    const relative = relativeDate(relativeTo, source);
     if (
-      a.years === b.years &&
-      a.months === b.months &&
-      a.weeks === b.weeks &&
-      a.days === b.days &&
-      a.hours === b.hours &&
-      a.minutes === b.minutes &&
-      a.seconds === b.seconds &&
-      a.milliseconds === b.milliseconds &&
-      a.microseconds === b.microseconds &&
-      a.nanoseconds === b.nanoseconds
+      a.#years === b.#years &&
+      a.#months === b.#months &&
+      a.#weeks === b.#weeks &&
+      a.#days === b.#days &&
+      a.#hours === b.#hours &&
+      a.#minutes === b.#minutes &&
+      a.#seconds === b.#seconds &&
+      a.#milliseconds === b.#milliseconds &&
+      a.#microseconds === b.#microseconds &&
+      a.#nanoseconds === b.#nanoseconds
     )
       return 0;
+    if (relative instanceof ZonedDateTime) {
+      if (a.largestUnit() <= 3 || b.largestUnit() <= 3) {
+        const first = a.#zonedEnd(relative);
+        const last = b.#zonedEnd(relative);
+        return first < last ? -1 : first > last ? 1 : 0;
+      }
+      return a.#time < b.#time ? -1 : a.#time > b.#time ? 1 : 0;
+    }
     if (relative !== undefined) {
       const day = PlainDate.epochDay(relative);
       const first = relativeISODuration(day, a.#years, a.#months, a.#weeks, a.#time);
@@ -186,7 +196,7 @@ export class Duration {
     return this.#sign === 0;
   }
 
-  #field(index: number): number {
+  #component(index: number): number {
     if (index === 0) return this.#years;
     if (index === 1) return this.#months;
     if (index === 2) return this.#weeks;
@@ -199,17 +209,11 @@ export class Duration {
     if (index === 9) return this.#nanoseconds;
     throw new RangeError("Invalid duration field");
   }
-  field(index: number): number {
-    return this.#field(index);
-  }
   static field(value: Duration, index: number): number {
-    return value.#field(index);
+    return value.#component(index);
   }
   static timeNanoseconds(value: Duration): bigint {
     return value.#time;
-  }
-  timeNanoseconds(): bigint {
-    return this.#time;
   }
   instantNanoseconds(): bigint {
     if (this.#years !== 0 || this.#months !== 0 || this.#weeks !== 0 || this.#days !== 0)
@@ -217,7 +221,7 @@ export class Duration {
     return this.#time;
   }
   largestUnit(): number {
-    for (let index = 0; index < 9; index++) if (this.#field(index) !== 0) return index;
+    for (let index = 0; index < 9; index++) if (this.#component(index) !== 0) return index;
     return 9;
   }
   scaled(sign: number): Duration {
@@ -235,6 +239,8 @@ export class Duration {
     );
   }
   with(fields: Readonly<Temporal.DurationLikeObject>): Duration {
+    this.#time;
+    requireOptions(fields);
     return durationFields(fields, this);
   }
   negated(): Duration {
@@ -263,6 +269,7 @@ export class Duration {
     value:
       | Temporal.PluralizeUnit<"day" | Temporal.TimeUnit>
       | Readonly<Temporal.DurationRoundingOptions>,
+    source: TimeZoneSource | undefined = undefined,
   ): Duration {
     const time = this.#time;
     const existingLargest = this.largestUnit();
@@ -278,7 +285,7 @@ export class Duration {
     const largestText = rawLargest === undefined ? "auto" : String(rawLargest);
     const largest = largestText === "auto" ? -1 : durationUnitIndex(largestText);
     const relativeTo = value.relativeTo;
-    const relative = relativePlainDate(relativeTo);
+    const relative = relativeDate(relativeTo, source);
     const increment = roundingIncrement(value.roundingIncrement);
     const rawMode = value.roundingMode;
     const mode = roundingMode(rawMode === undefined ? "halfExpand" : rawMode);
@@ -291,14 +298,24 @@ export class Duration {
     if (smallest >= 4) validateIncrement(smallest, increment);
     if (increment > 1 && smallest <= 3 && actualLargest !== smallest)
       throw new RangeError("Calendar increments require matching largest and smallest units");
+    if (relative instanceof ZonedDateTime)
+      return roundISOZonedDifference(
+        ZonedDateTime.epochNanoseconds(relative),
+        this.#zonedEnd(relative),
+        ZonedDateTime.rules(relative),
+        actualLargest,
+        smallest,
+        increment,
+        mode,
+      );
     if (relative !== undefined) {
       const day = PlainDate.epochDay(relative);
       const days = floorDivide(time, NS_PER_DAY);
       const targetDay = addISODate(
         day,
-        this.years,
-        this.months,
-        this.weeks,
+        this.#years,
+        this.#months,
+        this.#weeks,
         Number(days),
         "constrain",
       );
@@ -324,6 +341,7 @@ export class Duration {
     value:
       | Temporal.PluralizeUnit<"day" | Temporal.TimeUnit>
       | Readonly<Temporal.DurationTotalOptions>,
+    source: TimeZoneSource | undefined = undefined,
   ): number {
     const time = this.#time;
     if (typeof value === "string") {
@@ -333,20 +351,44 @@ export class Duration {
     }
     requireOptions(value);
     const relativeTo = value.relativeTo;
-    const relative = relativePlainDate(relativeTo);
+    const relative = relativeDate(relativeTo, source);
     const rawUnit = value.unit;
     if (rawUnit === undefined) throw new RangeError("A total unit is required");
     const unit = durationUnitIndex(rawUnit);
+    if (relative instanceof ZonedDateTime)
+      return totalISOZonedDifference(
+        ZonedDateTime.epochNanoseconds(relative),
+        this.#zonedEnd(relative),
+        ZonedDateTime.rules(relative),
+        unit,
+      );
     if (relative !== undefined) {
       const day = PlainDate.epochDay(relative);
       const nanoseconds = relativeISODuration(day, this.#years, this.#months, this.#weeks, time);
-      checkDateDay(day + Number(floorDivide(nanoseconds, NS_PER_DAY)));
+      const elapsedDays = floorDivide(nanoseconds, NS_PER_DAY);
+      const targetDay = checkDateDay(day + Number(elapsedDays));
+      if (nanoseconds !== 0n) {
+        checkDateTime(day, 0);
+        checkDateTime(targetDay, Number(nanoseconds - elapsedDays * NS_PER_DAY));
+      }
       return unit < 3
         ? relativeISOCalendarTotal(day, nanoseconds, unit)
         : durationTotal(nanoseconds, unit);
     }
     requireFixedDays(this);
     return durationTotal(time, unit);
+  }
+  #zonedEnd(relative: ZonedDateTime<ResolvedTimeZone>): bigint {
+    return addISOZonedDateTime(
+      ZonedDateTime.epochNanoseconds(relative),
+      ZonedDateTime.rules(relative),
+      this.#years,
+      this.#months,
+      this.#weeks,
+      this.#days,
+      this.#time - BigInt(this.#days) * NS_PER_DAY,
+      "constrain",
+    );
   }
   toString(opts: Readonly<Temporal.DurationToStringOptions> | undefined = undefined): string {
     const time = this.#time;
@@ -375,6 +417,15 @@ export class Duration {
       precision,
     );
   }
+  toLocaleString(
+    locales: Intl.LocalesArgument = undefined,
+    options: Readonly<Intl.DurationFormatOptions> | undefined = undefined,
+    source: TimeLocaleSource | undefined = undefined,
+  ): string {
+    this.#time;
+    if (source === undefined) return formatDuration(this);
+    return source.formatDuration(this, locales, options);
+  }
   toJSON(): string {
     return formatDuration(this);
   }
@@ -387,8 +438,7 @@ function integer(value: number): number {
   if (typeof value === "bigint" || typeof value === "symbol")
     throw new TypeError("Duration numeric fields reject BigInts and Symbols");
   const number = Number(value);
-  if (!Number.isFinite(number) || !Number.isInteger(number))
-    throw new RangeError("Duration fields must be integral");
+  if (number % 1 !== 0) throw new RangeError("Duration fields must be integral");
   return number === 0 ? 0 : number;
 }
 function durationFields(
@@ -398,28 +448,75 @@ function durationFields(
   // Read and independently validate each named field in specification order.
   // There is no temporary array or run-time string-key lookup.
   const rawDays = value.days;
-  const days = rawDays === undefined ? (previous?.days ?? 0) : integer(rawDays);
+  const days =
+    rawDays === undefined
+      ? previous === undefined
+        ? 0
+        : Duration.field(previous, 3)
+      : integer(rawDays);
   const rawHours = value.hours;
-  const hours = rawHours === undefined ? (previous?.hours ?? 0) : integer(rawHours);
+  const hours =
+    rawHours === undefined
+      ? previous === undefined
+        ? 0
+        : Duration.field(previous, 4)
+      : integer(rawHours);
   const rawMicroseconds = value.microseconds;
   const microseconds =
-    rawMicroseconds === undefined ? (previous?.microseconds ?? 0) : integer(rawMicroseconds);
+    rawMicroseconds === undefined
+      ? previous === undefined
+        ? 0
+        : Duration.field(previous, 8)
+      : integer(rawMicroseconds);
   const rawMilliseconds = value.milliseconds;
   const milliseconds =
-    rawMilliseconds === undefined ? (previous?.milliseconds ?? 0) : integer(rawMilliseconds);
+    rawMilliseconds === undefined
+      ? previous === undefined
+        ? 0
+        : Duration.field(previous, 7)
+      : integer(rawMilliseconds);
   const rawMinutes = value.minutes;
-  const minutes = rawMinutes === undefined ? (previous?.minutes ?? 0) : integer(rawMinutes);
+  const minutes =
+    rawMinutes === undefined
+      ? previous === undefined
+        ? 0
+        : Duration.field(previous, 5)
+      : integer(rawMinutes);
   const rawMonths = value.months;
-  const months = rawMonths === undefined ? (previous?.months ?? 0) : integer(rawMonths);
+  const months =
+    rawMonths === undefined
+      ? previous === undefined
+        ? 0
+        : Duration.field(previous, 1)
+      : integer(rawMonths);
   const rawNanoseconds = value.nanoseconds;
   const nanoseconds =
-    rawNanoseconds === undefined ? (previous?.nanoseconds ?? 0) : integer(rawNanoseconds);
+    rawNanoseconds === undefined
+      ? previous === undefined
+        ? 0
+        : Duration.field(previous, 9)
+      : integer(rawNanoseconds);
   const rawSeconds = value.seconds;
-  const seconds = rawSeconds === undefined ? (previous?.seconds ?? 0) : integer(rawSeconds);
+  const seconds =
+    rawSeconds === undefined
+      ? previous === undefined
+        ? 0
+        : Duration.field(previous, 6)
+      : integer(rawSeconds);
   const rawWeeks = value.weeks;
-  const weeks = rawWeeks === undefined ? (previous?.weeks ?? 0) : integer(rawWeeks);
+  const weeks =
+    rawWeeks === undefined
+      ? previous === undefined
+        ? 0
+        : Duration.field(previous, 2)
+      : integer(rawWeeks);
   const rawYears = value.years;
-  const years = rawYears === undefined ? (previous?.years ?? 0) : integer(rawYears);
+  const years =
+    rawYears === undefined
+      ? previous === undefined
+        ? 0
+        : Duration.field(previous, 0)
+      : integer(rawYears);
   if (
     rawDays === undefined &&
     rawHours === undefined &&
@@ -446,7 +543,7 @@ function durationFields(
     nanoseconds,
   );
 }
-export function toDuration(value: Temporal.DurationLike): Duration {
+export function toDuration(value: Temporal.DurationLike | Duration): Duration {
   if (typeof value === "string") return parseDuration(value);
   if (value instanceof Duration) return value;
   return durationFields(value);
@@ -455,7 +552,12 @@ function requireFixedDays(
   value: Duration,
   relativeTo?: Temporal.DurationRelativeToOptions["relativeTo"],
 ): void {
-  if (relativeTo !== undefined || value.years !== 0 || value.months !== 0 || value.weeks !== 0)
+  if (
+    relativeTo !== undefined ||
+    Duration.field(value, 0) !== 0 ||
+    Duration.field(value, 1) !== 0 ||
+    Duration.field(value, 2) !== 0
+  )
     throw new RangeError("Calendar duration arithmetic requires the relative-date adapter");
 }
 export function durationUnitIndex(unit: string): number {

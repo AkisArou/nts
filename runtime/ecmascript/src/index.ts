@@ -28,6 +28,7 @@ export {
   PlainDate,
   PlainDateTime,
   dateToInstant,
+  NtsNow,
 } from "./temporal/builtins.ts";
 export * as Temporal from "./temporal/builtins.ts";
 export { PlainYearMonth, PlainMonthDay } from "./temporal/builtins.ts";
@@ -35,6 +36,8 @@ export { NumberFormatter } from "./intl/number.ts";
 export { NtsNumberFormat } from "./intl/builtins.ts";
 export { NtsCollator, CollatorConfiguration } from "./intl/collator.ts";
 export { NtsDateTimeFormat } from "./intl/date-time-builtins.ts";
+export { TimeLocaleContext } from "./intl/time-locale.ts";
+export type { TimeLocaleSource } from "./time/locale-source.ts";
 export { NtsListFormat } from "./intl/list.ts";
 export { NtsRelativeTimeFormat } from "./intl/relative.ts";
 export { NtsPluralRules } from "./intl/plural.ts";

@@ -1,6 +1,12 @@
 import type { TimeZoneRules } from "../time/provider.ts";
 import type { RoundingMode } from "./exact.ts";
-import { floorDivide, NS_PER_DAY, roundNanoseconds, unitNanoseconds } from "./exact.ts";
+import {
+  divideExact,
+  floorDivide,
+  NS_PER_DAY,
+  roundNanoseconds,
+  unitNanoseconds,
+} from "./exact.ts";
 import { Duration, balanceDuration } from "./duration.ts";
 import { differenceISODate } from "./iso-date-duration.ts";
 import { addISODate } from "./iso-date.ts";
@@ -106,13 +112,13 @@ export function roundISOZonedDifference(
       roundNanoseconds(end - start, unitNanoseconds(smallest) * BigInt(increment), mode),
       largest,
     );
-  if (start === end) return new Duration();
   const local = localNanoseconds(start, zone);
   const startDay = Number(floorDivide(local, NS_PER_DAY));
   const startTime = Number(local - BigInt(startDay) * NS_PER_DAY);
-  const raw = difference(start, end, zone, startDay, startTime, largest);
+  const raw =
+    start === end ? new Duration() : difference(start, end, zone, startDay, startTime, largest);
   if (smallest === 9 && increment === 1) return raw;
-  const sign = end > start ? 1 : -1;
+  const sign = end >= start ? 1 : -1;
   let years = Duration.field(raw, 0);
   let months = Duration.field(raw, 1);
   let weeks = Duration.field(raw, 2);
@@ -214,4 +220,58 @@ export function roundISOZonedDifference(
     largest,
     smallest,
   );
+}
+
+// A calendar total measures the fraction between adjacent actual boundaries.
+// Keep the quotient exact until its single conversion to binary64.
+export function totalISOZonedDifference(
+  start: bigint,
+  end: bigint,
+  zone: TimeZoneRules,
+  unit: number,
+): number {
+  if (unit >= 4) return divideExact(end - start, unitNanoseconds(unit));
+  const local = localNanoseconds(start, zone);
+  const day = Number(floorDivide(local, NS_PER_DAY));
+  const time = Number(local - BigInt(day) * NS_PER_DAY);
+  const raw = difference(start, end, zone, day, time, unit);
+  let whole = Duration.field(raw, unit);
+  const sign = end >= start ? 1 : -1;
+  let lower = boundary(
+    start,
+    day,
+    time,
+    zone,
+    unit === 0 ? whole : 0,
+    unit === 1 ? whole : 0,
+    unit === 2 ? whole : 0,
+    unit === 3 ? whole : 0,
+  );
+  let upper = boundary(
+    start,
+    day,
+    time,
+    zone,
+    unit === 0 ? whole + sign : 0,
+    unit === 1 ? whole + sign : 0,
+    unit === 2 ? whole + sign : 0,
+    unit === 3 ? whole + sign : 0,
+  );
+  if (sign > 0 ? end > upper : end < upper) {
+    whole += sign;
+    lower = upper;
+    upper = boundary(
+      start,
+      day,
+      time,
+      zone,
+      unit === 0 ? whole + sign : 0,
+      unit === 1 ? whole + sign : 0,
+      unit === 2 ? whole + sign : 0,
+      unit === 3 ? whole + sign : 0,
+    );
+  }
+  const span = upper > lower ? upper - lower : lower - upper;
+  if (span === 0n) throw new Error("Time-zone provider returned an empty total interval");
+  return divideExact(BigInt(whole) * span + end - lower, span);
 }

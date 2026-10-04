@@ -56,6 +56,13 @@ public final class Host {
                 try {
                     String first = fields.length > 1 ? decode(fields[1]) : "";
                     switch (fields[0]) {
+                        case "nowNanoseconds": {
+                            java.time.Instant instant = java.time.Instant.now();
+                            result = java.math.BigInteger.valueOf(instant.getEpochSecond())
+                                .multiply(java.math.BigInteger.valueOf(1000000000))
+                                .add(java.math.BigInteger.valueOf(instant.getNano())).toString();
+                            break;
+                        }
                         case "canonicalize": result = data.canonicalize(first); break;
                         case "maximize": result = data.maximize(first); break;
                         case "minimize": result = data.minimize(first); break;

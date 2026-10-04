@@ -1,3 +1,4 @@
+import type { TimeLocaleSource } from "../time/locale-source.ts";
 import { ISOParser } from "./iso-parser.ts";
 import { NS_PER_DAY, roundNanoseconds } from "./exact.ts";
 import {
@@ -79,6 +80,17 @@ function timeFields(
   );
 }
 
+export function createPlainTime(value: number): PlainTime {
+  return new PlainTime(
+    Math.floor(value / 3600000000000),
+    Math.floor(value / 60000000000) % 60,
+    Math.floor(value / 1e9) % 60,
+    Math.floor(value / 1e6) % 1000,
+    Math.floor(value / 1000) % 1000,
+    value % 1000,
+  );
+}
+
 // A time of day has fewer than 2^47 nanoseconds: one binary64 integer stores
 // the entire immutable value exactly. BigInt is needed only for arithmetic
 // with arbitrary supported duration magnitudes, before reducing into the day.
@@ -89,16 +101,6 @@ export class PlainTime {
     this.#time = timeNanoseconds(hour, minute, second, millisecond, microsecond, nanosecond);
   }
 
-  private static fromNanoseconds(value: number): PlainTime {
-    return new PlainTime(
-      Math.floor(value / 3600000000000),
-      Math.floor(value / 60000000000) % 60,
-      Math.floor(value / 1e9) % 60,
-      Math.floor(value / 1e6) % 1000,
-      Math.floor(value / 1000) % 1000,
-      value % 1000,
-    );
-  }
   // Intl formats plain values in UTC and must read their immutable slot.
   static nanoseconds(value: PlainTime): number {
     return value.#time;
@@ -110,22 +112,22 @@ export class PlainTime {
     if (item instanceof ZonedDateTime) {
       const time = ZonedDateTime.nanoseconds(item);
       overflowOption(options);
-      return PlainTime.fromNanoseconds(time);
+      return createPlainTime(time);
     }
     if (item instanceof PlainTime) {
       overflowOption(options);
-      return PlainTime.fromNanoseconds(item.#time);
+      return createPlainTime(item.#time);
     }
     if (item instanceof PlainDateTime) {
       overflowOption(options);
-      return PlainTime.fromNanoseconds(PlainDateTime.nanoseconds(item));
+      return createPlainTime(PlainDateTime.nanoseconds(item));
     }
     if (typeof item === "string") {
       const parsed = new ISOParser(item, true);
       if (parsed.utcDesignator)
         throw new RangeError("PlainTime strings must not have a UTC designator");
       overflowOption(options);
-      return PlainTime.fromNanoseconds(parsed.timeNanoseconds());
+      return createPlainTime(parsed.timeNanoseconds());
     }
     if (item === null || typeof item !== "object")
       throw new TypeError("PlainTime requires a time object or string");
@@ -158,14 +160,14 @@ export class PlainTime {
 
   add(duration: Temporal.DurationLike): PlainTime {
     const time = this.#time;
-    return PlainTime.fromNanoseconds(
-      withinDay(BigInt(time) + toDuration(duration).timeNanoseconds()),
+    return createPlainTime(
+      withinDay(BigInt(time) + Duration.timeNanoseconds(toDuration(duration))),
     );
   }
   subtract(duration: Temporal.DurationLike): PlainTime {
     const time = this.#time;
-    return PlainTime.fromNanoseconds(
-      withinDay(BigInt(time) - toDuration(duration).timeNanoseconds()),
+    return createPlainTime(
+      withinDay(BigInt(time) - Duration.timeNanoseconds(toDuration(duration))),
     );
   }
   with(
@@ -259,7 +261,7 @@ export class PlainTime {
     const index = timeUnitIndex(unit);
     if (index < 4) throw new RangeError("Invalid PlainTime rounding unit");
     validateIncrement(index, increment);
-    return PlainTime.fromNanoseconds(
+    return createPlainTime(
       withinDay(roundNanoseconds(BigInt(time), unitNanoseconds(index) * BigInt(increment), mode)),
     );
   }
@@ -272,6 +274,22 @@ export class PlainTime {
     const increment =
       precision === -2 ? 60000000000n : BigInt(precision < 0 ? 1 : 10 ** (9 - precision));
     return formatPlainTime(withinDay(roundNanoseconds(BigInt(time), increment, mode)), precision);
+  }
+  toLocaleString(
+    locales: Intl.LocalesArgument = undefined,
+    options: Readonly<Intl.DateTimeFormatOptions> | undefined = undefined,
+    source: TimeLocaleSource | undefined = undefined,
+  ): string {
+    this.#time;
+    if (source === undefined) return formatPlainTime(this.#time);
+    return source.formatDateTime(
+      1,
+      Math.floor(this.#time / 1e6),
+      "iso8601",
+      locales,
+      options,
+      undefined,
+    );
   }
   toJSON(): string {
     return formatPlainTime(this.#time);

@@ -71,8 +71,8 @@ and artifact-size evidence before becoming another provider.
    setters, localization and the Temporal bridge. Core arithmetic, parsing and
    serialization exist. UTC and multi-component setters distinguish omission
    from explicit undefined. Their emitted optional-tuple witness still exposes
-   a compiler argument-count defect. Standard host binding and locale methods
-   remain open.
+   a compiler argument-count defect. The three locale methods now use shared
+   Intl. Complete standard binding and local environment wiring remain open.
 5. **Temporal.** Complete Instant, Duration, PlainDate, PlainTime, PlainDateTime,
    PlainYearMonth, PlainMonthDay, ZonedDateTime and Now, with non-ISO calendars,
    relative arithmetic, transitions and disambiguation. Instant/Duration scalar
@@ -83,8 +83,11 @@ and artifact-size evidence before becoming another provider.
    and the shared local-time/transition foundation now exist. The ISO
    ZonedDateTime value class has parsing, getters, field replacement,
    arithmetic, variable-day rounding, differences, transitions and plain-type
-   conversions. Non-ISO calendars, localization, complete relative-field
-   conversion, Now and compiled public acceptance remain open.
+   conversions. Duration's ISO plain/zoned relative conversion, comparison,
+   rounding and totals now reuse these kernels. Temporal.Now uses injected
+   nanosecond clock/default-zone capabilities and direct result construction.
+   All eight value classes now localize through shared Intl. Shipping clock/locale
+   bindings, non-ISO calendars and compiled public acceptance remain open.
 6. **PluralRules, ListFormat and DurationFormat.** Implement each service and
    connect localization methods to shared formatters. ListFormat's typed API,
    iterable validation, locale templates, contextual Spanish/Hebrew rules and
@@ -92,8 +95,8 @@ and artifact-size evidence before becoming another provider.
    algorithm and supports cardinal/ordinal rules, notation, exact inputs and
    ranges. Provider and shared assembly witnesses pass on all five backend/memory
    configurations. DurationFormat now has typed options, exact fractional
-   formatting, digital patterns, parts and C/JVM data providers; localization
-   methods and compiled public acceptance remain open. Duration's native
+   formatting, digital patterns, parts and C/JVM data providers; Duration's
+   localization uses this same formatter. Compiled public acceptance remains open. Its native
    callback sanitizer failure and JVM part-record defect remain acceptance gaps.
 7. **Other Intl services.** Complete Collator, RelativeTimeFormat, DisplayNames,
    Segmenter and Locale information APIs. Collator's typed API, shared option
@@ -195,8 +198,10 @@ BigInt domain.
   that implementation. ISO relative totals use exact calendar fractions with
   one binary64 rounding. Scalar calendar/field helpers have no class dependency;
   class identity checks and Duration construction live in separate modules.
-  Zoned/non-ISO relative arithmetic and complete relative-field conversion
-  remain open.
+  Zoned relative arithmetic reuses those kernels and keeps date days separate
+  from elapsed hours. Field preparation reads each property once in the specified
+  order and constructs only the resulting plain or zoned value. Non-ISO relative
+  arithmetic remains open.
 - **Temporal time zones:** shared exact local-time resolution, offset matching,
   gap/fold disambiguation, missing-midnight start of day and exclusive transition
   queries. Extended local milliseconds stay exact in Number; sub-millisecond
@@ -211,11 +216,12 @@ BigInt domain.
   time and offset scalars once. Its getters do not query the provider or
   allocate records. Zoned differences keep calendar days separate from elapsed
   hours, compare exact boundary distances and use bounded date corrections.
-  Non-ISO calendars, localization and compiled public acceptance remain open.
+  Non-ISO calendars and compiled public acceptance remain open. Shared
+  localization now uses the same Intl formatter as other Temporal values.
 - **Date:** mutable private state and scalar UTC/local operations. Static UTC
   and multi-component setters use standard Parameters tuples to preserve the
   supplied argument count. The standard compiled boundary remains pending.
-- **DurationFormat:** the full library instance contract, ordered options,
+- **DurationFormat:** typed public methods, ordered options,
   textual/digital/mixed styles, negative durations, exact fractional aggregation,
   truncation, resolved options and standard-library parts. Temporal's Intl
   amendment supplies the duration-string input; conversion and validation reuse
@@ -227,12 +233,12 @@ BigInt domain.
 
 Original Instant Test262 initially improved from 415/465 to 423/465. With the
 ZonedDateTime class, private-slot conversions and ordered round-option fixes,
-the current result is 459/465. Standard constructor conversion, localization
+that checkpoint reached 459/465. Standard constructor conversion, localization
 and excluded intrinsic metadata remain visible in those failures. The
 supplementary host provider uses the same pinned ICU4J primitives; production
 uses direct C/Java calls.
 
-The ISO ZonedDateTime class currently passes 893/901 original host tests,
+The ISO ZonedDateTime checkpoint passed 893/901 original host tests,
 including every `with`, `until` and `since` test. The eight retained failures
 concern localization and excluded intrinsic metadata. PlainDate and
 PlainDateTime now convert through the same resolved zone capability and
@@ -252,6 +258,95 @@ for the compiler lane. This is a compiler dependency; no casts or replacement
 ambient contracts hide it. The earlier compiled cache/performance receipts
 below precede this cleanup and are not current-source compiled acceptance.
 
+The relative Duration checkpoint passed 536/540 original host cases, including all 50 comparison,
+126 rounding and 78 total cases. Relative conversion preserves branded zoned
+slots and prepares plain/zoned bags through one ordered scalar routine. Strings
+are scanned once. Zoned totals use adjacent actual boundaries, exact rational
+arithmetic and one final binary64 rounding. Zero-duration calendar rounding and
+totals still validate the required next boundary; plain totals preserve the
+specified zero-duration early return at the range endpoints. Constrained
+month/year totals shift their rounding window once when necessary. The four
+retained failures concern localization and excluded metadata. These changes fix
+44 original cases without regressions; all 901 ZonedDateTime verdicts remain
+unchanged. Internal Duration reads use branded static helpers, with unused
+instance readers removed. Current public C/JVM emission still has canonical
+union, structural/generic dispatch and representation diagnostics; it is not
+compiled acceptance.
+
+Temporal.Now implements all six operations through one environment with an
+injected nanosecond clock, a current canonical default-zone query and the shared
+zone resolver. It retains clock precision, clamps samples to Instant's range,
+resolves a requested zone before sampling and samples once per value operation.
+Plain results reuse module-level scalar factories, with no temporary Temporal
+values or prepared field records. The default-zone identifier query opens no
+rule handle. Its original host result is 56/66; the ten retained failures are
+excluded metadata. The supplementary host clock queries java.time.Instant,
+without synthesizing precision from Date.now. Shipping clock bindings remain
+open; the production algorithms depend on typed injected capabilities.
+
+The actual clock/value fixture typechecks and its host driver verifies -1ns
+across all result types, five samples/three default queries, range clamping and
+zone rejection before sampling. Current C/JVM emission remains unaccepted:
+calling a typed BigInt-returning function through a field is refused on both
+backends, alongside the existing canonical union/structural/generic blockers.
+A minimal bigint callback fixture retains these diagnostics; its otherwise
+identical number control executes successfully on C and JVM with verification.
+Exit zero and partial artifacts are not acceptance. That complete original
+Temporal host checkpoint passed 4,551/4,603, with no previously passing cases regressed;
+Now also unblocks a PlainDateTime return-type case and a global key-presence
+case. Localization and non-ISO semantics remain incomplete despite weak tests
+that only require a string result. DateTimeFormat was 191/244 at that checkpoint.
+
+Shared localization now connects Instant, Duration, all five plain classes,
+ZonedDateTime and Date's three locale methods to the existing Intl algorithms.
+An environment owns the formatter capabilities; values pass their immutable
+scalar slots or a branded Duration. No temporary Temporal values, copied field
+records, standard-type aliases, mapped contracts or descriptor repairs are
+needed. DateTimeFormat opens its selected formatter lazily, avoiding an unused
+numeric-date handle when formatting Temporal. Each locale call still prepares
+options in the specified order. Zoned localization rejects a timeZone option
+before converting it and derives default zone names from its own zone. Invalid
+Dates return their specified string before reading locales/options. Intl-absent
+Temporal methods use the specified ordinary lexical formatting path.
+
+All 56 original builtin Temporal locale tests pass with and without Intl.
+The full builtin Temporal run passes 4,567/4,603, fixing 16 cases with no
+regressions; 35 retained failures concern excluded metadata and one requires
+standard Instant constructor conversion. The Intl-specific locale slice passes
+69/97; its 28 failures require non-ISO calendar integration. Date now passes
+396/594 and DateTimeFormat 192/244. DurationFormat remains 101/110.
+The host adapter binds Date localization to the shared formatter too, so the
+original Date/Temporal comparison tests use the same algorithms and pinned data.
+It does not normalize output or compare shared ICU text to Node's separate
+formatting adaptations. These remain supplementary host results.
+
+The actual C/JVM locale boundary witness covers all eight Temporal value classes
+and all three Date locale methods. Both strict provider configurations typecheck;
+the host driver verifies the outputs against fixed scalar cases and direct
+pinned ICU partial-date patterns. Current C/JVM emission retains canonical locale
+union and structural/generic dispatch refusals and therefore does not establish
+execution, native performance or packaging acceptance. Receipts are under
+target/ecmascript/audit/time-locale; original rows and their scoped comparison
+are under target/ecmascript/icu-check/temporal-localization-*. Shipping standard
+bindings and non-ISO semantics remain required.
+
+The full Intl Temporal checkpoint ran all 2,029 original cases and passed 254.
+It exposed two additional ISO time-zone defects. Shared transition search now
+skips ICU rule/abbreviation changes whose total UTC offset is unchanged, while
+checking exclusive progress and the Instant range on every provider result.
+Day rounding caps progress just before the next first midnight when a backward
+shift repeats part of today's date after tomorrow has already started. This is
+the [accepted issue #3312 resolution](https://github.com/tc39/proposal-temporal/issues/3312#issuecomment-4567138597)
+covered by the pinned Test262 case; the proposal's older spec snapshot still
+contains the replaced assertion. The scoped Intl ZonedDateTime rerun passes
+121/583, fixing both cases without regressions; all 901 builtin ZonedDateTime
+verdicts and reasons remain unchanged. Combining those scoped results with the
+full Intl checkpoint gives 256/2,029; this is a combined scope result rather
+than another full run. Non-ISO calendar construction, conversion and field
+validation still account for its retained failures. Original rows and reasons
+remain in temporal-localization-all-intl-test262.jsonl and
+zoned-intl-edge-test262.jsonl under target/ecmascript/icu-check.
+
 The compiled fixture compares cached and raw ICU offsets across all 446 primary
 zones and every one of 42,806 transitions from 1800 through 2099, including
 local window edges, both interpretations, cache eviction and the Temporal range
@@ -266,8 +361,8 @@ formatting. ISO zoned addition distinguishes calendar dates from elapsed
 retains a fold occurrence when no date units are added. Day rounding measures
 actual 23-/25-hour midnight intervals; sub-day rounding prefers the original
 offset. These kernels pass all five configurations. Original PlainDateTime
-round tests remain 45/45; Duration round remains 95/126, with all 31 residual
-failures retained and no regressions from the prior 458/540 full Duration run.
+round tests remain 45/45. The earlier Duration rounding checkpoint was 95/126;
+the relative-value work above now passes all 126 original host rounding cases.
 These are provider/cache/compiled boundary witnesses; original
 Test262 remains the semantic corpus.
 
@@ -356,17 +451,18 @@ Current host results against Test262
 
 | Slice                    | Host passes | Retained failures |
 | ------------------------ | ----------: | ----------------: |
-| Date                     |         390 |               204 |
-| Temporal.Instant         |         459 |                 6 |
-| Temporal.Duration        |         492 |                48 |
-| Temporal.PlainTime       |         489 |                 4 |
-| Temporal.PlainDate       |         648 |                 4 |
-| Temporal.PlainDateTime   |         768 |                 5 |
-| Temporal.PlainYearMonth  |         505 |                 4 |
-| Temporal.PlainMonthDay   |         195 |                 4 |
-| Temporal.ZonedDateTime   |         893 |                 8 |
+| Date                     |         396 |               198 |
+| Temporal.Instant         |         461 |                 4 |
+| Temporal.Duration        |         538 |                 2 |
+| Temporal.PlainTime       |         491 |                 2 |
+| Temporal.PlainDate       |         650 |                 2 |
+| Temporal.PlainDateTime   |         771 |                 2 |
+| Temporal.PlainYearMonth  |         507 |                 2 |
+| Temporal.PlainMonthDay   |         197 |                 2 |
+| Temporal.ZonedDateTime   |         895 |                 6 |
+| Temporal.Now             |          56 |                10 |
 | Intl.NumberFormat        |         220 |                29 |
-| Intl.DateTimeFormat      |         191 |                53 |
+| Intl.DateTimeFormat      |         192 |                52 |
 | Intl.Collator            |          50 |                15 |
 | Intl.ListFormat          |          70 |                11 |
 | Intl.RelativeTimeFormat  |          69 |                11 |
@@ -387,7 +483,9 @@ LLVM, JVM, C+RC and LLVM+RC. RC differential checks use `NTS_RC=1`. Separate
 public fixtures retain canonical union refusals and optional-tuple argument-count
 failures; an exit status of zero is not sufficient evidence of execution.
 
-The pinned compiled ICU fixture now passes **C, LLVM, JVM, C RC and LLVM RC**.
+The earlier pinned compiled ICU checkpoint passed **C, LLVM, JVM, C RC and LLVM RC**.
+It precedes the plain-class cleanup; current compiled provider dispatch remains
+blocked by the compiler dependencies recorded above.
 This general fixture covers the services listed below; the new DurationFormat
 gate is separate and is not accepted by this result.
 C RC passes ASan, UBSan and leak checks; LLVM/native provider code is also built
@@ -567,7 +665,7 @@ copied ambient declarations or renaming aliases are needed.
   or copied standard declaration. NumberDigits keeps the concrete option record
   type so sharing its algorithm requires no record projection or extra allocation.
 - NtsDurationFormat uses Intl types directly. Its input is
-  Temporal.DurationLike because the pinned Intl declaration omits the Temporal
+  Temporal.DurationLike plus the actual shared Duration class, because the pinned Intl declaration omits the Temporal
   amendment's string input. Its configuration and part types derive directly
   from the libraries, without aliases, copied declarations or erased casts.
 - NtsDisplayNames uses Intl types directly. Options, name types,

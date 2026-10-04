@@ -42,16 +42,36 @@ witness passes all five configurations; the public Locale constructor and result
 records still have compiler refusals. Original Locale Test262 remains 128/168.
 Temporal now shares exact local-time resolution, gap/fold and offset selection,
 start-of-day and transition queries. Instant has an original Test262 host result
-of 459/465; the ISO ZonedDateTime value class is at 893/901, including all original
+of 461/465; the ISO ZonedDateTime value class is at 895/901, including all original
 field replacement and difference tests. Bounded shared caches retain eight named
 handles and two adjacent offset periods per handle. Resolved identifiers retain
 both named spelling and IANA primary identity, including Factory. ISO zoned
 date addition and rounding now handle variable days and preserve fold offsets. The cache matches public
 ICU across all 446 primary zones in the earlier five-configuration checkpoint.
+Duration's ISO plain/zoned relative comparison, rounding and totals now share
+those kernels. Its original host result is 538/540, including every comparison,
+rounding and total case; two metadata failures remain visible.
 Removing class `implements` checks exposes a compiler dependency in structural
 provider dispatch; the current compiled gate stops before execution. Canonical
-public unions also remain compiler dependencies. Localization, Now, non-ISO
-calendars, complete standard bindings and public conformance remain in progress.
+public unions also remain compiler dependencies. Temporal.Now now implements
+all six operations with injected nanosecond clock/default-zone capabilities and
+direct value construction. Its original host result is 56/66, retaining ten
+metadata cases. Stored callbacks returning BigInt remain a compiler dependency;
+Shared localization now connects all eight Temporal value classes and the three
+Date locale methods to Intl through immutable slots. It opens only the selected
+formatter and preserves the specified fallback when Intl is absent. All 56
+original builtin Temporal locale cases pass both with and without Intl; the
+Intl-specific locale slice passes 69/97, retaining non-ISO calendar cases.
+The full builtin Temporal host result is 4,567/4,603, with no regressions in this
+localization change. Date is at 396/594 and DateTimeFormat at 192/244. The actual
+C/JVM localization witness typechecks but retains compiler refusals for canonical
+unions and structural dispatch. Shipping clock/locale bindings, non-ISO calendars,
+complete standard bindings and public conformance remain in progress.
+The separate full Intl Temporal checkpoint exposes the calendar work across
+2,029 cases. Two further ISO zone fixes skip unchanged-offset rule transitions
+and round repeated dates to the first day boundaries; the scoped ZonedDateTime
+reruns have no regressions. Combined host results pass 256/2,029 in that Intl
+suite and retain every failure.
 
 ## Regexp
 

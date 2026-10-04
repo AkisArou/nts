@@ -1,3 +1,4 @@
+import type { TimeLocaleSource } from "../time/locale-source.ts";
 import type { ResolvedTimeZone, TimeZoneSource } from "../time/zone-data.ts";
 import {
   epochDays,
@@ -56,75 +57,17 @@ import {
 } from "./zoned-time.ts";
 import { addISOZonedDateTime, roundISOZonedDateTime } from "./zoned-iso.ts";
 import { roundISOZonedDifference } from "./zoned-difference.ts";
+import { fromDateTimeFields } from "./date-time-fields.ts";
 import { Duration, toDuration } from "./duration.ts";
 import { Instant } from "./instant-object.ts";
 import { roundInstant } from "./instant.ts";
-import { PlainDate } from "./plain-date.ts";
-import { PlainTime } from "./plain-time.ts";
-import { PlainDateTime } from "./plain-date-time.ts";
+import { PlainDate, createPlainDate } from "./plain-date.ts";
+import { PlainTime, createPlainTime } from "./plain-time.ts";
+import { PlainDateTime, createPlainDateTime } from "./plain-date-time.ts";
 
-function numericField(value: number | undefined): number {
-  return value === undefined ? 0 : integerWithTruncation(value);
-}
 function stringField(value: string): string {
   if (typeof value === "symbol") throw new TypeError("Temporal string fields reject Symbols");
   return String(value);
-}
-
-function fromFields(
-  fields: Readonly<Partial<Temporal.ZonedDateTimeLikeObject>>,
-  options: Readonly<Temporal.ZonedDateTimeFromOptions> | undefined,
-  source: TimeZoneSource | undefined,
-): ZonedDateTime<ResolvedTimeZone> {
-  const calendar = fields.calendar;
-  if (calendar !== undefined) requireISOCalendarLike(calendar);
-  // PrepareCalendarFields reads and converts fields in alphabetical order.
-  // Retain scalar locals rather than building another public field record.
-  const rawDay = fields.day;
-  const day = rawDay === undefined ? undefined : positiveDateField(rawDay);
-  const hour = numericField(fields.hour);
-  const microsecond = numericField(fields.microsecond);
-  const millisecond = numericField(fields.millisecond);
-  const minute = numericField(fields.minute);
-  const rawMonth = fields.month;
-  const month = rawMonth === undefined ? undefined : positiveDateField(rawMonth);
-  const rawCode = fields.monthCode;
-  const code = rawCode === undefined ? undefined : isoMonthCode(rawCode);
-  const nanosecond = numericField(fields.nanosecond);
-  const rawOffset = fields.offset;
-  const offset =
-    rawOffset === undefined ? undefined : ISOParser.parseUTCOffset(requiredString(rawOffset));
-  const second = numericField(fields.second);
-  const rawZone = fields.timeZone;
-  if (rawZone === undefined) throw new TypeError("A zoned date-time requires a timeZone");
-  const zone = resolveTimeZone(rawZone, source);
-  const rawYear = fields.year;
-  const year = rawYear === undefined ? undefined : integerWithTruncation(rawYear);
-  if (options !== undefined) requireOptions(options);
-  const disambiguation = disambiguationOption(options?.disambiguation);
-  const offsetChoice = offsetOption(options?.offset, "reject");
-  const overflow = overflowOption(options);
-  const resultDay = resolveISOFields(year, month, code, day, overflow);
-  const time = timeNanoseconds(
-    regulateTimeField(hour, 23, overflow),
-    regulateTimeField(minute, 59, overflow),
-    regulateTimeField(second, 59, overflow),
-    regulateTimeField(millisecond, 999, overflow),
-    regulateTimeField(microsecond, 999, overflow),
-    regulateTimeField(nanosecond, 999, overflow),
-  );
-  checkDateTime(resultDay, time);
-  return new ZonedDateTime(
-    resolveLocalDateTime(
-      resultDay,
-      time,
-      zone,
-      disambiguation,
-      offset === undefined ? "ignore" : offsetChoice,
-      offset === undefined ? 0n : offset,
-    ),
-    zone,
-  );
 }
 
 // The standard constructor binding resolves its string into this typed rule
@@ -178,34 +121,39 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
       overflowOption(options);
       return new ZonedDateTime(epoch, value.#zone);
     }
-    if (typeof value === "string") {
-      const parsed = new ISOParser(value, false, true);
-      if (parsed.timeZone === undefined)
-        throw new RangeError("Zoned date-time strings require a time-zone annotation");
-      const zone = resolveTimeZoneIdentifier(parsed.timeZone, source);
-      requireISOCalendar(parsed.calendar);
-      if (options !== undefined) requireOptions(options);
-      const disambiguation = disambiguationOption(options?.disambiguation);
-      const offset = offsetOption(options?.offset, "reject");
-      overflowOption(options);
-      const day = epochDays(parsed.year, parsed.month - 1, parsed.day);
-      const time = parsed.timeNanoseconds();
-      const epoch = !parsed.hasTime
-        ? startOfDay(day, zone)
-        : resolveLocalDateTime(
-            day,
-            time,
-            zone,
-            disambiguation,
-            parsed.utcDesignator ? "use" : !parsed.hasOffset ? "ignore" : offset,
-            parsed.offsetNanoseconds,
-            !parsed.offsetHasSeconds,
-          );
-      return new ZonedDateTime(epoch, zone);
-    }
-    if (value === null || typeof value !== "object")
+    if (typeof value === "string")
+      return ZonedDateTime.fromParsed(new ISOParser(value, false, true), options, source);
+    if (value === null || (typeof value !== "object" && typeof value !== "function"))
       throw new TypeError("Zoned date-time requires an object or string");
-    return fromFields(value, options, source);
+    return fromDateTimeFields(value, options, source, true);
+  }
+  static fromParsed(
+    parsed: ISOParser,
+    options: Readonly<Temporal.ZonedDateTimeFromOptions> | undefined,
+    source: TimeZoneSource | undefined,
+  ): ZonedDateTime<ResolvedTimeZone> {
+    if (parsed.timeZone === undefined)
+      throw new RangeError("Zoned date-time strings require a time-zone annotation");
+    const zone = resolveTimeZoneIdentifier(parsed.timeZone, source);
+    requireISOCalendar(parsed.calendar);
+    if (options !== undefined) requireOptions(options);
+    const disambiguation = disambiguationOption(options?.disambiguation);
+    const offset = offsetOption(options?.offset, "reject");
+    overflowOption(options);
+    const day = epochDays(parsed.year, parsed.month - 1, parsed.day);
+    const time = parsed.timeNanoseconds();
+    const epoch = !parsed.hasTime
+      ? startOfDay(day, zone)
+      : resolveLocalDateTime(
+          day,
+          time,
+          zone,
+          disambiguation,
+          parsed.utcDesignator ? "use" : !parsed.hasOffset ? "ignore" : offset,
+          parsed.offsetNanoseconds,
+          !parsed.offsetHasSeconds,
+        );
+    return new ZonedDateTime(epoch, zone);
   }
   static compare(
     one: Temporal.ZonedDateTimeLike | ZonedDateTime<ResolvedTimeZone>,
@@ -489,6 +437,7 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
     if (smallest >= 4) validateIncrement(smallest, increment);
     if (largest <= 3 && this.#zone.primaryId !== target.#zone.primaryId)
       throw new RangeError("Calendar differences require equivalent time zones");
+    if (epoch === targetEpoch) return new Duration();
     const result = roundISOZonedDifference(
       epoch,
       targetEpoch,
@@ -591,6 +540,22 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
   ): string {
     return this.#formatString(options);
   }
+  toLocaleString(
+    locales: Intl.LocalesArgument = undefined,
+    options: Readonly<Intl.DateTimeFormatOptions> | undefined = undefined,
+    source: TimeLocaleSource | undefined = undefined,
+  ): string {
+    this.#epoch;
+    if (source === undefined) return this.#formatString(undefined);
+    return source.formatDateTime(
+      6,
+      epochMilliseconds(this.#epoch),
+      "iso8601",
+      locales,
+      options,
+      this.#zone.id,
+    );
+  }
   toJSON(): string {
     return this.#formatString(undefined);
   }
@@ -619,36 +584,12 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
     return new Instant(this.#epoch);
   }
   toPlainDate(): PlainDate {
-    return new PlainDate(
-      yearFromDays(this.#day),
-      monthFromTime(this.#day * MS_PER_DAY) + 1,
-      dateFromTime(this.#day * MS_PER_DAY),
-    );
+    return createPlainDate(this.#day);
   }
   toPlainTime(): PlainTime {
-    const t = this.#time;
-    return new PlainTime(
-      Math.floor(t / 3600000000000),
-      Math.floor(t / 60000000000) % 60,
-      Math.floor(t / 1e9) % 60,
-      Math.floor(t / 1e6) % 1000,
-      Math.floor(t / 1000) % 1000,
-      t % 1000,
-    );
+    return createPlainTime(this.#time);
   }
   toPlainDateTime(): PlainDateTime {
-    const d = this.#day,
-      t = this.#time;
-    return new PlainDateTime(
-      yearFromDays(d),
-      monthFromTime(d * MS_PER_DAY) + 1,
-      dateFromTime(d * MS_PER_DAY),
-      Math.floor(t / 3600000000000),
-      Math.floor(t / 60000000000) % 60,
-      Math.floor(t / 1e9) % 60,
-      Math.floor(t / 1e6) % 1000,
-      Math.floor(t / 1000) % 1000,
-      t % 1000,
-    );
+    return createPlainDateTime(this.#day, this.#time);
   }
 }

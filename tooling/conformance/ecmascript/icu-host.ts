@@ -304,6 +304,7 @@ export function icuHost(root: string) {
   }
   return {
     data,
+    nowNanoseconds: () => BigInt(required("nowNanoseconds")),
     openNumber,
     openCollator,
     openPatterns,

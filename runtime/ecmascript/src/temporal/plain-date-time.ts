@@ -1,3 +1,4 @@
+import type { TimeLocaleSource } from "../time/locale-source.ts";
 import {
   epochDays,
   yearFromDays,
@@ -47,7 +48,7 @@ import {
   secondsStringPrecision,
 } from "./options.ts";
 
-function fromDayTime(day: number, time: number): PlainDateTime {
+export function createPlainDateTime(day: number, time: number): PlainDateTime {
   const milliseconds = day * MS_PER_DAY;
   return new PlainDateTime(
     yearFromDays(day),
@@ -130,7 +131,7 @@ function fromFields(
     regulateTimeField(microsecond, 999, overflow),
     regulateTimeField(nanosecond, 999, overflow),
   );
-  return fromDayTime(resultDay, time);
+  return createPlainDateTime(resultDay, time);
 }
 
 function dateTimeString(
@@ -206,15 +207,15 @@ export class PlainDateTime {
       const day = ZonedDateTime.epochDay(value);
       const time = ZonedDateTime.nanoseconds(value);
       overflowOption(options);
-      return fromDayTime(day, time);
+      return createPlainDateTime(day, time);
     }
     if (value instanceof PlainDateTime) {
       overflowOption(options);
-      return fromDayTime(value.#day, value.#time);
+      return createPlainDateTime(value.#day, value.#time);
     }
     if (value instanceof PlainDate) {
       overflowOption(options);
-      return fromDayTime(PlainDate.epochDay(value), 0);
+      return createPlainDateTime(PlainDate.epochDay(value), 0);
     }
     if (typeof value === "string") {
       const parsed = new ISOParser(value, false, true);
@@ -222,7 +223,7 @@ export class PlainDateTime {
         throw new RangeError("Plain date-time strings reject UTC designators");
       requireISOCalendar(parsed.calendar);
       overflowOption(options);
-      return fromDayTime(
+      return createPlainDateTime(
         regulateISODate(parsed.year, parsed.month, parsed.day, "reject"),
         parsed.timeNanoseconds(),
       );
@@ -354,13 +355,13 @@ export class PlainDateTime {
   withPlainTime(value: Temporal.PlainTimeLike | undefined = undefined): PlainDateTime {
     const day = this.#day;
     const time = value === undefined ? 0 : PlainTime.nanoseconds(PlainTime.from(value));
-    return fromDayTime(day, time);
+    return createPlainDateTime(day, time);
   }
   withCalendar(calendar: Temporal.CalendarLike): PlainDateTime {
     const day = this.#day;
     const time = this.#time;
     requireISOCalendarLike(calendar);
-    return fromDayTime(day, time);
+    return createPlainDateTime(day, time);
   }
   private addDuration(
     value: Temporal.DurationLike,
@@ -371,9 +372,9 @@ export class PlainDateTime {
     const time = this.#time;
     const duration = toDuration(value);
     const overflow = overflowOption(options);
-    const sum = BigInt(time) + duration.timeNanoseconds() * BigInt(sign);
+    const sum = BigInt(time) + Duration.timeNanoseconds(duration) * BigInt(sign);
     const days = floorDivide(sum, NS_PER_DAY);
-    return fromDayTime(
+    return createPlainDateTime(
       balanceISODate(
         day,
         duration.years * sign,
@@ -487,7 +488,7 @@ export class PlainDateTime {
       unitNanoseconds(smallest) * BigInt(increment),
       mode,
     );
-    return fromDayTime(day + Number(rounded / NS_PER_DAY), Number(rounded % NS_PER_DAY));
+    return createPlainDateTime(day + Number(rounded / NS_PER_DAY), Number(rounded % NS_PER_DAY));
   }
   equals(other: Temporal.PlainDateTimeLike): boolean {
     const day = this.#day;
@@ -515,6 +516,22 @@ export class PlainDateTime {
     options: Readonly<Temporal.PlainDateTimeToStringOptions> | undefined = undefined,
   ): string {
     return dateTimeString(this.#day, this.#time, options);
+  }
+  toLocaleString(
+    locales: Intl.LocalesArgument = undefined,
+    options: Readonly<Intl.DateTimeFormatOptions> | undefined = undefined,
+    source: TimeLocaleSource | undefined = undefined,
+  ): string {
+    this.#day;
+    if (source === undefined) return dateTimeString(this.#day, this.#time);
+    return source.formatDateTime(
+      3,
+      this.#day * MS_PER_DAY + Math.floor(this.#time / 1e6),
+      "iso8601",
+      locales,
+      options,
+      undefined,
+    );
   }
   toJSON(): string {
     return dateTimeString(this.#day, this.#time);

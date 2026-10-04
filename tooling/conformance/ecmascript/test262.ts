@@ -72,17 +72,53 @@ async function candidate(context: vm.Context): Promise<vm.Module["namespace"]> {
     moduleFor(resolve(dirname(importer.identifier), specifier)),
   );
   await builtins.evaluate({ timeout });
-  if ((profile === "temporal" || profile === "intl") && intlProvider) {
+  if (intlProvider && (profile === "temporal" || profile === "intl" || profile === "date")) {
+    const locale = moduleFor(resolve(root, "runtime/ecmascript/src/intl/time-locale.ts"));
+    if (locale.status === "unlinked")
+      await locale.link((specifier, importer) =>
+        moduleFor(resolve(dirname(importer.identifier), specifier)),
+      );
+    await locale.evaluate({ timeout });
+    context.__localeCapabilities = {
+      TimeLocaleContext: locale.namespace.TimeLocaleContext,
+      LocaleResolver: moduleFor(resolve(root, "runtime/ecmascript/src/intl/locale.ts")).namespace
+        .LocaleResolver,
+      TimeZoneRegistry: moduleFor(resolve(root, "runtime/ecmascript/src/time/zone-id.ts")).namespace
+        .TimeZoneRegistry,
+    };
+  }
+  if ((profile === "temporal" || profile === "intl" || profile === "date") && intlProvider) {
     const time = moduleFor(resolve(root, "runtime/ecmascript/src/time/zone-source.ts"));
-    await time.link((specifier, importer) =>
-      moduleFor(resolve(dirname(importer.identifier), specifier)),
-    );
+    if (time.status === "unlinked")
+      await time.link((specifier, importer) =>
+        moduleFor(resolve(dirname(importer.identifier), specifier)),
+      );
     await time.evaluate({ timeout });
     context.__time = {
       TimeZoneContext: time.namespace.TimeZoneContext,
       TimeZoneRegistry: moduleFor(resolve(root, "runtime/ecmascript/src/time/zone-id.ts")).namespace
         .TimeZoneRegistry,
     };
+  }
+  if (profile === "date") {
+    context.__dateBindings = {
+      dateLocal: moduleFor(resolve(root, "runtime/ecmascript/src/date/operations.ts")).namespace
+        .dateLocal,
+      setComponent: moduleFor(resolve(root, "runtime/ecmascript/src/date/operations.ts")).namespace
+        .setComponent,
+      formatLocal: moduleFor(resolve(root, "runtime/ecmascript/src/date/format.ts")).namespace
+        .formatLocal,
+      UTC: moduleFor(resolve(root, "runtime/ecmascript/src/time/provider.ts")).namespace.UTC,
+    };
+    if (context.__needsTemporal) {
+      const temporal = moduleFor(resolve(root, "runtime/ecmascript/src/temporal/builtins.ts"));
+      if (temporal.status === "unlinked")
+        await temporal.link((specifier, importer) =>
+          moduleFor(resolve(dirname(importer.identifier), specifier)),
+        );
+      await temporal.evaluate({ timeout });
+      context.__temporal = temporal.namespace;
+    }
   }
   if (profile === "intl")
     context.__temporal = moduleFor(
@@ -105,7 +141,17 @@ async function candidate(context: vm.Context): Promise<vm.Module["namespace"]> {
 // Public results retain the candidate's actual private slots and prototype.
 const temporalBinding = `
   (() => {
-    const source = __timeZoneOpen ? new __time.TimeZoneContext(new __time.TimeZoneRegistry(__intlData), __timeZoneOpen) : undefined;
+    const registry = __timeZoneOpen ? new __time.TimeZoneRegistry(__intlData) : undefined;
+    const source = registry ? new __time.TimeZoneContext(registry, __timeZoneOpen) : undefined;
+    const now = new __temporal.NtsNow(__clockNanoseconds, () => registry ? registry.primaryIdentifier(registry.defaultIdentifier()) : __defaultZoneIdentifier(), source);
+    const Now = {
+      timeZoneId() { return now.timeZoneId(); },
+      instant() { return now.instant(); },
+      plainDateTimeISO(zone = undefined) { return now.plainDateTimeISO(zone); },
+      zonedDateTimeISO(zone = undefined) { return now.zonedDateTimeISO(zone); },
+      plainDateISO(zone = undefined) { return now.plainDateISO(zone); },
+      plainTimeISO(zone = undefined) { return now.plainTimeISO(zone); },
+    };
     const RawZonedDateTime = __temporal.ZonedDateTime;
     function ZonedDateTime(epochNanoseconds, timeZone, calendar = "iso8601") {
       if (!new.target) throw new TypeError("ZonedDateTime requires new");
@@ -117,7 +163,7 @@ const temporalBinding = `
     ZonedDateTime.prototype = RawZonedDateTime.prototype;
     ZonedDateTime.from = { from(value, options = undefined) { return RawZonedDateTime.from(value, options, source); } }.from;
     ZonedDateTime.compare = { compare(one, two) { return RawZonedDateTime.compare(one, two, source); } }.compare;
-    globalThis.Temporal = { ...__temporal, ZonedDateTime };
+    globalThis.Temporal = { ...__temporal, ZonedDateTime, Now };
     const instantString = Temporal.Instant.prototype.toString;
     Temporal.Instant.prototype.toString = { toString(options = undefined) { return instantString.call(this, options, source); } }.toString;
     const instantZoned = Temporal.Instant.prototype.toZonedDateTimeISO;
@@ -134,6 +180,16 @@ const temporalBinding = `
     Temporal.PlainDate.prototype.toZonedDateTime = { toZonedDateTime(value) { return dateZoned.call(this, value, source); } }.toZonedDateTime;
     const dateTimeZoned = Temporal.PlainDateTime.prototype.toZonedDateTime;
     Temporal.PlainDateTime.prototype.toZonedDateTime = { toZonedDateTime(zone, options = undefined) { return dateTimeZoned.call(this, zone, options, source); } }.toZonedDateTime;
+    const durationCompare = Temporal.Duration.compare;
+    Temporal.Duration.compare = { compare(one, two, options = undefined) { return durationCompare(one, two, options, source); } }.compare;
+    const durationRound = Temporal.Duration.prototype.round;
+    Temporal.Duration.prototype.round = { round(options) { return durationRound.call(this, options, source); } }.round;
+    const durationTotal = Temporal.Duration.prototype.total;
+    Temporal.Duration.prototype.total = { total(options) { return durationTotal.call(this, options, source); } }.total;
+    for (const Constructor of [Temporal.Instant, Temporal.PlainTime, Temporal.PlainDate, Temporal.PlainDateTime, Temporal.PlainYearMonth, Temporal.PlainMonthDay, RawZonedDateTime, Temporal.Duration]) {
+      const method = Constructor.prototype.toLocaleString;
+      Constructor.prototype.toLocaleString = { toLocaleString(locales = undefined, options = undefined) { return method.call(this, locales, options, __localeSource); } }.toLocaleString;
+    }
   })();
 `;
 
@@ -244,9 +300,16 @@ for (const selected of selection) {
   const context = vm.createContext({
     __stats: stats,
     __sabotage: sabotage,
+    __needsTemporal: selected.features.includes("Temporal"),
     console,
     print: () => {},
     __clock: () => Date.now(),
+    __clockNanoseconds: () => {
+      if (intlProvider === undefined)
+        throw new Error("Temporal.Now host validation requires --icu for its nanosecond clock");
+      return intlProvider.nowNanoseconds();
+    },
+    __defaultZoneIdentifier: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
     __intlData: intlProvider?.data,
     __intlNumberOpen: intlProvider?.openNumber,
     __intlCollatorOpen: intlProvider?.openCollator,
@@ -259,6 +322,30 @@ for (const selected of selection) {
     __timeZoneOpen: intlProvider?.openTimeZone,
   });
   context.__impl = await candidate(context);
+  if (intlProvider)
+    new vm.Script(`
+      globalThis.__localeSource = new __localeCapabilities.TimeLocaleContext(
+        new __localeCapabilities.LocaleResolver(__intlData),
+        new __localeCapabilities.TimeZoneRegistry(__intlData),
+        __intlPatternOpen, __intlDateOpen, __intlNumberOpen, __clock,
+      );
+    `).runInContext(context, { timeout });
+  else context.__localeSource = undefined;
+  if (intlProvider && profile !== "date")
+    new vm.Script(`
+      (() => {
+      // Date/Temporal comparison tests must use the same shared Intl algorithms
+      // and pinned provider. Node's Date formatter has its own ICU adaptations.
+      const getTime = Date.prototype.getTime;
+      for (const [name, kind] of [["toLocaleString", 7], ["toLocaleDateString", 8], ["toLocaleTimeString", 9]]) {
+        Date.prototype[name] = { [name](locales = undefined, options = undefined) {
+          const milliseconds = getTime.call(this);
+          if (Number.isNaN(milliseconds)) return "Invalid Date";
+          return __localeSource.formatDateTime(kind, milliseconds, "iso8601", locales, options, undefined);
+        } }[name];
+      }
+      })();
+    `).runInContext(context, { timeout });
   if (profile === "intl") {
     intlProvider!.reset();
     new vm.Script(`
@@ -330,20 +417,85 @@ for (const selected of selection) {
     new vm.Script(`
       // Host-only wiring of the typed candidate. There is no native Date
       // constructor or parser fallback; missing APIs remain visible failures.
-      class Date extends __impl.NtsDate {
-        constructor(value, month, day, hour, minute, second, millisecond) {
-          const count = arguments.length;
-          super(count === 0 ? __clock() : count > 1 ?
-            __impl.NtsDate.UTC(Number(value), Number(month), count > 2 ? Number(day) : 1,
-              count > 3 ? Number(hour) : 0, count > 4 ? Number(minute) : 0,
-              count > 5 ? Number(second) : 0, count > 6 ? Number(millisecond) : 0) :
-            value instanceof __impl.NtsDate ? value.getTime() :
-            typeof value === "string" ? __impl.NtsDate.parse(value) : Number(value));
+      (() => {
+      const RawDate = __impl.NtsDate;
+      const prototype = RawDate.prototype;
+      const registry = __timeZoneOpen ? new __time.TimeZoneRegistry(__intlData) : undefined;
+      const source = registry ? new __time.TimeZoneContext(registry, __timeZoneOpen) : undefined;
+      const zone = source ? source.resolveNamed(registry.defaultIdentifier()) : __dateBindings.UTC;
+      const setTime = prototype.setTime;
+      function primitive(value) {
+        if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+        const exotic = value[Symbol.toPrimitive];
+        if (exotic !== undefined && exotic !== null) {
+          if (typeof exotic !== "function") throw new TypeError("Invalid primitive conversion");
+          const result = exotic.call(value, "default");
+          if (result === null || (typeof result !== "object" && typeof result !== "function")) return result;
+          throw new TypeError("Primitive conversion returned an object");
         }
-        static now() { return __clock(); }
+        for (const key of ["valueOf", "toString"]) {
+          const method = value[key];
+          if (typeof method !== "function") continue;
+          const result = method.call(value);
+          if (result === null || (typeof result !== "object" && typeof result !== "function")) return result;
+        }
+        throw new TypeError("Primitive conversion returned an object");
       }
+      function Date(value, month, day, hour, minute, second, millisecond) {
+        if (!new.target) return __dateBindings.formatLocal(__clock(), zone);
+        const count = arguments.length;
+        let milliseconds;
+        if (count === 0) milliseconds = __clock();
+        else if (count > 1) milliseconds = __dateBindings.dateLocal(
+          +value, +month, count > 2 ? +day : 1,
+          count > 3 ? +hour : 0, count > 4 ? +minute : 0,
+          count > 5 ? +second : 0, count > 6 ? +millisecond : 0, zone,
+        );
+        else if (value instanceof RawDate) milliseconds = RawDate.milliseconds(value);
+        else {
+          const input = primitive(value);
+          milliseconds = typeof input === "string" ? RawDate.parse(input, zone) : +input;
+        }
+        return Reflect.construct(RawDate, [milliseconds], new.target);
+      }
+      Date.prototype = prototype;
+      Date.now = { now() { return __clock(); } }.now;
+      Date.UTC = RawDate.UTC;
+      Date.parse = { parse(value) {
+        if (typeof value === "symbol") throw new TypeError("Date.parse rejects Symbols");
+        return RawDate.parse(String(value), zone);
+      } }.parse;
       globalThis.Date = Date;
+      for (const name of ["getFullYear", "getMonth", "getDate", "getDay", "getHours", "getMinutes", "getSeconds", "getMilliseconds", "getTimezoneOffset", "toString", "toDateString", "toTimeString"]) {
+        const method = prototype[name];
+        prototype[name] = { [name]() { return method.call(this, zone); } }[name];
+      }
+      // Snapshot the Date value before numeric conversion, preserve omission,
+      // and ignore surplus arguments. Commit through the intrinsic slot writer.
+      for (const [name, kind, limit] of [["setFullYear", "year", 3], ["setMonth", "month", 2], ["setDate", "day", 1], ["setHours", "hour", 4], ["setMinutes", "minute", 3], ["setSeconds", "second", 2], ["setMilliseconds", "millisecond", 1]]) {
+        prototype[name] = { [name](value) {
+          const current = RawDate.milliseconds(this);
+          const count = arguments.length;
+          const first = +value;
+          const second = count > 1 && limit > 1 ? +arguments[1] : 0;
+          const third = count > 2 && limit > 2 ? +arguments[2] : 0;
+          const fourth = count > 3 && limit > 3 ? +arguments[3] : 0;
+          if (Number.isNaN(current) && kind !== "year") return NaN;
+          return setTime.call(this, __dateBindings.setComponent(
+            current, kind, first, second, third, fourth, count, true, zone,
+          ));
+        } }[name];
+      }
+      for (const name of ["toLocaleString", "toLocaleDateString", "toLocaleTimeString"]) {
+        const method = prototype[name];
+        prototype[name] = { [name](locales = undefined, options = undefined) { return method.call(this, locales, options, __localeSource); } }[name];
+      }
+      if (__needsTemporal) {
+        globalThis.Temporal = __temporal;
+        prototype.toTemporalInstant = { toTemporalInstant() { return __temporal.dateToInstant(this); } }.toTemporalInstant;
+      }
       if (__sabotage) Date.prototype.getTime = function getTime() { return 123; };
+      })();
     `).runInContext(context, { timeout });
   } else
     new vm.Script(`

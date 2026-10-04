@@ -54,9 +54,13 @@ export function roundISOZonedDateTime(
     if (increment !== 1) throw new RangeError("Day rounding requires an increment of one");
     const start = startOfDay(Number(day), zone);
     const end = startOfDay(Number(day) + 1, zone);
-    if (end <= start || epoch < start || epoch >= end)
+    if (end <= start || epoch < start)
       throw new Error("Time-zone provider returned inconsistent day boundaries");
-    return checkInstant(start + roundNanoseconds(epoch - start, end - start, mode));
+    // A rollback across midnight can repeat part of today's date after the
+    // first midnight of tomorrow. Day rounding still snaps to these two first
+    // boundaries; cap progress as resolved in Temporal issue #3312/Test262.
+    const progress = (epoch >= end ? end - 1n : epoch) - start;
+    return checkInstant(start + roundNanoseconds(progress, end - start, mode));
   }
   const time = local - day * NS_PER_DAY;
   const rounded = roundNanoseconds(time, unitNanoseconds(unit) * BigInt(increment), mode);

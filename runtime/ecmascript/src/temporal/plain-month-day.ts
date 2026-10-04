@@ -1,3 +1,4 @@
+import type { TimeLocaleSource } from "../time/locale-source.ts";
 import {
   yearFromDays,
   monthFromTime,
@@ -145,6 +146,22 @@ export class PlainMonthDay {
   }
   toString(options: Readonly<Temporal.PlainDateToStringOptions> | undefined = undefined): string {
     return monthDayString(this.#day, options);
+  }
+  toLocaleString(
+    locales: Intl.LocalesArgument = undefined,
+    options: Readonly<Intl.DateTimeFormatOptions> | undefined = undefined,
+    source: TimeLocaleSource | undefined = undefined,
+  ): string {
+    this.#day;
+    if (source === undefined) return monthDayString(this.#day);
+    return source.formatDateTime(
+      5,
+      this.#day * MS_PER_DAY + MS_PER_DAY / 2,
+      "iso8601",
+      locales,
+      options,
+      undefined,
+    );
   }
   toJSON(): string {
     return monthDayString(this.#day);
