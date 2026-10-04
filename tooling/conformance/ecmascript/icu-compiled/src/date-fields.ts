@@ -49,6 +49,22 @@ export function preparedDateFields<
     cyclic.end(1) !== 12
   )
     throw new Error("Public cyclic-only year spans were not preserved");
+  // A locator must measure supplied fields, including their actual digit width,
+  // rather than recalculate the calendar year from the timestamp.
+  cyclic.setCalendarFields(12000, 47, 0, false, 29, 58);
+  if (
+    cyclic.format(instant, true) !== "12000 geng-xu" ||
+    cyclic.fieldCount() !== 2 ||
+    cyclic.end(0) !== 5 ||
+    cyclic.start(1) !== 6 ||
+    cyclic.end(1) !== 13
+  )
+    throw new Error("Related-year locator recalculated supplied fields");
+  const late = open("en-u-ca-chinese", "r U", "UTC");
+  late.format(instant, true);
+  late.setCalendarFields(12000, 47, 0, false, 29, 58);
+  if (late.format(instant, true) !== "12000 geng-xu" || late.end(0) !== 5)
+    throw new Error("Related-year locator retained its original chronology");
   // Escaped literals are not fields. A cyclic name and a separate numeric
   // year must retain distinct spans even though ICU4J calls both YEAR.
   const mixed = open("en-u-ca-chinese", "'U''r 'M d r '年' U HH:mm yyyy", "UTC");

@@ -97,8 +97,13 @@ public final class IcuDateFormatter {
         if (scratch == null) scratch = new StringBuffer(64);
         for (DateFieldLocator locator : locators) {
             if (locator.value == null) {
-                locator.value = new SimpleDateFormat(locator.fieldPattern, locale);
-                if (!locator.markerPattern.isEmpty()) locator.marker = new SimpleDateFormat(locator.markerPattern, locale);
+                // Keep the configured calendar type and localized symbols.
+                locator.value = (SimpleDateFormat)formatter.clone();
+                locator.value.applyPattern(locator.fieldPattern);
+                if (!locator.markerPattern.isEmpty()) {
+                    locator.marker = (SimpleDateFormat)formatter.clone();
+                    locator.marker.applyPattern(locator.markerPattern);
+                }
             }
             int start = 0;
             if (locator.marker != null) {
@@ -154,6 +159,10 @@ public final class IcuDateFormatter {
             prepared = new CalendarFields(formatter.getTimeZone(), locale, type);
             formatter.setCalendar(prepared);
             calendar = prepared;
+            if (locators != null) for (DateFieldLocator locator : locators) {
+                locator.value = null;
+                locator.marker = null;
+            }
         }
         prepared.relatedYear = relatedYear;
         prepared.year = year;

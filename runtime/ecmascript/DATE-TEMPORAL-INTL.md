@@ -509,9 +509,10 @@ scratch open on first parts use and remain cached. Native cyclic-year spans use
 the stable ICU field directly. Java's public YEAR attribute supplies cyclic-only
 patterns; mixed numeric/cyclic patterns use the locator and retain separate year
 spans. Both providers leave time separators literal without naming internal
-field constants. The native date adapter compiles with U_HIDE_INTERNAL_API and
-U_HIDE_DEPRECATED_API enabled. Other provider API/data acceptance obligations
-remain separate.
+field constants. The native date adapter passes a compile-only audit with
+U_HIDE_INTERNAL_API and U_HIDE_DEPRECATED_API enabled. Those header macros alter
+ICU calendar vtables, so linked runtime checks use the ordinary pinned headers.
+Other provider API/data acceptance obligations remain separate.
 
 The direct ICU4J prepared-year sample measures 300,000 calls after 300,000 warmup
 calls, with three alternating before/after pairs and matching checksums.
@@ -523,10 +524,24 @@ Gregorian parts timings remain similar within these samples. This measures
 reused provider calls, not shared range composition or compiled public Intl;
 reports are public-year-paired-report.json and paired-report.json under
 target/ecmascript/audit/date-fields/performance. The native date adapter adds
-3,394 allocated object-section bytes (13,903 total) at -O2 without sanitizers;
-native-size-report.json retains commands and input hashes. This excludes linked
+3,429 allocated object-section bytes (13,938 total) at -O2 without sanitizers;
+the same-header comparison is in date-fields/clone-performance/native-size-report.json.
+The earlier 13,903-byte measurement used different API-hiding header flags and
+is superseded. This excludes linked
 ICU, shared TS and application packaging, and adds no C++ translation unit or
 calendar data table.
+
+Related-year locator formatters now clone their configured presentation calendar
+and symbols. Constructing a fresh locale formatter made ICU substitute its own
+chronology, yielding incorrect spans for a supplied five-digit related year.
+Locators created before preparation are invalidated once at that transition.
+The five-backend sanitizer/verification witness covers both paths. In three
+alternating direct managed-C-ABI RC samples, prepared Chinese year parts take
+344–356 ns versus 14,924–15,028 ns before this fix, with matching checksums;
+Gregorian and text-only calls remain similar. These reused-provider samples
+exclude shared TS and public Intl compilation. The fix adds 60 object-section
+bytes (13,998 total); paired-report.json and native-size-report.json in
+date-fields/clone-performance retain the scope, commands and hashes.
 
 The compiled fixture compares cached and raw ICU offsets across all 446 primary
 zones and every one of 42,806 transitions from 1800 through 2099, including

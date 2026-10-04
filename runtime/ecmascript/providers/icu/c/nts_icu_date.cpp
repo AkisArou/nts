@@ -148,10 +148,17 @@ extern "C" bool nts_icu_date_field_locator(NtsHeader *handle, NtsString *marker,
 static bool locate_fields(DateFormatter *state, UErrorCode &status) {
   for (auto &locator : state->locators) {
     if (!locator.field_formatter) {
-      locator.field_formatter = std::make_unique<icu::SimpleDateFormat>(locator.field_pattern, state->locale, status);
-      if (!locator.marker_pattern.isEmpty())
-        locator.marker_formatter = std::make_unique<icu::SimpleDateFormat>(locator.marker_pattern, state->locale, status);
-      if (U_FAILURE(status)) return false;
+      // Clone the configured formatter so its owned calendar has the same
+      // presentation type. ICU otherwise substitutes its original chronology
+      // when formatting fields from a different concrete Calendar class.
+      locator.field_formatter.reset(state->formatter.clone());
+      if (!locator.field_formatter) { status = U_MEMORY_ALLOCATION_ERROR; return false; }
+      locator.field_formatter->applyPattern(locator.field_pattern);
+      if (!locator.marker_pattern.isEmpty()) {
+        locator.marker_formatter.reset(state->formatter.clone());
+        if (!locator.marker_formatter) { status = U_MEMORY_ALLOCATION_ERROR; return false; }
+        locator.marker_formatter->applyPattern(locator.marker_pattern);
+      }
     }
     int32_t start = 0;
     if (locator.marker_formatter) {
@@ -236,6 +243,11 @@ extern "C" bool nts_icu_date_calendar_fields(NtsHeader *handle, double related_y
     state->prepared = prepared.get();
     state->calendar = prepared.get();
     state->formatter.adoptCalendar(prepared.release());
+    // Locators opened before preparation still own the original chronology.
+    for (auto &locator : state->locators) {
+      locator.field_formatter.reset();
+      locator.marker_formatter.reset();
+    }
   }
   state->prepared->related_year = static_cast<int32_t>(related_year);
   state->prepared->year = static_cast<int32_t>(year);
