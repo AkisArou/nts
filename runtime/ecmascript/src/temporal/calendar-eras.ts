@@ -59,3 +59,57 @@ export function calendarEraYear(calendar: string, era: string, year: number): nu
       return year;
   }
 }
+
+export function calendarSupportsEra(calendar: string): boolean {
+  return calendar !== "iso8601" && calendar !== "chinese" && calendar !== "dangi";
+}
+
+// Field bags permit lenient era-year interpretation, including values beyond
+// a regnal era's boundaries. The resulting date determines its actual era.
+export function calendarYearForEra(calendar: string, era: string, year: number): number {
+  switch (calendar) {
+    case "gregory":
+    case "japanese":
+      if (era === "ce" || era === "ad") return year;
+      if (era === "bce" || era === "bc") return 1 - year;
+      if (calendar === "japanese") {
+        if (era === "reiwa") return year + 2018;
+        if (era === "heisei") return year + 1988;
+        if (era === "showa") return year + 1925;
+        if (era === "taisho") return year + 1911;
+        if (era === "meiji") return year + 1867;
+      }
+      break;
+    case "ethiopic":
+      if (era === "aa") return year - 5500;
+      if (era === "am") return year;
+      break;
+    case "ethioaa":
+      if (era === "aa") return year;
+      break;
+    case "coptic":
+    case "hebrew":
+      if (era === "am") return year;
+      break;
+    case "buddhist":
+      if (era === "be") return year;
+      break;
+    case "indian":
+      if (era === "shaka") return year;
+      break;
+    case "persian":
+      if (era === "ap") return year;
+      break;
+    case "islamic-civil":
+    case "islamic-tbla":
+    case "islamic-umalqura":
+      if (era === "ah") return year;
+      if (era === "bh") return 1 - year;
+      break;
+    case "roc":
+      if (era === "roc") return year;
+      if (era === "broc") return 1 - year;
+      break;
+  }
+  throw new RangeError("Era is invalid for calendar");
+}

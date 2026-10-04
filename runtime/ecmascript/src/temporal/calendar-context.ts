@@ -112,6 +112,8 @@ export class CalendarContext {
     lastMonth: number,
   ): number {
     if (first.year === last.year) return lastMonth - firstMonth;
+    if (last.year === first.year + 1) return first.monthsInYear + lastMonth - firstMonth;
+    if (last.year === first.year - 1) return lastMonth - firstMonth - last.monthsInYear;
     return (
       this.#data.monthIndex(last.year, lastMonth) - this.#data.monthIndex(first.year, firstMonth)
     );

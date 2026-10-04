@@ -1,5 +1,6 @@
 import { ISOParser } from "./iso-parser.ts";
 import { requireOptions } from "./options.ts";
+import { calendarIndex, canonicalCalendarIdentifier } from "./calendar-identifier.ts";
 
 // The ISO path has no locale/calendar provider dependency. The calendar stage
 // extends identifier resolution for other built-in calendars independently.
@@ -9,8 +10,13 @@ export function requireISOCalendar(calendar: string): void {
     throw new RangeError("Non-ISO dates require calendar integration");
 }
 export function requireISOCalendarString(calendar: string): void {
+  requireISOCalendar(calendarIdentifierFromString(calendar));
+}
+export function calendarIdentifierFromString(calendar: string): string {
   if (typeof calendar !== "string") throw new TypeError("Calendar must be a string");
-  if (calendar.toLowerCase() === "iso8601") return;
+  const id = calendar.toLowerCase();
+  if (calendarIndex(id) >= 0 || id === "islamicc" || id === "ethiopic-amete-alem")
+    return canonicalCalendarIdentifier(id);
   const digits = leadingDigits(calendar);
   const time =
     calendar.charAt(0) === "T" ||
@@ -19,7 +25,7 @@ export function requireISOCalendarString(calendar: string): void {
     (digits === 2 && calendar.charAt(2) !== "-") ||
     (digits === 6 && (Number(calendar.slice(4, 6)) < 1 || Number(calendar.slice(4, 6)) > 12));
   const parsed = new ISOParser(calendar, time, true, true);
-  requireISOCalendar(parsed.calendar);
+  return canonicalCalendarIdentifier(parsed.calendar);
 }
 function leadingDigits(value: string): number {
   let length = 0;
@@ -39,5 +45,12 @@ export function calendarName(
 export function isoCalendarAnnotation(
   show: NonNullable<Temporal.PlainDateToStringOptions["calendarName"]>,
 ): string {
-  return show === "always" ? "[u-ca=iso8601]" : show === "critical" ? "[!u-ca=iso8601]" : "";
+  return calendarAnnotation("iso8601", show);
+}
+export function calendarAnnotation(
+  identifier: string,
+  show: NonNullable<Temporal.PlainDateToStringOptions["calendarName"]>,
+): string {
+  if (show === "never" || (show === "auto" && identifier === "iso8601")) return "";
+  return "[" + (show === "critical" ? "!" : "") + "u-ca=" + identifier + "]";
 }

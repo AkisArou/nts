@@ -1,4 +1,3 @@
-import { parseMonthCode } from "./month-code.ts";
 import type { TimeLocaleSource } from "../time/locale-source.ts";
 import {
   epochDays,
@@ -24,7 +23,6 @@ import {
 import {
   checkDateDay,
   regulateISODate,
-  addISODate,
   dateUnitIndex,
   isoWeek,
   isoWeekYear,
@@ -32,68 +30,69 @@ import {
 } from "./iso-date.ts";
 import type { ResolvedTimeZone, TimeZoneSource } from "../time/zone-data.ts";
 import { roundDateDifference } from "./date-duration.ts";
-import { positiveDateField, resolveISOFields } from "./iso-fields.ts";
-import { requireISOCalendar, calendarName, isoCalendarAnnotation } from "./calendar-id.ts";
+import { dateFieldsDay } from "./date-fields.ts";
+import { calendarName, calendarAnnotation } from "./calendar-id.ts";
+import { CalendarContext } from "./calendar-context.ts";
+import { resolveCalendar } from "./calendar-environment.ts";
+import type { CalendarEnvironment } from "./calendar-environment.ts";
+import { calendarEra, calendarEraYear } from "./calendar-eras.ts";
+import { addDate } from "./calendar-date.ts";
 import { PlainDateTime } from "./plain-date-time.ts";
 import { ZonedDateTime } from "./zoned-date-time.ts";
 import { resolveTimeZone } from "./zone-like.ts";
 import { resolveLocalDateTime, startOfDay } from "./zoned-time.ts";
 import { PlainTime } from "./plain-time.ts";
-import { requireISOCalendarLike, isPlainCalendar } from "./plain-calendar.ts";
+import { resolveCalendarLike, isPlainCalendar } from "./plain-calendar.ts";
 import { PlainYearMonth } from "./plain-year-month.ts";
 import { PlainMonthDay } from "./plain-month-day.ts";
-function fieldsDay(
-  value: Readonly<Temporal.PartialTemporalLike<Temporal.DateLikeObject>>,
-  options: Readonly<Temporal.OverflowOptions> | undefined,
-  previous?: number,
-): number {
-  const rawDay = value.day;
-  const day = rawDay === undefined ? undefined : positiveDateField(rawDay);
-  const rawMonth = value.month;
-  const month = rawMonth === undefined ? undefined : positiveDateField(rawMonth);
-  const rawCode = value.monthCode;
-  const code = rawCode === undefined ? undefined : parseMonthCode(rawCode);
-  const rawYear = value.year;
-  const year = rawYear === undefined ? undefined : integerWithTruncation(rawYear);
-  if (
-    previous !== undefined &&
-    rawDay === undefined &&
-    rawMonth === undefined &&
-    rawCode === undefined &&
-    rawYear === undefined
-  )
-    throw new TypeError("At least one date field is required");
-  const overflow = overflowOption(options);
-  return checkDateDay(resolveISOFields(year, month, code, day, overflow, previous));
-}
-
-function dateString(day: number, options?: Readonly<Temporal.PlainDateToStringOptions>): string {
+function dateString(
+  day: number,
+  calendar: CalendarContext | undefined,
+  options?: Readonly<Temporal.PlainDateToStringOptions>,
+): string {
   const show = calendarName(options);
-  return formatISODate(day) + isoCalendarAnnotation(show);
+  return formatISODate(day) + calendarAnnotation(calendar?.identifier ?? "iso8601", show);
 }
 
-export function createPlainDate(day: number): PlainDate {
+export function createPlainDate(
+  day: number,
+  calendar: CalendarContext | undefined = undefined,
+): PlainDate {
   const time = day * MS_PER_DAY;
-  return new PlainDate(yearFromDays(day), monthFromTime(time) + 1, dateFromTime(time));
+  return new PlainDate(yearFromDays(day), monthFromTime(time) + 1, dateFromTime(time), calendar);
 }
 
-// Immutable ISO date stage. Calendar adapters and cross-type/localized methods
-// extend this contract as they become executable; missing APIs stay visible.
+// ISO days remain the value's chronology. A non-ISO context carries its
+// calendar identity and immutable year cache; ISO needs no context allocation.
 export class PlainDate {
   readonly #day: number;
-  constructor(isoYear: number, isoMonth: number, isoDay: number, calendar = "iso8601") {
+  readonly #calendar: CalendarContext | undefined;
+  constructor(
+    isoYear: number,
+    isoMonth: number,
+    isoDay: number,
+    calendar: string | CalendarContext = "iso8601",
+    environment: CalendarEnvironment | undefined = undefined,
+  ) {
     const year = integerWithTruncation(isoYear);
     const month = integerWithTruncation(isoMonth);
     const day = integerWithTruncation(isoDay);
-    requireISOCalendar(calendar);
+    if (typeof calendar !== "string" && !(calendar instanceof CalendarContext))
+      throw new TypeError("Calendar must be a string");
+    this.#calendar =
+      typeof calendar === "string" ? resolveCalendar(calendar, environment) : calendar;
     this.#day = checkDateDay(regulateISODate(year, month, day, "reject"));
   }
   static epochDay(value: PlainDate): number {
     return value.#day;
   }
+  static calendarContext(value: PlainDate): CalendarContext | undefined {
+    return value.#calendar;
+  }
   static from(
     value: Temporal.PlainDateLike,
     options: Readonly<Temporal.OverflowOptions> | undefined = undefined,
+    environment: CalendarEnvironment | undefined = undefined,
   ): PlainDate {
     if (value instanceof ZonedDateTime) {
       const day = ZonedDateTime.epochDay(value);
@@ -102,7 +101,7 @@ export class PlainDate {
     }
     if (value instanceof PlainDate) {
       overflowOption(options);
-      return createPlainDate(value.#day);
+      return createPlainDate(value.#day, value.#calendar);
     }
     if (value instanceof PlainDateTime) {
       overflowOption(options);
@@ -111,16 +110,17 @@ export class PlainDate {
     if (typeof value === "string") {
       const parsed = new ISOParser(value, false, true);
       if (parsed.utcDesignator) throw new RangeError("Plain date strings reject UTC designators");
-      requireISOCalendar(parsed.calendar);
+      const calendar = resolveCalendar(parsed.calendar, environment);
       overflowOption(options);
-      return new PlainDate(parsed.year, parsed.month, parsed.day);
+      return new PlainDate(parsed.year, parsed.month, parsed.day, calendar);
     }
     if (value === null || typeof value !== "object")
       throw new TypeError("Date requires a date, fields or string");
     const fields: Readonly<Temporal.DateLikeObject> = value;
-    const calendar = fields.calendar;
-    if (calendar !== undefined) requireISOCalendarLike(calendar);
-    return createPlainDate(fieldsDay(value, options));
+    const rawCalendar = fields.calendar;
+    const calendar =
+      rawCalendar === undefined ? undefined : resolveCalendarLike(rawCalendar, environment);
+    return createPlainDate(dateFieldsDay(value, options, calendar), calendar);
   }
   toZonedDateTime(
     value:
@@ -132,7 +132,7 @@ export class PlainDate {
     const day = this.#day;
     if (typeof value === "string" || value instanceof ZonedDateTime) {
       const zone = resolveTimeZone(value, source);
-      return new ZonedDateTime(startOfDay(day, zone), zone);
+      return new ZonedDateTime(startOfDay(day, zone), zone, this.#calendar?.identifier);
     }
     if (value === null || (typeof value !== "object" && typeof value !== "function"))
       throw new TypeError("A zoned date requires a time zone or options object");
@@ -153,65 +153,105 @@ export class PlainDate {
             zone,
             "compatible",
           );
-    return new ZonedDateTime(epoch, zone);
+    return new ZonedDateTime(epoch, zone, this.#calendar?.identifier);
   }
-  static compare(one: Temporal.PlainDateLike, two: Temporal.PlainDateLike): number {
-    const a = PlainDate.from(one).#day;
-    const b = PlainDate.from(two).#day;
+  static compare(
+    one: Temporal.PlainDateLike,
+    two: Temporal.PlainDateLike,
+    environment: CalendarEnvironment | undefined = undefined,
+  ): number {
+    const a = PlainDate.from(one, undefined, environment).#day;
+    const b = PlainDate.from(two, undefined, environment).#day;
     return a < b ? -1 : a > b ? 1 : 0;
   }
   get calendarId(): string {
     this.#day;
-    return "iso8601";
+    return this.#calendar?.identifier ?? "iso8601";
   }
-  get era(): undefined {
-    this.#day;
-    return undefined;
+  get era(): string | undefined {
+    const day = this.#day;
+    const calendar = this.#calendar;
+    return calendar === undefined
+      ? undefined
+      : calendarEra(calendar.identifier, calendar.yearAt(day).year, day);
   }
-  get eraYear(): undefined {
-    this.#day;
-    return undefined;
+  get eraYear(): number | undefined {
+    const day = this.#day;
+    const calendar = this.#calendar;
+    if (calendar === undefined) return undefined;
+    const year = calendar.yearAt(day).year;
+    const era = calendarEra(calendar.identifier, year, day);
+    return era === undefined ? undefined : calendarEraYear(calendar.identifier, era, year);
   }
   get year(): number {
-    return yearFromDays(this.#day);
+    const day = this.#day;
+    return this.#calendar === undefined ? yearFromDays(day) : this.#calendar.yearAt(day).year;
   }
   get month(): number {
-    return monthFromTime(this.#day * MS_PER_DAY) + 1;
+    const day = this.#day;
+    return this.#calendar === undefined
+      ? monthFromTime(day * MS_PER_DAY) + 1
+      : this.#calendar.yearAt(day).monthAt(day) + 1;
   }
   get monthCode(): string {
-    return "M" + pad(monthFromTime(this.#day * MS_PER_DAY) + 1, 2);
+    const day = this.#day;
+    if (this.#calendar === undefined) return "M" + pad(monthFromTime(day * MS_PER_DAY) + 1, 2);
+    const year = this.#calendar.yearAt(day);
+    return year.monthCode(year.monthAt(day));
   }
   get day(): number {
-    return dateFromTime(this.#day * MS_PER_DAY);
+    const day = this.#day;
+    if (this.#calendar === undefined) return dateFromTime(day * MS_PER_DAY);
+    const year = this.#calendar.yearAt(day);
+    return day - year.monthStart(year.monthAt(day)) + 1;
   }
   get dayOfWeek(): number {
     return modulo(this.#day + 3, 7) + 1;
   }
   get dayOfYear(): number {
-    return this.#day - epochDays(yearFromDays(this.#day), 0, 1) + 1;
+    const day = this.#day;
+    return (
+      day -
+      (this.#calendar === undefined
+        ? epochDays(yearFromDays(day), 0, 1)
+        : this.#calendar.yearAt(day).firstDay) +
+      1
+    );
   }
-  get weekOfYear(): number {
-    return isoWeek(this.#day);
+  get weekOfYear(): number | undefined {
+    const day = this.#day;
+    return this.#calendar === undefined ? isoWeek(day) : undefined;
   }
-  get yearOfWeek(): number {
-    return isoWeekYear(this.#day);
+  get yearOfWeek(): number | undefined {
+    const day = this.#day;
+    return this.#calendar === undefined ? isoWeekYear(day) : undefined;
   }
   get daysInWeek(): number {
     this.#day;
     return 7;
   }
   get daysInMonth(): number {
-    return daysInMonth(yearFromDays(this.#day), monthFromTime(this.#day * MS_PER_DAY));
+    const day = this.#day;
+    if (this.#calendar === undefined)
+      return daysInMonth(yearFromDays(day), monthFromTime(day * MS_PER_DAY));
+    const year = this.#calendar.yearAt(day);
+    return year.daysInMonth(year.monthAt(day));
   }
   get daysInYear(): number {
-    return isLeapYear(yearFromDays(this.#day)) ? 366 : 365;
+    const day = this.#day;
+    if (this.#calendar === undefined) return isLeapYear(yearFromDays(day)) ? 366 : 365;
+    const year = this.#calendar.yearAt(day);
+    return year.endDay - year.firstDay;
   }
   get monthsInYear(): number {
     this.#day;
-    return 12;
+    return this.#calendar === undefined ? 12 : this.#calendar.yearAt(this.#day).monthsInYear;
   }
   get inLeapYear(): boolean {
-    return isLeapYear(yearFromDays(this.#day));
+    const day = this.#day;
+    return this.#calendar === undefined
+      ? isLeapYear(yearFromDays(day))
+      : this.#calendar.yearAt(day).inLeapYear;
   }
   with(
     value: Readonly<Temporal.PartialTemporalLike<Temporal.DateLikeObject>>,
@@ -231,12 +271,14 @@ export class PlainDate {
       fields.timeZone !== undefined
     )
       throw new TypeError("with requires date fields without a calendar or time zone");
-    return createPlainDate(fieldsDay(value, options, previous));
+    return createPlainDate(dateFieldsDay(value, options, this.#calendar, previous), this.#calendar);
   }
-  withCalendar(calendar: Temporal.CalendarLike): PlainDate {
+  withCalendar(
+    calendar: Temporal.CalendarLike,
+    environment: CalendarEnvironment | undefined = undefined,
+  ): PlainDate {
     const day = this.#day;
-    requireISOCalendarLike(calendar);
-    return createPlainDate(day);
+    return createPlainDate(day, resolveCalendarLike(calendar, environment));
   }
   private addDuration(
     value: Temporal.DurationLike,
@@ -248,14 +290,16 @@ export class PlainDate {
     const days = Number(Duration.timeNanoseconds(duration) / NS_PER_DAY);
     const overflow = overflowOption(options);
     return createPlainDate(
-      addISODate(
+      addDate(
         day,
         duration.years * sign,
         duration.months * sign,
         duration.weeks * sign,
         days * sign,
         overflow,
+        this.#calendar,
       ),
+      this.#calendar,
     );
   }
   add(
@@ -274,9 +318,15 @@ export class PlainDate {
     other: Temporal.PlainDateLike,
     options: Readonly<Temporal.RoundingOptionsWithLargestUnit<Temporal.DateUnit>> | undefined,
     since: boolean,
+    environment: CalendarEnvironment | undefined,
   ): Duration {
     const day = this.#day;
-    const target = PlainDate.from(other).#day;
+    const converted = PlainDate.from(other, undefined, environment);
+    const target = converted.#day;
+    if (
+      (this.#calendar?.identifier ?? "iso8601") !== (converted.#calendar?.identifier ?? "iso8601")
+    )
+      throw new RangeError("Date difference requires matching calendars");
     if (options !== undefined) requireOptions(options);
     const rawLargest = options?.largestUnit;
     if (typeof rawLargest === "symbol")
@@ -305,6 +355,7 @@ export class PlainDate {
               : mode === "halfFloor"
                 ? "halfCeil"
                 : mode,
+      this.#calendar,
     );
     return since ? result.negated() : result;
   }
@@ -313,23 +364,32 @@ export class PlainDate {
     options:
       | Readonly<Temporal.RoundingOptionsWithLargestUnit<Temporal.DateUnit>>
       | undefined = undefined,
+    environment: CalendarEnvironment | undefined = undefined,
   ): Duration {
-    return this.difference(other, options, false);
+    return this.difference(other, options, false, environment);
   }
   since(
     other: Temporal.PlainDateLike,
     options:
       | Readonly<Temporal.RoundingOptionsWithLargestUnit<Temporal.DateUnit>>
       | undefined = undefined,
+    environment: CalendarEnvironment | undefined = undefined,
   ): Duration {
-    return this.difference(other, options, true);
+    return this.difference(other, options, true, environment);
   }
-  equals(other: Temporal.PlainDateLike): boolean {
+  equals(
+    other: Temporal.PlainDateLike,
+    environment: CalendarEnvironment | undefined = undefined,
+  ): boolean {
     const day = this.#day;
-    return day === PlainDate.from(other).#day;
+    const converted = PlainDate.from(other, undefined, environment);
+    return (
+      day === converted.#day &&
+      (this.#calendar?.identifier ?? "iso8601") === (converted.#calendar?.identifier ?? "iso8601")
+    );
   }
   toString(options: Readonly<Temporal.PlainDateToStringOptions> | undefined = undefined): string {
-    return dateString(this.#day, options);
+    return dateString(this.#day, this.#calendar, options);
   }
   toLocaleString(
     locales: Intl.LocalesArgument = undefined,
@@ -337,18 +397,18 @@ export class PlainDate {
     source: TimeLocaleSource | undefined = undefined,
   ): string {
     this.#day;
-    if (source === undefined) return dateString(this.#day);
+    if (source === undefined) return dateString(this.#day, this.#calendar);
     return source.formatDateTime(
       2,
       this.#day * MS_PER_DAY + MS_PER_DAY / 2,
-      "iso8601",
+      this.#calendar?.identifier ?? "iso8601",
       locales,
       options,
       undefined,
     );
   }
   toJSON(): string {
-    return dateString(this.#day);
+    return dateString(this.#day, this.#calendar);
   }
   toPlainDateTime(value: Temporal.PlainTimeLike | undefined = undefined): PlainDateTime {
     const day = this.#day;
@@ -364,15 +424,30 @@ export class PlainDate {
       Math.floor(time / 1e6) % 1000,
       Math.floor(time / 1000) % 1000,
       time % 1000,
+      this.#calendar?.identifier,
     );
   }
   toPlainYearMonth(): PlainYearMonth {
     const day = this.#day;
-    return new PlainYearMonth(yearFromDays(day), monthFromTime(day * MS_PER_DAY) + 1);
+    if (this.#calendar === undefined)
+      return new PlainYearMonth(yearFromDays(day), monthFromTime(day * MS_PER_DAY) + 1);
+    return new PlainYearMonth(
+      yearFromDays(day),
+      monthFromTime(day * MS_PER_DAY) + 1,
+      this.#calendar?.identifier,
+      dateFromTime(day * MS_PER_DAY),
+    );
   }
   toPlainMonthDay(): PlainMonthDay {
     const day = this.#day;
-    return new PlainMonthDay(monthFromTime(day * MS_PER_DAY) + 1, dateFromTime(day * MS_PER_DAY));
+    if (this.#calendar === undefined)
+      return new PlainMonthDay(monthFromTime(day * MS_PER_DAY) + 1, dateFromTime(day * MS_PER_DAY));
+    return new PlainMonthDay(
+      monthFromTime(day * MS_PER_DAY) + 1,
+      dateFromTime(day * MS_PER_DAY),
+      this.#calendar?.identifier,
+      yearFromDays(day),
+    );
   }
   valueOf(): never {
     throw new TypeError("Temporal.PlainDate cannot be converted to a primitive value");

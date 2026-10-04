@@ -5,7 +5,7 @@ export function canonicalCalendarIdentifier(identifier: string): string {
   const id = identifier.toLowerCase();
   if (id === "islamicc") return "islamic-civil";
   if (id === "ethiopic-amete-alem") return "ethioaa";
-  calendarIndex(id);
+  if (calendarIndex(id) < 0) throw new RangeError("Unknown built-in calendar");
   return id;
 }
 
@@ -44,6 +44,6 @@ export function calendarIndex(identifier: string): number {
     case "roc":
       return 15;
     default:
-      throw new RangeError("Unknown built-in calendar");
+      return -1;
   }
 }

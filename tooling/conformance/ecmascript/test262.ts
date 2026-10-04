@@ -126,6 +126,9 @@ async function candidate(context: vm.Context): Promise<vm.Module["namespace"]> {
     ).namespace;
   if (profile === "temporal") context.__temporal = builtins.namespace;
   if (profile === "temporal" || profile === "intl") {
+    context.__calendar = moduleFor(
+      resolve(root, "runtime/ecmascript/src/temporal/calendar-environment.ts"),
+    ).namespace;
     context.__timeBindings = {
       checkInstant: moduleFor(resolve(root, "runtime/ecmascript/src/temporal/exact.ts")).namespace
         .checkInstant,
@@ -141,6 +144,7 @@ async function candidate(context: vm.Context): Promise<vm.Module["namespace"]> {
 // Public results retain the candidate's actual private slots and prototype.
 const temporalBinding = `
   (() => {
+    const calendars = new __calendar.CalendarEnvironment(__calendarOpen);
     const registry = __timeZoneOpen ? new __time.TimeZoneRegistry(__intlData) : undefined;
     const source = registry ? new __time.TimeZoneContext(registry, __timeZoneOpen) : undefined;
     const now = new __temporal.NtsNow(__clockNanoseconds, () => registry ? registry.primaryIdentifier(registry.defaultIdentifier()) : __defaultZoneIdentifier(), source);
@@ -153,6 +157,14 @@ const temporalBinding = `
       plainTimeISO(zone = undefined) { return now.plainTimeISO(zone); },
     };
     const RawZonedDateTime = __temporal.ZonedDateTime;
+    const RawPlainDate = __temporal.PlainDate;
+    function PlainDate(isoYear, isoMonth, isoDay, calendar = "iso8601") {
+      if (!new.target) throw new TypeError("PlainDate requires new");
+      return Reflect.construct(RawPlainDate, [isoYear, isoMonth, isoDay, calendar, calendars], new.target);
+    }
+    PlainDate.prototype = RawPlainDate.prototype;
+    PlainDate.from = { from(value, options = undefined) { return RawPlainDate.from(value, options, calendars); } }.from;
+    PlainDate.compare = { compare(one, two) { return RawPlainDate.compare(one, two, calendars); } }.compare;
     function ZonedDateTime(epochNanoseconds, timeZone, calendar = "iso8601") {
       if (!new.target) throw new TypeError("ZonedDateTime requires new");
       if (typeof epochNanoseconds === "number") throw new TypeError("Epoch nanoseconds must be a BigInt");
@@ -163,7 +175,15 @@ const temporalBinding = `
     ZonedDateTime.prototype = RawZonedDateTime.prototype;
     ZonedDateTime.from = { from(value, options = undefined) { return RawZonedDateTime.from(value, options, source); } }.from;
     ZonedDateTime.compare = { compare(one, two) { return RawZonedDateTime.compare(one, two, source); } }.compare;
-    globalThis.Temporal = { ...__temporal, ZonedDateTime, Now };
+    globalThis.Temporal = { ...__temporal, PlainDate, ZonedDateTime, Now };
+    const dateCalendar = RawPlainDate.prototype.withCalendar;
+    RawPlainDate.prototype.withCalendar = { withCalendar(calendar) { return dateCalendar.call(this, calendar, calendars); } }.withCalendar;
+    const dateEquals = RawPlainDate.prototype.equals;
+    RawPlainDate.prototype.equals = { equals(other) { return dateEquals.call(this, other, calendars); } }.equals;
+    const dateUntil = RawPlainDate.prototype.until;
+    RawPlainDate.prototype.until = { until(other, options = undefined) { return dateUntil.call(this, other, options, calendars); } }.until;
+    const dateSince = RawPlainDate.prototype.since;
+    RawPlainDate.prototype.since = { since(other, options = undefined) { return dateSince.call(this, other, options, calendars); } }.since;
     const instantString = Temporal.Instant.prototype.toString;
     Temporal.Instant.prototype.toString = { toString(options = undefined) { return instantString.call(this, options, source); } }.toString;
     const instantZoned = Temporal.Instant.prototype.toZonedDateTimeISO;
@@ -320,6 +340,7 @@ for (const selected of selection) {
     __intlDisplayOpen: intlProvider?.openDisplay,
     __intlSegmentOpen: intlProvider?.openSegmenter,
     __timeZoneOpen: intlProvider?.openTimeZone,
+    __calendarOpen: intlProvider?.openCalendar,
   });
   context.__impl = await candidate(context);
   if (intlProvider)
