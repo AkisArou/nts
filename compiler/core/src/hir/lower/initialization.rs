@@ -36,7 +36,7 @@ pub(super) struct Analysis {
     early: FxHashSet<u32>,
     guarded: FxHashSet<(NodeId, u32)>,
     /// Ancestors within the same executable body. Folding one of these would
-    /// discard an access's exception, even when its value is a known constant.
+    /// discard a TDZ or checked assertion exception, even for a known constant.
     guarded_expressions: FxHashSet<NodeId>,
     flagged_declarations: FxHashSet<NodeId>,
     cyclic: FxHashSet<usize>,
@@ -80,8 +80,14 @@ impl Analysis {
         {
             self.guarded.insert((parent, symbol));
         }
+        self.preserve_effect(probe, at);
+    }
+
+    fn preserve_effect(&mut self, probe: &FuncBuilder, at: NodeId) {
         for ancestor in std::iter::successors(Some(at), |at| probe.node(*at).parent) {
-            self.guarded_expressions.insert(ancestor);
+            if !self.guarded_expressions.insert(ancestor) {
+                break;
+            }
             if names_a_body(probe.kind_of(ancestor))
                 || probe.kind_of(ancestor).is_some_and(declares_a_class)
             {
@@ -735,6 +741,23 @@ pub(super) fn analyze(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Analy
                     }
                     Event::EndCall(previous) => unknown = previous,
                 }
+            }
+        }
+    }
+    // Source assertions synthesize throws without a THROW_STATEMENT. Keep
+    // their effect at each enclosing expression so all existing folding and
+    // synchronous-call decisions use the same licence as lowering.
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        if matches!(
+            node.kind,
+            nts_semantic_schema::NodeKind::Syntax(
+                syntax::AS_EXPRESSION | syntax::NON_NULL_EXPRESSION
+            )
+        ) && let Ok(index) = u32::try_from(index)
+        {
+            let at = NodeId(index);
+            if super::assertions::can_throw(probe, at) {
+                analysis.preserve_effect(probe, at);
             }
         }
     }

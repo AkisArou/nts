@@ -19,6 +19,8 @@ use nts_semantic_schema::{
     TypeRecord, syntax,
 };
 
+mod assertions;
+
 use super::facts::Facts;
 use super::{Absent, 
     BinOp, Block, BlockId, Callee, Field, FieldArm, Func, GeneratorKind, HirType, Layout,
@@ -42068,32 +42070,20 @@ impl<'a> FuncBuilder<'a> {
             Some(syntax::AWAIT_EXPRESSION) => self.lower_await(id),
             Some(syntax::YIELD_EXPRESSION) => self.lower_yield(id),
             Some(syntax::PROPERTY_ACCESS_EXPRESSION) => self.lower_property_access(id),
-            // `x!`, `x as T` and `x satisfies T` are claims about types. The
-            // first two narrow what the checker believes; the third asserts
-            // without narrowing. None of them computes anything, so each lowers
-            // to its operand — but the *claim* is not free: an `x!` on an
-            // element access is the author asserting the index is in bounds, and
-            // the bounds check is what makes that assertion checked rather than
-            // assumed. `docs/any-unknown.md` calls this out as the general rule
-            // for assertions.
+            // Assertions establish a native representation before reading its
+            // payload; satisfies only checks the source without changing it.
             Some(
                 syntax::NON_NULL_EXPRESSION | syntax::AS_EXPRESSION | syntax::SATISFIES_EXPRESSION,
             ) => {
-                let children = self.children(id);
-                let Some(inner) = children.first() else {
+                let Some(inner) = self.children(id).first().copied() else {
                     return Err(self.unsupported(id, "an assertion with no operand"));
                 };
-                let value = self.lower_expression(*inner)?;
-                // An assertion *from* an erased value is the one that computes
-                // something: `columns[0] as string` where the element is
-                // `string | number` reads the payload back at the asserted
-                // type. That is what the author claimed, and it is the same
-                // unerase a checker-narrowed read emits -- the difference is
-                // only who established it.
-                //
-                // Where nothing is erased this is the identity, which is what
-                // every other assertion stays.
-                self.narrowed(id, value)
+                let value = if self.type_of(inner) == Some(HirType::Void) {
+                    self.lower_expecting(inner, &HirType::Erased)?
+                } else {
+                    self.lower_expression(inner)?
+                };
+                assertions::lower(self, id, value)
             }
             Some(syntax::PREFIX_UNARY_EXPRESSION) => self.lower_prefix_unary(id),
             Some(syntax::POSTFIX_UNARY_EXPRESSION) => self.lower_postfix_unary(id),
