@@ -14,13 +14,24 @@ use crate::hir::tags;
 enum Check {
     Primitive { target: HirType, tag: u32 },
     Class(TypeId),
+    Present,
 }
 
-/// The check an `as` needs before its payload is read. `x!` has none: it is a
-/// claim about the type, and `digits().at(99)!` is `undefined` in node, which
-/// the program goes on to use; only a read whose slot cannot hold the absence
-/// traps (see `lower_element_access`).
+/// The check an assertion needs before its payload is read.
+///
+/// `x!` is checked only where its target is a reference: after it the program
+/// trusts the pointer, folds its own `=== null` guards away and dereferences
+/// it, so a null that got through is a crash rather than a JavaScript answer.
+/// A scalar target has no pointer to trust -- `digits().at(99)!` unerases
+/// `undefined` to NaN, which is what node's `undefined` becomes as a number --
+/// so it stays the type-only claim it is in JavaScript.
 fn check(probe: &FuncBuilder<'_>, id: NodeId) -> Option<Check> {
+    if probe.kind_of(id) == Some(syntax::NON_NULL_EXPRESSION) {
+        return probe
+            .type_of(id)
+            .is_some_and(|target| target.is_managed() || matches!(target, HirType::NativePointer(_)))
+            .then_some(Check::Present);
+    }
     if probe.kind_of(id) != Some(syntax::AS_EXPRESSION) {
         return None;
     }
@@ -72,6 +83,16 @@ pub(super) fn can_throw(probe: &FuncBuilder<'_>, id: NodeId) -> bool {
             probe.type_of(inner) != Some(HirType::Managed(ManagedType::Object(class)))
                 || removes_absence(probe, inner, id)
         }
+        Some(Check::Present) => {
+            probe.type_of(inner).is_some_and(|ty| ty == HirType::Erased)
+                || probe.snapshot.node_types.get(&inner).is_some_and(|ty| {
+                    super::holds_only_absences(probe.snapshot, *ty)
+                        || probe.snapshot.types.get(ty.0 as usize).is_some_and(|record| {
+                            matches!(&record.kind, super::TypeKind::Union(members)
+                                if members.iter().any(|member| super::absence_of_member(probe.snapshot, *member).is_some()))
+                        })
+                })
+        }
         None => false,
     }
 }
@@ -94,10 +115,8 @@ pub(super) fn lower(
         return Ok(value);
     }
     let source = builder.children(id).first().copied().unwrap_or(id);
-    // Widening to unknown keeps the value's own representation, as every
-    // unchecked assertion does: `strings as unknown as string[]` must still
-    // meet the refusal between a template object and an array, which erasing
-    // here would launder into an unchecked unerase.
+    // Widening to unknown preserves the runtime type instead of using the
+    // assertion's checker type as evidence for a later cast.
     if builder.type_of(id) == Some(HirType::Erased) {
         if actual_is_unerasable(builder, value) {
             return Err(builder.unsupported(
@@ -105,7 +124,7 @@ pub(super) fn lower(
                 "an assertion to unknown from a value with no erased representation",
             ));
         }
-        return builder.narrowed(id, value);
+        return builder.coerce(value, &HirType::Erased, source);
     }
     if check(builder, id).is_some() && actual_is_unerasable(builder, value) {
         return Err(builder.unsupported(
@@ -131,7 +150,8 @@ pub(super) fn lower(
             let erased = builder.coerce(value, &HirType::Erased, source)?;
             let matches = tag_matches(builder, id, erased, tag);
             let mismatch = disallowed(builder, id, erased, matches, &allowed);
-            builder.refuse_when(
+            reject_when(
+                builder,
                 id,
                 mismatch,
                 "TypeError",
@@ -153,13 +173,25 @@ pub(super) fn lower(
                 origin.clone(),
             );
             let mismatch = disallowed(builder, id, erased, matches, &allowed);
-            builder.refuse_when(
+            reject_when(
+                builder,
                 id,
                 mismatch,
                 "TypeError",
                 "The asserted native class does not match the value",
             )?;
             return Ok(builder.push(OpKind::Unerase { value: erased }, target, origin));
+        }
+        Some(Check::Present) if can_throw(builder, id) => {
+            if let Some(absent) = builder.absence_of(id, value) {
+                reject_when(
+                    builder,
+                    id,
+                    absent,
+                    "TypeError",
+                    "A non-null assertion received null or undefined",
+                )?;
+            }
         }
         _ => {}
     }
@@ -203,7 +235,8 @@ fn recover_matching(
             absent.is_some_and(|tag| !allowed.contains(&tag))
         };
         if needs_presence && let Some(absent) = builder.absence_of(id, concrete) {
-            builder.refuse_when(
+            reject_when(
+                builder,
                 id,
                 absent,
                 "TypeError",
@@ -266,4 +299,45 @@ fn tag_matches(builder: &mut FuncBuilder<'_>, id: NodeId, value: ValueId, tag: u
 fn actual_is_unerasable(builder: &FuncBuilder<'_>, value: ValueId) -> bool {
     let ty = &builder.values[value.0 as usize].ty;
     ty != &HirType::Erased && !super::erasable(ty)
+}
+
+/// A native safety failure is a checked `TypeError` where the program can
+/// handle it. At an unhandled entry, decline the case by name rather than
+/// presenting an added native assertion failure as JavaScript's result.
+fn reject_when(
+    builder: &mut FuncBuilder<'_>,
+    id: NodeId,
+    condition: ValueId,
+    class: &str,
+    message: &str,
+) -> Result<(), Diagnostic> {
+    if builder.raises
+        || builder.a_handler_in_this_function_would_catch()
+        || builder.async_result.is_some()
+    {
+        return builder.refuse_when(id, condition, class, message);
+    }
+    let rejected = builder.new_block();
+    let accepted = builder.new_block();
+    builder.terminate(super::super::Terminator::Branch {
+        cond: condition,
+        then_target: rejected,
+        then_args: Vec::new(),
+        else_target: accepted,
+        else_args: Vec::new(),
+    });
+    builder.switch_to(rejected);
+    builder.run_finallys_to(0)?;
+    if !builder.is_terminated() {
+        let origin = builder.origin(id);
+        let reason = builder.push(
+            OpKind::ConstString(message.to_owned()),
+            HirType::Managed(ManagedType::String),
+            origin.clone(),
+        );
+        builder.runtime_call("nts_assertion_failed", vec![reason], HirType::Void, origin);
+        builder.terminate(super::super::Terminator::Unreachable);
+    }
+    builder.switch_to(accepted);
+    Ok(())
 }

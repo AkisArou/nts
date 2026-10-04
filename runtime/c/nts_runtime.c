@@ -1792,6 +1792,16 @@ _Noreturn void nts_refused(const NtsString *what) {
   abort();
 }
 
+_Noreturn void nts_assertion_failed(const NtsString *what) {
+  fflush(stdout);
+  fputs("nts: refused: ", stderr);
+  for (uint32_t at = 0; what && at < what->length; at++) {
+    fputc((int)nts_unit(what, at), stderr);
+  }
+  fputc('\n', stderr);
+  exit(EXIT_FAILURE);
+}
+
 _Noreturn void nts_no_arm_of(NtsValue subject, const NtsString *member) {
   const char *name = "a value with no descriptor";
   if (NTS_TAG_IS_MANAGED(nts_value_tag(subject))) {

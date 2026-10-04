@@ -84,7 +84,6 @@ fn invalid_cooked_entries_and_writable_casts_remain_named_boundaries() {
     );
     for (name, reason) in [
         ("rawAccess", "`raw`"),
-        ("writableCast", "immutable template object"),
         ("invalidWhole", "undefined cooked entry"),
         ("invalidHead", "undefined cooked entry"),
         ("invalidMiddle", "undefined cooked entry"),
@@ -107,4 +106,21 @@ fn invalid_cooked_entries_and_writable_casts_remain_named_boundaries() {
             prepared.diagnostics
         );
     }
+    // `strings as unknown as string[]` compiles: erasure keeps the template
+    // object's identity, and reading it back as array storage is the `Unerase`
+    // every backend guards with `nts_array_writable`, which refuses an
+    // immutable template object at run time before the write lands.
+    let mutable = prepared
+        .program
+        .funcs
+        .iter()
+        .find(|f| f.name == "mutable")
+        .expect("writable-cast subject");
+    assert!(
+        mutable.blocks.iter().flat_map(|b| &b.ops).any(|value| matches!(
+            (&mutable.values[value.0 as usize].kind, &mutable.values[value.0 as usize].ty),
+            (hir::OpKind::Unerase { .. }, hir::HirType::Managed(hir::ManagedType::Array(_)))
+        )),
+        "the template is read back as array storage, which the backends check for writability"
+    );
 }

@@ -111,6 +111,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_array_unshift", returns: "double", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_array_unshift_ref", returns: "double", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_array_writable", returns: "ptr", params: &["ptr"], attributes: &[] },
+    Signature { name: "nts_assertion_failed", returns: "void", params: &["ptr"], attributes: &["noreturn"] },
     Signature { name: "nts_bigint_as_intn", returns: "i128", params: &["double", "i128"], attributes: &[] },
     Signature { name: "nts_bigint_as_uintn", returns: "i128", params: &["double", "i128"], attributes: &[] },
     Signature { name: "nts_bigint_box", returns: "ptr", params: &["i128"], attributes: &[] },

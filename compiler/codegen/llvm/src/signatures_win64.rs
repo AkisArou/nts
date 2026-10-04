@@ -86,6 +86,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
     Signature { name: "nts_array_unshift", returns: "double", params: &["ptr", "double"], attributes: &[] },
     Signature { name: "nts_array_unshift_ref", returns: "double", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_array_writable", returns: "ptr", params: &["ptr"], attributes: &[] },
+    Signature { name: "nts_assertion_failed", returns: "void", params: &["ptr"], attributes: &["noreturn"] },
     Signature { name: "nts_bigint_as_intn", returns: "<2 x i64>", params: &["double", "ptr dead_on_return"], attributes: &[] },
     Signature { name: "nts_bigint_as_uintn", returns: "<2 x i64>", params: &["double", "ptr dead_on_return"], attributes: &[] },
     Signature { name: "nts_bigint_box", returns: "ptr", params: &["ptr dead_on_return"], attributes: &[] },

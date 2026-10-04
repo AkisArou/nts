@@ -120,3 +120,41 @@ fn proven_identity_and_satisfies_controls_have_no_assertion_cost() {
         );
     }
 }
+
+#[test]
+fn a_provided_error_upcast_keeps_the_existing_representation() {
+    let Some(frontend) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
+    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/a-native-error-assertion-keeps-provided-ancestry/tsconfig.json");
+    let snapshot = TsgoApi::for_compilation(frontend)
+        .snapshot(&config)
+        .expect("snapshot");
+    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+    let prepared = hir::prepare(&snapshot).expect("valid error assertion HIR");
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let root = prepared
+        .program
+        .funcs
+        .iter()
+        .find(|func| func.name == "provedUpcast")
+        .expect("retained upcast root");
+    assert!(
+        !root
+            .blocks
+            .iter()
+            .flat_map(|block| &block.ops)
+            .any(|value| {
+                matches!(
+                    &root.values[value.0 as usize].kind,
+                    OpKind::InstanceOf { .. } | OpKind::Erase { .. } | OpKind::Unerase { .. }
+                )
+            }),
+        "a known subclass upcast must have no assertion or erasure cost"
+    );
+}

@@ -2936,6 +2936,10 @@ _Noreturn void nts_no_arm(const char *member);
  * named, and never an answer node would not give. `what` is the reason, as the
  * compile-time refusal would have said it. */
 _Noreturn void nts_refused(const NtsString *what);
+/* An incompatible input reached an unhandled native representation assertion.
+ * This is an input refusal, unlike nts_refused's missing compiled operation.
+ * Checks with a reachable handler instead raise the ordinary provided error. */
+_Noreturn void nts_assertion_failed(const NtsString *what);
 /* The same, for a chain a **lowering** built rather than an emitter: a call on
  * an erased receiver whose arms are the classes the receiver's union names.
  *
