@@ -817,7 +817,9 @@ fn unfilled_uniform_stubs(
         locals.extend((0..width).map(|_| VType::Object(types::VALUE.to_owned())));
         let slots = u16::try_from(locals.len()).unwrap_or(u16::MAX);
         let mut code = Code::new(locals, slots);
-        let why = format!("`{}` has no `{member}` to call: lowering refused every body it would have", layout.name);
+        // Only what is true of every case: a closure whose bodies lowering refused,
+        // a class-value token that was never callable, one raising arm missing.
+        let why = format!("`{}` has no `{member}` to call", layout.name);
         code.const_string(origin, pool, &why);
         code.invoke_static(origin, pool, body::RUNTIME, "refused", "(Ljava/lang/String;)V");
         code.const_null(origin);
