@@ -369,6 +369,30 @@ fn an_array_of_two_kinds_keeps_its_tags() {
     );
 }
 
+#[test]
+fn recovering_array_storage_requires_initialized_reads() {
+    let Some(prepared) = prepared_at("../../examples/an-erased-array-read-keeps-missing-elements") else {
+        return;
+    };
+    for name in ["missing", "hole", "numberedHole", "conditionalStore", "partialFill",
+        "skippedFill", "interruptedFill", "readBeforeFill", "freshOnEachIteration"] {
+        let f = prepared.program.funcs.iter().find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("{name} must stay admitted"));
+        assert!(f.blocks.iter().flat_map(|b| &b.ops).any(|id|
+            matches!(&f.value(*id).kind, OpKind::Call { callee: hir::Callee::External(name), .. }
+                if name == "nts_array_element")),
+            "{name} needs a read that preserves a missing slot");
+    }
+    for name in ["sameSlotControl", "completeFillControl", "mixedLiteralControl"] {
+        let f = prepared.program.funcs.iter().find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("{name} must stay admitted"));
+        assert!(!f.blocks.iter().flat_map(|b| &b.ops).any(|id|
+            matches!(&f.value(*id).kind, OpKind::Call { callee: hir::Callee::External(name), .. }
+                if name == "nts_array_element")),
+            "{name} already proves its reads initialized");
+    }
+}
+
 /// A parameter every caller reaches with the same kind stops being erased.
 ///
 /// The cross-function half. `addOne` in `examples/unknown` is called once, with

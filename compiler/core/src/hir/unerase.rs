@@ -24,6 +24,10 @@
 //! then be read as a double that was never written — silently. So escape
 //! analysis decides, and a value it cannot prove frame-local is left alone.
 //!
+//! Store agreement also says nothing about a hole: an erased slot nothing wrote
+//! reads `undefined`, a typed one reads zero. So each read of a narrowed array
+//! needs `initialized`'s proof that a store reached its slot first.
+//!
 //! Conservative twice over: every use of a read must be an unerase or a tag
 //! read. A read that flows anywhere else is a use that expects the general
 //! representation, and one of those sinks the whole array.
@@ -53,6 +57,7 @@ pub fn narrow_arrays(
     escapes: &Escapes,
     faces: &BTreeMap<TypeId, SignatureFace>,
 ) -> usize {
+    let initialized = super::initialized::Reads::analyze(func);
     let candidates: Vec<ValueId> = (0..func.values.len())
         .map(|index| ValueId(u32::try_from(index).unwrap_or(0)))
         .filter(|value| {
@@ -68,7 +73,7 @@ pub fn narrow_arrays(
 
     let mut narrowed = 0;
     for array in candidates {
-        if let Some(element) = single_representation(func, array) {
+        if let Some(element) = single_representation(func, array, &initialized) {
             rewrite(func, array, &element, faces);
             narrowed += 1;
         }
@@ -82,7 +87,11 @@ pub fn narrow_arrays(
 /// fresh erasure, or a read is used as anything but an unerase or a tag. Each
 /// of those is a use that wants the general representation, and wanting it once
 /// is wanting it.
-fn single_representation(func: &Func, array: ValueId) -> Option<HirType> {
+fn single_representation(
+    func: &Func,
+    array: ValueId,
+    initialized: &super::initialized::Reads,
+) -> Option<HirType> {
     let mut found: Option<HirType> = None;
     let mut reads: FxHashSet<ValueId> = FxHashSet::default();
 
@@ -106,6 +115,7 @@ fn single_representation(func: &Func, array: ValueId) -> Option<HirType> {
                 }
             }
             OpKind::ArrayGet { array: target, .. } if *target == array => {
+                if !initialized.contains(id) { return None }
                 reads.insert(id);
             }
             _ => {}

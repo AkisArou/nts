@@ -197,6 +197,8 @@ fn reaches(func: &Func, from: BlockId, to: BlockId) -> bool {
 
 /// The arguments a loop's single entry and single back edge carry.
 struct Shape {
+    entry: BlockId,
+    latch: BlockId,
     entry_args: Vec<ValueId>,
     latch_args: Vec<ValueId>,
 }
@@ -216,18 +218,136 @@ fn shape(
                 // loop, but the reasoning below assumes one back edge.
                 return None;
             }
-            latch = Some(args.clone());
+            latch = Some((*from, args.clone()));
         } else {
             if entry.is_some() {
                 return None;
             }
-            entry = Some(args.clone());
+            entry = Some((*from, args.clone()));
         }
     }
+    let (entry, entry_args) = entry?;
+    let (latch, latch_args) = latch?;
     Some(Shape {
-        entry_args: entry?,
-        latch_args: latch?,
+        entry,
+        latch,
+        entry_args,
+        latch_args,
     })
+}
+
+/// A complete traversal of a fixed prefix, on the header's false edge.
+///
+/// This is stronger than an upper bound on trips: initialization needs every
+/// index, so the counter starts at zero, advances by exactly one, and the
+/// only edge leaving the loop is its `counter < length` guard. Consumers must
+/// still prove that their store executes on every back edge.
+pub(super) struct PrefixLoop {
+    pub header: BlockId,
+    pub latch: BlockId,
+    pub exit: BlockId,
+    pub counter: ValueId,
+    pub length: f64,
+}
+
+pub(super) fn prefix_loops(
+    func: &Func,
+    analysis: &Analysis,
+    predecessors: &[Vec<(BlockId, Vec<ValueId>)>],
+    dominates: impl Fn(BlockId, BlockId) -> bool,
+) -> Vec<PrefixLoop> {
+    let mut found = Vec::new();
+    for header in headers(func) {
+        let Some(shape) = shape(func, predecessors, header) else {
+            continue;
+        };
+        let Terminator::Branch {
+            cond,
+            then_target,
+            else_target,
+            ..
+        } = func.blocks[header.0 as usize].terminator
+        else {
+            continue;
+        };
+        let OpKind::Binary {
+            op: BinOp::Lt,
+            lhs: counter,
+            rhs: limit,
+        } = func.value(cond).kind
+        else {
+            continue;
+        };
+        let Some(slot) = func.blocks[header.0 as usize]
+            .params
+            .iter()
+            .position(|param| *param == counter)
+        else {
+            continue;
+        };
+        let start = analysis.get(shape.entry_args[slot]);
+        let length = analysis.get(limit);
+        let Some(step) = step_of(
+            func,
+            analysis,
+            predecessors,
+            counter,
+            shape.latch_args.get(slot).copied(),
+            MERGE_DEPTH,
+        ) else {
+            continue;
+        };
+        if !start.is_singleton()
+            || start.lo != 0.0
+            || !step.is_singleton()
+            || step.lo.to_bits() != 1.0_f64.to_bits()
+            || !length.is_singleton()
+            || !length.whole
+            || length.maybe_nan
+            || !(0.0..=f64::from(u32::MAX)).contains(&length.lo)
+            || !dominates(header, shape.latch)
+            || reaches(func, header, shape.entry)
+        {
+            continue;
+        }
+        // The natural loop, using the same incoming edges as the trip proof.
+        let mut members = FxHashSet::from_iter([header]);
+        let mut stack = vec![shape.latch];
+        while let Some(block) = stack.pop() {
+            if members.insert(block) {
+                stack.extend(predecessors[block.0 as usize].iter().map(|(from, _)| *from));
+            }
+        }
+        if !members.contains(&then_target) || members.contains(&else_target)
+            || members.iter().any(|member| !dominates(header, *member))
+            || members.iter().any(|member| {
+                func.blocks[member.0 as usize].terminator.successors().iter()
+                    .any(|next| !(members.contains(next) || (*member == header && *next == else_target)))
+            })
+            // The exit is evidence that this loop completed only if no other
+            // path can enter that block.
+            || predecessors[else_target.0 as usize].iter().any(|(from, _)| *from != header)
+        {
+            continue;
+        }
+        found.push(PrefixLoop {
+            header,
+            latch: shape.latch,
+            exit: else_target,
+            counter,
+            length: length.lo,
+        });
+    }
+    found
+}
+
+pub(super) fn copies_counter(
+    func: &Func,
+    predecessors: &[Vec<(BlockId, Vec<ValueId>)>],
+    value: ValueId,
+    counter: ValueId,
+) -> bool {
+    copies(func, predecessors, value, counter, MERGE_DEPTH)
 }
 
 /// What a header parameter gains each time round, if it gains a fixed amount.
