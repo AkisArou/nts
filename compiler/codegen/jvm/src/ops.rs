@@ -4316,11 +4316,20 @@ impl Emitter<'_> {
                 }
                 return Ok(Some(Placed::OnStack));
             }
-            HirType::Managed(ManagedType::String) if equality => (
-                RUNTIME,
-                "stringEq",
-                "(Ljava/lang/String;Ljava/lang/String;)Z",
-            ),
+            // **Both sides strings, not the left alone** -- the erased arm's
+            // lesson above, a second time. `value === Error` specialised for a
+            // string `value` is an `eq` between a string and a class
+            // constructor: legal, and always false. Asking only the left took
+            // `stringEq(String, String)` with a `Ctor_Error` on the stack
+            // (`class-values`: `VerifyError` in `isProvided@0estr`). C and LLVM
+            // compare addresses and answer false by luck. A string against any
+            // other reference falls through to reference identity, which is the
+            // language's answer: no string is that object.
+            HirType::Managed(ManagedType::String)
+                if equality && *self.ty(rhs) == HirType::Managed(ManagedType::String) =>
+            {
+                (RUNTIME, "stringEq", "(Ljava/lang/String;Ljava/lang/String;)Z")
+            }
             _ if op == BinOp::Concat => {
                 let origin = self.func.values[lhs.0 as usize].origin.clone();
                 // An accumulator is already a builder, and `append` returns the
@@ -4768,7 +4777,11 @@ impl Emitter<'_> {
             code.branch_zero(&origin, test, target);
             return Ok(());
         }
-        if matches!(self.ty(lhs), HirType::Managed(ManagedType::String)) {
+        // Both strings, for the reason `reference_binary`'s string arm gives: a
+        // string against another reference is identity below, or a refusal.
+        if matches!(self.ty(lhs), HirType::Managed(ManagedType::String))
+            && matches!(self.ty(rhs), HirType::Managed(ManagedType::String))
+        {
             self.load(code, pool, lhs)?;
             self.load(code, pool, rhs)?;
             code.invoke_virtual(
