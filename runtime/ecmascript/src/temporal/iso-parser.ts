@@ -19,6 +19,7 @@ export class ISOParser {
   fractionalNanoseconds = 0;
   offsetNanoseconds = 0n;
   hasOffset = false;
+  offsetHasSeconds = false;
   utcDesignator = false;
   timeZone: string | undefined;
   calendar = "iso8601";
@@ -190,6 +191,7 @@ export class ISOParser {
     if (separated || this.nextDigit()) {
       minute = this.digits(2);
       if (!annotation && ((separated && this.take(":")) || (!separated && this.nextDigit()))) {
+        this.offsetHasSeconds = true;
         second = this.digits(2);
         fractional = this.fraction();
       }

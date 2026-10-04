@@ -14,9 +14,12 @@ import {
   validateIncrement,
   requireOptions,
   secondsStringPrecision,
+  temporalUnit,
 } from "./options.ts";
 import type { NtsDate } from "../date/builtins.ts";
 import type { WithResult } from "../contract.ts";
+import type { TimeZoneSource } from "../time/zone-data.ts";
+import { resolveTimeZone } from "./zone-like.ts";
 
 export { Duration } from "./duration.ts";
 export { PlainTime } from "./plain-time.ts";
@@ -144,20 +147,24 @@ export class Instant implements WithResult<
     if (unit === undefined) throw new RangeError("smallestUnit required");
     return new Instant(roundInstant(this.#epochNanoseconds, unit, increment, mode));
   }
-  toString(opts: Readonly<Temporal.InstantToStringOptions> | undefined = undefined): string {
+  toString(
+    opts: Readonly<Temporal.InstantToStringOptions> | undefined = undefined,
+    timeZones: TimeZoneSource | undefined = undefined,
+  ): string {
     if (opts !== undefined) requireOptions(opts);
     const digits = fractionalSecondDigits(opts?.fractionalSecondDigits);
     const mode = roundingMode(opts?.roundingMode);
-    const precision = secondsStringPrecision(opts?.smallestUnit, digits);
-    if (opts?.timeZone !== undefined)
-      throw new RangeError("Instant time-zone formatting requires the zone adapter");
+    const smallestUnit = temporalUnit(opts?.smallestUnit);
+    const timeZone = opts?.timeZone;
+    const precision = secondsStringPrecision(smallestUnit, digits);
+    const zone = timeZone === undefined ? undefined : resolveTimeZone(timeZone, timeZones);
     const minutes = precision === -2;
     const increment = minutes ? 60000000000n : BigInt(precision < 0 ? 1 : 10 ** (9 - precision));
-    const result = formatInstant(
+    return formatInstant(
       roundInstant(this.#epochNanoseconds, "nanosecond", Number(increment), mode),
-      minutes ? 0 : precision,
+      precision,
+      zone,
     );
-    return minutes ? result.slice(0, -4) + "Z" : result;
   }
   toJSON(): string {
     return formatInstant(this.#epochNanoseconds);

@@ -1,5 +1,6 @@
 import { canonicalizeLocale } from "./locale.ts";
-import type { LocaleData, LocaleInfoData } from "./locale-data.ts";
+import type { LocaleInfoData } from "./locale-data.ts";
+import { LocalePreferences } from "./locale-preference.ts";
 import {
   LocaleIdentifier,
   validLanguage,
@@ -23,22 +24,6 @@ function typeOption(value: string | undefined): string | undefined {
   return result;
 }
 
-function subdivision<D extends LocaleData>(
-  data: D,
-  identifier: LocaleIdentifier,
-  key: string,
-): string | undefined {
-  const value = identifier.keyword(key);
-  if (value === undefined) return undefined;
-  const region = value.slice(0, value.charCodeAt(0) >= 48 && value.charCodeAt(0) <= 57 ? 3 : 2);
-  if (!validRegion(region) || value.length === region.length) return undefined;
-  for (let index = region.length; index < value.length; index++) {
-    const code = value.charCodeAt(index);
-    if (!((code >= 48 && code <= 57) || (code >= 97 && code <= 122))) return undefined;
-  }
-  return new LocaleIdentifier(canonicalizeLocale(data, "und-" + region)).region;
-}
-
 export class NtsLocale<D extends LocaleInfoData> implements WithResult<
   Omit<Intl.Locale, "hourCycle" | "caseFirst">,
   Intl.Locale,
@@ -47,6 +32,7 @@ export class NtsLocale<D extends LocaleInfoData> implements WithResult<
   readonly #data: D;
   readonly #tag: string;
   readonly #identifier: LocaleIdentifier;
+  #preferences: LocalePreferences<D> | undefined;
 
   constructor(
     data: D,
@@ -174,21 +160,17 @@ export class NtsLocale<D extends LocaleInfoData> implements WithResult<
     return this.#tag;
   }
 
-  private preferredRegion(): string {
-    return (
-      subdivision(this.#data, this.#identifier, "rg") ??
-      this.#identifier.region ??
-      subdivision(this.#data, this.#identifier, "sd") ??
-      new LocaleIdentifier(this.#data.maximize(this.#tag)).region ??
-      "001"
-    );
+  private preferences(): LocalePreferences<D> {
+    let preferences = this.#preferences;
+    if (preferences === undefined) {
+      preferences = new LocalePreferences(this.#data, this.#identifier);
+      this.#preferences = preferences;
+    }
+    return preferences;
   }
 
   getCalendars(): string[] {
-    const calendar = this.#identifier.keyword("ca");
-    return calendar === undefined
-      ? this.#data.calendarValues(this.#identifier.language + "-" + this.preferredRegion())
-      : [calendar];
+    return this.preferences().calendars();
   }
   getCollations(): string[] {
     const collation = this.#identifier.keyword("co");
@@ -204,12 +186,7 @@ export class NtsLocale<D extends LocaleInfoData> implements WithResult<
     return result.sort();
   }
   getHourCycles(): string[] {
-    const value = this.#identifier.keyword("hc");
-    return [
-      value === undefined
-        ? this.#data.hourCycle(this.#identifier.language + "-" + this.preferredRegion())
-        : value,
-    ];
+    return this.preferences().hourCycles();
   }
   getNumberingSystems(): string[] {
     return [
@@ -219,7 +196,15 @@ export class NtsLocale<D extends LocaleInfoData> implements WithResult<
   }
   getTimeZones(): string[] | undefined {
     const region = this.#identifier.region;
-    return region === undefined ? undefined : this.#data.timeZones(region).sort();
+    if (region === undefined) return undefined;
+    const values = this.#data.timeZones(region).sort();
+    let count = 0;
+    for (let index = 0; index < values.length; index++) {
+      const value = values[index]!;
+      if (count === 0 || value !== values[count - 1]) values[count++] = value;
+    }
+    values.length = count;
+    return values;
   }
   getTextInfo(): Intl.TextInfo {
     const script =
@@ -228,7 +213,7 @@ export class NtsLocale<D extends LocaleInfoData> implements WithResult<
     return { direction: direction < 0 ? undefined : direction === 0 ? "ltr" : "rtl" };
   }
   getWeekInfo(): Intl.WeekInfo {
-    const data = this.#data.weekData(this.preferredRegion());
+    const data = this.preferences().weekData();
     const option = this.#identifier.keyword("fw");
     let firstDay = (data & 7) === 1 ? 7 : (data & 7) - 1;
     for (let index = 0; index < weekdays.length; index++)

@@ -14,13 +14,15 @@ export interface LocaleData {
 }
 
 export interface LocaleInfoData extends LocaleData {
+  // Canonical language-region preferences; empty when supplemental data are absent.
   calendarValues(locale: string): string[];
   collationValues(locale: string): string[];
-  hourCycle(locale: string): string;
+  hourCycleValues(locale: string): readonly string[];
   timeZones(region: string): string[];
   textDirection(script: string): number;
   // ICU weekday numbering: first day in bits 0..2, weekend day 1..7 in
-  // bits 3..9. This is ABI storage, not a copied public WeekInfo.
+  // bits 3..9; NaN means no supplemental data for this region. This is ABI
+  // storage, not a copied public WeekInfo.
   weekData(region: string): number;
 }
 

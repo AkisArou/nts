@@ -1,10 +1,13 @@
 import { IcuTimeZone } from "../../../../../runtime/ecmascript/providers/icu/java/provider.ts";
+import { zonedTimeDigest, zonedTimeBenchmark } from "./temporal-zone.ts";
 import { IcuLocaleData } from "../../../../../runtime/ecmascript/providers/icu/java/locale.ts";
 import { IcuCollator } from "../../../../../runtime/ecmascript/providers/icu/java/collator.ts";
 import { IcuDatePatterns } from "../../../../../runtime/ecmascript/providers/icu/java/date-pattern.ts";
 import { IcuDateFormatter } from "../../../../../runtime/ecmascript/providers/icu/java/date-time.ts";
 import { IcuRelativeFormatter } from "../../../../../runtime/ecmascript/providers/icu/java/relative.ts";
 import { IcuPluralRules } from "../../../../../runtime/ecmascript/providers/icu/java/plural.ts";
+import { IcuDisplayNames } from "../../../../../runtime/ecmascript/providers/icu/java/display.ts";
+import { IcuSegmenter } from "../../../../../runtime/ecmascript/providers/icu/java/segmenter.ts";
 import {
   IcuNumberData,
   IcuNumberFormatter,
@@ -15,10 +18,18 @@ import {
   numberOptionsDigest,
   numberRangeDigest,
   localeDataDigest,
+  localePreferenceDigest,
+  localePreferenceBenchmark,
   collatorDigest,
   datePatternDigest,
   dateTextDigest,
   timeZoneDataDigest,
+  supportedValuesDigest,
+  supportedValuesBenchmark,
+  displayDigest,
+  segmentDigest,
+  segmentBenchmark,
+  displayBenchmark,
   listDigest,
   listBenchmark,
   relativeDigest,
@@ -29,6 +40,14 @@ import {
 export function main(): string {
   return (
     digest(new IcuTimeZone("America/New_York")) +
+    "\n" +
+    zonedTimeDigest(
+      new IcuTimeZone("America/New_York"),
+      new IcuTimeZone("Australia/Lord_Howe"),
+      new IcuTimeZone("Pacific/Apia"),
+      new IcuTimeZone("America/Havana"),
+      new IcuTimeZone("Africa/Monrovia"),
+    ) +
     "\n" +
     numberDigest(new IcuNumberFormatter("en-US", ".00##")) +
     "\n" +
@@ -46,6 +65,8 @@ export function main(): string {
     "\n" +
     localeDataDigest(new IcuLocaleData()) +
     "\n" +
+    localePreferenceDigest(new IcuLocaleData()) +
+    "\n" +
     collatorDigest(
       new IcuLocaleData(),
       (locale, sensitivity, punctuation, numeric, caseFirst) =>
@@ -57,6 +78,15 @@ export function main(): string {
     dateTextDigest((locale, pattern, timeZone) => new IcuDateFormatter(locale, pattern, timeZone)) +
     "\n" +
     timeZoneDataDigest(new IcuLocaleData()) +
+    "\n" +
+    supportedValuesDigest(new IcuLocaleData()) +
+    "\n" +
+    segmentDigest((locale: string, granularity: number) => IcuSegmenter.open(locale, granularity)) +
+    "\n" +
+    displayDigest(
+      new IcuLocaleData(),
+      (locale, type, style, dialect) => new IcuDisplayNames(locale, type, style, dialect),
+    ) +
     "\n" +
     listDigest(new IcuLocaleData()) +
     "\n" +
@@ -70,6 +100,26 @@ export function main(): string {
 }
 export function benchmark(iterations: number): number {
   return formatBenchmark(new IcuNumberFormatter("en-US", ".00##"), iterations);
+}
+export function benchmarkZonedTime(iterations: number, ambiguous: boolean): number {
+  return zonedTimeBenchmark(new IcuTimeZone("America/New_York"), iterations, ambiguous);
+}
+export function benchmarkLocale(iterations: number, cached: boolean): number {
+  return localePreferenceBenchmark(new IcuLocaleData(), iterations, cached);
+}
+export function benchmarkSegment(iterations: number, containing: boolean, wide: boolean): number {
+  return segmentBenchmark(IcuSegmenter.open("en-US", 1), iterations, containing, wide);
+}
+export function benchmarkSupported(iterations: number, timeZones: boolean): number {
+  return supportedValuesBenchmark(new IcuLocaleData(), iterations, timeZones);
+}
+export function benchmarkDisplay(iterations: number, fields: boolean): number {
+  return displayBenchmark(
+    new IcuLocaleData(),
+    new IcuDisplayNames("en-US", fields ? 5 : 3, 0, true),
+    iterations,
+    fields,
+  );
 }
 export function benchmarkList(iterations: number, count: number): number {
   return listBenchmark(new IcuLocaleData(), iterations, count);

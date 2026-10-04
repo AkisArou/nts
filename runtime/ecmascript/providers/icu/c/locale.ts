@@ -9,7 +9,10 @@ import {
   nts_icu_numbering_supported,
   nts_icu_locale_type,
   nts_icu_locale_values,
-  nts_icu_locale_hour_cycle,
+  nts_icu_supported_values,
+  nts_icu_currency_named,
+  nts_icu_timezone_primary,
+  nts_icu_timezone_primary_names,
   nts_icu_script_direction,
   nts_icu_script_is_hebrew,
   nts_icu_locale_list_samples,
@@ -28,6 +31,12 @@ import type {
 import type { TimeZoneIdentifierData } from "../../../src/time/zone-data.ts";
 import type { ListPatternData } from "../../../src/intl/list-data.ts";
 import type { DurationPatternData } from "../../../src/intl/duration-data.ts";
+import type { SupportedValueData } from "../../../src/intl/supported-value-data.ts";
+import {
+  hasCalendarPreferences,
+  hasWeekPreferences,
+  hourCycleValues,
+} from "../shared/locale-preferences.ts";
 
 function required(value: string | null): string {
   if (value === null) throw new RangeError("ICU locale data operation failed");
@@ -41,7 +50,8 @@ export class IcuLocaleData
     CollationData,
     TimeZoneIdentifierData,
     ListPatternData,
-    DurationPatternData
+    DurationPatternData,
+    SupportedValueData
 {
   private readonly handle: IcuLocaleHandle;
   constructor() {
@@ -84,7 +94,16 @@ export class IcuLocaleData
   canonicalType(key: string, value: string): string {
     return required(nts_icu_locale_type(key, value));
   }
+  availableValues(category: number): string[] {
+    const values = nts_icu_supported_values(category);
+    if (values === null) throw new RangeError("ICU supported-value enumeration failed");
+    return values;
+  }
+  hasCurrencyName(code: string): boolean {
+    return nts_icu_currency_named(code);
+  }
   calendarValues(locale: string): string[] {
+    if (!hasCalendarPreferences(locale)) return [];
     const values = nts_icu_locale_values(locale, 0);
     if (values === null) throw new RangeError("ICU calendar data operation failed");
     return values;
@@ -104,8 +123,8 @@ export class IcuLocaleData
     if (Number.isNaN(result)) throw new RangeError("ICU collator data operation failed");
     return result;
   }
-  hourCycle(locale: string): string {
-    return required(nts_icu_locale_hour_cycle(locale));
+  hourCycleValues(locale: string): readonly string[] {
+    return hourCycleValues(locale);
   }
   timeZones(region: string): string[] {
     const values = nts_icu_locale_values(region, 2);
@@ -119,6 +138,14 @@ export class IcuLocaleData
   }
   canonicalTimeZone(name: string): string | undefined {
     return nts_icu_timezone_canonical(name) ?? undefined;
+  }
+  primaryTimeZone(name: string): string | undefined {
+    return nts_icu_timezone_primary(name) ?? undefined;
+  }
+  primaryTimeZoneNames(): string[] {
+    const names = nts_icu_timezone_primary_names();
+    if (names === null) throw new RangeError("ICU primary time-zone enumeration failed");
+    return names;
   }
   defaultTimeZoneIdentifier(): string {
     return required(nts_icu_timezone_default());
@@ -135,6 +162,7 @@ export class IcuLocaleData
     return samples;
   }
   weekData(region: string): number {
+    if (!hasWeekPreferences(region)) return NaN;
     const value = nts_icu_locale_week(region);
     if (!Number.isFinite(value)) throw new RangeError("ICU week data operation failed");
     return value;

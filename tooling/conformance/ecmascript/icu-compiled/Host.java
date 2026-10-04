@@ -12,6 +12,9 @@ import nts.intl.IcuDatePatterns;
 import nts.intl.IcuDateFormatter;
 import nts.intl.IcuRelativeFormatter;
 import nts.intl.IcuPluralRules;
+import nts.intl.IcuDisplayNames;
+import nts.intl.IcuSegmenter;
+import nts.intl.IcuTimeZone;
 
 /** Host Test262 driver only: calls the same pinned provider as compiled TS. */
 public final class Host {
@@ -41,6 +44,9 @@ public final class Host {
         ArrayList<IcuDateFormatter> dates = new ArrayList<>();
         ArrayList<IcuRelativeFormatter> relatives = new ArrayList<>();
         ArrayList<IcuPluralRules> plurals = new ArrayList<>();
+        ArrayList<IcuDisplayNames> displays = new ArrayList<>();
+        ArrayList<IcuSegmenter> segments = new ArrayList<>();
+        ArrayList<IcuTimeZone> zones = new ArrayList<>();
         try (BufferedReader input = new BufferedReader(new FileReader(args[0]));
              PrintWriter output = new PrintWriter(new FileWriter(args[1]), true)) {
             String line;
@@ -65,7 +71,6 @@ public final class Host {
                         case "availableCalendars": result = String.join(";", data.availableCalendars(first)); break;
                         case "collationValues": result = String.join(";", data.collationValues(first)); break;
                         case "collationDefaults": result = Integer.toString(IcuCollator.defaults(first)); break;
-                        case "hourCycle": result = data.hourCycle(first); break;
                         case "timeZones": result = String.join(";", data.timeZones(first)); break;
                         case "textDirection": result = Integer.toString(data.textDirection(first)); break;
                         case "isHebrew": result = Boolean.toString(data.isHebrew(Integer.parseInt(first))); break;
@@ -84,9 +89,41 @@ public final class Host {
                         }
                         case "weekData": result = Integer.toString(data.weekData(first)); break;
                         case "timeZoneNames": result = String.join(";", data.timeZoneNames()); break;
+                        case "availableValues": result = String.join(";", data.availableValues(Integer.parseInt(first))); break;
+                        case "hasCurrencyName": result = Boolean.toString(data.hasCurrencyName(first)); break;
+                        case "primaryTimeZoneNames": result = String.join(";", data.primaryTimeZoneNames()); break;
+                        case "primaryTimeZone": result = data.primaryTimeZone(first); break;
                         case "canonicalTimeZone": result = data.canonicalTimeZone(first); break;
                         case "defaultTimeZoneIdentifier": result = data.defaultTimeZoneIdentifier(); break;
-                        case "reset": formatters.clear(); collators.clear(); patterns.clear(); dates.clear(); relatives.clear(); plurals.clear(); result = ""; break;
+                        case "reset": formatters.clear(); collators.clear(); patterns.clear(); dates.clear(); relatives.clear(); plurals.clear(); displays.clear(); segments.clear(); zones.clear(); result = ""; break;
+                        case "zoneOpen": {
+                            IcuTimeZone zone = IcuTimeZone.open(first);
+                            if (zone == null) throw new IllegalArgumentException("Unknown time zone");
+                            zones.add(zone);
+                            result = Integer.toString(zones.size() - 1);
+                            break;
+                        }
+                        case "zoneId": result = zones.get(Integer.parseInt(first)).id(); break;
+                        case "zoneOffset": result = Double.toString(zones.get(Integer.parseInt(first)).offsetMilliseconds(Double.parseDouble(decode(fields[2])))); break;
+                        case "zoneLocalOffset": result = Double.toString(zones.get(Integer.parseInt(first)).localOffsetMilliseconds(Double.parseDouble(decode(fields[2])), Boolean.parseBoolean(decode(fields[3])))); break;
+                        case "zoneTransition": result = Double.toString(zones.get(Integer.parseInt(first)).transition(Double.parseDouble(decode(fields[2])), Boolean.parseBoolean(decode(fields[3])))); break;
+                        case "segmentOpen":
+                            segments.add(new IcuSegmenter(first, Integer.parseInt(decode(fields[2]))));
+                            result = Integer.toString(segments.size() - 1);
+                            break;
+                        case "segmentText":
+                            segments.add(segments.get(Integer.parseInt(first)).forText(decode(fields[2])));
+                            result = Integer.toString(segments.size() - 1);
+                            break;
+                        case "segmentNext": result = Integer.toString(segments.get(Integer.parseInt(first)).next()); break;
+                        case "segmentPrevious": result = Integer.toString(segments.get(Integer.parseInt(first)).previous()); break;
+                        case "segmentAfter": result = Integer.toString(segments.get(Integer.parseInt(first)).following(Integer.parseInt(decode(fields[2])))); break;
+                        case "segmentStatus": result = Integer.toString(segments.get(Integer.parseInt(first)).ruleStatus()); break;
+                        case "displayOpen":
+                            displays.add(new IcuDisplayNames(first, Integer.parseInt(decode(fields[2])), Integer.parseInt(decode(fields[3])), Boolean.parseBoolean(decode(fields[4]))));
+                            result = Integer.toString(displays.size() - 1);
+                            break;
+                        case "displayName": result = displays.get(Integer.parseInt(first)).name(decode(fields[2]), Integer.parseInt(decode(fields[3]))); break;
                         case "pluralOpen":
                             plurals.add(new IcuPluralRules(first, Boolean.parseBoolean(decode(fields[2])), decode(fields[3]), decode(fields[4])));
                             result = Integer.toString(plurals.size() - 1);

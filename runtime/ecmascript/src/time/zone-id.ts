@@ -40,6 +40,8 @@ const compatibilityZones = new Set<string>([
 export class TimeZoneRegistry<D extends TimeZoneIdentifierData> {
   readonly #data: D;
   readonly #identifiers = new Map<string, string>();
+  readonly #primary = new Map<string, string>();
+  #primaryIdentifiers: readonly string[] | undefined;
   constructor(data: D) {
     const names = data.timeZoneNames();
     for (let index = 0; index < names.length; index++) {
@@ -62,5 +64,36 @@ export class TimeZoneRegistry<D extends TimeZoneIdentifierData> {
   }
   defaultIdentifier(): string {
     return this.resolve(this.#data.defaultTimeZoneIdentifier());
+  }
+  primaryIdentifier(identifier: string): string {
+    const name = this.resolve(identifier);
+    if (offsetTimeZoneMinutes(name) !== undefined) return name;
+    let primary = this.#primary.get(name);
+    if (primary === undefined) {
+      const value = this.#data.primaryTimeZone(name);
+      if (value === undefined) throw new RangeError("Unknown primary time-zone identifier");
+      primary = value === "Etc/UTC" || value === "Etc/GMT" ? "UTC" : value;
+      this.#primary.set(name, primary);
+    }
+    return primary;
+  }
+  primaryIdentifiers(): string[] {
+    let cached = this.#primaryIdentifiers;
+    if (cached === undefined) {
+      // One bulk provider call, rather than crossing the ABI for every alias.
+      const names = this.#data.primaryTimeZoneNames();
+      const unique = new Set<string>();
+      for (let index = 0; index < names.length; index++) {
+        const name = names[index]!;
+        if (!compatibilityZones.has(name) && !name.startsWith("SystemV/"))
+          unique.add(name === "Etc/UTC" || name === "Etc/GMT" ? "UTC" : name);
+      }
+      const values = new Array<string>(unique.size);
+      let index = 0;
+      for (const name of unique) values[index++] = name;
+      cached = values.sort();
+      this.#primaryIdentifiers = cached;
+    }
+    return cached.slice();
   }
 }

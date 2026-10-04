@@ -2,9 +2,9 @@ import { LocaleResolver } from "./locale.ts";
 import type { LocaleData, NumberLocale } from "./locale.ts";
 import { getCanonicalLocales } from "./locale-list.ts";
 import { NumberFormatConfiguration } from "./number-options.ts";
-import type { NumberFormatData } from "./number-options.ts";
+import type { NumberFormatData } from "./number-data.ts";
 import { NumberFormatter } from "./number.ts";
-import type { NumberFormatterPrimitive } from "./number.ts";
+import type { NumberFormatterPrimitive } from "./number-data.ts";
 import { mathematicalValue, rangeValue } from "./mathematical-value.ts";
 export { LocaleResolver } from "./locale.ts";
 export { getCanonicalLocales, supportedLocalesOf } from "./locale-list.ts";
@@ -14,7 +14,11 @@ export { NtsDateTimeFormat } from "./date-time-builtins.ts";
 export { NtsListFormat } from "./list.ts";
 export { NtsRelativeTimeFormat } from "./relative.ts";
 export { NtsPluralRules } from "./plural.ts";
+export { NtsDurationFormat } from "./duration.ts";
 export { TimeZoneRegistry } from "../time/zone-id.ts";
+export { SupportedValues } from "./supported-values.ts";
+export { NtsDisplayNames } from "./display.ts";
+export { NtsSegmenter } from "./segmenter.ts";
 
 // The compiler's standard builtin binding supplies the environment resolver
 // and concrete provider factory. Public inputs/results use library types.

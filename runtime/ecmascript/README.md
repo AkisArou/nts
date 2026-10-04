@@ -14,6 +14,31 @@ configuration on C and JVM. Currency precision uses pinned provider data;
 formatting reuses its state and buffers. PluralRules shares the digit algorithm
 and supports cardinal/ordinal selection, notation, exact inputs and ranges.
 ListFormat and RelativeTimeFormat have typed implementations and pinned providers.
+DurationFormat now shares Temporal validation, NumberFormat primitives and lazy
+list templates, with exact fractions and standard-library parts. Its original
+Test262 host result is 101/110; native callback sanitizers and JVM optional part
+records still block compiled acceptance. The separate `--duration` ICU gate and
+public/parts witnesses retain those failures.
+supportedValuesOf now enumerates all six categories with cached shared semantics
+and fresh result arrays. Public ICU IANA identity queries supply primary zone
+names; NumberFormat shares the same sanctioned-unit table. Its original Test262
+host result is 24/25, retaining the excluded descriptor case. DisplayNames now
+implements the standard library contract for all six name types, with shared
+validation/canonicalization/fallback and bounded name caches. Its original
+Test262 host result is 49/57; canonical locale unions and resolved records still
+block public compiled acceptance.
+Segmenter now shares typed options, lazy independent cursors, containment and
+iteration across public ICU C/Java primitives. Native UTF-16 is borrowed;
+Latin-1 uses bounded decoded chunks. The original Test262 host result is 67/79,
+and all 766 Unicode 17 grapheme vectors pass on both providers. Boundary/provider
+checks pass all five configurations with native sanitizers and JVM verification.
+Public locale/record/iterator compilation and common iterator helpers remain open.
+Locale now shares ordered calendar/hour/week preference fallback and private lazy
+caches. A generated 2,022-byte CLDR payload supplies only availability and hour
+ordering absent from public ICU queries; calendar names and week values stay in
+ICU. Country zone lists use public IANA identities. The preference/provider
+witness passes all five configurations; the public Locale constructor and result
+records still have compiler refusals. Original Locale Test262 remains 128/168.
 Provider/shared assembly probes execute on C, LLVM, JVM and both native memory
 modes. Complete standard bindings and public conformance remain in progress.
 
@@ -63,6 +88,18 @@ A C compiler is needed to regenerate or verify data, not to run it on JVM.
 The generator is TypeScript and uses Node's built-in APIs. There is no Python
 tooling or second Unicode revision to maintain. MIT and Unicode notices are in
 `third_party/`.
+
+Intl's small preference index comes from pinned CLDR 48.2 supplementalData.xml,
+with its source/license hashes in `providers/icu/artifacts.json`. It records
+explicit calendar/week availability and ordered hour-cycle lists, including
+language-region overrides. It does not copy calendar names, weekday values,
+time-zone data or general Unicode properties. Four immutable hour lists are
+shared; public results are copied. The ICU gate checks generation drift.
+
+```sh
+node runtime/ecmascript/tools/generate-locale-preferences.ts
+node runtime/ecmascript/tools/generate-locale-preferences.ts --check
+```
 
 The generated TS data and C header are two representations of one pinned source.
 A native program using both the existing C String case-conversion code and this

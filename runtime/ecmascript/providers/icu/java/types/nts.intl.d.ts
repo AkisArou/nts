@@ -33,6 +33,12 @@ declare module "java:nts.intl" {
     patterns(): string[];
   }
 
+  /** nts.intl.IcuDisplayNames Final: cannot be extended. */
+  export class IcuDisplayNames {
+    constructor(a0: string, a1: number, a2: number, a3: boolean);
+    name(a0: string, a1: number): string | null;
+  }
+
   /** nts.intl.IcuLocaleData Final: cannot be extended. */
   export class IcuLocaleData {
     constructor();
@@ -46,13 +52,16 @@ declare module "java:nts.intl" {
     defaultNumberingSystem(a0: string): string;
     hasNumberingSystem(a0: string): boolean;
     canonicalType(a0: string, a1: string): string;
+    availableValues(a0: number): string[];
+    hasCurrencyName(a0: string): boolean;
     calendarValues(a0: string): string[];
     availableCalendars(a0: string): string[];
     collationValues(a0: string): string[];
-    hourCycle(a0: string): string;
     timeZones(a0: string): string[];
     timeZoneNames(): string[];
     canonicalTimeZone(a0: string): string | null;
+    primaryTimeZone(a0: string): string | null;
+    primaryTimeZoneNames(): string[];
     defaultTimeZoneIdentifier(): string;
     textDirection(a0: string): number;
     isHebrew(a0: number): boolean;
@@ -96,6 +105,16 @@ declare module "java:nts.intl" {
     field(a0: number): number;
     start(a0: number): number;
     end(a0: number): number;
+  }
+
+  /** nts.intl.IcuSegmenter Final: cannot be extended. */
+  export class IcuSegmenter {
+    constructor(a0: string, a1: number);
+    forText(a0: string): IcuSegmenter;
+    next(): number;
+    previous(): number;
+    following(a0: number): number;
+    ruleStatus(): number;
   }
 
   /** nts.intl.IcuTimeZone Final: cannot be extended. */

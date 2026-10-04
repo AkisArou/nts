@@ -1,4 +1,12 @@
 {
+  "nts.intl.IcuSegmenter": {
+    "nullability": {
+      "forText(Ljava/lang/String;)Lnts/intl/IcuSegmenter;": "nonnull"
+    }
+  },
+  "nts.intl.IcuDisplayNames": {
+    "nullability": { "name(Ljava/lang/String;I)Ljava/lang/String;": "nullable" }
+  },
   "nts.intl.IcuRelativeFormatter": {
     "nullability": { "format(DIZZ)Ljava/lang/String;": "nonnull" }
   },
@@ -25,10 +33,12 @@
       "bestFit(Ljava/lang/String;)Ljava/lang/String;": "nullable",
       "defaultNumberingSystem(Ljava/lang/String;)Ljava/lang/String;": "nonnull",
       "canonicalType(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;": "nonnull",
+      "availableValues(I)[Ljava/lang/String;": "nonnull",
+      "primaryTimeZone(Ljava/lang/String;)Ljava/lang/String;": "nullable",
+      "primaryTimeZoneNames()[Ljava/lang/String;": "nonnull",
       "calendarValues(Ljava/lang/String;)[Ljava/lang/String;": "nonnull",
       "availableCalendars(Ljava/lang/String;)[Ljava/lang/String;": "nonnull",
       "collationValues(Ljava/lang/String;)[Ljava/lang/String;": "nonnull",
-      "hourCycle(Ljava/lang/String;)Ljava/lang/String;": "nonnull",
       "timeZones(Ljava/lang/String;)[Ljava/lang/String;": "nonnull",
       "timeZoneNames()[Ljava/lang/String;": "nonnull",
       "canonicalTimeZone(Ljava/lang/String;)Ljava/lang/String;": "nullable",

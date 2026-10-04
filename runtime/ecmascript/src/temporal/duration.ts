@@ -109,6 +109,11 @@ export class Duration implements WithResult<
       value.#nanoseconds,
     );
   }
+  // Intrinsic snapshot for shared formatting; public getters are overridable.
+  static copyFields(value: Duration, destination: Float64Array): number {
+    for (let index = 0; index < 10; index++) destination[index] = value.#field(index);
+    return value.#sign;
+  }
   static compare(
     one: Temporal.DurationLike,
     two: Temporal.DurationLike,

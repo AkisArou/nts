@@ -2,6 +2,7 @@ extern "C" {
 #include "nts_icu.h"
 }
 #include <unicode/locid.h>
+#include "nts_icu_currency.h"
 #include <unicode/localematcher.h>
 #include <unicode/listformatter.h>
 #include <unicode/measfmt.h>
@@ -10,16 +11,30 @@ extern "C" {
 #include <unicode/uloc.h>
 #include <unicode/ucal.h>
 #include <unicode/ucol.h>
-#include <unicode/udatpg.h>
+#include <unicode/ucurr.h>
 #include <unicode/uenum.h>
 #include <unicode/uscript.h>
+#include <unicode/unumsys.h>
 #include <memory>
 #include <string>
+#include <vector>
 
 // ICU exposes CLDR alias replacement and its language-distance matcher through
 // C++. This translation unit is a data primitive behind the existing C ABI;
 // validation, Unicode-extension precedence and JS lists remain in TypeScript.
 using icu::Locale;
+
+extern "C" bool nts_icu_currency_named(NtsString *code) {
+  if (code->length != 3) return false;
+  UChar currency[4];
+  for (uint32_t index = 0; index < 3; index++) {
+    const uint16_t unit = nts_unit(code, index);
+    if (unit < 'A' || unit > 'Z') return false;
+    currency[index] = unit;
+  }
+  currency[3] = 0;
+  return currency_name_available(currency, "en");
+}
 
 static bool ascii(NtsString *input, std::string &output) {
   output.reserve(input->length);
@@ -157,7 +172,7 @@ extern "C" NtsArray *nts_icu_locale_duration_samples(NtsString *tag) {
       icu::Measure(icu::Formattable(7), icu::MeasureUnit::createHour(status), status),
       icu::Measure(icu::Formattable(8), icu::MeasureUnit::createMinute(status), status),
       icu::Measure(icu::Formattable(9), icu::MeasureUnit::createSecond(status), status)};
-  icu::UnicodeString samples[7];
+  icu::UnicodeString samples[8];
   icu::FieldPosition position(UNUM_INTEGER_FIELD);
   formatter.formatMeasures(measures, 3, samples[0], position, status);
   formatter.formatMeasures(measures, 2, samples[1], position, status);
@@ -165,10 +180,13 @@ extern "C" NtsArray *nts_icu_locale_duration_samples(NtsString *tag) {
   const auto one = icu::number::NumberFormatter::forSkeleton(u"precision-integer group-off integer-width/*0", status).locale(locale);
   const auto two = icu::number::NumberFormatter::forSkeleton(u"precision-integer group-off integer-width/*00", status).locale(locale);
   samples[3] = one.formatInt(7, status).toString(status);
-  for (int32_t index = 4; index < 7; index++) samples[index] = two.formatInt(index + 3, status).toString(status);
+  samples[4] = two.formatInt(7, status).toString(status);
+  samples[5] = one.formatInt(8, status).toString(status);
+  samples[6] = two.formatInt(8, status).toString(status);
+  samples[7] = two.formatInt(9, status).toString(status);
   if (U_FAILURE(status)) return nullptr;
-  NtsArray *result = nts_array_new(&strings, 7);
-  for (int32_t index = 0; index < 7; index++) {
+  NtsArray *result = nts_array_new(&strings, 8);
+  for (int32_t index = 0; index < 8; index++) {
     const icu::UnicodeString &sample = samples[index];
     if (sample.isBogus()) { nts_release(reinterpret_cast<NtsHeader *>(result)); return nullptr; }
     NtsString *value = nts_str_raw(static_cast<uint32_t>(sample.length()), 1);
@@ -217,32 +235,36 @@ extern "C" NtsArray *nts_icu_locale_list_samples(NtsString *tag, double type, do
   return result;
 }
 
-extern "C" NtsArray *nts_icu_locale_values(NtsString *tag, double kind) {
-  std::string text;
-  if (!ascii(tag, text)) return nullptr;
-  UErrorCode status = U_ZERO_ERROR;
-  UEnumeration *values = nullptr;
-  const char *key = nullptr;
-  if (kind == 3) {
-    values = ucal_openTimeZones(&status);
-  } else if (kind == 2) {
-    values = ucal_openTimeZoneIDEnumeration(UCAL_ZONE_TYPE_CANONICAL_LOCATION, text.c_str(), nullptr, &status);
-  } else {
-    const Locale locale = Locale::forLanguageTag(text, status);
-    if (kind == 0 || kind == 4) {
-      key = "ca";
-      values = ucal_getKeywordValuesForLocale("calendar", locale.getName(), kind == 0, &status);
-    } else if (kind == 1) {
-      key = "co";
-      values = ucol_getKeywordValuesForLocale("collation", locale.getName(), false, &status);
-    } else return nullptr;
+static NtsString *primary_zone_name(const UChar *input, int32_t inputLength, UErrorCode &status) {
+  UChar output[256];
+  const int32_t length = ucal_getIanaTimeZoneID(input, inputLength, output, 256, &status);
+  if (U_FAILURE(status) || length < 0 || length >= 256) return nullptr;
+  for (int32_t index = 0; index < length; index++) {
+    if (output[index] > 127) { status = U_INTERNAL_PROGRAM_ERROR; return nullptr; }
   }
+  NtsString *result = nts_str_raw(static_cast<uint32_t>(length), 0);
+  for (int32_t index = 0; index < length; index++) NTS_ELEMENTS(result, uint8_t)[index] = static_cast<uint8_t>(output[index]);
+  return result;
+}
+
+static NtsArray *enumeration_result(UEnumeration *values, const char *key, UErrorCode &status, bool primaryZones = false) {
   std::unique_ptr<UEnumeration, decltype(&uenum_close)> owner(values, uenum_close);
   if (U_FAILURE(status) || values == nullptr) return nullptr;
   const int32_t count = uenum_count(values, &status);
   if (U_FAILURE(status)) return nullptr;
   NtsArray *result = nts_array_new(&strings, count);
   for (int32_t index = 0; index < count; index++) {
+    if (primaryZones) {
+      int32_t length;
+      const UChar *value = uenum_unext(values, &length, &status);
+      NtsString *primary = U_FAILURE(status) || value == nullptr ? nullptr : primary_zone_name(value, length, status);
+      if (primary == nullptr) {
+        nts_release(reinterpret_cast<NtsHeader *>(result));
+        return nullptr;
+      }
+      NTS_ITEMS(result, NtsString *)[index] = primary;
+      continue;
+    }
     const char *value = uenum_next(values, nullptr, &status);
     if (U_FAILURE(status) || value == nullptr) {
       nts_release(reinterpret_cast<NtsHeader *>(result));
@@ -251,6 +273,73 @@ extern "C" NtsArray *nts_icu_locale_values(NtsString *tag, double kind) {
     const char *canonical = key == nullptr ? nullptr : uloc_toUnicodeLocaleType(key, value);
     NTS_ITEMS(result, NtsString *)[index] = string_result(canonical == nullptr ? value : canonical);
   }
+  return result;
+}
+
+extern "C" NtsArray *nts_icu_locale_values(NtsString *tag, double kind) {
+  std::string text;
+  if (!ascii(tag, text)) return nullptr;
+  UErrorCode status = U_ZERO_ERROR;
+  if (kind == 3) return enumeration_result(ucal_openTimeZones(&status), nullptr, status);
+  if (kind == 2)
+    return enumeration_result(ucal_openTimeZoneIDEnumeration(UCAL_ZONE_TYPE_CANONICAL_LOCATION, text.c_str(), nullptr, &status), nullptr, status, true);
+  const Locale locale = Locale::forLanguageTag(text, status);
+  if (kind == 0 || kind == 4)
+    return enumeration_result(ucal_getKeywordValuesForLocale("calendar", locale.getName(), kind == 0, &status), "ca", status);
+  if (kind == 1)
+    return enumeration_result(ucol_getKeywordValuesForLocale("collation", locale.getName(), false, &status), "co", status);
+  return nullptr;
+}
+
+extern "C" NtsArray *nts_icu_supported_values(double category) {
+  if (!nts_icu_versions_match()) return nullptr;
+  UErrorCode status = U_ZERO_ERROR;
+  UEnumeration *values;
+  if (category == 0) values = ucal_getKeywordValuesForLocale("calendar", "", false, &status);
+  else if (category == 1) values = ucol_getKeywordValues("collation", &status);
+  // The keyword query reads the pinned CLDR currency map. openISOCurrencies
+  // uses ICU's separately maintained historical code table instead.
+  else if (category == 2) values = ucurr_getKeywordValuesForLocale("currency", "und", false, &status);
+  else if (category == 3) values = unumsys_openAvailableNames(&status);
+  else return nullptr;
+  return enumeration_result(values, nullptr, status);
+}
+
+extern "C" NtsString *nts_icu_timezone_primary(NtsString *name) {
+  if (!nts_icu_versions_match() || name->length == 0 || name->length >= 256) return nullptr;
+  UChar input[256];
+  for (uint32_t index = 0; index < name->length; index++) input[index] = nts_unit(name, index);
+  UErrorCode status = U_ZERO_ERROR;
+  return primary_zone_name(input, static_cast<int32_t>(name->length), status);
+}
+
+extern "C" NtsArray *nts_icu_timezone_primary_names(void) {
+  if (!nts_icu_versions_match()) return nullptr;
+  UErrorCode status = U_ZERO_ERROR;
+  std::unique_ptr<UEnumeration, decltype(&uenum_close)> values(ucal_openTimeZones(&status), uenum_close);
+  if (U_FAILURE(status)) return nullptr;
+  const int32_t count = uenum_count(values.get(), &status);
+  if (U_FAILURE(status)) return nullptr;
+  std::vector<std::string> names;
+  names.reserve(count);
+  for (int32_t index = 0; index < count; index++) {
+    int32_t inputLength;
+    const UChar *input = uenum_unext(values.get(), &inputLength, &status);
+    if (U_FAILURE(status) || input == nullptr) return nullptr;
+    UChar output[256];
+    UErrorCode identityStatus = U_ZERO_ERROR;
+    const int32_t length = ucal_getIanaTimeZoneID(input, inputLength, output, 256, &identityStatus);
+    // ICU's Etc/Unknown sentinel has no IANA identity.
+    if (identityStatus == U_ILLEGAL_ARGUMENT_ERROR) continue;
+    if (U_FAILURE(identityStatus)) return nullptr;
+    std::string name;
+    name.reserve(length);
+    for (int32_t at = 0; at < length; at++) name.push_back(static_cast<char>(output[at]));
+    names.push_back(std::move(name));
+  }
+  NtsArray *result = nts_array_new(&strings, static_cast<int32_t>(names.size()));
+  for (size_t index = 0; index < names.size(); index++)
+    NTS_ITEMS(result, NtsString *)[index] = string_result(names[index]);
   return result;
 }
 
@@ -281,20 +370,6 @@ extern "C" NtsString *nts_icu_timezone_default(void) {
     result.push_back(static_cast<char>(output[index]));
   }
   return string_result(result);
-}
-
-extern "C" NtsString *nts_icu_locale_hour_cycle(NtsString *tag) {
-  std::string text;
-  if (!ascii(tag, text)) return nullptr;
-  UErrorCode status = U_ZERO_ERROR;
-  const Locale locale = Locale::forLanguageTag(text, status);
-  std::unique_ptr<UDateTimePatternGenerator, decltype(&udatpg_close)> generator(
-      udatpg_open(locale.getName(), &status), udatpg_close);
-  if (U_FAILURE(status)) return nullptr;
-  const UDateFormatHourCycle cycle = udatpg_getDefaultHourCycle(generator.get(), &status);
-  const char *names[] = {"h11", "h12", "h23", "h24"};
-  return U_SUCCESS(status) && cycle >= UDAT_HOUR_CYCLE_11 && cycle <= UDAT_HOUR_CYCLE_24
-      ? string_result(names[cycle]) : nullptr;
 }
 
 extern "C" double nts_icu_script_direction(NtsString *script) {

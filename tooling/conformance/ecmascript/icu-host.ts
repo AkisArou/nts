@@ -8,8 +8,8 @@ import type {
   DateTimeLocaleData,
 } from "../../../runtime/ecmascript/src/intl/locale-data.ts";
 import type { CollatorPrimitive } from "../../../runtime/ecmascript/src/intl/collation.ts";
-import type { NumberFormatData } from "../../../runtime/ecmascript/src/intl/number-options.ts";
-import type { NumberFormatterPrimitive } from "../../../runtime/ecmascript/src/intl/number.ts";
+import type { NumberFormatData } from "../../../runtime/ecmascript/src/intl/number-data.ts";
+import type { NumberFormatterPrimitive } from "../../../runtime/ecmascript/src/intl/number-data.ts";
 import type {
   DateTimePatternData,
   DateTimeFormatterPrimitive,
@@ -19,6 +19,15 @@ import type { ListPatternData } from "../../../runtime/ecmascript/src/intl/list-
 import type { RelativeTimePrimitive } from "../../../runtime/ecmascript/src/intl/relative-data.ts";
 import type { PluralRulesPrimitive } from "../../../runtime/ecmascript/src/intl/plural-data.ts";
 import type { DurationPatternData } from "../../../runtime/ecmascript/src/intl/duration-data.ts";
+import type { SupportedValueData } from "../../../runtime/ecmascript/src/intl/supported-value-data.ts";
+import type { DisplayNamesPrimitive } from "../../../runtime/ecmascript/src/intl/display-data.ts";
+import type { SegmenterPrimitive } from "../../../runtime/ecmascript/src/intl/segment-data.ts";
+import type { TimeZoneRules } from "../../../runtime/ecmascript/src/time/provider.ts";
+import {
+  hasCalendarPreferences,
+  hasWeekPreferences,
+  hourCycleValues,
+} from "../../../runtime/ecmascript/providers/icu/shared/locale-preferences.ts";
 
 // Supplementary host validation only. Production adapters call ICU directly;
 // this synchronous bridge lets original Test262 run shared TS inside its realm.
@@ -88,6 +97,7 @@ export function icuHost(root: string) {
     CollationData &
     ListPatternData &
     DurationPatternData &
+    SupportedValueData &
     TimeZoneIdentifierData = {
     canonicalize: (tag) => required("canonicalize", tag),
     durationSamples: (tag) =>
@@ -111,14 +121,17 @@ export function icuHost(root: string) {
     hasNumberingSystem: (name) => required("hasNumberingSystem", name) === "true",
     currencyDigits: (currency) => Number(required("currencyDigits", currency)),
     canonicalType: (key, value) => required("canonicalType", key, value),
-    calendarValues: (locale) => values("calendarValues", locale),
+    availableValues: (category) => required("availableValues", category).split(";"),
+    hasCurrencyName: (code) => required("hasCurrencyName", code) === "true",
+    calendarValues: (locale) =>
+      hasCalendarPreferences(locale) ? values("calendarValues", locale) : [],
     availableCalendars: (locale) => values("availableCalendars", locale),
     collationValues: (locale) => values("collationValues", locale),
     collationDefaults: (locale) => Number(required("collationDefaults", locale)),
-    hourCycle: (locale) => required("hourCycle", locale),
+    hourCycleValues,
     timeZones: (region) => values("timeZones", region),
     textDirection: (script) => Number(required("textDirection", script)),
-    weekData: (region) => Number(required("weekData", region)),
+    weekData: (region) => (hasWeekPreferences(region) ? Number(required("weekData", region)) : NaN),
     isHebrew: (codePoint) => required("isHebrew", codePoint) === "true",
     listSamples: (locale, type, style, tokens) =>
       required("listSamples", locale, type, style, ...tokens)
@@ -126,6 +139,8 @@ export function icuHost(root: string) {
         .map((value) => Buffer.from(value, "base64").toString("utf16le")),
     timeZoneNames: () => zoneNames,
     canonicalTimeZone: (identifier) => call("canonicalTimeZone", identifier) ?? undefined,
+    primaryTimeZone: (identifier) => call("primaryTimeZone", identifier) ?? undefined,
+    primaryTimeZoneNames: () => required("primaryTimeZoneNames").split(";"),
     defaultTimeZoneIdentifier: () => required("defaultTimeZoneIdentifier"),
   };
   function openNumber(
@@ -210,6 +225,15 @@ export function icuHost(root: string) {
         Number(required("pluralRange", handle, start, end, negativeStart, negativeEnd)),
     };
   }
+  function openDisplay(
+    locale: string,
+    type: number,
+    style: number,
+    dialect: boolean,
+  ): DisplayNamesPrimitive {
+    const handle = Number(required("displayOpen", locale, type, style, dialect));
+    return { name: (code, field) => call("displayName", handle, code, field) ?? undefined };
+  }
   function openRelative(locale: string, style: number): RelativeTimePrimitive {
     const handle = Number(required("relativeOpen", locale, style));
     let spans: number[][] = [];
@@ -233,6 +257,51 @@ export function icuHost(root: string) {
     };
   }
   let closed = false;
+  class HostSegmenter implements SegmenterPrimitive<HostSegmenter> {
+    readonly #handle: number;
+    constructor(handle: number) {
+      this.#handle = handle;
+    }
+    forText(input: string): HostSegmenter {
+      return new HostSegmenter(Number(required("segmentText", this.#handle, input)));
+    }
+    next(): number {
+      return Number(required("segmentNext", this.#handle));
+    }
+    previous(): number {
+      return Number(required("segmentPrevious", this.#handle));
+    }
+    following(index: number): number {
+      return Number(required("segmentAfter", this.#handle, index));
+    }
+    ruleStatus(): number {
+      return Number(required("segmentStatus", this.#handle));
+    }
+  }
+  function openSegmenter(locale: string, granularity: number): HostSegmenter {
+    return new HostSegmenter(Number(required("segmentOpen", locale, granularity)));
+  }
+  class HostTimeZone implements TimeZoneRules {
+    readonly id: string;
+    readonly #handle: number;
+    constructor(handle: number) {
+      this.#handle = handle;
+      this.id = required("zoneId", handle);
+    }
+    offsetMilliseconds(milliseconds: number): number {
+      return Number(required("zoneOffset", this.#handle, milliseconds));
+    }
+    localOffsetMilliseconds(milliseconds: number, former: boolean): number {
+      return Number(required("zoneLocalOffset", this.#handle, milliseconds, former));
+    }
+    transition(milliseconds: number, forward: boolean): number | null {
+      const next = Number(required("zoneTransition", this.#handle, milliseconds, forward));
+      return Number.isNaN(next) ? null : next;
+    }
+  }
+  function openTimeZone(identifier: string): HostTimeZone {
+    return new HostTimeZone(Number(required("zoneOpen", identifier)));
+  }
   return {
     data,
     openNumber,
@@ -241,6 +310,9 @@ export function icuHost(root: string) {
     openDate,
     openRelative,
     openPlural,
+    openDisplay,
+    openSegmenter,
+    openTimeZone,
     reset: () => {
       required("reset");
     },

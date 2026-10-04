@@ -53,8 +53,10 @@ and artifact-size evidence before becoming another provider.
    counts and mutable Date representation. The compiler lane owns these changes.
 2. **Shared foundations.** Complete locale validation, aliases, extension
    negotiation/matching, Locale, supportedValuesOf, clocks/default locale/zone,
-   calendar metadata and conversion. Locale metadata is implemented through ICU.
-   supportedValuesOf, primary time-zone identities, calendar conversion and
+   calendar metadata and conversion. Locale metadata uses public ICU primitives
+   and the minimal pinned preference availability/hour-order index.
+   supportedValuesOf and primary time-zone identities now share cached TS
+   semantics and pinned public ICU data primitives. Calendar conversion and
    runtime host binding remain open.
 3. **NumberFormat and DateTimeFormat.** Complete exact public inputs, bound
    formatting, resolved options, ranges, parts and Temporal date/time inputs.
@@ -84,13 +86,20 @@ and artifact-size evidence before becoming another provider.
    exact empty-element parts exist. PluralRules shares NumberFormat's digit
    algorithm and supports cardinal/ordinal rules, notation, exact inputs and
    ranges. Provider and shared assembly witnesses pass on all five backend/memory
-   configurations; compiled public acceptance and DurationFormat remain open.
+   configurations. DurationFormat now has typed options, exact fractional
+   formatting, digital patterns, parts and C/JVM data providers; localization
+   methods and compiled public acceptance remain open. Duration's native
+   callback sanitizer failure and JVM part-record defect remain acceptance gaps.
 7. **Other Intl services.** Complete Collator, RelativeTimeFormat, DisplayNames,
    Segmenter and Locale information APIs. Collator's typed API, shared option
    resolution and C/JVM primitives exist. RelativeTimeFormat's typed API,
-   number parts and pinned C/JVM primitives also exist. DisplayNames, Segmenter,
-   the remaining Locale information APIs and compiled public acceptance remain
-   open.
+   number parts and pinned C/JVM primitives also exist. DisplayNames now has a
+   typed implementation, shared validation/fallback and public C/JVM data
+   primitives. Segmenter's shared options, independent lazy text cursors,
+   containment and iteration now exist through public C/JVM primitives.
+   Locale's calendar/hour/week fallback and country zone identity now share
+   cached algorithms. Common iterator helpers and compiled public acceptance
+   remain open.
 8. **Packaging and performance.** Finish reachability-controlled acquisition,
    platform/device acceptance and construction, format, parts, range, startup,
    heap and artifact-size measurements.
@@ -98,8 +107,10 @@ and artifact-size evidence before becoming another provider.
 Independent semantic/provider work can proceed while compiler integration is
 pending. No stage is complete solely because a host or provider probe passes.
 
-NTS deliberately uses fixed-width 128-bit BigInt. It covers Temporal's timestamp
-domain; arbitrary-precision BigInt is outside this plan. NumberFormat decimal
+NTS currently uses fixed-width 128-bit BigInt. This is a real general ECMAScript
+gap, and the user has requested arbitrary precision in MainCodex's compiler/runtime
+plan, with a small-value fast path. Temporal's timestamp and validated duration
+formatting domains fit the current representation. NumberFormat decimal
 strings preserve all digits across the provider boundary without entering this
 BigInt domain.
 
@@ -113,10 +124,39 @@ BigInt domain.
   and reused; equal-range approximation and source attribution are preserved.
 - **Locale:** structural language-tag validation, CLDR aliases, likely subtags,
   overrides, maximize/minimize and data getters. ICU supplies calendars,
-  collations, preferred hour cycle, numbering system, zone lists, script
-  direction and weekday metadata. Shared code controls JS lists and result
-  objects. Primary time-zone naming and unavailable-region override fallback
-  still require finishing.
+  collations, numbering system, country zone lists, script direction and week
+  values. Shared code resolves override/base/world fallback independently for
+  calendars, hour cycles and week data, applies explicit keywords, filters
+  deprecated calendar preferences and produces fresh JS results. The small
+  generated CLDR index supplies explicit preference availability and all ordered
+  hour cycles, including language-region data absent from public ICU queries.
+  Calendar/hour/week caches belong to one immutable Locale and never escape.
+  Country zone lists retain ICU's location filter and use its public IANA
+  identity API, preserving country-specific zones while updating legacy names.
+- **supportedValuesOf:** canonical library key types, canonical calendars and
+  collations, currencies, decimal numbering systems, IANA primary time zones
+  and the single sanctioned-unit table shared with NumberFormat validation.
+  The environment caches ordered unique sets and returns independent arrays.
+  ICU's public IANA identity lookup preserves country-specific primary zones
+  and updated names; UTC normalization and non-IANA filtering remain shared TS.
+  Bulk enumeration crosses the provider boundary once per data category.
+- **DisplayNames:** the full library instance contract, ordered options,
+  all six name types, code validation/canonicalization, dialect selection,
+  missing-name fallback and resolved options. Public ICU data supplies names;
+  the native provider uses C APIs and the JVM provider uses ordinary ICU4J calls.
+  The twelve date/time field names are cached by ordinal. Other names have a
+  lazy eight-entry cache, including missing results; conversion and validation
+  still run on each call. Arbitrary language inputs cannot grow the cache.
+- **Segmenter:** canonical library options, resolved results and segment records;
+  grapheme, word and sentence boundaries; independent lazy iterators and
+  containment. Empty text and invalid containment queries open no text cursor.
+  Each iterator/search cursor clones configured ICU rules and retains its input.
+  Iteration keeps scalar boundaries; it creates the fresh result records the API
+  requires, without building a complete boundary array. Word results alone own
+  isWordLike. Containment seeks the following boundary once and walks adjacent
+  boundaries, preserving surrogate pairs and ICU's dictionary cache. Native C
+  uses the public UText provider API: UTF-16 is borrowed, and Latin-1 is decoded
+  in bounded 512-unit chunks. JVM passes native strings to ICU4J directly.
 - **Collator:** ordered option conversion and extension negotiation; stable lazy
   bound comparison; resolved options. C borrows Latin-1/UTF-16 inputs through ICU
   iterators/direct spans; JVM compares its native strings. No provider input
@@ -135,7 +175,8 @@ BigInt domain.
   Providers also expose time-zone name enumeration, canonical/default
   names; shared code parses and normalizes Intl offset identifiers, retains named
   identifier casing and excludes ICU's non-IANA compatibility zones. Other
-  non-ISO Temporal inputs and primary time-zone identity correction remain open.
+  non-ISO Temporal inputs remain open. Primary identity has a separate cached
+  query; formatting retains the specified named identifier.
 - **Temporal:** one ISO scanner supplies Instant and PlainTime parsing, including
   annotation syntax, offsets, leap seconds and ambiguous bare-time rejection.
   PlainTime owns one exact within-day nanosecond Number; Duration owns validated
@@ -154,6 +195,13 @@ BigInt domain.
 - **Date:** mutable private state and scalar UTC/local operations. Static UTC
   and multi-component setters use standard Parameters tuples to preserve the
   supplied argument count. The standard compiled boundary remains pending.
+- **DurationFormat:** the full library instance contract, ordered options,
+  textual/digital/mixed styles, negative durations, exact fractional aggregation,
+  truncation, resolved options and standard-library parts. Temporal's Intl
+  amendment supplies the duration-string input; conversion and validation reuse
+  Temporal.Duration, and branded values read private slots. Number formatter
+  variants, list templates and parts scratch are lazy and reused. Single-group
+  formatting avoids list assembly arrays and template loading.
 
 ## Pins and verification
 
@@ -186,13 +234,17 @@ Current host results against Test262
 | Temporal.PlainYearMonth  |         498 |                11 |
 | Temporal.PlainMonthDay   |         192 |                 7 |
 | Intl.NumberFormat        |         220 |                29 |
-| Intl.DateTimeFormat      |         184 |                60 |
+| Intl.DateTimeFormat      |         185 |                59 |
 | Intl.Collator            |          50 |                15 |
 | Intl.ListFormat          |          70 |                11 |
 | Intl.RelativeTimeFormat  |          69 |                11 |
 | Intl.PluralRules         |          43 |                10 |
+| Intl.DurationFormat      |         101 |                 9 |
+| Intl.DisplayNames        |          49 |                 8 |
+| Intl.Segmenter           |          67 |                12 |
 | Intl.Locale              |         128 |                40 |
 | Intl.getCanonicalLocales |          29 |                 9 |
+| Intl.supportedValuesOf   |          24 |                 1 |
 
 Failures include missing supported semantics/APIs, adapter limitations and
 documented metadata/realm non-goals. These counts do not establish completeness.
@@ -204,6 +256,8 @@ public fixtures retain canonical union refusals and optional-tuple argument-coun
 failures; an exit status of zero is not sufficient evidence of execution.
 
 The pinned compiled ICU fixture now passes **C, LLVM, JVM, C RC and LLVM RC**.
+This general fixture covers the services listed below; the new DurationFormat
+gate is separate and is not accepted by this result.
 C RC passes ASan, UBSan and leak checks; LLVM/native provider code is also built
 with sanitizer flags, and JVM runs with verification. The fixture includes DST
 gaps/overlaps/transitions, exact decimals
@@ -215,6 +269,76 @@ Chinese relatedYear/yearName parts and offset time-zone identifiers.
 Date ranges now execute on both backends, including interval sources and
 single-date identity fallback. The public PlainDate and PlainDateTime witnesses
 retain canonical union/record projection refusals on C and JVM.
+The enumeration witness executes all six standard categories, verifies sorted
+unique values and fresh-array isolation, and checks alias identity separately
+from retained named identifiers. It covers Europe/Kyiv, Asia/Kolkata, distinct
+Europe/Prague and Europe/Bratislava, Arctic/Longyearbyen, UTC and Etc/GMT+1.
+The supported-values host residual is the excluded global method descriptor;
+the calendar and currency name-availability tests now pass.
+The native and Java raw calendar/collation/currency/numbering/IANA identity sets
+match exactly. Currency enumeration uses the public CLDR map queries: native
+openISOCurrencies has a separately maintained historical table and differs from
+that map; Java's currency keyword query filters out non-tender codes. Neither
+table is duplicated in shared TS. Currency metadata contains 308 codes, but
+XAD has no display name in any available ICU locale. The provider exposes name
+availability; shared enumeration retains 307 named currencies without a
+hardcoded code exception. After first use, 12,000 enumeration requests made no
+provider data calls. Cache arrays remain private and each returned array
+can be changed independently.
+Exhaustively querying all 17,576 three-letter codes produced the same 307 named
+currencies on native and Java; none were missing from the metadata map. XAD was
+the sole metadata-only entry.
+The Locale preference witness passes all five configurations with native
+sanitizers and JVM verification. It covers region override/subdivision/likely
+subtag/world priority, unavailable override fallback, language-specific hour
+lists, Japan's three hour cycles, deprecated calendar filtering, explicit
+unknown keywords and result-array isolation. Separate country queries agree on
+all 1,676 two-letter/numeric region keys: 248 have zones, with 419 total location
+entries. Public IANA identities include Kyiv/Kolkata and preserve Bratislava,
+Prague, Oslo and Mariehamn. Native country queries also pass ASan/UBSan/leak
+checks; JVM runs with verification.
+The generator reads hash-verified CLDR 48.2 supplementalData.xml and checks the
+Unicode license. Its 2,022-byte payload (2,465-byte generated TS module) contains
+52 calendar availability keys, 151 week availability keys, 252 region hour keys,
+24 language-region hour overrides and four shared ordered hour lists. Calendar
+and week values stay in ICU; no private resource APIs are used. An independent
+source audit checks all 1,700 region/language lookups, including absent keys.
+After initialization, 12,000 repeated preference query sets make zero provider
+calls. Explicit calendar/hour keywords make no region-data calls. Public Locale
+C/JVM witnesses still refuse the standard constructor union, TextInfo/WeekInfo
+records and nested generic locale calls. Original Locale Test262 remains
+128/168; these witnesses and host results are separate from standard binding
+acceptance. Reports are locale-preferences-all-backends.log,
+locale-preferences-data-report.json, locale-preferences-cache-report.json and
+locale-zones-report.json under target/ecmascript/audit.
+DisplayNames' host residuals cover three array-like locale inputs, excluded
+metadata/prototype behavior and the realm host facility. Its public C/JVM
+witnesses retain canonical locale-union and ResolvedDisplayNamesOptions record
+refusals. The typed lookup/provider witness is separate from those public APIs.
+An audit of 1,638 public-provider name requests over 13 locales found 1,552
+identical results. The 86 differences concern contextual versus standalone
+script text and provider fallback selection for short regions/root currencies.
+These are implementation-defined data selections; shared code validation,
+canonicalization and fallback remain common. Expected provider text is checked
+explicitly, without private ICU resource access or a duplicate name table.
+The Segmenter boundary witness passes all five configurations with native
+sanitizers and JVM verification. It interleaves independent cursors and checks
+every UTF-16 index in both directions for grapheme/word/sentence text, including
+family emoji, flags, Thai/CJK dictionary words, embedded NULs, lone surrogates and
+Latin-1 chunk crossings. Both providers also pass all 766 original Unicode 17
+GraphemeBreakTest vectors and agree on 300 additional provider ownership/text
+cases. The native audit drops original input/rules/cursor owners before using
+surviving clones, and compares the custom UText provider with ICU's contiguous
+UTF-16 provider under ASan/UBSan. This supplements original Test262 rather than
+replacing semantic conformance. Reports are segment-unicode-report.json and
+segment-walk-all-backends.log in target/ecmascript/audit.
+Segmenter's 12 host residuals retain array-like locale inputs, excluded metadata,
+prototype behavior and the realm facility. Its sabotage control substitutes
+empty text and fails an original containment test; the unchanged control passes.
+Public C/JVM witnesses still refuse canonical locale unions, optional segment
+records, iterator results and ResolvedSegmenterOptions. Common iterator helpers
+and intrinsic inheritance remain runtime integration work; the typed iterator
+protocol is not a claim that the complete modern SegmentIterator contract exists.
 The list witness also passes both backends, covering empty elements, astral and
 unpaired UTF-16 units, contextual Spanish/Hebrew conjunctions and Māori suffixes.
 The unpaired unit is constructed with String.fromCharCode: literal transport's
@@ -257,6 +381,29 @@ host Test262 residuals cover metadata/prototypes, prototype tampering and the
 realm host facility. The public C/JVM witnesses retain locale and mathematical
 input-union refusals and an intersection-result refusal.
 
+Duration separators and hour padding come from eight construction-only public
+ICU samples; there is no duplicate CLDR table or private-resource dependency.
+The audit decoded 1,218 Java locale/numbering-system combinations, including
+astral digits. All 911 native samples matched Java exactly and passed native
+sanitizers. HMS and HM hour padding can differ in es-CL and Turkmen; the decoder
+preserves that distinction. Exact subsecond aggregation uses BigInt decimal
+scaling within the validated duration domain, avoiding binary64 rounding before
+ICU formats the value. The nine host residuals cover array-like locale records
+and excluded metadata/prototypes.
+
+Duration compiled acceptance remains open. Its native text gate produces the
+expected exact results but UBSan detects an indirect factory call whose concrete
+receiver pointer type differs from the erased function slot's receiver type.
+Text results agree on all five configurations without sanitizers; this does not
+accept the native callback's undefined behavior.
+The JVM standard-part consumer cannot read a valid literal record with omitted
+optional unit. The reduced duration-part-record fixture agrees on C's one case;
+JVM declines that sole case and compares nothing. These are retained compiler
+defects, not passing conformance evidence. Separate public witnesses also retain
+canonical locale/duration unions and resolved-record refusals. Logs are in
+target/ecmascript/audit/duration-*.log and the integration handoff records the
+compiler/frontend fingerprints.
+
 The earlier loop-condition compiler defect
 [a-postfix-increment-in-a-loop-condition-is-not-carried](../../tooling/conformance/outcomes/a-postfix-increment-in-a-loop-condition-is-not-carried/src/main.ts)
 was recorded at `9ef297662` and fixed by the compiler lane. The padding algorithm
@@ -288,6 +435,23 @@ copied ambient declarations or renaming aliases are needed.
   fields: significant-only precision omits them. There is no erased result cast
   or copied standard declaration. NumberDigits keeps the concrete option record
   type so sharing its algorithm requires no record projection or extra allocation.
+- NtsDurationFormat implements Intl.DurationFormat directly. Its input is
+  Temporal.DurationLike because the pinned Intl declaration omits the Temporal
+  amendment's string input. Its configuration and part types derive directly
+  from the libraries, without aliases, copied declarations or erased casts.
+- NtsDisplayNames implements Intl.DisplayNames directly. Options, name types,
+  fallback/dialect values and resolved results use the library declarations.
+  Provider name capabilities and ordinal tables describe internal data only.
+- NtsSegmenter and NtsSegments use WithResult to retain the library contracts
+  while returning their concrete typed segmentation/iterator instances.
+  NtsSegmentIterator implements IterableIterator<Intl.SegmentData, undefined,
+  unknown>. Options and public records use Intl declarations directly. Modern
+  Intl.SegmentIterator additionally inherits common IteratorObject helpers and
+  disposal; those are still pending runtime integration, with no asserted cast
+  or duplicated library declaration hiding the missing contract.
+- supportedValuesOf's key derives directly from the library function's
+  Parameters tuple. Supported-value enumeration and IANA identity capabilities
+  are provider data contracts, with no copied standard declaration.
 - NtsLocale corrects the library's hourCycle/caseFirst getter narrowing: a valid
   Unicode extension may have an unknown or empty value. variants and
   firstDayOfWeek supplement members missing from the pinned LocaleOptions.
@@ -327,6 +491,55 @@ The reused-number-formatter sample measured approximately 592 ns on C RC and
 microbenchmark, not a whole-public-API throughput, allocation or startup claim.
 Broader measurements and reachability-controlled packaging remain open.
 
+The supported-values sample measured about 211 ns on C RC for numbering systems
+and 1,002 ns for time zones (100,000 calls, no native sanitizer instrumentation).
+Three JVM allocation runs measured 64–66 ns and about 354 bytes for numbering
+systems; time zones measured 316–323 ns and about 1,833 bytes. These batches warm
+the runtime and include one environment/cache initialization per timed batch;
+they measure shared enumeration and fresh-array copying, not standard builtin
+binding or startup. The matching 200,000-call checksums were 21674272 and 13455286. The native C++ adapter section delta is 3,429 bytes, bringing the five
+adapter objects to 48,373 bytes at -O2 without sanitizers. This excludes linked
+ICU data, whole application size and reachability-controlled packaging.
+
+DisplayNames' repeated three-currency lookup sample measured 45–56 ns on C RC
+and 33–35 ns on JVM after the bounded cache, versus 1,606–1,640 ns and 468–647 ns
+before. Date/time field lookup measured 28–35 ns on native and 34–35 ns on JVM.
+Each timed 250,000-call batch includes one provider/matcher construction and
+cache initialization, after 10,000 native/50,000 JVM warmup calls. Checksums
+match. Thread allocation accounting over 200,000 calls measured about 1.15
+bytes/currency lookup after caching versus 617 bytes before; the remaining
+allocation is amortized batch initialization. Cache instrumentation verifies
+conversion/validation, absent-name caching and eviction beyond eight codes.
+This measures the shared typed lookup, not compiled public construction or
+standard binding. Reports are display-performance-{before,after}-cache.json
+and display-allocation-{before,after}-cache.json in target/ecmascript/audit.
+The new native C adapter allocates 2,764 bytes of object code/data sections;
+currency availability adds 347 bytes to the existing locale adapter, bringing
+the five C++ objects to 48,720 bytes. No new C++ translation unit is needed.
+These -O2/no-sanitizer measurements exclude ICU and application packaging;
+inputs/hashes are in target/ecmascript/audit/size/display-milestone-report.json.
+
+Segmenter's shared compiled word-boundary sample uses 336-unit Latin-1 and
+504-unit wide texts. Containment reuses one cursor and queries scattered indices;
+iteration clones one cursor and traverses the complete text. Walking adjacent
+boundaries after one seek reduced native containment to 170–174 ns for Latin-1
+and 408–412 ns for wide text, versus 212–214/600 ns before. JVM measured
+222–225/428–443 ns versus 251–253/608–628 ns. Checksums match in every run.
+Each timed batch includes configuration/text initialization once; C RC uses
+10,000 query warmup calls and JVM 50,000, followed by 500,000 queries. Native
+uses -O2 without sanitizers, and JVM verification remains enabled. These are
+scalar boundary measurements, excluding the fresh public segment/result records,
+substrings, constructor options and standard binding. Reports are
+segment-performance-{before,after}-walk.json in target/ecmascript/audit.
+JVM thread allocation accounting measured 385–406 bytes per wide containment
+query after the change, versus 620–661 before. Latin-1 containment measured
+about 0.013 bytes/query, including amortized initialization. Wide dictionary
+queries still allocate inside ICU; these results do not claim allocation-free
+segmentation. Iteration clones one cursor per text and retains its separate
+ICU allocation cost. Reports are segment-allocation-{before,after}-walk.json.
+The new C adapter's allocated object sections occupy 4,931 bytes; no C++ unit
+or Unicode table was added. This excludes linked ICU data and application size.
+
 The plural provider sample measured about 220 ns on C RC and 207 ns on JVM for
 scalar selection, and 833/802 ns for ranges, with matching checksums. It uses
 reused Polish cardinal rules, 500,000 scalar or 100,000 range calls, and one
@@ -342,6 +555,33 @@ construction per timed batch; it excludes the public Iterable conversion and
 does not claim complete-service throughput. Increasing length from 100 to 1,000
 scaled time by about 9.4x on C and 8.5x on JVM.
 
+The compiled JVM digital-duration sample uses one formatter per batch and
+1,000,000 calls after a 50,000-call warmup. Three alternating before/after runs
+measured about 515–532 ns/call after single-group list assembly was removed,
+versus 526–545 ns before. Thread allocation accounting measured about
+2,451–2,453 bytes/call versus 2,498–2,503 before, with identical checksums. Most
+remaining allocation is outside the eliminated assembly array. This physical
+kernel sample includes numeric field writes and exact fractional conversion;
+it excludes public duration-bag conversion and does not establish whole-service
+or native throughput. Receipts are in duration-performance-paired.json.
+
+Locale's compiled calendar/hour/week query set for en-JP measured 45–46 ns on
+C RC and 31–40 ns on JVM with per-locale caches, versus 2.6 µs and 3.6–5.0 µs
+for equivalent uncached provider queries. Cached results still create two fresh
+arrays; JVM allocation measured 104.47 bytes/query set versus 5,871–5,906 bytes
+uncached. Each batch includes provider/preference initialization once, after
+10,000 native/50,000 JVM cached warmups (200/1,000 uncached), and checksums match.
+Cached batches run 500,000 query sets; uncached batches run 25,000. Native uses
+-O2 without sanitizers and JVM verification stays enabled. This measures the
+shared preference path, excluding public constructor/result-record bindings.
+Reports are locale-preferences-performance-report.json in target/ecmascript/audit.
+Removing the unused default-hour-cycle primitive while adding public IANA country
+identity mapping reduces the five C++ adapter objects by 96 bytes, to 48,624
+allocated bytes. The small generated TS index is measured separately; these
+object-section figures exclude ICU libraries, linked application size and
+reachability packaging. Inputs/hashes are in
+target/ecmascript/audit/size/locale-preference-milestone-report.json.
+
 Local Linux x86-64 size evidence (2026-10-04, `-O2`, without sanitizers): the
 four native C++ adapter objects contain **33,067 bytes of allocated code/data**
 before final linking. The untrimmed pinned ICU4J jar is **14.5 MiB** and the native
@@ -356,6 +596,10 @@ the same flags, bringing the five C++ adapter objects to **41,496 bytes**.
 This is an object-section measurement, not a linked application size or a
 reachability guarantee; its inputs and hashes are retained in
 target/ecmascript/audit/size/plural-milestone-report.json.
+The public duration-data query adds 3,448 bytes in the existing locale adapter,
+bringing the same five-object measurement to 44,944 bytes. No new C++ translation
+unit is needed. This still excludes linked ICU dependencies and final packaging;
+target/ecmascript/audit/size/duration-milestone-report.json records the inputs.
 
 An earlier direct UTC/ISO core sample links and runs without ICU on C and JVM. Its
 stripped C executable is 51,640 bytes with section garbage collection and links
@@ -371,11 +615,18 @@ pnpm exec tsc -p runtime/ecmascript/tsconfig.json
 node tooling/conformance/ecmascript/test262.ts --under test/built-ins/Temporal/PlainTime
 node tooling/conformance/ecmascript/test262.ts --under test/intl402/NumberFormat
 node tooling/conformance/ecmascript/test262.ts --under test/intl402/Collator
+node tooling/conformance/ecmascript/test262.ts --under test/intl402/DurationFormat
 NTS_BACKEND=c NTS_RC=1 NTS_TSGO=target/tsgo target/debug/nts check tooling/conformance/ecmascript/date-compiled/tsconfig.iso-parser.json
 node runtime/ecmascript/tools/icu.ts --pinned-native --all-backends --sanitize
 node runtime/ecmascript/tools/icu.ts --pinned-native --bench
 node runtime/ecmascript/tools/icu.ts --pinned-native --android
+NTS_BIN=target/debug/nts NTS_TSGO=target/tsgo node runtime/ecmascript/tools/icu.ts --pinned-native --duration --all-backends --sanitize
 ```
+
+The DurationFormat command is a required pending gate and currently exposes the
+native callback signature defect. Its artifacts use separate native-duration
+and jvm-duration directories. duration-parts and duration-public fixture configs
+retain the remaining compiled boundaries; they are not covered by the text gate.
 
 After a Java provider API change, use `--regenerate-bindings` to refresh the
 declarations and binding table together. Never format the generated declarations

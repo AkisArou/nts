@@ -1,4 +1,23 @@
 declare module "c:nts_icu" {
+  export type IcuSegmentHandle = import("./handle.ts").IcuSegmentHandle;
+  /** @ntsAbi managed */
+  export function nts_icu_segment_open(
+    locale: string,
+    granularity: number,
+  ): IcuSegmentHandle | null;
+  /** @ntsAbi managed */
+  export function nts_icu_segment_text(
+    handle: IcuSegmentHandle,
+    input: string,
+  ): IcuSegmentHandle | null;
+  /** @ntsAbi managed */
+  export function nts_icu_segment_boundary(
+    handle: IcuSegmentHandle,
+    index: number,
+    direction: number,
+  ): number;
+  /** @ntsAbi managed */
+  export function nts_icu_segment_status(handle: IcuSegmentHandle): number;
   export type IcuTimeZoneHandle = import("./handle.ts").IcuTimeZoneHandle;
   export type IcuNumberHandle = import("./handle.ts").IcuNumberHandle;
   export type IcuLocaleHandle = import("./handle.ts").IcuLocaleHandle;
@@ -8,6 +27,22 @@ declare module "c:nts_icu" {
   export type IcuDateHandle = import("./handle.ts").IcuDateHandle;
   export type IcuRelativeHandle = import("./handle.ts").IcuRelativeHandle;
   export type IcuPluralHandle = import("./handle.ts").IcuPluralHandle;
+  export type IcuDisplayHandle = import("./handle.ts").IcuDisplayHandle;
+  /** @ntsAbi managed */
+  export function nts_icu_currency_named(code: string): boolean;
+  /** @ntsAbi managed */
+  export function nts_icu_display_open(
+    locale: string,
+    type: number,
+    style: number,
+    dialect: boolean,
+  ): IcuDisplayHandle | null;
+  /** @ntsAbi managed */
+  export function nts_icu_display_name(
+    handle: IcuDisplayHandle,
+    code: string,
+    field: number,
+  ): string | null;
   /** @ntsAbi managed */
   export function nts_icu_plural_open(
     locale: string,
@@ -145,7 +180,11 @@ declare module "c:nts_icu" {
   /** @ntsAbi managed */
   export function nts_icu_locale_values(tag: string, kind: number): string[] | null;
   /** @ntsAbi managed */
-  export function nts_icu_locale_hour_cycle(tag: string): string | null;
+  export function nts_icu_supported_values(category: number): string[] | null;
+  /** @ntsAbi managed */
+  export function nts_icu_timezone_primary(name: string): string | null;
+  /** @ntsAbi managed */
+  export function nts_icu_timezone_primary_names(): string[] | null;
   /** @ntsAbi managed */
   export function nts_icu_script_direction(script: string): number;
   /** @ntsAbi managed */

@@ -1,6 +1,9 @@
 import { ISOParser } from "./iso-parser.ts";
 import { epochDays, MS_PER_DAY } from "../date/calendar.ts";
-import { formatISO, pad } from "../date/format.ts";
+import { formatISODate } from "./iso-date.ts";
+import { formatPlainTime } from "./iso-time.ts";
+import type { TimeZoneRules } from "../time/provider.ts";
+import { formatRoundedOffset, offsetNanoseconds } from "./zoned-time.ts";
 import {
   checkInstant,
   epochMilliseconds,
@@ -26,20 +29,21 @@ export function parseInstant(input: string): bigint {
   );
 }
 
-export function formatInstant(value: bigint, digits = -1): string {
+export function formatInstant(
+  value: bigint,
+  digits = -1,
+  zone: TimeZoneRules | undefined = undefined,
+): string {
   checkInstant(value);
-  const milli = epochMilliseconds(value);
-  // Date's clipped millisecond domain contains Instant's entire UTC domain.
-  const base = formatISO(milli).slice(0, -5);
-  const seconds = floorDivide(value, NS_PER_SECOND);
-  const remainder = Number(value - seconds * NS_PER_SECOND);
-  let fraction = pad(remainder, 9);
-  if (digits < 0) {
-    let end = fraction.length;
-    while (end > 0 && fraction.charAt(end - 1) === "0") end--;
-    fraction = fraction.slice(0, end);
-  } else fraction = fraction.slice(0, digits);
-  return base + (fraction.length > 0 ? "." + fraction : "") + "Z";
+  const offset = zone === undefined ? 0n : offsetNanoseconds(value, zone);
+  const local = value + offset;
+  const day = floorDivide(local, NS_PER_DAY);
+  return (
+    formatISODate(Number(day)) +
+    "T" +
+    formatPlainTime(Number(local - day * NS_PER_DAY), digits) +
+    (zone === undefined ? "Z" : formatRoundedOffset(offset))
+  );
 }
 
 export function instantUnit(unit: string): bigint {

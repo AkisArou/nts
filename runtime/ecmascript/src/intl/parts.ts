@@ -77,6 +77,28 @@ export class NumberPartBuffer {
     if (cell === 9 && percentUnit) return "unit";
     return numberFields[cell - 1]!;
   }
+  prepare(text: string, spans: FieldSpans): number {
+    this.read(text, spans, false);
+    let count = 0;
+    for (let index = 0; index < text.length; index++)
+      if (index === 0 || this.cells[index] !== this.cells[index - 1]) count++;
+    return count;
+  }
+  segmentEnd(from: number, length: number): number {
+    const cell = this.cells[from]!;
+    let to = from + 1;
+    while (to < length && this.cells[to] === cell) to++;
+    return to;
+  }
+  partType(
+    from: number,
+    negative: boolean,
+    nan = false,
+    infinity = false,
+    percentUnit = false,
+  ): Intl.NumberFormatPart["type"] {
+    return this.type(this.cells[from]!, negative, nan, infinity, percentUnit);
+  }
   partition(
     text: string,
     spans: FieldSpans,
@@ -85,18 +107,13 @@ export class NumberPartBuffer {
     infinity: boolean,
     percentUnit = false,
   ): Pick<Intl.NumberFormatPart, "type" | "value">[] {
-    this.read(text, spans, false);
-    let count = 0;
-    for (let index = 0; index < text.length; index++)
-      if (index === 0 || this.cells[index] !== this.cells[index - 1]) count++;
+    const count = this.prepare(text, spans);
     const parts = new Array<Pick<Intl.NumberFormatPart, "type" | "value">>(count);
     let from = 0;
     let output = 0;
     while (from < text.length) {
-      const cell = this.cells[from]!;
-      let to = from + 1;
-      while (to < text.length && this.cells[to] === cell) to++;
-      const type = this.type(cell, negative, nan, infinity, percentUnit);
+      const to = this.segmentEnd(from, text.length);
+      const type = this.partType(from, negative, nan, infinity, percentUnit);
       parts[output++] = { type, value: text.slice(from, to) };
       from = to;
     }

@@ -11,8 +11,8 @@ import {
   nts_icu_number_range_field,
 } from "c:nts_icu";
 import type { IcuNumberHandle, IcuNumberRangeHandle } from "c:nts_icu";
-import type { NumberFormatterPrimitive } from "../../../src/intl/number.ts";
-import type { NumberFormatData } from "../../../src/intl/number-options.ts";
+import type { NumberFormatterPrimitive } from "../../../src/intl/number-data.ts";
+import type { NumberFormatData } from "../../../src/intl/number-data.ts";
 
 export class IcuNumberData implements NumberFormatData {
   currencyDigits(currency: string): number {

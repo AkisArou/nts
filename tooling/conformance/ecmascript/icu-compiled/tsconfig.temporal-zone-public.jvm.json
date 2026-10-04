@@ -1,0 +1,8 @@
+{
+  "extends": "../../../../tsconfig.fixtures.json",
+  "include": [
+    "src/temporal-zone-public-jvm.ts",
+    "handle-types.d.ts",
+    "../../../../runtime/ecmascript/providers/icu/java/types/nts.intl.d.ts"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "extends": "../../../../tsconfig.fixtures.json",
+  "include": [
+    "src/locale-public-c.ts",
+    "../../../../runtime/ecmascript/providers/icu/c/bindings.d.ts"
+  ]
+}

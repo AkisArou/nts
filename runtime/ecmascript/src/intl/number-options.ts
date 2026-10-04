@@ -1,11 +1,11 @@
 import { optionalString, stringOption } from "./options.ts";
+import { validUnit } from "./units.ts";
+import { validCurrency } from "./currency.ts";
 import { NumberDigits } from "./number-digits.ts";
 import { numberNotation, compactDisplay, notationSkeleton } from "./number-notation.ts";
 
-// Data supplied by the pinned provider, rather than a second currency table.
-export interface NumberFormatData {
-  currencyDigits(currency: string): number;
-}
+import type { NumberFormatData } from "./number-data.ts";
+export type { NumberFormatData } from "./number-data.ts";
 
 const styles: readonly Intl.ResolvedNumberFormatOptions["style"][] = [
   "decimal",
@@ -32,71 +32,6 @@ const signs: readonly Intl.ResolvedNumberFormatOptions["signDisplay"][] = [
   "exceptZero",
   "negative",
 ];
-// The spec's sanctioned unit set is narrower than ICU's unit registry.
-// Keep validation here; ICU must not accidentally admit extra JS units.
-const units: readonly string[] = [
-  "acre",
-  "bit",
-  "byte",
-  "celsius",
-  "centimeter",
-  "day",
-  "degree",
-  "fahrenheit",
-  "fluid-ounce",
-  "foot",
-  "gallon",
-  "gigabit",
-  "gigabyte",
-  "gram",
-  "hectare",
-  "hour",
-  "inch",
-  "kilobit",
-  "kilobyte",
-  "kilogram",
-  "kilometer",
-  "liter",
-  "megabit",
-  "megabyte",
-  "meter",
-  "microsecond",
-  "mile",
-  "mile-scandinavian",
-  "milliliter",
-  "millimeter",
-  "millisecond",
-  "minute",
-  "month",
-  "nanosecond",
-  "ounce",
-  "percent",
-  "petabyte",
-  "pound",
-  "second",
-  "stone",
-  "terabit",
-  "terabyte",
-  "week",
-  "yard",
-  "year",
-];
-
-function validCurrency(currency: string): boolean {
-  if (currency.length !== 3) return false;
-  for (let i = 0; i < 3; i++) {
-    const c = currency.charCodeAt(i);
-    if (!((c >= 65 && c <= 90) || (c >= 97 && c <= 122))) return false;
-  }
-  return true;
-}
-
-function validUnit(unit: string): boolean {
-  if (units.includes(unit)) return true;
-  const per = unit.indexOf("-per-");
-  return per >= 0 && units.includes(unit.slice(0, per)) && units.includes(unit.slice(per + 5));
-}
-
 function grouping(
   value: Intl.NumberFormatOptions["useGrouping"],
   compact: boolean,

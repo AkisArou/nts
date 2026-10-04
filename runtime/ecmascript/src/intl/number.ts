@@ -1,20 +1,6 @@
 import { FieldSpans, NumberPartBuffer } from "./parts.ts";
-
-export interface NumberFormatterPrimitive {
-  format(value: number, fields: boolean, negative: boolean): string;
-  formatDecimal(value: string, fields: boolean, negative: boolean): string;
-  fieldCount(): number;
-  field(index: number): number;
-  start(index: number): number;
-  end(index: number): number;
-  formatRange(
-    start: string,
-    end: string,
-    fields: boolean,
-    negativeStart: boolean,
-    negativeEnd: boolean,
-  ): string;
-}
+import type { NumberFormatterPrimitive } from "./number-data.ts";
+export type { NumberFormatterPrimitive } from "./number-data.ts";
 
 // Typed integration API. ECMA-402 construction, options, locale resolution and
 // bound-format accessors will bind to this shared formatting state.

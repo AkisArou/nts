@@ -49,12 +49,21 @@ export function validVariant(text: string): boolean {
 }
 
 export function validUnicodeType(value: string): boolean {
-  const parts = value.toLowerCase().split("-");
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i]!;
-    if (part.length < 3 || part.length > 8 || !alphanumeric(part)) return false;
+  let length = 0;
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    if (code === 45) {
+      if (length < 3) return false;
+      length = 0;
+    } else {
+      if (
+        !((code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122))
+      )
+        return false;
+      if (++length > 8) return false;
+    }
   }
-  return true;
+  return length >= 3;
 }
 
 class LocaleExtension {
@@ -125,6 +134,8 @@ export class LocaleIdentifier {
   readonly baseName: string;
 
   constructor(tag: string) {
+    for (let index = 0; index < tag.length; index++)
+      if (tag.charCodeAt(index) > 127) throw new RangeError("Locale identifiers must be ASCII");
     const parts = tag.toLowerCase().split("-");
     const baseEnd = languageEnd(parts, 0);
     if (baseEnd === 0) throw new RangeError("Invalid locale language");

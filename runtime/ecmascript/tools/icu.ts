@@ -1,5 +1,5 @@
 // Reproducible provider/ABI validation, independent of the Java-8 core runtime.
-// node runtime/ecmascript/tools/icu.ts [--regenerate-bindings] [--all-backends] [--sanitize]
+// node runtime/ecmascript/tools/icu.ts [--regenerate-bindings] [--all-backends] [--sanitize] [--duration]
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
@@ -31,10 +31,18 @@ for (const option of process.argv.slice(2)) {
       "--bench",
       "--android",
       "--all-backends",
+      "--duration",
     ].includes(option)
   )
     throw new Error("Unknown option: " + option);
 }
+const duration = process.argv.includes("--duration");
+if (duration && (process.argv.includes("--bench") || process.argv.includes("--android")))
+  throw new Error(
+    "Duration text gate uses its own driver; run benchmarks/Android on the general fixture",
+  );
+const configuration = duration ? "tsconfig.duration." : "tsconfig.";
+const javaDriver = duration ? "DurationDrive" : "Drive";
 if (process.argv.includes("--pinned-native")) {
   env.PKG_CONFIG_LIBDIR = resolve(root, "target/ecmascript/icu-native-pin/install/lib/pkgconfig");
 }
@@ -59,6 +67,8 @@ function run(binary: string, args: string[], cwd = root): string {
 function hash(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
+
+run(process.execPath, [resolve(provider, "../../tools/generate-locale-preferences.ts"), "--check"]);
 
 // Read the same exact Maven pin that the ordinary NTS dependency resolver can
 // consume. A corrupt cached jar fails, and an unverified download is never used.
@@ -113,15 +123,23 @@ for (const name of ["nts.intl.d.ts", "nts.intl.bind"]) {
   else if (!bytes.equals(readFileSync(committed))) throw new Error("Java binding drift: " + name);
 }
 
-const jvm = resolve(out, "jvm");
-run(nts, ["emit-jvm", resolve(fixture, "tsconfig.jvm.json"), "--out", jvm]);
+const jvm = resolve(out, duration ? "jvm-duration" : "jvm");
+run(nts, ["emit-jvm", resolve(fixture, configuration + "jvm.json"), "--out", jvm]);
 const classpath = [jvm, resolve(jvm, "nts-runtime.jar"), java, jar].join(
   process.platform === "win32" ? ";" : ":",
 );
-run("javac", ["--release", "11", "-cp", classpath, "-d", jvm, resolve(fixture, "Drive.java")]);
-const jvmResult = run("java", ["-Xverify:all", "-cp", classpath, "Drive"]);
+run("javac", [
+  "--release",
+  "11",
+  "-cp",
+  classpath,
+  "-d",
+  jvm,
+  resolve(fixture, javaDriver + ".java"),
+]);
+const jvmResult = run("java", ["-Xverify:all", "-cp", classpath, javaDriver]);
 
-const native = resolve(out, "native");
+const native = resolve(out, duration ? "native-duration" : "native");
 mkdirSync(native, { recursive: true });
 const cc = process.env.CC ?? "clang";
 const cxx = process.env.CXX ?? "clang++";
@@ -140,6 +158,8 @@ for (const [name, source] of [
   ["provider", resolve(provider, "c/nts_icu.c")],
   ["collator", resolve(provider, "c/nts_icu_collator.c")],
   ["relative", resolve(provider, "c/nts_icu_relative.c")],
+  ["display", resolve(provider, "c/nts_icu_display.c")],
+  ["segment", resolve(provider, "c/nts_icu_segment.c")],
 ] as const) {
   const object = resolve(native, name + ".o");
   run(cc, [
@@ -182,13 +202,14 @@ function buildNative(
   rc: boolean,
 ): { executable: string; result: string; backend: string } {
   const name = backend + (rc ? "-rc" : "");
-  const directory = backend === "c" && rc ? native : resolve(out, "native-" + name);
+  const directory =
+    backend === "c" && rc ? native : resolve(out, "native-" + (duration ? "duration-" : "") + name);
   mkdirSync(directory, { recursive: true });
   const program = resolve(directory, backend === "c" ? "program.c" : "program.ll");
   if (backend === "c")
     run(nts, [
       "emit-c",
-      resolve(fixture, "tsconfig.c.json"),
+      resolve(fixture, configuration + "c.json"),
       ...(rc ? ["--rc"] : []),
       "--out",
       directory,
@@ -196,13 +217,13 @@ function buildNative(
   else
     writeFileSync(
       program,
-      run(nts, ["emit-llvm", resolve(fixture, "tsconfig.c.json"), ...(rc ? ["--rc"] : [])]),
+      run(nts, ["emit-llvm", resolve(fixture, configuration + "c.json"), ...(rc ? ["--rc"] : [])]),
     );
   const objects = [...providerObjects];
   for (const [file, input] of [
     ["program", program],
     ["runtime", resolve(root, "runtime/c/nts_runtime.c")],
-    ["drive", resolve(fixture, "drive.c")],
+    ["drive", resolve(fixture, duration ? "duration-drive.c" : "drive.c")],
   ] as const) {
     const object = resolve(directory, file + ".o");
     run(cc, [
@@ -238,7 +259,52 @@ if (process.argv.includes("--all-backends")) {
   nativeResults.push(buildNative("llvm", false));
 }
 let expected =
-  "America/New_York:-18000000:1710055800000:1730611800000:1710054000000\n900,719,925,474,099,312,345.00;minusSign=-;integer=12;group=,;integer=345;decimal=.;fraction=678\n𝟗𝟎𝟎,𝟕𝟏𝟗,𝟗𝟐𝟓,𝟒𝟕𝟒,𝟎𝟗𝟗,𝟑𝟏𝟐,𝟑𝟒𝟓.𝟎𝟎;minusSign=-;integer=𝟏𝟐;group=,;integer=𝟑𝟒𝟓;decimal=.;fraction=𝟔𝟕𝟖\n+1.3%\n($1.05)\n¥1,235\nKWD 1.235\n1.2K\n12.4 meters per second\n001\n13\n0.10\nZZZ 1.23\n~$1;currency=$=startRange;integer=3=startRange;literal= – =shared;currency=$=endRange;integer=5=endRange\n1:2:~0\n987,654,321,987,654,321–987,654,321,987,654,322\nbuddhist,gregory;standard,phonebk,search,emoji,eor;h12;h23;Asia/Tokyo;521;522;1;0;-1";
+  "America/New_York:-18000000:1710055800000:1730611800000:1710054000000\n900,719,925,474,099,312,345.00;minusSign=-;integer=12;group=,;integer=345;decimal=.;fraction=678\n𝟗𝟎𝟎,𝟕𝟏𝟗,𝟗𝟐𝟓,𝟒𝟕𝟒,𝟎𝟗𝟗,𝟑𝟏𝟐,𝟑𝟒𝟓.𝟎𝟎;minusSign=-;integer=𝟏𝟐;group=,;integer=𝟑𝟒𝟓;decimal=.;fraction=𝟔𝟕𝟖\n+1.3%\n($1.05)\n¥1,235\nKWD 1.235\n1.2K\n12.4 meters per second\n001\n13\n0.10\nZZZ 1.23\n~$1;currency=$=startRange;integer=3=startRange;literal= – =shared;currency=$=endRange;integer=5=endRange\n1:2:~0\n987,654,321,987,654,321–987,654,321,987,654,322\nbuddhist,gregory;standard,phonebk,search,emoji,eor;h12,h23;h23,h12;Asia/Tokyo;521;522;1;0;-1";
+expected = expected.replace(
+  "\n900,",
+  [
+    "",
+    "temporal-gap:2024-03-10T07:30:00.123456789Z:2024-03-10T06:30:00.123456789Z:2024-03-10T07:30:00.123456789Z",
+    "temporal-fold:2024-11-03T05:30:00.123456789Z:2024-11-03T05:30:00.123456789Z:2024-11-03T06:30:00.123456789Z",
+    "temporal-half-gap:2024-10-05T15:45:00Z:2024-10-05T15:15:00Z:2024-10-05T15:45:00Z",
+    "temporal-half-fold:2024-04-06T14:45:00Z:2024-04-06T14:45:00Z:2024-04-06T15:15:00Z",
+    "temporal-skipped-date:2011-12-30T22:00:00Z:2011-12-29T22:00:00Z:2011-12-30T22:00:00Z",
+    "temporal-start:2024-03-10T05:00:00Z:23:2024-11-03T04:00:00Z:25:1972-01-07T00:44:30Z:2011-12-30T10:00:00Z",
+    "temporal-transition:1710054000000:1710054000000:1699164000000:1730613600000:null",
+    "temporal-negative-transition:-2717650800000:-2717650800000",
+    "temporal-endpoints:+275760-09-13T23:59:00+23:59:-271821-04-19T00:01:00-23:59",
+    "temporal-offset:1972-01-06T22:15:30-00:45:-00:44:30:-00:00:00.000000001:+00:00:1970-01-01T05:29:59.999999999+05:30",
+    "temporal-offset-selection:2024-11-03T06:30:00Z:2024-11-03T06:30:00Z:2024-11-03T04:30:00Z",
+    "temporal-rounded-match:1880-01-01T04:56:02Z",
+    "temporal-zone-like:-07:00:UTC:UTC:UTC:+05:30",
+    "900,",
+  ].join("\n"),
+);
+expected += [
+  "",
+  "locale:fa-JP-u-rg-thzzzz-sd-inka:buddhist,gregory;h23,h12;521",
+  "locale:fa-JP-u-sd-inka:gregory,japanese;h23,h11,h12;521",
+  "locale:fa-u-sd-inka:gregory,indian;h12,h23;9",
+  "locale:fa:persian,gregory,islamic-civil,islamic-tbla;h12,h23;263",
+  "locale:eo:gregory;h23,h12;522",
+  "locale:fa-IN-u-rg-zzzzzz:gregory,indian;h12,h23;9",
+  "locale:en-US-u-rg-grzzzz:gregory;h12,h23;522",
+  "locale:en-JP:gregory,japanese;h23,h11,h12;521",
+  "locale:en-001:gregory;h12,h23;522",
+  "locale:und-001:gregory;h23,h12;522",
+  "locale:fr-CA:gregory;h23,h12;521",
+  "locale:en-CA:gregory;h12,h23;521",
+  "locale:en-SA:gregory,islamic-umalqura;h12,h23;769",
+  "locale:en-US-u-ca-foobar-hc-foobar:foobar;foobar;521",
+  "locale-zones:UA:Europe/Kyiv,Europe/Simferopol",
+  "locale-zones:IN:Asia/Kolkata",
+  "locale-zones:SK:Europe/Bratislava",
+  "locale-zones:CZ:Europe/Prague",
+  "locale-zones:NO:Europe/Oslo",
+  "locale-zones:AX:Europe/Mariehamn",
+  "locale-zones:ZZ:",
+  "locale-zones:001:",
+].join("\n");
 expected += "\n3:7:0:0:-1:-1:0:-1:-1:-1:-1";
 expected +=
   "\nyMMMMdHHmmssSSSv:numeric:long:numeric:2-digit:2-digit:2-digit:3:shortGeneric:h24:2-digit:h12:numeric:long:numeric";
@@ -253,6 +319,18 @@ expected +=
 expected +=
   "\nJan 1, 1970;month=Jan=shared;literal= =shared;day=1=shared;literal=, =shared;year=1970=shared";
 expected += "\nAmerica/New_York:true:true:-04:00:+05:30:+00:00";
+expected +=
+  "\ncalendar:16:3877277735:true:true\ncollation:12:899042060:true:true\ncurrency:307:1334098130:true:true\nnumberingSystem:78:28763515:true:true\ntimeZone:445:1348871885:true:true\nunit:45:2973811530:true:true";
+expected +=
+  "\nEurope/Kyiv:Asia/Kolkata:Europe/Bratislava:Europe/Prague:Arctic/Longyearbyen:UTC:Etc/GMT+1:Europe/Kiev";
+expected +=
+  "\nsegments:0:5:4210:0:2:false,2:4:false,4:15:false,15:19:false,19:20:false\nsegments:1:10:8776:0:5:true,5:6:false,6:7:false,7:9:true,9:10:false,10:11:false,11:14:true,14:18:true,18:21:true,21:25:true\nsegments:2:4:4692:0:5:false,5:11:false,11:18:false,18:20:true\nsegments:3:6:486:0:1:false,1:2:false,2:3:false,3:4:false,4:5:false,5:6:false\nsegments:4:3:296549:0:513:true,513:514:false,514:515:true";
+expected +=
+  "\nAmerican English:English (United States):Hebrew:undefined\nUnited States:undefined\nSimplified Han:Traditional Han:undefined\nUS Dollar:Unknown Currency:undefined:XZZ";
+expected +=
+  "\nGregorian Calendar:Hijri Calendar (tabular, civil epoch):Ethiopic Amete Alem Calendar:foobar";
+expected +=
+  "\nera,year,quarter,month,week,day of the week,day,AM/PM,hour,minute,second,time zone:month\nera,yr.,qtr.,mo.,wk.,day of wk.,day,AM/PM,hr.,min.,sec.,zone:mo.\nera,yr,qtr,mo,wk,day of wk.,day,AM/PM,hr,min,sec,zone:mo";
 expected += "\nA, , and B;element=2;literal=2;element=0;literal=6;element=1";
 expected += "\nA e iglesia:A y hielo:A u 11:A o 110\nA וב:A ו-😀\nA, B, C, D rānei";
 expected += "\n0 days ago:in 0 days:today:in 0.001 days:in 0.999 days";
@@ -262,33 +340,79 @@ expected += "\nza 1000 dni\nin 𝟏𝟐.𝟓 days;0=3:7;2=7:8;1=8:10";
 expected += "\none,other:one:one:other:one:other";
 expected += "\none,two,few,other:other:one:two:few:other:other:one:one:other";
 expected += "\nother:one\none:few\nmany:many:one\none:other:one\nother:other";
+if (duration)
+  expected = [
+    "1 yr, 2 mths, 3 wks, 4 days, 5 hr, 6 min, 7 sec, 8 ms, 9 μs, 10 ns",
+    "-1 yr, 2 mths, 3 wks, 4 days, 5 hr, 6 min, 7 sec, 8 ms, 9 μs, 10 ns",
+    "5 days, 1 hr, 2:03",
+    "0:00:10000000.000000001",
+    "0:00:9007199254740991.975424",
+    "-0:00:01.000000001",
+    "7.08.09",
+    "𝟕:𝟎𝟖:𝟎𝟗",
+  ].join("\n");
 if (jvmResult !== expected) throw new Error("ICU compiled ABI mismatch on JVM:\n" + jvmResult);
+// ICU4C supplies contextual script names; ICU4J supplies standalone names.
+// ICU4J also drops a short region name equal to the code (US) and uses the
+// long form. These pinned public APIs differ in data selection, which ECMA-402
+// permits. Preserve exact expected text for both providers.
+const nativeExpected = duration
+  ? expected
+  : expected
+      .replace("\nUnited States:undefined\n", "\nUS:undefined\n")
+      .replace(
+        "\nSimplified Han:Traditional Han:undefined\n",
+        "\nSimplified:Traditional:undefined\n",
+      );
 for (const result of nativeResults)
-  if (result.result !== expected)
+  if (result.result !== nativeExpected)
     throw new Error("ICU compiled ABI mismatch on " + result.backend + ":\n" + result.result);
 console.log(
   JSON.stringify({
-    mode: "compiled-ICU-ABI",
+    mode: duration ? "compiled-ICU-duration-text" : "compiled-ICU-ABI",
     icu: version,
     backends: [...nativeResults.map((result) => result.backend), "jvm"],
-    exactDecimal: true,
-    utf16Parts: true,
-    dst: true,
-    numberOptions: true,
-    numberRanges: true,
-    localeData: true,
-    collation: true,
-    datePatterns: true,
-    dateText: true,
-    dateRanges: true,
-    timeZoneIdentifiers: true,
-    listPatterns: true,
-    relativeTime: true,
-    pluralRules: true,
+    ...(duration
+      ? { durationText: true, durationParts: false, compiledPublicApi: false }
+      : {
+          exactDecimal: true,
+          utf16Parts: true,
+          dst: true,
+          temporalTimeZones: true,
+          temporalTimeZoneErrors: false,
+          numberOptions: true,
+          numberRanges: true,
+          localeData: true,
+          localePreferences: true,
+          collation: true,
+          datePatterns: true,
+          dateText: true,
+          dateRanges: true,
+          timeZoneIdentifiers: true,
+          supportedValues: true,
+          primaryTimeZoneIdentifiers: true,
+          displayNames: true,
+          segmenter: true,
+          listPatterns: true,
+          relativeTime: true,
+          pluralRules: true,
+        }),
     sanitize: sanitize.length > 0,
   }),
 );
 if (process.argv.includes("--bench")) {
+  for (const kind of ["fields", "currency"]) {
+    console.log("C", run(executable, ["250000", "display", kind]));
+    console.log(
+      "JVM",
+      run("java", ["-Xverify:all", "-cp", classpath, javaDriver, "250000", "display", kind]),
+    );
+  }
+  for (const key of ["numberingSystem", "timeZone"]) {
+    const arguments_ = ["100000", "supported", key];
+    console.log(run(executable, arguments_));
+    console.log(run("java", ["-Xverify:all", "-cp", classpath, "Drive", ...arguments_]));
+  }
   for (const mode of ["scalar", "range"]) {
     const arguments_ = [mode === "scalar" ? "500000" : "100000", "plural", mode];
     console.log(run(executable, arguments_));

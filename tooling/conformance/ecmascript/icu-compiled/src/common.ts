@@ -1,10 +1,19 @@
 import { disambiguate } from "../../../../../runtime/ecmascript/src/time/provider.ts";
 import type { TimeZoneRules } from "../../../../../runtime/ecmascript/src/time/provider.ts";
 import { NumberFormatter } from "../../../../../runtime/ecmascript/src/intl/number.ts";
-import type { NumberFormatterPrimitive } from "../../../../../runtime/ecmascript/src/intl/number.ts";
+import type { NumberFormatterPrimitive } from "../../../../../runtime/ecmascript/src/intl/number-data.ts";
 import { NumberFormatConfiguration } from "../../../../../runtime/ecmascript/src/intl/number-options.ts";
-import type { NumberFormatData } from "../../../../../runtime/ecmascript/src/intl/number-options.ts";
+import type { NumberFormatData } from "../../../../../runtime/ecmascript/src/intl/number-data.ts";
 import type { LocaleInfoData } from "../../../../../runtime/ecmascript/src/intl/locale-data.ts";
+import { LocaleIdentifier } from "../../../../../runtime/ecmascript/src/intl/locale-id.ts";
+import { LocalePreferences } from "../../../../../runtime/ecmascript/src/intl/locale-preference.ts";
+import type { SupportedValueData } from "../../../../../runtime/ecmascript/src/intl/supported-value-data.ts";
+import { SupportedValues } from "../../../../../runtime/ecmascript/src/intl/supported-values.ts";
+import { TimeZoneRegistry } from "../../../../../runtime/ecmascript/src/time/zone-id.ts";
+import type { DisplayNamesPrimitive } from "../../../../../runtime/ecmascript/src/intl/display-data.ts";
+import { DisplayNameLookup } from "../../../../../runtime/ecmascript/src/intl/display-lookup.ts";
+import type { SegmenterPrimitive } from "../../../../../runtime/ecmascript/src/intl/segment-data.ts";
+import { SegmentBoundaries } from "../../../../../runtime/ecmascript/src/intl/segment-boundaries.ts";
 import type { CollationData } from "../../../../../runtime/ecmascript/src/intl/locale-data.ts";
 import type { CollatorPrimitive } from "../../../../../runtime/ecmascript/src/intl/collation.ts";
 import type { DateTimePatternData } from "../../../../../runtime/ecmascript/src/intl/date-time-data.ts";
@@ -35,6 +44,30 @@ import {
   pluralCategory,
   pluralCategories,
 } from "../../../../../runtime/ecmascript/src/intl/plural-category.ts";
+
+export function segmentBenchmark<P extends SegmenterPrimitive<P>>(
+  primitive: P,
+  iterations: number,
+  containing: boolean,
+  wide: boolean,
+): number {
+  const input = (wide ? "Hi! 👩‍👩‍👧‍👦 日本語\r\n" : "Hello, café!\r\n").repeat(24);
+  let checksum = 0;
+  if (containing) {
+    const boundaries = new SegmentBoundaries(primitive.forText(input), input);
+    for (let index = 0; index < iterations; index++) {
+      boundaries.find((index * 7919) % input.length);
+      checksum += boundaries.start + boundaries.end + (boundaries.wordLike ? 1 : 0);
+    }
+  } else {
+    for (let index = 0; index < iterations; index++) {
+      const boundaries = new SegmentBoundaries(primitive.forText(input), input);
+      while (boundaries.advance())
+        checksum += boundaries.start + boundaries.end + (boundaries.wordLike ? 1 : 0);
+    }
+  }
+  return checksum;
+}
 
 export function pluralDigest<P extends PluralRulesPrimitive>(
   open: (locale: string, ordinal: boolean, skeleton: string, negativeSkeleton: string) => P,
@@ -284,6 +317,248 @@ export function timeZoneDataDigest<D extends TimeZoneIdentifierData>(data: D): s
   );
 }
 
+export function supportedValuesDigest<
+  D extends LocaleInfoData & SupportedValueData & TimeZoneIdentifierData,
+>(data: D): string {
+  const zones = new TimeZoneRegistry(data);
+  const supported = new SupportedValues(data, zones);
+  const keys: readonly Parameters<typeof Intl.supportedValuesOf>[0][] = [
+    "calendar",
+    "collation",
+    "currency",
+    "numberingSystem",
+    "timeZone",
+    "unit",
+  ];
+  let result = "";
+  for (let index = 0; index < keys.length; index++) {
+    const values = supported.of(keys[index]!);
+    let ordered = true;
+    for (let at = 1; at < values.length; at++) if (values[at - 1]! >= values[at]!) ordered = false;
+    const text = values.join(",");
+    let checksum = 2166136261;
+    for (let at = 0; at < text.length; at++) checksum = (checksum * 31 + text.charCodeAt(at)) >>> 0;
+    const first = values[0]!;
+    values[0] = "mutated";
+    const fresh = supported.of(keys[index]!)[0] === first;
+    result +=
+      (index === 0 ? "" : "\n") +
+      keys[index] +
+      ":" +
+      values.length +
+      ":" +
+      checksum +
+      ":" +
+      ordered +
+      ":" +
+      fresh;
+  }
+  return (
+    result +
+    "\n" +
+    zones.primaryIdentifier("europe/kiev") +
+    ":" +
+    zones.primaryIdentifier("Asia/Calcutta") +
+    ":" +
+    zones.primaryIdentifier("Europe/Bratislava") +
+    ":" +
+    zones.primaryIdentifier("Europe/Prague") +
+    ":" +
+    zones.primaryIdentifier("Atlantic/Jan_Mayen") +
+    ":" +
+    zones.primaryIdentifier("Etc/GMT") +
+    ":" +
+    zones.primaryIdentifier("Etc/GMT+1") +
+    ":" +
+    zones.resolve("europe/kiev")
+  );
+}
+
+export function supportedValuesBenchmark<
+  D extends LocaleInfoData & SupportedValueData & TimeZoneIdentifierData,
+>(data: D, iterations: number, timeZones: boolean): number {
+  const supported = new SupportedValues(data, new TimeZoneRegistry(data));
+  const key = timeZones ? "timeZone" : "numberingSystem";
+  supported.of(key);
+  let checksum = 0;
+  for (let index = 0; index < iterations; index++) {
+    const values = supported.of(key);
+    checksum += values[index % values.length]!.charCodeAt(0);
+  }
+  return checksum;
+}
+
+export function displayBenchmark<D extends LocaleInfoData, P extends DisplayNamesPrimitive>(
+  data: D,
+  primitive: P,
+  iterations: number,
+  fields: boolean,
+): number {
+  const lookup = new DisplayNameLookup(
+    data,
+    primitive,
+    fields ? "dateTimeField" : "currency",
+    "none",
+  );
+  const codes = fields
+    ? [
+        "era",
+        "year",
+        "quarter",
+        "month",
+        "weekOfYear",
+        "weekday",
+        "day",
+        "dayPeriod",
+        "hour",
+        "minute",
+        "second",
+        "timeZoneName",
+      ]
+    : ["USD", "EUR", "JPY"];
+  for (let index = 0; index < codes.length; index++) lookup.of(codes[index]!);
+  let checksum = 0;
+  for (let index = 0; index < iterations; index++)
+    checksum += lookup.of(codes[index % codes.length]!)!.length;
+  return checksum;
+}
+
+export function displayDigest<D extends LocaleInfoData, P extends DisplayNamesPrimitive>(
+  data: D,
+  open: (locale: string, type: number, style: number, dialect: boolean) => P,
+): string {
+  const dialect = new DisplayNameLookup(data, open("en-US", 0, 0, true), "language", "code");
+  const standard = new DisplayNameLookup(data, open("en-US", 0, 0, false), "language", "none");
+  let result =
+    dialect.of("EN-us") +
+    ":" +
+    standard.of("en-US") +
+    ":" +
+    dialect.of("iw") +
+    ":" +
+    standard.of("zzzzz");
+  const region = new DisplayNameLookup(data, open("en-US", 1, 1, true), "region", "none");
+  result += "\n" + region.of("us") + ":" + region.of("XX");
+  const script = new DisplayNameLookup(data, open("en-US", 2, 0, true), "script", "none");
+  result += "\n" + script.of("hans") + ":" + script.of("HANT") + ":" + script.of("Qaaa");
+  const currency = new DisplayNameLookup(data, open("en-US", 3, 0, true), "currency", "none");
+  const fallback = new DisplayNameLookup(data, open("en-US", 3, 0, true), "currency", "code");
+  result +=
+    "\n" +
+    currency.of("usd") +
+    ":" +
+    currency.of("XXX") +
+    ":" +
+    currency.of("XZZ") +
+    ":" +
+    fallback.of("xzz");
+  const calendar = new DisplayNameLookup(data, open("en-US", 4, 0, true), "calendar", "code");
+  result +=
+    "\n" +
+    calendar.of("GREGORY") +
+    ":" +
+    calendar.of("islamicc") +
+    ":" +
+    calendar.of("ethiopic-amete-alem") +
+    ":" +
+    calendar.of("FOOBAR");
+  const fields = [
+    "era",
+    "year",
+    "quarter",
+    "month",
+    "weekOfYear",
+    "weekday",
+    "day",
+    "dayPeriod",
+    "hour",
+    "minute",
+    "second",
+    "timeZoneName",
+  ];
+  for (let style = 0; style < 3; style++) {
+    const names = new DisplayNameLookup(
+      data,
+      open("en-US", 5, style, true),
+      "dateTimeField",
+      "none",
+    );
+    result += "\n";
+    for (let index = 0; index < fields.length; index++)
+      result += (index === 0 ? "" : ",") + names.of(fields[index]!);
+    result += ":" + names.of("month");
+  }
+  return result;
+}
+
+export function segmentDigest<P extends SegmenterPrimitive<P>>(
+  open: (locale: string, granularity: number) => P,
+): string {
+  const texts = [
+    "á\r\n👩‍👩‍👧‍👦🇬🇷B",
+    "Hello, 世界! 123カタカナไทยภาษา",
+    "One. Two?\r\nThird! 😀",
+    "A" + String.fromCharCode(0, 233, 0xd800) + "B" + String.fromCharCode(0xdc00),
+    "é".repeat(513) + " x",
+  ];
+  let result = "";
+  for (let sample = 0; sample < texts.length; sample++) {
+    const input = texts[sample]!;
+    const granularity = sample === 1 || sample === 4 ? 1 : sample === 2 ? 2 : 0;
+    const source = open(sample === 1 ? "th" : "en-US", granularity);
+    const first = new SegmentBoundaries(source.forText(input), input);
+    const second = new SegmentBoundaries(source.forText(input), input);
+    const search = new SegmentBoundaries(source.forText(input), input);
+    const forward = new SegmentBoundaries(source.forText(input), input);
+    let checksum = 0;
+    let count = 0;
+    let boundaries = "";
+    while (first.advance()) {
+      if (
+        !second.advance() ||
+        first.start !== second.start ||
+        first.end !== second.end ||
+        first.wordLike !== second.wordLike
+      )
+        throw new Error("Independent segment cursors disagree");
+      boundaries += (count === 0 ? "" : ",") + first.start + ":" + first.end + ":" + first.wordLike;
+      for (let index = first.end - 1; index >= first.start; index--) {
+        if (
+          !search.find(index) ||
+          search.start !== first.start ||
+          search.end !== first.end ||
+          search.wordLike !== first.wordLike
+        )
+          throw new Error("Containing and sequential boundaries disagree");
+        checksum += search.start * 31 + search.end + (search.wordLike ? 1 : 0);
+      }
+      count++;
+      for (let index = first.start; index < first.end; index++) {
+        if (
+          !forward.find(index) ||
+          forward.start !== first.start ||
+          forward.end !== first.end ||
+          forward.wordLike !== first.wordLike
+        )
+          throw new Error("Forward containing boundaries disagree");
+      }
+    }
+    if (first.advance() || second.advance() || search.find(-1) || search.find(input.length))
+      throw new Error("Invalid segmentation exhaustion/index");
+    result +=
+      (sample === 0 ? "" : "\n") +
+      "segments:" +
+      sample +
+      ":" +
+      count +
+      ":" +
+      checksum +
+      ":" +
+      boundaries;
+  }
+  return result;
+}
+
 export function datePatternDigest<P extends DateTimePatternData>(data: P): string {
   const skeleton = dateTimeSkeleton(
     {
@@ -387,9 +662,9 @@ export function localeDataDigest<D extends LocaleInfoData>(data: D): string {
     ";" +
     data.collationValues("de-DE").join(",") +
     ";" +
-    data.hourCycle("en-US") +
+    data.hourCycleValues("en-US").join(",") +
     ";" +
-    data.hourCycle("en-GB") +
+    data.hourCycleValues("en-GB").join(",") +
     ";" +
     data.timeZones("JP").join(",") +
     ";" +
@@ -403,6 +678,75 @@ export function localeDataDigest<D extends LocaleInfoData>(data: D): string {
     ";" +
     data.textDirection("Zzzz")
   );
+}
+
+export function localePreferenceDigest<D extends LocaleInfoData>(data: D): string {
+  const tags = [
+    "fa-JP-u-rg-thzzzz-sd-inka",
+    "fa-JP-u-sd-inka",
+    "fa-u-sd-inka",
+    "fa",
+    "eo",
+    "fa-IN-u-rg-zzzzzz",
+    "en-US-u-rg-grzzzz",
+    "en-JP",
+    "en-001",
+    "und-001",
+    "fr-CA",
+    "en-CA",
+    "en-SA",
+    "en-US-u-ca-foobar-hc-foobar",
+  ];
+  let result = "";
+  for (let index = 0; index < tags.length; index++) {
+    const preferences = new LocalePreferences(
+      data,
+      new LocaleIdentifier(data.canonicalize(tags[index]!)),
+    );
+    const calendars = preferences.calendars(),
+      hours = preferences.hourCycles();
+    const expectedCalendars = calendars.join(","),
+      expectedHours = hours.join(",");
+    calendars[0] = "mutated";
+    hours[0] = "mutated";
+    if (
+      preferences.calendars().join(",") !== expectedCalendars ||
+      preferences.hourCycles().join(",") !== expectedHours
+    )
+      throw new Error("Locale preference cache escaped");
+    result +=
+      (index === 0 ? "" : "\n") +
+      "locale:" +
+      tags[index] +
+      ":" +
+      expectedCalendars +
+      ";" +
+      expectedHours +
+      ";" +
+      preferences.weekData();
+  }
+  const regions = ["UA", "IN", "SK", "CZ", "NO", "AX", "ZZ", "001"];
+  for (let index = 0; index < regions.length; index++)
+    result +=
+      "\nlocale-zones:" + regions[index] + ":" + data.timeZones(regions[index]!).sort().join(",");
+  return result;
+}
+
+export function localePreferenceBenchmark<D extends LocaleInfoData>(
+  data: D,
+  iterations: number,
+  cached: boolean,
+): number {
+  const preferences = new LocalePreferences(data, new LocaleIdentifier("en-JP"));
+  let checksum = 0;
+  for (let index = 0; index < iterations; index++) {
+    checksum += cached
+      ? preferences.calendars().length + preferences.hourCycles().length + preferences.weekData()
+      : data.calendarValues("en-JP").length +
+        data.hourCycleValues("en-JP").length +
+        data.weekData("JP");
+  }
+  return checksum;
 }
 
 export function gap(zone: TimeZoneRules): number {

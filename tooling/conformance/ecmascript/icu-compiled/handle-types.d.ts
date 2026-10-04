@@ -5,6 +5,8 @@ import type {
   IcuDateHandle,
   IcuRelativeHandle,
   IcuPluralHandle,
+  IcuDisplayHandle,
+  IcuSegmentHandle,
 } from "../../../../runtime/ecmascript/providers/icu/c/handle.ts";
 
 type MustBeFalse<T extends false> = T;
@@ -36,3 +38,17 @@ export type NumberIsNotRelative = MustBeFalse<
 export type PluralCannotBeForged = MustBeFalse<{} extends IcuPluralHandle ? true : false>;
 export type PluralIsNotNumber = MustBeFalse<IcuPluralHandle extends IcuNumberHandle ? true : false>;
 export type NumberIsNotPlural = MustBeFalse<IcuNumberHandle extends IcuPluralHandle ? true : false>;
+export type DisplayCannotBeForged = MustBeFalse<{} extends IcuDisplayHandle ? true : false>;
+export type DisplayIsNotNumber = MustBeFalse<
+  IcuDisplayHandle extends IcuNumberHandle ? true : false
+>;
+export type NumberIsNotDisplay = MustBeFalse<
+  IcuNumberHandle extends IcuDisplayHandle ? true : false
+>;
+export type SegmentCannotBeForged = MustBeFalse<{} extends IcuSegmentHandle ? true : false>;
+export type SegmentIsNotNumber = MustBeFalse<
+  IcuSegmentHandle extends IcuNumberHandle ? true : false
+>;
+export type NumberIsNotSegment = MustBeFalse<
+  IcuNumberHandle extends IcuSegmentHandle ? true : false
+>;

@@ -2,7 +2,6 @@ package nts.intl;
 
 import com.ibm.icu.text.NumberingSystem;
 import com.ibm.icu.text.Collator;
-import com.ibm.icu.text.DateTimePatternGenerator;
 import com.ibm.icu.text.ListFormatter;
 import com.ibm.icu.text.MeasureFormat;
 import com.ibm.icu.number.NumberFormatter;
@@ -11,15 +10,19 @@ import com.ibm.icu.util.Measure;
 import com.ibm.icu.util.MeasureUnit;
 import com.ibm.icu.lang.UScript;
 import com.ibm.icu.util.Calendar;
+import com.ibm.icu.text.CurrencyMetaInfo;
+import com.ibm.icu.text.CurrencyDisplayNames;
 import com.ibm.icu.util.TimeZone;
 import com.ibm.icu.util.LocaleMatcher;
 import com.ibm.icu.util.ULocale;
 import java.util.Arrays;
+import java.util.ArrayList;
 
 /** CLDR data operations; shared TypeScript owns ECMA-402 locale semantics. */
 public final class IcuLocaleData {
     private final ULocale[] available;
     private final LocaleMatcher matcher;
+    private CurrencyDisplayNames currencyNames;
 
     public IcuLocaleData() {
         IcuVersions.verify();
@@ -55,6 +58,25 @@ public final class IcuLocaleData {
         String canonical = ULocale.toUnicodeLocaleType(key, value);
         return canonical == null ? value : canonical;
     }
+    public String[] availableValues(int category) {
+        switch (category) {
+            case 0: return Calendar.getKeywordValuesForLocale("calendar", ULocale.ROOT, false);
+            case 1: return Collator.getKeywordValues("collation");
+            case 2:
+                // Currency.getKeywordValuesForLocale filters out non-tender
+                // codes; the shared enumeration includes funds and metals.
+                return CurrencyMetaInfo.getInstance().currencies(CurrencyMetaInfo.CurrencyFilter.all()).toArray(new String[0]);
+            case 3: return NumberingSystem.getAvailableNames();
+            default: throw new IllegalArgumentException("Invalid supported-value category");
+        }
+    }
+    public boolean hasCurrencyName(String code) {
+        if (currencyNames == null) {
+            currencyNames = CurrencyDisplayNames.getInstance(ULocale.ENGLISH, true);
+            if (currencyNames == null) throw new IllegalStateException("Missing ICU currency names");
+        }
+        return currencyNames.getName(code) != null;
+    }
     public String[] calendarValues(String tag) { return calendars(tag, true); }
     public String[] availableCalendars(String tag) { return calendars(tag, false); }
     private String[] calendars(String tag, boolean commonlyUsed) {
@@ -67,23 +89,30 @@ public final class IcuLocaleData {
         for (int index = 0; index < values.length; index++) values[index] = canonicalType("co", values[index]);
         return values;
     }
-    public String hourCycle(String tag) {
-        switch (DateTimePatternGenerator.getInstance(ULocale.forLanguageTag(tag)).getDefaultHourCycle()) {
-            case HOUR_CYCLE_11: return "h11";
-            case HOUR_CYCLE_12: return "h12";
-            case HOUR_CYCLE_23: return "h23";
-            case HOUR_CYCLE_24: return "h24";
-            default: throw new IllegalStateException("Unrecognized ICU hour cycle");
-        }
-    }
     public String[] timeZones(String region) {
-        return TimeZone.getAvailableIDs(TimeZone.SystemTimeZoneType.CANONICAL_LOCATION, region, null).toArray(new String[0]);
+        String[] names = TimeZone.getAvailableIDs(TimeZone.SystemTimeZoneType.CANONICAL_LOCATION, region, null).toArray(new String[0]);
+        for (int index = 0; index < names.length; index++) {
+            String primary = TimeZone.getIanaID(names[index]);
+            if (primary == null) throw new IllegalStateException("Missing IANA identity for location zone");
+            names[index] = primary;
+        }
+        return names;
     }
     public String[] timeZoneNames() { return TimeZone.getAvailableIDs(); }
     public String canonicalTimeZone(String name) {
         boolean[] system = { false };
         String canonical = TimeZone.getCanonicalID(name, system);
         return system[0] ? canonical : null;
+    }
+    public String primaryTimeZone(String name) { return TimeZone.getIanaID(name); }
+    public String[] primaryTimeZoneNames() {
+        String[] availableNames = TimeZone.getAvailableIDs();
+        ArrayList<String> names = new ArrayList<>(availableNames.length);
+        for (String name : availableNames) {
+            String primary = TimeZone.getIanaID(name);
+            if (primary != null) names.add(primary);
+        }
+        return names.toArray(new String[0]);
     }
     public String defaultTimeZoneIdentifier() { return TimeZone.getDefault().getID(); }
     public int textDirection(String script) {
@@ -101,7 +130,7 @@ public final class IcuLocaleData {
         LocalizedNumberFormatter oneDigit = NumberFormatter.forSkeleton("precision-integer group-off integer-width/*0").locale(locale);
         LocalizedNumberFormatter twoDigits = NumberFormatter.forSkeleton("precision-integer group-off integer-width/*00").locale(locale);
         return new String[] { measures.formatMeasures(hours, minutes, seconds), measures.formatMeasures(hours, minutes), measures.formatMeasures(minutes, seconds),
-            oneDigit.format(7).toString(), twoDigits.format(7).toString(), twoDigits.format(8).toString(), twoDigits.format(9).toString() };
+            oneDigit.format(7).toString(), twoDigits.format(7).toString(), oneDigit.format(8).toString(), twoDigits.format(8).toString(), twoDigits.format(9).toString() };
     }
     public String[] listSamples(String tag, int type, int style, String[] tokens) {
         if (tokens.length != 4 || type < 0 || type > 2 || style < 0 || style > 2)

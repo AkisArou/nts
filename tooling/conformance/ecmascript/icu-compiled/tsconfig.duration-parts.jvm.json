@@ -1,0 +1,7 @@
+{
+  "extends": "../../../../tsconfig.fixtures.json",
+  "include": [
+    "src/duration-parts-jvm.ts",
+    "../../../../runtime/ecmascript/providers/icu/java/types/nts.intl.d.ts"
+  ]
+}

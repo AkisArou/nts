@@ -3,19 +3,41 @@ import type { RoundingMode } from "./exact.ts";
 // The numeric precision belongs to the scalar formatter ABI. Public options
 // name automatic precision explicitly rather than exposing its sentinel.
 export const AUTO_PRECISION = -1;
+
+// Read and convert a unit before validating its permitted group. Temporal's
+// ordered options read can precede a later algorithmic rejection of that unit.
+export function temporalUnit(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === "symbol") throw new TypeError("Temporal string options reject Symbols");
+  const text = String(value);
+  const unit = text.endsWith("s") ? text.slice(0, -1) : text;
+  if (
+    unit === "year" ||
+    unit === "month" ||
+    unit === "week" ||
+    unit === "day" ||
+    unit === "hour" ||
+    unit === "minute" ||
+    unit === "second" ||
+    unit === "millisecond" ||
+    unit === "microsecond" ||
+    unit === "nanosecond"
+  )
+    return unit;
+  throw new RangeError("Invalid Temporal unit");
+}
+
 // -2 is minute precision; -1 is automatic fractional precision; 0..9 are
 // decimal digits. A scalar keeps the common seconds-string precision record
 // out of formatting allocations.
 export function secondsStringPrecision(smallestUnit: string | undefined, digits: number): number {
+  smallestUnit = temporalUnit(smallestUnit);
   if (smallestUnit === undefined) return digits;
-  if (typeof smallestUnit === "symbol")
-    throw new TypeError("Temporal string options reject Symbols");
-  smallestUnit = String(smallestUnit);
-  if (smallestUnit === "minute" || smallestUnit === "minutes") return -2;
-  if (smallestUnit === "second" || smallestUnit === "seconds") return 0;
-  if (smallestUnit === "millisecond" || smallestUnit === "milliseconds") return 3;
-  if (smallestUnit === "microsecond" || smallestUnit === "microseconds") return 6;
-  if (smallestUnit === "nanosecond" || smallestUnit === "nanoseconds") return 9;
+  if (smallestUnit === "minute") return -2;
+  if (smallestUnit === "second") return 0;
+  if (smallestUnit === "millisecond") return 3;
+  if (smallestUnit === "microsecond") return 6;
+  if (smallestUnit === "nanosecond") return 9;
   throw new RangeError("Invalid seconds-string unit");
 }
 

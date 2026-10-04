@@ -50,7 +50,7 @@ const limit = Number(option("--limit", "0"));
 const rowsPath = option("--rows", "target/" + profile + "-test262.jsonl");
 const sabotage = argv.includes("--sabotage");
 const timeout = Number(option("--timeout", "30000"));
-const intlProvider = profile === "intl" ? icuHost(root) : undefined;
+const intlProvider = profile === "intl" || argv.includes("--icu") ? icuHost(root) : undefined;
 if (intlProvider) process.on("exit", () => intlProvider.close());
 const sources = new Map<string, string>();
 async function candidate(context: vm.Context): Promise<vm.Module["namespace"]> {
@@ -72,6 +72,18 @@ async function candidate(context: vm.Context): Promise<vm.Module["namespace"]> {
     moduleFor(resolve(dirname(importer.identifier), specifier)),
   );
   await builtins.evaluate({ timeout });
+  if (profile === "temporal" && intlProvider) {
+    const time = moduleFor(resolve(root, "runtime/ecmascript/src/time/zone-source.ts"));
+    await time.link((specifier, importer) =>
+      moduleFor(resolve(dirname(importer.identifier), specifier)),
+    );
+    await time.evaluate({ timeout });
+    context.__time = {
+      TimeZoneContext: time.namespace.TimeZoneContext,
+      TimeZoneRegistry: moduleFor(resolve(root, "runtime/ecmascript/src/time/zone-id.ts")).namespace
+        .TimeZoneRegistry,
+    };
+  }
   if (profile === "intl")
     context.__temporal = moduleFor(
       resolve(root, "runtime/ecmascript/src/temporal/builtins.ts"),
@@ -196,6 +208,9 @@ for (const selected of selection) {
     __intlDateOpen: intlProvider?.openDate,
     __intlRelativeOpen: intlProvider?.openRelative,
     __intlPluralOpen: intlProvider?.openPlural,
+    __intlDisplayOpen: intlProvider?.openDisplay,
+    __intlSegmentOpen: intlProvider?.openSegmenter,
+    __timeZoneOpen: intlProvider?.openTimeZone,
   });
   context.__impl = await candidate(context);
   if (profile === "intl") {
@@ -204,6 +219,7 @@ for (const selected of selection) {
       (() => {
       const resolver = new __impl.LocaleResolver(__intlData);
       const timeZones = new __impl.TimeZoneRegistry(__intlData);
+      const values = new __impl.SupportedValues(__intlData, timeZones);
       class NumberFormat extends __impl.NtsNumberFormat {
         constructor(locales, options) { super(resolver, __intlNumberOpen, locales, options); }
         static supportedLocalesOf(locales, options) { return __impl.supportedLocalesOf(resolver, locales, options); }
@@ -231,17 +247,44 @@ for (const selected of selection) {
         constructor(locales = undefined, options) { super(resolver, __intlPluralOpen, locales, options); }
         static supportedLocalesOf(locales, options = undefined) { return __impl.supportedLocalesOf(resolver, locales, options); }
       }
+      class DurationFormat extends __impl.NtsDurationFormat {
+        constructor(locales = undefined, options) { super(resolver, __intlNumberOpen, locales, options); }
+        static supportedLocalesOf(locales, options = undefined) { return __impl.supportedLocalesOf(resolver, locales, options); }
+      }
+      class DisplayNames extends __impl.NtsDisplayNames {
+        constructor(locales, options) { super(resolver, __intlDisplayOpen, locales, options); }
+        static supportedLocalesOf(locales, options = undefined) { return __impl.supportedLocalesOf(resolver, locales, options); }
+      }
+      class Segmenter extends __impl.NtsSegmenter {
+        constructor(locales = undefined, options) { super(resolver, __intlSegmentOpen, locales, options); }
+        static supportedLocalesOf(locales, options = undefined) { return __impl.supportedLocalesOf(resolver, locales, options); }
+      }
       globalThis.Intl = {
-        NumberFormat, Locale, Collator, DateTimeFormat, ListFormat, RelativeTimeFormat, PluralRules,
+        NumberFormat, Locale, Collator, DateTimeFormat, ListFormat, RelativeTimeFormat, PluralRules, DurationFormat, DisplayNames, Segmenter,
         getCanonicalLocales(locales) { return __impl.getCanonicalLocales(__intlData, locales); },
+        supportedValuesOf(key) { return values.of(key); },
       };
       globalThis.Temporal = __temporal;
-      if (__sabotage) NumberFormat.prototype.formatToParts = function() { return []; };
+      if (__sabotage) {
+        NumberFormat.prototype.formatToParts = function() { return []; };
+        const originalSegment = Segmenter.prototype.segment;
+        Segmenter.prototype.segment = function(input) { return originalSegment.call(this, ""); };
+      }
       })();
     `).runInContext(context, { timeout });
   } else if (profile === "temporal") {
+    intlProvider?.reset();
     new vm.Script(`
       Object.defineProperty(globalThis, "Temporal", { value: __impl, writable: true, configurable: true });
+      if (__timeZoneOpen) {
+        const timeZones = new __time.TimeZoneContext(new __time.TimeZoneRegistry(__intlData), __timeZoneOpen);
+        const original = Temporal.Instant.prototype.toString;
+        // Host-only binding of the same explicit environment argument used by
+        // compiled standard integration; no process-global production state.
+        Temporal.Instant.prototype.toString = {
+          toString(options = undefined) { return original.call(this, options, timeZones); },
+        }.toString;
+      }
       if (__sabotage) Temporal.Instant.prototype.equals = function equals() { return false; };
     `).runInContext(context, { timeout });
   } else if (profile === "date") {

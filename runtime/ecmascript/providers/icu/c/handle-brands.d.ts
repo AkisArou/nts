@@ -8,6 +8,8 @@ declare const datePatternHandle: unique symbol;
 declare const dateHandle: unique symbol;
 declare const relativeHandle: unique symbol;
 declare const pluralHandle: unique symbol;
+declare const displayHandle: unique symbol;
+declare const segmentHandle: unique symbol;
 export interface TimeZoneHandleBrand {
   readonly [timeZoneHandle]: never;
 }
@@ -34,4 +36,10 @@ export interface RelativeHandleBrand {
 }
 export interface PluralHandleBrand {
   readonly [pluralHandle]: never;
+}
+export interface DisplayHandleBrand {
+  readonly [displayHandle]: never;
+}
+export interface SegmentHandleBrand {
+  readonly [segmentHandle]: never;
 }
