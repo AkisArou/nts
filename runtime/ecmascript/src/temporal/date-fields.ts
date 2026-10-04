@@ -15,7 +15,7 @@ export function dateFieldsDay(
   previous: number | undefined = undefined,
 ): number {
   const rawDay = value.day;
-  let day = rawDay === undefined ? undefined : positiveDateField(rawDay);
+  const day = rawDay === undefined ? undefined : positiveDateField(rawDay);
   let era: string | undefined;
   let eraYear: number | undefined;
   if (calendar !== undefined && calendarSupportsEra(calendar.identifier)) {
@@ -27,9 +27,9 @@ export function dateFieldsDay(
   const rawMonth = value.month;
   const month = rawMonth === undefined ? undefined : positiveDateField(rawMonth);
   const rawCode = value.monthCode;
-  let code = rawCode === undefined ? undefined : parseMonthCode(rawCode);
+  const code = rawCode === undefined ? undefined : parseMonthCode(rawCode);
   const rawYear = value.year;
-  let year = rawYear === undefined ? undefined : integerWithTruncation(rawYear);
+  const year = rawYear === undefined ? undefined : integerWithTruncation(rawYear);
   if (
     previous !== undefined &&
     rawDay === undefined &&
@@ -41,8 +41,23 @@ export function dateFieldsDay(
   )
     throw new TypeError("At least one date field is required");
   const overflow = overflowOption(options);
-  if (calendar === undefined)
-    return checkDateDay(resolveISOFields(year, month, code, day, overflow, previous));
+  return checkDateDay(
+    resolveDateFields(year, month, code, day, era, eraYear, overflow, calendar, previous),
+  );
+}
+
+export function resolveDateFields(
+  year: number | undefined,
+  month: number | undefined,
+  code: number | undefined,
+  day: number | undefined,
+  era: string | undefined,
+  eraYear: number | undefined,
+  overflow: NonNullable<Temporal.OverflowOptions["overflow"]>,
+  calendar: CalendarContext | undefined,
+  previous: number | undefined = undefined,
+): number {
+  if (calendar === undefined) return resolveISOFields(year, month, code, day, overflow, previous);
   if (previous !== undefined) {
     const oldYear = calendar.yearAt(previous);
     const oldMonth = oldYear.monthAt(previous);
@@ -64,5 +79,5 @@ export function dateFieldsDay(
     year = arithmeticYear;
   }
   const topology = calendar.yearFor(year!);
-  return checkDateDay(topology.date(topology.resolveMonth(month, code, overflow), day, overflow));
+  return topology.date(topology.resolveMonth(month, code, overflow), day, overflow);
 }

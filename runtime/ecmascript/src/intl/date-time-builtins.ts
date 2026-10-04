@@ -14,6 +14,7 @@ import { PlainDate } from "../temporal/plain-date.ts";
 import { PlainDateTime } from "../temporal/plain-date-time.ts";
 import { PlainYearMonth } from "../temporal/plain-year-month.ts";
 import { PlainMonthDay } from "../temporal/plain-month-day.ts";
+import { ZonedDateTime } from "../temporal/zoned-date-time.ts";
 import { MS_PER_DAY } from "../date/calendar.ts";
 
 function clip(value: number): number {
@@ -71,27 +72,40 @@ export class NtsDateTimeFormat<
       throw new TypeError("Date/time inputs reject BigInts and Symbols");
     return Number(value);
   }
+  #temporal(value: Date | number | bigint | Intl.FormattableTemporalObject): boolean {
+    return (
+      value instanceof PlainDate ||
+      value instanceof PlainDateTime ||
+      value instanceof PlainTime ||
+      value instanceof PlainYearMonth ||
+      value instanceof PlainMonthDay ||
+      value instanceof Instant ||
+      value instanceof ZonedDateTime
+    );
+  }
   get format(): Intl.DateTimeFormat["format"] {
     if (this.#bound === undefined)
       this.#bound = (date?: Parameters<Intl.DateTimeFormat["formatToParts"]>[0]): string => {
         if (date instanceof PlainYearMonth)
-          return this.yearMonthFormatter().format(
-            PlainYearMonth.epochDay(date) * MS_PER_DAY + MS_PER_DAY / 2,
-          );
+          return this.yearMonthFormatter(
+            PlainYearMonth.calendarContext(date)?.identifier ?? "iso8601",
+          ).format(PlainYearMonth.epochDay(date) * MS_PER_DAY + MS_PER_DAY / 2);
         if (date instanceof PlainMonthDay)
-          return this.monthDayFormatter().format(
-            PlainMonthDay.epochDay(date) * MS_PER_DAY + MS_PER_DAY / 2,
-          );
+          return this.monthDayFormatter(
+            PlainMonthDay.calendarContext(date)?.identifier ?? "iso8601",
+          ).format(PlainMonthDay.epochDay(date) * MS_PER_DAY + MS_PER_DAY / 2);
         if (date instanceof PlainDateTime)
-          return this.dateTimeFormatter().format(PlainDateTime.milliseconds(date));
+          return this.dateTimeFormatter(
+            PlainDateTime.calendarContext(date)?.identifier ?? "iso8601",
+          ).format(PlainDateTime.milliseconds(date));
         if (date instanceof Instant)
           return this.instantFormatter().format(Instant.epochMilliseconds(date));
         if (date instanceof PlainTime)
           return this.timeFormatter().format(Math.floor(PlainTime.nanoseconds(date) / 1e6));
         if (date instanceof PlainDate)
-          return this.dateFormatter().format(
-            PlainDate.epochDay(date) * MS_PER_DAY + MS_PER_DAY / 2,
-          );
+          return this.dateFormatter(
+            PlainDate.calendarContext(date)?.identifier ?? "iso8601",
+          ).format(PlainDate.epochDay(date) * MS_PER_DAY + MS_PER_DAY / 2);
         return this.#defaultFormatter().format(
           clip(date === undefined ? this.#clock() : this.#number(date)),
         );
@@ -110,21 +124,21 @@ export class NtsDateTimeFormat<
   // Slot entry point for Temporal/Date localization. It uses exactly the same
   // pattern selection, calendar validation and provider as public formatting.
   formatTemporal(kind: number, milliseconds: number, calendar: string): string {
-    const config = this.#configuration;
     if (kind === 4 || kind === 5) {
-      if (calendar !== config.calendar)
-        throw new RangeError("Partial-date calendars must match the formatter");
-      return (kind === 4 ? this.yearMonthFormatter() : this.monthDayFormatter()).format(
-        milliseconds,
-      );
+      return (
+        kind === 4 ? this.yearMonthFormatter(calendar) : this.monthDayFormatter(calendar)
+      ).format(milliseconds);
     }
-    if (kind !== 0 && kind < 7 && calendar !== "iso8601" && calendar !== config.calendar)
-      throw new RangeError("Temporal calendars must match the formatter");
+    if (kind === 6) this.requireCalendar(calendar, false);
     if (kind === 0 || kind === 6) return this.instantFormatter().format(milliseconds);
     if (kind === 1) return this.timeFormatter().format(milliseconds);
-    if (kind === 2) return this.dateFormatter().format(milliseconds);
-    if (kind === 3) return this.dateTimeFormatter().format(milliseconds);
+    if (kind === 2) return this.dateFormatter(calendar).format(milliseconds);
+    if (kind === 3) return this.dateTimeFormatter(calendar).format(milliseconds);
     return this.#defaultFormatter().format(milliseconds);
+  }
+  private requireCalendar(calendar: string, partial: boolean): void {
+    if ((partial || calendar !== "iso8601") && calendar !== this.#configuration.calendar)
+      throw new RangeError("Temporal calendars must match the formatter");
   }
   private instantFormatter(): DateTimeFormatter<P> {
     if (this.#instant === undefined) {
@@ -144,7 +158,8 @@ export class NtsDateTimeFormat<
     }
     return this.#plainTime;
   }
-  private dateFormatter(): DateTimeFormatter<P> {
+  private dateFormatter(calendar: string): DateTimeFormatter<P> {
+    this.requireCalendar(calendar, false);
     if (this.#plainDate === undefined) {
       const config = this.#configuration;
       this.#plainDate = new DateTimeFormatter(
@@ -153,7 +168,8 @@ export class NtsDateTimeFormat<
     }
     return this.#plainDate;
   }
-  private dateTimeFormatter(): DateTimeFormatter<P> {
+  private dateTimeFormatter(calendar: string): DateTimeFormatter<P> {
+    this.requireCalendar(calendar, false);
     if (this.#plainDateTime === undefined) {
       const config = this.#configuration;
       this.#plainDateTime = new DateTimeFormatter(
@@ -162,9 +178,8 @@ export class NtsDateTimeFormat<
     }
     return this.#plainDateTime;
   }
-  private yearMonthFormatter(): DateTimeFormatter<P> {
-    if (this.#configuration.calendar !== "iso8601")
-      throw new RangeError("Year-month calendars must match the formatter");
+  private yearMonthFormatter(calendar: string): DateTimeFormatter<P> {
+    this.requireCalendar(calendar, true);
     if (this.#plainYearMonth === undefined) {
       const config = this.#configuration;
       this.#plainYearMonth = new DateTimeFormatter(
@@ -173,9 +188,8 @@ export class NtsDateTimeFormat<
     }
     return this.#plainYearMonth;
   }
-  private monthDayFormatter(): DateTimeFormatter<P> {
-    if (this.#configuration.calendar !== "iso8601")
-      throw new RangeError("Month-day calendars must match the formatter");
+  private monthDayFormatter(calendar: string): DateTimeFormatter<P> {
+    this.requireCalendar(calendar, true);
     if (this.#plainMonthDay === undefined) {
       const config = this.#configuration;
       this.#plainMonthDay = new DateTimeFormatter(
@@ -186,23 +200,25 @@ export class NtsDateTimeFormat<
   }
   formatToParts(date?: Parameters<Intl.DateTimeFormat["formatToParts"]>[0]): DateTimeFormatPart[] {
     if (date instanceof PlainYearMonth)
-      return this.yearMonthFormatter().formatToParts(
-        PlainYearMonth.epochDay(date) * MS_PER_DAY + MS_PER_DAY / 2,
-      );
+      return this.yearMonthFormatter(
+        PlainYearMonth.calendarContext(date)?.identifier ?? "iso8601",
+      ).formatToParts(PlainYearMonth.epochDay(date) * MS_PER_DAY + MS_PER_DAY / 2);
     if (date instanceof PlainMonthDay)
-      return this.monthDayFormatter().formatToParts(
-        PlainMonthDay.epochDay(date) * MS_PER_DAY + MS_PER_DAY / 2,
-      );
+      return this.monthDayFormatter(
+        PlainMonthDay.calendarContext(date)?.identifier ?? "iso8601",
+      ).formatToParts(PlainMonthDay.epochDay(date) * MS_PER_DAY + MS_PER_DAY / 2);
     if (date instanceof PlainDateTime)
-      return this.dateTimeFormatter().formatToParts(PlainDateTime.milliseconds(date));
+      return this.dateTimeFormatter(
+        PlainDateTime.calendarContext(date)?.identifier ?? "iso8601",
+      ).formatToParts(PlainDateTime.milliseconds(date));
     if (date instanceof Instant)
       return this.instantFormatter().formatToParts(Instant.epochMilliseconds(date));
     if (date instanceof PlainTime)
       return this.timeFormatter().formatToParts(Math.floor(PlainTime.nanoseconds(date) / 1e6));
     if (date instanceof PlainDate)
-      return this.dateFormatter().formatToParts(
-        PlainDate.epochDay(date) * MS_PER_DAY + MS_PER_DAY / 2,
-      );
+      return this.dateFormatter(
+        PlainDate.calendarContext(date)?.identifier ?? "iso8601",
+      ).formatToParts(PlainDate.epochDay(date) * MS_PER_DAY + MS_PER_DAY / 2);
     const formatter = this.#defaultFormatter();
     return formatter.formatToParts(clip(date === undefined ? this.#clock() : this.#number(date)));
   }
@@ -210,13 +226,19 @@ export class NtsDateTimeFormat<
     start: Parameters<Intl.DateTimeFormat["formatRange"]>[0] | bigint,
     end: Parameters<Intl.DateTimeFormat["formatRange"]>[1] | bigint,
   ): string {
-    const formatter = this.#defaultFormatter();
     if (start === undefined || end === undefined)
       throw new TypeError("Date/time range endpoints are required");
+    // ToDateTimeFormattable precedes type matching and TimeClip. Coerce both
+    // numeric inputs once, in argument order, even for a mixed Temporal range.
+    const first = this.#temporal(start) ? NaN : this.#number(start);
+    const last = this.#temporal(end) ? NaN : this.#number(end);
     if (start instanceof PlainYearMonth || end instanceof PlainYearMonth) {
       if (!(start instanceof PlainYearMonth) || !(end instanceof PlainYearMonth))
         throw new TypeError("Temporal range endpoints must have the same type");
-      return this.yearMonthFormatter().formatRange(
+      this.requireCalendar(PlainYearMonth.calendarContext(end)?.identifier ?? "iso8601", true);
+      return this.yearMonthFormatter(
+        PlainYearMonth.calendarContext(start)?.identifier ?? "iso8601",
+      ).formatRange(
         PlainYearMonth.epochDay(start) * MS_PER_DAY + MS_PER_DAY / 2,
         PlainYearMonth.epochDay(end) * MS_PER_DAY + MS_PER_DAY / 2,
       );
@@ -224,7 +246,10 @@ export class NtsDateTimeFormat<
     if (start instanceof PlainMonthDay || end instanceof PlainMonthDay) {
       if (!(start instanceof PlainMonthDay) || !(end instanceof PlainMonthDay))
         throw new TypeError("Temporal range endpoints must have the same type");
-      return this.monthDayFormatter().formatRange(
+      this.requireCalendar(PlainMonthDay.calendarContext(end)?.identifier ?? "iso8601", true);
+      return this.monthDayFormatter(
+        PlainMonthDay.calendarContext(start)?.identifier ?? "iso8601",
+      ).formatRange(
         PlainMonthDay.epochDay(start) * MS_PER_DAY + MS_PER_DAY / 2,
         PlainMonthDay.epochDay(end) * MS_PER_DAY + MS_PER_DAY / 2,
       );
@@ -232,10 +257,10 @@ export class NtsDateTimeFormat<
     if (start instanceof PlainDateTime || end instanceof PlainDateTime) {
       if (!(start instanceof PlainDateTime) || !(end instanceof PlainDateTime))
         throw new TypeError("Temporal range endpoints must have the same type");
-      return this.dateTimeFormatter().formatRange(
-        PlainDateTime.milliseconds(start),
-        PlainDateTime.milliseconds(end),
-      );
+      this.requireCalendar(PlainDateTime.calendarContext(end)?.identifier ?? "iso8601", false);
+      return this.dateTimeFormatter(
+        PlainDateTime.calendarContext(start)?.identifier ?? "iso8601",
+      ).formatRange(PlainDateTime.milliseconds(start), PlainDateTime.milliseconds(end));
     }
     if (start instanceof Instant || end instanceof Instant) {
       if (!(start instanceof Instant) || !(end instanceof Instant))
@@ -256,26 +281,33 @@ export class NtsDateTimeFormat<
     if (start instanceof PlainDate || end instanceof PlainDate) {
       if (!(start instanceof PlainDate) || !(end instanceof PlainDate))
         throw new TypeError("Temporal range endpoints must have the same type");
-      return this.dateFormatter().formatRange(
+      this.requireCalendar(PlainDate.calendarContext(end)?.identifier ?? "iso8601", false);
+      return this.dateFormatter(
+        PlainDate.calendarContext(start)?.identifier ?? "iso8601",
+      ).formatRange(
         PlainDate.epochDay(start) * MS_PER_DAY + MS_PER_DAY / 2,
         PlainDate.epochDay(end) * MS_PER_DAY + MS_PER_DAY / 2,
       );
     }
-    const first = this.#number(start);
-    const last = this.#number(end);
-    return formatter.formatRange(clip(first), clip(last));
+    if (start instanceof ZonedDateTime || end instanceof ZonedDateTime)
+      throw new TypeError("Zoned date/time values require toLocaleString");
+    return this.#defaultFormatter().formatRange(clip(first), clip(last));
   }
   formatRangeToParts(
     start: Parameters<Intl.DateTimeFormat["formatRangeToParts"]>[0] | bigint,
     end: Parameters<Intl.DateTimeFormat["formatRangeToParts"]>[1] | bigint,
   ): DateTimeRangeFormatPart[] {
-    const formatter = this.#defaultFormatter();
     if (start === undefined || end === undefined)
       throw new TypeError("Date/time range endpoints are required");
+    const first = this.#temporal(start) ? NaN : this.#number(start);
+    const last = this.#temporal(end) ? NaN : this.#number(end);
     if (start instanceof PlainYearMonth || end instanceof PlainYearMonth) {
       if (!(start instanceof PlainYearMonth) || !(end instanceof PlainYearMonth))
         throw new TypeError("Temporal range endpoints must have the same type");
-      return this.yearMonthFormatter().formatRangeToParts(
+      this.requireCalendar(PlainYearMonth.calendarContext(end)?.identifier ?? "iso8601", true);
+      return this.yearMonthFormatter(
+        PlainYearMonth.calendarContext(start)?.identifier ?? "iso8601",
+      ).formatRangeToParts(
         PlainYearMonth.epochDay(start) * MS_PER_DAY + MS_PER_DAY / 2,
         PlainYearMonth.epochDay(end) * MS_PER_DAY + MS_PER_DAY / 2,
       );
@@ -283,7 +315,10 @@ export class NtsDateTimeFormat<
     if (start instanceof PlainMonthDay || end instanceof PlainMonthDay) {
       if (!(start instanceof PlainMonthDay) || !(end instanceof PlainMonthDay))
         throw new TypeError("Temporal range endpoints must have the same type");
-      return this.monthDayFormatter().formatRangeToParts(
+      this.requireCalendar(PlainMonthDay.calendarContext(end)?.identifier ?? "iso8601", true);
+      return this.monthDayFormatter(
+        PlainMonthDay.calendarContext(start)?.identifier ?? "iso8601",
+      ).formatRangeToParts(
         PlainMonthDay.epochDay(start) * MS_PER_DAY + MS_PER_DAY / 2,
         PlainMonthDay.epochDay(end) * MS_PER_DAY + MS_PER_DAY / 2,
       );
@@ -291,10 +326,10 @@ export class NtsDateTimeFormat<
     if (start instanceof PlainDateTime || end instanceof PlainDateTime) {
       if (!(start instanceof PlainDateTime) || !(end instanceof PlainDateTime))
         throw new TypeError("Temporal range endpoints must have the same type");
-      return this.dateTimeFormatter().formatRangeToParts(
-        PlainDateTime.milliseconds(start),
-        PlainDateTime.milliseconds(end),
-      );
+      this.requireCalendar(PlainDateTime.calendarContext(end)?.identifier ?? "iso8601", false);
+      return this.dateTimeFormatter(
+        PlainDateTime.calendarContext(start)?.identifier ?? "iso8601",
+      ).formatRangeToParts(PlainDateTime.milliseconds(start), PlainDateTime.milliseconds(end));
     }
     if (start instanceof Instant || end instanceof Instant) {
       if (!(start instanceof Instant) || !(end instanceof Instant))
@@ -315,14 +350,17 @@ export class NtsDateTimeFormat<
     if (start instanceof PlainDate || end instanceof PlainDate) {
       if (!(start instanceof PlainDate) || !(end instanceof PlainDate))
         throw new TypeError("Temporal range endpoints must have the same type");
-      return this.dateFormatter().formatRangeToParts(
+      this.requireCalendar(PlainDate.calendarContext(end)?.identifier ?? "iso8601", false);
+      return this.dateFormatter(
+        PlainDate.calendarContext(start)?.identifier ?? "iso8601",
+      ).formatRangeToParts(
         PlainDate.epochDay(start) * MS_PER_DAY + MS_PER_DAY / 2,
         PlainDate.epochDay(end) * MS_PER_DAY + MS_PER_DAY / 2,
       );
     }
-    const first = this.#number(start);
-    const last = this.#number(end);
-    return formatter.formatRangeToParts(clip(first), clip(last));
+    if (start instanceof ZonedDateTime || end instanceof ZonedDateTime)
+      throw new TypeError("Zoned date/time values require toLocaleString");
+    return this.#defaultFormatter().formatRangeToParts(clip(first), clip(last));
   }
   resolvedOptions(): Intl.ResolvedDateTimeFormatOptions {
     const config = this.#configuration;

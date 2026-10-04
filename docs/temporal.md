@@ -16,6 +16,12 @@ objects. Providers supply locale/calendar/time-zone data, text formatting,
 string comparison and UTF-16 field spans. ISO arithmetic and parsing remain
 independent of ICU.
 
+Chinese/Korean modern year tables are generated in TypeScript from licensed,
+pinned ICU4X data. No ICU4X execution engine or Rust dependency is imported.
+The calendar context is shared by all calendar-bearing Temporal values and
+relative Duration operations. Intl formatting must consume consistent calendar
+fields; its current independent ICU calendar calculation remains an open gap.
+
 Best architecture, clean code and performance are standing requirements.
 Use the pinned TypeScript library contracts directly, private instance state,
 managed provider handles, configuration outside hot loops and reusable typed

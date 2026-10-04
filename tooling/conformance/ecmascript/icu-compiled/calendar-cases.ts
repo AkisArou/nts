@@ -4,6 +4,14 @@ function isoDay(year: number, month: number, day: number): number {
   return epochDays(year, month - 1, day);
 }
 
+// Public cases from Intl Temporal PlainDate month-code/day-boundary Test262,
+// checked through the compiled packed-data cursor as well as the public API.
+export const calendarTableCases = [
+  { calendar: "chinese", day: isoDay(1987, 7, 26), expected: "1987:7:1:M06L" },
+  { calendar: "chinese", day: isoDay(2027, 2, 6), expected: "2027:1:1:M01" },
+  { calendar: "chinese", day: isoDay(2030, 2, 3), expected: "2030:1:1:M01" },
+];
+
 // Fixed data/ABI goldens. Original Test262 remains the public semantic corpus.
 export const calendarCases = [
   {

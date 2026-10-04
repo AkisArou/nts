@@ -1,6 +1,7 @@
 import { IcuCalendar } from "@nts/icu-calendar";
 import { HebrewCalendar } from "../../../../../runtime/ecmascript/src/temporal/hebrew-calendar.ts";
 import { ArithmeticCalendar } from "../../../../../runtime/ecmascript/src/temporal/arithmetic-calendar.ts";
+import { LunisolarTable } from "../../../../../runtime/ecmascript/src/temporal/lunisolar-table.ts";
 import {
   calendarEra,
   calendarEraYear,
@@ -47,6 +48,34 @@ export function invalidDate(identifier: string): boolean {
     Number.isNaN(calendar.estimateEpochDay(year, 99, 1)) &&
     Number.isNaN(calendar.estimateEpochDay(year, 0, 99))
   );
+}
+
+// The compact shared tables deliberately replace inaccurate modern ICU data.
+// Validate their actual compiled representation separately from raw ICU parity.
+export function tableSnapshot(identifier: string, epochDay: number): string {
+  const calendar = new LunisolarTable(identifier);
+  if (!calendar.load(epochDay)) throw new RangeError("Lunisolar table golden unavailable");
+  return (
+    calendar.field(0) +
+    ":" +
+    (calendar.field(1) + 1) +
+    ":" +
+    calendar.field(2) +
+    ":" +
+    calendar.monthCode()
+  );
+}
+
+export function tableRoundTrips(identifier: string): number {
+  const calendar = new LunisolarTable(identifier);
+  const end = calendar.estimateEpochDay(identifier === "chinese" ? 2101 : 2051, 0, 1);
+  if (!Number.isInteger(end)) return -1;
+  for (let day = -25567; day < end; day++) {
+    if (!calendar.load(day)) return day - end;
+    if (calendar.estimateEpochDay(calendar.field(0), calendar.field(1), calendar.field(2)) !== day)
+      return day - end;
+  }
+  return end + 25567;
 }
 
 // ICU4J's Hebrew cache can hang for negative years. The shared arithmetic

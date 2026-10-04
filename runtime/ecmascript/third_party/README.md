@@ -23,3 +23,14 @@ the Unicode copyright/SPDX notice and references `UNICODE-LICENSE`. Only explici
 calendar/week availability and ordered hour-cycle metadata absent from public
 ICU queries are retained. Calendar/week values, names and time-zone data remain
 in the pinned ICU providers.
+
+Chinese and Korean calendar year data derives from
+[ICU4X at fe2b931521a2c3e90846908faeb4fd8ee22efecb](https://github.com/unicode-org/icu4x/tree/fe2b931521a2c3e90846908faeb4fd8ee22efecb/components/calendar/src/cal/east_asian_traditional).
+`lunisolar-sources.json` pins all three source hashes and the full license notice
+in `ICU4X-LICENSE`. `tools/generate-lunisolar-data.ts` validates continuity,
+month lengths and encoding before emitting the shared packed tables. The
+common 1899 boundary row comes from the pinned public ICU 78.3 calendar fields;
+it preserves January 1900 dates before that year's New Year. The tables cover
+Chinese years 1900–2100 and Korean years 1900–2050, with a next-year row for
+boundary validation. Only year data is included; no ICU4X engine or dependency
+is linked into applications.

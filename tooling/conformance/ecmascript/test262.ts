@@ -61,6 +61,24 @@ async function candidate(context: vm.Context): Promise<vm.Module["namespace"]> {
     let source = sources.get(path);
     if (source === undefined) {
       source = stripTypeScriptTypes(readFileSync(path, "utf8"));
+      // Host-only standard-binding projection: supply the environmental
+      // capability as a default argument in the candidate's own test realm.
+      // Keep its actual class, prototype and method bodies. Compiled standard
+      // lowering must pass this argument itself; this is no compiled receipt.
+      if (
+        path.endsWith("/temporal/plain-date.ts") ||
+        path.endsWith("/temporal/plain-date-time.ts") ||
+        path.endsWith("/temporal/plain-year-month.ts") ||
+        path.endsWith("/temporal/plain-month-day.ts") ||
+        path.endsWith("/temporal/zoned-date-time.ts") ||
+        path.endsWith("/temporal/duration.ts") ||
+        path.endsWith("/temporal/relative-calendar.ts") ||
+        path.endsWith("/temporal/date-time-fields.ts")
+      )
+        source = source.replace(
+          /\benvironment\s*=\s*undefined/g,
+          "environment = globalThis.__calendarEnvironment",
+        );
       sources.set(path, source);
     }
     const module = new vm.SourceTextModule(source, { context, identifier: path });
@@ -144,7 +162,7 @@ async function candidate(context: vm.Context): Promise<vm.Module["namespace"]> {
 // Public results retain the candidate's actual private slots and prototype.
 const temporalBinding = `
   (() => {
-    const calendars = new __calendar.CalendarEnvironment(__calendarOpen);
+    globalThis.__calendarEnvironment = new __calendar.CalendarEnvironment(__calendarOpen);
     const registry = __timeZoneOpen ? new __time.TimeZoneRegistry(__intlData) : undefined;
     const source = registry ? new __time.TimeZoneContext(registry, __timeZoneOpen) : undefined;
     const now = new __temporal.NtsNow(__clockNanoseconds, () => registry ? registry.primaryIdentifier(registry.defaultIdentifier()) : __defaultZoneIdentifier(), source);
@@ -157,14 +175,6 @@ const temporalBinding = `
       plainTimeISO(zone = undefined) { return now.plainTimeISO(zone); },
     };
     const RawZonedDateTime = __temporal.ZonedDateTime;
-    const RawPlainDate = __temporal.PlainDate;
-    function PlainDate(isoYear, isoMonth, isoDay, calendar = "iso8601") {
-      if (!new.target) throw new TypeError("PlainDate requires new");
-      return Reflect.construct(RawPlainDate, [isoYear, isoMonth, isoDay, calendar, calendars], new.target);
-    }
-    PlainDate.prototype = RawPlainDate.prototype;
-    PlainDate.from = { from(value, options = undefined) { return RawPlainDate.from(value, options, calendars); } }.from;
-    PlainDate.compare = { compare(one, two) { return RawPlainDate.compare(one, two, calendars); } }.compare;
     function ZonedDateTime(epochNanoseconds, timeZone, calendar = "iso8601") {
       if (!new.target) throw new TypeError("ZonedDateTime requires new");
       if (typeof epochNanoseconds === "number") throw new TypeError("Epoch nanoseconds must be a BigInt");
@@ -175,15 +185,7 @@ const temporalBinding = `
     ZonedDateTime.prototype = RawZonedDateTime.prototype;
     ZonedDateTime.from = { from(value, options = undefined) { return RawZonedDateTime.from(value, options, source); } }.from;
     ZonedDateTime.compare = { compare(one, two) { return RawZonedDateTime.compare(one, two, source); } }.compare;
-    globalThis.Temporal = { ...__temporal, PlainDate, ZonedDateTime, Now };
-    const dateCalendar = RawPlainDate.prototype.withCalendar;
-    RawPlainDate.prototype.withCalendar = { withCalendar(calendar) { return dateCalendar.call(this, calendar, calendars); } }.withCalendar;
-    const dateEquals = RawPlainDate.prototype.equals;
-    RawPlainDate.prototype.equals = { equals(other) { return dateEquals.call(this, other, calendars); } }.equals;
-    const dateUntil = RawPlainDate.prototype.until;
-    RawPlainDate.prototype.until = { until(other, options = undefined) { return dateUntil.call(this, other, options, calendars); } }.until;
-    const dateSince = RawPlainDate.prototype.since;
-    RawPlainDate.prototype.since = { since(other, options = undefined) { return dateSince.call(this, other, options, calendars); } }.since;
+    globalThis.Temporal = { ...__temporal, ZonedDateTime, Now };
     const instantString = Temporal.Instant.prototype.toString;
     Temporal.Instant.prototype.toString = { toString(options = undefined) { return instantString.call(this, options, source); } }.toString;
     const instantZoned = Temporal.Instant.prototype.toZonedDateTimeISO;

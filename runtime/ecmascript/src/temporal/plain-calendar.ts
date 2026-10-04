@@ -2,7 +2,7 @@ import { PlainDate } from "./plain-date.ts";
 import { PlainDateTime } from "./plain-date-time.ts";
 import { PlainYearMonth } from "./plain-year-month.ts";
 import { PlainMonthDay } from "./plain-month-day.ts";
-import { calendarIdentifierFromString, requireISOCalendarString } from "./calendar-id.ts";
+import { calendarIdentifierFromString } from "./calendar-id.ts";
 import { ZonedDateTime } from "./zoned-date-time.ts";
 import type { CalendarContext } from "./calendar-context.ts";
 import { resolveCalendar } from "./calendar-environment.ts";
@@ -21,22 +21,23 @@ export function isPlainCalendar(value: object): boolean {
     value instanceof PlainMonthDay
   );
 }
-export function requireISOCalendarLike(value: Temporal.CalendarLike): void {
-  if (typeof value === "string") requireISOCalendarString(value);
-  else if (value instanceof PlainDate) {
-    if (PlainDate.calendarContext(value) !== undefined)
-      throw new RangeError("Non-ISO dates require calendar integration");
-  } else if (!isPlainCalendar(value))
-    throw new TypeError("Calendar requires a string or Temporal date");
-}
-
 export function resolveCalendarLike(
   value: Temporal.CalendarLike,
   environment: CalendarEnvironment | undefined = undefined,
 ): CalendarContext | undefined {
   if (typeof value === "string")
     return resolveCalendar(calendarIdentifierFromString(value), environment);
-  if (value instanceof PlainDate) return PlainDate.calendarContext(value);
   if (!isPlainCalendar(value)) throw new TypeError("Calendar requires a string or Temporal date");
+  return calendarContextFor(value);
+}
+
+// Internal-slot extraction for a known Temporal object. Unlike field-bag
+// preparation, this never observes an overridden public calendarId getter.
+export function calendarContextFor(value: object): CalendarContext | undefined {
+  if (value instanceof ZonedDateTime) return ZonedDateTime.calendarContext(value);
+  if (value instanceof PlainDate) return PlainDate.calendarContext(value);
+  if (value instanceof PlainDateTime) return PlainDateTime.calendarContext(value);
+  if (value instanceof PlainYearMonth) return PlainYearMonth.calendarContext(value);
+  if (value instanceof PlainMonthDay) return PlainMonthDay.calendarContext(value);
   return undefined;
 }

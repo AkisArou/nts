@@ -1,0 +1,18 @@
+{
+  "repository": "https://github.com/unicode-org/icu4x",
+  "revision": "fe2b931521a2c3e90846908faeb4fd8ee22efecb",
+  "directory": "components/calendar/src/cal/east_asian_traditional",
+  "sources": {
+    "qing_data.rs": "e8097d4ba4651863644ef2ed7247d57640e949eb2c2ef207a2d8ebf9b5c4f69e",
+    "china_data.rs": "46e9ad101ef4501765524d5f5ea65ec1c87a1c9f1bec00cb66e7b57ad49ef9a5",
+    "korea_data.rs": "109acbffe1cf64ce20bf483752f5c1d2f6b8cae07b6a75e17e79e0f2a20eb69f"
+  },
+  "licenseSha256": "f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2",
+  "boundary": {
+    "source": "Public ICU4J Calendar fields, ChineseCalendar and DangiCalendar, version 78.3",
+    "icuVersion": "78.3",
+    "year": 1899,
+    "newYear": [1899, 2, 10],
+    "monthLengths": [30, 29, 30, 29, 30, 29, 30, 30, 29, 30, 29, 30]
+  }
+}

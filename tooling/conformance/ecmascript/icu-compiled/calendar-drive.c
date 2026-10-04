@@ -45,5 +45,23 @@ int main(void) {
     nts_release((NtsHeader *)id);
 #endif
   }
+  for (size_t index = 0; index < sizeof(calendar_table_cases) / sizeof(calendar_table_cases[0]); index++) {
+    const CalendarCase *sample = &calendar_table_cases[index];
+    NtsString *id = nts_string_from_required_cstring(sample->calendar);
+    text(tableSnapshot(id, sample->day), sample->expected);
+#ifdef NTS_PROVIDER_RC
+    nts_release((NtsHeader *)id);
+#endif
+  }
+  for (int index = 0; index < 2; index++) {
+    const char *name = index == 0 ? "chinese" : "dangi";
+    NtsString *id = nts_string_from_required_cstring(name);
+    const double count = tableRoundTrips(id);
+    if (count != (index == 0 ? 73442 : 55193)) abort();
+    printf("%s:table-roundtrips:%.0f\n", name, count);
+#ifdef NTS_PROVIDER_RC
+    nts_release((NtsHeader *)id);
+#endif
+  }
   return 0;
 }

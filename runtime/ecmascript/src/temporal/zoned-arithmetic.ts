@@ -7,7 +7,9 @@ import {
   roundNanoseconds,
   unitNanoseconds,
 } from "./exact.ts";
-import { addISODate, checkDateTime } from "./iso-date.ts";
+import { checkDateTime } from "./iso-date.ts";
+import { addDate } from "./calendar-date.ts";
+import type { CalendarContext } from "./calendar-context.ts";
 import {
   localNanoseconds,
   offsetNanoseconds,
@@ -15,10 +17,10 @@ import {
   startOfDay,
 } from "./zoned-time.ts";
 
-// ISO date units advance wall dates; time units advance exact elapsed time.
+// Calendar date units advance wall dates; time units advance exact elapsed time.
 // The caller supplies normalized fields, so no options, public property reads,
 // Duration construction or calendar-object dependency belongs in this kernel.
-export function addISOZonedDateTime(
+export function addZonedDateTime(
   epoch: bigint,
   zone: TimeZoneRules,
   years: number,
@@ -27,18 +29,19 @@ export function addISOZonedDateTime(
   days: number,
   time: bigint,
   overflow: NonNullable<Temporal.OverflowOptions["overflow"]>,
+  calendar: CalendarContext | undefined = undefined,
 ): bigint {
   checkInstant(epoch);
   if (years === 0 && months === 0 && weeks === 0 && days === 0) return checkInstant(epoch + time);
   const local = localNanoseconds(epoch, zone);
   const localDay = floorDivide(local, NS_PER_DAY);
   const localTime = Number(local - localDay * NS_PER_DAY);
-  const addedDay = addISODate(Number(localDay), years, months, weeks, days, overflow);
+  const addedDay = addDate(Number(localDay), years, months, weeks, days, overflow, calendar);
   checkDateTime(addedDay, localTime);
   return checkInstant(resolveLocalDateTime(addedDay, localTime, zone, "compatible") + time);
 }
 
-export function roundISOZonedDateTime(
+export function roundZonedDateTime(
   epoch: bigint,
   zone: TimeZoneRules,
   unit: number,

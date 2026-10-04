@@ -60,15 +60,18 @@ and artifact-size evidence before becoming another provider.
    supportedValuesOf and primary time-zone identities now share cached TS
    semantics and pinned public ICU data primitives. Calendar data now has
    public C/JVM cursors, exact shared arithmetic for eleven non-ISO calendars,
-   and validated month-boundary snapshots with a two-year cache. Public value
-   integration, full-range astronomical data and runtime host binding remain open.
+   and validated month-boundary snapshots with a two-year cache. All calendar
+   value classes now use these contexts. Chinese/Korean year data is generated
+   from licensed, pinned tables. Actual compiled strategy/value acceptance and
+   runtime host binding remain open.
 3. **NumberFormat and DateTimeFormat.** Complete exact public inputs, bound
    formatting, resolved options, ranges, parts and Temporal date/time inputs.
    NumberFormat's shared semantics and C/JVM primitives exist; compiled public
    acceptance remains open. DateTimeFormat pattern metadata, basic matching,
    construction, single/range formatting and UTF-16 parts exist on both providers.
-   Instant and all ISO plain Temporal types are integrated; non-ISO calendar
-   corrections and compiled public acceptance remain open.
+   Instant and all plain Temporal types are integrated, including calendar
+   identity validation. Shared prepared calendar fields for formatting, range
+   pattern selection and compiled public acceptance remain open.
 4. **Date.** Complete standard constructor/call behavior, local operations,
    setters, localization and the Temporal bridge. Core arithmetic, parsing and
    serialization exist. UTC and multi-component setters distinguish omission
@@ -90,8 +93,10 @@ and artifact-size evidence before becoming another provider.
    conversions. Duration's ISO plain/zoned relative conversion, comparison,
    rounding and totals now reuse these kernels. Temporal.Now uses injected
    nanosecond clock/default-zone capabilities and direct result construction.
-   All eight value classes now localize through shared Intl. Shipping clock/locale
-   bindings, non-ISO calendars and compiled public acceptance remain open.
+   All eight value classes now localize through shared Intl. Non-ISO plain and
+   zoned arithmetic, differences, conversions and Duration-relative operations
+   retain their resolved calendar context. Shipping clock/locale bindings,
+   formatting data consistency and compiled public acceptance remain open.
 6. **PluralRules, ListFormat and DurationFormat.** Implement each service and
    connect localization methods to shared formatters. ListFormat's typed API,
    iterable validation, locale templates, contextual Spanish/Hebrew rules and
@@ -182,30 +187,37 @@ BigInt domain.
   Parts scratch is created lazily and reused; output arrays have their exact
   size. Interval formatters/calendars are created lazily; identity fallback keeps
   the selected single-date pattern, and shared code partitions endpoint sources.
-  Instant and all ISO plain Temporal formatting reads immutable private slots;
+  Instant and all plain Temporal formatting reads immutable private slots;
   plain values ignore the formatter's time zone and bypass Date's time clipping.
   Providers also expose time-zone name enumeration, canonical/default
   names; shared code parses and normalizes Intl offset identifiers, retains named
-  identifier casing and excludes ICU's non-IANA compatibility zones. Other
-  non-ISO Temporal inputs remain open. Primary identity has a separate cached
-  query; formatting retains the specified named identifier.
+  identifier casing and excludes ICU's non-IANA compatibility zones. Full dates
+  allow ISO inputs or matching calendars; partial dates require matching
+  calendars. Numeric range inputs are converted once in argument order before
+  type matching or clipping. Primary identity has a separate cached query;
+  formatting retains the specified named identifier. ICU's independent calendar
+  fields still disagree with corrected Chinese data and era rules; the shared
+  prepared-field formatting path remains required.
 - **Temporal:** one ISO scanner supplies Instant and PlainTime parsing, including
   annotation syntax, offsets, leap seconds and ambiguous bare-time rejection.
   PlainTime owns one exact within-day nanosecond Number; Duration owns validated
   fields and cached normalized BigInt time. Precision and rounding helpers use
   scalar state and read each option once. PlainDate, PlainYearMonth and
   PlainMonthDay each own one epoch-day scalar; PlainDateTime adds one exact
-  nanosecond-of-day scalar. Getters allocate no intermediate date/time records.
+  nanosecond-of-day scalar. Non-ISO values additionally retain their resolved
+  calendar context; ISO values require no context. Getters allocate no
+  intermediate date/time records.
   Bounded estimates for date differences avoid searches over years/months/days.
   Calendar rounding compares exact distances to actual adjacent boundaries and
-  bubbles expanded smaller units; Duration's plain ISO relative rounding shares
-  that implementation. ISO relative totals use exact calendar fractions with
+  bubbles expanded smaller units; Duration's plain relative rounding shares
+  that implementation. Relative totals use exact calendar fractions with
   one binary64 rounding. Scalar calendar/field helpers have no class dependency;
   class identity checks and Duration construction live in separate modules.
   Zoned relative arithmetic reuses those kernels and keeps date days separate
   from elapsed hours. Field preparation reads each property once in the specified
-  order and constructs only the resulting plain or zoned value. Non-ISO relative
-  arithmetic remains open.
+  order and constructs only the resulting plain or zoned value. YearMonth keeps
+  the first calendar day of its reference month. MonthDay resolves deterministic
+  reference dates, including the specified Chinese/Korean leap-month table.
 - **Temporal time zones:** shared exact local-time resolution, offset matching,
   gap/fold disambiguation, missing-midnight start of day and exclusive transition
   queries. Extended local milliseconds stay exact in Number; sub-millisecond
@@ -216,11 +228,12 @@ BigInt domain.
   primary identity. Each handle lazily caches two
   adjacent UTC offset periods, including their local gap/fold windows. Nearby
   timestamps reuse public rule data; arbitrary timestamps cannot grow the cache.
-  The ISO value class retains the resolved snapshot and derives local day,
+  The value class retains the resolved zone snapshot and derives local day,
   time and offset scalars once. Its getters do not query the provider or
   allocate records. Zoned differences keep calendar days separate from elapsed
   hours, compare exact boundary distances and use bounded date corrections.
-  Non-ISO calendars and compiled public acceptance remain open. Shared
+  Its calendar context survives arithmetic, rounding, zone changes, transitions
+  and plain conversions. Compiled public acceptance remains open. Shared
   localization now uses the same Intl formatter as other Temporal values.
 - **Date:** mutable private state and scalar UTC/local operations. Static UTC
   and multi-component setters use standard Parameters tuples to preserve the
@@ -301,43 +314,86 @@ Now also unblocks a PlainDateTime return-type case and a global key-presence
 case. Localization and non-ISO semantics remain incomplete despite weak tests
 that only require a string result. DateTimeFormat was 191/244 at that checkpoint.
 
-The calendar foundation now supplies one shared arithmetic implementation for
+The calendar foundation supplies one shared arithmetic implementation for
 Gregorian variants, Coptic/Ethiopic, Indian, tabular Hijri and Hebrew calendars.
-Reusable cursors keep year boundaries and allocate no per-date object during
+Reusable cursors retain year boundaries and allocate no per-date object during
 load/conversion. Hebrew uses Euclidean arithmetic through negative years;
 ICU4J's Hebrew cache hangs in that range, as confirmed by the retained stack at
-target/ecmascript/audit/calendar-data/jvm-live-stack.log.
-The raw C/JVM Hebrew primitives now decline dates before year 1, before
-entering that cache; shared arithmetic handles the range. Direct C sanitizer
-and JVM verification witnesses check negative-year rejection and the valid epoch.
-ICU is still used for astronomical/table data through public APIs; no internal ICU methods or JNI
-are involved. The provider reverse conversion is explicitly an estimate.
-CalendarYear validates complete month topology before caching it; CalendarContext
-retains two immutable years, so subsequent reads do not query the provider.
-Era rules and month-code syntax/validation remain shared. These foundations
-are not yet connected to the public non-ISO Temporal values.
+target/ecmascript/audit/calendar-data/jvm-live-stack.log. The raw C/JVM Hebrew
+primitives decline dates before year 1 before entering that cache; shared
+arithmetic handles the range. Native sanitizer and verified JVM witnesses cover
+negative-year rejection and the valid epoch. Provider reverse conversion remains
+an estimate; CalendarYear validates complete topology before caching it.
 
-The actual calendar data witness executes on C, C/RC, LLVM, LLVM/RC and JVM.
-Each configuration passes 21 fixed goldens and 825,000 modern round trips across
-15 calendars. The eleven shared arithmetic calendars also match all eight ICU
-fields and month codes for 605,000 modern dates per configuration. Their sampled
-full-range conversions pass. The full-range gate deliberately remains red:
-Chinese/Dangi first disagree at day -99,400,000, and Umm al-Qura needs the
-specified tabular fallback outside its data range. Each backend retains its
-output as result.log in the corresponding *-calendar directory; the combined
-audit is target/ecmascript/audit/calendar-data/final-all-backends.log.
-Native runs check ASan/UBSan; leak checking applies to RC because NoGC deliberately
-retains its bump-allocated heap. This is data/ABI acceptance, not public Test262
-or complete calendar-range acceptance.
+All five calendar-bearing Temporal classes retain resolved contexts for fields,
+eras, field replacement, arithmetic, differences, rounding and annotations.
+Conversions use intrinsic contexts, including when subclasses override public
+calendar getters. ZonedDateTime retains its context across zone changes and
+transition results. Duration comparison, rounding and totals use the relative
+plain/zoned value's context. ISO values keep their direct scalar path without a
+calendar context or provider allocation. YearMonth reference dates identify the
+first day of the actual calendar month. MonthDay uses the specified deterministic
+reference search and Chinese/Korean reference-year table. ISO month-day strings
+validate their parsed date but discard its year before checking the value range.
 
-The actual calendar-topology fixture typechecks but is currently refused on C
-and JVM: CalendarPrimitive.load/estimateEpochDay cannot dispatch to the implicit
-class implementations. This is the structural-conformance work already owned
-by the compiler lane. No implements clause or erased adapter was introduced to
-bypass it. Logs are calendar-data/topology-{c,jvm}.log in the audit directory.
-The month-code refactor reran all 4,603 original builtin Temporal cases: 4,567
-pass, with all verdicts and failure reasons unchanged. Calendar rules follow the
-[specified era/month-code algorithms](https://tc39.es/proposal-intl-era-monthcode/).
+CalendarEnvironment lazily resolves one context per canonical identity. Values
+retain contexts, which do not reference the environment. Large month additions
+and differences use exact serial coordinates; small additions use two cached
+years without initializing the lunisolar month index. Year addition preserves
+month codes before counting actual months. Difference comparisons retain the
+requested day until the overshoot decision, then apply overflow. The renamed
+date-time-duration, relative-calendar and zoned-arithmetic kernels express their
+calendar support directly and keep the scalar ISO path.
+
+Pinned ICU4J 78.3 has independently reproduced Chinese defects in the 1987
+leap-month code and 2027/2030 New Year boundaries. Chinese/Korean modern years
+now use generated ICU4X data at fe2b931521a2c3e90846908faeb4fd8ee22efecb under
+Unicode-3.0. This imports data only, with no ICU4X engine or Rust dependency.
+The TS generator verifies source/license hashes, month counts, packed fields,
+contiguous boundaries and the 1899 public-ICU boundary row. Its --check compares
+the generated file exactly. Qing rows are shared, with separate modern China
+and Korea rows and next-year sentinels: 1,372 packed payload bytes in total.
+That is data size, not a linked application measurement.
+
+Umm al-Qura selects tabular civil arithmetic outside years 1300–1600. Chinese
+and Korean calendars use continuous, bounded 19-year approximations outside
+their modern data ranges, aligned with Gregorian years to avoid large-range
+drift. Supplementary checks pass 1,014 cursor, topology and month-coordinate
+samples per strategy, including range endpoints and joins. Actual compiled
+full-range strategy/value acceptance remains required.
+
+All 2,029 original Intl Temporal cases pass in the completed host rerun
+intl-temporal-calendar-regression-test262.jsonl. Scoped results include 976/976
+PlainDate/PlainDateTime, 327/327 YearMonth, 90/90 MonthDay, 583/583 ZonedDateTime
+and 21/21 Duration. This exercises the candidate classes and original test
+source, with environmental capabilities supplied in each test realm. It remains
+supplementary host evidence, not compiled standard-binding acceptance.
+The full builtin Temporal rerun passes 4,567/4,603, with every verdict and failure
+reason unchanged from the baseline. Receipts are temporal-calendar-regression-
+test262.* and calendar-data/calendar-regression-comparison.json. The two ISO
+MonthDay string regressions discovered during integration were fixed before
+this completed rerun. Strict runtime and fixture typechecking also passes.
+
+The actual data witness executes on C, C/RC, LLVM, LLVM/RC and verified JVM.
+Each configuration passes the three corrected Chinese goldens and 128,635
+Chinese/Korean table round trips, in addition to 21 raw-provider goldens,
+825,000 modern raw round trips and 605,000 modern arithmetic/provider field
+comparisons across 15 calendars. Native runs check ASan/UBSan; leak checking
+applies to RC because NoGC retains its bump-allocated heap. The raw-provider
+full-range gate deliberately remains red: Chinese/Dangi first disagree at day
+-99,400,000, and Umm al-Qura requires its shared tabular fallback. Per-backend
+result.log files retain these failures. The combined receipt is
+target/ecmascript/audit/calendar-data/pinned-tables-all-backends.log. This is
+scoped data/ABI acceptance, not complete calendar-range or public acceptance.
+
+Actual calendar-topology and value/context fixtures typecheck but shipping C
+and JVM emission still refuses implicit CalendarPrimitive implementation bodies,
+alongside canonical public Temporal unions and structural/generic dispatch.
+Worker B owns that compiler boundary. No implements clause or erased adapter
+bypasses it. Exit zero plus partial artifacts is not acceptance. Renewed logs
+are topology-tables-{c,jvm}.log and values-{c,jvm}.log in the calendar-data audit
+directory. The host value fixture verifies Chinese conversions, Hebrew leap
+MonthDay, a 383-day relative year and zoned calendar-month differences.
 
 Shared localization now connects Instant, Duration, all five plain classes,
 ZonedDateTime and Date's three locale methods to the existing Intl algorithms.
@@ -352,11 +408,15 @@ Dates return their specified string before reading locales/options. Intl-absent
 Temporal methods use the specified ordinary lexical formatting path.
 
 All 56 original builtin Temporal locale tests pass with and without Intl.
-The full builtin Temporal run passes 4,567/4,603, fixing 16 cases with no
-regressions; 35 retained failures concern excluded metadata and one requires
-standard Instant constructor conversion. The Intl-specific locale slice passes
-69/97; its 28 failures require non-ISO calendar integration. Date now passes
-396/594 and DateTimeFormat 192/244. DurationFormat remains 101/110.
+The builtin run retains 35 excluded metadata failures and one standard Instant
+constructor-conversion gap. All 97 Intl-specific locale cases pass within the
+complete 2,029-case rerun. Date's latest environment/slot checkpoint is 543/594;
+DurationFormat remains 101/110. DateTimeFormat now passes 217/244, including the
+two corrected mixed-range conversion-order cases. That scoped result improves
+215/244 without regressing a previously passing case; receipts are
+date-time-format-calendar-regression-test262.*. Its remaining supported gaps
+include Chinese field-data consistency, era labels, same-day datetime range
+sharing and the pinned hanidec pattern's AM/PM spacing.
 The host adapter binds Date localization to the shared formatter too, so the
 original Date/Temporal comparison tests use the same algorithms and pinned data.
 It does not normalize output or compare shared ICU text to Node's separate
@@ -387,7 +447,21 @@ full Intl checkpoint gives 256/2,029; this is a combined scope result rather
 than another full run. Non-ISO calendar construction, conversion and field
 validation still account for its retained failures. Original rows and reasons
 remain in temporal-localization-all-intl-test262.jsonl and
-zoned-intl-edge-test262.jsonl under target/ecmascript/icu-check.
+zoned-intl-edge-test262.jsonl under target/ecmascript/icu-check. This historical
+partial result is superseded by the complete 2,029/2,029 calendar rerun above.
+
+DateTimeFormat's next semantic step is a shared calendar-field and range-pattern
+path. A public prepared-Calendar probe preserves corrected fields for single
+dates on ICU4C and ICU4J, but ICU4C's interval formatter clones those fields back
+into its own calendar type. The retained probes are under
+target/ecmascript/audit/date-fields; they are not production adapters or accepted
+compiled public witnesses. The implementation must prepare calendar fields in
+TS, select/split public interval-pattern data in shared code and reuse provider
+text/span buffers for those prepared fields. Both single and range formatting
+must use the same calendar source. Private ICU hooks, a duplicate native/JVM
+calendar engine, shifted surrogate timestamps and localized-output scraping
+are not acceptable shortcuts. Pattern selection and formatter construction
+belong outside hot loops; range scratch and immutable year caches stay bounded.
 
 The compiled fixture compares cached and raw ICU offsets across all 446 primary
 zones and every one of 42,806 transitions from 1800 through 2099, including

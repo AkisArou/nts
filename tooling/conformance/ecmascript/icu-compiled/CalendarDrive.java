@@ -25,5 +25,15 @@ public final class CalendarDrive {
                     || !nts.gen.Program.invalidDate(id)) throw new AssertionError(id);
             System.out.println(id + ":roundtrips:55000:invalid:true:extended:" + (extended < 0 ? (int) extended : 0));
         }
+        for (CalendarCases.Case sample : CalendarCases.TABLE_CASES) {
+            String text = nts.gen.Program.tableSnapshot(sample.calendar, sample.day);
+            if (!text.equals(sample.expected)) throw new AssertionError(text);
+            System.out.println(text);
+        }
+        for (String id : new String[] {"chinese", "dangi"}) {
+            double count = nts.gen.Program.tableRoundTrips(id);
+            if (count != (id.equals("chinese") ? 73442 : 55193)) throw new AssertionError(id);
+            System.out.println(id + ":table-roundtrips:" + (int) count);
+        }
     }
 }

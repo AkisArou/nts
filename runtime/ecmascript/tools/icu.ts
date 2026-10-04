@@ -15,6 +15,7 @@ import { resolve } from "node:path";
 import {
   calendarCases,
   calendarIdentifiers,
+  calendarTableCases,
 } from "../../../tooling/conformance/ecmascript/icu-compiled/calendar-cases.ts";
 
 const root = resolve(import.meta.dirname, "../../..");
@@ -92,6 +93,8 @@ function hash(bytes: Uint8Array): string {
 }
 
 run(process.execPath, [resolve(provider, "../../tools/generate-locale-preferences.ts"), "--check"]);
+if (calendar)
+  run(process.execPath, [resolve(provider, "../../tools/generate-lunisolar-data.ts"), "--check"]);
 
 // Read the same exact Maven pin that the ordinary NTS dependency resolver can
 // consume. A corrupt cached jar fails, and an unverified download is never used.
@@ -161,6 +164,12 @@ if (calendar) {
           `    new Case(${JSON.stringify(sample.calendar)}, ${sample.day}, ${JSON.stringify(sample.expected)}),`,
       ),
       "  };",
+      "  static final Case[] TABLE_CASES = {",
+      ...calendarTableCases.map(
+        (sample) =>
+          `    new Case(${JSON.stringify(sample.calendar)}, ${sample.day}, ${JSON.stringify(sample.expected)}),`,
+      ),
+      "  };",
       "  static final String[] IDS = {" +
         calendarIdentifiers.map((id) => JSON.stringify(id)).join(",") +
         "};",
@@ -198,6 +207,12 @@ if (calendar) {
       "typedef struct { const char *calendar; double day; const char *expected; } CalendarCase;",
       "static const CalendarCase calendar_cases[] = {",
       ...calendarCases.map(
+        (sample) =>
+          `  {${JSON.stringify(sample.calendar)}, ${sample.day}, ${JSON.stringify(sample.expected)}},`,
+      ),
+      "};",
+      "static const CalendarCase calendar_table_cases[] = {",
+      ...calendarTableCases.map(
         (sample) =>
           `  {${JSON.stringify(sample.calendar)}, ${sample.day}, ${JSON.stringify(sample.expected)}},`,
       ),
@@ -442,7 +457,8 @@ if (duration)
 const extendedFailures: { calendar: string; firstMismatchDay: number }[] = [];
 if (calendar) {
   const rows = jvmResult.split("\n");
-  if (rows.length !== calendarCases.length + calendarIdentifiers.length)
+  const tableOffset = calendarCases.length + calendarIdentifiers.length;
+  if (rows.length !== tableOffset + calendarTableCases.length + 2)
     throw new Error("Calendar witness omitted a result");
   for (let index = 0; index < calendarCases.length; index++)
     if (rows[index] !== calendarCases[index]!.expected)
@@ -461,6 +477,14 @@ if (calendar) {
         firstMismatchDay: -100000000 + (-failure - 1) * 200000,
       });
   }
+  for (let index = 0; index < calendarTableCases.length; index++)
+    if (rows[tableOffset + index] !== calendarTableCases[index]!.expected)
+      throw new Error("Lunisolar table golden mismatch at " + index);
+  if (
+    rows[tableOffset + calendarTableCases.length] !== "chinese:table-roundtrips:73442" ||
+    rows[tableOffset + calendarTableCases.length + 1] !== "dangi:table-roundtrips:55193"
+  )
+    throw new Error("Lunisolar table coverage mismatch");
   // Fixed goldens and modern-day round trips are checked above and in the
   // drivers. Keep the wider failures in the C/JVM parity result, then fail the
   // full-range gate below; agreement on a failure is not acceptance.
@@ -495,6 +519,8 @@ console.log(
       ? {
           calendarData: true,
           goldenCases: calendarCases.length,
+          lunisolarTableGoldenCases: calendarTableCases.length,
+          lunisolarTableRoundTripsPerBackend: 73442 + 55193,
           modernRoundTripsPerBackend: calendarIdentifiers.length * 55000,
           hebrewSharedAgreementDaysPerBackend: 55000,
           arithmeticSharedAgreementDaysPerBackend: 550000,

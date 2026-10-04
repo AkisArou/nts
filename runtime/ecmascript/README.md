@@ -12,10 +12,17 @@ compile under NTS's typed object model. No WeakMap is needed for these values.
 
 Non-ISO calendar foundations now include shared arithmetic, era/month-code
 rules, validated year snapshots and a bounded cache, with public ICU C/JVM data
-cursors for the remaining calendars. The data witness passes modern checks on
-all five backend/memory configurations. Full-range Chinese/Dangi/Umm al-Qura
-data and public value integration remain open; `--calendar` retains those
-failures instead of claiming complete conformance.
+cursors for the remaining calendars. All five calendar-bearing values and
+Duration-relative operations use resolved contexts for non-ISO fields,
+arithmetic, differences and conversions. The complete original Intl Temporal
+host suite passes 2,029/2,029. Licensed, pinned Chinese/Korean year tables fix
+independently reproduced ICU data defects; their TS generator verifies hashes
+and continuity. The compiled table witness passes corrected goldens and 128,635
+round trips on every backend/memory configuration. Bounded full-range strategies
+and exact month coordinates pass supplementary checks; their actual compiled
+strategy/value acceptance remains open. `--calendar` retains three raw-provider
+full-range failures. DateTimeFormat still needs calendar fields consistent with
+these corrected tables; its independent ICU formatting data has a known mismatch.
 
 Intl number options now normalize in shared TypeScript and produce the same ICU
 configuration on C and JVM. Currency precision uses pinned provider data;
@@ -49,13 +56,13 @@ witness passes all five configurations; the public Locale constructor and result
 records still have compiler refusals. Original Locale Test262 remains 128/168.
 Temporal now shares exact local-time resolution, gap/fold and offset selection,
 start-of-day and transition queries. Instant has an original Test262 host result
-of 461/465; the ISO ZonedDateTime value class is at 895/901, including all original
+of 461/465; the ZonedDateTime value class is at 895/901, including all original
 field replacement and difference tests. Bounded shared caches retain eight named
 handles and two adjacent offset periods per handle. Resolved identifiers retain
 both named spelling and IANA primary identity, including Factory. ISO zoned
 date addition and rounding now handle variable days and preserve fold offsets. The cache matches public
 ICU across all 446 primary zones in the earlier five-configuration checkpoint.
-Duration's ISO plain/zoned relative comparison, rounding and totals now share
+Duration's plain/zoned relative comparison, rounding and totals now share
 those kernels. Its original host result is 538/540, including every comparison,
 rounding and total case; two metadata failures remain visible.
 Removing class `implements` checks exposes a compiler dependency in structural
@@ -68,19 +75,20 @@ Shared localization now connects all eight Temporal value classes and the three
 Date locale methods to Intl through immutable slots. It opens only the selected
 formatter and preserves the specified fallback when Intl is absent. All 56
 original builtin Temporal locale cases pass both with and without Intl; the
-Intl-specific locale slice passes 69/97, retaining non-ISO calendar cases.
-The full builtin Temporal host result is 4,567/4,603, with no regressions in this
-localization change. Date is at 543/594 and DateTimeFormat at 192/244. Date's
+Intl-specific locale slice now passes 97/97 within the complete
+2,029/2,029 Intl Temporal checkpoint above.
+The full builtin Temporal host result is 4,567/4,603, with all verdicts and failure
+reasons unchanged in the calendar integration. Date is at 543/594 and
+DateTimeFormat at 217/244. Date's
 environment/slot follow-up fixes 149 original cases and retains two new excluded
 descriptor failures; its full compiled state witness remains refused. The actual
 C/JVM localization witness typechecks but retains compiler refusals for canonical
-unions and structural dispatch. Shipping clock/locale bindings, non-ISO calendars,
+unions and structural dispatch. Shipping clock/locale bindings, calendar formatting,
 complete standard bindings and public conformance remain in progress.
-The separate full Intl Temporal checkpoint exposes the calendar work across
-2,029 cases. Two further ISO zone fixes skip unchanged-offset rule transitions
-and round repeated dates to the first day boundaries; the scoped ZonedDateTime
-reruns have no regressions. Combined host results pass 256/2,029 in that Intl
-suite and retain every failure.
+Shared zone fixes skip unchanged-offset rule transitions and round repeated
+dates to their first day boundaries. The completed Intl Temporal rerun exercises
+both fixes alongside the new non-ISO operations. Host results remain supplementary;
+shipping standard builtin execution is required for completion.
 
 ## Regexp
 

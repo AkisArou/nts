@@ -1,4 +1,5 @@
-import { addISODate } from "./iso-date.ts";
+import { addDate } from "./calendar-date.ts";
+import type { CalendarContext } from "./calendar-context.ts";
 import { differenceDate } from "./date-duration.ts";
 import { Duration, balanceDuration, timeUnitIndex, unitNanoseconds } from "./duration.ts";
 import { NS_PER_DAY, roundNanoseconds } from "./exact.ts";
@@ -27,13 +28,14 @@ function difference(
   endDay: number,
   endTime: number,
   largest: number,
+  calendar: CalendarContext | undefined,
 ): Duration {
   const time = endTime - startTime;
   if (largest >= 4)
     return balanceDuration(BigInt(endDay - startDay) * NS_PER_DAY + BigInt(time), largest);
   const sign = endDay > startDay ? 1 : endDay < startDay ? -1 : 0;
   const adjustment = sign * time < 0 ? -sign : 0;
-  const date = differenceDate(startDay, endDay + adjustment, largest);
+  const date = differenceDate(startDay, endDay + adjustment, largest, calendar);
   return balanceDuration(
     BigInt(date.days - adjustment) * NS_PER_DAY + BigInt(time),
     3,
@@ -51,6 +53,7 @@ function bubble(
   sign: number,
   largest: number,
   smallest: number,
+  calendar: CalendarContext | undefined,
 ): Duration {
   let result = raw;
   for (let unit = smallest - 1; unit >= largest; unit--) {
@@ -58,7 +61,7 @@ function bubble(
     const years = result.years + (unit === 0 ? sign : 0);
     const months = unit === 0 ? 0 : result.months + (unit === 1 ? sign : 0);
     const weeks = unit <= 1 ? 0 : result.weeks + sign;
-    const day = addISODate(startDay, years, months, weeks, 0, "constrain");
+    const day = addDate(startDay, years, months, weeks, 0, "constrain", calendar);
     const boundary = BigInt(day) * NS_PER_DAY + BigInt(startTime);
     if (sign > 0 ? nudged < boundary : nudged > boundary) break;
     result = new Duration(years, months, weeks);
@@ -68,7 +71,7 @@ function bubble(
 
 // Calendar rounding uses exact distances between actual calendar boundaries.
 // No month-length approximation or floating-point fraction enters the choice.
-export function roundISODateTimeDifference(
+export function roundDateTimeDifference(
   startDay: number,
   startTime: number,
   endDay: number,
@@ -77,8 +80,9 @@ export function roundISODateTimeDifference(
   smallest: number,
   increment: number,
   mode: RoundingMode,
+  calendar: CalendarContext | undefined = undefined,
 ): Duration {
-  const raw = difference(startDay, startTime, endDay, endTime, largest);
+  const raw = difference(startDay, startTime, endDay, endTime, largest, calendar);
   if (raw.blank || (smallest === 9 && increment === 1)) return raw;
   const sign = raw.sign;
   const origin = BigInt(startDay) * NS_PER_DAY + BigInt(startTime);
@@ -95,7 +99,16 @@ export function roundISODateTimeDifference(
     );
     const expanded = sign * Number(rounded / NS_PER_DAY - time / NS_PER_DAY) > 0;
     if (!expanded || largest >= 3) return result;
-    return bubble(startDay, startTime, destination + rounded - time, result, sign, largest, 3);
+    return bubble(
+      startDay,
+      startTime,
+      destination + rounded - time,
+      result,
+      sign,
+      largest,
+      3,
+      calendar,
+    );
   }
   const amount =
     smallest === 0 ? raw.years : smallest === 1 ? raw.months : raw.weeks + Math.trunc(raw.days / 7);
@@ -106,17 +119,18 @@ export function roundISODateTimeDifference(
   let lower =
     years === 0 && months === 0 && weeks === 0
       ? origin
-      : BigInt(addISODate(startDay, years, months, weeks, 0, "constrain")) * NS_PER_DAY +
+      : BigInt(addDate(startDay, years, months, weeks, 0, "constrain", calendar)) * NS_PER_DAY +
         BigInt(startTime);
   let upper =
     BigInt(
-      addISODate(
+      addDate(
         startDay,
         years + (smallest === 0 ? increment * sign : 0),
         months + (smallest === 1 ? increment * sign : 0),
         weeks + (smallest === 2 ? increment * sign : 0),
         0,
         "constrain",
+        calendar,
       ),
     ) *
       NS_PER_DAY +
@@ -134,13 +148,14 @@ export function roundISODateTimeDifference(
     lower = upper;
     upper =
       BigInt(
-        addISODate(
+        addDate(
           startDay,
           years + (smallest === 0 ? increment * sign : 0),
           months + (smallest === 1 ? increment * sign : 0),
           weeks,
           0,
           "constrain",
+          calendar,
         ),
       ) *
         NS_PER_DAY +
@@ -158,5 +173,14 @@ export function roundISODateTimeDifference(
   }
   const result = new Duration(years, months, weeks);
   if (smallest === 2 || (!expanded && !shifted)) return result;
-  return bubble(startDay, startTime, expanded ? upper : lower, result, sign, largest, smallest);
+  return bubble(
+    startDay,
+    startTime,
+    expanded ? upper : lower,
+    result,
+    sign,
+    largest,
+    smallest,
+    calendar,
+  );
 }

@@ -19,11 +19,13 @@ import type { RoundingMode } from "./exact.ts";
 import type { ResolvedTimeZone, TimeZoneSource } from "../time/zone-data.ts";
 import { PlainDate } from "./plain-date.ts";
 import { ZonedDateTime } from "./zoned-date-time.ts";
-import { addISOZonedDateTime } from "./zoned-iso.ts";
-import { roundISOZonedDifference, totalISOZonedDifference } from "./zoned-difference.ts";
-import { checkDateDay, addISODate } from "./iso-date.ts";
-import { checkDateTime, roundISODateTimeDifference } from "./iso-date-time.ts";
-import { relativeDate, relativeISODuration, relativeISOCalendarTotal } from "./relative-iso.ts";
+import { addZonedDateTime } from "./zoned-arithmetic.ts";
+import { roundZonedDifference, totalZonedDifference } from "./zoned-difference.ts";
+import { checkDateDay } from "./iso-date.ts";
+import { addDate } from "./calendar-date.ts";
+import type { CalendarEnvironment } from "./calendar-environment.ts";
+import { checkDateTime, roundDateTimeDifference } from "./date-time-duration.ts";
+import { relativeDate, relativeDuration, relativeCalendarTotal } from "./relative-calendar.ts";
 import { pad } from "../date/format.ts";
 import {
   NS_PER_DAY,
@@ -122,12 +124,13 @@ export class Duration {
     two: Temporal.DurationLike,
     opts: Readonly<Temporal.DurationRelativeToOptions> | undefined = undefined,
     source: TimeZoneSource | undefined = undefined,
+    environment: CalendarEnvironment | undefined = undefined,
   ): number {
     const a = toDuration(one);
     const b = toDuration(two);
     if (opts !== undefined) requireOptions(opts);
     const relativeTo = opts?.relativeTo;
-    const relative = relativeDate(relativeTo, source);
+    const relative = relativeDate(relativeTo, source, environment);
     if (
       a.#years === b.#years &&
       a.#months === b.#months &&
@@ -151,8 +154,9 @@ export class Duration {
     }
     if (relative !== undefined) {
       const day = PlainDate.epochDay(relative);
-      const first = relativeISODuration(day, a.#years, a.#months, a.#weeks, a.#time);
-      const last = relativeISODuration(day, b.#years, b.#months, b.#weeks, b.#time);
+      const calendar = PlainDate.calendarContext(relative);
+      const first = relativeDuration(day, a.#years, a.#months, a.#weeks, a.#time, calendar);
+      const last = relativeDuration(day, b.#years, b.#months, b.#weeks, b.#time, calendar);
       return first < last ? -1 : first > last ? 1 : 0;
     }
     requireFixedDays(a);
@@ -270,6 +274,7 @@ export class Duration {
       | Temporal.PluralizeUnit<"day" | Temporal.TimeUnit>
       | Readonly<Temporal.DurationRoundingOptions>,
     source: TimeZoneSource | undefined = undefined,
+    environment: CalendarEnvironment | undefined = undefined,
   ): Duration {
     const time = this.#time;
     const existingLargest = this.largestUnit();
@@ -285,7 +290,7 @@ export class Duration {
     const largestText = rawLargest === undefined ? "auto" : String(rawLargest);
     const largest = largestText === "auto" ? -1 : durationUnitIndex(largestText);
     const relativeTo = value.relativeTo;
-    const relative = relativeDate(relativeTo, source);
+    const relative = relativeDate(relativeTo, source, environment);
     const increment = roundingIncrement(value.roundingIncrement);
     const rawMode = value.roundingMode;
     const mode = roundingMode(rawMode === undefined ? "halfExpand" : rawMode);
@@ -299,7 +304,7 @@ export class Duration {
     if (increment > 1 && smallest <= 3 && actualLargest !== smallest)
       throw new RangeError("Calendar increments require matching largest and smallest units");
     if (relative instanceof ZonedDateTime)
-      return roundISOZonedDifference(
+      return roundZonedDifference(
         ZonedDateTime.epochNanoseconds(relative),
         this.#zonedEnd(relative),
         ZonedDateTime.rules(relative),
@@ -307,23 +312,26 @@ export class Duration {
         smallest,
         increment,
         mode,
+        ZonedDateTime.calendarContext(relative),
       );
     if (relative !== undefined) {
       const day = PlainDate.epochDay(relative);
+      const calendar = PlainDate.calendarContext(relative);
       const days = floorDivide(time, NS_PER_DAY);
-      const targetDay = addISODate(
+      const targetDay = addDate(
         day,
         this.#years,
         this.#months,
         this.#weeks,
         Number(days),
         "constrain",
+        calendar,
       );
       const targetTime = Number(time - days * NS_PER_DAY);
       if (day === targetDay && targetTime === 0) return new Duration();
       checkDateTime(day, 0);
       checkDateTime(targetDay, targetTime);
-      return roundISODateTimeDifference(
+      return roundDateTimeDifference(
         day,
         0,
         targetDay,
@@ -332,6 +340,7 @@ export class Duration {
         smallest,
         increment,
         mode,
+        calendar,
       );
     }
     requireFixedDays(this, relativeTo);
@@ -342,6 +351,7 @@ export class Duration {
       | Temporal.PluralizeUnit<"day" | Temporal.TimeUnit>
       | Readonly<Temporal.DurationTotalOptions>,
     source: TimeZoneSource | undefined = undefined,
+    environment: CalendarEnvironment | undefined = undefined,
   ): number {
     const time = this.#time;
     if (typeof value === "string") {
@@ -351,20 +361,29 @@ export class Duration {
     }
     requireOptions(value);
     const relativeTo = value.relativeTo;
-    const relative = relativeDate(relativeTo, source);
+    const relative = relativeDate(relativeTo, source, environment);
     const rawUnit = value.unit;
     if (rawUnit === undefined) throw new RangeError("A total unit is required");
     const unit = durationUnitIndex(rawUnit);
     if (relative instanceof ZonedDateTime)
-      return totalISOZonedDifference(
+      return totalZonedDifference(
         ZonedDateTime.epochNanoseconds(relative),
         this.#zonedEnd(relative),
         ZonedDateTime.rules(relative),
         unit,
+        ZonedDateTime.calendarContext(relative),
       );
     if (relative !== undefined) {
       const day = PlainDate.epochDay(relative);
-      const nanoseconds = relativeISODuration(day, this.#years, this.#months, this.#weeks, time);
+      const calendar = PlainDate.calendarContext(relative);
+      const nanoseconds = relativeDuration(
+        day,
+        this.#years,
+        this.#months,
+        this.#weeks,
+        time,
+        calendar,
+      );
       const elapsedDays = floorDivide(nanoseconds, NS_PER_DAY);
       const targetDay = checkDateDay(day + Number(elapsedDays));
       if (nanoseconds !== 0n) {
@@ -372,14 +391,14 @@ export class Duration {
         checkDateTime(targetDay, Number(nanoseconds - elapsedDays * NS_PER_DAY));
       }
       return unit < 3
-        ? relativeISOCalendarTotal(day, nanoseconds, unit)
+        ? relativeCalendarTotal(day, nanoseconds, unit, calendar)
         : durationTotal(nanoseconds, unit);
     }
     requireFixedDays(this);
     return durationTotal(time, unit);
   }
   #zonedEnd(relative: ZonedDateTime<ResolvedTimeZone>): bigint {
-    return addISOZonedDateTime(
+    return addZonedDateTime(
       ZonedDateTime.epochNanoseconds(relative),
       ZonedDateTime.rules(relative),
       this.#years,
@@ -388,6 +407,7 @@ export class Duration {
       this.#days,
       this.#time - BigInt(this.#days) * NS_PER_DAY,
       "constrain",
+      ZonedDateTime.calendarContext(relative),
     );
   }
   toString(opts: Readonly<Temporal.DurationToStringOptions> | undefined = undefined): string {

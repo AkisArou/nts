@@ -22,12 +22,17 @@ import {
   negateRoundingMode,
 } from "./exact.ts";
 import { ISOParser } from "./iso-parser.ts";
-import { requireISOCalendar, calendarName, isoCalendarAnnotation } from "./calendar-id.ts";
-import { requireISOCalendarLike, isPlainCalendar } from "./plain-calendar.ts";
+import { calendarName, calendarAnnotation } from "./calendar-id.ts";
+import { resolveCalendarLike, isPlainCalendar } from "./plain-calendar.ts";
+import { CalendarContext } from "./calendar-context.ts";
+import { resolveCalendar } from "./calendar-environment.ts";
+import type { CalendarEnvironment } from "./calendar-environment.ts";
+import { calendarEra, calendarEraYear, calendarSupportsEra } from "./calendar-eras.ts";
+import { resolveDateFields } from "./date-fields.ts";
 import { formatISODate, isoWeek, isoWeekYear, checkDateTime } from "./iso-date.ts";
-import { positiveDateField, resolveISOFields, regulateTimeField } from "./iso-fields.ts";
+import { positiveDateField, regulateTimeField } from "./iso-fields.ts";
 import { formatPlainTime, timeNanoseconds } from "./iso-time.ts";
-import { dateTimeUnitIndex } from "./iso-date-time.ts";
+import { dateTimeUnitIndex } from "./date-time-duration.ts";
 import {
   integerWithTruncation,
   requiredString,
@@ -51,8 +56,8 @@ import {
   startOfDay,
   timeZoneTransitionMilliseconds,
 } from "./zoned-time.ts";
-import { addISOZonedDateTime, roundISOZonedDateTime } from "./zoned-iso.ts";
-import { roundISOZonedDifference } from "./zoned-difference.ts";
+import { addZonedDateTime, roundZonedDateTime } from "./zoned-arithmetic.ts";
+import { roundZonedDifference } from "./zoned-difference.ts";
 import { fromDateTimeFields } from "./date-time-fields.ts";
 import { Duration, toDuration } from "./duration.ts";
 import { Instant } from "./instant-object.ts";
@@ -70,19 +75,29 @@ function stringField(value: string): string {
 // snapshot before allocation, as Date's binding supplies converted milliseconds.
 // Generic provider storage preserves concrete layouts on compiled backends.
 // Immutable local scalars are derived once; getters allocate no records or
-// query ICU. Calendar conversion and localization remain open.
+// query ICU for ISO dates. Other calendars retain the same shared context and
+// immutable year snapshots as plain dates; time-zone state remains independent.
 export class ZonedDateTime<Z extends ResolvedTimeZone> {
   readonly #epoch: bigint;
   readonly #zone: Z;
   readonly #day: number;
   readonly #time: number;
   readonly #offset: number;
+  readonly #calendar: CalendarContext | undefined;
 
-  constructor(epochNanoseconds: bigint, zone: Z, calendar = "iso8601") {
+  constructor(
+    epochNanoseconds: bigint,
+    zone: Z,
+    calendar: string | CalendarContext = "iso8601",
+    environment: CalendarEnvironment | undefined = undefined,
+  ) {
     if (typeof epochNanoseconds !== "bigint")
       throw new TypeError("Epoch nanoseconds must be a BigInt");
     this.#epoch = checkInstant(epochNanoseconds);
-    requireISOCalendar(calendar);
+    if (typeof calendar !== "string" && !(calendar instanceof CalendarContext))
+      throw new TypeError("Calendar must be a string");
+    this.#calendar =
+      typeof calendar === "string" ? resolveCalendar(calendar, environment) : calendar;
     this.#zone = zone;
     const offset = offsetNanoseconds(epochNanoseconds, zone);
     const local = epochNanoseconds + offset;
@@ -100,6 +115,9 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
   static nanoseconds(value: ZonedDateTime<ResolvedTimeZone>): number {
     return value.#time;
   }
+  static calendarContext(value: ZonedDateTime<ResolvedTimeZone>): CalendarContext | undefined {
+    return value.#calendar;
+  }
   static rules<R extends ResolvedTimeZone>(value: ZonedDateTime<R>): R {
     return value.#zone;
   }
@@ -108,6 +126,7 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
     value: Temporal.ZonedDateTimeLike | ZonedDateTime<ResolvedTimeZone>,
     options: Readonly<Temporal.ZonedDateTimeFromOptions> | undefined = undefined,
     source: TimeZoneSource | undefined = undefined,
+    environment: CalendarEnvironment | undefined = undefined,
   ): ZonedDateTime<ResolvedTimeZone> {
     if (value instanceof ZonedDateTime) {
       const epoch = value.#epoch;
@@ -115,23 +134,29 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
       disambiguationOption(options?.disambiguation);
       offsetOption(options?.offset, "reject");
       overflowOption(options);
-      return new ZonedDateTime(epoch, value.#zone);
+      return new ZonedDateTime(epoch, value.#zone, value.#calendar);
     }
     if (typeof value === "string")
-      return ZonedDateTime.fromParsed(new ISOParser(value, false, true), options, source);
+      return ZonedDateTime.fromParsed(
+        new ISOParser(value, false, true),
+        options,
+        source,
+        environment,
+      );
     if (value === null || (typeof value !== "object" && typeof value !== "function"))
       throw new TypeError("Zoned date-time requires an object or string");
-    return fromDateTimeFields(value, options, source, true);
+    return fromDateTimeFields(value, options, source, true, environment);
   }
   static fromParsed(
     parsed: ISOParser,
     options: Readonly<Temporal.ZonedDateTimeFromOptions> | undefined,
     source: TimeZoneSource | undefined,
+    environment: CalendarEnvironment | undefined = undefined,
   ): ZonedDateTime<ResolvedTimeZone> {
     if (parsed.timeZone === undefined)
       throw new RangeError("Zoned date-time strings require a time-zone annotation");
     const zone = resolveTimeZoneIdentifier(parsed.timeZone, source);
-    requireISOCalendar(parsed.calendar);
+    const calendar = resolveCalendar(parsed.calendar, environment);
     if (options !== undefined) requireOptions(options);
     const disambiguation = disambiguationOption(options?.disambiguation);
     const offset = offsetOption(options?.offset, "reject");
@@ -149,43 +174,61 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
           parsed.offsetNanoseconds,
           !parsed.offsetHasSeconds,
         );
-    return new ZonedDateTime(epoch, zone);
+    return new ZonedDateTime(epoch, zone, calendar);
   }
   static compare(
     one: Temporal.ZonedDateTimeLike | ZonedDateTime<ResolvedTimeZone>,
     two: Temporal.ZonedDateTimeLike | ZonedDateTime<ResolvedTimeZone>,
     source: TimeZoneSource | undefined = undefined,
+    environment: CalendarEnvironment | undefined = undefined,
   ): number {
-    const a = ZonedDateTime.from(one, undefined, source).#epoch;
-    const b = ZonedDateTime.from(two, undefined, source).#epoch;
+    const a = ZonedDateTime.from(one, undefined, source, environment).#epoch;
+    const b = ZonedDateTime.from(two, undefined, source, environment).#epoch;
     return a < b ? -1 : a > b ? 1 : 0;
   }
   get calendarId(): string {
     this.#epoch;
-    return "iso8601";
+    return this.#calendar?.identifier ?? "iso8601";
   }
   get timeZoneId(): string {
     return this.#zone.id;
   }
-  get era(): undefined {
-    this.#epoch;
-    return undefined;
+  get era(): string | undefined {
+    const day = this.#day;
+    const calendar = this.#calendar;
+    return calendar === undefined
+      ? undefined
+      : calendarEra(calendar.identifier, calendar.yearAt(day).year, day);
   }
-  get eraYear(): undefined {
-    this.#epoch;
-    return undefined;
+  get eraYear(): number | undefined {
+    const day = this.#day;
+    const calendar = this.#calendar;
+    if (calendar === undefined) return undefined;
+    const year = calendar.yearAt(day).year;
+    const era = calendarEra(calendar.identifier, year, day);
+    return era === undefined ? undefined : calendarEraYear(calendar.identifier, era, year);
   }
   get year(): number {
-    return yearFromDays(this.#day);
+    const day = this.#day;
+    return this.#calendar === undefined ? yearFromDays(day) : this.#calendar.yearAt(day).year;
   }
   get month(): number {
-    return monthFromTime(this.#day * MS_PER_DAY) + 1;
+    const day = this.#day;
+    return this.#calendar === undefined
+      ? monthFromTime(day * MS_PER_DAY) + 1
+      : this.#calendar.yearAt(day).monthAt(day) + 1;
   }
   get monthCode(): string {
-    return "M" + pad(monthFromTime(this.#day * MS_PER_DAY) + 1, 2);
+    const day = this.#day;
+    if (this.#calendar === undefined) return "M" + pad(monthFromTime(day * MS_PER_DAY) + 1, 2);
+    const year = this.#calendar.yearAt(day);
+    return year.monthCode(year.monthAt(day));
   }
   get day(): number {
-    return dateFromTime(this.#day * MS_PER_DAY);
+    const day = this.#day;
+    if (this.#calendar === undefined) return dateFromTime(day * MS_PER_DAY);
+    const year = this.#calendar.yearAt(day);
+    return day - year.monthStart(year.monthAt(day)) + 1;
   }
   get hour(): number {
     return Math.floor(this.#time / 3600000000000);
@@ -215,13 +258,22 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
     return modulo(this.#day + 3, 7) + 1;
   }
   get dayOfYear(): number {
-    return this.#day - epochDays(yearFromDays(this.#day), 0, 1) + 1;
+    const day = this.#day;
+    return (
+      day -
+      (this.#calendar === undefined
+        ? epochDays(yearFromDays(day), 0, 1)
+        : this.#calendar.yearAt(day).firstDay) +
+      1
+    );
   }
-  get weekOfYear(): number {
-    return isoWeek(this.#day);
+  get weekOfYear(): number | undefined {
+    const day = this.#day;
+    return this.#calendar === undefined ? isoWeek(day) : undefined;
   }
-  get yearOfWeek(): number {
-    return isoWeekYear(this.#day);
+  get yearOfWeek(): number | undefined {
+    const day = this.#day;
+    return this.#calendar === undefined ? isoWeekYear(day) : undefined;
   }
   get hoursInDay(): number {
     return (
@@ -234,17 +286,27 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
     return 7;
   }
   get daysInMonth(): number {
-    return daysInMonth(yearFromDays(this.#day), monthFromTime(this.#day * MS_PER_DAY));
+    const day = this.#day;
+    if (this.#calendar === undefined)
+      return daysInMonth(yearFromDays(day), monthFromTime(day * MS_PER_DAY));
+    const year = this.#calendar.yearAt(day);
+    return year.daysInMonth(year.monthAt(day));
   }
   get daysInYear(): number {
-    return isLeapYear(yearFromDays(this.#day)) ? 366 : 365;
+    const day = this.#day;
+    if (this.#calendar === undefined) return isLeapYear(yearFromDays(day)) ? 366 : 365;
+    const year = this.#calendar.yearAt(day);
+    return year.endDay - year.firstDay;
   }
   get monthsInYear(): number {
     this.#epoch;
-    return 12;
+    return this.#calendar === undefined ? 12 : this.#calendar.yearAt(this.#day).monthsInYear;
   }
   get inLeapYear(): boolean {
-    return isLeapYear(yearFromDays(this.#day));
+    const day = this.#day;
+    return this.#calendar === undefined
+      ? isLeapYear(yearFromDays(day))
+      : this.#calendar.yearAt(day).inLeapYear;
   }
   get offsetNanoseconds(): number {
     return this.#offset;
@@ -271,6 +333,14 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
       throw new TypeError("with requires fields without a calendar or time zone");
     const rawDay = fields.day;
     const day = rawDay === undefined ? undefined : positiveDateField(rawDay);
+    let era: string | undefined;
+    let eraYear: number | undefined;
+    if (this.#calendar !== undefined && calendarSupportsEra(this.#calendar.identifier)) {
+      const rawEra = fields.era;
+      era = rawEra === undefined ? undefined : requiredString(rawEra);
+      const rawEraYear = fields.eraYear;
+      eraYear = rawEraYear === undefined ? undefined : integerWithTruncation(rawEraYear);
+    }
     const rawHour = fields.hour;
     const hour =
       rawHour === undefined
@@ -312,6 +382,8 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
     const year = rawYear === undefined ? undefined : integerWithTruncation(rawYear);
     if (
       rawDay === undefined &&
+      era === undefined &&
+      eraYear === undefined &&
       rawHour === undefined &&
       rawMicrosecond === undefined &&
       rawMillisecond === undefined &&
@@ -328,7 +400,17 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
     const disambiguation = disambiguationOption(options?.disambiguation);
     const offsetChoice = offsetOption(options?.offset, "prefer");
     const overflow = overflowOption(options);
-    const resultDay = resolveISOFields(year, month, code, day, overflow, previousDay);
+    const resultDay = resolveDateFields(
+      year,
+      month,
+      code,
+      day,
+      era,
+      eraYear,
+      overflow,
+      this.#calendar,
+      previousDay,
+    );
     const time = timeNanoseconds(
       regulateTimeField(hour, 23, overflow),
       regulateTimeField(minute, 59, overflow),
@@ -341,6 +423,7 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
     return new ZonedDateTime(
       resolveLocalDateTime(resultDay, time, this.#zone, disambiguation, offsetChoice, offset),
       this.#zone,
+      this.#calendar,
     );
   }
 
@@ -355,20 +438,23 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
             this.#zone,
             "compatible",
           );
-    return new ZonedDateTime(epoch, this.#zone);
+    return new ZonedDateTime(epoch, this.#zone, this.#calendar);
   }
   withTimeZone(
     value: Temporal.TimeZoneLike | ZonedDateTime<ResolvedTimeZone>,
     source: TimeZoneSource | undefined = undefined,
   ): ZonedDateTime<ResolvedTimeZone> {
     const epoch = this.#epoch;
-    return new ZonedDateTime(epoch, resolveTimeZone(value, source));
+    return new ZonedDateTime(epoch, resolveTimeZone(value, source), this.#calendar);
   }
-  withCalendar(value: Temporal.CalendarLike | ZonedDateTime<ResolvedTimeZone>): ZonedDateTime<Z> {
+  withCalendar(
+    value: Temporal.CalendarLike | ZonedDateTime<ResolvedTimeZone>,
+    environment: CalendarEnvironment | undefined = undefined,
+  ): ZonedDateTime<Z> {
     const epoch = this.#epoch;
-    if (value instanceof ZonedDateTime) value.#epoch;
-    else requireISOCalendarLike(value);
-    return new ZonedDateTime(epoch, this.#zone);
+    const calendar =
+      value instanceof ZonedDateTime ? value.#calendar : resolveCalendarLike(value, environment);
+    return new ZonedDateTime(epoch, this.#zone, calendar);
   }
   #addDuration(
     value: Temporal.DurationLike,
@@ -380,7 +466,7 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
     const overflow = overflowOption(options);
     const days = Duration.field(duration, 3);
     return new ZonedDateTime(
-      addISOZonedDateTime(
+      addZonedDateTime(
         epoch,
         this.#zone,
         Duration.field(duration, 0) * sign,
@@ -389,8 +475,10 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
         days * sign,
         (Duration.timeNanoseconds(duration) - BigInt(days) * NS_PER_DAY) * BigInt(sign),
         overflow,
+        this.#calendar,
       ),
       this.#zone,
+      this.#calendar,
     );
   }
   add(
@@ -412,11 +500,16 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
       | undefined,
     since: boolean,
     source: TimeZoneSource | undefined,
+    environment: CalendarEnvironment | undefined,
   ): Duration {
     const epoch = this.#epoch;
     const target =
-      other instanceof ZonedDateTime ? other : ZonedDateTime.from(other, undefined, source);
+      other instanceof ZonedDateTime
+        ? other
+        : ZonedDateTime.from(other, undefined, source, environment);
     const targetEpoch = target.#epoch;
+    if ((this.#calendar?.identifier ?? "iso8601") !== (target.#calendar?.identifier ?? "iso8601"))
+      throw new RangeError("Zoned date-time difference requires matching calendars");
     if (options !== undefined) requireOptions(options);
     const rawLargest = options?.largestUnit;
     if (typeof rawLargest === "symbol")
@@ -434,7 +527,7 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
     if (largest <= 3 && this.#zone.primaryId !== target.#zone.primaryId)
       throw new RangeError("Calendar differences require equivalent time zones");
     if (epoch === targetEpoch) return new Duration();
-    const result = roundISOZonedDifference(
+    const result = roundZonedDifference(
       epoch,
       targetEpoch,
       this.#zone,
@@ -442,6 +535,7 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
       smallest,
       increment,
       since ? negateRoundingMode(mode) : mode,
+      this.#calendar,
     );
     return since ? result.negated() : result;
   }
@@ -451,8 +545,9 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
       | Readonly<Temporal.RoundingOptionsWithLargestUnit<Temporal.DateUnit | Temporal.TimeUnit>>
       | undefined = undefined,
     source: TimeZoneSource | undefined = undefined,
+    environment: CalendarEnvironment | undefined = undefined,
   ): Duration {
-    return this.#difference(other, options, false, source);
+    return this.#difference(other, options, false, source, environment);
   }
   since(
     other: Temporal.ZonedDateTimeLike | ZonedDateTime<ResolvedTimeZone>,
@@ -460,8 +555,9 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
       | Readonly<Temporal.RoundingOptionsWithLargestUnit<Temporal.DateUnit | Temporal.TimeUnit>>
       | undefined = undefined,
     source: TimeZoneSource | undefined = undefined,
+    environment: CalendarEnvironment | undefined = undefined,
   ): Duration {
-    return this.#difference(other, options, true, source);
+    return this.#difference(other, options, true, source, environment);
   }
   round(
     value:
@@ -487,17 +583,23 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
       if (increment !== 1) throw new RangeError("Day rounding requires an increment of one");
     } else validateIncrement(index, increment);
     return new ZonedDateTime(
-      roundISOZonedDateTime(epoch, this.#zone, index, increment, mode),
+      roundZonedDateTime(epoch, this.#zone, index, increment, mode),
       this.#zone,
+      this.#calendar,
     );
   }
   equals(
     other: Temporal.ZonedDateTimeLike | ZonedDateTime<ResolvedTimeZone>,
     source: TimeZoneSource | undefined = undefined,
+    environment: CalendarEnvironment | undefined = undefined,
   ): boolean {
     const epoch = this.#epoch;
-    const target = ZonedDateTime.from(other, undefined, source);
-    return epoch === target.#epoch && this.#zone.primaryId === target.#zone.primaryId;
+    const target = ZonedDateTime.from(other, undefined, source, environment);
+    return (
+      epoch === target.#epoch &&
+      this.#zone.primaryId === target.#zone.primaryId &&
+      (this.#calendar?.identifier ?? "iso8601") === (target.#calendar?.identifier ?? "iso8601")
+    );
   }
   #formatString(options: Readonly<Temporal.ZonedDateTimeToStringOptions> | undefined): string {
     const epoch = this.#epoch;
@@ -528,7 +630,7 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
       (showName === "never"
         ? ""
         : "[" + (showName === "critical" ? "!" : "") + this.#zone.id + "]") +
-      isoCalendarAnnotation(calendar)
+      calendarAnnotation(this.#calendar?.identifier ?? "iso8601", calendar)
     );
   }
   toString(
@@ -546,7 +648,7 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
     return source.formatDateTime(
       6,
       epochMilliseconds(this.#epoch),
-      "iso8601",
+      this.#calendar?.identifier ?? "iso8601",
       locales,
       options,
       this.#zone.id,
@@ -559,7 +661,7 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
     throw new TypeError("Temporal.ZonedDateTime cannot be converted to a primitive value");
   }
   startOfDay(): ZonedDateTime<Z> {
-    return new ZonedDateTime(startOfDay(this.#day, this.#zone), this.#zone);
+    return new ZonedDateTime(startOfDay(this.#day, this.#zone), this.#zone, this.#calendar);
   }
   getTimeZoneTransition(
     value: "next" | "previous" | Readonly<Temporal.TransitionOptions>,
@@ -574,18 +676,20 @@ export class ZonedDateTime<Z extends ResolvedTimeZone> {
     if (direction !== "next" && direction !== "previous")
       throw new RangeError("Invalid transition direction");
     const next = timeZoneTransitionMilliseconds(epoch, this.#zone, direction === "next");
-    return next === null ? null : new ZonedDateTime(BigInt(next) * NS_PER_MILLISECOND, this.#zone);
+    return next === null
+      ? null
+      : new ZonedDateTime(BigInt(next) * NS_PER_MILLISECOND, this.#zone, this.#calendar);
   }
   toInstant(): Instant {
     return new Instant(this.#epoch);
   }
   toPlainDate(): PlainDate {
-    return createPlainDate(this.#day);
+    return createPlainDate(this.#day, this.#calendar);
   }
   toPlainTime(): PlainTime {
     return createPlainTime(this.#time);
   }
   toPlainDateTime(): PlainDateTime {
-    return createPlainDateTime(this.#day, this.#time);
+    return createPlainDateTime(this.#day, this.#time, this.#calendar);
   }
 }

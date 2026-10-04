@@ -36,15 +36,17 @@ import { CalendarContext } from "./calendar-context.ts";
 import { resolveCalendar } from "./calendar-environment.ts";
 import type { CalendarEnvironment } from "./calendar-environment.ts";
 import { calendarEra, calendarEraYear } from "./calendar-eras.ts";
-import { addDate } from "./calendar-date.ts";
+import { addDate, calendarMonthStart } from "./calendar-date.ts";
 import { PlainDateTime } from "./plain-date-time.ts";
 import { ZonedDateTime } from "./zoned-date-time.ts";
 import { resolveTimeZone } from "./zone-like.ts";
 import { resolveLocalDateTime, startOfDay } from "./zoned-time.ts";
 import { PlainTime } from "./plain-time.ts";
 import { resolveCalendarLike, isPlainCalendar } from "./plain-calendar.ts";
-import { PlainYearMonth } from "./plain-year-month.ts";
-import { PlainMonthDay } from "./plain-month-day.ts";
+import { createPlainYearMonth } from "./plain-year-month.ts";
+import type { PlainYearMonth } from "./plain-year-month.ts";
+import { monthDayFromDate } from "./plain-month-day.ts";
+import type { PlainMonthDay } from "./plain-month-day.ts";
 function dateString(
   day: number,
   calendar: CalendarContext | undefined,
@@ -97,7 +99,7 @@ export class PlainDate {
     if (value instanceof ZonedDateTime) {
       const day = ZonedDateTime.epochDay(value);
       overflowOption(options);
-      return createPlainDate(day);
+      return createPlainDate(day, ZonedDateTime.calendarContext(value));
     }
     if (value instanceof PlainDate) {
       overflowOption(options);
@@ -105,7 +107,7 @@ export class PlainDate {
     }
     if (value instanceof PlainDateTime) {
       overflowOption(options);
-      return createPlainDate(PlainDateTime.epochDay(value));
+      return createPlainDate(PlainDateTime.epochDay(value), PlainDateTime.calendarContext(value));
     }
     if (typeof value === "string") {
       const parsed = new ISOParser(value, false, true);
@@ -132,7 +134,7 @@ export class PlainDate {
     const day = this.#day;
     if (typeof value === "string" || value instanceof ZonedDateTime) {
       const zone = resolveTimeZone(value, source);
-      return new ZonedDateTime(startOfDay(day, zone), zone, this.#calendar?.identifier);
+      return new ZonedDateTime(startOfDay(day, zone), zone, this.#calendar);
     }
     if (value === null || (typeof value !== "object" && typeof value !== "function"))
       throw new TypeError("A zoned date requires a time zone or options object");
@@ -153,7 +155,7 @@ export class PlainDate {
             zone,
             "compatible",
           );
-    return new ZonedDateTime(epoch, zone, this.#calendar?.identifier);
+    return new ZonedDateTime(epoch, zone, this.#calendar);
   }
   static compare(
     one: Temporal.PlainDateLike,
@@ -424,30 +426,16 @@ export class PlainDate {
       Math.floor(time / 1e6) % 1000,
       Math.floor(time / 1000) % 1000,
       time % 1000,
-      this.#calendar?.identifier,
+      this.#calendar,
     );
   }
   toPlainYearMonth(): PlainYearMonth {
     const day = this.#day;
-    if (this.#calendar === undefined)
-      return new PlainYearMonth(yearFromDays(day), monthFromTime(day * MS_PER_DAY) + 1);
-    return new PlainYearMonth(
-      yearFromDays(day),
-      monthFromTime(day * MS_PER_DAY) + 1,
-      this.#calendar?.identifier,
-      dateFromTime(day * MS_PER_DAY),
-    );
+    return createPlainYearMonth(calendarMonthStart(day, this.#calendar), this.#calendar);
   }
   toPlainMonthDay(): PlainMonthDay {
     const day = this.#day;
-    if (this.#calendar === undefined)
-      return new PlainMonthDay(monthFromTime(day * MS_PER_DAY) + 1, dateFromTime(day * MS_PER_DAY));
-    return new PlainMonthDay(
-      monthFromTime(day * MS_PER_DAY) + 1,
-      dateFromTime(day * MS_PER_DAY),
-      this.#calendar?.identifier,
-      yearFromDays(day),
-    );
+    return monthDayFromDate(day, this.#calendar);
   }
   valueOf(): never {
     throw new TypeError("Temporal.PlainDate cannot be converted to a primitive value");

@@ -1,6 +1,9 @@
 import { parseMonthCode } from "./month-code.ts";
 import type { ResolvedTimeZone, TimeZoneSource } from "../time/zone-data.ts";
-import { positiveDateField, resolveISOFields, regulateTimeField } from "./iso-fields.ts";
+import { positiveDateField, regulateTimeField } from "./iso-fields.ts";
+import { resolveDateFields } from "./date-fields.ts";
+import { calendarSupportsEra } from "./calendar-eras.ts";
+import type { CalendarEnvironment } from "./calendar-environment.ts";
 import {
   integerWithTruncation,
   requiredString,
@@ -9,7 +12,7 @@ import {
   offsetOption,
   overflowOption,
 } from "./options.ts";
-import { requireISOCalendarLike } from "./plain-calendar.ts";
+import { resolveCalendarLike } from "./plain-calendar.ts";
 import { ISOParser } from "./iso-parser.ts";
 import { timeNanoseconds } from "./iso-time.ts";
 import { checkDateTime } from "./iso-date.ts";
@@ -27,25 +30,37 @@ export function fromDateTimeFields(
   options: Readonly<Temporal.ZonedDateTimeFromOptions> | undefined,
   source: TimeZoneSource | undefined,
   requireZone: true,
+  environment?: CalendarEnvironment,
 ): ZonedDateTime<ResolvedTimeZone>;
 export function fromDateTimeFields(
   fields: Readonly<Partial<Temporal.ZonedDateTimeLikeObject>>,
   options: Readonly<Temporal.ZonedDateTimeFromOptions> | undefined,
   source: TimeZoneSource | undefined,
   requireZone: false,
+  environment?: CalendarEnvironment,
 ): PlainDate | ZonedDateTime<ResolvedTimeZone>;
 export function fromDateTimeFields(
   fields: Readonly<Partial<Temporal.ZonedDateTimeLikeObject>>,
   options: Readonly<Temporal.ZonedDateTimeFromOptions> | undefined,
   source: TimeZoneSource | undefined,
   requireZone: boolean,
+  environment: CalendarEnvironment | undefined = undefined,
 ): PlainDate | ZonedDateTime<ResolvedTimeZone> {
-  const calendar = fields.calendar;
-  if (calendar !== undefined) requireISOCalendarLike(calendar);
+  const rawCalendar = fields.calendar;
+  const calendar =
+    rawCalendar === undefined ? undefined : resolveCalendarLike(rawCalendar, environment);
   // Both abstract operations prepare the same fields in alphabetical order.
   // Scalars survive through interpretation; no prepared record is allocated.
   const rawDay = fields.day;
   const day = rawDay === undefined ? undefined : positiveDateField(rawDay);
+  let era: string | undefined;
+  let eraYear: number | undefined;
+  if (calendar !== undefined && calendarSupportsEra(calendar.identifier)) {
+    const rawEra = fields.era;
+    era = rawEra === undefined ? undefined : requiredString(rawEra);
+    const rawEraYear = fields.eraYear;
+    eraYear = rawEraYear === undefined ? undefined : integerWithTruncation(rawEraYear);
+  }
   const hour = numericField(fields.hour);
   const microsecond = numericField(fields.microsecond);
   const millisecond = numericField(fields.millisecond);
@@ -69,7 +84,7 @@ export function fromDateTimeFields(
   const disambiguation = disambiguationOption(options?.disambiguation);
   const offsetChoice = offsetOption(options?.offset, "reject");
   const overflow = overflowOption(options);
-  const resultDay = resolveISOFields(year, month, code, day, overflow);
+  const resultDay = resolveDateFields(year, month, code, day, era, eraYear, overflow, calendar);
   const time = timeNanoseconds(
     regulateTimeField(hour, 23, overflow),
     regulateTimeField(minute, 59, overflow),
@@ -78,7 +93,7 @@ export function fromDateTimeFields(
     regulateTimeField(microsecond, 999, overflow),
     regulateTimeField(nanosecond, 999, overflow),
   );
-  if (zone === undefined) return createPlainDate(resultDay);
+  if (zone === undefined) return createPlainDate(resultDay, calendar);
   checkDateTime(resultDay, time);
   return new ZonedDateTime(
     resolveLocalDateTime(
@@ -90,5 +105,6 @@ export function fromDateTimeFields(
       offset === undefined ? 0n : offset,
     ),
     zone,
+    calendar,
   );
 }

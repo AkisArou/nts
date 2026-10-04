@@ -4,6 +4,7 @@ import { ArithmeticCalendar } from "./arithmetic-calendar.ts";
 import { HebrewCalendar } from "./hebrew-calendar.ts";
 import { UmmAlQuraCalendar } from "./umalqura-calendar.ts";
 import { LunisolarCalendar } from "./lunisolar-calendar.ts";
+import { LunisolarTable } from "./lunisolar-table.ts";
 import { calendarIndex, canonicalCalendarIdentifier } from "./calendar-identifier.ts";
 
 function calendarData(
@@ -15,8 +16,7 @@ function calendarData(
       return new HebrewCalendar();
     case "chinese":
     case "dangi":
-      if (open === undefined) throw new RangeError("Lunisolar calendar data is unavailable");
-      return new LunisolarCalendar(identifier, open(identifier));
+      return new LunisolarCalendar(identifier, new LunisolarTable(identifier));
     case "islamic-umalqura":
       if (open === undefined) throw new RangeError("Umm al-Qura calendar data is unavailable");
       return new UmmAlQuraCalendar(open(identifier));

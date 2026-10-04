@@ -2,16 +2,7 @@ import { ISOParser } from "./iso-parser.ts";
 import { requireOptions } from "./options.ts";
 import { calendarIndex, canonicalCalendarIdentifier } from "./calendar-identifier.ts";
 
-// The ISO path has no locale/calendar provider dependency. The calendar stage
-// extends identifier resolution for other built-in calendars independently.
-export function requireISOCalendar(calendar: string): void {
-  if (typeof calendar !== "string") throw new TypeError("Calendar must be a string");
-  if (calendar.toLowerCase() !== "iso8601")
-    throw new RangeError("Non-ISO dates require calendar integration");
-}
-export function requireISOCalendarString(calendar: string): void {
-  requireISOCalendar(calendarIdentifierFromString(calendar));
-}
+// Identifier and annotation semantics have no provider or value-class imports.
 export function calendarIdentifierFromString(calendar: string): string {
   if (typeof calendar !== "string") throw new TypeError("Calendar must be a string");
   const id = calendar.toLowerCase();
@@ -41,11 +32,6 @@ export function calendarName(
   const show = raw === undefined ? "auto" : String(raw);
   if (show === "auto" || show === "always" || show === "never" || show === "critical") return show;
   throw new RangeError("Invalid calendar name option");
-}
-export function isoCalendarAnnotation(
-  show: NonNullable<Temporal.PlainDateToStringOptions["calendarName"]>,
-): string {
-  return calendarAnnotation("iso8601", show);
 }
 export function calendarAnnotation(
   identifier: string,

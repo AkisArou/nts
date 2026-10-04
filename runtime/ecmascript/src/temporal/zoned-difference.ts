@@ -9,7 +9,8 @@ import {
 } from "./exact.ts";
 import { Duration, balanceDuration } from "./duration.ts";
 import { differenceDate } from "./date-duration.ts";
-import { addISODate } from "./iso-date.ts";
+import { addDate } from "./calendar-date.ts";
+import type { CalendarContext } from "./calendar-context.ts";
 import { localNanoseconds, resolveLocalDateTime } from "./zoned-time.ts";
 
 function elapsed(duration: Duration): bigint {
@@ -25,6 +26,7 @@ function difference(
   startDay: number,
   startTime: number,
   largest: number,
+  calendar: CalendarContext | undefined,
 ): Duration {
   const localEnd = localNanoseconds(end, zone);
   const endDay = Number(floorDivide(localEnd, NS_PER_DAY));
@@ -38,7 +40,7 @@ function difference(
     const intermediate = resolveLocalDateTime(intermediateDay, startTime, zone, "compatible");
     const remainder = end - intermediate;
     if (sign > 0 ? remainder >= 0n : remainder <= 0n) {
-      const date = differenceDate(startDay, intermediateDay, largest);
+      const date = differenceDate(startDay, intermediateDay, largest, calendar);
       return balanceDuration(
         remainder,
         4,
@@ -62,10 +64,11 @@ function boundary(
   months: number,
   weeks: number,
   days: number,
+  calendar: CalendarContext | undefined,
 ): bigint {
   if (years === 0 && months === 0 && weeks === 0 && days === 0) return origin;
   return resolveLocalDateTime(
-    addISODate(day, years, months, weeks, days, "constrain"),
+    addDate(day, years, months, weeks, days, "constrain", calendar),
     time,
     zone,
     "compatible",
@@ -82,6 +85,7 @@ function bubble(
   sign: number,
   largest: number,
   smallest: number,
+  calendar: CalendarContext | undefined,
 ): Duration {
   let result = raw;
   for (let unit = smallest - 1; unit >= largest; unit--) {
@@ -89,7 +93,7 @@ function bubble(
     const years = Duration.field(result, 0) + (unit === 0 ? sign : 0);
     const months = unit === 0 ? 0 : Duration.field(result, 1) + (unit === 1 ? sign : 0);
     const weeks = unit === 2 ? Duration.field(result, 2) + sign : 0;
-    const next = boundary(origin, day, time, zone, years, months, weeks, 0);
+    const next = boundary(origin, day, time, zone, years, months, weeks, 0, calendar);
     if (sign > 0 ? nudged < next : nudged > next) break;
     result = new Duration(years, months, weeks);
   }
@@ -98,7 +102,7 @@ function bubble(
 
 // Exact distances between actual zoned boundaries select calendar rounding.
 // Estimates and corrections are bounded even at the representable endpoints.
-export function roundISOZonedDifference(
+export function roundZonedDifference(
   start: bigint,
   end: bigint,
   zone: TimeZoneRules,
@@ -106,6 +110,7 @@ export function roundISOZonedDifference(
   smallest: number,
   increment: number,
   mode: RoundingMode,
+  calendar: CalendarContext | undefined = undefined,
 ): Duration {
   if (largest >= 4)
     return balanceDuration(
@@ -116,7 +121,9 @@ export function roundISOZonedDifference(
   const startDay = Number(floorDivide(local, NS_PER_DAY));
   const startTime = Number(local - BigInt(startDay) * NS_PER_DAY);
   const raw =
-    start === end ? new Duration() : difference(start, end, zone, startDay, startTime, largest);
+    start === end
+      ? new Duration()
+      : difference(start, end, zone, startDay, startTime, largest, calendar);
   if (smallest === 9 && increment === 1) return raw;
   const sign = end >= start ? 1 : -1;
   let years = Duration.field(raw, 0);
@@ -124,7 +131,7 @@ export function roundISOZonedDifference(
   let weeks = Duration.field(raw, 2);
   let days = Duration.field(raw, 3);
   if (smallest >= 4) {
-    const day = addISODate(startDay, years, months, weeks, days, "constrain");
+    const day = addDate(startDay, years, months, weeks, days, "constrain", calendar);
     const from = resolveLocalDateTime(day, startTime, zone, "compatible");
     const to = resolveLocalDateTime(day + sign, startTime, zone, "compatible");
     const span = to - from;
@@ -151,6 +158,7 @@ export function roundISOZonedDifference(
           sign,
           largest,
           3,
+          calendar,
         );
   }
   const amount =
@@ -166,7 +174,7 @@ export function roundISOZonedDifference(
   months = smallest > 1 ? months : smallest === 1 ? quotient * increment : 0;
   weeks = smallest > 2 ? weeks : smallest === 2 ? quotient * increment : 0;
   days = smallest === 3 ? quotient * increment : 0;
-  let lower = boundary(start, startDay, startTime, zone, years, months, weeks, days);
+  let lower = boundary(start, startDay, startTime, zone, years, months, weeks, days, calendar);
   let upper = boundary(
     start,
     startDay,
@@ -176,6 +184,7 @@ export function roundISOZonedDifference(
     months + (smallest === 1 ? increment * sign : 0),
     weeks + (smallest === 2 ? increment * sign : 0),
     days + (smallest === 3 ? increment * sign : 0),
+    calendar,
   );
   let shifted = false;
   if (sign > 0 ? end < lower || end > upper : end > lower || end < upper) {
@@ -194,6 +203,7 @@ export function roundISOZonedDifference(
       months + (smallest === 1 ? increment * sign : 0),
       weeks + (smallest === 2 ? increment * sign : 0),
       days + (smallest === 3 ? increment * sign : 0),
+      calendar,
     );
     shifted = true;
   }
@@ -219,22 +229,24 @@ export function roundISOZonedDifference(
     sign,
     largest,
     smallest,
+    calendar,
   );
 }
 
 // A calendar total measures the fraction between adjacent actual boundaries.
 // Keep the quotient exact until its single conversion to binary64.
-export function totalISOZonedDifference(
+export function totalZonedDifference(
   start: bigint,
   end: bigint,
   zone: TimeZoneRules,
   unit: number,
+  calendar: CalendarContext | undefined = undefined,
 ): number {
   if (unit >= 4) return divideExact(end - start, unitNanoseconds(unit));
   const local = localNanoseconds(start, zone);
   const day = Number(floorDivide(local, NS_PER_DAY));
   const time = Number(local - BigInt(day) * NS_PER_DAY);
-  const raw = difference(start, end, zone, day, time, unit);
+  const raw = difference(start, end, zone, day, time, unit, calendar);
   let whole = Duration.field(raw, unit);
   const sign = end >= start ? 1 : -1;
   let lower = boundary(
@@ -246,6 +258,7 @@ export function totalISOZonedDifference(
     unit === 1 ? whole : 0,
     unit === 2 ? whole : 0,
     unit === 3 ? whole : 0,
+    calendar,
   );
   let upper = boundary(
     start,
@@ -256,6 +269,7 @@ export function totalISOZonedDifference(
     unit === 1 ? whole + sign : 0,
     unit === 2 ? whole + sign : 0,
     unit === 3 ? whole + sign : 0,
+    calendar,
   );
   if (sign > 0 ? end > upper : end < upper) {
     whole += sign;
@@ -269,6 +283,7 @@ export function totalISOZonedDifference(
       unit === 1 ? whole + sign : 0,
       unit === 2 ? whole + sign : 0,
       unit === 3 ? whole + sign : 0,
+      calendar,
     );
   }
   const span = upper > lower ? upper - lower : lower - upper;
