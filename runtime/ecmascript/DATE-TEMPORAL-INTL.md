@@ -412,13 +412,14 @@ All 56 original builtin Temporal locale tests pass with and without Intl.
 The builtin run retains 35 excluded metadata failures and one standard Instant
 constructor-conversion gap. All 97 Intl-specific locale cases pass within the
 complete 2,029-case rerun. Date's latest environment/slot checkpoint is 543/594;
-DurationFormat remains 101/110. DateTimeFormat now passes 218/244, including the
+DurationFormat remains 101/110. DateTimeFormat now passes 219/244, including the
 two corrected mixed-range conversion-order cases and the complete original
-1950–2050 lunisolar field consistency test. Only that consistency verdict
-changes from 217/244; receipts are
-date-time-format-prepared-calendar-test262.*. Its remaining supported gaps
-include era labels, same-day datetime range sharing and the pinned hanidec
-pattern's AM/PM spacing. All 97 Intl Temporal localization cases still pass.
+1950–2050 lunisolar field consistency test and the same-day Temporal datetime
+range source test. Only that range verdict changes from the 218/244 prepared
+calendar checkpoint, with no regressions. Current receipts are
+date-time-range-shared-date-final-test262.* and date-time-range-shared-date-diff.json.
+Its remaining supported gaps include era labels and the pinned hanidec pattern's
+AM/PM spacing. All 97 Intl Temporal localization cases still pass.
 The host adapter binds Date localization to the shared formatter too, so the
 original Date/Temporal comparison tests use the same algorithms and pinned data.
 It does not normalize output or compare shared ICU text to Node's separate
@@ -471,21 +472,61 @@ spans include each endpoint's leading/trailing literals. Private ICU hooks,
 duplicate native/JVM calendar engines, shifted surrogate timestamps and
 localized-output scraping are not acceptable shortcuts.
 
+Shared datetime range composition now formats the date once when both endpoints
+fall on the same local civil day and selects the time interval independently.
+The selected components determine the date/time projections and CLDR connector
+style. Handles and typed span scratch are opened lazily and reused; a collapsed
+time range preserves the original complete single-date pattern. The scalar
+provider identity flag avoids forcing parts or rendering both endpoints just
+to establish identity. Cross-day ranges retain their existing selection path.
+Date/time connectors decode LDML literal quoting; interval fallbacks retain
+SimpleFormatter's distinct brace-quoting grammar. A supplementary pinned-ICU4J
+host probe covers 1,920 cases across eight locales, all date/time styles, DST
+boundaries, source attribution and identity. It supplements original Test262;
+actual compiled composition remains refused on both C and JVM because the
+shipping compiler cannot dispatch implicitly satisfied DateTimeTextPrimitive
+and DateTimePatternData contracts. Their reproducing programs and diagnostics
+are shared-datetime-range-{c,jvm}.* in the date-fields audit directory. No class
+implements clause, cast or alternate scalar public API hides that dependency.
+
 The supplementary compiled prepared-field witness runs with
 `node runtime/ecmascript/tools/icu.ts --date-fields --pinned-native --all-backends --sanitize`
 and passes on C, C/RC, LLVM, LLVM/RC and JVM. It checks supplied fields, UTF-16
-span codes, 2,000 field replacements at one timestamp, offsets and public
-interval/fallback/connector data. Native ASan/UBSan and RC leak checks pass;
+span codes, mixed numeric/cyclic years, quoted literals, 2,000 field replacements
+at one timestamp, offsets, public interval/fallback/connector data and both
+template grammars. Native ASan/UBSan and RC leak checks pass;
 JVM runs with `-Xverify:all`. Receipts are under
 target/ecmascript/audit/date-fields and target/ecmascript/icu-check/*-date-fields.
 This verifies actual compiled adapters, not compiled public DateTimeFormat.
-Other calendar presentation, complete style/date-time interval composition,
+Other calendar presentation, complete interval selection across styles,
 public execution and performance/artifact measurements remain required.
-The earlier date-span mapping also still names ICU's internal/deprecated
-related-year and time-separator field constants. The new presentation adapter
-adds no private hooks, but replacing that existing mapping with a stable
-documented boundary remains an acceptance requirement. The complete formatter
-does not yet meet the target of using public ICU APIs exclusively.
+
+The date-span mapping now uses stable public APIs exclusively. Shared,
+quote-aware pattern metadata locates related-year starts through an otherwise
+unchanged pattern containing an unused public marker, then measures the isolated
+field. Ordinary text formatting makes no locator calls; locator formatters and
+scratch open on first parts use and remain cached. Native cyclic-year spans use
+the stable ICU field directly. Java's public YEAR attribute supplies cyclic-only
+patterns; mixed numeric/cyclic patterns use the locator and retain separate year
+spans. Both providers leave time separators literal without naming internal
+field constants. The native date adapter compiles with U_HIDE_INTERNAL_API and
+U_HIDE_DEPRECATED_API enabled. Other provider API/data acceptance obligations
+remain separate.
+
+The direct ICU4J prepared-year sample measures 300,000 calls after 300,000 warmup
+calls, with three alternating before/after pairs and matching checksums.
+Chinese related/cyclic-year parts take 1,316–1,363 ns with the public mapping,
+versus 1,205–1,247 ns before. Parts allocation is 3,320–3,344 bytes per call,
+versus 3,368–3,392 before; ICU owns its attributed iterator allocations. The
+earlier unoptimized locator sample took 1,682–1,791 ns. Ordinary text and
+Gregorian parts timings remain similar within these samples. This measures
+reused provider calls, not shared range composition or compiled public Intl;
+reports are public-year-paired-report.json and paired-report.json under
+target/ecmascript/audit/date-fields/performance. The native date adapter adds
+3,394 allocated object-section bytes (13,903 total) at -O2 without sanitizers;
+native-size-report.json retains commands and input hashes. This excludes linked
+ICU, shared TS and application packaging, and adds no C++ translation unit or
+calendar data table.
 
 The compiled fixture compares cached and raw ICU offsets across all 446 primary
 zones and every one of 42,806 transitions from 1800 through 2099, including

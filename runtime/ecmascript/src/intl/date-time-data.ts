@@ -16,6 +16,7 @@ export interface DateTimePatternData {
 export interface DateTimeTextPrimitive {
   format(milliseconds: number, fields: boolean): string;
   formatRange(start: number, end: number, fields: boolean): string;
+  rangeCollapsed(): boolean;
   fieldCount(): number;
   field(index: number): number;
   start(index: number): number;

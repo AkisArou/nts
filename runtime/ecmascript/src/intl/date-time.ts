@@ -111,8 +111,11 @@ export class DateTimeFormatter<P extends DateTimeTextPrimitive> {
   private readonly primitive: P;
   private parts: DatePartBuffer | undefined;
   private spans: FieldSpans | undefined;
-  constructor(primitive: P) {
+  private readonly ranges: (() => DateTimeTextPrimitive) | undefined;
+  private range: DateTimeTextPrimitive | undefined;
+  constructor(primitive: P, ranges: (() => DateTimeTextPrimitive) | undefined = undefined) {
     this.primitive = primitive;
+    this.ranges = ranges;
   }
   format(milliseconds: number): string {
     return this.primitive.format(milliseconds, false);
@@ -120,10 +123,9 @@ export class DateTimeFormatter<P extends DateTimeTextPrimitive> {
   formatToParts(milliseconds: number): DateTimeFormatPart[] {
     const text = this.primitive.format(milliseconds, true);
     if (this.parts === undefined) this.parts = new DatePartBuffer();
-    return this.parts.partition(text, this.readSpans());
+    return this.parts.partition(text, this.readSpans(this.primitive));
   }
-  private readSpans(): FieldSpans {
-    const primitive = this.primitive;
+  private readSpans(primitive: DateTimeTextPrimitive): FieldSpans {
     const count = primitive.fieldCount();
     if (this.spans === undefined || this.spans.fields.length < count)
       this.spans = new FieldSpans(Math.max(count, (this.spans?.fields.length ?? 8) * 2));
@@ -136,16 +138,20 @@ export class DateTimeFormatter<P extends DateTimeTextPrimitive> {
     return this.spans;
   }
   formatRange(start: number, end: number): string {
-    const primitive = this.primitive;
     return start === end
-      ? primitive.format(start, false)
-      : primitive.formatRange(start, end, false);
+      ? this.primitive.format(start, false)
+      : this.rangePrimitive().formatRange(start, end, false);
+  }
+  private rangePrimitive(): DateTimeTextPrimitive {
+    if (this.ranges === undefined) return this.primitive;
+    if (this.range === undefined) this.range = this.ranges();
+    return this.range;
   }
   formatRangeToParts(start: number, end: number): DateTimeRangeFormatPart[] {
-    const primitive = this.primitive;
+    const primitive = start === end ? this.primitive : this.rangePrimitive();
     const text =
       start === end ? primitive.format(start, true) : primitive.formatRange(start, end, true);
     if (this.parts === undefined) this.parts = new DatePartBuffer();
-    return this.parts.partitionRange(text, this.readSpans());
+    return this.parts.partitionRange(text, this.readSpans(primitive));
   }
 }

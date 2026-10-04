@@ -22,7 +22,11 @@ The calendar context is shared by all calendar-bearing Temporal values and
 relative Duration operations. Intl now supplies the same shared Chinese/Korean
 fields to both text providers, including ranges selected in TS. The original
 lunisolar formatting consistency test passes; other calendars and compiled
-public formatting acceptance remain open.
+public formatting acceptance remain open. Shared same-day datetime ranges
+format one date and select the time interval separately. Date spans use public
+ICU APIs, with cached locator handles only where stable field identifiers are
+unavailable. Datetime connectors and interval fallbacks retain their respective
+LDML and SimpleFormatter quoting rules.
 
 Best architecture, clean code and performance are standing requirements.
 Use the pinned TypeScript library contracts directly, private instance state,

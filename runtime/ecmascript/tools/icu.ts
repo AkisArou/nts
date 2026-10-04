@@ -473,6 +473,7 @@ if (dateFields)
     "0:2030|2|29|Sunday|00:00:00.000:8:2556",
     "same-instant:2000",
     "utf16:𝟐𝟎𝟑𝟎|𝟏|𝟐𝟗:16;11=0:8;2=9:11;3=12:16",
+    "mixed:U'r 1 29 2030 年 geng-xu 00:00 0047;2=4:5;3=6:8;11=9:13;12=16:23;4=24:26;5=27:29;1=30:34",
     "offset:-14400000",
     "interval-data:order:fields:fallback:connector",
   ].join("\n");
@@ -572,6 +573,8 @@ console.log(
           ? {
               preparedDateFields: true,
               utf16Spans: true,
+              publicDateFieldMapping: true,
+              dateTimeTemplateGrammars: true,
               intervalPatternData: true,
               compiledPublicApi: false,
             }

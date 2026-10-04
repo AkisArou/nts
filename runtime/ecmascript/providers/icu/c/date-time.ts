@@ -6,8 +6,11 @@ import {
   nts_icu_date_field,
   nts_icu_date_offset,
   nts_icu_date_calendar_fields,
+  nts_icu_date_field_locator,
+  nts_icu_date_range_collapsed,
 } from "c:nts_icu";
 import type { IcuDateHandle } from "c:nts_icu";
+import { DateFieldPatterns } from "../shared/date-fields.ts";
 
 export class IcuDateFormatter {
   private readonly handle: IcuDateHandle;
@@ -15,6 +18,20 @@ export class IcuDateFormatter {
     const handle = nts_icu_date_open(locale, pattern, timeZone);
     if (handle === null) throw new RangeError("ICU date formatter could not be opened");
     this.handle = handle;
+    if (pattern.includes("r") || pattern.includes("U")) {
+      const fields = new DateFieldPatterns(pattern);
+      while (fields.next())
+        if (
+          fields.field === 11 &&
+          !nts_icu_date_field_locator(
+            handle,
+            fields.markerPattern(),
+            fields.fieldPattern(),
+            fields.markerCode(),
+          )
+        )
+          throw new RangeError("ICU calendar field locator could not be configured");
+    }
   }
   format(milliseconds: number, fields: boolean): string {
     const text = nts_icu_date_format(this.handle, milliseconds, fields);
@@ -44,6 +61,9 @@ export class IcuDateFormatter {
   }
   fieldCount(): number {
     return nts_icu_date_field_count(this.handle);
+  }
+  rangeCollapsed(): boolean {
+    return nts_icu_date_range_collapsed(this.handle);
   }
   field(index: number): number {
     return nts_icu_date_field(this.handle, index, 0);

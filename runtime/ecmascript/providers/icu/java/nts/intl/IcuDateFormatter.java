@@ -11,7 +11,7 @@ import com.ibm.icu.util.TimeZone;
 import com.ibm.icu.util.ULocale;
 import java.text.AttributedCharacterIterator;
 import java.text.FieldPosition;
-import java.text.Format;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.Map;
@@ -27,9 +27,12 @@ public final class IcuDateFormatter {
     private final ConstrainedFieldPosition rangePosition = new ConstrainedFieldPosition();
     private final StringBuffer text = new StringBuffer(64);
     private final FieldPosition noField = new FieldPosition(-1);
-    private final boolean yearName;
+    private ArrayList<DateFieldLocator> locators;
+    private StringBuffer scratch;
     private int[] spans = new int[48];
     private int count;
+    private boolean collapsed = true;
+    private boolean yearNameOnly;
 
     public IcuDateFormatter(String locale, String pattern, String timeZone) {
         IcuVersions.verify();
@@ -42,13 +45,13 @@ public final class IcuDateFormatter {
         calendar = formatter.getCalendar();
         if (calendar instanceof GregorianCalendar)
             ((GregorianCalendar)calendar).setGregorianChange(new Date(-(1L << 53)));
-        yearName = hasYearName(pattern);
     }
     public String format(double milliseconds, boolean fields) {
         if (!Double.isFinite(milliseconds)) throw new IllegalArgumentException("Invalid date/time");
         calendar.setTimeInMillis((long)milliseconds);
         text.setLength(0);
         count = 0;
+        collapsed = true;
         if (!fields) return formatter.format(calendar, text, noField).toString();
         // ICU4J's public field API returns an attributed iterator. Retain the
         // output and span buffers; the iterator's allocation belongs to ICU.
@@ -67,12 +70,76 @@ public final class IcuDateFormatter {
             }
             while (index < limit) text.append(iterator.setIndex(index++));
         }
+        locateFields();
         return text.toString();
+    }
+    public void addFieldLocator(String marker, String pattern, int markerCode, int field) {
+        if ((markerCode != 0 && markerCode != 1) || (field != 11 && field != 12) || pattern.isEmpty())
+            throw new IllegalArgumentException("Invalid calendar field locator");
+        if (locators == null) locators = new ArrayList<>(2);
+        locators.add(new DateFieldLocator(marker, pattern, markerCode, field));
+    }
+    public void setYearNameOnly(boolean value) { yearNameOnly = value; }
+    private static final class DateFieldLocator {
+        final String markerPattern, fieldPattern;
+        final FieldPosition position;
+        final int field;
+        SimpleDateFormat marker, value;
+        DateFieldLocator(String markerPattern, String fieldPattern, int markerCode, int field) {
+            this.markerPattern = markerPattern;
+            this.fieldPattern = fieldPattern;
+            this.field = field;
+            position = new FieldPosition(markerCode == 0 ? DateFormat.Field.MILLISECONDS_IN_DAY : DateFormat.Field.JULIAN_DAY);
+        }
+    }
+    private void locateFields() {
+        if (locators == null) return;
+        if (scratch == null) scratch = new StringBuffer(64);
+        for (DateFieldLocator locator : locators) {
+            if (locator.value == null) {
+                locator.value = new SimpleDateFormat(locator.fieldPattern, locale);
+                if (!locator.markerPattern.isEmpty()) locator.marker = new SimpleDateFormat(locator.markerPattern, locale);
+            }
+            int start = 0;
+            if (locator.marker != null) {
+                scratch.setLength(0);
+                locator.position.setBeginIndex(0);
+                locator.position.setEndIndex(0);
+                locator.marker.format(calendar, scratch, locator.position);
+                if (locator.position.getEndIndex() <= locator.position.getBeginIndex())
+                    throw new IllegalStateException("Calendar marker field was not formatted");
+                start = locator.position.getBeginIndex();
+            }
+            scratch.setLength(0);
+            locator.value.format(calendar, scratch, noField);
+            int end = start + scratch.length();
+            if (end > text.length() || end <= start)
+                throw new IllegalStateException("Calendar field span outside text");
+            int output = 0;
+            for (int index = 0; index < count; index++) {
+                if (locator.field == 12 && spans[index * 3] == 1 && spans[index * 3 + 1] >= start && spans[index * 3 + 2] <= end)
+                    continue;
+                spans[output * 3] = spans[index * 3];
+                spans[output * 3 + 1] = spans[index * 3 + 1];
+                spans[output * 3 + 2] = spans[index * 3 + 2];
+                output++;
+            }
+            count = output;
+            if ((count + 1) * 3 > spans.length) spans = Arrays.copyOf(spans, spans.length * 2);
+            int position = 0;
+            while (position < count && spans[position * 3 + 1] <= start) position++;
+            System.arraycopy(spans, position * 3, spans, (position + 1) * 3, (count - position) * 3);
+            spans[position * 3] = locator.field;
+            spans[position * 3 + 1] = start;
+            spans[position * 3 + 2] = end;
+            count++;
+        }
     }
     public int fieldCount() { return count; }
     public int field(int index) { return spans[index * 3]; }
     public int start(int index) { return spans[index * 3 + 1]; }
     public int end(int index) { return spans[index * 3 + 2]; }
+    public boolean rangeCollapsed() { return collapsed; }
 
     public int offsetMilliseconds(double milliseconds) {
         if (!Double.isFinite(milliseconds)) throw new IllegalArgumentException("Invalid date/time");
@@ -124,7 +191,7 @@ public final class IcuDateFormatter {
     }
 
     public String formatRange(double start, double end, boolean fields) {
-        if (prepared != null) throw new IllegalStateException("Prepared calendar ranges require shared pattern selection");
+        if (prepared != null || locators != null) throw new IllegalStateException("Prepared calendar ranges require shared pattern selection");
         if (!Double.isFinite(start) || !Double.isFinite(end)) throw new IllegalArgumentException("Invalid date/time");
         if (range == null) {
             String skeleton = DateTimePatternGenerator.getInstance(locale).getSkeleton(formatter.toPattern());
@@ -153,23 +220,14 @@ public final class IcuDateFormatter {
             spans[count * 3 + 2] = rangePosition.getLimit();
             count++;
         }
-        return hasSpan ? result.toString() : format(start, fields);
+        if (!hasSpan) return format(start, fields);
+        collapsed = false;
+        return result.toString();
     }
 
-    private static boolean hasYearName(String pattern) {
-        boolean quoted = false;
-        for (int index = 0; index < pattern.length(); index++) {
-            char symbol = pattern.charAt(index);
-            if (symbol == '\'') {
-                if (index + 1 < pattern.length() && pattern.charAt(index + 1) == '\'') index++;
-                else quoted = !quoted;
-            } else if (!quoted && symbol == 'U') return true;
-        }
-        return false;
-    }
     private int fieldCode(AttributedCharacterIterator.Attribute field) {
         if (field == DateFormat.Field.ERA) return 0;
-        if (field == DateFormat.Field.YEAR) return yearName ? 12 : 1;
+        if (field == DateFormat.Field.YEAR) return yearNameOnly ? 12 : 1;
         if (field == DateFormat.Field.EXTENDED_YEAR) return 1;
         if (field == DateFormat.Field.MONTH) return 2;
         if (field == DateFormat.Field.DAY_OF_MONTH) return 3;
@@ -180,8 +238,10 @@ public final class IcuDateFormatter {
         if (field == DateFormat.Field.DAY_OF_WEEK || field == DateFormat.Field.DOW_LOCAL) return 8;
         if (field == DateFormat.Field.AM_PM || field == DateFormat.Field.AM_PM_MIDNIGHT_NOON || field == DateFormat.Field.FLEXIBLE_DAY_PERIOD) return 9;
         if (field == DateFormat.Field.TIME_ZONE) return 10;
-        if (field == DateFormat.Field.RELATED_YEAR) return 11;
-        if (field == DateFormat.Field.TIME_SEPARATOR) return -1;
-        return field instanceof Format.Field ? 13 : -1;
+        if (field == DateFormat.Field.DAY_OF_YEAR || field == DateFormat.Field.DAY_OF_WEEK_IN_MONTH
+            || field == DateFormat.Field.WEEK_OF_YEAR || field == DateFormat.Field.WEEK_OF_MONTH
+            || field == DateFormat.Field.YEAR_WOY || field == DateFormat.Field.JULIAN_DAY
+            || field == DateFormat.Field.MILLISECONDS_IN_DAY || field == DateFormat.Field.QUARTER) return 13;
+        return -1;
     }
 }

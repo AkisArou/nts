@@ -119,6 +119,13 @@ declare module "c:nts_icu" {
     fields: boolean,
   ): string | null;
   /** @ntsAbi managed */
+  export function nts_icu_date_field_locator(
+    handle: IcuDateHandle,
+    marker: string,
+    pattern: string,
+    markerCode: number,
+  ): boolean;
+  /** @ntsAbi managed */
   export function nts_icu_date_range(
     handle: IcuDateHandle,
     start: number,
@@ -127,6 +134,8 @@ declare module "c:nts_icu" {
   ): string | null;
   /** @ntsAbi managed */
   export function nts_icu_date_field_count(handle: IcuDateHandle): number;
+  /** @ntsAbi managed */
+  export function nts_icu_date_range_collapsed(handle: IcuDateHandle): boolean;
   /** @ntsAbi managed */
   export function nts_icu_date_offset(handle: IcuDateHandle, milliseconds: number): number;
   /** @ntsAbi managed */

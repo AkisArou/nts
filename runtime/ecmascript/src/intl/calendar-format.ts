@@ -2,6 +2,7 @@ import { MS_PER_DAY, modulo } from "../date/calendar.ts";
 import type { CalendarContext } from "../temporal/calendar-context.ts";
 import { DateTimePattern, datePatternField, dateTimeSkeleton } from "./date-pattern.ts";
 import type { DateTimeFormatterPrimitive, DateTimePatternData } from "./date-time-data.ts";
+import { DateTimeTemplate } from "./date-time-template.ts";
 import { FieldSpans } from "./parts.ts";
 
 class CalendarDate {
@@ -69,57 +70,6 @@ class CalendarInterval<P extends DateTimeFormatterPrimitive> {
   }
 }
 
-class IntervalFallback {
-  readonly prefix: string;
-  readonly separator: string;
-  readonly suffix: string;
-  readonly laterFirst: boolean;
-  constructor(pattern: string) {
-    let quoted = false;
-    let count = 0;
-    let seen = 0;
-    let first = 0;
-    let prefix = "";
-    let separator = "";
-    let suffix = "";
-    // ICU SimpleFormatter quotes braces, treats doubled apostrophes as one,
-    // and preserves an ordinary apostrophe inside literal text.
-    for (let index = 0; index < pattern.length; index++) {
-      const symbol = pattern.charAt(index);
-      if (symbol === "'") {
-        const next = pattern.charAt(index + 1);
-        if (next === "'") index++;
-        else if (quoted) {
-          quoted = false;
-          continue;
-        } else if (next === "{" || next === "}") {
-          quoted = true;
-          continue;
-        }
-      } else if (!quoted && symbol === "{") {
-        const argument = pattern.charAt(index + 1);
-        if ((argument !== "0" && argument !== "1") || pattern.charAt(index + 2) !== "}")
-          throw new RangeError("Invalid interval fallback argument");
-        const position = argument === "0" ? 0 : 1;
-        if (seen & (1 << position)) throw new RangeError("Duplicate interval fallback argument");
-        if (count === 0) first = position;
-        seen |= 1 << position;
-        count++;
-        index += 2;
-        continue;
-      }
-      if (count === 0) prefix += symbol;
-      else if (count === 1) separator += symbol;
-      else suffix += symbol;
-    }
-    if (count !== 2) throw new RangeError("Interval fallback requires both endpoints");
-    this.laterFirst = first === 1;
-    this.prefix = prefix;
-    this.separator = separator;
-    this.suffix = suffix;
-  }
-}
-
 // One chronology for single dates and ranges. Providers receive presentation
 // fields, never recalculate a lunisolar date or choose the public range shape.
 export class CalendarDateFormatter<P extends DateTimeFormatterPrimitive> {
@@ -131,7 +81,7 @@ export class CalendarDateFormatter<P extends DateTimeFormatterPrimitive> {
   readonly #start = new CalendarDate();
   #end: CalendarDate | undefined;
   #intervals: (CalendarInterval<P> | null | undefined)[] | undefined;
-  #fallback: IntervalFallback | undefined;
+  #fallback: DateTimeTemplate | undefined;
   #dayPeriod: P | undefined;
   #spans: FieldSpans | undefined;
   #range = false;
@@ -310,28 +260,31 @@ export class CalendarDateFormatter<P extends DateTimeFormatterPrimitive> {
       );
     }
     if (this.#fallback === undefined)
-      this.#fallback = new IntervalFallback(this.#data.intervalFallback());
+      this.#fallback = new DateTimeTemplate(this.#data.intervalFallback());
     const fallback = this.#fallback;
     this.#length = fallback.prefix.length;
     const first = this.append(
       this.#primitive,
-      fallback.laterFirst ? this.#end : this.#start,
+      fallback.firstArgument === 1 ? this.#end : this.#start,
       fields,
-      fallback.laterFirst ? 15 : 14,
+      fallback.firstArgument === 1 ? 15 : 14,
       0x1fff,
     );
     this.#length += fallback.separator.length;
     const last = this.append(
       this.#primitive,
-      fallback.laterFirst ? this.#start : this.#end,
+      fallback.firstArgument === 1 ? this.#start : this.#end,
       fields,
-      fallback.laterFirst ? 14 : 15,
+      fallback.firstArgument === 1 ? 14 : 15,
       0x1fff,
     );
     return fallback.prefix + first + fallback.separator + last + fallback.suffix;
   }
   fieldCount(): number {
     return this.#range ? (this.#spans?.count ?? 0) : this.#primitive.fieldCount();
+  }
+  rangeCollapsed(): boolean {
+    return !this.#range;
   }
   field(index: number): number {
     return this.#range ? this.#spans!.fields[index]! : this.#primitive.field(index);

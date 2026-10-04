@@ -32,6 +32,7 @@ import {
   calendarMonthIndex,
   calendarYearFromMonthIndex,
 } from "../../../runtime/ecmascript/src/temporal/calendar-month-index.ts";
+import { DateFieldPatterns } from "../../../runtime/ecmascript/providers/icu/shared/date-fields.ts";
 import {
   hasCalendarPreferences,
   hasWeekPreferences,
@@ -203,6 +204,20 @@ export function icuHost(root: string) {
   }
   function openDate(locale: string, pattern: string, timeZone: string): DateTimeFormatterPrimitive {
     const handle = Number(required("dateOpen", locale, pattern, timeZone));
+    if (pattern.includes("r") || pattern.includes("U")) {
+      const fields = new DateFieldPatterns(pattern);
+      required("dateYearNameOnly", handle, fields.yearNameOnly);
+      while (fields.next())
+        if (fields.field !== 12 || !fields.yearNameOnly)
+          required(
+            "dateFieldLocator",
+            handle,
+            fields.markerPattern(),
+            fields.fieldPattern(),
+            fields.markerCode(),
+            fields.field,
+          );
+    }
     let spans: number[][] = [];
     function format(operation: string, ...arguments_: (string | number | boolean)[]): string {
       const parts = required(operation, handle, ...arguments_).split(";");
@@ -212,6 +227,7 @@ export function icuHost(root: string) {
     return {
       format: (milliseconds, fields) => format("dateFormat", milliseconds, fields),
       formatRange: (start, end, fields) => format("dateRange", start, end, fields),
+      rangeCollapsed: () => required("dateRangeCollapsed", handle) === "true",
       offsetMilliseconds: (milliseconds) => Number(required("dateOffset", handle, milliseconds)),
       setCalendarFields: (relatedYear, year, month, leap, day, dayOfYear) => {
         if (

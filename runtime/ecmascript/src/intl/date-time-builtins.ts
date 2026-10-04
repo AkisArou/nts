@@ -20,10 +20,29 @@ import { PlainYearMonth } from "../temporal/plain-year-month.ts";
 import { PlainMonthDay } from "../temporal/plain-month-day.ts";
 import { ZonedDateTime } from "../temporal/zoned-date-time.ts";
 import { CalendarDateFormatter } from "./calendar-format.ts";
+import { DateTimeRangeFormatter } from "./date-time-range.ts";
 import type { DateTimePattern } from "./date-pattern.ts";
 import { resolveCalendar } from "../temporal/calendar-environment.ts";
 import type { CalendarContext } from "../temporal/calendar-context.ts";
 import { MS_PER_DAY } from "../date/calendar.ts";
+import { LocaleIdentifier } from "./locale-id.ts";
+
+const dateFields = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 8) | (1 << 11) | (1 << 12);
+const timeFields = (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 9);
+const calendarFields = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 11) | (1 << 12);
+const calendarDataFields = calendarFields | (1 << 0);
+
+function calendarText<P extends DateTimeFormatterPrimitive>(
+  primitive: P,
+  calendar: CalendarContext | undefined,
+  pattern: DateTimePattern,
+  data: DateTimePatternData,
+  open: (pattern: string) => P,
+): DateTimeTextPrimitive {
+  return calendar === undefined || !(pattern.fieldMask & calendarFields)
+    ? primitive
+    : new CalendarDateFormatter(primitive, calendar, pattern, data, open);
+}
 
 function clip(value: number): number {
   const result = timeClip(value);
@@ -132,21 +151,41 @@ export class NtsDateTimeFormat<
     const config = this.#configuration;
     const open = this.#open;
     const locale = config.dataLocale;
-    const primitive = open(locale, pattern.pattern, zone);
+    // Time/weekday symbols inherit Gregorian data. These paths need no
+    // non-ISO date calculation, including at ECMAScript's extreme instants.
+    const timeLocale =
+      config.calendar === "gregory" || config.calendar === "iso8601"
+        ? locale
+        : new LocaleIdentifier(locale).withKeyword("ca", "gregory");
     if (
       (config.calendar === "chinese" || config.calendar === "dangi") &&
-      (pattern.fieldMask & ((1 << 1) | (1 << 2) | (1 << 3) | (1 << 11) | (1 << 12))) !== 0
+      (pattern.fieldMask & calendarFields) !== 0
     ) {
       if (this.#calendar === undefined) this.#calendar = resolveCalendar(config.calendar);
       if (this.#calendar === undefined)
         throw new RangeError("Calendar formatting data unavailable");
-      return new DateTimeFormatter(
-        new CalendarDateFormatter(primitive, this.#calendar, pattern, config.patterns, (selected) =>
-          open(locale, selected, zone),
-        ),
-      );
     }
-    return new DateTimeFormatter(primitive);
+    const calendar = this.#calendar;
+    const data = config.patterns;
+    const selectedLocale = pattern.fieldMask & calendarDataFields ? locale : timeLocale;
+    const primitive = open(selectedLocale, pattern.pattern, zone);
+    const text = calendarText(primitive, calendar, pattern, data, (selected) =>
+      open(selectedLocale, selected, zone),
+    );
+    if (!(pattern.fieldMask & dateFields) || !(pattern.fieldMask & timeFields))
+      return new DateTimeFormatter(text);
+    // Capture immutable capabilities, never the owner: retained range factories
+    // must not introduce an RC cycle back to their containing builtin.
+    const openText = (selected: DateTimePattern): DateTimeTextPrimitive => {
+      const tag = selected.fieldMask & calendarDataFields ? locale : timeLocale;
+      return calendarText(open(tag, selected.pattern, zone), calendar, selected, data, (value) =>
+        open(tag, value, zone),
+      );
+    };
+    return new DateTimeFormatter(
+      text,
+      () => new DateTimeRangeFormatter(text, primitive, pattern, data, openText),
+    );
   }
   // Slot entry point for Temporal/Date localization. It uses exactly the same
   // pattern selection, calendar validation and provider as public formatting.

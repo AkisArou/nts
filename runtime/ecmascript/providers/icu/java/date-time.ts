@@ -1,9 +1,22 @@
 import { IcuDateFormatter as NativeFormatter } from "java:nts.intl";
+import { DateFieldPatterns } from "../shared/date-fields.ts";
 
 export class IcuDateFormatter {
   private readonly handle: NativeFormatter;
   constructor(locale: string, pattern: string, timeZone: string) {
     this.handle = new NativeFormatter(locale, pattern, timeZone);
+    if (pattern.includes("r") || pattern.includes("U")) {
+      const fields = new DateFieldPatterns(pattern);
+      this.handle.setYearNameOnly(fields.yearNameOnly);
+      while (fields.next())
+        if (fields.field !== 12 || !fields.yearNameOnly)
+          this.handle.addFieldLocator(
+            fields.markerPattern(),
+            fields.fieldPattern(),
+            fields.markerCode(),
+            fields.field,
+          );
+    }
   }
   format(milliseconds: number, fields: boolean): string {
     return this.handle.format(milliseconds, fields);
@@ -27,6 +40,9 @@ export class IcuDateFormatter {
   }
   fieldCount(): number {
     return this.handle.fieldCount();
+  }
+  rangeCollapsed(): boolean {
+    return this.handle.rangeCollapsed();
   }
   field(index: number): number {
     return this.handle.field(index);

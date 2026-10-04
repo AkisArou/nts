@@ -27,10 +27,13 @@ declare module "java:nts.intl" {
   export class IcuDateFormatter {
     constructor(a0: string, a1: string, a2: string);
     format(a0: number, a1: boolean): string;
+    addFieldLocator(a0: string, a1: string, a2: number, a3: number): void;
+    setYearNameOnly(a0: boolean): void;
     fieldCount(): number;
     field(a0: number): number;
     start(a0: number): number;
     end(a0: number): number;
+    rangeCollapsed(): boolean;
     offsetMilliseconds(a0: number): number;
     setCalendarFields(a0: number, a1: number, a2: number, a3: boolean, a4: number, a5: number): boolean;
     formatRange(a0: number, a1: number, a2: boolean): string;
@@ -41,6 +44,10 @@ declare module "java:nts.intl" {
     export class CalendarFields {
       getType(): string | null;
       protected computeFields(): void;
+    }
+
+    /** nts.intl.IcuDateFormatter$DateFieldLocator Final: cannot be extended. */
+    export class DateFieldLocator {
     }
 
   }

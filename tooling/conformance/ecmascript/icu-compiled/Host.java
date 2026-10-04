@@ -201,6 +201,18 @@ public final class Host {
                         case "dateOffset":
                             result = Integer.toString(dates.get(Integer.parseInt(first)).offsetMilliseconds(Double.parseDouble(decode(fields[2]))));
                             break;
+                        case "dateRangeCollapsed":
+                            result = Boolean.toString(dates.get(Integer.parseInt(first)).rangeCollapsed());
+                            break;
+                        case "dateFieldLocator":
+                            dates.get(Integer.parseInt(first)).addFieldLocator(decode(fields[2]), decode(fields[3]),
+                                Integer.parseInt(decode(fields[4])), Integer.parseInt(decode(fields[5])));
+                            result = "true";
+                            break;
+                        case "dateYearNameOnly":
+                            dates.get(Integer.parseInt(first)).setYearNameOnly(Boolean.parseBoolean(decode(fields[2])));
+                            result = "true";
+                            break;
                         case "dateCalendarFields":
                             result = Boolean.toString(dates.get(Integer.parseInt(first)).setCalendarFields(
                                 Integer.parseInt(decode(fields[2])), Integer.parseInt(decode(fields[3])),
