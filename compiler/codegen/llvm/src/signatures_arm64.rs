@@ -89,6 +89,7 @@ pub const SIGNATURES_ARM64: &[Signature] = &[
     Signature { name: "nts_bigint_as_intn", returns: "i128", params: &["double", "i128"], attributes: &[] },
     Signature { name: "nts_bigint_as_uintn", returns: "i128", params: &["double", "i128"], attributes: &[] },
     Signature { name: "nts_bigint_box", returns: "ptr", params: &["i128"], attributes: &[] },
+    Signature { name: "nts_bigint_compare_string", returns: "double", params: &["i128", "ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_bigint_from_number", returns: "i128", params: &["double"], attributes: &[] },
     Signature { name: "nts_bigint_shl", returns: "i128", params: &["i128", "i128"], attributes: &[] },
     Signature { name: "nts_bigint_shr", returns: "i128", params: &["i128", "i128"], attributes: &[] },

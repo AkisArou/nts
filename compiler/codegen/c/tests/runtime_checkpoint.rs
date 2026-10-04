@@ -455,6 +455,14 @@ fn the_runtime_keeps_the_contracts_its_header_states() {
     );
 }
 
+#[test]
+fn bigint_string_ordering_uses_the_integer_grammar_without_rounding() {
+    let report =
+        run_suite("bigint_strings", &["-DNTS_PROVIDER_RC", "-fsanitize=address,undefined"]);
+    assert!(report.contains("666 of 666 comparisons agree"), "{report}");
+    assert!(report.contains("no retained bytes"), "{report}");
+}
+
 /// And the endpoint it must refuse is refused rather than converted.
 ///
 /// Separate because a refusal aborts, so it cannot share a process with the

@@ -5466,6 +5466,114 @@ static bool nts_str_is_space(uint32_t unit) {
   }
 }
 
+/* StringIntegerLiteral, with magnitude retained only through 2^127. Past that
+ * every native BigInt is smaller in magnitude. Continue validating all code
+ * units after overflow: a huge integer followed by a dot is still invalid.
+ * No string copy or arbitrary-precision allocation is needed for ordering. */
+typedef struct {
+  unsigned __int128 magnitude;
+  bool negative;
+  bool past;
+} NtsIntegerString;
+
+static bool nts_str_integer(const NtsString *s, NtsIntegerString *out) {
+  if (s == NULL) {
+    return false;
+  }
+  uint32_t from = 0;
+  uint32_t to = s->length;
+  while (from < to && nts_str_is_space(nts_unit(s, from))) {
+    from++;
+  }
+  while (to > from && nts_str_is_space(nts_unit(s, to - 1))) {
+    to--;
+  }
+  *out = (NtsIntegerString){0, false, false};
+  if (from == to) {
+    return true;
+  }
+
+  bool signed_decimal = false;
+  uint16_t unit = nts_unit(s, from);
+  if (unit == '+' || unit == '-') {
+    signed_decimal = true;
+    out->negative = unit == '-';
+    from++;
+  }
+  uint32_t base = 10;
+  if (!signed_decimal && to - from >= 2 && nts_unit(s, from) == '0') {
+    switch (nts_unit(s, from + 1)) {
+    case 'x':
+    case 'X':
+      base = 16;
+      break;
+    case 'o':
+    case 'O':
+      base = 8;
+      break;
+    case 'b':
+    case 'B':
+      base = 2;
+      break;
+    default:
+      break;
+    }
+    if (base != 10) {
+      from += 2;
+    }
+  }
+  if (from == to) {
+    return false;
+  }
+
+  const unsigned __int128 limit = (unsigned __int128)1 << 127;
+  for (; from < to; from++) {
+    unit = nts_unit(s, from);
+    uint32_t digit;
+    if (unit >= '0' && unit <= '9') {
+      digit = (uint32_t)(unit - '0');
+    } else if (unit >= 'a' && unit <= 'f') {
+      digit = (uint32_t)(unit - 'a') + 10u;
+    } else if (unit >= 'A' && unit <= 'F') {
+      digit = (uint32_t)(unit - 'A') + 10u;
+    } else {
+      return false;
+    }
+    if (digit >= base) {
+      return false;
+    }
+    if (!out->past) {
+      if (out->magnitude > (limit - digit) / base) {
+        out->past = true;
+      } else {
+        out->magnitude = out->magnitude * base + digit;
+      }
+    }
+  }
+  out->negative = out->negative && (out->past || out->magnitude != 0);
+  return true;
+}
+
+double nts_bigint_compare_string(__int128 value, const NtsString *text) {
+  NtsIntegerString parsed;
+  if (!nts_str_integer(text, &parsed)) {
+    return (double)NAN;
+  }
+  bool negative = value < 0;
+  if (negative != parsed.negative) {
+    return negative ? -1.0 : 1.0;
+  }
+  if (parsed.past) {
+    return negative ? 1.0 : -1.0;
+  }
+  /* Unsigned negation also covers the asymmetric -2^127 endpoint. */
+  unsigned __int128 magnitude =
+      negative ? (unsigned __int128)0 - (unsigned __int128)value
+               : (unsigned __int128)value;
+  int order = (magnitude > parsed.magnitude) - (magnitude < parsed.magnitude);
+  return (double)(negative ? -order : order);
+}
+
 /* `trim`, `trimStart` and `trimEnd`, which differ only in which ends they
  * move. One walk each way and then a slice, so a string with nothing to trim
  * still allocates a copy -- which is what every other string operation here

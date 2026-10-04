@@ -915,6 +915,13 @@ NtsString *nts_bool_to_string(bool value);
  * answer rather than a lossy one. */
 __int128 nts_bigint_from_number(double value);
 
+/* Exact integer ordering against StringToBigInt's grammar: -1, 0, 1, or NaN
+ * when the string is incomparable. The result alone is a double; neither
+ * operand is rounded. Strings beyond the 128-bit value domain are ordered by
+ * their magnitude without materializing an out-of-domain BigInt. */
+NTS_READS_ONLY double nts_bigint_compare_string(__int128 value,
+                                                const NtsString *text);
+
 NtsString *nts_bigint_to_string(__int128 value);
 
 __int128 nts_bigint_shl(__int128 value, __int128 count);

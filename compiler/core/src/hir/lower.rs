@@ -66734,6 +66734,10 @@ impl<'a> FuncBuilder<'a> {
 
         let (lhs, rhs) = self.relational_operands(id, op, *lhs_node, *rhs_node, lhs, rhs)?;
 
+        if let Some(comparison) = self.bigint_string_comparison(id, op, lhs, rhs) {
+            return Ok(comparison);
+        }
+
         let (lhs, rhs) = self.numeric_operands(id, op, lhs, rhs)?;
 
         let origin = self.origin(id);
@@ -68655,6 +68659,7 @@ mod tests {
     }
 }
 
+mod bigint;
 mod gobject;
 mod initialization;
 mod native_memory;
