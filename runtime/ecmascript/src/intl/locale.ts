@@ -74,7 +74,9 @@ export class LocaleResolver<D extends LocaleData> {
     tag: string,
     matcher: NonNullable<Intl.NumberFormatOptions["localeMatcher"]>,
   ): string | undefined {
-    return matcher === "lookup" ? this.lookup(tag) : this.data.bestFit(tag);
+    // ICU's distance threshold may reject a supported language with an unusual
+    // script. Best fit still retains every match available to prefix lookup.
+    return matcher === "lookup" ? this.lookup(tag) : this.data.bestFit(tag) ?? this.lookup(tag);
   }
 
   resolve(

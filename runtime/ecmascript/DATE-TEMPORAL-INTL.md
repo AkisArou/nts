@@ -766,6 +766,29 @@ methods have no shared binding in this adapter. Their Node results cannot count
 as NTS evidence. Focused original-suite receipts are
 `locale-slots-unbound-*-test262.{jsonl,log}` in the same audit directory.
 
+Best-fit locale matching now retains shared prefix lookup when ICU's distance
+threshold declines a tag. For example, `fr-Hans` selects the supported `fr`
+prefix rather than the environment default, and `en-Hans` is consistently
+reported by both construction and supportedLocalesOf. ICU's accepted match
+does not incur a second lookup. This preserves the minimum quality described
+by [ECMA-402 best-fit matching](https://tc39.es/ecma402/#sec-lookupmatchinglocalebybestfit).
+The original `supportedLocalesOf-consistent-with-resolvedOptions.js` now passes
+its six constructors and both matchers. A direct concrete-provider resolver
+probe returns `en:en;fr:fr;de:de;none:none` on C, C RC, LLVM, LLVM RC and JVM,
+with ASan/UBSan, RC leaks and JVM verification. The unrelated uninstantiated
+generic export refusal is retained in each emission receipt; this is evidence
+for the selected resolver path, not full-source or public-API acceptance.
+Commands/results are `locale-best-fit-compiled-{commands,report}.json` under
+`target/ecmascript/audit`.
+The final full Intl host run retains **3132 passes, 185 failures and 40
+unsupported cases**, with no regressions, missing rows or changed Test262 source
+hashes against the discovery run. The consistency test is the additional pass;
+all forty unbound locale-method rows now come directly from the final guarded
+runner. DateTimeFormat remains **220/244** and Intl/Temporal **2029/2029**.
+The full rows and comparison are `locale-best-fit-intl-final-test262.jsonl` and
+`locale-best-fit-intl-final-comparison.json`. Public binding, unsupported locale
+methods and platform/performance acceptance still remain open.
+
 The scalar ISO parser fixture agrees on **812 cases across 18 functions** on C,
 LLVM, JVM, C+RC and LLVM+RC. RC differential checks use `NTS_RC=1`. Separate
 public fixtures retain canonical union refusals and optional-tuple argument-count
