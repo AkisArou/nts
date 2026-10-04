@@ -2111,6 +2111,16 @@ NtsValue nts_array_element(NtsValue array, double index) {
   }
   const NtsArray *object = (const NtsArray *)nts_value_reference(array);
   const NtsDescriptor *descriptor = object->header.descriptor;
+  /* Array identity includes tuples, but their fields are not array slots and
+   * their header length is not an element count. Check that capability before
+   * bounds; a zero tuple header must not invent an undefined element. */
+  if (descriptor->kind != NTS_KIND_ARRAY) {
+    fprintf(stderr,
+            NTS_REFUSED "an erased read of `%s`, a tuple whose indexed storage "
+                        "contract is not built\n",
+            descriptor->name ? descriptor->name : "?");
+    abort();
+  }
   if (!(index >= 0.0 && index < (double)object->header.length &&
         index == (double)(uint32_t)index)) {
     return nts_value_of_undefined();

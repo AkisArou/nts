@@ -17,7 +17,12 @@
  * are here so that a change which fixes it by breaking them cannot pass.
  */
 #include <math.h>
+#include <signal.h>
 #include <stdio.h>
+#include <string.h>
+#include <sys/resource.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include "nts_test_host.h"
 
@@ -113,7 +118,45 @@ static NtsValue as_value(NtsArray *array) {
   return nts_value_of_reference(&array->header, NTS_TAG_OBJECT);
 }
 
+static bool tuple_read_refuses(void) {
+  int output[2];
+  if (pipe(output) != 0) {
+    return false;
+  }
+  fflush(stdout);
+  pid_t child = fork();
+  if (child == 0) {
+    close(output[0]);
+    dup2(output[1], STDERR_FILENO);
+    close(output[1]);
+    struct rlimit no_core = {0, 0};
+    setrlimit(RLIMIT_CORE, &no_core);
+    NtsDescriptor tuple = desc_value;
+    tuple.kind = NTS_KIND_TUPLE;
+    tuple.name = "[number]";
+    NtsHeader header = {0};
+    header.descriptor = &tuple;
+    /* A tuple has fields but no logical array length in its header. */
+    nts_array_element(nts_value_of_reference(&header, NTS_TAG_OBJECT), 0);
+    _exit(0);
+  }
+  close(output[1]);
+  char message[256] = {0};
+  ssize_t read_bytes = read(output[0], message, sizeof(message) - 1);
+  close(output[0]);
+  int status = 0;
+  if (child < 0 || waitpid(child, &status, 0) < 0) {
+    return false;
+  }
+  return read_bytes > 0 && WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT &&
+         strstr(message, "nts: refused:") != NULL &&
+         strstr(message, "tuple whose indexed storage contract is not built") !=
+             NULL;
+}
+
 int main(void) {
+  check("tuple identity does not invent an undefined indexed element",
+        tuple_read_refuses());
   /* THE CASE THE FIELD EXISTS FOR. Two descriptors that agree on kind, on
    * size, on references and on erasure, and hold different things. */
   check("eight bytes of double and eight bytes of int64 are the same width",
