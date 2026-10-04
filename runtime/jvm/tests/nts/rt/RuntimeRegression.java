@@ -38,6 +38,24 @@ public final class RuntimeRegression {
     private static void bigint(NtsBigInt a, BigInteger expected, String operation) {
         equal(wide(a), wrap(expected), operation);
     }
+    /**
+     * The two refusal lines are C's and tell a decline from a defect by prefix: `nts: refused: ` is the
+     * program declining its input, `nts: refused at run time: ` the missing-feature abort.
+     */
+    private static void testRefusalLines() {
+        equal(new NtsRefusal("index 1 is outside [0, 1)").getMessage(), "nts: refused: index 1 is outside [0, 1)",
+            "a decline is C's NTS_REFUSED line");
+        check(new NtsRefusal("x").status == 134, "a decline ends as C's abort()");
+        String missing = null;
+        int status = 0;
+        try { NtsRuntime.refused("`f` was declined: reasons"); } catch (NtsRefusal e) { missing = e.getMessage(); status = e.status; }
+        equal(missing, "nts: refused at run time: `f` was declined: reasons", "the missing-feature abort is C's nts_refused line");
+        check(!missing.startsWith("nts: refused: "), "and does not read as a decline");
+        check(status == 134, "and ends as C's abort()");
+        equal(NtsRefusal.decline("y", 1).getMessage(), "nts: refused: y", "an exiting decline keeps the decline prefix");
+        check(NtsRefusal.decline("y", 1).status == 1, "and its own status");
+    }
+
     /** `compareString` against ECMA-262 StringToBigInt, and exact past 2^53 and past 128 bits. */
     private static void testBigIntCompareString() {
         NtsBigInt big = NtsBigInt.fromLong(9007199254740993L);
@@ -816,7 +834,8 @@ public final class RuntimeRegression {
 
     public static void main(String[] args) throws Exception {
         testBigInt();
-        testBigIntCompareString(); System.out.println("bigint randomized tests passed");
+        testBigIntCompareString();
+        testRefusalLines(); System.out.println("bigint randomized tests passed");
         testMap(); System.out.println("map randomized and cursor tests passed");
         testMapAsJavaMap(); System.out.println("NtsMap as java.util.Map passed");
         testForeignCallbacks(); System.out.println("foreign-thread callbacks passed");

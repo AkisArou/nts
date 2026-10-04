@@ -12,9 +12,9 @@ package nts.rt;
  * every instrument, not merely untested (2026-10-02).
  *
  * <p>The exits match the C lane's: an uncaught throw already ends the process
- * from compiled code ({@link NtsRuntime#uncaught}, status 1); a run-time
- * refusal prints C's {@code nts: refused at run time: } line and exits 134,
- * which is what C's {@code abort()} leaves; a clean run exits 0.
+ * from compiled code ({@link NtsRuntime#uncaught}, status 1); a refusal
+ * prints its own line -- C's text for that helper -- and exits with C's status
+ * for it (134, C's {@code abort()}, unless the helper exits); a clean run exits 0.
  */
 public final class NtsMain {
     private NtsMain() {}
@@ -42,13 +42,12 @@ public final class NtsMain {
             if (cause instanceof Exception) { throw (Exception) cause; }
             throw (Error) cause;
         }
-        String message = cause.getMessage();
-        String detail = message.startsWith("nts: refused: at run time: ")
-            ? message.substring("nts: refused: at run time: ".length())
-            : message.substring("nts: refused: ".length());
+        // The refusal's own line and status are C's (see NtsRefusal). This used to rewrite every refusal to
+        // `nts: refused at run time: ` and 134, so a legitimate decline -- `nts: refused: index 1 is outside
+        // [0, 1)` on C -- read here as the missing-feature abort.
         System.out.flush();
-        System.err.println("nts: refused at run time: " + detail);
+        System.err.println(cause.getMessage());
         System.err.flush();
-        System.exit(134);
+        System.exit(((NtsRefusal) cause).status);
     }
 }

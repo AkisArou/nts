@@ -93,7 +93,7 @@ fn an_uncaught_throw_at_module_scope_exits_one() {
 }
 
 /// A run-time refusal ends the run as C's `abort()` does: status 134 and the
-/// line C prints. The refusal is a checked read past the end of an array --
+/// line C prints, `nts: refused: ` and the reason. The refusal is a checked read past the end of an array --
 /// `xs[1]!` on a one-element array, where node answers `undefined` and nts
 /// refuses rather than hand back a value the `!` promised was there.
 ///
@@ -111,7 +111,10 @@ fn a_run_time_refusal_exits_as_c_aborts() {
     };
     assert_eq!(status, 134, "C's `abort()` status: {stderr}");
     assert_eq!(stdout, "start\n");
-    assert_eq!(stderr.trim(), "nts: refused at run time: index 1 is outside [0, 1)");
+    // C's `nts_bounds` line, `NTS_REFUSED` + the index: a legitimate decline, which the differential
+    // reads by the `nts: refused: ` prefix. The launcher used to rewrite it to `nts: refused at run time: `,
+    // the missing-feature abort's text, which this test then pinned.
+    assert_eq!(stderr.trim(), "nts: refused: index 1 is outside [0, 1)");
 }
 
 /// The program the refusal test used to run, now that it compiles: a `bigint`

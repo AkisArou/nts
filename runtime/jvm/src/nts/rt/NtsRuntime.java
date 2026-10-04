@@ -176,7 +176,7 @@ public final class NtsRuntime {
      */
     /** A refusal reached at run time; see {@code nts_refused}. */
     public static void refused(String what) {
-        throw new NtsRefusal("at run time: " + what);
+        throw NtsRefusal.missing(what);
     }
     public static void noArm(NtsValue subject, String member) {
         /* `-source 8`, as `uncaught` above is written for: no switch
