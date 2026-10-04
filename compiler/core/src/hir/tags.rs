@@ -42,6 +42,9 @@ pub const NULL: u32 = 7;
 pub const HANDLE_GOBJECT: u32 = 8;
 pub const HANDLE_OBJC: u32 = 9;
 pub const HANDLE_COM: u32 = 10;
+/// Reserved for an erased `BigInt` payload. Its owned storage and readers are
+/// introduced separately; no lowering emits this tag until those are present.
+pub const BIGINT: u32 = 16;
 /// The tag a counted handle of `family` carries in an erased value, which is
 /// its family's place in the block; `None` for a C pointer nothing counts,
 /// which no erased value holds. The one answer every backend asks.
@@ -71,6 +74,8 @@ const _: () = assert!(
     HANDLE_BLOCK == NULL + 1 && HANDLE_GOBJECT == HANDLE_BLOCK && HANDLE_COM < HANDLE_BLOCK + HANDLE_BLOCK_SIZE,
     "the handle block follows NULL, and every handle tag is inside it"
 );
+const _: () = assert!(BIGINT >= HANDLE_BLOCK + HANDLE_BLOCK_SIZE,
+    "an erased BigInt must not overlap the native handle tag band");
 
 /// The orderings the numbering above rests on, checked where it is written.
 ///

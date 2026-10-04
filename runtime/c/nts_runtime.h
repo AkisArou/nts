@@ -589,7 +589,10 @@ typedef enum NtsTag {
    * the block sits above `OBJECT`. */
   NTS_TAG_HANDLE_GOBJECT = 8,
   NTS_TAG_HANDLE_OBJC = 9,
-  NTS_TAG_HANDLE_COM = 10
+  NTS_TAG_HANDLE_COM = 10,
+  /* Reserved until the owned BigInt payload and every reader are implemented.
+   * No lowering emits this tag yet. It lies outside the handle band 8..15. */
+  NTS_TAG_BIGINT = 16
 } NtsTag;
 
 /* Whether a tag is one of the handle block's, 8 to 15, and which family of
