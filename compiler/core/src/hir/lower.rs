@@ -31938,7 +31938,18 @@ impl<'a> FuncBuilder<'a> {
         let b = self.lower_expression(right)?;
         let origin = self.origin(id);
         let numeric = |ty: &HirType| matches!(ty, HirType::Float { .. } | HirType::Int { .. });
-        if !numeric(&self.values[a.0 as usize].ty) || !numeric(&self.values[b.0 as usize].ty) {
+        let (a_ty, b_ty) = (&self.values[a.0 as usize].ty, &self.values[b.0 as usize].ty);
+        if numeric(a_ty) && numeric(b_ty) {
+            let a = self.coerce(a, &HirType::NUMBER, left)?;
+            let b = self.coerce(b, &HirType::NUMBER, right)?;
+            return self.object_is_numbers(id, a, b);
+        }
+        // A concrete non-number cannot contribute either exceptional case.
+        // An erased value can, but its annotation proves neither its tag nor
+        // the safety of reading a number payload.
+        if !matches!(a_ty, HirType::Erased) && !numeric(a_ty)
+            || !matches!(b_ty, HirType::Erased) && !numeric(b_ty)
+        {
             return Ok(self.push(
                 OpKind::Binary {
                     op: BinOp::Eq,
@@ -31949,8 +31960,43 @@ impl<'a> FuncBuilder<'a> {
                 origin,
             ));
         }
-        let a = self.coerce(a, &HirType::NUMBER, left)?;
-        let b = self.coerce(b, &HirType::NUMBER, right)?;
+        let a = self.coerce(a, &HirType::Erased, left)?;
+        let b = self.coerce(b, &HirType::Erased, right)?;
+        let check_b = self.new_block();
+        let numbers = self.new_block();
+        let ordinary = self.new_block();
+        let merge = self.new_block();
+        let answer = self.push_block_param(merge, HirType::Bool, origin.clone());
+        let unsigned = HirType::Int { bits: 32, signed: false };
+        let number = self.push(OpKind::ConstInt(i128::from(super::tags::NUMBER)),
+            unsigned.clone(), origin.clone());
+        for (value, yes) in [(a, check_b), (b, numbers)] {
+            let tag = self.push(OpKind::TagOf { value }, unsigned.clone(), origin.clone());
+            let is_number = self.push(OpKind::Binary { op: BinOp::Eq, lhs: tag, rhs: number },
+                HirType::Bool, origin.clone());
+            self.terminate(Terminator::Branch {
+                cond: is_number, then_target: yes, then_args: Vec::new(),
+                else_target: ordinary, else_args: Vec::new(),
+            });
+            self.switch_to(yes);
+        }
+        // Both tag tests dominate the payload reads, on every backend.
+        let a_number = self.push(OpKind::Unerase { value: a }, HirType::NUMBER, origin.clone());
+        let b_number = self.push(OpKind::Unerase { value: b }, HirType::NUMBER, origin.clone());
+        let same_number = self.object_is_numbers(id, a_number, b_number)?;
+        self.terminate(Terminator::Jump { target: merge, args: vec![same_number] });
+        self.switch_to(ordinary);
+        let equal = self.push(OpKind::Binary { op: BinOp::Eq, lhs: a, rhs: b },
+            HirType::Bool, origin);
+        self.terminate(Terminator::Jump { target: merge, args: vec![equal] });
+        self.switch_to(merge);
+        Ok(answer)
+    }
+
+    /// The numeric `SameValue` kernel, after static conversion or actual tag
+    /// guards have supplied two doubles. No conversion of another JS type.
+    fn object_is_numbers(&mut self, id: NodeId, a: ValueId, b: ValueId) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
         let mut binary = |op, lhs, rhs, ty: HirType, origin: &Origin| {
             self.push(OpKind::Binary { op, lhs, rhs }, ty, origin.clone())
         };
