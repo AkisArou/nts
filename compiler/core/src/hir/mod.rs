@@ -6130,7 +6130,7 @@ fn narrow_erasure(program: &mut Program) -> usize {
     // The other order narrows nothing on the second pass.
     let escapes = escape::analyze_program(program);
     for (func, escapes) in program.funcs.iter_mut().zip(&escapes) {
-        narrowed += unerase::narrow_arrays(func, escapes);
+        narrowed += unerase::narrow_arrays(func, escapes, &program.signature_faces);
     }
     narrowed
 }

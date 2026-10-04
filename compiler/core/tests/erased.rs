@@ -544,3 +544,31 @@ fn nullable_reference_recovery_keeps_its_tags_at_every_boundary() {
         HirType::Managed(hir::ManagedType::String),
         "the nonnullable control still recovers string storage");
 }
+
+/// A callable face retains FUNCTION when its erased wrapper is removed.
+#[test]
+fn recovered_signature_faces_keep_their_runtime_callable_tag() {
+    let Some(prepared) = prepared_at(
+        "../../examples/a-recovered-callable-keeps-its-function-tag",
+    ) else { return; };
+    let named = |name: &str| prepared.program.funcs.iter()
+        .find(|func| func.name == name).unwrap_or_else(|| panic!("no function {name}"));
+    let HirType::Managed(hir::ManagedType::Object(face)) = named("describe").params[0].ty else {
+        panic!("the parameter did not recover its callable storage");
+    };
+    assert!(prepared.program.signature_faces.contains_key(&face));
+    assert!(!hir::is_closure_type(face), "a signature face is not a closure instance");
+    for name in ["describe", "returned", "array"] {
+        let func = named(name);
+        let equality = func.blocks.iter().flat_map(|block| &block.ops)
+            .find_map(|value| match func.value(*value).kind {
+                OpKind::Binary { op: hir::BinOp::Eq, lhs, rhs } => Some((lhs, rhs)),
+                _ => None,
+            }).unwrap_or_else(|| panic!("no callable test in {name}"));
+        assert!(matches!(func.value(equality.0).kind,
+            OpKind::ConstInt(tag) if tag == i128::from(hir::tags::FUNCTION)),
+            "{name}'s recovered callable is still a function at runtime");
+    }
+    assert_eq!(named("mixed").return_type, HirType::Erased,
+        "callable and nominal object values keep independent tags");
+}

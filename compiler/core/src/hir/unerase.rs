@@ -28,10 +28,12 @@
 //! read. A read that flows anywhere else is a use that expects the general
 //! representation, and one of those sinks the whole array.
 
+use std::collections::BTreeMap;
+
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::escape::Escapes;
-use super::{Absent, Callee, Func, HirType, ManagedType, OpKind, Program, ValueId};
+use super::{Absent, Callee, Func, HirType, ManagedType, OpKind, Program, SignatureFace, TypeId, ValueId};
 
 /// Removing an erasure must preserve its tag as well as its payload storage.
 /// A nullable reference carries an absence that its machine type alone cannot
@@ -46,7 +48,11 @@ fn payload_without_absence(func: &Func, erased: ValueId) -> Option<ValueId> {
 
 /// Specialize the erased arrays a function allocates and keeps. Reports how
 /// many.
-pub fn narrow_arrays(func: &mut Func, escapes: &Escapes) -> usize {
+pub fn narrow_arrays(
+    func: &mut Func,
+    escapes: &Escapes,
+    faces: &BTreeMap<TypeId, SignatureFace>,
+) -> usize {
     let candidates: Vec<ValueId> = (0..func.values.len())
         .map(|index| ValueId(u32::try_from(index).unwrap_or(0)))
         .filter(|value| {
@@ -63,7 +69,7 @@ pub fn narrow_arrays(func: &mut Func, escapes: &Escapes) -> usize {
     let mut narrowed = 0;
     for array in candidates {
         if let Some(element) = single_representation(func, array) {
-            rewrite(func, array, &element);
+            rewrite(func, array, &element, faces);
             narrowed += 1;
         }
     }
@@ -196,8 +202,13 @@ fn single_representation(func: &Func, array: ValueId) -> Option<HirType> {
 }
 
 /// Retype the array and unwrap every erasure around it.
-fn rewrite(func: &mut Func, array: ValueId, element: &HirType) {
-    let tag = super::tags::of_representation(element);
+fn rewrite(
+    func: &mut Func,
+    array: ValueId,
+    element: &HirType,
+    faces: &BTreeMap<TypeId, SignatureFace>,
+) {
+    let tag = super::tags::of_registered(faces, element);
     func.values[array.0 as usize].ty =
         HirType::Managed(ManagedType::Array(Box::new(element.clone())));
 
@@ -343,7 +354,7 @@ pub fn narrow_parameters(program: &mut Program) -> usize {
     }
 
     for ((at, position), representation) in &chosen {
-        retype_parameter(&mut program.funcs[*at], *position, representation);
+        retype_parameter(&mut program.funcs[*at], *position, representation, &program.signature_faces);
     }
     let targets: FxHashMap<(&str, usize), HirType> = chosen
         .iter()
@@ -460,7 +471,7 @@ pub fn narrow_returns(program: &mut Program) -> usize {
         .map(|(at, representation)| (program.funcs[*at].name.clone(), representation.clone()))
         .collect();
     for caller in &mut program.funcs {
-        unwrap_results(caller, &targets);
+        unwrap_results(caller, &targets, &program.signature_faces);
     }
     chosen.len()
 }
@@ -508,7 +519,11 @@ fn retype_return(func: &mut Func, representation: &HirType) {
 }
 
 /// Take the result of a narrowed call as what it now is.
-fn unwrap_results(caller: &mut Func, targets: &FxHashMap<String, HirType>) {
+fn unwrap_results(
+    caller: &mut Func,
+    targets: &FxHashMap<String, HirType>,
+    faces: &BTreeMap<TypeId, SignatureFace>,
+) {
     let mut narrowed: FxHashMap<ValueId, HirType> = FxHashMap::default();
     for index in 0..caller.values.len() {
         let OpKind::Call {
@@ -531,7 +546,7 @@ fn unwrap_results(caller: &mut Func, targets: &FxHashMap<String, HirType>) {
     for (id, representation) in &narrowed {
         caller.values[id.0 as usize].ty = representation.clone();
     }
-    unwrap_uses(caller, &narrowed);
+    unwrap_uses(caller, &narrowed, faces);
 }
 
 /// What every direct caller passes to each candidate's erased parameters.
@@ -655,7 +670,12 @@ fn only_unwrapped_value(func: &Func, value: ValueId, representation: &HirType) -
 }
 
 /// Give a parameter its concrete representation and unwrap its uses.
-fn retype_parameter(func: &mut Func, position: usize, representation: &HirType) {
+fn retype_parameter(
+    func: &mut Func,
+    position: usize,
+    representation: &HirType,
+    faces: &BTreeMap<TypeId, SignatureFace>,
+) {
     func.params[position].ty = representation.clone();
 
     let mut parameter = None;
@@ -666,7 +686,7 @@ fn retype_parameter(func: &mut Func, position: usize, representation: &HirType) 
         }
     }
     let Some(parameter) = parameter else { return };
-    unwrap_uses(func, &FxHashMap::from_iter([(parameter, representation.clone())]));
+    unwrap_uses(func, &FxHashMap::from_iter([(parameter, representation.clone())]), faces);
 }
 
 /// Rewrite the uses of values that have stopped being erased.
@@ -678,7 +698,11 @@ fn retype_parameter(func: &mut Func, position: usize, representation: &HirType) 
 /// Batched over every narrowed value at once, because the substitution walks
 /// the whole function and doing it per value made the pass quadratic in the
 /// number of calls a function makes.
-fn unwrap_uses(func: &mut Func, narrowed: &FxHashMap<ValueId, HirType>) {
+fn unwrap_uses(
+    func: &mut Func,
+    narrowed: &FxHashMap<ValueId, HirType>,
+    faces: &BTreeMap<TypeId, SignatureFace>,
+) {
     let mut replacements: FxHashMap<ValueId, ValueId> = FxHashMap::default();
     for index in 0..func.values.len() {
         let id = ValueId(u32::try_from(index).unwrap_or(0));
@@ -688,7 +712,7 @@ fn unwrap_uses(func: &mut Func, narrowed: &FxHashMap<ValueId, HirType>) {
             }
             OpKind::TagOf { value } => {
                 if let Some(representation) = narrowed.get(&value) {
-                    let tag = super::tags::of_representation(representation);
+                    let tag = super::tags::of_registered(faces, representation);
                     func.values[index].kind = OpKind::ConstInt(i128::from(tag));
                 }
             }

@@ -201,6 +201,27 @@ pub fn of_representation(ty: &super::HirType) -> u32 {
     }
 }
 
+/// The tag of an actual prepared representation. A signature face was
+/// published from a checker function type and keyed by that representation;
+/// it proves a callable payload, not a callback's written signature.
+#[must_use]
+pub fn of_prepared(program: &super::Program, ty: &super::HirType) -> u32 {
+    of_registered(&program.signature_faces, ty)
+}
+
+/// The same prepared tag authority with only its immutable face registry
+/// borrowed, so a pass can rewrite functions without cloning the registry.
+pub(super) fn of_registered(
+    faces: &std::collections::BTreeMap<super::TypeId, super::SignatureFace>,
+    ty: &super::HirType,
+) -> u32 {
+    match ty {
+        super::HirType::Managed(ManagedType::Object(ty))
+            if super::is_closure_type(*ty) || faces.contains_key(ty) => FUNCTION,
+        _ => of_representation(ty),
+    }
+}
+
 /// Whether an erased value of this representation holds a **reference** in its
 /// payload -- and so whether a zero payload is an *absence* rather than a value.
 ///
@@ -451,6 +472,18 @@ mod representation {
         use crate::hir::{ManagedType, constructor_token, provided_error_type};
         assert_eq!(of_reference(&ManagedType::Object(provided_error_type(0))), OBJECT);
         assert_eq!(of_reference(&ManagedType::Object(constructor_token(0))), FUNCTION);
+    }
+
+    #[test]
+    fn prepared_function_faces_keep_their_callable_tag() {
+        use crate::hir::{ManagedType, Program, SignatureFace, TypeId};
+        let mut program = Program::default();
+        let callable = TypeId(41);
+        let plain = TypeId(42);
+        program.signature_faces.insert(callable, SignatureFace { params: Vec::new(), returns: Some(HirType::Bool) });
+        assert_eq!(super::of_prepared(&program, &HirType::Managed(ManagedType::Object(callable))), FUNCTION);
+        assert_eq!(super::of_prepared(&program, &HirType::Managed(ManagedType::Object(plain))), OBJECT);
+        assert_eq!(of_representation(&HirType::Managed(ManagedType::Object(callable))), OBJECT);
     }
 
     #[test]
