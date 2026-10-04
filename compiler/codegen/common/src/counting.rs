@@ -55,6 +55,7 @@ pub fn array_element(ty: &HirType) -> u32 {
         HirType::Int { signed: true, .. } => 4,
         HirType::Int { signed: false, .. } => 5,
         HirType::Bool => 6,
+        HirType::BigInt => 8,
         counted if counted_element(counted).is_some() => ARRAY_FOREIGN,
         _ => 0,
     }

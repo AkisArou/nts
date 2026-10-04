@@ -15169,6 +15169,28 @@ pub fn parse_number(text: &str) -> Option<f64> {
         .map(|value| value as f64)
 }
 
+/// A source or checker `BigInt` spelling within the compiler's signed 128-bit
+/// profile. Keep literal lowering and value-dispatch guards on the same parser.
+fn parse_bigint(text: &str) -> Option<i128> {
+    let digits = text.trim().trim_end_matches('n');
+    let (negative, digits) = digits.strip_prefix('-')
+        .map_or((false, digits), |digits| (true, digits));
+    let (radix, body) = match digits.get(..2) {
+        Some("0x" | "0X") => (16, &digits[2..]),
+        Some("0o" | "0O") => (8, &digits[2..]),
+        Some("0b" | "0B") => (2, &digits[2..]),
+        _ => (10, digits),
+    };
+    let cleaned: String = body.chars().filter(|c| *c != '_').collect();
+    let magnitude = u128::from_str_radix(&cleaned, radix).ok()?;
+    if negative && magnitude == 1_u128 << 127 {
+        Some(i128::MIN)
+    } else {
+        let magnitude = i128::try_from(magnitude).ok()?;
+        Some(if negative { -magnitude } else { magnitude })
+    }
+}
+
 /// A short name for a type, for a diagnostic to quote.
 ///
 /// A refusal that says only "unrepresentable" is not a work queue. Run over a
@@ -15287,6 +15309,7 @@ pub fn erasable(ty: &HirType) -> bool {
         HirType::Float { .. }
             | HirType::Int { .. }
             | HirType::Bool
+            | HirType::BigInt
             | HirType::Void
             | HirType::Managed(
                 ManagedType::BoxedBigInt
@@ -22461,32 +22484,6 @@ impl<'a> FuncBuilder<'a> {
         {
             return Ok(value);
         }
-        // Narrowed to a `bigint`, which an erased value provably is not.
-        //
-        // An `NtsValue` carries one of eight tags -- undefined, boolean, number,
-        // string, function, symbol, object, null -- and none of them is a
-        // bigint. `erasable` refuses to put one in, and the napi boundary
-        // answers `None` for `HirType::BigInt`, so no caller can hand one in
-        // either. So `typeof v === "bigint"` on an `unknown` is not
-        // unrepresentable, it is **false**, and `hir::tags` says so in as many
-        // words: the comparison is "correctly false against a string the
-        // runtime never returns".
-        //
-        // The branch under it is therefore dead, and refusing it cost the
-        // function, its callers, and their callers. `determineSpecificType` and
-        // `ERR_OUT_OF_RANGE`'s constructor in `runtime/node/internal/errors.ts`
-        // are two such branches, and between them they stop eleven of `path`'s
-        // fifteen exports and most of `buffer`'s.
-        //
-        // A zero of the type rather than a refusal, and it is observable only if
-        // the impossible happens. The guard is folded to a constant by
-        // `tags::fold_comparisons`, so the block is removed rather than merely
-        // unreachable -- which is what makes this a lowering of dead code and
-        // not a default value someone might read.
-        if want == HirType::BigInt {
-            let origin = self.origin(id);
-            return Ok(self.push(OpKind::ConstInt(0), HirType::BigInt, origin));
-        }
         // Narrowed to `never`, which is the checker saying this code cannot run.
         //
         // Refused here until now, and the reason given was real: `never` is
@@ -26273,7 +26270,11 @@ impl<'a> FuncBuilder<'a> {
             return None;
         }
         let reader = super::suspend::settled_reader(payload)?;
-        Some(self.runtime_call(reader, vec![source], payload.clone(), origin.clone()))
+        let storage = super::suspend::settled_storage(payload);
+        let value = self.runtime_call(reader, vec![source], storage.clone(), origin.clone());
+        Some(if storage == *payload { value } else {
+            self.push(OpKind::Unerase { value }, payload.clone(), origin.clone())
+        })
     }
 
     /// Call one of a reaction's handlers with `argument`, and answer what it
@@ -32430,12 +32431,16 @@ impl<'a> FuncBuilder<'a> {
     /// union with `object` in it does not, because `ToNumber` of one is
     /// `ToPrimitive` and this compiler has no prototype chain to run.
     fn only_primitives(&self, at: NodeId) -> bool {
+        self.numeric_primitives(at, false)
+    }
+
+    fn numeric_primitives(&self, at: NodeId, allow_bigint: bool) -> bool {
         let Some(&ty) = self.snapshot.node_types.get(&at) else {
             return false;
         };
         let primitive = |snapshot: &SemanticSnapshot, id: TypeId| {
-            matches!(
-                snapshot.types.get(id.0 as usize).map(|record| &record.kind),
+            match snapshot.types.get(id.0 as usize).map(|record| &record.kind) {
+                Some(TypeKind::BigInt | TypeKind::Literal(LiteralValue::BigInt(_))) => allow_bigint,
                 Some(
                     TypeKind::Number
                         | TypeKind::String
@@ -32445,8 +32450,9 @@ impl<'a> FuncBuilder<'a> {
                         // A literal is its base type narrowed to one value, and
                         // `"7"` is as much a string as `string` is.
                         | TypeKind::Literal(_)
-                )
-            )
+                ) => true,
+                _ => false,
+            }
         };
         match self
             .snapshot
@@ -33571,17 +33577,12 @@ impl<'a> FuncBuilder<'a> {
             (HirType::Float { .. } | HirType::Int { .. } | HirType::Bool, Some(value)) => {
                 ("nts_promise_fulfill_number", vec![result.promise, value])
             }
-            // A promise settles through a two-slot union of a double and a
-            // pointer, and a `bigint` is 128 bits of neither. Refused rather
-            // than narrowed: settling one through the number slot would keep
-            // the low 53 bits of a value whose whole reason for existing is
-            // that 53 are not enough.
-            (HirType::BigInt, Some(_)) => {
-                return Err(self.unsupported(
-                    id,
-                    "an `async` function settling with a `bigint`, which does not fit the \
-                     promise's payload",
-                ));
+            // Logical BigInt uses the existing tagged payload; late boxing
+            // supplies its owned native reference before counting/emission.
+            (HirType::BigInt, Some(value)) => {
+                let erased = self.push(OpKind::Erase { value, absent: Absent::Impossible },
+                    HirType::Erased, origin.clone());
+                ("nts_promise_fulfill_value", vec![result.promise, erased])
             }
             // The tag, supplied rather than derived. The compiler emitted the
             // type, so it knows whether this is a string; making the runtime
@@ -40705,15 +40706,6 @@ impl<'a> FuncBuilder<'a> {
                             // `String(type)` on a `string | symbol` turned out
                             // to be under `EventEmitter#on`.
                             //
-                            // **`BigInt` above is in this list and unreachable
-                            // through it**: putting one in an erased slot is
-                            // refused earlier, as "a value of type BigInt where
-                            // `unknown` is expected", so no bigint tag ever
-                            // reaches the helper. Teaching the helper a case it
-                            // cannot receive is a probe below its first use, so
-                            // it is deliberately not there -- and this comment
-                            // is the record of that being checked rather than
-                            // assumed.
                             | TypeKind::Symbol
                             | TypeKind::Literal(_)
                     )
@@ -51126,11 +51118,8 @@ impl<'a> FuncBuilder<'a> {
     /// type is not the identity, and writing it once is what keeps the other
     /// arms from being missing in one of the two places.
     ///
-    /// The two spellings *do* differ in one place and the typechecker is what
-    /// separates them: `Number(1n)` is 1 and `+1n` is a `TypeError`. TypeScript
-    /// refuses the second as TS2736 before lowering sees it, so the `BigInt`
-    /// arm below is reachable only through the spelling it is right for. Shared
-    /// on that fact rather than on the hope that nobody writes it.
+    /// Implicit `ToNumber` excludes `BigInt`. An assertion can hide its source
+    /// type from the checker, so the compiler must preserve this distinction.
     fn coerce_to_number(
         &mut self,
         id: NodeId,
@@ -51140,12 +51129,9 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(id);
         match self.values[value.0 as usize].ty {
                 HirType::Float { .. } | HirType::Int { .. } => Ok(value),
-                // One conversion, two reasons. A boolean is `ToNumber`, which
-                // the specification gives as 1 and 0. A `bigint` rounds to the
-                // nearest double -- lossy above 2^53 in node and here alike,
-                // deliberately, because that is what asking for a `number`
-                // means. C's own conversion is both of those.
-                HirType::Bool | HirType::BigInt => {
+                // ToNumber of a boolean is 1 or 0. Explicit Number's BigInt
+                // conversion lives in coerce_explicit_number, not this path.
+                HirType::Bool => {
                     Ok(self.push(OpKind::Convert(value), HirType::NUMBER, origin))
                 }
                 // An erased value whose type admits no object, which is
@@ -51182,6 +51168,24 @@ impl<'a> FuncBuilder<'a> {
                     &origin,
                 )),
                 _ => Err(self.unsupported(id, "a conversion to number from this type")),
+        }
+    }
+
+    /// Number explicitly accepts `BigInt`; implicit `ToNumber` must never use
+    /// this adapter. The erased helper reads the owned payload after its tag.
+    fn coerce_explicit_number(
+        &mut self,
+        id: NodeId,
+        argument: NodeId,
+        value: ValueId,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        match self.values[value.0 as usize].ty {
+            HirType::BigInt => Ok(self.push(OpKind::Convert(value), HirType::NUMBER, origin)),
+            HirType::Erased if self.numeric_primitives(argument, true) => Ok(self.call_runtime(
+                "nts_value_to_number_explicit", vec![value], HirType::NUMBER, &origin,
+            )),
+            _ => self.coerce_to_number(id, argument, value),
         }
     }
 
@@ -61620,7 +61624,7 @@ impl<'a> FuncBuilder<'a> {
                 Ok(value) => value,
                 Err(problem) => return Some(Err(problem)),
             };
-            return Some(self.coerce_to_number(id, *argument, value));
+            return Some(self.coerce_explicit_number(id, *argument, value));
         }
 
         // `BigInt(x)`, the mirror of `Number(x)` and not quite its twin.
@@ -66158,14 +66162,7 @@ impl<'a> FuncBuilder<'a> {
             .ok_or_else(|| self.unsupported(id, "a `bigint` literal with no digits"))?;
 
         let digits = text.trim().trim_end_matches('n');
-        let (radix, body) = match digits.get(..2) {
-            Some("0x" | "0X") => (16, &digits[2..]),
-            Some("0o" | "0O") => (8, &digits[2..]),
-            Some("0b" | "0B") => (2, &digits[2..]),
-            _ => (10, digits),
-        };
-        let cleaned: String = body.chars().filter(|c| *c != '_').collect();
-        let Ok(value) = i128::from_str_radix(&cleaned, radix) else {
+        let Some(value) = parse_bigint(&text) else {
             return Err(self.unsupported(
                 id,
                 &format!(
@@ -68534,7 +68531,19 @@ mod tests {
         assert!(!super::nominal_name("Point"));
     }
 
-    use super::{closure_type, parse_number};
+    use super::{closure_type, parse_bigint, parse_number};
+
+    #[test]
+    fn bigint_literal_and_guard_spellings_are_exact() {
+        assert_eq!(parse_bigint("9_007_199_254_740_993n"), Some(9_007_199_254_740_993));
+        assert_eq!(parse_bigint("0x10000000000000007n"), Some((1_i128 << 64) + 7));
+        assert_eq!(parse_bigint("-0b101n"), Some(-5));
+        assert_eq!(parse_bigint("0o17n"), Some(15));
+        assert_eq!(parse_bigint("170141183460469231731687303715884105727"), Some(i128::MAX));
+        assert_eq!(parse_bigint("-170141183460469231731687303715884105728"), Some(i128::MIN));
+        assert_eq!(parse_bigint("170141183460469231731687303715884105728n"), None);
+        assert_eq!(parse_bigint(""), None);
+    }
 
     /// The synthetic id bands do not overlap.
     ///

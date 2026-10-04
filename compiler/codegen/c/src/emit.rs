@@ -3846,6 +3846,7 @@ fn element_descriptor(array: &HirType, origin: &Origin, context: &Context<'_>) -
 /// exactly like the honest case.
 fn array_element_kind(element: &str) -> &'static str {
     match element {
+        "__int128" => "NTS_ARRAY_BIGINT",
         "NtsValue" => "NTS_ARRAY_VALUE",
         "bool" => "NTS_ARRAY_BOOL",
         "float" | "double" => "NTS_ARRAY_FLOAT",
@@ -5687,6 +5688,7 @@ mod tests {
         });
         let scalars = [
             HirType::Bool,
+            HirType::BigInt,
             HirType::Erased,
             HirType::Float { bits: 32 },
             HirType::Float { bits: 64 },
@@ -5753,7 +5755,7 @@ mod tests {
             file: nts_diagnostics::SourceId(0),
             span: nts_diagnostics::Span { start: 0, end: 0 },
         });
-        let mut scalars = vec![HirType::Bool, HirType::Erased, HirType::Float { bits: 64 }, HirType::Float { bits: 32 }];
+        let mut scalars = vec![HirType::Bool, HirType::BigInt, HirType::Erased, HirType::Float { bits: 64 }, HirType::Float { bits: 32 }];
         for bits in [8, 16, 32, 64] {
             scalars.push(HirType::Int { bits, signed: true });
             scalars.push(HirType::Int { bits, signed: false });

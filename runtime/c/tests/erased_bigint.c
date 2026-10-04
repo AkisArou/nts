@@ -83,6 +83,25 @@ static void one_value(__int128 n, const char *plain, const char *inspected) {
   nts_value_release(found);
   nts_release((NtsHeader *)array);
 
+  static const NtsDescriptor wide = {
+      NTS_KIND_ARRAY, sizeof(__int128), 0, 0, NULL, NULL, "bigint[]",
+      0, NULL, NTS_ARRAY_BIGINT, 0, NULL};
+  array = nts_array_new(&wide, 1);
+  NTS_ITEMS(array, __int128)[0] = n;
+  found = nts_array_element(
+      nts_value_of_reference((NtsHeader *)array, NTS_TAG_OBJECT), 0);
+  expect("unboxed array reader preserves the complete integer",
+         nts_value_tag(found) == NTS_TAG_BIGINT &&
+             nts_value_strict_eq(found, b));
+  expect("unboxed array read is independently owned",
+         nts_value_reference(found) != nts_value_reference(a));
+  nts_value_release(found);
+  found = nts_array_element(
+      nts_value_of_reference((NtsHeader *)array, NTS_TAG_OBJECT), 1);
+  expect("out of range bigint element is undefined",
+         nts_value_tag(found) == NTS_TAG_UNDEFINED);
+  nts_release((NtsHeader *)array);
+
   uintptr_t before = nts_value_reference(a)->reserved;
   NtsPromise *promise = nts_promise_new();
   nts_promise_fulfill_value(promise, a);

@@ -1650,9 +1650,15 @@ pub(super) fn settled_reader(payload: &HirType) -> Option<&'static str> {
         // `await` read its value as a double: a number agreed by coincidence,
         // a string aborted with "read a number from a promise holding
         // something else" in C and was `typeof` "number" on the JVM.
-        HirType::Erased => "nts_promise_value",
+        HirType::Erased | HirType::BigInt => "nts_promise_value",
         _ => "nts_promise_number",
     })
+}
+
+/// The runtime payload's actual representation. `BigInt` is logically unboxed
+/// but travels through the tagged promise slot as an owned immutable box.
+pub(super) fn settled_storage(payload: &HirType) -> HirType {
+    if *payload == HirType::BigInt { HirType::Erased } else { payload.clone() }
 }
 
 fn read_settled(
@@ -1716,9 +1722,11 @@ fn read_settled(
             args: vec![held],
             frame: None,
         },
-        payload.clone(),
+        settled_storage(payload),
     );
-    build.values[awaited.0 as usize].kind = OpKind::Convert(value);
+    build.values[awaited.0 as usize].kind = if *payload == HirType::BigInt {
+        OpKind::Unerase { value }
+    } else { OpKind::Convert(value) };
     build.ops.push(awaited);
     if let Some(slot) = slot_of.get(&awaited).copied() {
         build.set(frame, slot, awaited);

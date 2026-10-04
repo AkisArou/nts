@@ -300,6 +300,9 @@ typedef struct NtsDescriptor {
  * slot, a nullable handle), which every op takes. There is no tagged form: an
  * erased read of one is refused. */
 #define NTS_ARRAY_FOREIGN 7u
+/* Unboxed signed 128-bit BigInt slots. A dynamic read creates an owned box;
+ * this is distinct from a numeric slot whose conversion rounds to double. */
+#define NTS_ARRAY_BIGINT 8u
 
 /* RFC 8.2. One header for every variable-length managed object: an array and a
  * string differ by descriptor, not by shape, so `length` is the same field at
@@ -602,8 +605,8 @@ typedef enum NtsTag {
   NTS_TAG_HANDLE_GOBJECT = 8,
   NTS_TAG_HANDLE_OBJC = 9,
   NTS_TAG_HANDLE_COM = 10,
-  /* A `bigint`. Above the handle block, so outside the "object" band: `typeof`
-   * answers "bigint". No native lowering erases a bigint yet. */
+  /* A `bigint`, in an owned immutable box. Above the handle block, so outside
+   * the "object" band: `typeof` answers "bigint". */
   NTS_TAG_BIGINT = 16
 } NtsTag;
 

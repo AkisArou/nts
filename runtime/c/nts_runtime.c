@@ -2178,6 +2178,10 @@ NtsValue nts_array_element(NtsValue array, double index) {
     abort();
   case NTS_ARRAY_BOOL:
     return nts_value_of_boolean(NTS_ITEMS(object, bool)[at]);
+  case NTS_ARRAY_BIGINT:
+    return nts_value_of_reference(
+        (NtsHeader *)nts_bigint_box(NTS_ITEMS(object, __int128)[at]),
+        NTS_TAG_BIGINT);
   case NTS_ARRAY_FLOAT:
     if (descriptor->size == sizeof(float)) {
       return nts_value_of_number((double)NTS_ITEMS(object, float)[at]);
