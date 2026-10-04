@@ -418,6 +418,9 @@ fn value_external(name: &str) -> Option<(&'static str, &'static str, &'static st
         // `a-unary-plus-is-a-conversion` asked, so the missing row was an old
         // question newly asked rather than a regression.
         "nts_value_to_number" => (types::VALUE, "valueToNumber", "(Lnts/rt/NtsValue;)D"),
+        // `Number(v)` where `v` may be an erased bigint, which converts; the
+        // implicit conversion above refuses one (a TypeError in JavaScript).
+        "nts_value_to_number_explicit" => (types::VALUE, "valueToNumberExplicit", "(Lnts/rt/NtsValue;)D"),
         "nts_is_buffer" => (types::VALUE, "isBuffer", "(Lnts/rt/NtsValue;)Z"),
         "nts_is_data_view" => (types::VALUE, "isDataView", "(Lnts/rt/NtsValue;)Z"),
         // `ArrayBuffer.isView(x)`, which is a typed array *or* a `DataView`.

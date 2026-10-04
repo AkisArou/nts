@@ -61,6 +61,37 @@ public final class RuntimeRegression {
         check(assertedStatus == 1, "and exits 1, as C's helper does");
     }
 
+    /** An erased bigint (tag 16): every reader names it, and it is a value, not a reference. */
+    private static void testErasedBigInt() {
+        NtsBigInt five = NtsBigInt.fromLong(5);
+        NtsValue a = NtsValue.ofBigInt(NtsBigInt.add(NtsBigInt.fromLong(2), NtsBigInt.fromLong(3)));
+        NtsValue b = NtsValue.ofBigInt(five);
+        NtsValue zero = NtsValue.ofBigInt(NtsBigInt.sub(five, five));
+        check(a.tag == NtsValue.BIGINT && NtsValue.BIGINT == 16, "an erased bigint is tag 16");
+        equal(NtsValue.tagName(a.tag), "bigint", "typeof 5n");
+        equal(NtsValue.valueToString(a), "5", "String(5n)");
+        equal(NtsValue.valueInspect(a), "5n", "console.log(5n)");
+        check(NtsValue.truthy(a), "5n is truthy");
+        check(!NtsValue.truthy(zero), "0n is falsy");
+        check(a.ref != b.ref && NtsValue.strictEq(a, b), "two separately computed 5n are ===");
+        check(!NtsValue.strictEq(a, zero), "5n !== 0n");
+        check(!NtsValue.strictEq(a, NtsValue.ofNumber(5)), "5n !== 5");
+        check(NtsValue.valueToNumberExplicit(a) == 5.0, "Number(5n) is 5");
+        boolean refused = false;
+        try { NtsValue.valueToNumber(a); } catch (NtsRefusal e) { refused = e.getMessage().startsWith("nts: refused at run time: "); }
+        check(refused, "+5n is refused, not NaN");
+        check(NtsValue.ofReference(five).tag == NtsValue.BIGINT, "a bare NtsBigInt tags 16");
+        check(!NtsValue.isArray(a), "a bigint is not an array");
+        NtsMap map = NtsMap.newMap(0);
+        map = NtsMap.set(map, a, NtsValue.ofString("five"));
+        equal(NtsTable.get(map, b).ref, "five", "a Map keyed by 5n finds a separately computed 5n");
+        check(NtsTable.hasObject(map, NtsBigInt.fromLong(5)), "and so does a bare-reference lookup");
+        check(!NtsTable.has(map, zero), "0n is a different key");
+        NtsArrayL held = NtsArrayL.of(0);
+        NtsArrayL.push(held, five);
+        check(NtsValue.arrayElement(NtsValue.ofObject(held), 0).tag == NtsValue.BIGINT, "an NtsBigInt element reads back tag 16");
+    }
+
     /** `compareString` against ECMA-262 StringToBigInt, and exact past 2^53 and past 128 bits. */
     private static void testBigIntCompareString() {
         NtsBigInt big = NtsBigInt.fromLong(9007199254740993L);
@@ -840,7 +871,8 @@ public final class RuntimeRegression {
     public static void main(String[] args) throws Exception {
         testBigInt();
         testBigIntCompareString();
-        testRefusalLines(); System.out.println("bigint randomized tests passed");
+        testRefusalLines();
+        testErasedBigInt(); System.out.println("bigint randomized tests passed");
         testMap(); System.out.println("map randomized and cursor tests passed");
         testMapAsJavaMap(); System.out.println("NtsMap as java.util.Map passed");
         testForeignCallbacks(); System.out.println("foreign-thread callbacks passed");

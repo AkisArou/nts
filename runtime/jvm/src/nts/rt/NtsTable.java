@@ -518,6 +518,8 @@ public abstract class NtsTable {
                 return (a.num != 0.0) == (b.num != 0.0);
             case NtsValue.STRING:
                 return a.ref == b.ref || a.ref.equals(b.ref);
+            case NtsValue.BIGINT:
+                return NtsBigInt.eq((NtsBigInt) a.ref, (NtsBigInt) b.ref);
             case NtsValue.UNDEFINED:
             case NtsValue.NULL:
                 return true;
@@ -557,6 +559,7 @@ public abstract class NtsTable {
             case NtsValue.NUMBER:
             case NtsValue.BOOLEAN:
             case NtsValue.STRING:
+            case NtsValue.BIGINT:
             case NtsValue.UNDEFINED:
             case NtsValue.NULL:
                 return false;
@@ -566,7 +569,12 @@ public abstract class NtsTable {
     }
 
     private static int hashObject(Object ref) {
-        int h = System.identityHashCode(ref);
+        // A bigint is a value: two equal ones from two computations are one
+        // key, and `hash`'s default arm sends tag 16 here, so a typed lookup by
+        // bare reference and a boxed one hash alike.
+        int h = ref instanceof NtsBigInt
+            ? Long.hashCode(((NtsBigInt) ref).hi) * 31 + Long.hashCode(((NtsBigInt) ref).lo)
+            : System.identityHashCode(ref);
         h *= 0x9e3779b1;
         return h ^ (h >>> 16);
     }
@@ -588,6 +596,7 @@ public abstract class NtsTable {
      */
     private int findObject(Object key) {
         if (key == null) { return find(NtsValue.NULL_VALUE); }
+        if (key instanceof NtsBigInt) { return find(NtsValue.ofBigInt((NtsBigInt) key)); }
         if (count == 0) { return -1; }
         if (buckets.length == 0) {
             for (int i = head; i < used; i++) {

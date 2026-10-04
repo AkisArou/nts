@@ -12,6 +12,17 @@ public final class NtsValue {
     public static final int SYMBOL = 5;
     public static final int OBJECT = 6;
     public static final int NULL = 7;
+    /**
+     * An erased `bigint`: `ref` is an immutable {@link NtsBigInt}. The value
+     * `runtime/c` gives `NTS_BIGINT`, outside the native handles' 8..15.
+     *
+     * <p>**Above `OBJECT`, so a `tag >= OBJECT` range test admits it** -- and
+     * `typeof 1n` is "bigint", not "object". Every reader here names it
+     * explicitly; the emitted object test has to stop being a range for the
+     * same reason. Compared and hashed by *value*: `NtsBigInt` shares
+     * constants (`ZERO`), so identity is wrong both ways.
+     */
+    public static final int BIGINT = 16;
     public final int tag;
     public final double num;
     public final Object ref;
@@ -53,9 +64,13 @@ public final class NtsValue {
      * `"object"` where node and C answer `"string"`, and an unhandled one was
      * reported as `nts: uncaught String` (2026-10-02).
      */
+    public static NtsValue ofBigInt(NtsBigInt value) {
+        return value == null ? NULL_VALUE : new NtsValue(BIGINT, 0.0, value);
+    }
     public static NtsValue ofReference(Object value) {
         if (value instanceof String) { return new NtsValue(STRING, 0.0, value); }
         if (value instanceof NtsSymbol) { return new NtsValue(SYMBOL, 0.0, value); }
+        if (value instanceof NtsBigInt) { return new NtsValue(BIGINT, 0.0, value); }
         return ofObject(value);
     }
     /**
@@ -137,9 +152,23 @@ public final class NtsValue {
                 return NtsRuntime.strToNumber((String) value.ref);
             case NULL:
                 return 0.0;
+            case BIGINT:
+                // ToNumber of a bigint is a TypeError; `Number(x)` is the
+                // explicit conversion and is `valueToNumberExplicit`. Refused by
+                // name until a raise contract lets the runtime throw it.
+                throw NtsRefusal.missing("an implicit conversion of a bigint to a number, "
+                    + "which is a TypeError");
             default:
                 return Double.NaN;
         }
+    }
+
+    /** `Number(v)`: as {@link #valueToNumber}, except that a bigint converts (`Number(1n)` is 1). */
+    public static double valueToNumberExplicit(NtsValue value) {
+        if (value != null && value.tag == BIGINT) {
+            return NtsBigInt.toNumber((NtsBigInt) value.ref);
+        }
+        return valueToNumber(value);
     }
 
     /**
@@ -165,6 +194,10 @@ public final class NtsValue {
     public static String valueInspect(NtsValue value) {
         if (value != null && value.tag == NUMBER && value.num == 0.0 && 1.0 / value.num < 0.0) {
             return "-0";
+        }
+        // `console.log(5n)` prints `5n`; `String(5n)` is `"5"`.
+        if (value != null && value.tag == BIGINT) {
+            return NtsBigInt.toText((NtsBigInt) value.ref) + "n";
         }
         return valueToString(value);
     }
@@ -203,9 +236,9 @@ public final class NtsValue {
                 // plausible for it.
                 throw new NtsRefusal("String() of a function, whose source text "
                     + "this compiler does not keep");
+            case BIGINT:
+                return NtsBigInt.toText((NtsBigInt) value.ref);
             default:
-                // BIGINT never erases, so every tag the table defines is
-                // answered above. This is unreachable rather than unhandled.
                 throw new NtsRefusal("String() on tag " + value.tag
                     + ", which is not a tag this table defines");
         }
@@ -527,10 +560,10 @@ public final class NtsValue {
         if (element instanceof NtsValue) {
             return (NtsValue) element;
         }
-        if (element instanceof String) {
-            return ofString((String) element);
-        }
-        return ofObject(element);
+        // A bare reference tags by what it is -- a string, a symbol, a bigint --
+        // which is `ofReference`; `ofObject` tagged an NtsBigInt or NtsSymbol
+        // element OBJECT, so `typeof xs[0]` answered "object" for either.
+        return ofReference(element);
     }
 
     /**
@@ -645,6 +678,7 @@ public final class NtsValue {
             case STRING: return "string";
             case FUNCTION: return "function";
             case SYMBOL: return "symbol";
+            case BIGINT: return "bigint";
             default: return "object";
         }
     }
@@ -655,6 +689,7 @@ public final class NtsValue {
             case BOOLEAN: return value.num != 0.0;
             case NUMBER: return value.num == value.num && value.num != 0.0;
             case STRING: return !((String) value.ref).isEmpty();
+            case BIGINT: return !NtsBigInt.eq((NtsBigInt) value.ref, NtsBigInt.ZERO);
             default: return true;
         }
     }
@@ -666,6 +701,7 @@ public final class NtsValue {
             case BOOLEAN:
             case NUMBER: return left.num == right.num;
             case STRING: return java.util.Objects.equals(left.ref, right.ref);
+            case BIGINT: return NtsBigInt.eq((NtsBigInt) left.ref, (NtsBigInt) right.ref);
             default: return left.ref == right.ref;
         }
     }

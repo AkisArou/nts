@@ -55,6 +55,7 @@ fn the_three_tag_tables_agree() {
         ("SYMBOL", nts_core::hir::tags::SYMBOL),
         ("OBJECT", nts_core::hir::tags::OBJECT),
         ("NULL", nts_core::hir::tags::NULL),
+        ("BIGINT", nts_core::hir::tags::BIGINT),
     ];
     let found = java_constants();
     assert_eq!(
