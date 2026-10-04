@@ -8443,6 +8443,7 @@ struct PendingCopy {
 }
 
 mod erased_calls;
+mod generic_values;
 
 struct StructuralPlanner<'a, 's> {
     probe: &'a FuncBuilder<'s>,
@@ -10834,7 +10835,8 @@ impl Shared {
         let mut closures = closures.to_vec();
         let variants = closure_variants(&probe, &closures, &structural);
         closures.extend(variants);
-        let generics = super::generics::function_instantiations(snapshot);
+        let mut generics = super::generics::function_instantiations(snapshot);
+        generic_values::register(snapshot, &closures, &mut generics);
         let class_copies = class_copies(snapshot, &generics);
         closures.extend(class_closure_variants(&probe, &closures, &class_copies));
         let class_instances = std::rc::Rc::new(
@@ -12831,7 +12833,9 @@ fn lower_wanted_closures(
         builder.retyped_symbols = aliases();
         // A job or a resolving function has a body the compiler makes; every
         // other closure has one the program wrote.
-        let made = builder.lower_made_closure(index, &closures[index]);
+        let made = generic_values::lower(&mut builder, index, &closures[index],
+            &shared.generics, &lowered.program.funcs)
+            .or_else(|| builder.lower_made_closure(index, &closures[index]));
         match made.unwrap_or_else(|| builder.lower_closure(index, &closures[index])) {
             Ok(func) => {
                 // The erased entry beside the body it wraps, built here because
@@ -12863,18 +12867,17 @@ fn lower_wanted_closures(
                 // off nothing names these, and building them anyway emitted 1,675
                 // abort shells and thousands of `@raises` bodies across the corpora
                 // for a slot no call reaches. See `what_holds_the_gate_off`.
-                for produced in raising_closure(
+                lowered.program.funcs.push(func);
+                let raising = raising_closure(
                     snapshot,
                     foreign,
                     shared,
                     closures,
                     index,
-                    &func,
+                    &lowered.program.funcs,
                     copy_for(true),
-                ) {
-                    lowered.program.funcs.push(produced);
-                }
-                lowered.program.funcs.push(func);
+                );
+                lowered.program.funcs.extend(raising);
             }
             // **A refused closure had no line of its own.** `uncompiled` is keyed
             // by a *declared* name and an arrow has none, so every cascade ending
@@ -12952,9 +12955,11 @@ fn raising_closure(
     shared: &Shared,
     closures: &[ClosureInfo],
     index: usize,
-    func: &Func,
+    kernels: &[Func],
     copy: Copy,
 ) -> Vec<Func> {
+    // The ordinary closure was just appended; all its source kernels precede it.
+    let func = kernels.last().expect("ordinary closure before its raising entry");
     if !shared.hierarchy.closures_carry
         || shared.hierarchy.raising_call_slot.is_none()
         || closures[index].source.only_the_runtime_calls()
@@ -12970,7 +12975,9 @@ fn raising_closure(
     };
     let mut second = shared.builder(snapshot, foreign, copy);
     second.retyped_symbols = closure_aliases(snapshot, closures, index);
-    let made = second.lower_made_closure(index, &closures[index]);
+    let made = generic_values::lower(&mut second, index, &closures[index],
+        &shared.generics, kernels)
+        .or_else(|| second.lower_made_closure(index, &closures[index]));
     match made.unwrap_or_else(|| second.lower_closure(index, &closures[index])) {
         Ok(raising) if the_same_program(func, &raising) => Vec::new(),
         Ok(raising) if a_raise_cannot_return(&raising.return_type) => abort(format!(
@@ -18814,6 +18821,9 @@ impl<'a> FuncBuilder<'a> {
         // `v1` rightly has no declaration.
         if ty.0 >= super::SYNTHETIC_TYPE_FLOOR {
             let info = self.closures.get(closure_index(ty))?;
+            if generic_values::is_canonical(self.snapshot, info) {
+                return Some(HirType::Erased);
+            }
             let declared = *self.snapshot.node_types.get(&info.node)?;
             return self.represent(signature_key(self.snapshot, declared)?.1);
         }
@@ -60634,7 +60644,11 @@ impl<'a> FuncBuilder<'a> {
         // What it buys is the **IIFE**: `try { (() => { … })() }` has a known class
         // and is 48 test262 files on the conformance lane's count with nothing else
         // holding their gate down.
-        let callee = if receiver_ty.0 >= super::SYNTHETIC_TYPE_FLOOR && !raising {
+        let canonical_generic = receiver_ty.0 >= super::SYNTHETIC_TYPE_FLOOR
+            && self.closures.get(closure_index(receiver_ty))
+                .is_some_and(|info| generic_values::is_canonical(self.snapshot, info));
+        let callee = if receiver_ty.0 >= super::SYNTHETIC_TYPE_FLOOR && !raising
+            && !canonical_generic {
             Callee::Direct(closure_names(closure_index(receiver_ty)).1)
         } else if let Some(slot) = if raising {
             self.hierarchy.raising_call_slot

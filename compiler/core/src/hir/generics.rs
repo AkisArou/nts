@@ -308,11 +308,23 @@ pub struct FunctionInstance {
     pub suffix: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct ValueContext {
+    pub instance: FunctionInstance,
+    pub receiving: Vec<TypeId>,
+}
+
 /// Which copies of which generic functions to emit, and what each call names.
 #[derive(Debug, Default)]
 pub struct GenericFunctions {
     /// Copies to emit, by declaration node.
     pub copies: FxHashMap<nts_semantic_schema::NodeId, Vec<FunctionInstance>>,
+    /// One erased source kernel behind a named generic function's singleton.
+    /// Its actual body is lowered through the same copy path as direct calls.
+    pub value_fallbacks: FxHashMap<NodeId, FunctionInstance>,
+    /// Finite kernel contexts offered by concrete receiving signatures. Several
+    /// signatures may offer the same kernel; runtime evidence is kept separate.
+    pub value_contexts: FxHashMap<NodeId, Vec<ValueContext>>,
     /// The suffix each *call site* appends to its callee's name.
     pub at_call: FxHashMap<nts_semantic_schema::NodeId, String>,
     /// And the suffix a call names *inside one copy of a generic class*,
@@ -398,6 +410,106 @@ pub fn function_instantiations(snapshot: &SemanticSnapshot) -> GenericFunctions 
         copies.sort_by(|a, b| a.suffix.cmp(&b.suffix));
     }
     found
+}
+
+/// Add an erased kernel only for a generic declaration actually used as a value.
+/// A checker-owned unknown/any source is required: source identities feed nested
+/// type substitution, and an unresolved parameter is not an erased source type.
+pub(super) fn add_value_fallbacks(
+    snapshot: &SemanticSnapshot,
+    found: &mut GenericFunctions,
+    declarations: impl IntoIterator<Item = NodeId>,
+) {
+    let source = snapshot.types.iter().enumerate()
+        .find(|(_, record)| matches!(record.kind, TypeKind::Unknown))
+        .or_else(|| snapshot.types.iter().enumerate()
+            .find(|(_, record)| matches!(record.kind, TypeKind::Any)))
+        .and_then(|(at, _)| u32::try_from(at).ok()).map(TypeId);
+    let Some(source) = source else { return; };
+    for declaration in declarations {
+        let Some(signature) = declared_signature(snapshot, declaration) else { continue; };
+        if signature.type_parameters.is_empty() || found.value_fallbacks.contains_key(&declaration) {
+            continue;
+        }
+        let mut substitution = Substitution::default();
+        let mut sources = Sources::default();
+        for parameter in &signature.type_parameters {
+            substitution.insert(*parameter, HirType::Erased);
+            sources.insert(*parameter, source);
+        }
+        // Distinct from a direct call at an erased union: its source membership
+        // can authorize different narrowing than this genuinely open kernel.
+        let fallback = FunctionInstance {
+            substitution, sources, suffix: "<value-erased>".to_owned(),
+        };
+        found.copies.entry(declaration).or_default().push(fallback.clone());
+        found.value_fallbacks.insert(declaration, fallback);
+    }
+    if found.value_fallbacks.is_empty() { return; }
+    let templates = Templates::new(snapshot);
+    for _ in 0..PASSES {
+        let before = copies_made(found);
+        found.unpinned.clear();
+        one_pass(snapshot, &templates, found);
+        if copies_made(found) == before { break; }
+    }
+    for copies in found.copies.values_mut() {
+        copies.sort_by(|a, b| a.suffix.cmp(&b.suffix));
+    }
+}
+
+/// Offer one concrete receiving signature without changing the source object.
+/// Kernel identity includes the actual representation and its source bindings:
+/// equal-width literal/nullable/tuple/nominal contexts must not collide.
+pub(super) fn add_value_context(
+    snapshot: &SemanticSnapshot, templates: &Templates, found: &mut GenericFunctions,
+    declaration: NodeId, receiving: TypeId,
+) {
+    let Some(TypeKind::Function(signature)) = snapshot.types.get(receiving.0 as usize)
+        .map(|record| &record.kind) else { return; };
+    let Some(actual) = snapshot.signatures.get(signature.0 as usize) else { return; };
+    let Some(generic) = declared_signature(snapshot, declaration) else { return; };
+    if generic.parameters.len() != actual.parameters.len() { return; }
+    let Pinned { substitution, sources, deferred } = pin_down(snapshot, generic, actual);
+    if !deferred.is_empty() || generic.type_parameters.iter()
+        .any(|parameter| !substitution.contains_key(parameter) || !sources.contains_key(parameter)) {
+        return;
+    }
+    let contexts = found.value_contexts.entry(declaration).or_default();
+    if let Some(context) = contexts.iter_mut().find(|context|
+        context.instance.sources == sources && generic.type_parameters.iter().all(|parameter|
+            context.instance.substitution.get(parameter) == substitution.get(parameter))) {
+        if !context.receiving.contains(&receiving) { context.receiving.push(receiving); }
+        return;
+    }
+    // Independent of existing direct-call copies and the always-open fallback.
+    if contexts.len() >= 8 { return; }
+    let identity: Vec<_> = generic.type_parameters.iter().map(|parameter| {
+        format!("{}@{}", spell(substitution.get(parameter).expect("pinned parameter")),
+            sources[parameter].0)
+    }).collect();
+    let sigma = sources.iter().map(|(k, v)| (*k, *v)).collect();
+    let instance = FunctionInstance {
+        substitution: substitution.with_instances(templates, Owner::Function(declaration), &sigma),
+        sources, suffix: format!("<value-{}>", identity.join(",")),
+    };
+    found.copies.entry(declaration).or_default().push(instance.clone());
+    contexts.push(ValueContext { instance, receiving: vec![receiving] });
+}
+
+pub(super) fn settle_value_contexts(snapshot: &SemanticSnapshot, found: &mut GenericFunctions) {
+    let templates = Templates::new(snapshot);
+    for _ in 0..PASSES {
+        let before = copies_made(found);
+        found.unpinned.clear();
+        one_pass(snapshot, &templates, found);
+        if copies_made(found) == before { break; }
+    }
+    for copies in found.copies.values_mut() { copies.sort_by(|a, b| a.suffix.cmp(&b.suffix)); }
+    for contexts in found.value_contexts.values_mut() {
+        contexts.sort_by(|a, b| a.instance.suffix.cmp(&b.instance.suffix));
+        for context in contexts { context.receiving.sort(); context.receiving.dedup(); }
+    }
 }
 
 /// How many passes the fixpoint runs; each one expands the calls written inside
