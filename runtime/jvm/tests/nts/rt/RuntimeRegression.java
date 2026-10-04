@@ -54,6 +54,11 @@ public final class RuntimeRegression {
         check(status == 134, "and ends as C's abort()");
         equal(NtsRefusal.decline("y", 1).getMessage(), "nts: refused: y", "an exiting decline keeps the decline prefix");
         check(NtsRefusal.decline("y", 1).status == 1, "and its own status");
+        String asserted = null;
+        int assertedStatus = 0;
+        try { NtsRuntime.assertionFailed("expected a number"); } catch (NtsRefusal e) { asserted = e.getMessage(); assertedStatus = e.status; }
+        equal(asserted, "nts: refused: expected a number", "nts_assertion_failed is a decline line");
+        check(assertedStatus == 1, "and exits 1, as C's helper does");
     }
 
     /** `compareString` against ECMA-262 StringToBigInt, and exact past 2^53 and past 128 bits. */

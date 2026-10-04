@@ -382,6 +382,9 @@ fn global_external(name: &str) -> Option<(&'static str, &'static str, &'static s
         // answers `NaN`, refuses a trailing non-digit, and cannot exceed a
         // `long`. Transliterated; see the method.
         "nts_parse_int" => (RUNTIME, "parseInt", "(Ljava/lang/String;D)D"),
+        // A checked assertion an input fails with no handler for its TypeError:
+        // a decline (`nts: refused: `, exit 1), not `nts_refused`'s defect abort.
+        "nts_assertion_failed" => (RUNTIME, "assertionFailed", "(Ljava/lang/String;)V"),
         // The longest admitted prefix, then a parse of that -- `parseDouble` on
         // the whole string reads `0x10` as 16 where JavaScript answers 0.
         "nts_parse_float" => (RUNTIME, "parseFloat", "(Ljava/lang/String;)D"),

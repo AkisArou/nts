@@ -178,6 +178,14 @@ public final class NtsRuntime {
     public static void refused(String what) {
         throw NtsRefusal.missing(what);
     }
+    /**
+     * `nts_assertion_failed`: a checked assertion an input fails, with no handler to raise its TypeError to.
+     * A legitimate decline, not a defect -- `nts: refused: <what>` -- and, as C's helper does, the process
+     * exits 1 rather than aborting.
+     */
+    public static void assertionFailed(String what) {
+        throw NtsRefusal.decline(what, 1);
+    }
     public static void noArm(NtsValue subject, String member) {
         /* `-source 8`, as `uncaught` above is written for: no switch
            expressions, so this is a statement and a local. */
