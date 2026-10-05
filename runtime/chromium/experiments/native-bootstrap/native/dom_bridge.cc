@@ -71,10 +71,47 @@ private:
 
 // The listeners a context has registered, until each is removed: what gives
 // every closure back when the document goes.
+// A compiled closure to run before the next frame: Blink's own frame
+// callback, in the queue page script's requestAnimationFrame uses, so the two
+// run in the order they asked. It runs once and gives the closure back; a
+// cancelled one, or one the document's end leaves, gives it back unrun.
+class NtsFrame final : public blink::FrameCallback {
+public:
+  NtsFrame(NtsDomContext *context, NtsDomFrameCallback callback, void *closure,
+           NtsDomDestroy destroy)
+      : context_(context), callback_(callback), closure_(closure),
+        destroy_(destroy) {}
+
+  void Invoke(double time) override;
+
+  // What gives the closure back, once; nothing after.
+  NtsDomDestroy Take(void *&closure) {
+    if (!callback_)
+      return nullptr;
+    callback_ = nullptr;
+    context_ = nullptr;
+    closure = closure_.ExtractAsDangling();
+    return std::exchange(destroy_, nullptr);
+  }
+
+private:
+  raw_ptr<NtsDomContext> context_;
+  NtsDomFrameCallback callback_;
+  raw_ptr<void> closure_;
+  NtsDomDestroy destroy_;
+};
+
+// What a context's program has asked Blink to call -- listeners until each is
+// removed, frames until each runs -- and so what gives every closure back
+// when the document goes.
 class ListenerSet final : public blink::GarbageCollected<ListenerSet> {
 public:
-  void Trace(blink::Visitor *visitor) const { visitor->Trace(set); }
+  void Trace(blink::Visitor *visitor) const {
+    visitor->Trace(set);
+    visitor->Trace(frames);
+  }
   blink::HeapHashSet<blink::Member<NtsListener>> set;
+  blink::HeapHashSet<blink::Member<NtsFrame>> frames;
 };
 
 // Listener handles the program keeps off the stack, as Roots for objects.
@@ -157,6 +194,7 @@ using nts_dom::Entry;
 using nts_dom::HeldListeners;
 using nts_dom::ListenerSet;
 using nts_dom::NativeJob;
+using nts_dom::NtsFrame;
 using nts_dom::NtsListener;
 using nts_dom::HeldObjects;
 
@@ -165,6 +203,17 @@ void NtsListener::Invoke(blink::ExecutionContext *, blink::Event *event) {
   if (!callback_)
     return;
   context_->Dispatch(callback_, event, closure_.get());
+}
+
+void NtsFrame::Invoke(double time) {
+  NtsDomContext *context = context_;
+  const NtsDomFrameCallback callback = callback_;
+  void *closure = nullptr;
+  const NtsDomDestroy destroy = Take(closure);
+  if (!context)
+    return;
+  context->listeners->frames.erase(this);
+  context->RunFrame(callback, time, closure, destroy);
 }
 } // namespace nts_dom
 
@@ -201,6 +250,31 @@ void NtsDomContext::Dispatch(NtsDomCallback callback, blink::Event *event,
       &call);
 }
 
+
+void NtsDomContext::RunFrame(NtsDomFrameCallback callback, double time,
+                             void *closure, NtsDomDestroy destroy) {
+  if (closed || !invoke)
+    return;
+  Entry entry(this);
+  v8::HandleScope handles(v8_isolate);
+  v8::MicrotasksScope microtasks(v8_isolate, event_loop->microtask_queue(),
+                                 v8::MicrotasksScope::kRunMicrotasks);
+  struct Call {
+    NtsDomFrameCallback callback;
+    double time;
+    raw_ptr<void> closure;
+    NtsDomDestroy destroy;
+  } call{callback, time, closure, destroy};
+  invoke(
+      invoke_host.get(),
+      [](void *state) {
+        auto *call = static_cast<Call *>(state);
+        call->callback(call->time, call->closure.get());
+        if (call->destroy)
+          call->destroy(call->closure.get());
+      },
+      &call);
+}
 
 // Gives a closure back where the program's environment is entered.
 void NtsDomContext::GiveBack(NtsDomDestroy destroy, void *closure) {
@@ -330,6 +404,13 @@ void NtsDomContext::Close() {
   for (auto &listener : remaining) {
     void *closure = nullptr;
     if (auto destroy = listener->Detach(closure))
+      GiveBack(destroy, closure);
+  }
+  blink::HeapVector<blink::Member<NtsFrame>> frames(listeners->frames);
+  listeners->frames.clear();
+  for (auto &frame : frames) {
+    void *closure = nullptr;
+    if (auto destroy = frame->Take(closure))
       GiveBack(destroy, closure);
   }
   closed = true;
@@ -539,6 +620,33 @@ void nts_dom_listener_release(void *listener) {
   const auto found = counts.find(reinterpret_cast<NtsListener *>(listener));
   CHECK(found != counts.end());
   counts.erase(found);
+}
+
+int32_t nts_dom_request_animation_frame(NtsDomFrameCallback callback,
+                                        void *closure, NtsDomDestroy destroy) {
+  NtsDomContext &context = nts_dom::Current();
+  CHECK(context.invoke);
+  auto *frame = blink::MakeGarbageCollected<NtsFrame>(&context, callback,
+                                                       closure, destroy);
+  context.listeners->frames.insert(frame);
+  return context.document->RequestAnimationFrame(
+      frame, blink::FrameCallbackType::kWebExposed);
+}
+void nts_dom_cancel_animation_frame(int32_t id) {
+  NtsDomContext &context = nts_dom::Current();
+  for (auto &frame : context.listeners->frames) {
+    if (frame->Id() != id)
+      continue;
+    context.document->CancelAnimationFrame(
+        id, blink::FrameCallbackType::kWebExposed);
+    NtsFrame *cancelled = frame.Get();
+    context.listeners->frames.erase(cancelled);
+    void *closure = nullptr;
+    // Inside the program's call: its environment is entered already.
+    if (auto destroy = cancelled->Take(closure))
+      destroy(closure);
+    return;
+  }
 }
 
 // The benchmark's controls (ffi/dom_host.h): text interned for an id.

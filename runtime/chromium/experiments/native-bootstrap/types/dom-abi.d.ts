@@ -4,7 +4,15 @@
 // the document an entry runs in, and listening with a compiled closure.
 // Contract: native/ffi/dom_abi.h.
 declare module "nts:dom" {
-  import type { Closure, HostClass, StringView } from "c:types";
+  import type { CNumber, Closure, HostClass, StringView } from "c:types";
+  /**
+   * `requestAnimationFrame(callback)`: once, before the next frame, with its
+   * time, in the queue page script's callbacks share.
+   * @ntsSymbol nts_dom_request_animation_frame
+   */
+  export function requestAnimationFrame(callback: Closure<(time: CNumber<"double">) => void>): CNumber<"int32">;
+  /** @ntsSymbol nts_dom_cancel_animation_frame */
+  export function cancelAnimationFrame(id: CNumber<"int32">): void;
   /** The document the running code is part of. */
   /** @ntsSymbol nts_dom_document */
   export function document(): Document;

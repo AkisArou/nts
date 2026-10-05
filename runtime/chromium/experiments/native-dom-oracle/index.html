@@ -44,6 +44,8 @@ window.domWitness = (() => {
   label.textContent = 'Count: 0';
   return 0;
 })();
+requestAnimationFrame((time) => label.setAttribute('data-frame', time > 0 ? 'ran' : 'no time'));
+cancelAnimationFrame(requestAnimationFrame(() => label.setAttribute('data-cancelled', 'ran')));
 let count = 0;
 document.querySelector('#native-increment').addEventListener('input', () => { label.textContent = 'Count: ' + ++count; });
 </script>

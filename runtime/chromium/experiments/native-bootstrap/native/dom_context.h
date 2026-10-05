@@ -28,6 +28,7 @@
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
+#include "third_party/blink/renderer/core/dom/frame_request_callback_collection.h"
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/execution_context/agent.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -61,6 +62,7 @@ class ListenerSet;
 class NativeJob;
 using NtsDomCallback = void (*)(NtsDomEvent *, void *);
 using NtsDomDestroy = void (*)(void *);
+using NtsDomFrameCallback = void (*)(double, void *);
 
 // A handle is the object's address as a ScriptWrappable, whatever interface
 // it is typed as: NtsDomElement * and NtsDomNode * name one object, as
@@ -135,6 +137,7 @@ using nts_dom::ObjectOf;
 using nts_dom::WrappableOf;
 using nts_dom::NtsDomCallback;
 using nts_dom::NtsDomDestroy;
+using nts_dom::NtsDomFrameCallback;
 
 
 struct NtsDomContext : public base::RefCounted<NtsDomContext> {
@@ -143,6 +146,10 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
   // A compiled listener's call: its own entry, as any native callback, and
   // the program's environment entered by the host that owns the program.
   void Dispatch(NtsDomCallback callback, blink::Event *event, void *closure);
+  // A compiled frame callback's call, its own entry like a dispatch; the
+  // closure goes back once it has run.
+  void RunFrame(NtsDomFrameCallback callback, double time, void *closure,
+                NtsDomDestroy destroy);
   // Gives a closure back where the program's environment is entered.
   void GiveBack(NtsDomDestroy destroy, void *closure);
   // A job queued by native code, run as a microtask or at the end of the

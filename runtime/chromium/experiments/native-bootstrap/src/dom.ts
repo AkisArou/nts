@@ -2,7 +2,7 @@
 // operation calls Blink immediately; this is not a DOM effect tape or a
 // declaration pretending to implement lib.dom.
 import * as host from "nts:chromium-dom-experiment";
-import { asHTMLElement, document } from "nts:dom";
+import { asHTMLElement, cancelAnimationFrame, document, requestAnimationFrame } from "nts:dom";
 import type { Document, Element, Event, Node } from "nts:dom";
 import { idlTranscript } from "./idl-vectors.ts";
 import type { VectorHost } from "./idl-vectors.ts";
@@ -100,6 +100,15 @@ export function ntsChromiumDomProgram(): number {
   const pre = element(d, "pre", "native-idl");
   pre.textContent = transcript;
   container.appendChild(pre);
+
+  // A frame callback runs before the next frame, with its time; a cancelled
+  // one never runs. The smoke reads both after its frames have passed.
+  requestAnimationFrame((time: number): void => {
+    label.setAttribute("data-frame", time > 0 ? "ran" : "no time");
+  });
+  cancelAnimationFrame(requestAnimationFrame((): void => {
+    label.setAttribute("data-cancelled", "ran");
+  }));
   return 0;
 }
 

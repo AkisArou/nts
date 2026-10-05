@@ -77,6 +77,16 @@ void nts_dom_unlisten(NtsDomListener* listener);
 void* nts_dom_listener_retain(void* listener);
 void nts_dom_listener_release(void* listener);
 
+/* `requestAnimationFrame(callback)` for a compiled closure: called once, with
+ * the frame's time, in the queue page script's callbacks share, then given
+ * back. Answers the id nts_dom_cancel_animation_frame takes, which gives the
+ * closure back unrun; the document's end gives back any still waiting. */
+int32_t nts_dom_request_animation_frame(void (*callback)(double time,
+                                                         void* closure),
+                                        void* closure,
+                                        void (*destroy)(void* closure));
+void nts_dom_cancel_animation_frame(int32_t id);
+
 #ifdef __cplusplus
 }
 #endif
