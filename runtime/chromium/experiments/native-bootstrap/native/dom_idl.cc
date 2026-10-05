@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/core/css/css_style_declaration.h"
 #include "third_party/blink/renderer/core/css/cssom/element_computed_style_map.h"
 #include "third_party/blink/renderer/core/dom/character_data.h"
+#include "third_party/blink/renderer/core/dom/comment.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/document_fragment.h"
 #include "third_party/blink/renderer/core/dom/dom_token_list.h"
@@ -20,15 +21,19 @@
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
 #include "third_party/blink/renderer/core/dom/node.h"
+#include "third_party/blink/renderer/core/dom/node_list.h"
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
 #include "third_party/blink/renderer/core/events/ui_event.h"
 #include "third_party/blink/renderer/core/fullscreen/document_fullscreen.h"
 #include "third_party/blink/renderer/core/fullscreen/element_fullscreen.h"
+#include "third_party/blink/renderer/core/geometry/dom_rect.h"
+#include "third_party/blink/renderer/core/geometry/dom_rect_read_only.h"
 #include "third_party/blink/renderer/core/html/forms/html_button_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/html_anchor_element.h"
+#include "third_party/blink/renderer/core/html/html_collection.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/script_tools/model_context_supplement.h"
 #include "third_party/blink/renderer/core/svg/svg_document_extensions.h"
@@ -115,6 +120,12 @@ NtsDomElement* nts_dom_Node_get_parentElement(NtsDomNode* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::Node>(self);
   return HandleOf<NtsDomElement>(receiver->parentElement());
+}
+
+NtsDomNodeList* nts_dom_Node_get_childNodes(NtsDomNode* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Node>(self);
+  return HandleOf<NtsDomNodeList>(receiver->childNodes());
 }
 
 NtsDomNode* nts_dom_Node_get_firstChild(NtsDomNode* self) {
@@ -1012,6 +1023,12 @@ void nts_dom_Element_set_ariaActiveDescendantElement(NtsDomElement* self, NtsDom
   receiver->SetElementAttribute(html_names::kAriaActivedescendantAttr, ObjectOf<blink::Element>(value));
 }
 
+NtsDomHTMLCollection* nts_dom_Element_get_children(NtsDomElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Element>(self);
+  return HandleOf<NtsDomHTMLCollection>(receiver->children());
+}
+
 NtsDomElement* nts_dom_Element_get_firstElementChild(NtsDomElement* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::Element>(self);
@@ -1059,6 +1076,30 @@ const NtsStringView* nts_dom_Element_getAttributeNS(NtsDomElement* self, const N
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::Element>(self);
   return context.Lend(nts_dom::AsString(receiver->getAttributeNS(NtsText(context, namespaceURI), NtsText(context, localName))), true);
+}
+
+NtsDomDOMRect* nts_dom_Element_getBoundingClientRect(NtsDomElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Element>(self);
+  return HandleOf<NtsDomDOMRect>(receiver->GetBoundingClientRectForBinding());
+}
+
+NtsDomHTMLCollection* nts_dom_Element_getElementsByClassName(NtsDomElement* self, const NtsBorrowedString* classNames) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Element>(self);
+  return HandleOf<NtsDomHTMLCollection>(receiver->getElementsByClassName(NtsText(context, classNames)));
+}
+
+NtsDomHTMLCollection* nts_dom_Element_getElementsByTagName(NtsDomElement* self, const NtsBorrowedString* localName) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Element>(self);
+  return HandleOf<NtsDomHTMLCollection>(receiver->getElementsByTagName(NtsText(context, localName)));
+}
+
+NtsDomHTMLCollection* nts_dom_Element_getElementsByTagNameNS(NtsDomElement* self, const NtsBorrowedString* namespaceURI, const NtsBorrowedString* localName) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Element>(self);
+  return HandleOf<NtsDomHTMLCollection>(receiver->getElementsByTagNameNS(NtsText(context, namespaceURI), NtsText(context, localName)));
 }
 
 bool nts_dom_Element_hasAttribute(NtsDomElement* self, const NtsBorrowedString* name) {
@@ -1128,6 +1169,13 @@ NtsDomElement* nts_dom_Element_querySelector(NtsDomElement* self, const NtsBorro
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::Element>(self);
   return HandleOf<NtsDomElement>(receiver->querySelector(NtsText(context, selectors), exception_state));
+}
+
+NtsDomNodeList* nts_dom_Element_querySelectorAll(NtsDomElement* self, const NtsBorrowedString* selectors, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  return HandleOf<NtsDomNodeList>(receiver->querySelectorAll(NtsText(context, selectors), exception_state));
 }
 
 void nts_dom_Element_releasePointerCapture(NtsDomElement* self, int32_t pointerId, NtsDomException** error) {
@@ -1484,6 +1532,42 @@ void nts_dom_Document_set_body(NtsDomDocument* self, NtsDomHTMLElement* value, N
   receiver->setBody(ObjectOf<blink::HTMLElement>(value), exception_state);
 }
 
+NtsDomHTMLCollection* nts_dom_Document_get_images(NtsDomDocument* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomHTMLCollection>(receiver->images());
+}
+
+NtsDomHTMLCollection* nts_dom_Document_get_embeds(NtsDomDocument* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomHTMLCollection>(receiver->embeds());
+}
+
+NtsDomHTMLCollection* nts_dom_Document_get_plugins(NtsDomDocument* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomHTMLCollection>(receiver->embeds());
+}
+
+NtsDomHTMLCollection* nts_dom_Document_get_links(NtsDomDocument* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomHTMLCollection>(receiver->links());
+}
+
+NtsDomHTMLCollection* nts_dom_Document_get_forms(NtsDomDocument* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomHTMLCollection>(receiver->forms());
+}
+
+NtsDomHTMLCollection* nts_dom_Document_get_scripts(NtsDomDocument* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomHTMLCollection>(receiver->scripts());
+}
+
 const NtsStringView* nts_dom_Document_get_designMode(NtsDomDocument* self) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::Document>(self);
@@ -1495,6 +1579,18 @@ void nts_dom_Document_set_designMode(NtsDomDocument* self, const NtsBorrowedStri
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
   receiver->setDesignMode(NtsText(context, value));
+}
+
+NtsDomHTMLCollection* nts_dom_Document_get_anchors(NtsDomDocument* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomHTMLCollection>(receiver->anchors());
+}
+
+NtsDomHTMLCollection* nts_dom_Document_get_applets(NtsDomDocument* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomHTMLCollection>(receiver->applets());
 }
 
 const NtsStringView* nts_dom_Document_get_fgColor(NtsDomDocument* self) {
@@ -1634,6 +1730,12 @@ NtsDomElement* nts_dom_Document_get_webkitFullscreenElement(NtsDomDocument* self
   return HandleOf<NtsDomElement>(DocumentFullscreen::fullscreenElement(*receiver));
 }
 
+NtsDomHTMLCollection* nts_dom_Document_get_children(NtsDomDocument* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomHTMLCollection>(receiver->children());
+}
+
 NtsDomElement* nts_dom_Document_get_firstElementChild(NtsDomDocument* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::Document>(self);
@@ -1702,6 +1804,12 @@ void nts_dom_Document_close(NtsDomDocument* self, NtsDomException** error) {
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
   receiver->close(exception_state);
+}
+
+NtsDomComment* nts_dom_Document_createComment(NtsDomDocument* self, const NtsBorrowedString* data) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomComment>(receiver->createComment(NtsText(context, data)));
 }
 
 NtsDomDocumentFragment* nts_dom_Document_createDocumentFragment(NtsDomDocument* self) {
@@ -1774,6 +1882,30 @@ NtsDomElement* nts_dom_Document_getElementById(NtsDomDocument* self, const NtsBo
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::Document>(self);
   return HandleOf<NtsDomElement>(receiver->getElementById(NtsText(context, elementId)));
+}
+
+NtsDomHTMLCollection* nts_dom_Document_getElementsByClassName(NtsDomDocument* self, const NtsBorrowedString* classNames) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomHTMLCollection>(receiver->getElementsByClassName(NtsText(context, classNames)));
+}
+
+NtsDomNodeList* nts_dom_Document_getElementsByName(NtsDomDocument* self, const NtsBorrowedString* elementName) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomNodeList>(receiver->getElementsByName(NtsText(context, elementName)));
+}
+
+NtsDomHTMLCollection* nts_dom_Document_getElementsByTagName(NtsDomDocument* self, const NtsBorrowedString* localName) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomHTMLCollection>(receiver->getElementsByTagName(NtsText(context, localName)));
+}
+
+NtsDomHTMLCollection* nts_dom_Document_getElementsByTagNameNS(NtsDomDocument* self, const NtsBorrowedString* namespaceURI, const NtsBorrowedString* localName) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomHTMLCollection>(receiver->getElementsByTagNameNS(NtsText(context, namespaceURI), NtsText(context, localName)));
 }
 
 bool nts_dom_Document_hasFocus(NtsDomDocument* self) {
@@ -1864,6 +1996,13 @@ NtsDomElement* nts_dom_Document_querySelector(NtsDomDocument* self, const NtsBor
   return HandleOf<NtsDomElement>(receiver->querySelector(NtsText(context, selectors), exception_state));
 }
 
+NtsDomNodeList* nts_dom_Document_querySelectorAll(NtsDomDocument* self, const NtsBorrowedString* selectors, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomNodeList>(receiver->querySelectorAll(NtsText(context, selectors), exception_state));
+}
+
 void nts_dom_Document_releaseEvents(NtsDomDocument* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::Document>(self);
@@ -1935,6 +2074,12 @@ NtsDomDocumentFragment* nts_dom_as_DocumentFragment(NtsDomNode* node) {
   return HandleOf<NtsDomDocumentFragment>(blink::DynamicTo<blink::DocumentFragment>(ObjectOf<blink::Node>(node)));
 }
 
+NtsDomHTMLCollection* nts_dom_DocumentFragment_get_children(NtsDomDocumentFragment* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
+  return HandleOf<NtsDomHTMLCollection>(receiver->children());
+}
+
 NtsDomElement* nts_dom_DocumentFragment_get_firstElementChild(NtsDomDocumentFragment* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
@@ -1972,6 +2117,13 @@ NtsDomElement* nts_dom_DocumentFragment_querySelector(NtsDomDocumentFragment* se
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
   return HandleOf<NtsDomElement>(receiver->querySelector(NtsText(context, selectors), exception_state));
+}
+
+NtsDomNodeList* nts_dom_DocumentFragment_querySelectorAll(NtsDomDocumentFragment* self, const NtsBorrowedString* selectors, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
+  return HandleOf<NtsDomNodeList>(receiver->querySelectorAll(NtsText(context, selectors), exception_state));
 }
 
 NtsDomHTMLElement* nts_dom_as_HTMLElement(NtsDomNode* node) {
@@ -2783,6 +2935,12 @@ const NtsStringView* nts_dom_HTMLInputElement_get_validationMessage(NtsDomHTMLIn
   return context.Lend(nts_dom::AsString(receiver->validationMessage()), false);
 }
 
+NtsDomNodeList* nts_dom_HTMLInputElement_get_labels(NtsDomHTMLInputElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::HTMLInputElement>(self);
+  return HandleOf<NtsDomNodeList>(receiver->labels());
+}
+
 const NtsStringView* nts_dom_HTMLInputElement_get_selectionDirection(NtsDomHTMLInputElement* self, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
@@ -3091,6 +3249,12 @@ const NtsStringView* nts_dom_HTMLButtonElement_get_validationMessage(NtsDomHTMLB
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::HTMLButtonElement>(self);
   return context.Lend(nts_dom::AsString(receiver->validationMessage()), false);
+}
+
+NtsDomNodeList* nts_dom_HTMLButtonElement_get_labels(NtsDomHTMLButtonElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::HTMLButtonElement>(self);
+  return HandleOf<NtsDomNodeList>(receiver->labels());
 }
 
 NtsDomElement* nts_dom_HTMLButtonElement_get_popoverTargetElement(NtsDomHTMLButtonElement* self) {
@@ -4077,6 +4241,137 @@ void nts_dom_CSSStyleDeclaration_setProperty_2(NtsDomCSSStyleDeclaration* self, 
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), NtsText(context, property), NtsText(context, value), blink::AtomicString(""), exception_state);
+}
+
+NtsDomComment* nts_dom_as_Comment(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomComment>(blink::DynamicTo<blink::Comment>(ObjectOf<blink::Node>(node)));
+}
+
+uint32_t nts_dom_NodeList_get_length(NtsDomNodeList* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::NodeList>(self);
+  return static_cast<uint32_t>(receiver->length());
+}
+
+NtsDomNode* nts_dom_NodeList_item(NtsDomNodeList* self, uint32_t index) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::NodeList>(self);
+  return HandleOf<NtsDomNode>(receiver->item(index));
+}
+
+uint32_t nts_dom_HTMLCollection_get_length(NtsDomHTMLCollection* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::HTMLCollection>(self);
+  return static_cast<uint32_t>(receiver->length());
+}
+
+NtsDomElement* nts_dom_HTMLCollection_item(NtsDomHTMLCollection* self, uint32_t index) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::HTMLCollection>(self);
+  return HandleOf<NtsDomElement>(receiver->item(index));
+}
+
+NtsDomElement* nts_dom_HTMLCollection_namedItem(NtsDomHTMLCollection* self, const NtsBorrowedString* name) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::HTMLCollection>(self);
+  return HandleOf<NtsDomElement>(receiver->namedItem(NtsText(context, name)));
+}
+
+double nts_dom_DOMRectReadOnly_get_x(NtsDomDOMRectReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMRectReadOnly>(self);
+  return static_cast<double>(receiver->x());
+}
+
+double nts_dom_DOMRectReadOnly_get_y(NtsDomDOMRectReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMRectReadOnly>(self);
+  return static_cast<double>(receiver->y());
+}
+
+double nts_dom_DOMRectReadOnly_get_width(NtsDomDOMRectReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMRectReadOnly>(self);
+  return static_cast<double>(receiver->width());
+}
+
+double nts_dom_DOMRectReadOnly_get_height(NtsDomDOMRectReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMRectReadOnly>(self);
+  return static_cast<double>(receiver->height());
+}
+
+double nts_dom_DOMRectReadOnly_get_top(NtsDomDOMRectReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMRectReadOnly>(self);
+  return static_cast<double>(receiver->top());
+}
+
+double nts_dom_DOMRectReadOnly_get_right(NtsDomDOMRectReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMRectReadOnly>(self);
+  return static_cast<double>(receiver->right());
+}
+
+double nts_dom_DOMRectReadOnly_get_bottom(NtsDomDOMRectReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMRectReadOnly>(self);
+  return static_cast<double>(receiver->bottom());
+}
+
+double nts_dom_DOMRectReadOnly_get_left(NtsDomDOMRectReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMRectReadOnly>(self);
+  return static_cast<double>(receiver->left());
+}
+
+double nts_dom_DOMRect_get_x(NtsDomDOMRect* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMRect>(self);
+  return static_cast<double>(receiver->x());
+}
+
+void nts_dom_DOMRect_set_x(NtsDomDOMRect* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMRect>(self);
+  receiver->setX(value);
+}
+
+double nts_dom_DOMRect_get_y(NtsDomDOMRect* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMRect>(self);
+  return static_cast<double>(receiver->y());
+}
+
+void nts_dom_DOMRect_set_y(NtsDomDOMRect* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMRect>(self);
+  receiver->setY(value);
+}
+
+double nts_dom_DOMRect_get_width(NtsDomDOMRect* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMRect>(self);
+  return static_cast<double>(receiver->width());
+}
+
+void nts_dom_DOMRect_set_width(NtsDomDOMRect* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMRect>(self);
+  receiver->setWidth(value);
+}
+
+double nts_dom_DOMRect_get_height(NtsDomDOMRect* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMRect>(self);
+  return static_cast<double>(receiver->height());
+}
+
+void nts_dom_DOMRect_set_height(NtsDomDOMRect* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMRect>(self);
+  receiver->setHeight(value);
 }
 }  // extern "C"
 }  // namespace blink

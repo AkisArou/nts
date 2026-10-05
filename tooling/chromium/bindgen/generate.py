@@ -85,8 +85,8 @@ SCALARS = {
     "unsigned long long": ("uint64_t", 'CNumber<"uint64">'),
     "float": ("float", 'CNumber<"float">'),
     "unrestricted float": ("float", 'CNumber<"float">'),
-    "double": ("double", "number"),
-    "unrestricted double": ("double", "number"),
+    "double": ("double", 'CNumber<"double">'),
+    "unrestricted double": ("double", 'CNumber<"double">'),
 }
 # DOMString and CSSOMString are one type to Blink. A USVString's lone
 # surrogates become U+FFFD, as V8's conversion makes them. A ByteString
@@ -475,6 +475,11 @@ class Generator:
         identifier = interface.identifier
         root = self.hierarchy_root(interface)
         if root is interface:
+            return
+        # DynamicTo needs Blink's DowncastTraits, which the node and event
+        # classes have and others (DOMRect from DOMRectReadOnly) need not;
+        # without RTTI there is no other checked cast to offer.
+        if root.identifier not in ("EventTarget", "Event"):
             return
         cls = blink_class_name(interface)
         if identifier == "Node":

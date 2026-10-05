@@ -17,6 +17,11 @@
     "MouseEvent",
     "KeyboardEvent",
     "DOMTokenList",
-    "CSSStyleDeclaration"
+    "CSSStyleDeclaration",
+    "Comment",
+    "NodeList",
+    "HTMLCollection",
+    "DOMRectReadOnly",
+    "DOMRect"
   ]
 }

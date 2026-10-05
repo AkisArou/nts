@@ -1,5 +1,5 @@
 {
-  "bound": 621,
+  "bound": 669,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -25,11 +25,6 @@
       "interface": "EventTarget",
       "member": "when/2",
       "why": "interface Observable is not bound"
-    },
-    {
-      "interface": "Node",
-      "member": "get childNodes",
-      "why": "interface NodeList is not bound"
     },
     {
       "interface": "Node",
@@ -303,11 +298,6 @@
     },
     {
       "interface": "Element",
-      "member": "get children",
-      "why": "interface HTMLCollection is not bound"
-    },
-    {
-      "interface": "Element",
       "member": "after/1",
       "why": "variadic (Node or DOMString or TrustedScript)..."
     },
@@ -418,11 +408,6 @@
     },
     {
       "interface": "Element",
-      "member": "getBoundingClientRect/0",
-      "why": "interface DOMRect is not bound"
-    },
-    {
-      "interface": "Element",
       "member": "getBoxQuads/1",
       "why": "result type sequence<DOMQuad>"
     },
@@ -430,21 +415,6 @@
       "interface": "Element",
       "member": "getClientRects/0",
       "why": "interface DOMRectList is not bound"
-    },
-    {
-      "interface": "Element",
-      "member": "getElementsByClassName/1",
-      "why": "interface HTMLCollection is not bound"
-    },
-    {
-      "interface": "Element",
-      "member": "getElementsByTagName/1",
-      "why": "interface HTMLCollection is not bound"
-    },
-    {
-      "interface": "Element",
-      "member": "getElementsByTagNameNS/2",
-      "why": "interface HTMLCollection is not bound"
     },
     {
       "interface": "Element",
@@ -480,11 +450,6 @@
       "interface": "Element",
       "member": "pseudo/1",
       "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "Element",
-      "member": "querySelectorAll/1",
-      "why": "interface NodeList is not bound"
     },
     {
       "interface": "Element",
@@ -813,36 +778,6 @@
     },
     {
       "interface": "Document",
-      "member": "get images",
-      "why": "interface HTMLCollection is not bound"
-    },
-    {
-      "interface": "Document",
-      "member": "get embeds",
-      "why": "interface HTMLCollection is not bound"
-    },
-    {
-      "interface": "Document",
-      "member": "get plugins",
-      "why": "interface HTMLCollection is not bound"
-    },
-    {
-      "interface": "Document",
-      "member": "get links",
-      "why": "interface HTMLCollection is not bound"
-    },
-    {
-      "interface": "Document",
-      "member": "get forms",
-      "why": "interface HTMLCollection is not bound"
-    },
-    {
-      "interface": "Document",
-      "member": "get scripts",
-      "why": "interface HTMLCollection is not bound"
-    },
-    {
-      "interface": "Document",
       "member": "get currentScript",
       "why": "result type HTMLOrSVGScriptElement?"
     },
@@ -860,16 +795,6 @@
       "interface": "Document",
       "member": "set onreadystatechange",
       "why": "parameter type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get anchors",
-      "why": "interface HTMLCollection is not bound"
-    },
-    {
-      "interface": "Document",
-      "member": "get applets",
-      "why": "interface HTMLCollection is not bound"
     },
     {
       "interface": "Document",
@@ -2198,11 +2123,6 @@
     },
     {
       "interface": "Document",
-      "member": "get children",
-      "why": "interface HTMLCollection is not bound"
-    },
-    {
-      "interface": "Document",
       "member": "get styleSheets",
       "why": "interface StyleSheetList is not bound"
     },
@@ -2283,11 +2203,6 @@
     },
     {
       "interface": "Document",
-      "member": "createComment/1",
-      "why": "interface Comment is not bound"
-    },
-    {
-      "interface": "Document",
       "member": "createEvent/1",
       "why": "[CallWith=ScriptState] needs a script context"
     },
@@ -2358,26 +2273,6 @@
     },
     {
       "interface": "Document",
-      "member": "getElementsByClassName/1",
-      "why": "interface HTMLCollection is not bound"
-    },
-    {
-      "interface": "Document",
-      "member": "getElementsByName/1",
-      "why": "interface NodeList is not bound"
-    },
-    {
-      "interface": "Document",
-      "member": "getElementsByTagName/1",
-      "why": "interface HTMLCollection is not bound"
-    },
-    {
-      "interface": "Document",
-      "member": "getElementsByTagNameNS/2",
-      "why": "interface HTMLCollection is not bound"
-    },
-    {
-      "interface": "Document",
       "member": "getSelection/0",
       "why": "interface Selection is not bound"
     },
@@ -2415,11 +2310,6 @@
       "interface": "Document",
       "member": "prepend/1",
       "why": "variadic (Node or DOMString or TrustedScript)..."
-    },
-    {
-      "interface": "Document",
-      "member": "querySelectorAll/1",
-      "why": "interface NodeList is not bound"
     },
     {
       "interface": "Document",
@@ -2503,11 +2393,6 @@
     },
     {
       "interface": "DocumentFragment",
-      "member": "get children",
-      "why": "interface HTMLCollection is not bound"
-    },
-    {
-      "interface": "DocumentFragment",
       "member": "append/1",
       "why": "variadic (Node or DOMString or TrustedScript)..."
     },
@@ -2515,11 +2400,6 @@
       "interface": "DocumentFragment",
       "member": "prepend/1",
       "why": "variadic (Node or DOMString or TrustedScript)..."
-    },
-    {
-      "interface": "DocumentFragment",
-      "member": "querySelectorAll/1",
-      "why": "interface NodeList is not bound"
     },
     {
       "interface": "DocumentFragment",
@@ -3818,11 +3698,6 @@
     },
     {
       "interface": "HTMLInputElement",
-      "member": "get labels",
-      "why": "interface NodeList is not bound"
-    },
-    {
-      "interface": "HTMLInputElement",
       "member": "get selectionStart",
       "why": "result type unsigned long?"
     },
@@ -3875,11 +3750,6 @@
       "interface": "HTMLButtonElement",
       "member": "get validity",
       "why": "interface ValidityState is not bound"
-    },
-    {
-      "interface": "HTMLButtonElement",
-      "member": "get labels",
-      "why": "interface NodeList is not bound"
     },
     {
       "interface": "HTMLAnchorElement",
@@ -3960,6 +3830,21 @@
       "interface": "CSSStyleDeclaration",
       "member": "get parentRule",
       "why": "interface CSSRule is not bound"
+    },
+    {
+      "interface": "DOMRectReadOnly",
+      "member": "toJSON/0",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "DOMRectReadOnly",
+      "member": "fromRect/1",
+      "why": "static"
+    },
+    {
+      "interface": "DOMRect",
+      "member": "fromRect/1",
+      "why": "static"
     }
   ]
 }

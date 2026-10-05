@@ -140,6 +140,48 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   log("type", input.type);
   log("checked", "" + input.checked);
 
+  // Collections, by length and item, as page script without an index
+  // operator writes them.
+  const list = d.createElement("ul");
+  root.appendChild(list);
+  for (let i = 0; i < 3; i += 1) {
+    const item = d.createElement("li");
+    item.className = i === 1 ? "odd x" : "x";
+    item.appendChild(d.createTextNode("item " + i));
+    list.appendChild(item);
+  }
+  log("children", "" + list.children.length);
+  log("childNodes", "" + list.childNodes.length);
+  log("childItem", describe(list.children.item(2)));
+  log("childMissing", describe(list.children.item(9)));
+  log("queryAll", "" + list.querySelectorAll("li.x").length);
+  log("queryAllItem", describe(list.querySelectorAll(".odd").item(0)));
+
+  // A token list: variadic adds at each bound arity, toggles, removal.
+  const tokens = list.classList;
+  tokens.add("a");
+  tokens.add("b", "c");
+  tokens.add("d", "e", "a");
+  log("tokens", tokens.value + "|" + tokens.length);
+  log("tokenContains", "" + tokens.contains("c"));
+  log("tokenToggle", "" + tokens.toggle("c") + "," + tokens.toggle("c", true));
+  tokens.remove("a", "b");
+  log("tokensAfter", list.className + "|" + tokens.item(0));
+  thrown("emptyToken", () => tokens.add(""));
+  thrown("spaceToken", () => tokens.add("a b"));
+
+  // An inline style, and the layout it makes, read back.
+  const box = asHTMLElement(d.createElement("div"))!;
+  root.appendChild(box);
+  box.style.setProperty("width", "120px");
+  box.style.setProperty("height", "30px", "important");
+  log("styleWidth", box.style.getPropertyValue("width"));
+  log("stylePriority", box.style.getPropertyPriority("height"));
+  log("cssText", box.style.cssText);
+  const rect = box.getBoundingClientRect();
+  log("rect", rect.width + "x" + rect.height);
+  log("removed", box.style.removeProperty("height") + "|" + box.style.cssText);
+
   // What the members raise: each exception's name and Blink's message.
   thrown("syntax", () => d.querySelector("["));
   thrown("hierarchy", () => div.appendChild(div));
