@@ -164,8 +164,13 @@ class ProbeObserver final : public content::RenderFrameObserver {
 
   void RunRows(blink::WebDOMEvent) {
     CHECK(probe_ && dom_);
-    const auto result = RunRowsBenchmark(
-        render_frame()->GetWebFrame()->GetDocument(), dom_.get(), probe_.get());
+    StartRowsBenchmark(render_frame()->GetWebFrame()->GetDocument(), dom_.get(),
+                       probe_.get(),
+                       base::BindOnce(&ProbeObserver::RowsDone,
+                                      weak_factory_.GetWeakPtr()));
+  }
+
+  void RowsDone(std::string result) {
     counter_output_.SetAttribute(blink::WebString::FromAscii("data-result"),
                                  blink::WebString::FromUtf8(result));
     counter_output_.SetAttribute(blink::WebString::FromAscii("data-state"),

@@ -31,7 +31,7 @@ const profile = process.argv.includes("--perf");
 mkdirSync(output, { recursive: true });
 
 interface Sample { case: string; round: number; batch: number; nsPerOperation: number; ntsAllocations?: number; idleCollectNs?: number }
-interface Result { samples: Sample[]; finalRows: number; liveLeases?: number; maxRssKb?: number; liveBeforeApp?: number; liveAfterDestroy?: number; dom: string }
+interface Result { samples: Sample[]; finalRows: number; liveLeases?: number; leasesAfterDestroy?: number; maxRssKb?: number; liveBeforeApp?: number; liveAfterDestroy?: number; dom: string }
 
 // Native: the archive the renderer links (program, runtime, shims; pinned
 // clang -O2), with mini_dom.c standing in for the Blink adapter.
@@ -63,7 +63,7 @@ class MiniNode {
   previousSibling: MiniNode | null = null;
   nextSibling: MiniNode | null = null;
   attributes = new Map<string, string>();
-  listeners = new Map<string, () => void>();
+  listeners = new Map<string, () => unknown>();
   readonly tag: string;
   data: string | null;
   constructor(tag: string, data: string | null) {
@@ -85,7 +85,7 @@ class MiniNode {
   }
   setAttribute(name: string, value: string): void { this.attributes.set(name, value); }
   getAttribute(name: string): string | null { return this.attributes.get(name) ?? null; }
-  addEventListener(type: string, listener: () => void): void { this.listeners.set(type, listener); }
+  addEventListener(type: string, listener: () => unknown): void { this.listeners.set(type, listener); }
   appendChild(child: MiniNode): MiniNode { return this.insertBefore(child, null); }
   insertBefore(child: MiniNode, reference: MiniNode | null): MiniNode {
     child.remove();
@@ -110,7 +110,7 @@ class MiniNode {
     return copy;
   }
 }
-function v8(): Result {
+async function v8(): Promise<Result> {
   const html = readFileSync(resolve(root, "runtime/chromium/experiments/rows-benchmark-v8/index.html"), "utf8");
   const script = html.match(/<script>([\s\S]*)<\/script>/)?.[1];
   assert(script, "the V8 fixture has one inline script");
@@ -120,8 +120,11 @@ function v8(): Result {
     createTextNode: (text: string) => new MiniNode("", text),
     querySelector: (selector: string) => byId.get(selector) ?? null,
   };
-  runInNewContext(script, { document, performance, Error, JSON });
-  byId.get("#v8-rows-run")!.listeners.get("input")!();
+  // The page posts each step as a task and waits a frame after setup; here a
+  // frame is one more turn of the loop, since nothing renders.
+  const requestAnimationFrame = (callback: () => void) => setImmediate(callback);
+  runInNewContext(script, { document, performance, Error, JSON, MessageChannel, requestAnimationFrame });
+  await byId.get("#v8-rows-run")!.listeners.get("input")!();
   const result = JSON.parse(byId.get("#benchmark-result")!.getAttribute("data-result")!) as Result;
   const rows: string[] = [];
   for (let row = byId.get("#tbody")!.firstChild; row; row = row.nextSibling) rows.push(`${row.className}|${row.textContent}`);
@@ -130,11 +133,12 @@ function v8(): Result {
 }
 
 const results = { c: native("c", "checkpoint"), cIdle: native("c", "idle"), llvm: native("llvm", "checkpoint"),
-  llvmIdle: native("llvm", "idle"), v8: v8() };
+  llvmIdle: native("llvm", "idle"), v8: await v8() };
 for (const [name, result] of Object.entries(results)) {
   assert.equal(result.finalRows, 999, name);
   assert.equal(result.dom, results.v8.dom, `${name} must build the rows the page script builds`);
   if (name !== "v8") assert.equal(result.liveLeases, 2 + 2 * result.finalRows, `${name} leaked leases`);
+  if (name !== "v8") assert.equal(result.leasesAfterDestroy, 0, `${name}: destroying the app and releasing the query left a lease`);
   if (name !== "v8") assert.equal(result.liveAfterDestroy, result.liveBeforeApp, `${name}: destroying the app left NTS objects alive`);
 }
 const median = (samples: Sample[]): number => {

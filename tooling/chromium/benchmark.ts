@@ -13,8 +13,8 @@ interface Sample { payload: string; path: string; round: number; length: number;
 interface EntrySample { entry: string; round: number; length: number; operationsPerEntry: number; entries: number; elapsedNs: number; nsPerEntry: number; ntsAllocations: number }
 interface Measurements { samples: Sample[]; entrySamples?: EntrySample[]; status: number; finalLength: number; payload: string; timing: string; exactUnits?: number[] }
 // The rows workload (--workload rows): one sample per batch of an operation.
-interface RowsSample { case: string; round: number; batch: number; elapsedNs: number; nsPerOperation: number; rows: number; ntsAllocations?: number; ntsLiveObjects?: number; idleCollectNs?: number }
-interface RowsMeasurements { samples: RowsSample[]; status: number; finalRows: number; liveLeases?: number; dom?: string; timing: string }
+interface RowsSample { case: string; round: number; batch: number; elapsedNs: number; nsPerOperation: number; rows: number; ntsAllocations?: number; ntsLiveObjects?: number; idleCollectNs?: number; layoutNs?: number }
+interface RowsMeasurements { samples: RowsSample[]; status: number; finalRows: number; liveLeases?: number; leasesAfterDestroy?: number; dom?: string; structure?: string; timing: string }
 type Mode = "native" | "v8";
 interface LaunchResult { result: Measurements; executable: string; fixture: string; args: string[]; rendererPid: number; rendererStatus: string; loadBefore: string; loadAfter: string }
 const root = resolve(import.meta.dirname, "../..");
@@ -29,6 +29,14 @@ let collection: "checkpoint" | "idle" = "idle";
 // --trace-gc: V8's GC trace in both launches. Oilpan collects inside V8's
 // unified heap, so its mark-compacts are in the same lines.
 let traceGc = false;
+// --trace: a Chromium trace of each launch (timeline, GC), streamed over CDP
+// to trace-<run>-<mode>.json beside the launch logs. Diagnostic: tracing
+// costs time, so its timings are not results.
+let trace = false;
+// --diagnostic-js-flags F: V8 flags given to both engines, to test a
+// mechanism (e.g. --no-incremental-marking). Recorded in the result; a run
+// with them is a diagnosis, never a performance result.
+let diagnosticJsFlags: string | undefined;
 const allowDebug = process.argv.includes("--allow-debug");
 for (let i = 5; i < process.argv.length; ++i) {
   const option = process.argv[i];
@@ -36,6 +44,8 @@ for (let i = 5; i < process.argv.length; ++i) {
   if (option === "--cpu") cpu = Number(process.argv[++i]);
   else if (option === "--runs") runs = Number(process.argv[++i]);
   else if (option === "--trace-gc") traceGc = true;
+  else if (option === "--trace") trace = true;
+  else if (option === "--diagnostic-js-flags") diagnosticJsFlags = process.argv[++i];
   else if (option === "--collection") {
     const value = process.argv[++i];
     assert(value === "checkpoint" || value === "idle", "--collection must be checkpoint or idle");
@@ -107,7 +117,8 @@ async function measure(run: number, mode: Mode): Promise<LaunchResult> {
   const args = ["--ozone-platform=x11", "--disable-features=SpareRendererForSitePerProcess", "--enable-logging=stderr", "--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1", `--user-data-dir=${profile}`];
   if (mode === "native") args.push(`--nts-probe-url=${fixture}`, `--nts-benchmark-order=${run % 3}`);
   if (mode === "native" && workload === "rows") args.push(`--nts-collection=${collection}`);
-  if (traceGc) args.push("--js-flags=--trace-gc");
+  const jsFlags = [...(traceGc ? ["--trace-gc"] : []), ...(diagnosticJsFlags ? [diagnosticJsFlags] : [])];
+  if (jsFlags.length) args.push(`--js-flags=${jsFlags.join(" ")}`);
   args.push(fixture);
   const child = spawn("xvfb-run", ["-a", "-s", "-screen 0 1280x900x24", engine, ...args], {detached:true, stdio:["ignore","pipe","pipe"]});
   let log = "";
@@ -152,8 +163,10 @@ async function measure(run: number, mode: Mode): Promise<LaunchResult> {
       connection.addEventListener("error", () => { clearTimeout(timeout); reject(new Error("CDP connection failed")); }, {once:true});
     });
     let id = 0;
+    let traceStream: string | undefined;
     connection.addEventListener("message", event => {
-      const message = JSON.parse(String(event.data)) as {id?:number; error?:unknown; result:unknown};
+      const message = JSON.parse(String(event.data)) as {id?:number; method?:string; params?:{stream?:string}; error?:unknown; result:unknown};
+      if (message.method === "Tracing.tracingComplete") traceStream = message.params?.stream ?? "";
       if (!message.id) return;
       const entry = pending.get(message.id);
       if (!entry) return;
@@ -196,8 +209,22 @@ async function measure(run: number, mode: Mode): Promise<LaunchResult> {
     const loadBefore = (await readFile("/proc/loadavg", "utf8")).trim();
     const selector = `#${mode}-${workload === "binding" ? "benchmark" : "rows"}-run`;
     const point = await evaluate<{x:number;y:number}>(`(() => {const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+    if (trace) await cdp("Tracing.start", {transferMode:"ReturnAsStream", traceConfig:{recordMode:"recordAsMuchAsPossible",
+      includedCategories:["devtools.timeline","disabled-by-default-devtools.timeline","blink.user_timing","v8.gc","disabled-by-default-v8.gc","blink_gc","cppgc"]}});
     for (const type of ["mousePressed", "mouseReleased"]) await cdp("Input.dispatchMouseEvent", {type,...point,button:"left",clickCount:1});
     await until(() => evaluate<boolean>("document.querySelector('#benchmark-result').getAttribute('data-state') === 'done'"));
+    if (trace) {
+      await cdp("Tracing.end");
+      const stream = await until(() => traceStream);
+      const chunks: string[] = [];
+      for (;;) {
+        const chunk = await cdp<{data:string; base64Encoded?:boolean; eof:boolean}>("IO.read", {handle:stream, size:1 << 20});
+        chunks.push(chunk.base64Encoded ? Buffer.from(chunk.data, "base64").toString("utf8") : chunk.data);
+        if (chunk.eof) break;
+      }
+      await cdp("IO.close", {handle:stream});
+      await writeFile(resolve(output, `trace-${run}-${mode}.json`), chunks.join(""));
+    }
     const result = JSON.parse(await evaluate<string>("document.querySelector('#benchmark-result').getAttribute('data-result')")) as Measurements;
     assert.equal(result.status, 0);
     if (workload === "rows") {
@@ -207,7 +234,11 @@ async function measure(run: number, mode: Mode): Promise<LaunchResult> {
       assert.equal(rows.finalRows, 999);
       // tbody + template + (tr, label text) per row: every other lease released.
       if (mode === "native") assert.equal(rows.liveLeases, 2 + 2 * rows.finalRows, "native handles leaked");
+      if (mode === "native") assert.equal(rows.leasesAfterDestroy, 0, "destroying the app and releasing the query must leave no lease");
       rows.dom = await evaluate<string>("[...document.querySelector('#tbody').rows].map(r => r.className + '|' + r.textContent).join('\\n')");
+      // The whole subtree, not only what the rows say: markup, and every node
+      // by type, empty text nodes included -- what layout actually walks.
+      rows.structure = await evaluate<string>("(() => { const t = document.querySelector('#tbody'); const counts = {}; const w = document.createTreeWalker(t); for (let n = w.currentNode; n; n = w.nextNode()) { const k = n.nodeType === 3 ? (n.data.length ? 'text' : 'empty-text') : n.nodeName; counts[k] = (counts[k] || 0) + 1; } return JSON.stringify({counts, markup: t.outerHTML}); })()");
       const shape = await evaluate<string>("(() => { const t = document.querySelector('#tbody'); const c = t.firstElementChild; return JSON.stringify({children: t.children.length, rows: t.rows.length, first: c && {tag: c.tagName, ns: c.namespaceURI, kind: Object.prototype.toString.call(c)}}); })()");
       assert.equal(rows.dom.split("\n").length, rows.finalRows, `Inspect actual Blink output, not only the benchmark's self-check: ${shape}`);
       console.log(`Run ${run+1}/${runs}, ${mode}: ${rows.samples.length} rows samples; normal JIT, sandbox active`);
@@ -247,6 +278,11 @@ for (let run = 0; run < runs; ++run) {
   const v8 = launches.v8;
   assert(native && v8);
   if (workload === "rows") assert.equal((native.result as unknown as RowsMeasurements).dom, (v8.result as unknown as RowsMeasurements).dom, "native and V8 must build the same rows");
+  if (workload === "rows") {
+    const [n, v] = [native, v8].map(engine => JSON.parse((engine.result as unknown as RowsMeasurements).structure!) as {counts: Record<string, number>; markup: string});
+    assert.deepEqual(n.counts, v.counts, "native and V8 must build the same nodes");
+    assert.equal(n.markup, v.markup, "native and V8 must build the same markup");
+  }
   else assert.deepEqual(native.result.exactUnits, v8.result.exactUnits);
   measurements.push({run,order,native:native.result,v8:v8.result,launches:{native,v8}});
 }
@@ -260,7 +296,7 @@ const gc = traceGc ? await Promise.all(measurements.flatMap(run => (["native", "
     pauseMs: +pauses.reduce((sum, match) => sum + Number(match[2]), 0).toFixed(1)};
 }))) : undefined;
 const percentile = (values:number[], fraction:number):number => values[Math.floor((values.length-1)*fraction)];
-const provenance = {observedAt:new Date().toISOString(),workload,gc,collection:workload === "rows" ? collection : undefined,backend,debugEngine,
+const provenance = {observedAt:new Date().toISOString(),workload,gc,diagnosticJsFlags,collection:workload === "rows" ? collection : undefined,backend,debugEngine,
   scope:debugEngine?"Diagnostic architecture comparison in debug Chromium; not a production performance claim":"Optimized static Chromium (no DCHECKs) architecture comparison; not an official/PGO distribution or whole-application speedup",
   argsText,cpu,runs,buildRecord,executable,executableSha256:hash(await readFile(executable)),fixtureSha256:hash(await readFile(fixturePath)),
   v8Executable,v8ExecutableSha256:hash(await readFile(v8Executable)),v8FixtureSha256:hash(await readFile(v8FixturePath)),
@@ -274,8 +310,11 @@ if (workload === "rows") {
     const median = (engine: "native" | "v8") => {
       const samples = measurements.flatMap(run => rowsOf(run[engine])).filter(sample => sample.case === name);
       const values = samples.map(sample => sample.nsPerOperation).sort((a,b) => a-b);
+      // A +layout sample also times its forced layouts alone; per operation.
+      const layouts = samples.filter(sample => sample.layoutNs !== undefined).map(sample => sample.layoutNs!/sample.batch).sort((a,b) => a-b);
       return {samples:values.length,medianNs:percentile(values,.5),q1Ns:percentile(values,.25),q3Ns:percentile(values,.75),
         meanNs:values.reduce((sum,value) => sum+value,0)/values.length,
+        layoutMedianNs:layouts.length ? percentile(layouts,.5) : undefined,
         ntsAllocationsPerOperation:samples[0].ntsAllocations===undefined?undefined:samples[0].ntsAllocations/samples[0].batch};
     };
     const native = median("native"), v8 = median("v8");
@@ -288,7 +327,9 @@ if (workload === "rows") {
       limits:"Script time, plus forced style and layout in +layout cases; no paint; native pays one environment and DOM entry per operation, V8 one function call; native releases handles by hand"},
     measurements,summaries},null,2)}\n`);
   console.table(summaries.map(({case:name,native,v8,nativeOverV8}) => ({case:name,nativeUs:+(native.medianNs/1e3).toFixed(2),
-    v8Us:+(v8.medianNs/1e3).toFixed(2),nativeOverV8:+nativeOverV8.toFixed(3),ntsAllocations:native.ntsAllocationsPerOperation})));
+    v8Us:+(v8.medianNs/1e3).toFixed(2),nativeOverV8:+nativeOverV8.toFixed(3),
+    layoutNativeUs:native.layoutMedianNs===undefined?undefined:+(native.layoutMedianNs/1e3).toFixed(1),
+    layoutV8Us:v8.layoutMedianNs===undefined?undefined:+(v8.layoutMedianNs/1e3).toFixed(1),ntsAllocations:native.ntsAllocationsPerOperation})));
 } else {
   const all = measurements.flatMap(run => [...run.native.samples,...run.v8.samples]);
   const summaries=[];

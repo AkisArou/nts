@@ -129,31 +129,56 @@ const cases = [
   ['select+layout', 0, 1000, true, 3, 0, 100, 3, 15, true],
   ['swap+layout', 0, 1000, true, 4, 0, 100, 3, 15, true],
 ];
-document.querySelector('#v8-rows-run').addEventListener('input', () => {
+// A round is two interactions: the setup, a rendered frame, then the timed
+// batch -- each a posted message, as rows_benchmark.cc posts its own -- so
+// the measured operation always meets laid-out, painted rows. Between tasks
+// the event loop runs what Blink scheduled, GC steps included.
+function nextTask() {
+  return new Promise(resolve => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      channel.port1.close();
+      resolve();
+    };
+    channel.port2.postMessage(null);
+  });
+}
+document.querySelector('#v8-rows-run').addEventListener('input', async () => {
   const samples = [];
   let selection = 0;
   for (const [name, setup, setupCount, once, operation, count, batch, warm, measured, layout] of cases) {
     for (let round = 0; round < warm + measured; ++round) {
+      await nextTask();
       if (setup !== NONE && (!once || round === 0)) operate(setup, setupCount);
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await nextTask();
       let rows = 0;
+      let layoutMs = 0;
       const start = performance.now();
       for (let i = 0; i < batch; ++i) {
         rows = operate(operation, operation === 3 ? selection++ % 1000 : count);
-        // Force style and layout, as the next frame would.
-        if (layout && tbody.offsetHeight < 0) throw Error('layout');
+        // Force style and layout, as the next frame would; timed on its own
+        // as well, as rows_benchmark.cc does.
+        if (layout) {
+          const layoutStart = performance.now();
+          if (tbody.offsetHeight < 0) throw Error('layout');
+          layoutMs += performance.now() - layoutStart;
+        }
       }
       const elapsedNs = (performance.now() - start) * 1e6;
       if (round < warm) continue;
-      samples.push({case: name, round: round - warm, batch, elapsedNs, nsPerOperation: elapsedNs / batch, rows});
+      samples.push({case: name, round: round - warm, batch, elapsedNs, nsPerOperation: elapsedNs / batch, rows,
+        ...(layout ? {layoutNs: layoutMs * 1e6} : {})});
     }
   }
+  await nextTask();
   operate(0, 1000);
   operate(2, 0);
   operate(3, 5);
   operate(4, 0);
   const finalRows = operate(5, 4);
   output.setAttribute('data-result', JSON.stringify({samples, finalRows, status: 0,
-    timing: 'Ordinary page input handler; performance.now around batches'}));
+    timing: 'Ordinary page script; performance.now around batches; setup and batch are separate posted tasks'}));
   output.setAttribute('data-state', 'done');
 });
 output.setAttribute('data-state', 'ready');

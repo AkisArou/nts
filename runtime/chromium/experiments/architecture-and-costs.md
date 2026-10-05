@@ -260,11 +260,9 @@ The rows workload (js-framework-benchmark-shaped, four balanced pairs) is at
 parity: create1k 2.82 vs 2.90 ms, replace1k 3.30 vs 3.30 ms, update10th 20.2 vs
 20.0 us, create10k 27.8 vs 28.4 ms. Blink's cloning, insertion and text work
 dominate; the compiled application's own cost (about 0.9 ms per thousand rows
-standalone) is a small slice. `create1k+layout` is the exception: 38.2 ms
-native against 30.2 ms V8, while `create1k` alone is at parity. Unexplained;
-the leading hypothesis is Oilpan collection pressure from leases churned
-through the traced handle registry (four temporaries per row), to be tested
-with `benchmark.ts --trace-gc` before anything is changed for it.
+standalone) is a small slice. `create1k+layout` was the exception (38.2 ms
+native against 30.2 ms V8); [the next section](#the-layout-gap-was-gc-pacing)
+explains it, and it was the harness.
 
 What this says about where native wins: per-call binding work (interned and
 prepared text, 2-40x), and compute in the application itself -- not DOM
@@ -300,6 +298,51 @@ ahead at 4096 units and behind at every shorter length. Rows are unchanged
 (their text is ASCII, which UTF-8 already lent in place): create1k 2.78 vs
 3.20 ms, update10th 17.9 vs 20.0 us, create1k+layout still 38.1 vs 29.7 ms.
 Evidence: `target/chromium/perf/{binding-benchmark,rows}-c-sv/`.
+
+## The layout gap was GC pacing
+
+`create1k+layout` cost 38.1 ms native against 29.1 ms V8 although both build
+the identical DOM -- `benchmark.ts` now asserts the whole subtree's markup
+and node counts equal, not only each row's text. Timed alone, the forced
+layout was the whole difference (34.3 vs 26.4 ms). A Chromium trace
+(`benchmark.ts --trace`) showed why: native ran 30 major GC cycles to V8's
+62, but each one in ~459 incremental Oilpan marking steps against ~22, so a
+marking cycle was open during most native layouts -- allocation-driven
+marking steps and write barriers inside layout. V8 paces incremental marking
+by JS-heap allocation, which page script supplies in quantity; the compiled
+app allocates in its own heap, which V8 does not see, so a cycle advanced
+only by Oilpan's own small steps. Both harnesses ran every round in one
+task, so Blink's scheduled GC work never ran between them. Confirmed with
+`--diagnostic-js-flags --no-incremental-marking` on both engines: 30.6 vs
+30.6 ms, layout 27.9 vs 27.6.
+
+A real application is not one long task: each interaction is its own task
+and a frame renders between them. Both harnesses now run each round as the
+setup task, a rendered frame (`requestAnimationFrame`; Blink's internal
+`FrameCallback`), then the timed task. Every case became unimodal -- before,
+`remove` was 0.8 or 4 us depending on whether a frame happened to fall
+between setup and batch -- and the engines run the same number of GC cycles
+(92 vs 92-94). Two runs, `--cpu 4`, native/V8 ms:
+
+| Case | Native | V8 | Ratio |
+| --- | ---: | ---: | ---: |
+| create1k | 2.83 | 2.90 | 0.98 |
+| replace1k | 5.71 | 5.70 | 1.00 |
+| create10k | 24.2 | 26.4 | 0.92 |
+| clear10k | 34.2 | 34.1 | 1.00 |
+| create1k+layout | 28.6-30.4 | 28.3-28.7 | 1.01-1.06 |
+| update10th+layout | 5.91-6.35 | 5.68-5.82 | 1.04-1.09 |
+
+What remains is structural, not a defect: native still advances marking in
+about 2.5x as many smaller steps (Oilpan's allocation-driven steps against
+V8's), worth a few percent of layout-heavy frames. A native host that
+allocates outside V8's heap does not feed V8's marking pace; any lever for
+that belongs to Blink/V8's embedder API, not to the compiled program.
+
+The run also found the renderer harness leaking its own `tbody` query lease
+(the app borrows it; nobody released it); both harnesses now release it and
+assert zero leases after destroy. Evidence: `target/chromium/perf/
+rows-c-{layout,trace,noincremental,frames,frames-trace}/`.
 
 ## RC defects found by this lane and fixed in the compiler
 

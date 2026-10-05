@@ -39,6 +39,7 @@ static NtsDomContext* dom;
 static ntsRowsCreate_return_t* app;
 /* Live NTS objects before the app existed; destroying it must return here. */
 static size_t live_before_app;
+static uint32_t tbody;
 
 /* The collection policy under test. "checkpoint" is the runtime default: every
    outermost nts_leave drains and runs nts_collect_cycles if any candidate
@@ -94,8 +95,7 @@ int main(int argc, char** argv) {
     nts_enter();
     mini_dom_enter(dom);
     const uint32_t document = nts_dom_document(dom);
-    const uint32_t tbody =
-        nts_dom_query_atom(dom, document, mini_dom_intern(dom, "#tbody"));
+    tbody = nts_dom_query_atom(dom, document, mini_dom_intern(dom, "#tbody"));
     nts_dom_release(dom, document);
     live_before_app = nts_live_count();
     app = ntsRowsCreate(dom, tbody);
@@ -150,25 +150,29 @@ int main(int argc, char** argv) {
   const uint32_t leases = mini_dom_live_leases(dom);
   /* The renderer harness destroys the app and checks this; so does this. */
   size_t live_after_destroy;
+  uint32_t leases_after_destroy;
   {
     NtsEnvironmentScope scope = nts_environment_enter(environment);
     nts_callback_enter();
     nts_enter();
     mini_dom_enter(dom);
     ntsRowsDestroy(app);
+    /* The app borrowed the table's handle; the lease is the query's. */
+    nts_dom_release(dom, tbody);
     mini_dom_leave(dom);
     nts_release((NtsHeader*)app);
     nts_leave();
     nts_callback_leave();
     nts_collect_cycles();
     live_after_destroy = nts_live_count();
+    leases_after_destroy = mini_dom_live_leases(dom);
     nts_environment_leave(&scope);
   }
   struct rusage usage;
   getrusage(RUSAGE_SELF, &usage);
-  printf("],\"finalRows\":%.0f,\"liveLeases\":%u,\"maxRssKb\":%ld,\"liveBeforeApp\":%zu,\"liveAfterDestroy\":%zu,\"dom\":\"",
-         final_rows, leases, usage.ru_maxrss, live_before_app,
-         live_after_destroy);
+  printf("],\"finalRows\":%.0f,\"liveLeases\":%u,\"leasesAfterDestroy\":%u,\"maxRssKb\":%ld,\"liveBeforeApp\":%zu,\"liveAfterDestroy\":%zu,\"dom\":\"",
+         final_rows, leases, leases_after_destroy, usage.ru_maxrss,
+         live_before_app, live_after_destroy);
   for (const char* p = rows; *p; ++p) {
     if (*p == '\n')
       fputs("\\n", stdout);
