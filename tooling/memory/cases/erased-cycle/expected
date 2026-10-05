@@ -1,0 +1,14 @@
+ideal 10
+allocated 5
+candidates 5
+because five boxes, each holding itself in a field of erased type.
+because
+because Retains, five: storing the box into `data`. Releases, five: `work`
+because giving up its box, which leaves it above zero.
+because
+because Candidates: five. An erased value can be any object at all, so a field
+because of one reaches every layout -- including its own -- and `Box` is cyclic.
+because It was `_ => {}` in `reaches`: no edge, no candidate, and all five boxes
+because leaked.
+because
+because Allocations: five boxes.

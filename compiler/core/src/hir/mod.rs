@@ -3120,6 +3120,21 @@ impl Program {
                 subtypes[above].push(at);
             }
         }
+        // **A subclass is not the only thing a slot holds, and treating it as
+        // one leaked.** A structural prefix cast stores a `Node` where a `Leaf`
+        // is wanted when `Node` holds `Leaf`'s fields first, and an `Unerase`
+        // makes whatever was erased into whatever it is narrowed to, unchecked.
+        // `class Node { value: number; kids: Leaf[] }` with `n.kids.push(n)`
+        // reached only `Leaf` from `Node`, so `Node` was emitted acyclic and the
+        // cycle was found only while the array happened to be retained around
+        // the `push`; elide that pair and five nodes leaked. So a layout's slot
+        // holds what the program actually casts into it, as well as what
+        // derives from it.
+        for (target, source) in self.cast_sources() {
+            if !subtypes[target].contains(&source) {
+                subtypes[target].push(source);
+            }
+        }
 
         // Edges: which layouts a layout's reference fields can lead to, and
         // everything derived from those.
@@ -3184,8 +3199,25 @@ impl Program {
                     None => into.extend(0..self.layouts.len()),
                 }
             }
-            // Through an array, which is a reference like any other.
-            HirType::Managed(ManagedType::Array(element)) => self.reaches(element, into),
+            // Through a container, which is a reference like any other and
+            // holds what its element types say. `Map`, `Set` and `Promise`
+            // were the `_` arm below, so `class Node { children: Map<string,
+            // Node> }` was acyclic and found only while the map was a
+            // candidate on its own account.
+            HirType::Managed(
+                ManagedType::Array(element)
+                | ManagedType::View(element)
+                | ManagedType::Set(element)
+                | ManagedType::Promise(element),
+            ) => self.reaches(element, into),
+            HirType::Managed(ManagedType::Map(key, value) | ManagedType::Table(key, value)) => {
+                self.reaches(key, into);
+                self.reaches(value, into);
+            }
+            // An erased value can be any object at all, so -- as for a type
+            // with no layout here -- every layout. `class Box { data: unknown }`
+            // with `box.data = box` leaked every box while this was `_ => {}`.
+            HirType::Erased => into.extend(0..self.layouts.len()),
             // Through a foreign object that holds the closures lent to it: a
             // `GObject` can hold any closure the program connects to its
             // signals, and a closure can hold anything -- so, as for a type
@@ -3196,6 +3228,142 @@ impl Program {
             // 1000 more -- once per object, as buffering is.
             HirType::NativePointer(_) if ty.counted_family().is_some_and(native::Family::holds_closures) => {
                 into.extend(0..self.layouts.len());
+            }
+            // Nothing that can lead to an object. Spelled out rather than `_`,
+            // so a new type has to be decided here instead of defaulting to "no
+            // edge" -- which is the wrong default, and how three of the arms
+            // above were missed.
+            // Typed memory holds bytes, and a symbol's description is a string.
+            HirType::Managed(
+                ManagedType::String
+                | ManagedType::Template
+                | ManagedType::Date
+                | ManagedType::Buffer
+                | ManagedType::AnyView
+                | ManagedType::DataView
+                | ManagedType::Symbol,
+            )
+            | HirType::NativePointer(_)
+            | HirType::Void
+            | HirType::Never
+            | HirType::Bool
+            | HirType::Int { .. }
+            | HirType::Float { .. }
+            | HirType::BigInt => {}
+        }
+    }
+
+    /// Which layouts can be stored in a slot of another one, beyond its
+    /// subclasses: `(target, source)` for every cast the program performs.
+    ///
+    /// A `Convert` between object types is a structural prefix cast, and
+    /// stores its source wherever its target is wanted. An `Unerase` is
+    /// unchecked by construction -- narrowing licensed it, nothing tested the
+    /// layout -- so anything erased anywhere can arrive at any type unerased
+    /// to, and the pairs are every erased type against every unerased one.
+    /// Both are read from the operations themselves rather than predicted from
+    /// which layouts *could* be cast, because a cast nobody performs stores
+    /// nothing.
+    fn cast_sources(&self) -> Vec<(usize, usize)> {
+        let mut pairs = Vec::new();
+        let mut erased: Vec<&HirType> = Vec::new();
+        let mut unerased: Vec<&HirType> = Vec::new();
+        for func in &self.funcs {
+            for op in &func.values {
+                match &op.kind {
+                    OpKind::Convert(from) => {
+                        self.cast_pairs(&func.values[from.0 as usize].ty, &op.ty, &mut pairs);
+                    }
+                    OpKind::Erase { value, .. } => {
+                        let ty = &func.values[value.0 as usize].ty;
+                        if !erased.contains(&ty) {
+                            erased.push(ty);
+                        }
+                    }
+                    OpKind::Unerase { .. } if !unerased.contains(&&op.ty) => unerased.push(&op.ty),
+                    _ => {}
+                }
+            }
+        }
+        for to in &unerased {
+            for from in &erased {
+                self.cast_pairs(from, to, &mut pairs);
+            }
+        }
+        // **A structural cast usually leaves no operation behind**, which is
+        // why the scan above is not enough on its own. `add(node, node)` where
+        // `add` takes a `Leaf` is specialized into `add@1obj5`, whose parameter
+        // already *is* a `Node`, and its `push` into a `Leaf[]` stores one with
+        // nothing in between to read. So the pairs come from the rule that
+        // admits the cast, applied to the layouts: a slot of `T` can hold any
+        // layout that holds `T`'s fields first, in order (`lower::same_slot`).
+        //
+        // A fieldless target is a prefix of everything. A closure signature is
+        // one -- the base its closures name -- and only a closure is admitted
+        // there, already its subtype, so it takes nothing more; widening every
+        // callback field to every layout would make every class that holds one
+        // cyclic. Any other fieldless type, `{}` or an empty interface, can be
+        // handed any object, and takes every layout.
+        let signatures: Vec<usize> = (0..self.layouts.len())
+            .filter(|&at| {
+                self.layouts.iter().any(|layout| {
+                    layout.base.is_some_and(|base| self.layouts[at].types.contains(&base))
+                        && layout.types.iter().copied().any(is_closure_type)
+                })
+            })
+            .collect();
+        for (target, wanted) in self.layouts.iter().enumerate() {
+            if wanted.fields.is_empty() && signatures.contains(&target) {
+                continue;
+            }
+            for (source, held) in self.layouts.iter().enumerate() {
+                if source != target
+                    && wanted.fields.len() <= held.fields.len()
+                    && wanted.fields.iter().zip(&held.fields).all(|(want, have)| lower::same_slot(want, have))
+                {
+                    pairs.push((target, source));
+                }
+            }
+        }
+        pairs
+    }
+
+    /// The `(target, source)` layout pairs a cast from `from` to `to` implies,
+    /// following element types through containers on both sides.
+    fn cast_pairs(&self, from: &HirType, to: &HirType, into: &mut Vec<(usize, usize)>) {
+        let position = |id: &TypeId| self.layouts.iter().position(|l| l.types.contains(id));
+        match (from, to) {
+            (HirType::Managed(ManagedType::Object(source)), HirType::Managed(ManagedType::Object(target))) => {
+                // A target with no layout already reaches everything.
+                let Some(target) = position(target) else {
+                    return;
+                };
+                match position(source) {
+                    Some(source) if source != target => into.push((target, source)),
+                    Some(_) => {}
+                    None => into.extend((0..self.layouts.len()).map(|source| (target, source))),
+                }
+            }
+            (
+                HirType::Managed(
+                    ManagedType::Array(source)
+                    | ManagedType::View(source)
+                    | ManagedType::Set(source)
+                    | ManagedType::Promise(source),
+                ),
+                HirType::Managed(
+                    ManagedType::Array(target)
+                    | ManagedType::View(target)
+                    | ManagedType::Set(target)
+                    | ManagedType::Promise(target),
+                ),
+            ) => self.cast_pairs(source, target, into),
+            (
+                HirType::Managed(ManagedType::Map(source_key, source) | ManagedType::Table(source_key, source)),
+                HirType::Managed(ManagedType::Map(target_key, target) | ManagedType::Table(target_key, target)),
+            ) => {
+                self.cast_pairs(source_key, target_key, into);
+                self.cast_pairs(source, target, into);
             }
             _ => {}
         }

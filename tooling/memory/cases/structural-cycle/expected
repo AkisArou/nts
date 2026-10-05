@@ -1,0 +1,21 @@
+ideal 10
+allocated 15
+candidates 5
+because five iterations, each a node that holds itself through its own kids.
+because
+because Retains, five: `push` storing the node into `kids`, the array's own
+because reference. Releases, five: `work` giving up its node at the end of the
+because iteration, which leaves it above zero -- the array still holds it.
+because `n.kids` is read out of a parameter and handed to a runtime helper, so
+because it costs nothing (see `field-array-mutation`).
+because
+because Candidates: five, one node each, and this is the line the case is for.
+because That release above zero is what offers a node to the collector, and only
+because a node classified cyclic is offered. `Node` is cyclic because a `Leaf`
+because slot can hold any layout that holds `Leaf`'s fields first: the rule that
+because admits the cast is the rule that adds the edge. Without it there were no
+because candidates and every node, array and block leaked -- fifteen objects,
+because which the harness reports as `leaked`.
+because
+because Allocations: fifteen. Per iteration a node, its empty `kids` array, and
+because the first block `push` grows it into.

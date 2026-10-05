@@ -1,0 +1,16 @@
+ideal 20
+allocated 25
+candidates 5
+because five nodes, each holding itself in the second slot of its own tuple.
+because
+because Retains, five: storing the node into the new tuple. Releases, fifteen:
+because per node, `link` replacing `pair` gives up the constructor's tuple, which
+because frees its leaf; and `work` giving up the node leaves it above zero.
+because
+because Candidates: five, the nodes. A `Leaf` slot holds any layout that holds
+because `Leaf`'s fields first, and `Node` does, so `Node` reaches itself through
+because its tuple. Before, nothing in the cycle was offered and the node, its
+because tuple and its leaf leaked -- fifteen objects.
+because
+because Allocations: twenty five. Per node the node, the constructor's tuple and
+because leaf, and `link`'s tuple and leaf.

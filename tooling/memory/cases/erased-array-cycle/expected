@@ -1,0 +1,19 @@
+ideal 20
+allocated 15
+candidates 5
+because five boxes, each holding itself through an array of erased values.
+because
+because Retains, ten; releases, ten. Per box: `work` erases the box to pass it as
+because `unknown`, and the erased copy takes a reference; `push` takes the array's
+because own. `work` then gives up the erased copy and the box. `b.items` is read
+because out of a parameter and handed to a runtime helper, so it costs nothing.
+because The erased copy's pair is a borrow the call could have made instead -- a
+because floor this case does not claim.
+because
+because Candidates: five, the boxes. An array of erased values is not a candidate
+because itself, so the box has to be, and it is now that an erased element
+because reaches every layout. Before, nothing in the cycle was ever offered and
+because all fifteen objects leaked.
+because
+because Allocations: fifteen. Per box the box, its empty `items` array, and the
+because block `push` grows it into.
