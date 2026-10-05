@@ -74,6 +74,7 @@ fn the_compiler_and_the_runtime_number_the_tags_alike() {
         ("NTS_TAG_HANDLE_GOBJECT", tags::HANDLE_GOBJECT),
         ("NTS_TAG_HANDLE_OBJC", tags::HANDLE_OBJC),
         ("NTS_TAG_HANDLE_COM", tags::HANDLE_COM),
+        ("NTS_TAG_BIGINT", tags::BIGINT),
     ];
 
     for (name, value) in &mine {
@@ -100,13 +101,13 @@ fn the_compiler_and_the_runtime_number_the_tags_alike() {
     );
 }
 
-/// **No tag sits above `NULL`**, because `typeof x === "object"` is emitted as
-/// the single comparison `tag >= OBJECT`.
+/// **Only `OBJECT`, `NULL` and the handles sit in the object band**, because
+/// `typeof x === "object"` is emitted as the band test `OBJECT <= tag < end`
+/// (`tags::OBJECT_BAND`), and every tag inside it answers `"object"`.
 ///
-/// `hir::tags` asserts at compile time that `NULL == OBJECT + 1`, and the message
-/// on that assertion says "and the last" -- which its predicate does not check. A
-/// tag added *above* `NULL` answers `"object"` to `typeof` exactly as surely as
-/// one inserted between `OBJECT` and `NULL`, and only the second was guarded.
+/// It was `tag >= OBJECT` until `NTS_TAG_BIGINT` (16) arrived above the handle
+/// block: a test with no upper end would have answered `"object"` for a
+/// `bigint`. The band's end is what keeps it `"bigint"`.
 ///
 /// The test above catches a tag added to the header alone, by counting. It does
 /// not catch one added to **both** tables, which is the shape a real change
@@ -124,29 +125,34 @@ fn the_compiler_and_the_runtime_number_the_tags_alike() {
 /// so that a tag someone adds to both tables is caught by this file rather than
 /// by a program answering the wrong thing.
 ///
-/// **One named exception: the handle block, 8..15.** A C library's object
+/// The handle block, 8..15, is inside the band on purpose. A C library's object
 /// *should* answer `typeof === "object"` -- GJS answers it for a `GObject` --
-/// and the worry above, something reading it as an `NtsHeader`, is now
-/// `NTS_TAG_IS_MANAGED`'s to answer, which the block is outside by
-/// construction (`runtime/c/tests/handles.c` checks it). So a tag above `NULL`
-/// is allowed exactly when it is a `NTS_TAG_HANDLE_*` inside the block.
+/// and the worry above, something reading it as an `NtsHeader`, is
+/// `NTS_TAG_IS_MANAGED`'s to answer, which the block is outside by construction
+/// (`runtime/c/tests/handles.c` checks it).
 #[test]
-fn no_tag_sits_above_null_because_typeof_object_is_a_range() {
+fn only_objects_null_and_handles_answer_typeof_object() {
     let header = header_tags();
     assert!(
         header.len() >= 7,
         "the header's tag enum was not parsed: {header:?}"
     );
+    let tags::TagTest::Range { first, end } = tags::OBJECT_BAND else {
+        panic!("`typeof x === \"object\"` is a band, not one tag");
+    };
+    assert_eq!(tags::of_spelling("object"), Some(tags::OBJECT_BAND));
     for (name, value) in &header {
-        let a_handle = name.starts_with("NTS_TAG_HANDLE_")
-            && (tags::HANDLE_BLOCK..tags::HANDLE_BLOCK + tags::HANDLE_BLOCK_SIZE).contains(value);
-        assert!(
-            *value <= tags::NULL || a_handle,
-            "`{name}` is {value} and `NTS_TAG_NULL` is {}: `typeof x === \"object\"` is \
-             `tag >= NTS_TAG_OBJECT`, so a tag above NULL answers \"object\" whatever it \
-             holds. A payload that is not a reference needs somewhere other than the tag \
-             -- a slot on the structure that carries it.",
-            tags::NULL
+        let an_object = name == "NTS_TAG_OBJECT"
+            || name == "NTS_TAG_NULL"
+            || (name.starts_with("NTS_TAG_HANDLE_")
+                && (tags::HANDLE_BLOCK..tags::HANDLE_BLOCK + tags::HANDLE_BLOCK_SIZE).contains(value));
+        assert_eq!(
+            (first..end).contains(value),
+            an_object,
+            "`{name}` is {value} and the object band is {first}..{end}: a tag inside the band \
+             answers \"object\" to `typeof` whatever it holds. A payload that is not an \
+             object needs a tag outside it."
         );
     }
+    assert_eq!(tags::of_spelling("bigint"), Some(tags::TagTest::Is(tags::BIGINT)));
 }

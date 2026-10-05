@@ -555,13 +555,13 @@ _Static_assert(sizeof(NtsArray) % 16u == 0u,
  * two tags share a spelling.
  *
  * The order is not arbitrary. `NTS_TAG_OBJECT` and `NTS_TAG_NULL` are adjacent
- * and last, which makes `typeof x === "object"` the single comparison
- * `tag >= NTS_TAG_OBJECT` rather than a pair, and is what the peephole in
- * `hir::tags` emits. `NTS_TAG_FUNCTION` and `NTS_TAG_SYMBOL` sit *below* them
- * for the same reason inverted: a closure answers `"function"` and a symbol
- * answers `"symbol"`, so both have to fall outside that range. Both are still
- * references, which is why the macro below is a range over the middle four
- * rather than a set of equalities.
+ * and followed by the handle block, which makes `typeof x === "object"` the one
+ * band `NTS_TAG_OBJECT <= tag < 16` rather than a set, and is what the
+ * peephole in `hir::tags` emits. `NTS_TAG_FUNCTION` and `NTS_TAG_SYMBOL` sit
+ * *below* them for the same reason inverted: a closure answers `"function"` and
+ * a symbol answers `"symbol"`, so both have to fall outside that range. Both
+ * are still references, which is why the macro below is a range over the middle
+ * four rather than a set of equalities.
  *
  * `NTS_TAG_SYMBOL` is a reference because a symbol *is* one: its identity is
  * the address of an interned cell, which is what makes `Symbol("a") !==
@@ -592,8 +592,8 @@ typedef enum NtsTag {
   NTS_TAG_HANDLE_GOBJECT = 8,
   NTS_TAG_HANDLE_OBJC = 9,
   NTS_TAG_HANDLE_COM = 10,
-  /* Reserved until the owned BigInt payload and every reader are implemented.
-   * No lowering emits this tag yet. It lies outside the handle band 8..15. */
+  /* A `bigint`. Above the handle block, so outside the "object" band: `typeof`
+   * answers "bigint". No native lowering erases a bigint yet. */
   NTS_TAG_BIGINT = 16
 } NtsTag;
 

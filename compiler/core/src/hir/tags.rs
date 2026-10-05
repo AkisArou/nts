@@ -17,21 +17,20 @@ pub const BOOLEAN: u32 = 1;
 pub const NUMBER: u32 = 2;
 pub const STRING: u32 = 3;
 /// A closure. `typeof` answers `"function"` for one, so it has a tag of its
-/// own — and it sits *below* [`OBJECT`] because "object" is the range test
-/// `tag >= OBJECT` and a function must fall outside it.
+/// own — and it sits *below* [`OBJECT`] because "object" is the band
+/// [`OBJECT_BAND`] and a function must fall outside it.
 pub const FUNCTION: u32 = 4;
 /// A symbol. `typeof` answers `"symbol"`, so it sits *below* [`OBJECT`] for the
-/// same reason [`FUNCTION`] does — the range test `tag >= OBJECT` must not
-/// admit it — and inside the reference range, because a symbol is one: its
+/// same reason [`FUNCTION`] does — the object band must not admit it — and
+/// inside the reference range, because a symbol is one: its
 /// identity is the address of an interned cell.
 pub const SYMBOL: u32 = 5;
 pub const OBJECT: u32 = 6;
 /// `null`, which is a different *value* from `undefined` and needs a tag to say
 /// so — `null === undefined` is false.
 ///
-/// Last, and adjacent to [`OBJECT`], on purpose: `typeof null` is `"object"`,
-/// so the two tags share a spelling and `typeof x === "object"` stays the one
-/// comparison `tag >= OBJECT` instead of becoming a pair.
+/// Adjacent to [`OBJECT`], on purpose: `typeof null` is `"object"`, so the two
+/// tags share a spelling and both open [`OBJECT_BAND`].
 pub const NULL: u32 = 7;
 
 /// A C library's object in an erased value, one tag per object system in the
@@ -42,8 +41,9 @@ pub const NULL: u32 = 7;
 pub const HANDLE_GOBJECT: u32 = 8;
 pub const HANDLE_OBJC: u32 = 9;
 pub const HANDLE_COM: u32 = 10;
-/// Reserved for an erased `BigInt` payload. Its owned storage and readers are
-/// introduced separately; no lowering emits this tag until those are present.
+/// An erased `BigInt` payload. `typeof` answers `"bigint"`, so it sits above
+/// the handle block, outside [`OBJECT_BAND`]. The JVM runtime reads it; no
+/// lowering erases a `bigint` for the native backends yet.
 pub const BIGINT: u32 = 16;
 /// The tag a counted handle of `family` carries in an erased value, which is
 /// its family's place in the block; `None` for a C pointer nothing counts,
@@ -79,6 +79,14 @@ const _: () = assert!(
 const _: () = assert!(BIGINT >= HANDLE_BLOCK + HANDLE_BLOCK_SIZE,
     "an erased BigInt must not overlap the native handle tag band");
 
+/// The tags `typeof` spells `"object"`: [`OBJECT`], [`NULL`] and the handle
+/// block, `first <= tag < end`. A closed band rather than `tag >= OBJECT`,
+/// because [`BIGINT`] sits above it and answers `"bigint"`.
+pub const OBJECT_BAND: TagTest = TagTest::Range {
+    first: OBJECT,
+    end: HANDLE_BLOCK + HANDLE_BLOCK_SIZE,
+};
+
 /// The orderings the numbering above rests on, checked where it is written.
 ///
 /// Both are prose in `nts_runtime.h` and both are load-bearing, and a
@@ -88,12 +96,12 @@ const _: () = assert!(BIGINT >= HANDLE_BLOCK + HANDLE_BLOCK_SIZE,
 /// change here fails here.
 ///
 /// Adjacency is the one worth spelling out. `typeof x === "object"` is emitted
-/// as `tag >= OBJECT`, which is only equivalent to "`OBJECT` or `NULL`" while
-/// nothing sits between them -- a tag inserted there would answer `"object"`
-/// to `typeof` whatever it actually held.
+/// as a test of [`OBJECT_BAND`], which is only "`OBJECT`, `NULL` or a handle"
+/// while nothing else sits between them -- a tag inserted there would answer
+/// `"object"` to `typeof` whatever it actually held.
 const _: () = assert!(
     NULL == OBJECT + 1,
-    "`typeof x === \"object\"` is `tag >= OBJECT`, so NULL must be the next tag and the last"
+    "`typeof x === \"object\"` tests OBJECT_BAND, so NULL must be the next tag, then the handle block"
 );
 const _: () = assert!(
     FUNCTION < OBJECT && FUNCTION >= STRING,
@@ -221,12 +229,12 @@ pub fn payload_is_a_reference(ty: &super::HirType) -> bool {
 
 /// The tag a `typeof` comparison against this literal is asking about.
 ///
-/// `None` for a spelling no tag can produce, which is now only `"bigint"`.
-/// That comparison is *not* rewritten: left alone it compares a string the
-/// runtime never returns and is correctly false, where folding it to a tag this
-/// compiler does not have would be inventing one.
+/// `None` for a spelling no tag can produce. Such a comparison is *not*
+/// rewritten: left alone it compares a string the runtime never returns and is
+/// correctly false, where folding it to a tag would be inventing one.
 ///
-/// `"symbol"` was in that sentence and should not have been -- `NTS_TAG_SYMBOL`
+/// `"bigint"` was that spelling until [`BIGINT`] existed, and `"symbol"` was in
+/// that sentence and should not have been -- `NTS_TAG_SYMBOL`
 /// exists -- so the comparison was correct and allocated a string per test.
 #[must_use]
 pub fn of_spelling(text: &str) -> Option<TagTest> {
@@ -235,9 +243,10 @@ pub fn of_spelling(text: &str) -> Option<TagTest> {
         "boolean" => Some(TagTest::Is(BOOLEAN)),
         "number" => Some(TagTest::Is(NUMBER)),
         "string" => Some(TagTest::Is(STRING)),
-        // Two tags, because `typeof null` is `"object"` as well. They are
-        // adjacent so that this stays one comparison.
-        "object" => Some(TagTest::AtLeast(OBJECT)),
+        // A band, because `typeof null` is `"object"` as well, and so is a
+        // handle's.
+        "object" => Some(OBJECT_BAND),
+        "bigint" => Some(TagTest::Is(BIGINT)),
         // A closure carries its own tag, so this is answerable now. It used to
         // be left alone deliberately -- comparing against a spelling no tag
         // could produce is correctly false -- and that stopped being true the
@@ -255,15 +264,15 @@ pub fn of_spelling(text: &str) -> Option<TagTest> {
 
 /// What a `typeof` comparison against a spelling actually tests.
 ///
-/// Every spelling but one names a single tag. `"object"` names two — a
-/// reference's and `null`'s — and they are numbered adjacently so the test is
-/// still a single comparison rather than a disjunction.
+/// Every spelling but one names a single tag. `"object"` names a band — a
+/// reference's, `null`'s and each handle family's — numbered contiguously so
+/// the test is two comparisons rather than a disjunction over every tag.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TagTest {
     /// Exactly this tag.
     Is(u32),
-    /// This tag or any above it.
-    AtLeast(u32),
+    /// `first <= tag < end`.
+    Range { first: u32, end: u32 },
 }
 
 /// Rewrite `typeof v === "number"` into an integer compare, and report how
@@ -280,9 +289,8 @@ pub enum TagTest {
 /// the pattern is already in the IR and says exactly what it is.
 ///
 /// The comparison is left alone when the literal is a spelling no tag can
-/// produce — `"function"`, `"bigint"` — because it is then correctly false
-/// against a string the runtime never returns, and rewriting it would mean
-/// inventing a tag.
+/// produce, because it is then correctly false against a string the runtime
+/// never returns, and rewriting it would mean inventing a tag.
 pub fn fold_comparisons(func: &mut super::Func) -> usize {
     use super::{BinOp, Callee, OpKind};
 
@@ -328,13 +336,14 @@ pub fn fold_comparisons(func: &mut super::Func) -> usize {
             continue;
         };
 
-        // `!=` against a range is the complement of the range, not a `>=` with
-        // the operands kept: `typeof x !== "object"` is `tag < OBJECT`.
         let (op, wanted) = match (op, wanted) {
             (BinOp::Eq, TagTest::Is(tag)) => (BinOp::Eq, tag),
             (BinOp::Ne, TagTest::Is(tag)) => (BinOp::Ne, tag),
-            (BinOp::Eq, TagTest::AtLeast(tag)) => (BinOp::Ge, tag),
-            (BinOp::Ne, TagTest::AtLeast(tag)) => (BinOp::Lt, tag),
+            (_, TagTest::Range { first, end }) => {
+                fold_range(func, index, tag, first, end, op == BinOp::Ne);
+                folded += 1;
+                continue;
+            }
             _ => continue,
         };
 
@@ -363,6 +372,48 @@ pub fn fold_comparisons(func: &mut super::Func) -> usize {
         folded += 1;
     }
     folded
+}
+
+/// Replace the comparison at `index` with `first <= tag < end`, or with its
+/// complement when `negate`: `typeof x !== "object"` is `tag < first || tag >=
+/// end`, not a range test with the operands kept.
+///
+/// The two halves are joined as integers because HIR has no boolean `and`;
+/// both are single compares on a `u32` every backend already emits, and clang
+/// folds the pair back into one unsigned range check.
+fn fold_range(func: &mut super::Func, index: usize, tag: super::ValueId, first: u32, end: u32, negate: bool) {
+    use super::{BinOp, HirType, OpKind, ValueId};
+    let origin = func.values[index].origin.clone();
+    let tag_type = func.values[tag.0 as usize].ty.clone();
+    let mut made = Vec::with_capacity(7);
+    let mut push = |kind, ty| {
+        let id = ValueId(u32::try_from(func.values.len()).unwrap_or(u32::MAX));
+        func.values.push(super::Op { kind, ty, origin: origin.clone() });
+        made.push(id);
+        id
+    };
+    let low = push(OpKind::ConstInt(i128::from(first)), tag_type.clone());
+    let high = push(OpKind::ConstInt(i128::from(end)), tag_type);
+    let (above, below, join) = if negate {
+        (BinOp::Lt, BinOp::Ge, BinOp::BitOr)
+    } else {
+        (BinOp::Ge, BinOp::Lt, BinOp::BitAnd)
+    };
+    let lower = push(OpKind::Binary { op: above, lhs: tag, rhs: low }, HirType::Bool);
+    let upper = push(OpKind::Binary { op: below, lhs: tag, rhs: high }, HirType::Bool);
+    let integer = HirType::Int { bits: 32, signed: true };
+    let lower = push(OpKind::Convert(lower), integer.clone());
+    let upper = push(OpKind::Convert(upper), integer.clone());
+    let joined = push(OpKind::Binary { op: join, lhs: lower, rhs: upper }, integer);
+    // Every new value is defined after the existing ones, so each has to be
+    // *placed* before the comparison it now feeds, in the block holding it.
+    for block in &mut func.blocks {
+        if let Some(at) = block.ops.iter().position(|v| v.0 as usize == index) {
+            block.ops.splice(at..at, made);
+            break;
+        }
+    }
+    func.values[index].kind = OpKind::Convert(joined);
 }
 
 #[cfg(test)]

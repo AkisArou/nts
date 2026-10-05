@@ -4740,6 +4740,8 @@ NtsString *nts_tag_name(uint32_t tag) {
   case NTS_TAG_HANDLE_OBJC:
   case NTS_TAG_HANDLE_COM:
     return nts_string_from_utf8("object", 6);
+  case NTS_TAG_BIGINT:
+    return nts_string_from_utf8("bigint", 6);
   default:
     fprintf(stderr, "nts: `typeof` of a value with tag %u, which is not one\n",
             tag);
