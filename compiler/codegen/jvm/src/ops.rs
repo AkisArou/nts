@@ -2743,10 +2743,10 @@ impl Emitter<'_> {
         ) else {
             return Ok(());
         };
-        // Any class callable at the uniform entry is a value of any signature
+        // Any actual callable storage is a value of a signature
         // type: both are referred to as `types::callable_class`, which every
         // such class extends. See it for the 81 declines this answered.
-        if types::is_signature(self.program, target_layout) && types::is_callable(self.program, source_layout) {
+        if types::is_signature(self.program, target_layout) && types::is_callable_storage(self.program, source_layout) {
             return Ok(());
         }
         let wanted = types::class_name(self.shape.package, target_layout);

@@ -125,17 +125,17 @@ pub fn joined(package: &str, program: &Program, func: &Func) -> FxHashMap<ValueI
         let Some(declared) = closure_layout(program, &func.values[param.0 as usize].ty) else {
             continue;
         };
-        // **Arms that are all callable at the uniform entry share the root**,
+        // **Arms that all have callable storage share the root**,
         // whatever their bases: two closures merged into one binding with no
         // common signature class were refused here, and that was
         // blockers/two-closures-merged-at-one-signature. See
         // `types::callable_class`.
-        if types::is_callable(program, declared) {
+        if types::is_callable_storage(program, declared) {
             let classes: Option<FxHashSet<String>> = args
                 .iter()
                 .map(|arg| {
                     closure_layout(program, &func.values[arg.0 as usize].ty)
-                        .filter(|layout| types::is_callable(program, layout))
+                        .filter(|layout| types::is_callable_storage(program, layout))
                         .map(|layout| types::class_name(package, layout))
                 })
                 .collect();

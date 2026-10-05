@@ -559,13 +559,13 @@ fn collect(classes: &mut Vec<Class>, diagnostics: &mut Vec<Diagnostic>, emitted:
     }
 }
 
-/// What a layout's class extends: its base's class, or -- for a class callable
-/// at the uniform entry with no base of its own -- the program's root, so every
+/// What a layout's class extends: its base's class, or -- for callable storage
+/// with no base of its own -- the program's root, so every
 /// class a signature-typed slot can hold is one class's subclass. One with a
 /// base keeps it, and that base, a signature class, extends the root in turn.
 /// See `types::callable_class`.
 fn super_class(package: &str, program: &Program, layout: &nts_core::hir::Layout) -> String {
-    let root = (!hierarchy::is_interface(program, layout) && types::is_callable(program, layout))
+    let root = (!hierarchy::is_interface(program, layout) && types::is_callable_storage(program, layout))
         .then(|| types::callable_class(package));
     crate::hierarchy::jvm_base(program, layout)
         .and_then(|at| program.layouts.get(at))
@@ -744,8 +744,10 @@ fn interface_instance(package: &str, program: &Program, layout: &nts_core::hir::
 /// The program's callable root: `types::callable_class`, abstract, declaring
 /// **every uniform entry** a callable class fills -- the erased one, and the
 /// raising one where a `try` guards a call through a function value
-/// (`Program::raising_call_slot`). `None` where no layout is callable, so a
+/// (`Program::raising_call_slot`). `None` where no callable storage remains, so a
 /// program without closures writes no class for them.
+/// Stored but unused callbacks need the root even when every entry was pruned;
+/// that root has no methods and does not manufacture call availability.
 ///
 /// Every one, because a call through a signature-typed value is emitted on the
 /// root (`types::reference_class`), so an entry the root does not declare is a
@@ -803,7 +805,8 @@ fn unfilled_uniform_stubs(
     origin: &nts_semantic_schema::Origin,
 ) -> Result<(), Diagnostic> {
     if builder.access & access::ABSTRACT != 0
-        || !hierarchy::ancestry(program, layout).iter().skip(1).any(|at| types::is_callable(program, at))
+        || !(types::is_callable_storage(program, layout)
+            || hierarchy::ancestry(program, layout).iter().skip(1).any(|at| types::is_callable_storage(program, at)))
     {
         return Ok(());
     }
@@ -834,7 +837,7 @@ fn unfilled_uniform_stubs(
 
 fn callable_root(package: &str, program: &Program) -> Result<Option<Class>, Diagnostic> {
     let entries = uniform_entries(package, program);
-    if entries.is_empty() {
+    if entries.is_empty() && !program.layouts.iter().any(|layout| types::is_callable_storage(program, layout)) {
         return Ok(None);
     }
     let origin = program_origin(program);

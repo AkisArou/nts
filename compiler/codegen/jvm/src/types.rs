@@ -125,12 +125,20 @@ pub fn is_callable(program: &nts_core::hir::Program, layout: &Layout) -> bool {
         .any(|slot| layout.methods.get(slot as usize).is_some_and(Option::is_some))
 }
 
-/// Whether a layout is a *signature*: callable at the entry, and no closure's
+/// A function value's storage identity survives removal of its unused entries.
+/// This proves the shared reference ABI, never a method that can be invoked.
+#[must_use]
+pub fn is_callable_storage(program: &nts_core::hir::Program, layout: &Layout) -> bool {
+    is_callable(program, layout) || layout.types.iter().any(|ty|
+        nts_core::hir::has_a_closure_body(*ty) || program.signature_faces.contains_key(ty))
+}
+
+/// Whether a layout is a *signature*: callable storage, and no closure's
 /// own class. A value of a signature type is any closure the program can store
 /// there, so it is referred to as [`callable_class`].
 #[must_use]
 pub fn is_signature(program: &nts_core::hir::Program, layout: &Layout) -> bool {
-    is_callable(program, layout) && !layout.types.iter().any(|ty| nts_core::hir::is_closure_type(*ty))
+    is_callable_storage(program, layout) && !layout.types.iter().any(|ty| nts_core::hir::is_closure_type(*ty))
 }
 
 /// The class a value of this layout's type is referred to as -- in a
@@ -981,6 +989,28 @@ mod tests {
 
     fn empty() -> Program {
         Program::default()
+    }
+
+    #[test]
+    fn callable_storage_needs_actual_identity_and_never_supplies_an_entry() {
+        use nts_core::hir::{SignatureFace, SYNTHETIC_CLOSURES, constructor_token, class_token};
+        use nts_semantic_schema::TypeId;
+        let mut program = Program::default();
+        let mut layout = Layout { types: vec![TypeId(7)], name: "Fn__forged".to_owned(),
+            fields: Vec::new(), methods: Vec::new(), interfaces: Vec::new(), base: None };
+        assert!(!is_callable_storage(&program, &layout), "a name supplies no function identity");
+        program.signature_faces.insert(TypeId(7), SignatureFace { params: Vec::new(), returns: Some(HirType::Erased) });
+        assert!(is_callable_storage(&program, &layout));
+        assert!(is_signature(&program, &layout));
+        assert!(!is_callable(&program, &layout), "storage is not an entry");
+        layout.types = vec![TypeId(SYNTHETIC_CLOSURES)];
+        assert!(is_callable_storage(&program, &layout));
+        assert!(!is_signature(&program, &layout));
+        assert!(!is_callable(&program, &layout));
+        for token in [constructor_token(0), class_token(3)] {
+            layout.types = vec![token];
+            assert!(!is_callable_storage(&program, &layout), "constructor identity is not callback storage");
+        }
     }
 
     /// **`descriptor` and `vtype` must name the same class, and they are two
