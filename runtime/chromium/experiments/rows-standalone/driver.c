@@ -95,7 +95,7 @@ int main(int argc, char** argv) {
     mini_dom_enter(dom);
     const uint32_t document = nts_dom_document(dom);
     const uint32_t tbody =
-        nts_dom_query_atom(dom, document, nts_dom_intern(dom, "#tbody"));
+        nts_dom_query_atom(dom, document, mini_dom_intern(dom, "#tbody"));
     nts_dom_release(dom, document);
     live_before_app = nts_live_count();
     app = ntsRowsCreate(dom, tbody);

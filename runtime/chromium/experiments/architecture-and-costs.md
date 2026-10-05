@@ -270,11 +270,43 @@ What this says about where native wins: per-call binding work (interned and
 prepared text, 2-40x), and compute in the application itself -- not DOM
 construction, where both engines wait on Blink.
 
+## String views (2026-10-05)
+
+`StringView` (main ccfe38f51, request 1) replaced the UTF-8 crossing on every
+text parameter of both ABIs. The program passes its string itself; the
+adapter reads it with `nts_string_view` and copies the units once, at their
+own width, into a Blink string of the same width (`CopyView`). A literal
+(immortal) is copied once per document and shared after, keyed by its
+address (`NtsDomContext::Text`). `NtsDomString` and the `units()`
+`Uint16Array` conversion are gone; Blink's text comes back as a view too.
+The smoke's exact-units witness -- NUL, Latin-1, a lone high and low
+surrogate, a pair -- now passes through `string` itself.
+
+Same engine profile, `--cpu 4`, median ns per mutation, before -> after (the
+controls drifted about 4% slower between the two runs):
+
+| Payload | `string` | Fresh `string` | Prepared UTF-16 | V8 fresh |
+| --- | ---: | ---: | ---: | ---: |
+| Latin-1, 256 | 145 -> 117 | 158 -> 137 | 115 -> 125 | 266 |
+| Latin-1, 4096 | 557 -> 145 | 1834 -> 1491 | 170 -> 177 | 1416 |
+| UTF-16, 16 | 279 -> 117 | 295 -> 135 | 113 -> 119 | 151 |
+| UTF-16, 256 | 718 -> 124 | 743 -> 146 | 121 -> 126 | 329 |
+| UTF-16, 4096 | 6707 -> 170 | 9188 -> 2757 | 168 -> 177 | 2426 |
+
+A `string` now costs what a prepared buffer does, with zero NTS allocations
+(asserted by `benchmark.ts`). What remains in the fresh rows is building the
+string -- a 4096-unit concatenation per mutation -- where V8 is still 5-14%
+ahead at 4096 units and behind at every shorter length. Rows are unchanged
+(their text is ASCII, which UTF-8 already lent in place): create1k 2.78 vs
+3.20 ms, update10th 17.9 vs 20.0 us, create1k+layout still 38.1 vs 29.7 ms.
+Evidence: `target/chromium/perf/{binding-benchmark,rows}-c-sv/`.
+
 ## RC defects found by this lane and fixed in the compiler
 
 Measured with `tooling/memory`'s harness on the unmodified compiler (main
 7a453f3ad), each fixed on branch `chromium/rc-runtime-helper-borrows`
-(worktree `~/.cache/nts-chromium-rc`) and delivered to Main for review:
+(worktree `~/.cache/nts-chromium-rc`), and landed on main as 7c1ea2099,
+bdd57aa29, ee5b38823 and a2fe27266 (event-state bench f72fa7563):
 
 | Defect | Effect on main | Commit |
 | --- | --- | --- |

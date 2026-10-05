@@ -5,6 +5,7 @@
 #include <cmath>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "base/check.h"
 #include "base/json/json_writer.h"
@@ -40,11 +41,11 @@ constexpr std::array<Row, 7> kLatin1Rows{{
     {"compiled-entered-fresh-string", 5, kNtsChromiumEntered},
     {"compiled-entered-atom", 6, kNtsChromiumEntered},
 }};
-// Two-byte payloads. `string` crosses today's ABI as UTF-8, so these rows
-// show what non-ASCII text costs until a width-preserving string view exists.
+// Two-byte payloads: the string crosses as a view at its own width, so these
+// rows match the Latin-1 ones except that the copy is twice the bytes.
 constexpr std::array<Row, 7> kWideRows{{
     {"blink-intrinsic", kIntrinsic, kNtsChromiumEntered},
-    {"compiled-legacy-converted-utf16", 0, kNtsChromiumLegacyScope},
+    {"compiled-legacy-string", 0, kNtsChromiumLegacyScope},
     {"compiled-legacy-prepared-utf16", 1, kNtsChromiumLegacyScope},
     {"compiled-entered-prepared-utf16", 2, kNtsChromiumEntered},
     {"compiled-entered-string", 4, kNtsChromiumEntered},
@@ -88,13 +89,10 @@ std::string RunBindingBenchmark(const blink::WebDocument& web_document,
       document->getElementById(blink::AtomicString("benchmark-text"));
   CHECK(output);
   // The same attached Text node is used by every path; setup is untimed.
-  const std::u16string selector = u"#benchmark-text";
-  blink::Vector<uint16_t> selector_units;
-  for (char16_t unit : selector)
-    selector_units.push_back(static_cast<uint16_t>(unit));
+  constexpr std::string_view selector = "#benchmark-text";
   const uint32_t parent = nts_blink_dom_query(
-      context, {selector_units.data(), selector_units.size()});
-  const uint32_t node = nts_blink_dom_text(context, {nullptr, 0});
+      context, {selector.data(), static_cast<uint32_t>(selector.size()), 0});
+  const uint32_t node = nts_blink_dom_text(context, {"", 0, 0});
   CHECK_EQ(nts_blink_dom_append(context, parent, node), node);
   auto* text = blink::To<blink::Text>(output->firstChild());
   base::ListValue samples;

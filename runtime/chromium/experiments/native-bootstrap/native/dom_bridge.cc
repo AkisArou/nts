@@ -2,7 +2,6 @@
 #include "nts/dom_abi.h"
 
 #include <limits>
-#include <string_view>
 #include <utility>
 
 #include "base/auto_reset.h"
@@ -81,30 +80,17 @@ private:
   raw_ptr<void> state_;
 };
 
-blink::String CopyStringVector(NtsDomString input) {
-  CHECK(input.data || input.length == 0);
-  // The C ABI caller supplies length live uint16_t elements for this call.
-  // Span construction is the sole unchecked memory boundary; String copies.
-  const auto units = UNSAFE_BUFFERS(base::span(input.data, input.length));
-  blink::Vector<UChar> copy;
-  CHECK_LE(input.length, std::numeric_limits<uint32_t>::max());
-  copy.ReserveInitialCapacity(static_cast<uint32_t>(input.length));
-  for (uint16_t unit : units)
-    copy.push_back(static_cast<UChar>(unit));
-  return copy.empty() ? blink::g_empty_string : blink::String(copy);
-}
-
-blink::String CopyString(NtsDomString input) {
-  CHECK(input.data || input.length == 0);
-  CHECK_LE(input.length, std::numeric_limits<uint32_t>::max());
-  if (!input.length)
+blink::String CopyUtf16(const uint16_t *data, size_t length) {
+  CHECK(data || length == 0);
+  CHECK_LE(length, std::numeric_limits<uint32_t>::max());
+  if (!length)
     return blink::g_empty_string;
   // Copy straight into owned Blink storage. Byte spans avoid aliasing a
   // uint16_t array as UChar; no temporary vector or second character copy.
   static_assert(sizeof(UChar) == sizeof(uint16_t));
-  const auto units = UNSAFE_BUFFERS(base::span(input.data, input.length));
+  const auto units = UNSAFE_BUFFERS(base::span(data, length));
   base::span<UChar> destination;
-  auto impl = blink::StringImpl::CreateUninitialized(input.length, destination);
+  auto impl = blink::StringImpl::CreateUninitialized(length, destination);
   base::as_writable_bytes(destination).copy_from(base::as_bytes(units));
   return blink::String(std::move(impl));
 }
@@ -120,6 +106,17 @@ blink::String CopyLatin1(const uint8_t *data, size_t length) {
   auto impl = blink::StringImpl::CreateUninitialized(length, destination);
   base::as_writable_bytes(destination).copy_from(units);
   return blink::String(std::move(impl));
+}
+
+// A program's string at its own width: Latin-1 stays 8-bit and UTF-16 stays
+// 16-bit, as Blink stores them, so the one copy is a memcpy and nothing is
+// decoded. A null view (`StringView | null` given null) is a null String.
+blink::String CopyView(NtsStringView view) {
+  if (!view.units)
+    return blink::String();
+  if (view.flags & NTS_STRING_VIEW_WIDE)
+    return CopyUtf16(static_cast<const uint16_t *>(view.units), view.length);
+  return CopyLatin1(static_cast<const uint8_t *>(view.units), view.length);
 }
 
 } // namespace
@@ -357,6 +354,7 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
     free_slots.clear();
     atoms.clear();
     atom_ids.clear();
+    literals.clear();
   }
 
   // Names and literal text are interned once; operations then pass an id.
@@ -375,6 +373,22 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
     atom_ids.insert(atom, atoms.size());
     return atoms.size();
   }
+  // Text from a program's string. A literal (NTS_STRING_VIEW_IMMORTAL) has
+  // units that never move or change, so it is copied once per document and
+  // shared after, keyed by their address: what interning gives a name, with
+  // no id for the program to keep. The table is bounded by the program's
+  // literals. Every other string is copied, once.
+  blink::String Text(NtsStringView view) {
+    if (!view.units || !(view.flags & NTS_STRING_VIEW_IMMORTAL))
+      return CopyView(view);
+    const auto found = literals.find(view.units);
+    if (found != literals.end())
+      return found->value;
+    auto text = CopyView(view);
+    if (!closed)
+      literals.insert(view.units, text);
+    return text;
+  }
   const blink::AtomicString *Atom(uint32_t id) const {
     return id && id <= atoms.size() ? &atoms[id - 1] : nullptr;
   }
@@ -385,13 +399,15 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
   // queued callbacks still need explicit revocation because that loop is
   // shared.
   const scoped_refptr<blink::scheduler::EventLoop> event_loop;
-  blink::Vector<uint16_t> read_buffer;
+  // The text read_text last lent, kept alive until the next read.
+  blink::String read_text;
   blink::Vector<uint32_t> leases;
   blink::Vector<uint8_t> generations;
   blink::Vector<uint32_t> free_slots;
   int32_t last_error = 0;
   blink::Vector<blink::AtomicString> atoms;
   blink::HashMap<blink::AtomicString, uint32_t> atom_ids;
+  blink::HashMap<const void *, blink::String> literals;
   int32_t status = 0;
   bool closed = false;
   uint32_t native_entry_depth = 0;
@@ -456,46 +472,20 @@ int32_t nts_blink_dom_entry(NtsDomContext *context, NativeJob::Callback run,
   run(state);
   return 0;
 }
-int32_t nts_blink_dom_set_text16(NtsDomContext *context, uint32_t id,
-                                 NtsDomString text) {
+int32_t nts_blink_dom_set_text_view(NtsDomContext *context, uint32_t id,
+                                    NtsStringView text) {
   return context->Entered([&](blink::ExceptionState &) {
     auto *node = context->Lookup(id);
-    if (!node)
+    const auto value = context->Text(text);
+    if (!node || value.IsNull())
       return 1000;
     blink::CEReactionsScope reactions(context->v8_isolate); // [CEReactions]
-    node->setTextContent(CopyString(text));
+    node->setTextContent(value);
     return 0;
   });
 }
-int32_t nts_blink_dom_set_text8(NtsDomContext *context, uint32_t id,
-                                const uint8_t *latin1, size_t length) {
-  return context->Entered([&](blink::ExceptionState &) {
-    auto *node = context->Lookup(id);
-    if (!node)
-      return 1000;
-    blink::CEReactionsScope reactions(context->v8_isolate);
-    node->setTextContent(CopyLatin1(latin1, length));
-    return 0;
-  });
-}
-int32_t nts_blink_dom_set_text_utf8(NtsDomContext *context, uint32_t id,
-                                    const char *utf8) {
-  return context->Entered([&](blink::ExceptionState &) {
-    auto *node = context->Lookup(id);
-    if (!node || !utf8)
-      return 1000;
-    // FromUtf8 makes ASCII an 8-bit StringImpl in one copy.
-    auto text = blink::String::FromUtf8(std::string_view(utf8));
-    if (text.IsNull())
-      return 1000;
-    blink::CEReactionsScope reactions(context->v8_isolate);
-    node->setTextContent(text);
-    return 0;
-  });
-}
-uint32_t nts_blink_dom_intern_utf8(NtsDomContext *context, const char *utf8) {
-  return utf8 ? context->Intern(blink::String::FromUtf8(std::string_view(utf8)))
-              : 0;
+uint32_t nts_blink_dom_intern(NtsDomContext *context, NtsStringView text) {
+  return context->Intern(context->Text(text));
 }
 int32_t nts_blink_dom_set_text_atom(NtsDomContext *context, uint32_t id,
                                     uint32_t atom) {
@@ -509,17 +499,6 @@ int32_t nts_blink_dom_set_text_atom(NtsDomContext *context, uint32_t id,
     return 0;
   });
 }
-int32_t nts_blink_dom_set_text_vector_for_benchmark(NtsDomContext *context,
-                                                    uint32_t id,
-                                                    NtsDomString text) {
-  scoped_refptr<NtsDomContext> keep_alive(context);
-  context->Call([&](v8::Isolate *isolate, blink::ExceptionState &) {
-    blink::CEReactionsScope reactions(isolate);
-    if (auto *node = context->Node(id))
-      node->setTextContent(CopyStringVector(text));
-  });
-  return context->status;
-}
 uint32_t nts_blink_dom_body(NtsDomContext *context) {
   scoped_refptr<NtsDomContext> keep_alive(context);
   uint32_t result = 0;
@@ -528,34 +507,34 @@ uint32_t nts_blink_dom_body(NtsDomContext *context) {
   });
   return result;
 }
-uint32_t nts_blink_dom_query(NtsDomContext *context, NtsDomString selector) {
+uint32_t nts_blink_dom_query(NtsDomContext *context, NtsStringView selector) {
   scoped_refptr<NtsDomContext> keep_alive(context);
   uint32_t result = 0;
   context->Call([&](v8::Isolate *, blink::ExceptionState &exception) {
     auto *node = context->roots->document->querySelector(
-        blink::AtomicString(CopyString(selector)), exception);
+        blink::AtomicString(context->Text(selector)), exception);
     if (!exception.HadException())
       result = context->Bind(node);
   });
   return result;
 }
-uint32_t nts_blink_dom_element(NtsDomContext *context, NtsDomString name) {
+uint32_t nts_blink_dom_element(NtsDomContext *context, NtsStringView name) {
   scoped_refptr<NtsDomContext> keep_alive(context);
   uint32_t result = 0;
   context->Call([&](v8::Isolate *, blink::ExceptionState &exception) {
     auto *node = context->roots->document->CreateElementForBinding(
-        blink::AtomicString(CopyString(name)), exception);
+        blink::AtomicString(context->Text(name)), exception);
     if (!exception.HadException())
       result = context->Bind(node);
   });
   return result;
 }
-uint32_t nts_blink_dom_text(NtsDomContext *context, NtsDomString text) {
+uint32_t nts_blink_dom_text(NtsDomContext *context, NtsStringView text) {
   scoped_refptr<NtsDomContext> keep_alive(context);
   uint32_t result = 0;
   context->Call([&](v8::Isolate *, blink::ExceptionState &) {
     result = context->Bind(
-        context->roots->document->createTextNode(CopyString(text)));
+        context->roots->document->createTextNode(context->Text(text)));
   });
   return result;
 }
@@ -592,17 +571,17 @@ uint32_t nts_blink_dom_remove(NtsDomContext *context, uint32_t parent,
   return result;
 }
 int32_t nts_blink_dom_set_text(NtsDomContext *context, uint32_t id,
-                               NtsDomString text) {
+                               NtsStringView text) {
   scoped_refptr<NtsDomContext> keep_alive(context);
   context->Call([&](v8::Isolate *isolate, blink::ExceptionState &) {
     blink::CEReactionsScope reactions(isolate);
     if (auto *node = context->Node(id))
-      node->setTextContent(CopyString(text));
+      node->setTextContent(context->Text(text));
   });
   return context->status;
 }
 int32_t nts_blink_dom_set_attribute(NtsDomContext *context, uint32_t id,
-                                    NtsDomString name, NtsDomString value) {
+                                    NtsStringView name, NtsStringView value) {
   scoped_refptr<NtsDomContext> keep_alive(context);
   context->Call([&](v8::Isolate *isolate, blink::ExceptionState &exception) {
     blink::CEReactionsScope reactions(isolate);
@@ -611,24 +590,24 @@ int32_t nts_blink_dom_set_attribute(NtsDomContext *context, uint32_t id,
       context->status = 1000;
       return;
     }
-    element->setAttribute(blink::AtomicString(CopyString(name)),
-                          blink::AtomicString(CopyString(value)), exception);
+    element->setAttribute(blink::AtomicString(context->Text(name)),
+                          blink::AtomicString(context->Text(value)), exception);
   });
   return context->status;
 }
-NtsDomString nts_blink_dom_read_text(NtsDomContext *context, uint32_t id) {
+NtsStringView nts_blink_dom_read_text(NtsDomContext *context, uint32_t id) {
   scoped_refptr<NtsDomContext> keep_alive(context);
-  context->read_buffer.clear();
+  context->read_text = blink::g_empty_string;
   context->Call([&](v8::Isolate *, blink::ExceptionState &) {
-    auto *node = context->Node(id);
-    if (!node)
-      return;
-    const auto text = node->textContentForBinding();
-    context->read_buffer.ReserveInitialCapacity(text.length());
-    for (unsigned i = 0; i < text.length(); ++i)
-      context->read_buffer.push_back(text[i]);
+    if (auto *node = context->Node(id))
+      context->read_text = node->textContentForBinding();
   });
-  return {context->read_buffer.data(), context->read_buffer.size()};
+  const auto &text = context->read_text;
+  if (text.IsNull() || text.empty())
+    return {"", 0, 0};
+  if (text.Is8Bit())
+    return {text.Span8().data(), text.length(), 0};
+  return {text.Span16().data(), text.length(), NTS_STRING_VIEW_WIDE};
 }
 int32_t nts_blink_dom_status(NtsDomContext *context) {
   scoped_refptr<NtsDomContext> keep_alive(context);
@@ -678,8 +657,9 @@ void nts_blink_dom_end_checkpoint(NtsDomContext *context,
 // The entered DOM ABI (ffi/dom_abi.h). Operations follow their IDL members:
 // [CEReactions] members open a reaction scope, the rest do not; nothing here
 // enters a V8 context or creates a V8 exception.
-uint32_t nts_dom_intern(NtsDomContext *context, const char *text) {
-  return nts_blink_dom_intern_utf8(context, text);
+uint32_t nts_dom_intern(NtsDomContext *context,
+                        const NtsBorrowedString *text) {
+  return nts_blink_dom_intern(context, nts_string_view(text));
 }
 void nts_dom_release(NtsDomContext *context, uint32_t node) {
   context->ReleaseLease(node);
@@ -718,12 +698,11 @@ uint32_t nts_dom_create_element(NtsDomContext *context, uint32_t tag) {
         return 0;
       });
 }
-uint32_t nts_dom_create_text(NtsDomContext *context, const char *text) {
+uint32_t nts_dom_create_text(NtsDomContext *context,
+                             const NtsBorrowedString *text) {
   return context->EnteredNode(
       [&](blink::ExceptionState &, blink::Node *&result) {
-        if (!text)
-          return 1000;
-        const auto value = blink::String::FromUtf8(std::string_view(text));
+        const auto value = context->Text(nts_string_view(text));
         if (value.IsNull())
           return 1000;
         result = context->roots->document->createTextNode(value);
@@ -798,8 +777,8 @@ int32_t nts_dom_remove_node(NtsDomContext *context, uint32_t node) {
   });
 }
 int32_t nts_dom_set_text_value(NtsDomContext *context, uint32_t node,
-                               const char *text) {
-  return nts_blink_dom_set_text_utf8(context, node, text);
+                               const NtsBorrowedString *text) {
+  return nts_blink_dom_set_text_view(context, node, nts_string_view(text));
 }
 int32_t nts_dom_set_text_interned(NtsDomContext *context, uint32_t node,
                                   uint32_t atom) {

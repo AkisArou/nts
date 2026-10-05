@@ -222,8 +222,9 @@ async function measure(run: number, mode: Mode): Promise<LaunchResult> {
     for (const sample of result.entrySamples ?? []) assert.equal(sample.ntsAllocations, 0);
     for (const sample of result.samples.filter(sample => sample.path.startsWith("compiled-"))) {
       if (sample.path.includes("prepared")) assert.equal(sample.ntsAllocations, 0, "prepared input must allocate no NTS objects per loop");
-      else if (sample.path.includes("converted") || sample.path.includes("fresh"))
+      else if (sample.path.includes("fresh"))
         assert((sample.ntsAllocations ?? 0) >= sample.iterations, "per-mutation strings must be counted");
+      else if (sample.path.endsWith("-string")) assert.equal(sample.ntsAllocations, 0, "a string view must allocate nothing");
     }
     const exactUnits = await evaluate<number[]>("(() => {const s=document.querySelector('#benchmark-text').textContent; return Array.from({length:s.length},(_,i)=>s.charCodeAt(i));})()");
     assert.deepEqual(exactUnits, [256,...Array<number>(finalLength-2).fill(120),66], "Inspect actual Blink output, not only the benchmark's self-check");

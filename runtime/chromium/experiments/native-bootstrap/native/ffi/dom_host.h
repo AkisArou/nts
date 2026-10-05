@@ -3,14 +3,10 @@
 #include "../dom_bridge.h"
 uint32_t nts_dom_body(NtsDomContext* context);
 uint32_t nts_dom_query(NtsDomContext* context,
-                       const uint16_t* selector,
-                       uint32_t length);
+                       const NtsBorrowedString* selector);
 uint32_t nts_dom_element(NtsDomContext* context,
-                         const uint16_t* name,
-                         uint32_t length);
-uint32_t nts_dom_text(NtsDomContext* context,
-                      const uint16_t* text,
-                      uint32_t length);
+                         const NtsBorrowedString* name);
+uint32_t nts_dom_text(NtsDomContext* context, const NtsBorrowedString* text);
 uint32_t nts_dom_append(NtsDomContext* context,
                         uint32_t parent,
                         uint32_t child);
@@ -19,14 +15,16 @@ uint32_t nts_dom_remove(NtsDomContext* context,
                         uint32_t child);
 int32_t nts_dom_set_text(NtsDomContext* context,
                          uint32_t node,
-                         const uint16_t* text,
-                         uint32_t length);
+                         const NtsBorrowedString* text);
+// A prepared UTF-16 buffer through the same bridge: the benchmark's control.
+int32_t nts_dom_set_text_units(NtsDomContext* context,
+                               uint32_t node,
+                               const uint16_t* text,
+                               uint32_t length);
 int32_t nts_dom_set_attribute(NtsDomContext* context,
                               uint32_t node,
-                              const uint16_t* name,
-                              uint32_t name_length,
-                              const uint16_t* value,
-                              uint32_t value_length);
+                              const NtsBorrowedString* name,
+                              const NtsBorrowedString* value);
 int32_t nts_dom_set_text16(NtsDomContext* context,
                            uint32_t node,
                            const uint16_t* text,

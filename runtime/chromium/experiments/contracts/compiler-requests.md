@@ -18,6 +18,12 @@ Ranked by expected effect on a UI written in TypeScript.
 
 ## 1. An exact, width-preserving borrowed string parameter
 
+**Delivered** on main as ccfe38f51 (`StringView` in `c:types`, read with
+`nts_string_view` from `runtime/c/nts_string_view.h`); both DOM ABIs use it.
+Accepted: the exact-units witness passes through `string` in Blink, and the
+binding benchmark's `-string` rows assert zero NTS allocations. The proposal
+as written follows.
+
 **Observed.** DOM text must cross exactly: embedded U+0000, lone surrogates,
 one- and two-byte storage. Neither existing string crossing does:
 

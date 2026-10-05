@@ -80,7 +80,8 @@ std::string RunRowsBenchmark(const blink::WebDocument& web_document,
                  auto& q = *static_cast<Query*>(state);
                  const uint32_t root = nts_dom_document(q.context);
                  *q.tbody = nts_dom_query_atom(
-                     q.context, root, nts_dom_intern(q.context, "#tbody"));
+                     q.context, root,
+                     nts_blink_dom_intern(q.context, {"#tbody", 6, 0}));
                  nts_dom_release(q.context, root);
                },
                &query),

@@ -4,7 +4,8 @@
  * per returned handle, identity while leased -- and is stricter: a stale or
  * unknown handle, or a call outside an entry, ends the process. It is not a
  * DOM implementation: only what the rows workload uses, no events, no CSS.
- * Nodes are never freed, so a detached subtree costs memory and not time. */
+ * Nodes are never freed, so a detached subtree costs memory and not time.
+ * Text is kept as UTF-8, converted from each view the program lends. */
 #include "mini_dom.h"
 
 #include <stdio.h>
@@ -166,10 +167,10 @@ NtsDomContext* mini_dom_create(void) {
   if (!c)
     fail("out of memory", 0);
   c->document = node_new(0, NULL);
-  c->document->tag = nts_dom_intern(c, "#document");
-  MiniNode* tbody = node_new(nts_dom_intern(c, "tbody"), NULL);
-  tbody->attribute_names[0] = nts_dom_intern(c, "id");
-  tbody->attribute_values[0] = nts_dom_intern(c, "tbody");
+  c->document->tag = mini_dom_intern(c, "#document");
+  MiniNode* tbody = node_new(mini_dom_intern(c, "tbody"), NULL);
+  tbody->attribute_names[0] = mini_dom_intern(c, "id");
+  tbody->attribute_values[0] = mini_dom_intern(c, "tbody");
   tbody->attributes = 1;
   insert(c->document, tbody, NULL);
   return c;
@@ -204,7 +205,7 @@ char* mini_dom_serialize_rows(NtsDomContext* c) {
   MiniNode* tbody = find_id(c, c->document, "tbody");
   char* out = calloc(1, 1);
   size_t length = 0, capacity = 1;
-  const uint32_t class_atom = nts_dom_intern(c, "class");
+  const uint32_t class_atom = mini_dom_intern(c, "class");
   for (MiniNode* row = tbody->first; row; row = row->next) {
     if (row != tbody->first) {
       while (length + 2 > capacity) {
@@ -232,7 +233,52 @@ char* mini_dom_serialize_rows(NtsDomContext* c) {
   return out;
 }
 
-uint32_t nts_dom_intern(NtsDomContext* c, const char* text) {
+/* A lent view as an owned UTF-8 string. Units past U+FFFF arrive as
+ * surrogate pairs and are joined; a lone surrogate becomes U+FFFD, which the
+ * rows workload never produces. */
+static char* utf8_of(const NtsBorrowedString* string) {
+  const NtsStringView view = nts_string_view(string);
+  if (!view.units)
+    fail("a null string", 0);
+  char* out = malloc((size_t)view.length * 3 + 1);
+  if (!out)
+    fail("out of memory", 0);
+  size_t n = 0;
+  for (uint32_t i = 0; i < view.length; ++i) {
+    uint32_t u = (view.flags & NTS_STRING_VIEW_WIDE)
+                     ? ((const uint16_t*)view.units)[i]
+                     : ((const uint8_t*)view.units)[i];
+    if (u >= 0xd800 && u < 0xdc00 && i + 1 < view.length &&
+        (view.flags & NTS_STRING_VIEW_WIDE)) {
+      const uint32_t low = ((const uint16_t*)view.units)[i + 1];
+      if (low >= 0xdc00 && low < 0xe000) {
+        u = 0x10000 + ((u - 0xd800) << 10) + (low - 0xdc00);
+        ++i;
+      }
+    }
+    if (u >= 0xd800 && u < 0xe000)
+      u = 0xfffd;
+    if (u < 0x80) {
+      out[n++] = (char)u;
+    } else if (u < 0x800) {
+      out[n++] = (char)(0xc0 | (u >> 6));
+      out[n++] = (char)(0x80 | (u & 0x3f));
+    } else if (u < 0x10000) {
+      out[n++] = (char)(0xe0 | (u >> 12));
+      out[n++] = (char)(0x80 | ((u >> 6) & 0x3f));
+      out[n++] = (char)(0x80 | (u & 0x3f));
+    } else {
+      out[n++] = (char)(0xf0 | (u >> 18));
+      out[n++] = (char)(0x80 | ((u >> 12) & 0x3f));
+      out[n++] = (char)(0x80 | ((u >> 6) & 0x3f));
+      out[n++] = (char)(0x80 | (u & 0x3f));
+    }
+  }
+  out[n] = 0;
+  return out;
+}
+
+uint32_t mini_dom_intern(NtsDomContext* c, const char* text) {
   for (uint32_t i = 0; i < c->atom_count; ++i)
     if (!strcmp(c->atoms[i], text))
       return i + 1;
@@ -275,9 +321,18 @@ uint32_t nts_dom_create_element(NtsDomContext* c, uint32_t tag) {
   require_entry(c);
   return bind(c, node_new(tag, NULL));
 }
-uint32_t nts_dom_create_text(NtsDomContext* c, const char* text) {
+uint32_t nts_dom_intern(NtsDomContext* c, const NtsBorrowedString* text) {
+  char* utf8 = utf8_of(text);
+  const uint32_t atom = mini_dom_intern(c, utf8);
+  free(utf8);
+  return atom;
+}
+uint32_t nts_dom_create_text(NtsDomContext* c, const NtsBorrowedString* text) {
   require_entry(c);
-  return bind(c, node_new(0, text));
+  char* utf8 = utf8_of(text);
+  const uint32_t node = bind(c, node_new(0, utf8));
+  free(utf8);
+  return node;
 }
 uint32_t nts_dom_clone(NtsDomContext* c, uint32_t node, int32_t deep) {
   require_entry(c);
@@ -309,8 +364,7 @@ int32_t nts_dom_remove_node(NtsDomContext* c, uint32_t node) {
   detach(lookup(c, node));
   return 0;
 }
-int32_t nts_dom_set_text_value(NtsDomContext* c, uint32_t node,
-                               const char* text) {
+static int32_t set_text(NtsDomContext* c, uint32_t node, const char* text) {
   require_entry(c);
   MiniNode* target = lookup(c, node);
   if (!target->tag) {
@@ -324,9 +378,16 @@ int32_t nts_dom_set_text_value(NtsDomContext* c, uint32_t node,
     insert(target, node_new(0, text), NULL);
   return 0;
 }
+int32_t nts_dom_set_text_value(NtsDomContext* c, uint32_t node,
+                               const NtsBorrowedString* text) {
+  char* utf8 = utf8_of(text);
+  const int32_t status = set_text(c, node, utf8);
+  free(utf8);
+  return status;
+}
 int32_t nts_dom_set_text_interned(NtsDomContext* c, uint32_t node,
                                   uint32_t atom) {
-  return nts_dom_set_text_value(c, node, c->atoms[atom - 1]);
+  return set_text(c, node, c->atoms[atom - 1]);
 }
 int32_t nts_dom_set_attribute_interned(NtsDomContext* c, uint32_t element,
                                        uint32_t name, uint32_t value) {

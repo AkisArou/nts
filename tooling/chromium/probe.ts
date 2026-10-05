@@ -68,6 +68,9 @@ for (const file of ["BUILD.gn", "probe.gni", "probe.c", "probe.h", "probe_main.c
   stage(resolve(fixture, "native", file), file);
 }
 stage(resolve(fixture, "native/ffi/dom_abi.h"), "dom_abi.h");
+// Beside dom_abi.h and dom_bridge.h, which include it: the one C++ half of
+// StringView, the same for both backends.
+stage(resolve(root, "runtime/c/nts_string_view.h"), "nts_string_view.h");
 for (const variant of ["c", "llvm"] as const) {
   const generated = resolve(output, "native-bootstrap", variant === "c" ? "probe" : "probe-llvm", "linux-gnu-x86_64");
   for (const file of ["program.h", "nts_runtime.h", "nts_string_view.h"]) stage(resolve(generated, file), `generated/${variant}/${file}`);

@@ -5,20 +5,15 @@ import * as dom from "nts:chromium-dom";
 import type { DomContext } from "nts:chromium-dom-experiment";
 import type { c_uint32 } from "c:types";
 
-function units(text: string): Uint16Array {
-  const result = new Uint16Array(text.length);
-  for (let i = 0; i < text.length; ++i) result[i] = text.charCodeAt(i);
-  return result;
-}
 function getBody(c: DomContext): c_uint32 { return host.nts_dom_body(c); }
-function query(c: DomContext, s: string): c_uint32 { return host.nts_dom_query(c, units(s), s.length as c_uint32); }
-function element(c: DomContext, s: string): c_uint32 { return host.nts_dom_element(c, units(s), s.length as c_uint32); }
-function textNode(c: DomContext, s: string): c_uint32 { return host.nts_dom_text(c, units(s), s.length as c_uint32); }
+function query(c: DomContext, s: string): c_uint32 { return host.nts_dom_query(c, s); }
+function element(c: DomContext, s: string): c_uint32 { return host.nts_dom_element(c, s); }
+function textNode(c: DomContext, s: string): c_uint32 { return host.nts_dom_text(c, s); }
 function append(c: DomContext, p: c_uint32, n: c_uint32): number { return host.nts_dom_append(c, p, n); }
 function remove(c: DomContext, p: c_uint32, n: c_uint32): number { return host.nts_dom_remove(c, p, n); }
-function setText(c: DomContext, n: c_uint32, s: string): number { return host.nts_dom_set_text(c, n, units(s), s.length as c_uint32); }
+function setText(c: DomContext, n: c_uint32, s: string): number { return host.nts_dom_set_text(c, n, s); }
 function setAttribute(c: DomContext, n: c_uint32, name: string, value: string): number {
-  return host.nts_dom_set_attribute(c, n, units(name), name.length as c_uint32, units(value), value.length as c_uint32);
+  return host.nts_dom_set_attribute(c, n, name, value);
 }
 function status(c: DomContext): number { return host.nts_dom_status(c); }
 function readText(c: DomContext, n: c_uint32): string {
@@ -52,8 +47,8 @@ export function ntsChromiumDomProgram(context: DomContext): number {
   element(context, "bad name");
   if (status(context) !== 5) return 7; // InvalidCharacterError
 
-  // Length-bearing copies must preserve NUL, paired and lone surrogates,
-  // Latin-1 and non-Latin-1 code units in both directions.
+  // A string view must preserve NUL, paired and lone surrogates, Latin-1 and
+  // non-Latin-1 code units into Blink, and the copy back must return them.
   const exact = "A\0\u00e9\u03a9" + String.fromCharCode(0xd800) + "Z"
     + String.fromCharCode(0xdc00) + String.fromCharCode(0xd83d) + String.fromCharCode(0xde00);
   setText(context, label, exact);
@@ -91,6 +86,14 @@ export interface ChromiumBenchmarkState {
   aAtom: c_uint32;
   bAtom: c_uint32;
 }
+// Prepared buffers: the controls a view is measured against. Built once,
+// outside the timed loop, so they show the cost of the call and Blink's copy
+// with no string handling at all.
+function utf16(text: string): Uint16Array {
+  const result = new Uint16Array(text.length);
+  for (let i = 0; i < text.length; ++i) result[i] = text.charCodeAt(i);
+  return result;
+}
 // Latin-1 storage for a one-byte payload; only Latin-1 rows use it.
 function latin1(text: string): Uint8Array {
   const result = new Uint8Array(text.length);
@@ -98,14 +101,14 @@ function latin1(text: string): Uint8Array {
   return result;
 }
 export function ntsChromiumPrepareBenchmark(context: DomContext, a: string, b: string): ChromiumBenchmarkState {
-  return {aUnits: units(a), bUnits: units(b), aBytes: latin1(a), bBytes: latin1(b),
+  return {aUnits: utf16(a), bUnits: utf16(b), aBytes: latin1(a), bBytes: latin1(b),
     prefix: a.substring(0, a.length - 1), aAtom: dom.nts_dom_intern(context, a), bAtom: dom.nts_dom_intern(context, b)};
 }
 // Modes match binding_benchmark.cc. 0-1 are the original bridge, which reads
-// a context-wide status; 2-5 are entered calls returning their own status.
-// 0 converts each string through `units` -- the cost today's string ABI forces
-// on exact text -- 5 builds a fresh string per mutation, as UI code does, and
-// 6 writes interned text by id, as a literal would once the compiler interns it.
+// a context-wide status; 2-6 are entered calls returning their own status.
+// 0 and 4 pass the string itself as a view (the legacy and the entered
+// bridge), 1-3 prepared buffers, 5 a fresh string per mutation, as UI code
+// builds one, and 6 interned text by id.
 export function ntsChromiumBenchmarkLoop(context: DomContext, node: c_uint32,
   state: ChromiumBenchmarkState, a: string, b: string, iterations: number, mode: number): number {
   const length = a.length as c_uint32;
@@ -114,7 +117,7 @@ export function ntsChromiumBenchmarkLoop(context: DomContext, node: c_uint32,
     for (let i = 0; i < iterations; ++i) setText(context, node, i % 2 === 0 ? a : b);
   } else if (mode === 1) {
     for (let i = 0; i < iterations; ++i) {
-      host.nts_dom_set_text(context, node, i % 2 === 0 ? state.aUnits : state.bUnits, length);
+      host.nts_dom_set_text_units(context, node, i % 2 === 0 ? state.aUnits : state.bUnits, length);
     }
   } else if (mode === 2) {
     for (let i = 0; i < iterations; ++i) {

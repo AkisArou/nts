@@ -6,6 +6,7 @@ source_set("dom_bridge") {
   sources = [
     "//nts/dom_bridge.cc",
     "//nts/dom_abi.h",
+    "//nts/nts_string_view.h",
     "//nts/dom_bridge.h",
     "//nts/dom_bridge_bindings.h",
     "//nts/binding_benchmark.cc",

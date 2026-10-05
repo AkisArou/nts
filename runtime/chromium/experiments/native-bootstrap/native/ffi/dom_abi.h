@@ -17,14 +17,19 @@
  *
  * Strings. An atom is a name or literal text interned once per document; an
  * operation taking one passes a reference to Blink's shared string, with no
- * copy and no hashing. Dynamic text crosses as the compiler lends a `string`
- * today -- ASCII in place, other text as a UTF-8 copy -- and Blink copies it
- * once into its own storage, which is the floor for text Blink keeps.
+ * copy and no hashing. Text crosses as a `StringView` (nts_string_view.h):
+ * the program's own units at their own width, Latin-1 or UTF-16, exact --
+ * NUL and lone surrogates included -- and Blink copies them once into a
+ * string of the same width, which is the floor for text Blink keeps. A
+ * literal (NTS_STRING_VIEW_IMMORTAL) is copied once per document and shared
+ * after, keyed by its address.
  *
  * Errors. A status-returning function returns its DOM exception code (0 on
  * success). A handle-returning function returns 0 on null or failure and
  * records its code for nts_dom_last_error, which the next call overwrites. */
 #include <stdint.h>
+
+#include "nts_string_view.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,7 +37,7 @@ extern "C" {
 
 typedef struct NtsDomContext NtsDomContext;
 
-uint32_t nts_dom_intern(NtsDomContext* context, const char* text);
+uint32_t nts_dom_intern(NtsDomContext* context, const NtsBorrowedString* text);
 void nts_dom_release(NtsDomContext* context, uint32_t node);
 int32_t nts_dom_last_error(NtsDomContext* context);
 
@@ -41,7 +46,8 @@ uint32_t nts_dom_query_atom(NtsDomContext* context,
                             uint32_t root,
                             uint32_t selector);
 uint32_t nts_dom_create_element(NtsDomContext* context, uint32_t tag);
-uint32_t nts_dom_create_text(NtsDomContext* context, const char* text);
+uint32_t nts_dom_create_text(NtsDomContext* context,
+                             const NtsBorrowedString* text);
 uint32_t nts_dom_clone(NtsDomContext* context, uint32_t node, int32_t deep);
 uint32_t nts_dom_first_child(NtsDomContext* context, uint32_t node);
 uint32_t nts_dom_next_sibling(NtsDomContext* context, uint32_t node);
@@ -56,7 +62,7 @@ int32_t nts_dom_insert_before(NtsDomContext* context,
 int32_t nts_dom_remove_node(NtsDomContext* context, uint32_t node);
 int32_t nts_dom_set_text_value(NtsDomContext* context,
                                uint32_t node,
-                               const char* text);
+                               const NtsBorrowedString* text);
 int32_t nts_dom_set_text_interned(NtsDomContext* context,
                                   uint32_t node,
                                   uint32_t atom);
