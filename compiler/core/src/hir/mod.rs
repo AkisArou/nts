@@ -3853,6 +3853,7 @@ const KEEPS_FIELD_BORROWS: &[&str] = &[
     "nts_array_at_ref",
     "nts_array_at_value",
     "nts_array_element",
+    "nts_array_length",
     "nts_array_includes",
     "nts_array_includes_ref",
     "nts_array_includes_str",
