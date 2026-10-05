@@ -1441,3 +1441,48 @@ source/compiler hashes and refusal logs are retained in
 `target/ecmascript/audit/date-callback/summary.json` and
 `date-callback-intl-test262.{jsonl,log}`. All results here are supplementary;
 `compiledPublicApi` remains false.
+
+### Native number-range storage checkpoint — 2026-10-05
+
+Native number ranges now copy ICU text directly into the managed result string,
+using one private UTF-16 conversion helper shared with Date. The helper preserves
+NULs and lone surrogates and selects Latin-1 storage when possible. The unused
+temporary vector and second copy are gone. Span capacity is reserved on the
+first parts request and reused; text-only ranges allocate no span buffer.
+No public ABI, TypeScript contract, generated binding or Java signature changed.
+
+The paired actual C ABI probe against immutable 1b62427d6 source checks exact
+UTF-16 units and span triples for 192 calls across six locales and eight
+configurations, including different endpoint rounding, equal ranges, accounting,
+scientific notation, large decimal strings and growth to 128 spans. Five direct
+conversion cases cover empty text, embedded NULs, Latin-1 boundaries and paired
+or lone surrogates. ASan/UBSan and RC leak detection pass; managed live count
+returns to zero. C++ allocation tracking measures opening an English range at
+4 requests/998 bytes before and 3/782 after. Its first text call removes a
+42-byte allocation; first parts defers the existing 192-byte reserve.
+These counters exclude ICU/runtime malloc and total application heap.
+
+Three alternating warmed pairs on CPU 24 measure 200,000 calls per mode after
+100,000 warmup calls. English/Arabic text medians stay near 982/969 ns. Parts
+medians move from 1,456/1,395 ns to 1,365/1,325 ns. These are direct managed C ABI
+measurements, including result allocation/release. Normal `-O2` allocated object
+sections shrink from 5,978 to 5,563 bytes for NumberRange and 16,766 to 16,734 for
+Date; complete linked application size remains open.
+
+The existing Date field/template gate passes all five backend/memory
+configurations. A supplementary compiled production NumberFormatter range/parts
+consumer executes identical six-locale output on all five configurations, with
+native sanitizers, RC leak detection and JVM verification. Emission still refuses
+the unused canonical `formatValue` union; whole-class/public acceptance is false.
+The general provider fixture still stops at its JVM structural/layout refusals.
+Those failed gates remain recorded rather than being replaced by the scoped
+consumer. No original Test262 source or expected result was changed.
+
+The new private compiler pin 19f02aa9cb15 also still refuses all four unchanged
+calendar-topology exports on C-RC and JVM at implicit CalendarPrimitive dispatch.
+Its quarantined status and exact source/compiler hashes are retained in
+`target/ecmascript/audit/calendar-private-19f-topology-report.json`.
+Allocation, equivalence, timing, sanitizer, scoped compiled outputs and failed
+general-gate receipts are `target/ecmascript/audit/number-range-storage/summary.json`.
+`compiledPublicApi` remains false; standard-bound Test262 and platform acceptance
+are still required.

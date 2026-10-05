@@ -1,6 +1,7 @@
 extern "C" {
 #include "nts_icu.h"
 }
+#include "nts_icu_text.h"
 #include <unicode/smpdtfmt.h>
 #include <unicode/dtfmtsym.h>
 #include <unicode/gregocal.h>
@@ -239,18 +240,7 @@ static bool locate_fields(DateFormatter *state, UErrorCode &status) {
 }
 
 static NtsString *date_text(DateFormatter *state) {
-  bool wide = false;
-  for (int32_t index = 0; index < state->text.length(); index++)
-    if (state->text.charAt(index) > 255) { wide = true; break; }
-  NtsString *result = nts_str_raw(static_cast<uint32_t>(state->text.length()), wide ? 1 : 0);
-  if (wide) {
-    uint16_t *output = NTS_ELEMENTS(result, uint16_t);
-    for (int32_t index = 0; index < state->text.length(); index++) output[index] = state->text.charAt(index);
-  } else {
-    uint8_t *output = NTS_ELEMENTS(result, uint8_t);
-    for (int32_t index = 0; index < state->text.length(); index++) output[index] = static_cast<uint8_t>(state->text.charAt(index));
-  }
-  return result;
+  return nts_icu_copy_text(state->text);
 }
 extern "C" NtsString *nts_icu_date_format(NtsHeader *handle, double milliseconds, bool fields) {
   if (!isfinite(milliseconds)) return nullptr;

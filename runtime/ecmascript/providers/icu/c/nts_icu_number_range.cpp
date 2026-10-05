@@ -1,6 +1,7 @@
 extern "C" {
 #include "nts_icu.h"
 }
+#include "nts_icu_text.h"
 #include <unicode/numberrangeformatter.h>
 #include <unicode/uformattedvalue.h>
 #include <unicode/unum.h>
@@ -16,9 +17,8 @@ struct NumberRange {
   icu::number::LocalizedNumberRangeFormatter formatter;
   icu::ConstrainedFieldPosition position;
   std::vector<NumberSpan> spans;
-  std::vector<uint16_t> units;
   explicit NumberRange(icu::number::LocalizedNumberRangeFormatter formatter)
-      : formatter(std::move(formatter)) { spans.reserve(16); }
+      : formatter(std::move(formatter)) {}
 };
 
 static bool ascii(NtsString *input, std::string &output) {
@@ -67,6 +67,9 @@ extern "C" NtsString *nts_icu_number_range_format(NtsHeader *handle, NtsString *
   auto result = range->formatter.formatFormattableRange(from, to, status);
   range->spans.clear();
   if (fields) {
+    // Text-only range formatters need no span buffer. Reuse it after the first
+    // parts request, including when the following call asks for text alone.
+    if (range->spans.capacity() == 0) range->spans.reserve(16);
     range->position.reset();
     while (result.nextPosition(range->position, status)) {
       const int32_t category = range->position.getCategory();
@@ -78,9 +81,7 @@ extern "C" NtsString *nts_icu_number_range_format(NtsHeader *handle, NtsString *
   }
   const icu::UnicodeString text = result.toString(status);
   if (U_FAILURE(status)) return nullptr;
-  range->units.resize(static_cast<size_t>(text.length()));
-  for (int32_t index = 0; index < text.length(); index++) range->units[index] = text.charAt(index);
-  return nts_str_alloc(range->units.data(), static_cast<uint32_t>(text.length()));
+  return nts_icu_copy_text(text);
 }
 
 extern "C" double nts_icu_number_range_field_count(NtsHeader *handle) { return range_state(handle)->spans.size(); }
