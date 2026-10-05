@@ -1,8 +1,388 @@
-Below is the RFC I would use as the architectural starting point. I’ve made a few decisions explicit where our discussion had multiple plausible paths, especially around security, ABI stability, V8 interop, ReactDOM, and dynamic code.
+# Electron-like runtime: exploration and experiment plan
+
+**Status:** Initial RFC; architecture under investigation, not an implementation specification.  
+**Reviewed:** 2026-10-05 against the current compiler and runtimes.  
+**Name:** `electron-like` is a temporary code name.
+
+The original generated proposal is retained below. This review grounds it in
+the repository and proposes experiments that can confirm or reject its
+assumptions. Its `MUST`/`SHOULD` language describes proposed goals, not an
+implemented contract. The experiment order here supersedes the original
+sections 66 and 73. Handle layouts, HIR additions, package formats, and a
+stable ABI remain open until there is execution evidence.
+
+E0 and E1 passed at the pinned Chromium revision, with both C and LLVM native
+libraries running in sandboxed renderers. The next experiment now creates
+real Blink nodes through a small direct bridge and matches the V8 fixtures'
+DOM, UTF-16 units, and complete mixed microtask/custom-element/MutationObserver
+traces. Both backends pass. The owned shell and Blink target need no tracked
+Chromium source changes. The supported E2 subset passes; E3 remains partial
+because general event semantics, generated-await cancellation, rejection
+maintenance and task/timer posting are unresolved. React is outside the
+current work. See [bring-up](../runtime/chromium/experiments/bringup.md) and
+[DOM/scheduling evidence](../runtime/chromium/experiments/dom-and-microtasks.md).
+
+## Recommendation
+
+Investigate a Chromium `content/` embedder with NTS application code statically
+linked into its sandboxed renderer. Start from `content_shell`, prove a small
+native DOM program, then add events, lifecycle, and shared microtask scheduling.
+Use the existing C backend as a bring-up oracle and repeat the program through
+LLVM. This can progress independently of a complete React or Node runtime.
+
+For the direct Blink path, use a source build of Chromium. Vendor a pinned
+source submodule under `third_party/chromium/src`, with its `DEPS` managed by
+`depot_tools`/`gclient`, NTS-owned integration sources, and a small reproducible
+patch set only where existing seams are insufficient. Copying `content/`
+alone is insufficient: it depends on Blink, V8, networking, graphics, Mojo,
+the Chromium build system, and dependencies resolved through `DEPS`.
+Chromium documents `content_shell` as its basic content embedder and separates
+the Web platform from Chrome product features. [Content module](https://chromium.googlesource.com/chromium/src/+/main/content/README.md).
+
+CEF remains a possible comparison if the objective becomes a conventional
+browser shell with native business logic. Its abstraction does not establish
+the proposed direct, comprehensive Blink binding surface. A JS bridge can be a
+useful baseline, but results through that bridge would not prove the direct
+native-to-Blink hypothesis.
+
+## What the repository already has
+
+The code and current lane documents, rather than `docs/RFC.md`, are the basis
+of this assessment. Some crate comments describe future architecture; the
+call paths are more authoritative.
+
+| Area | Observed starting point | Consequence for this RFC |
+| --- | --- | --- |
+| Frontend and IR | [`frontend-ts`](../compiler/frontend-ts/src/lib.rs) obtains checked facts from tsgo; [`emit_llvm`](../tooling/cli/src/main.rs) calls `hir::prepare_with` and emits that program | The current path is checked source → semantic snapshot → typed SSA HIR and shared passes → backend. A separate MIR and `web.*`/`HostRef` instruction family are proposals, not prerequisites. |
+| Backends | [`C`](../compiler/codegen/c/src/lib.rs), [`LLVM`](../compiler/codegen/llvm/src/lib.rs), and [`JVM`](../compiler/codegen/jvm/src/lib.rs) consume the shared program | Chromium desktop bring-up uses the native lanes. JVM remains a compiler target; a JVM browser host would be a separate JNI/WebView integration project. |
+| Native interop | [`hir/native.rs`](../compiler/core/src/hir/native.rs) carries authored ABI and retention facts; [`native_callback.rs`](../compiler/core/src/hir/native_callback.rs) checks callback constraints | Start with existing foreign calls and callbacks. Reduce missing constructs for the compiler lane instead of introducing a new host IR immediately. |
+| C embedding | [`ts-from-c`](../examples/interop/ts-from-c/README.md) exports a generated header and static library | A compiled library can be called from a renderer-owned C shim; it need not start its own executable or event loop. |
+| Scheduling | [`NtsHost`](../runtime/c/nts_runtime.h) includes `enqueue_microtask`; [`nts_enqueue_microtask`, `nts_leave`, and `nts_checkpoint`](../runtime/c/nts_runtime.c) already delegate queue ownership when it is installed | The Blink seam exists, but no Chromium implementation was found. Queue selection, callback entry, teardown, rejection reporting, and collector maintenance still need a real host. |
+| Module instances | [`C global emission`](../compiler/codegen/c/src/emit.rs) and [`LLVM global emission`](../compiler/codegen/llvm/src/lib.rs) emit module variables as static/global storage | An NTS environment isolates runtime state, not compiled module globals. Multiple documents using one linked image need a separate module-instance/reset contract. |
+| Memory | [`hir/rc.rs`](../compiler/core/src/hir/rc.rs) and the C runtime implement reference counting and cycle collection; plain `Opaque` C pointers have manual lifetimes | The original proposal's unspecified native tracing GC is not the current memory model. Oilpan roots and cycles crossing DOM/listener/native closures need explicit investigation. |
+| React | [`runtime/react`](../runtime/react/README.md) owns a React-compatible runtime, with typed JSX lowering, scheduler and host seams; [`upstream-compile`](../runtime/react/upstream-compile/README.md) records the retired upstream-compilation route | “Compile upstream React and ReactDOM unchanged” conflicts with the current lane direction. Reuse the existing runtime for an experimental DOM host; upstream ReactDOM behavior remains a separate compatibility obligation. |
+| Web and Node APIs | [`web-platform`](../runtime/web-platform/README.md) owns shared server/mobile Web algorithms; [`node`](../runtime/node/README.md) owns Node-compatible modules over native capabilities | In a Chromium renderer, Blink should supply browser DOM/network/storage semantics. Do not silently substitute server/mobile Fetch, EventTarget, or storage implementations. A full native Node main process is a later integration milestone. |
+
+The existing C embedding example was run successfully during this review:
+`examples/interop/ts-from-c/build.sh /tmp/nts-electron-rfc-review/c-embedding`.
+Its scalar, string, object, generator, and promise observations matched the
+example's documented output. This used the available `target/release/nts`
+binary dated October 3; it is evidence for that embedding path, not a fresh
+compiler build or a Chromium acceptance result.
+
+## Assumptions to resolve
+
+**Native execution is not a complete JavaScript realm.** NTS uses static
+representations; [`TypeScript conformance §13`](conformance/typescript.md#13-what-this-compiler-is-not)
+explicitly excludes several dynamic object-model operations. The prototype
+epochs, arbitrary DOM expandos, `Proxy`, and transparent `JSRef` property calls
+below would require substantial new language/runtime behavior. A practical
+first profile is typed AOT application code with a declared browser API subset,
+plus explicit V8 interop. Preserve the long-term compatibility questions,
+but do not promise that every npm/browser program compiles in that profile.
+
+**Direct calls must implement binding semantics.** Blink's public embedder API
+is not a complete WebIDL API: for example, `WebNode::QuerySelector` returns
+null when the JS API would throw. Forwarding it cannot distinguish an invalid
+selector from a missing match. Chromium also requires code outside Blink to
+use its public API. Therefore a faithful direct bridge will likely need a
+small, version-specific implementation compiled within Blink's layering and
+exposed through a narrow public entry point. This is an inference from the
+current [WebNode header](https://github.com/chromium/chromium/blob/main/third_party/blink/public/web/web_node.h)
+and [Blink layering rules](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/README.md),
+to be tested at the chosen Chromium pin.
+
+The bridge must reproduce conversion, overload, nullable result, exception,
+custom-element reaction, and execution-context behavior from the existing
+bindings for each operation it implements. Some operations need `ScriptState`
+or V8-backed state even when their caller is native. “V8 does not execute the
+packaged application” is a useful target; “Blink never enters V8” is not.
+
+**Isolation follows processes and origins.** Separate native and V8 globals
+do not create a security boundary against arbitrary native execution in the
+same renderer. Remote scripts loaded into the application document also share
+its origin and can mutate its DOM or trigger native listeners. Browser-side
+services must validate and scope authority to the calling document; an
+untrusted remote UI should use a separate origin/frame with ordinary Chromium
+isolation. A renderer-local handle check is a correctness measure, not a
+defense against a fully compromised renderer. [Mojo security guidance](https://chromium.googlesource.com/chromium/src/+/main/docs/security/mojo.md).
+
+**Lifetime and scheduling are early acceptance gates.** A retained native DOM
+reference needs an Oilpan root. A DOM event listener retaining an NTS closure
+which captures that reference can form a cross-runtime cycle. Existing native
+foreign-holder support is useful precedent, but Oilpan does not have GObject's
+reference counts. Explicit listener removal and document disposal can bound
+the first experiment; that does not solve general cross-heap collection or
+WeakRef/FinalizationRegistry semantics.
+
+Likewise, install `NtsHost.enqueue_microtask` into the document agent's actual
+queue rather than enqueueing on an arbitrary isolate-wide queue. Blink exposes
+`EventLoop::EnqueueMicrotask` and end-of-checkpoint facilities, giving us a
+concrete integration candidate. The correct queue and scopes must be checked
+at the pin and tested against V8 promises and observers.
+[Blink EventLoop](https://chromium.googlesource.com/chromium/src/+/master/third_party/blink/renderer/platform/scheduler/public/event_loop.h).
+
+**A stable ABI is a later hypothesis.** The first experiment can rebuild its
+application and bridge together with Chromium. Keep Blink pointers and C++
+types private from the start, but defer import-table negotiation and long-term
+binary compatibility. Neither an arbitrary 64-bit token passed as a TS
+`number` nor a raw `Opaque` pointer automatically supplies safe managed DOM
+identity: the former needs exact representation, and the latter receives no
+automatic retain/release.
+
+## Experiment sequence
+
+These are proposed experiments with decision gates, not committed delivery
+dates or final API definitions. The current scope is the DOM counter, native
+events, document lifetime and scheduling. React remains deferred.
+
+### E0: reproducible Chromium baseline
+
+Choose a supported Linux x86-64 build host and an exact Chromium source
+revision, preferably from a maintained stable release. Record the resolved
+dependency revisions, toolchain, GN arguments, and build/launch commands.
+Build and run unmodified `content_shell` before applying any NTS changes.
+Start with a component debug build for iteration; size/performance measurements
+later require a separate optimized distribution build.
+
+The opt-in checkout and baseline build now have a repository-owned wrapper:
+
+```sh
+node tooling/chromium/chromium.ts bootstrap
+node tooling/chromium/chromium.ts sync --jobs 8
+node tooling/chromium/chromium.ts hooks
+node tooling/chromium/chromium.ts gen
+node tooling/chromium/chromium.ts build --jobs 8
+node tooling/chromium/smoke.ts
+```
+
+Check the flags and target at the selected revision. Chromium's official
+[Linux build guide](https://chromium.googlesource.com/chromium/src/+show/main/docs/linux/build_instructions.md)
+requires at least 100 GB of free disk and recommends more than 16 GB of RAM.
+After the user reclaimed disk space, checkout, build, and sandboxed baseline
+execution completed on the initial 32 GiB host.
+The source and tool pins, build profile, and commands are documented in
+[`third_party/chromium`](../third_party/chromium/README.md). The
+[validation record](../runtime/chromium/experiments/bringup.md) captures
+the observed gate results and their limits.
+
+**Gate:** a real window loads fixture HTML/CSS/JS, browser and renderer run
+as separate processes, and the renderer sandbox is verified active. Record
+the verification method. A launch requiring `--no-sandbox` does not pass.
+Record an unmodified startup/memory baseline and the complete launch resource
+set, rather than just the executable's size.
+
+### E1: statically linked native renderer program
+
+Add a tiny NTS library exporting an initialization function and a scalar
+calculation. Link it into a renderer test target, invoke it from a
+`ContentRendererClient`/`RenderFrameObserver` integration, and log the result.
+The prepared experiment derives an owned shell through `ShellMainDelegate`'s
+client factories and GN's `root_extra_deps`; this seam requires no tracked
+Chromium source changes at the pin. Its optional script-free input counter
+uses public Blink APIs and explicit document state. That bounded witness does
+not establish the full DOM or scheduling gates below.
+Compile NTS runtime/generated C as C, with Chromium's toolchain. Put a narrow
+C-compatible shim between those headers and Chromium C++; do not assume
+`nts_runtime.h` or generated `program.h` is directly C++-compatible.
+
+Follow the library export/header pattern already exercised by `ts-from-c`.
+Then emit LLVM for the same fixture and compile its object with the compatible
+toolchain. Check diagnostics and the required export symbols as well as the
+exit status: diagnostic `emit-llvm` can print refusals and still return zero.
+Run managed application code with reclamation enabled.
+
+Use one NTS environment per participating document initially, enter it on
+every callback, and bootstrap only the selected fixture's committed document.
+Keep fixture state in explicitly owned per-document objects and avoid mutable
+module globals. The existing library image is not instantiated afresh by
+creating another environment. General module initialization/reset, global
+roots, and multiple app documents sharing a renderer need a reduced witness
+and an agreed contract with the compiler/runtime lane.
+Choose the attachment hook with document/context readiness and teardown in
+mind; merely observing creation of a renderer process is insufficient. Start
+with a C++ browser shell, without the entire Node profile or a native module
+loader.
+
+**Gate:** both C- and LLVM-produced libraries actually execute in the sandboxed
+renderer. Reload and navigation create/dispose environments correctly. A
+controlled renderer crash leaves the browser process alive. App code needs
+no separate UI event loop or runtime-loaded machine code.
+
+### E2: small direct DOM bridge
+
+Hand-write the bridge for a tiny counter, starting with document/body access,
+querying, element/text creation, insertion/removal, text, and attributes.
+Use opaque bridge-owned identities and a canonical node mapping; the app
+must not depend on Blink C++ classes. Explicit lifetime ownership is acceptable
+for the bounded prototype if it is recorded and teardown is exercised.
+An initial explicit experimental TS host API is acceptable for isolating the
+ABI question; ordinary `document.querySelector` syntax is a subsequent facade
+and binding test, not proof supplied by a `.d.ts` declaration alone.
+
+Read the corresponding Blink IDL and generated V8 bindings for every operation.
+The IDL is input to semantic review now, before it becomes generator input.
+For operations requiring internals, keep the implementation in a Blink-owned
+build target behind the bridge entry point, rather than adding internal
+includes throughout the content embedder.
+
+Copy strings initially through an explicitly sized Latin-1/UTF-16 boundary,
+preserving lone surrogates and embedded NULs. Defer shared storage. Return
+errors through a defined C boundary; translate them to NTS failures after
+returning from Blink. Never unwind an NTS `longjmp` or C++ exception through
+the other runtime's frames. Add a throwing-call witness before claiming
+ordinary DOM exception compatibility.
+
+**Gate:** native code creates and changes real Blink nodes; DevTools/test
+inspection sees them. Repeated queries preserve identity, missing matches
+return null, invalid selectors report `SyntaxError`, invalid tree edits report
+their DOM errors, and strings round-trip exactly. The direct path does not
+evaluate JS strings to perform those mutations. An equivalent V8 fixture
+produces the same observable trace.
+
+**Observed:** C and LLVM pass this bounded operation set through the owned
+Blink target. Canonical identities, missing/error distinctions, tree errors,
+detached-node GC, exact UTF-16 data and a native raise/catch after Blink return
+are exercised. The source API is explicitly experimental; it does not supply
+ordinary `document` syntax or full DOMException/WebIDL compatibility.
+The available compiler's source-literal defect is isolated by constructing
+surrogate units at runtime and checking actual Blink units against V8.
+
+### E3: events, lifetime, and microtasks
+
+Add a native event listener and increment the counter from an actual input
+event. Preserve callback identity, capture, cancellation, and synchronous
+reentry. Implement the Chromium `NtsHost`: task/timer posting, owner-thread
+entry, cancellation, and document-agent microtasks. Keep synchronous pumping
+unavailable in the UI host if it would enter a nested event loop.
+
+Exercise native and V8 jobs in both enqueue orders, nested jobs, DOM events,
+MutationObserver delivery, and a V8 custom element reacting to a native
+mutation. Installing the host microtask hook bypasses NTS's normal drain;
+audit end-of-checkpoint cycle collection and unhandled rejection reporting
+as well. Host tasks own their retained state and must run or drop it on
+cancellation. Pending completions must never touch a disposed environment.
+
+**Gate:** listener removal works, retained detached nodes survive Blink GC,
+roots and callbacks are released on disposal, and repeated reload does not
+grow live native/bridge state. Old document callbacks cannot act on a new
+document. Event errors are reported without unwinding across Blink frames.
+The mixed scheduling trace agrees with the equivalent all-V8 program.
+
+**Observed:** Both backends match the complete V8 trace for ten events across
+both listener orders and actual input/script dispatch. Each event has two
+compiled scalar awaits, V8 nested jobs, custom-element reactions and observer
+delivery. Checkpoint collection leaves one owned counter; four disposals drop
+a managed host task and destroy an empty environment. This is a subset of E3.
+Generated resume tasks have null drop callbacks, and the available compiler
+does not retain the tested managed async parameter. Pending-await cancellation
+and host rejection maintenance remain [reduced blockers](../runtime/chromium/experiments/contracts/README.md).
+
+### E4: source facade, limited V8 interop, and packaged origin
+
+Expose the proven subset through normal typed DOM syntax. Treat DOM types
+as host-backed values, not ordinary NTS records just because tsgo knows
+`lib.dom.d.ts`. Add an explicit same-node round trip to V8 and back plus a
+small typed function call; defer transparent arbitrary JS object behavior
+and network module loading.
+
+Replace fixture bootstrap with a browser-served packaged origin. Define
+resource loading, origin identity, redirects, CSP, storage partition, and
+navigation rules; registering a URL scheme alone does not settle them.
+Native entry attachment follows browser-authorized package/document identity.
+Add one narrow handwritten Mojo service, with document-scoped lifetime and
+browser-side validation, before generating IPC from application types.
+
+**Gate:** the same DOM node retains identity through explicit V8 interop.
+Remote navigation and remote frames receive no automatic native entry or
+desktop service. Pending service replies are revoked on document teardown.
+Browser authority does not depend on a renderer-supplied origin string.
+Two participating documents in one renderer must also demonstrate independent
+application module state and roots before that configuration is supported.
+
+### E5: native React on the proven DOM host
+
+Build a small Blink DOM host for the existing NTS React runtime and its
+scheduler seam. It is an experiment under this runtime's ownership, with
+upstream React/ReactDOM as the observable-behavior oracle. Demonstrate a
+counter, keyed reorder, refs matching direct queries, and a controlled input.
+Record the exact supported HTML/prop/event surface. A mounted counter proves
+neither ReactDOM compatibility nor hydration, portals, selection, resources,
+or browser event semantics.
+Audit the runtime and scheduler's own module globals as part of environment
+ownership. Initially limit the React experiment to one active application
+document per renderer, restarting that renderer for a fresh module instance
+if reset is not yet supported; record the limitation explicitly.
+
+Decide from the evidence whether to implement a ReactDOM-compatible facade
+over this host, adapt selected upstream DOM logic, or reopen upstream ReactDOM
+compilation as a separate compiler research effort. This is an architectural
+choice to reconcile with the React lane, not a prerequisite for E1–E4.
+
+**Gate:** the advertised React scenarios run compiled native, have the same
+observable trace as upstream, and manipulate the same DOM as direct access.
+Keep compiler refusals visible and send minimal reproducers to their owning
+lane. No DOM effect tape is needed for acceptance.
+
+## Ownership and follow-on work
+
+The isolated lane owns `runtime/chromium/` for integration sources, C shims,
+and fixtures, and `tooling/chromium/` for directly executable TypeScript build
+and launch tools. `third_party/chromium/src` is a pinned source submodule;
+its additional dependencies and build outputs remain untracked. Reuse the
+repository's [tracked-patch practice](../third_party/patches/README.md) if an
+experiment needs upstream edits, adapted for the gclient checkout, and check
+that every such patch reapplies at the pin. Prefer owned targets and existing
+embedder extension points when they provide the required semantics.
+
+Compiler, common runtime, React, Node, and JVM changes belong to their existing
+lanes. This lane should supply reduced blockers and a requested contract
+rather than editing those components while MainCodex and other sessions are
+changing them. Record compiler and Chromium revisions with every experiment;
+an experiment passing against a scratch stand-in is still blocked against
+the shipping compiler.
+
+After E2/E3 establish binding semantics, try generating a small subset from
+Blink's resolved IDL metadata, including inheritance, mixins and extended
+attributes. Grow an allowlist with direct/adapted/V8-assisted categories and
+per-operation differential tests. Extend HIR with host-effect metadata only
+when a concrete optimization or diagnostic requires it; default to immediate,
+conservative foreign calls until reentrancy and observation are understood.
+Integrate the Node main profile afterward, through a Chromium loop adapter
+or a separate AppHost with its own loop and IPC. Neither option warrants
+running an independent libuv UI loop in the renderer.
+
+The capability-linker appendix is a separate research track. First measure
+an optimized content embedder and inspect GN/link dependencies for one large
+candidate such as WebRTC. Hiding a V8 property or disabling a runtime feature
+does not establish that implementation code was removed. Static NTS usage
+also does not bound downloaded scripts, frames, workers, dynamically created
+markup, or shared browser services. A reduced engine must conservatively
+include those requirements or explicitly restrict that content profile.
+Feature DLL packs and per-world Web API availability are not established
+Chromium facilities; validate one vertical removal and its compatibility/size
+effect before designing either distribution system.
+
+Measure native→Blink and V8→Blink for the same work, separating computation,
+binding overhead, layout/paint, startup, and the complete runtime footprint.
+Maintain Chromium security updates and test patch rebases from the first fork;
+successful embedding does not eliminate that recurring maintenance cost.
+E0 and E1 now pass, along with the bounded native input-counter witness.
+The next work is faithful DOM operations and document-agent scheduling.
+The native fixture uses Linux as its platform/ABI; a Chromium app/product
+configuration can follow once the host integration is proven. The speculative architecture below remains
+available for discussion as those experiments produce evidence.
+
+---
+
+## Original generated proposal
+
+The remainder preserves the initial architecture and capability-linker ideas.
+Read it with the corrections and unresolved choices above.
 
 # RFC-0001: Native Web Runtime — AOT TypeScript/React on Chromium
 
-**Status:** Draft  
+**Status:** Generated exploratory draft; see the repository review above.  
 **Version:** 0.1  
 **Target:** Chromium `content/` embedder  
 **Primary execution model:** TypeScript/JavaScript → HIR → LLVM → native machine code  
@@ -214,7 +594,7 @@ The runtime does NOT attempt to:
 
 The runtime SHOULD be implemented as a Chromium `content/` embedder.
 
-Chromium describes `content` as the core code required to render pages using a multi-process sandboxed browser, including the Web platform and GPU acceleration, while excluding Chrome-specific product features. `//content/public` is explicitly the API exposed to content embedders. :chatgpt-content-reference{index="0"}
+Chromium describes `content` as the core code required to render pages using a multi-process sandboxed browser, including the Web platform and GPU acceleration, while excluding Chrome-specific product features. `//content/public` is explicitly the API exposed to content embedders. [Content module](https://chromium.googlesource.com/chromium/src/+/main/content/README.md).
 
 The runtime will implement equivalents of:
 
@@ -327,7 +707,7 @@ The renderer MUST NOT expose unrestricted Node.js capabilities.
 
 This remains true even though Native Realm code itself is machine code.
 
-Chromium's threat model explicitly assumes that a compromised renderer can execute arbitrary native code and relies on sandboxing, Site Isolation and IPC validation to limit the resulting authority. :chatgpt-content-reference{index="1"}
+Chromium's threat model explicitly assumes that a compromised renderer can execute arbitrary native code and relies on sandboxing, Site Isolation and IPC validation to limit the resulting authority. [Chromium Mojo security guidance](https://chromium.googlesource.com/chromium/src/+/main/docs/security/mojo.md).
 
 Therefore:
 
@@ -625,7 +1005,7 @@ A more scalable implementation MAY bind only functions actually referenced by th
 
 # 12. WebIDL-generated bindings
 
-Blink already uses WebIDL descriptions to generate V8-facing C++ bindings. :chatgpt-content-reference{index="2"}
+Blink already uses WebIDL descriptions to generate V8-facing C++ bindings. [Blink bindings](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/bindings/README.md).
 
 The runtime SHOULD add a second binding backend:
 
@@ -756,6 +1136,11 @@ React refs and direct DOM queries MUST resolve to the same WebRef identity.
 
 # 14. Lifetime and Blink GC
 
+> Repository correction: NTS currently uses reference counting and cycle
+> collection. The native tracing GC and cross-runtime weak-reference support
+> described here are possibilities to investigate, not existing facilities.
+> E3 above tests a bounded lifetime model first.
+
 Blink objects use Blink's garbage-collected object model.
 
 Native Realm references must therefore participate in Blink object lifetime.
@@ -816,6 +1201,10 @@ ReactDOM's internal per-node bookkeeping can therefore continue to function.
 ---
 
 # 16. Prototype semantics and intrinsic optimization
+
+> Open research direction: mutable language prototypes and intrinsic epochs
+> are outside the current NTS execution profile. They are not required by the
+> proposed typed DOM bring-up and would need a separate representation decision.
 
 The Native Realm maintains its own language prototypes for Web objects.
 
@@ -883,7 +1272,7 @@ Conceptually:
            Native Realm         Web Realm
 ```
 
-Blink already contains machinery for wrapping C++ platform objects into V8 objects and maintaining wrappers across multiple worlds. :chatgpt-content-reference{index="3"}
+Blink already contains machinery for wrapping C++ platform objects into V8 objects and maintaining wrappers across multiple worlds. [Blink platform bindings](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/platform/bindings/README.md).
 
 Native → V8:
 
@@ -1114,6 +1503,12 @@ A future compatibility mode MAY support greater global sharing, but it is expect
 
 # 24. React architecture
 
+> Repository correction: the current React lane builds an NTS-owned runtime
+> compatible with React's public behavior. Upstream compilation is retained
+> as a stress corpus and oracle. Compiling upstream ReactDOM unchanged is
+> an alternative research route; E5 above proposes a host experiment using
+> the existing runtime and explicitly records the DOM compatibility gap.
+
 The runtime does NOT introduce a custom UI framework.
 
 Existing:
@@ -1173,7 +1568,7 @@ rather than reimplementing this behavior immediately.
 
 # 25. React reconciler integration
 
-React's reconciler is explicitly designed around host operations such as creating instances and appending children. React documents mutation-mode renderers as appropriate for DOM-like targets and exposes commit hooks such as `prepareForCommit()` and `resetAfterCommit()`. :chatgpt-content-reference{index="4"}
+React's reconciler is explicitly designed around host operations such as creating instances and appending children. React documents mutation-mode renderers as appropriate for DOM-like targets and exposes commit hooks such as `prepareForCommit()` and `resetAfterCommit()`. [React reconciler](https://github.com/facebook/react/blob/main/packages/react-reconciler/README.md).
 
 This creates a natural future optimization boundary:
 
@@ -1349,7 +1744,7 @@ Renderer access to privileged functionality MUST occur through explicit IPC.
 
 Mojo is the preferred implementation.
 
-Chromium's Mojo layer provides typed message pipes, data pipes and shared buffers and supports generated versioned message structures. :chatgpt-content-reference{index="5"}
+Chromium's Mojo layer provides typed message pipes, data pipes and shared buffers and supports generated versioned message structures. [Mojo documentation](https://chromium.googlesource.com/chromium/src/+/main/mojo/README.md).
 
 Rather than Electron-style string channels:
 
@@ -1496,7 +1891,7 @@ remote code           → isolated Web/V8 environment
 
 No remote `<script>` or downloaded application module should obtain Node-compatible privileges merely because it was loaded by the application.
 
-Electron's current security model similarly recommends separating remote content from Node privileges and retaining sandbox/context isolation. :chatgpt-content-reference{index="6"}
+Electron's current security model similarly recommends separating remote content from Node privileges and retaining sandbox/context isolation. [Electron security guidance](https://www.electronjs.org/docs/latest/tutorial/security).
 
 ---
 
@@ -2038,7 +2433,9 @@ The following are hard requirements:
 
 **S4.** Remote origins do not automatically receive the Native Realm.
 
-**S5.** Native code cannot forge arbitrary WebRef values that escape validation.
+**S5.** The bridge validates WebRef type, lifetime, and document ownership.
+These checks support correct execution; privileged-process checks must still
+assume a renderer capable of arbitrary native execution.
 
 **S6.** IPC is capability-scoped and validated in privileged processes.
 
@@ -2050,7 +2447,7 @@ The following are hard requirements:
 
 **S10.** Site Isolation remains compatible with the runtime.
 
-These principles align with Chromium's design assumption that renderers can become fully compromised and therefore privileged security checks must exist outside the renderer. :chatgpt-content-reference{index="7"}
+These principles align with Chromium's design assumption that renderers can become fully compromised and therefore privileged security checks must exist outside the renderer. [Chromium Mojo security guidance](https://chromium.googlesource.com/chromium/src/+/main/docs/security/mojo.md).
 
 ---
 
@@ -2200,7 +2597,7 @@ typed IPC
 
 Using CEF would eventually require bypassing a significant portion of the abstraction it provides.
 
-Chromium `content/` is explicitly the embedder layer and is therefore the cleaner long-term foundation. :chatgpt-content-reference{index="8"}
+Chromium `content/` is explicitly the embedder layer and is therefore the cleaner long-term foundation. [Content module](https://chromium.googlesource.com/chromium/src/+/main/content/README.md).
 
 CEF may still be useful for early prototypes, but is not the target architecture.
 
@@ -2297,6 +2694,10 @@ A custom UI framework would unnecessarily reduce ecosystem compatibility and obs
 ---
 
 # 66. Implementation phases
+
+> Historical proposal. Use experiments E0–E5 above as the initial work order.
+> The full Main Realm, upstream ReactDOM compilation, and a native module
+> loader are not prerequisites for proving the renderer bridge.
 
 ## Phase 0 — Chromium embedder
 
@@ -2650,7 +3051,7 @@ The project should preserve the following even if implementation details change:
 
 ---
 
-# 72. Final architecture
+# 72. Proposed architecture
 
 The resulting system is:
 
@@ -2768,9 +3169,14 @@ same Blink DOM
 
 inside a normal Chromium-sandboxed renderer.
 
-If that works correctly and performs well, the remaining work becomes engineering rather than validation of the underlying architecture.
+If those examples work, they establish the narrow execution path. General
+cross-runtime lifetime, scheduling, browser compatibility, and distribution
+still require their own evidence.
 
-This is the version I’d treat as **RFC-0001**. The next useful document would be a much more concrete **RFC-0002 / implementation specification** defining the actual `WebRef` bit layout, native module ABI, WebIDL type lowering table, HIR opcodes, Blink bridge classes, Mojo interfaces, and the exact Chromium source directories/hooks to modify.
+The next useful artifact is an experiment report recording the source pins,
+patches, executed scenarios, failures, and measurements. A detailed
+implementation specification should follow the experiments that justify its
+representation and integration choices.
 
 Extra
 ------

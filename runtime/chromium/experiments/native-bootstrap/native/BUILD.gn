@@ -1,0 +1,69 @@
+import("//nts/probe.gni")
+
+assert(is_linux && current_cpu == "x64")
+assert(nts_probe_backend != "")
+
+# Staged by the NTS lane from its checked standalone native embedding check.
+# Generated/runtime headers stay in the precompiled C archive, never C++.
+source_set("probe_abi") {
+  testonly = true
+  visibility = [
+    "//nts:*",
+    "//third_party/blink/renderer/nts:*",
+  ]
+  sources = [ "probe.h" ]
+  public = [ "probe.h" ]
+}
+
+source_set("renderer_probe") {
+  testonly = true
+  sources = [
+    "probe_observer.cc",
+    "probe_observer.h",
+    "dom_bridge.h",
+    "dom_bridge_bindings.h",
+  ]
+  defines = [ "NTS_CHROMIUM_PROBE_BACKEND=\"$nts_probe_backend\"" ]
+
+  # Model the precompiled archive as an input as well as a link argument.
+  # Rebuilding the NTS program must invalidate this target's cached actions.
+  inputs = [ "generated/$nts_probe_backend/program.a" ]
+  libs = [
+    "//nts/generated/$nts_probe_backend/program.a",
+    "m",
+  ]
+  deps = [
+    ":probe_abi",
+    "//base",
+    "//content/public/renderer",
+    "//third_party/blink/public:blink",
+    "//third_party/blink/renderer/nts:dom_bridge",
+    "//url",
+  ]
+}
+
+# Experimental Linux embedder, derived through upstream client factories.
+# GN's root_extra_deps makes this target reachable without a root BUILD patch.
+executable("nts_shell") {
+  testonly = true
+  sources = [ "probe_main.cc" ]
+  deps = [
+    ":renderer_probe",
+    "//base",
+    "//content/public/app",
+    "//content/public/common",
+    "//content/shell:content_shell_app",
+    "//content/shell:content_shell_lib",
+    "//content/shell:pak",
+    "//sandbox",
+  ]
+  data_deps = [
+    "//components/crash/core/app:chrome_crashpad_handler",
+    "//content/shell:pak",
+    "//tools/v8_context_snapshot",
+  ]
+  write_runtime_deps = "$root_out_dir/nts_shell.runtime_deps"
+  if (!is_component_build) {
+    configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
+  }
+}

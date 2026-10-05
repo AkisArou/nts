@@ -12,6 +12,15 @@
 # other two sessions paying for both.
 /target-config
 
+# Chromium is an opt-in source-build lane. Its src tree is a pinned submodule;
+# gclient/depot_tools caches and generated dependency state are reproducible.
+/third_party/chromium/depot_tools/
+/third_party/chromium/.gclient_*
+/third_party/chromium/.gcs_entries
+/third_party/chromium/.cipd*
+/third_party/chromium/_bad_scm/
+/third_party/chromium/.gsutil/
+
 # TypeScript / pnpm
 node_modules/
 *.tsbuildinfo

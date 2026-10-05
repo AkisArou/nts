@@ -1,0 +1,8 @@
+# Optimized component build for architecture measurements. Full V8/Web platform.
+# This is not the final static/LTO application distribution profile.
+is_debug = false
+is_component_build = true
+symbol_level = 0
+blink_symbol_level = 0
+v8_symbol_level = 0
+use_remoteexec = false

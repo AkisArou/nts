@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>NTS binding architecture benchmark</title>
+<style>
+body { font: 18px system-ui; padding: 32px; }
+label { display: block; margin: 24px 0; }
+#benchmark-text { display: block; width: 640px; overflow: hidden; }
+#benchmark-result::after { content: attr(data-state); }
+</style>
+<h1>Native binding architecture benchmark</h1>
+<p>Renderer-local paired loops. Application scripts: zero.</p>
+<label><input type="checkbox" id="native-benchmark-run"> Run paired cases</label>
+<output id="benchmark-text"></output>
+<output id="benchmark-result" data-state="initializing"></output>

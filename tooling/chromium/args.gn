@@ -1,0 +1,9 @@
+# Baseline content_shell: full Web platform, no NTS or feature-removal patches.
+# Keep assertions, use a component build, and limit debug data on the first
+# 32 GiB build host. This configuration is for bring-up, not performance claims.
+is_debug = true
+is_component_build = true
+symbol_level = 1
+blink_symbol_level = 0
+v8_symbol_level = 0
+use_remoteexec = false

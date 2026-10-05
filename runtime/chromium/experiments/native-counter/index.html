@@ -1,0 +1,17 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>NTS native input counter</title>
+<style>
+  body { margin: 48px; color: #18232a; background: #f4f6f7; font: 18px sans-serif; }
+  main { max-width: 640px; }
+  label { display: flex; align-items: center; gap: 12px; width: fit-content; cursor: pointer; }
+  input { width: 28px; height: 28px; accent-color: #176c45; }
+  output { display: block; margin-top: 24px; font-size: 28px; }
+  output::after { content: attr(data-count); }
+</style>
+<main>
+  <h1>Native NTS input counter</h1>
+  <p>Toggle the checkbox to increment document-owned NTS state.</p>
+  <label><input id="native-increment" type="checkbox">Increment</label>
+  <output id="native-count" data-count="0">Count: </output>
+</main>

@@ -2,3 +2,6 @@
 	path = third_party/typescript-go
 	url = https://github.com/microsoft/typescript-go
 	branch = main
+[submodule "chromium"]
+	path = third_party/chromium/src
+	url = https://chromium.googlesource.com/chromium/src.git

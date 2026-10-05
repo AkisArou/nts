@@ -1,0 +1,439 @@
+#include "probe.h"
+
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "dom_bridge.h"
+#include "program.h"
+
+struct NtsChromiumProbe {
+  NtsEnvironment* environment;
+  ntsChromiumCreateCounter_return_t* counter;
+  NtsDomContext* dom;
+  NtsPromise* pending;
+  pthread_t owner;
+  bool collector_queued;
+  size_t entries;
+  bool closing;
+};
+
+typedef struct ProbeScope {
+  NtsEnvironmentScope environment;
+  NtsChromiumProbe* probe;
+} ProbeScope;
+static void finalize_probe(NtsChromiumProbe* probe);
+static ProbeScope enter(NtsChromiumProbe* probe) {
+  ++probe->entries;
+  NtsEnvironmentScope scope = nts_environment_enter(probe->environment);
+  /* This entry barrier prevents a legacy landing past the C++ caller. DOM
+     errors return from Blink before the compiled program raises/catches. */
+  nts_callback_enter();
+  nts_enter();
+  return (ProbeScope){scope, probe};
+}
+
+static void leave(ProbeScope* scope) {
+  nts_leave();
+  nts_callback_leave();
+  nts_environment_leave(&scope->environment);
+  if (--scope->probe->entries == 0 && scope->probe->closing)
+    finalize_probe(scope->probe);
+}
+
+NtsChromiumProbe* nts_chromium_probe_create(void) {
+  NtsChromiumProbe* probe = calloc(1, sizeof(*probe));
+  if (!probe)
+    abort();
+  probe->environment = nts_environment_create();
+  return probe;
+}
+
+NtsChromiumProbeResult nts_chromium_probe_run(NtsChromiumProbe* probe) {
+  NtsChromiumProbeResult result = {0};
+  ProbeScope scope = enter(probe);
+  result.live_objects_before = nts_live_count();
+  result.scalar = ntsChromiumProbe(7.0);
+  NtsString* input = nts_string_from_utf8("probe", 5);
+  NtsString* text = ntsChromiumText(input);
+  if (nts_raising())
+    abort();
+  static const char expected[] = "native:probe";
+  result.text_matches = text && text->length == sizeof(expected) - 1;
+  if (result.text_matches) {
+    for (size_t i = 0; i < sizeof(expected) - 1; ++i) {
+      if (nts_str_char_code_at(text, (double)i) != (unsigned char)expected[i]) {
+        result.text_matches = false;
+      }
+    }
+  }
+  nts_release((NtsHeader*)text);
+  nts_release((NtsHeader*)input);
+  result.live_objects_after = nts_live_count();
+  leave(&scope);
+  return result;
+}
+
+void nts_chromium_probe_counter_initialize(NtsChromiumProbe* probe) {
+  if (probe->counter)
+    abort();
+  ProbeScope scope = enter(probe);
+  probe->counter = ntsChromiumCreateCounter();
+  if (nts_raising() || !probe->counter)
+    abort();
+  leave(&scope);
+}
+
+typedef struct DomInvocation {
+  NtsDomContext* context;
+  double count;
+  double result;
+} DomInvocation;
+static void run_dom_program(void* state) {
+  DomInvocation* call = state;
+  call->result = ntsChromiumDomProgram(call->context);
+}
+static void run_dom_counter(void* state) {
+  DomInvocation* call = state;
+  ntsChromiumDomCounter(call->context, call->count);
+}
+
+double nts_chromium_probe_dom_run(NtsChromiumProbe* probe,
+                                  NtsDomContext* context) {
+  ProbeScope scope = enter(probe);
+  const size_t before = nts_live_count();
+  DomInvocation call = {.context = context, .result = -1};
+  nts_blink_dom_native_scope(context, run_dom_program, &call);
+  if (nts_raising() || nts_live_count() != before)
+    abort();
+  leave(&scope);
+  return call.result;
+}
+
+void nts_chromium_probe_dom_counter(NtsChromiumProbe* probe,
+                                    NtsDomContext* context,
+                                    double count) {
+  ProbeScope scope = enter(probe);
+  const size_t before = nts_live_count();
+  DomInvocation call = {.context = context, .count = count};
+  nts_blink_dom_native_scope(context, run_dom_counter, &call);
+  if (nts_raising() || nts_live_count() != before)
+    abort();
+  leave(&scope);
+}
+
+NtsChromiumCounterResult nts_chromium_probe_counter_increment(
+    NtsChromiumProbe* probe) {
+  if (!probe->counter)
+    abort();
+  ProbeScope scope = enter(probe);
+  NtsChromiumCounterResult result = {0};
+  result.live_objects_before = nts_live_count();
+  result.count = ntsChromiumIncrementCounter(probe->counter);
+  if (nts_raising())
+    abort();
+  result.live_objects_after = nts_live_count();
+  leave(&scope);
+  return result;
+}
+
+static void finalize_probe(NtsChromiumProbe* probe) {
+  NtsEnvironmentScope scope = nts_environment_enter(probe->environment);
+  nts_callback_enter();
+  nts_enter();
+  nts_release((NtsHeader*)probe->pending);
+  probe->pending = NULL;
+  nts_release((NtsHeader*)probe->counter);
+  probe->counter = NULL;
+  nts_collect_cycles();
+  if (nts_live_count() != 0)
+    abort();
+  nts_leave();
+  nts_callback_leave();
+  nts_environment_leave(&scope);
+  nts_environment_destroy(probe->environment);
+  free(probe);
+}
+void nts_chromium_probe_destroy(NtsChromiumProbe* probe) {
+  if (!probe)
+    return;
+  probe->closing = true;
+  // A synchronous custom-element reaction can dispose the observer while a
+  // compiled call is active. Its outermost entry releases the environment.
+  if (probe->entries == 0)
+    finalize_probe(probe);
+}
+
+/* The native task layout stays in C. Blink owns only these opaque envelopes. */
+typedef struct QueuedTask {
+  NtsChromiumProbe* probe;
+  NtsTask task;
+} QueuedTask;
+
+static void run_native_task(void* state) {
+  QueuedTask* queued = state;
+  ProbeScope scope = enter(queued->probe);
+  nts_task_run(queued->task);
+  if (nts_raising())
+    abort();
+  leave(&scope);
+  free(queued);
+}
+static void drop_native_task(void* state) {
+  QueuedTask* queued = state;
+  ProbeScope scope = enter(queued->probe);
+  if (queued->task.drop)
+    queued->task.drop(queued->task.state);
+  fprintf(stderr, "NTS_NATIVE_TASK drop live=%zu\n", nts_live_count());
+  leave(&scope);
+  free(queued);
+}
+static void end_checkpoint(void* state) {
+  NtsChromiumProbe* probe = state;
+  ProbeScope scope = enter(probe);
+  probe->collector_queued = false;
+  nts_collect_cycles();
+  if (probe->pending || nts_live_count() != 1)
+    abort();
+  fprintf(stderr, "NTS_CHECKPOINT live=%zu\n", nts_live_count());
+  leave(&scope);
+}
+static void drop_checkpoint(void* state) {
+  NtsChromiumProbe* probe = state;
+  probe->collector_queued = false;
+}
+static void enqueue_native(void* state, NtsTask task) {
+  NtsChromiumProbe* probe = state;
+  QueuedTask* queued = malloc(sizeof(*queued));
+  if (!queued)
+    abort();
+  *queued = (QueuedTask){probe, task};
+  nts_blink_dom_enqueue(probe->dom, run_native_task, drop_native_task, queued);
+  if (!probe->collector_queued) {
+    probe->collector_queued = true;
+    nts_blink_dom_end_checkpoint(probe->dom, end_checkpoint, drop_checkpoint,
+                                 probe);
+  }
+}
+static bool on_owner_thread(void* state) {
+  return pthread_equal(((NtsChromiumProbe*)state)->owner, pthread_self());
+}
+void nts_chromium_probe_install_microtasks(NtsChromiumProbe* probe,
+                                           NtsDomContext* context) {
+  ProbeScope scope = enter(probe);
+  probe->dom = context;
+  probe->owner = pthread_self();
+  /* Fulfilled-promise experiment only. Timers, task posting and synchronous
+     pumping are outside this profile and deliberately have no callbacks. */
+  const NtsHost host = {.enqueue_microtask = enqueue_native,
+                        .is_owner_thread = on_owner_thread,
+                        .state = probe};
+  nts_host_install(&host);
+  leave(&scope);
+}
+typedef struct Completion {
+  NtsHeader header;
+  NtsChromiumProbe* probe; /* C owner lives until its document drops this. */
+} Completion;
+static const NtsDescriptor completion_descriptor = {NTS_KIND_OBJECT,
+                                                    sizeof(Completion),
+                                                    0u,
+                                                    0u,
+                                                    NULL,
+                                                    NULL,
+                                                    "Chromium completion",
+                                                    0u,
+                                                    NULL,
+                                                    NTS_ARRAY_UNKNOWN,
+                                                    0u,
+                                                    NULL};
+static void finish_counter(void* state) {
+  Completion* completion = state;
+  NtsChromiumProbe* probe = completion->probe;
+  if (nts_promise_state(probe->pending) != NTS_PROMISE_FULFILLED)
+    abort();
+  double expected = nts_value_number(nts_promise_value(probe->pending));
+  double count = ntsChromiumIncrementCounter(probe->counter);
+  if (count != expected)
+    abort();
+  DomInvocation call = {.context = probe->dom, .count = count};
+  nts_blink_dom_native_scope(probe->dom, run_dom_counter, &call);
+  nts_release((NtsHeader*)probe->pending);
+  probe->pending = NULL;
+  nts_release((NtsHeader*)completion);
+  fprintf(stderr, "NTS_ASYNC count=%.0f live=%zu\n", count, nts_live_count());
+}
+static void drop_finish(void* state) {
+  nts_release((NtsHeader*)state);
+}
+void nts_chromium_probe_await_counter(NtsChromiumProbe* probe) {
+  if (probe->pending || !probe->counter || !probe->dom)
+    abort();
+  ProbeScope scope = enter(probe);
+  probe->pending =
+      ntsChromiumAwaitCounter(ntsChromiumCounterValue(probe->counter));
+  if (nts_raising() || !probe->pending)
+    abort();
+  Completion* completion = (Completion*)nts_object_new(&completion_descriptor);
+  completion->probe = probe;
+  nts_promise_subscribe(probe->pending,
+                        (NtsTask){finish_counter, drop_finish, completion});
+  if (nts_promise_state(probe->pending) != NTS_PROMISE_PENDING)
+    abort();
+  leave(&scope);
+}
+
+/* The compiler's await tasks currently lack drop callbacks. Teardown here
+   separately tests a managed host task, without guessing ownership for null
+   drop. Suspended-await cancellation remains a compiler/runtime blocker. */
+typedef struct CancellationTask {
+  NtsHeader header;
+  ntsChromiumCreateCounter_return_t* counter;
+} CancellationTask;
+static const uint32_t cancellation_offsets[] = {
+    offsetof(CancellationTask, counter)};
+static const NtsDescriptor cancellation_descriptor = {NTS_KIND_OBJECT,
+                                                      sizeof(CancellationTask),
+                                                      1u,
+                                                      0u,
+                                                      cancellation_offsets,
+                                                      NULL,
+                                                      "Chromium cancellation",
+                                                      0u,
+                                                      NULL,
+                                                      NTS_ARRAY_UNKNOWN,
+                                                      0u,
+                                                      NULL};
+static void canceled_run(void* state) {
+  CancellationTask* task = state;
+  ntsChromiumIncrementCounter(task->counter);
+  fprintf(stderr, "NTS_TEARDOWN_TASK unexpectedly ran\n");
+  nts_release((NtsHeader*)task);
+  abort();
+}
+static void canceled_drop(void* state) {
+  nts_release((NtsHeader*)state);
+}
+void nts_chromium_probe_teardown_witness(NtsChromiumProbe* probe) {
+  ProbeScope scope = enter(probe);
+  if (probe->pending) {
+    fprintf(stderr, "NTS_TEARDOWN pending await: cancellation unsupported\n");
+  } else {
+    CancellationTask* task =
+        (CancellationTask*)nts_object_new(&cancellation_descriptor);
+    task->counter = probe->counter;
+    nts_retain((NtsHeader*)task->counter);
+    nts_enqueue_microtask((NtsTask){canceled_run, canceled_drop, task});
+  }
+  leave(&scope);
+}
+
+struct NtsChromiumBenchmark {
+  NtsChromiumProbe* probe;
+  NtsDomContext* context;
+  uint32_t node;
+  ntsChromiumPrepareBenchmark_return_t* state;
+  NtsString* first;
+  NtsString* second;
+  size_t live_before_setup;
+  uint32_t iterations;
+  bool prepared;
+  double result;
+};
+NtsChromiumBenchmark* nts_chromium_benchmark_create(NtsChromiumProbe* probe,
+                                                    NtsDomContext* context,
+                                                    uint32_t node,
+                                                    const char* a,
+                                                    const char* b,
+                                                    size_t bytes) {
+  NtsChromiumBenchmark* benchmark = calloc(1, sizeof(*benchmark));
+  if (!benchmark)
+    abort();
+  ProbeScope scope = enter(probe);
+  benchmark->live_before_setup = nts_live_count();
+  NtsString* first = nts_string_from_utf8(a, bytes);
+  NtsString* second = nts_string_from_utf8(b, bytes);
+  benchmark->state = ntsChromiumPrepareBenchmark(first, second);
+  benchmark->first = first;
+  benchmark->second = second;
+  if (nts_raising() || !benchmark->state)
+    abort();
+  benchmark->probe = probe;
+  benchmark->context = context;
+  benchmark->node = node;
+  leave(&scope);
+  return benchmark;
+}
+static void run_benchmark(void* state) {
+  NtsChromiumBenchmark* benchmark = state;
+  benchmark->result = ntsChromiumBenchmarkLoop(
+      benchmark->context, benchmark->node, benchmark->state, benchmark->first,
+      benchmark->second, (double)benchmark->iterations, benchmark->prepared);
+}
+NtsChromiumBenchmarkStats nts_chromium_benchmark_run(
+    NtsChromiumBenchmark* benchmark,
+    uint32_t iterations,
+    bool prepared,
+    bool scoped) {
+  ProbeScope scope = enter(benchmark->probe);
+  const size_t before = nts_live_count();
+  benchmark->iterations = iterations;
+  benchmark->prepared = prepared;
+  benchmark->result = -1;
+  nts_counting_reset();
+  if (scoped)
+    nts_blink_dom_native_scope(benchmark->context, run_benchmark, benchmark);
+  else
+    run_benchmark(benchmark);
+  if (nts_raising() || benchmark->result != 0 || nts_live_count() != before)
+    abort();
+  NtsChromiumBenchmarkStats stats = {nts_counted_allocations(),
+                                     nts_counted_retains(),
+                                     nts_counted_releases(), nts_live_count()};
+  leave(&scope);
+  return stats;
+}
+NtsChromiumBenchmarkStats nts_chromium_benchmark_entries(
+    NtsChromiumBenchmark* benchmark,
+    uint32_t operations_per_entry,
+    uint32_t entries,
+    bool scoped) {
+  /* Selecting the environment for counters does not open a managed callback.
+     Every measured callback below enters/leaves normally, including its empty
+     runtime checkpoint; instrumentation is outside those repeated entries. */
+  NtsEnvironmentScope environment =
+      nts_environment_enter(benchmark->probe->environment);
+  const size_t before = nts_live_count();
+  benchmark->iterations = operations_per_entry;
+  benchmark->prepared = true;
+  nts_counting_reset();
+  for (uint32_t i = 0; i < entries; ++i) {
+    ProbeScope scope = enter(benchmark->probe);
+    benchmark->result = -1;
+    if (scoped)
+      nts_blink_dom_native_scope(benchmark->context, run_benchmark, benchmark);
+    else
+      run_benchmark(benchmark);
+    if (nts_raising() || benchmark->result != 0)
+      abort();
+    leave(&scope);
+  }
+  if (nts_live_count() != before)
+    abort();
+  NtsChromiumBenchmarkStats stats = {nts_counted_allocations(),
+                                     nts_counted_retains(),
+                                     nts_counted_releases(), nts_live_count()};
+  nts_environment_leave(&environment);
+  return stats;
+}
+void nts_chromium_benchmark_destroy(NtsChromiumBenchmark* benchmark) {
+  ProbeScope scope = enter(benchmark->probe);
+  nts_release((NtsHeader*)benchmark->state);
+  nts_release((NtsHeader*)benchmark->first);
+  nts_release((NtsHeader*)benchmark->second);
+  nts_collect_cycles();
+  if (nts_live_count() != benchmark->live_before_setup)
+    abort();
+  leave(&scope);
+  free(benchmark);
+}

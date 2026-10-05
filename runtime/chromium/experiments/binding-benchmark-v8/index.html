@@ -1,0 +1,56 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>V8 binding architecture benchmark</title>
+<style>
+body { font: 18px system-ui; padding: 32px; }
+label { display: block; margin: 24px 0; }
+#benchmark-text { display: block; width: 640px; overflow: hidden; }
+#benchmark-result::after { content: attr(data-state); }
+</style>
+<h1>V8 binding architecture benchmark</h1>
+<p>Ordinary page JavaScript and normal V8 JIT. Renderer-local timing.</p>
+<label><input type="checkbox" id="v8-benchmark-run"> Run paired cases</label>
+<output id="benchmark-text"></output>
+<output id="benchmark-result" data-state="initializing"></output>
+<script>
+// Ordinary application source, loaded by the HTML parser. CDP only supplies
+// input and reads results; it does not evaluate the measured application.
+const text = document.createTextNode('');
+document.querySelector('#benchmark-text').appendChild(text);
+const output = document.querySelector('#benchmark-result');
+const payloads = [16, 256, 4096].map(length => ({
+  length, a: '\u0100' + 'x'.repeat(length - 2) + 'A',
+  b: '\u0100' + 'x'.repeat(length - 2) + 'B',
+}));
+function mutate(node, a, b, iterations) {
+  for (let i = 0; i < iterations; ++i) node.textContent = i % 2 ? b : a;
+}
+document.querySelector('#v8-benchmark-run').addEventListener('input', () => {
+  const samples = [];
+  const shift = Number(new URL(location.href).searchParams.get('order') ?? 0);
+  const order = payloads.slice(shift).concat(payloads.slice(0, shift));
+  for (const {length, a, b} of order) {
+    const warmup = 16384;
+    let start = performance.now();
+    mutate(text, a, b, warmup);
+    const calibration = Math.max(performance.now() - start, .001);
+    const iterations = Math.max(32, Math.min(100000,
+      Math.ceil((16 * warmup / calibration) / 2) * 2));
+    for (let round = 1; round <= 7; ++round) {
+      start = performance.now();
+      mutate(text, a, b, iterations);
+      const elapsedNs = (performance.now() - start) * 1e6;
+      if (text.data !== b || text.length !== length) throw Error('V8 output mismatch');
+      samples.push({path: 'v8-prepared', length, iterations, round, elapsedNs,
+        nsPerOperation: elapsedNs / iterations});
+    }
+  }
+  const exactUnits = Array.from({length: text.length}, (_, i) => text.data.charCodeAt(i));
+  output.setAttribute('data-result', JSON.stringify({samples, status: 0,
+    finalLength: text.length, exactUnits,
+    payload: 'Alternating UTF-16 strings beginning with U+0100, ending A/B',
+    timing: 'Ordinary page input handler; renderer performance.now around warmed loops'}));
+  output.setAttribute('data-state', 'done');
+});
+output.setAttribute('data-state', 'ready');
+</script>

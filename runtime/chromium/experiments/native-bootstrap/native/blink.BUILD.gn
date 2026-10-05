@@ -1,0 +1,22 @@
+# Owned experimental bridge, staged inside Blink's GN visibility boundary.
+# No internal headers propagate to the content embedder.
+source_set("dom_bridge") {
+  testonly = true
+  visibility = [ "//nts:*" ]
+  sources = [
+    "//nts/dom_bridge.cc",
+    "//nts/dom_bridge.h",
+    "//nts/dom_bridge_bindings.h",
+    "//nts/binding_benchmark.cc",
+    "//nts/binding_benchmark.h",
+  ]
+  configs += [ "//third_party/blink/renderer:config" ]
+  deps = [
+    "//nts:probe_abi",
+    "//base",
+    "//third_party/blink/public:blink_headers",
+    "//third_party/blink/renderer/core",
+    "//third_party/blink/renderer/platform",
+    "//v8",
+  ]
+}
