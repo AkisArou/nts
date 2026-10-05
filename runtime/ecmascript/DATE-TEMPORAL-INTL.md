@@ -73,9 +73,8 @@ and artifact-size evidence before becoming another provider.
    identity validation. All non-ISO date fields now come from the shared calendar
    contexts, including era years and ordinal/leap months. Shared interval
    selection exists; complete range/data coverage and compiled public acceptance
-   remain open. Its stored bound format callback still captures the owning
-   facade; separate cached formatting state to remove that RC cycle while
-   preserving lazy selection and callback identity.
+   remain open. Its cached bound callback retains separate lazy formatting
+   state, preserving identity without an RC cycle back to the public facade.
 4. **Date.** Complete standard constructor/call behavior, local operations,
    setters, localization and the Temporal bridge. Core arithmetic, parsing and
    serialization exist. UTC and multi-component setters distinguish omission
@@ -1401,3 +1400,44 @@ original rows/comparison are `java-date-span-provider-final.log` and
 NTS_BIN=target/debug/nts NTS_ICU_CHECK_OUT=target/ecmascript/audit/java-date-span-icu-check node runtime/ecmascript/tools/icu.ts --pinned-native --date-fields --all-backends --sanitize
 NTS_ICU_CHECK_OUT=target/ecmascript/audit/java-date-span-icu-check node tooling/conformance/ecmascript/test262.ts --under test/intl402 --rows target/ecmascript/audit/java-date-span-intl-final-test262.jsonl
 ```
+
+### DateTimeFormat callback ownership checkpoint — 2026-10-05
+
+DateTimeFormat's public facade now owns a lazy formatting state and its cached
+bound function. The function retains that state, which owns the selected
+formatters and has no reference to the facade or callback. Configuration and
+option reads keep their constructor order; provider selection, per-Temporal
+formatter caches and range factories keep their existing algorithms. The state
+is allocated once on first formatting use or bound-function access. Construction
+and `resolvedOptions()` alone allocate no state or provider. This adds one lazy
+state object and delegation to remove the ownership cycle; public argument and
+result types remain library-derived, with plain class declarations.
+
+A supplementary host lifetime probe keeps each bound function alive, drops the
+facade and forces GC. The old facade remains reachable; the new facade is
+collected and its callback still formats correctly. The same probe checks
+callback identity, detached calls, per-call clock reads and provider reuse across
+text and parts. This is evidence about the host ownership graph, not a compiled
+RC leak check. No WeakMap or descriptor/prototype repair was introduced.
+
+The original full Intl host rerun is unchanged: 3,357 rows, 3,172 passes and
+185 retained failures, with zero verdict changes, missing rows or source-hash
+changes. DateTimeFormat is 220/244 and Intl/Temporal 2,029/2,029. Strict typechecking,
+including unused and indexed-access checks, passes. An isolated host overhead
+probe uses a deterministic text primitive, 500,000 warmup calls and 10 million
+measured calls in each of three rounds per implementation. Median callback cost
+is 15.49 ns before and 15.77 ns after on CPU 24. This excludes actual ICU work and
+does not establish performance through compiled public bindings.
+
+The unchanged production Date/Temporal localization consumers are still refused
+on C-RC and JVM. Both emit commands exit zero but diagnose and omit `main` because
+the canonical locale union cannot be represented; these are failed acceptance
+gates. Canonical formattable-value unions, generic factory captures and provider
+layout/dispatch gaps also remain compiler-lane work. No reduced input contract
+or scalar replacement stands in for that public acceptance.
+
+Original rows, comparisons, immutable baseline source, ownership/overhead probes,
+source/compiler hashes and refusal logs are retained in
+`target/ecmascript/audit/date-callback/summary.json` and
+`date-callback-intl-test262.{jsonl,log}`. All results here are supplementary;
+`compiledPublicApi` remains false.

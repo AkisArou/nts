@@ -50,7 +50,9 @@ function clip(value: number): number {
   return result;
 }
 
-export class NtsDateTimeFormat<
+// The bound function retains this formatting state, which has no reference to
+// its public facade or cached callback. Provider selection remains lazy.
+class DateTimeFormatState<
   D extends DateTimeLocaleData & TimeZoneIdentifierData,
   G extends DateTimePatternData,
   P extends DateTimeFormatterPrimitive,
@@ -65,34 +67,15 @@ export class NtsDateTimeFormat<
   #plainDateTime: DateTimeFormatter<DateTimeTextPrimitive> | undefined;
   #plainYearMonth: DateTimeFormatter<DateTimeTextPrimitive> | undefined;
   #plainMonthDay: DateTimeFormatter<DateTimeTextPrimitive> | undefined;
-  #bound: Intl.DateTimeFormat["format"] | undefined;
   #calendar: CalendarContext | undefined;
   readonly #environment: CalendarEnvironment | undefined;
 
   constructor(
-    resolver: LocaleResolver<D>,
-    timeZones: TimeZoneRegistry<D>,
-    patterns: (locale: string) => G,
+    configuration: DateTimeFormatConfiguration<D, G>,
     open: (locale: string, pattern: string, timeZone: string) => P,
     clock: () => number,
-    locales: Intl.LocalesArgument = undefined,
-    options?: Readonly<Intl.DateTimeFormatOptions>,
-    required: number = 0,
-    defaults: number = 0,
-    timeZoneOverride: string | undefined = undefined,
-    environment: CalendarEnvironment | undefined = undefined,
+    environment: CalendarEnvironment | undefined,
   ) {
-    const requested = getCanonicalLocales(resolver.data, locales);
-    const configuration = new DateTimeFormatConfiguration(
-      resolver,
-      timeZones,
-      patterns,
-      requested,
-      options,
-      required,
-      defaults,
-      timeZoneOverride,
-    );
     this.#configuration = configuration;
     this.#clock = clock;
     this.#open = open;
@@ -114,34 +97,30 @@ export class NtsDateTimeFormat<
       value instanceof ZonedDateTime
     );
   }
-  get format(): Intl.DateTimeFormat["format"] {
-    if (this.#bound === undefined)
-      this.#bound = (date?: Parameters<Intl.DateTimeFormat["formatToParts"]>[0]): string => {
-        if (date instanceof PlainYearMonth)
-          return this.yearMonthFormatter(
-            PlainYearMonth.calendarContext(date)?.identifier ?? "iso8601",
-          ).format(PlainYearMonth.epochDay(date) * MS_PER_DAY + MS_PER_DAY / 2);
-        if (date instanceof PlainMonthDay)
-          return this.monthDayFormatter(
-            PlainMonthDay.calendarContext(date)?.identifier ?? "iso8601",
-          ).format(PlainMonthDay.epochDay(date) * MS_PER_DAY + MS_PER_DAY / 2);
-        if (date instanceof PlainDateTime)
-          return this.dateTimeFormatter(
-            PlainDateTime.calendarContext(date)?.identifier ?? "iso8601",
-          ).format(PlainDateTime.milliseconds(date));
-        if (date instanceof Instant)
-          return this.instantFormatter().format(Instant.epochMilliseconds(date));
-        if (date instanceof PlainTime)
-          return this.timeFormatter().format(Math.floor(PlainTime.nanoseconds(date) / 1e6));
-        if (date instanceof PlainDate)
-          return this.dateFormatter(
-            PlainDate.calendarContext(date)?.identifier ?? "iso8601",
-          ).format(PlainDate.epochDay(date) * MS_PER_DAY + MS_PER_DAY / 2);
-        return this.#defaultFormatter().format(
-          clip(date === undefined ? this.#clock() : this.#number(date)),
-        );
-      };
-    return this.#bound;
+  format(date?: Parameters<Intl.DateTimeFormat["formatToParts"]>[0]): string {
+    if (date instanceof PlainYearMonth)
+      return this.yearMonthFormatter(
+        PlainYearMonth.calendarContext(date)?.identifier ?? "iso8601",
+      ).format(PlainYearMonth.epochDay(date) * MS_PER_DAY + MS_PER_DAY / 2);
+    if (date instanceof PlainMonthDay)
+      return this.monthDayFormatter(
+        PlainMonthDay.calendarContext(date)?.identifier ?? "iso8601",
+      ).format(PlainMonthDay.epochDay(date) * MS_PER_DAY + MS_PER_DAY / 2);
+    if (date instanceof PlainDateTime)
+      return this.dateTimeFormatter(
+        PlainDateTime.calendarContext(date)?.identifier ?? "iso8601",
+      ).format(PlainDateTime.milliseconds(date));
+    if (date instanceof Instant)
+      return this.instantFormatter().format(Instant.epochMilliseconds(date));
+    if (date instanceof PlainTime)
+      return this.timeFormatter().format(Math.floor(PlainTime.nanoseconds(date) / 1e6));
+    if (date instanceof PlainDate)
+      return this.dateFormatter(PlainDate.calendarContext(date)?.identifier ?? "iso8601").format(
+        PlainDate.epochDay(date) * MS_PER_DAY + MS_PER_DAY / 2,
+      );
+    return this.#defaultFormatter().format(
+      clip(date === undefined ? this.#clock() : this.#number(date)),
+    );
   }
   #defaultFormatter(): DateTimeFormatter<DateTimeTextPrimitive> {
     if (this.#formatter === undefined) {
@@ -420,6 +399,84 @@ export class NtsDateTimeFormat<
     if (start instanceof ZonedDateTime || end instanceof ZonedDateTime)
       throw new TypeError("Zoned date/time values require toLocaleString");
     return this.#defaultFormatter().formatRangeToParts(clip(first), clip(last));
+  }
+}
+
+export class NtsDateTimeFormat<
+  D extends DateTimeLocaleData & TimeZoneIdentifierData,
+  G extends DateTimePatternData,
+  P extends DateTimeFormatterPrimitive,
+> {
+  readonly #configuration: DateTimeFormatConfiguration<D, G>;
+  readonly #clock: () => number;
+  readonly #open: (locale: string, pattern: string, timeZone: string) => P;
+  readonly #environment: CalendarEnvironment | undefined;
+  #state: DateTimeFormatState<D, G, P> | undefined;
+  #bound: Intl.DateTimeFormat["format"] | undefined;
+
+  constructor(
+    resolver: LocaleResolver<D>,
+    timeZones: TimeZoneRegistry<D>,
+    patterns: (locale: string) => G,
+    open: (locale: string, pattern: string, timeZone: string) => P,
+    clock: () => number,
+    locales: Intl.LocalesArgument = undefined,
+    options?: Readonly<Intl.DateTimeFormatOptions>,
+    required: number = 0,
+    defaults: number = 0,
+    timeZoneOverride: string | undefined = undefined,
+    environment: CalendarEnvironment | undefined = undefined,
+  ) {
+    const requested = getCanonicalLocales(resolver.data, locales);
+    this.#configuration = new DateTimeFormatConfiguration(
+      resolver,
+      timeZones,
+      patterns,
+      requested,
+      options,
+      required,
+      defaults,
+      timeZoneOverride,
+    );
+    this.#clock = clock;
+    this.#open = open;
+    this.#environment = environment;
+  }
+  #formattingState(): DateTimeFormatState<D, G, P> {
+    if (this.#state === undefined)
+      this.#state = new DateTimeFormatState(
+        this.#configuration,
+        this.#open,
+        this.#clock,
+        this.#environment,
+      );
+    return this.#state;
+  }
+  get format(): Intl.DateTimeFormat["format"] {
+    if (this.#bound === undefined) {
+      const state = this.#formattingState();
+      this.#bound = (date?: Parameters<Intl.DateTimeFormat["formatToParts"]>[0]): string =>
+        state.format(date);
+    }
+    return this.#bound;
+  }
+  formatTemporal(kind: number, milliseconds: number, calendar: string): string {
+    return this.#formattingState().formatTemporal(kind, milliseconds, calendar);
+  }
+  formatToParts(date?: Parameters<Intl.DateTimeFormat["formatToParts"]>[0]): DateTimeFormatPart[] {
+    return this.#formattingState().formatToParts(date);
+  }
+  formatRange(
+    start: Parameters<Intl.DateTimeFormat["formatRange"]>[0] | bigint,
+    end: Parameters<Intl.DateTimeFormat["formatRange"]>[1] | bigint,
+  ): string {
+    return this.#formattingState().formatRange(start, end);
+  }
+  formatRangeToParts(
+    start: Parameters<Intl.DateTimeFormat["formatRangeToParts"]>[0] | bigint,
+    end: Parameters<Intl.DateTimeFormat["formatRangeToParts"]>[1] | bigint,
+  ): DateTimeRangeFormatPart[] {
+    return this.#formattingState().formatRangeToParts(start, end);
   }
   resolvedOptions(): Intl.ResolvedDateTimeFormatOptions {
     const config = this.#configuration;
