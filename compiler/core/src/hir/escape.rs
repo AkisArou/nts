@@ -327,6 +327,7 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
     // `arr.map(x => x * 2)` would pay an allocation and a reference count for a
     // function whose whole life is one call.
     let in_slot = program.slot_targets();
+    let cycles = program.cycles();
     let arity: Vec<usize> = program.funcs.iter().map(|func| func.params.len()).collect();
     let handed_back: Vec<FxHashSet<u32>> = program.funcs.iter().map(returned_params).collect();
     let put_into: Vec<Vec<(u32, u32)>> = program.funcs.iter().map(stores_into).collect();
@@ -349,6 +350,8 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
                 analyze(
                     func,
                     &Summaries {
+                        program,
+                        cycles: &cycles,
                         by_name: &by_name,
                         in_slot: &in_slot,
                         arity: &arity,
@@ -458,11 +461,17 @@ fn escaped(escapes: &mut Escapes, func: &Func, value: ValueId) {
 /// and eighteen heap allocations appeared where the case says zero.
 ///
 /// The answer has to match the descriptor the backend emits or it is a guess.
-/// `element_descriptor` gives every array whose element may hold a reference
-/// `nts_desc_ref`, whose `cyclic` is 1; an array of scalars gets a descriptor
-/// with no reference fields, which the collector never asks about.
-fn buffers(ty: &HirType) -> bool {
-    matches!(ty, HirType::Managed(ManagedType::Array(element)) if element.may_hold_a_reference())
+/// An array of references gets `nts_desc_ref`, whose `cyclic` is 1, unless
+/// [`super::Cycles::array`] proves its elements cannot lead back to it, when it
+/// gets `nts_desc_ref_acyclic` and is never buffered -- the question asked here,
+/// of the same `Cycles`. An array of scalars gets a descriptor with no
+/// reference fields, which the collector never asks about.
+fn buffers(ty: &HirType, of: &Summaries<'_>) -> bool {
+    matches!(
+        ty,
+        HirType::Managed(ManagedType::Array(element))
+            if element.may_hold_a_reference() && of.cycles.array(of.program, element)
+    )
 }
 
 /// One function, given what each callee does with its parameters.
@@ -475,6 +484,10 @@ fn buffers(ty: &HirType) -> bool {
 /// argument limit, and the limit was right -- a reader of the call site could
 /// not tell which slice meant what.
 struct Summaries<'a> {
+    /// The program, and which of its arrays can be in a cycle: [`buffers`] has
+    /// to give the answer the backend's descriptor gives.
+    program: &'a Program,
+    cycles: &'a super::Cycles,
     /// Which function each name is.
     by_name: &'a FxHashMap<&'a str, usize>,
     /// Which functions a dispatch slot can reach.
@@ -491,6 +504,9 @@ struct Summaries<'a> {
     leaking: &'a [FxHashSet<u32>],
 }
 
+// One walk over every operation, each arm a different way a value escapes;
+// splitting it would scatter the state the arms share (as in `rc::insert_into`).
+#[allow(clippy::too_many_lines)]
 fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
     let mut escapes = Escapes::default();
     // What each store makes reachable, and from where. Deferred rather than
@@ -578,7 +594,7 @@ fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
                         func.values[container.0 as usize].kind,
                         OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
                     ) && (!repeated.contains(stored) || repeated.contains(container))
-                        && !buffers(&func.values[container.0 as usize].ty);
+                        && !buffers(&func.values[container.0 as usize].ty, of);
                     // A parameter stored into a parameter's field is published
                     // rather than escaped: see `stores_into`. The caller knows
                     // whether the container outlives anything and this does not.
@@ -619,6 +635,7 @@ fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
                         put_where_it_went(
                             &mut escapes,
                             func,
+                            of,
                             &repeated,
                             args,
                             &of.put_into[*target],
@@ -981,9 +998,13 @@ fn bodies_reached<'a>(
 /// per-iteration disk pushed onto a pile that outlives the loop does not. The
 /// frame has one slot for that allocation and reuses it, so the pile would hold
 /// seventeen pointers to the same disk.
+// One more than clippy's seven: `of` is what `buffers` asks, and folding it
+// into another argument would hide which question each one answers.
+#[allow(clippy::too_many_arguments)]
 fn put_where_it_went(
     escapes: &mut Escapes,
     func: &Func,
+    of: &Summaries<'_>,
     repeated: &FxHashSet<ValueId>,
     args: &[ValueId],
     pairs: &[(u32, u32)],
@@ -998,7 +1019,7 @@ fn put_where_it_went(
         let ours = matches!(
             func.values[container.0 as usize].kind,
             OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
-        ) && !buffers(&func.values[container.0 as usize].ty);
+        ) && !buffers(&func.values[container.0 as usize].ty, of);
         let outlived = !repeated.contains(stored) || repeated.contains(container);
         if one && ours && outlived {
             reachable_from.push((*container, *stored));

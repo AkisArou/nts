@@ -3091,8 +3091,15 @@ impl Program {
         targets
     }
 
+    /// Which objects can be in a cycle, and which arrays of references.
+    ///
+    /// Computed once and asked many times: a backend asks it of every layout
+    /// it describes and every array it allocates, and escape analysis asks it
+    /// of every container a store goes into -- and all of them have to get the
+    /// same answer, because the descriptor the backend emits *is* the answer
+    /// the collector acts on.
     #[must_use]
-    pub fn cyclic_layouts(&self) -> Vec<bool> {
+    pub fn cycles(&self) -> Cycles {
         // Which layouts each layout is a *base* of, directly. A field declares
         // the type it is written as and holds any subtype of it, so an edge to a
         // layout is an edge to everything that can be stored through it.
@@ -3165,7 +3172,7 @@ impl Program {
         // one per distinct object shape in the program -- so a search per
         // layout is the right shape of answer rather than a strongly-connected
         // components pass that would need explaining.
-        (0..self.layouts.len())
+        let cyclic = (0..self.layouts.len())
             .map(|start| {
                 let mut seen = vec![false; self.layouts.len()];
                 let mut stack = edges[start].clone();
@@ -3180,7 +3187,18 @@ impl Program {
                 }
                 false
             })
-            .collect()
+            .collect();
+        Cycles {
+            cyclic,
+            subtypes,
+            edges,
+        }
+    }
+
+    /// [`Self::cycles`]'s answer for layouts alone, by layout index.
+    #[must_use]
+    pub fn cyclic_layouts(&self) -> Vec<bool> {
+        self.cycles().cyclic
     }
 
     /// The layouts a type's references can lead to.
@@ -3619,6 +3637,70 @@ fn changes_array_length(name: &str) -> bool {
 /// list makes the same assumption, no wider.
 fn keeps_field_borrows(name: &str) -> bool {
     KEEPS_FIELD_BORROWS.contains(&name)
+}
+
+/// What [`Program::cycles`] decided: which layouts can be in a reference cycle,
+/// and the graph it decided it on -- kept, so that an array is answered from
+/// the same edges rather than from a second derivation that could disagree.
+#[derive(Debug, Clone)]
+pub struct Cycles {
+    /// By layout index: whether an object of that layout can be in a cycle.
+    pub cyclic: Vec<bool>,
+    /// What a slot of each layout can hold besides itself, directly: its
+    /// subclasses and what the program casts into it.
+    subtypes: Vec<Vec<usize>>,
+    /// Where each layout's reference fields lead, everything those can hold
+    /// included.
+    edges: Vec<Vec<usize>>,
+}
+
+impl Cycles {
+    /// Whether an array of references with this element type can be in a cycle.
+    ///
+    /// Every array of references used to share one descriptor, conservatively
+    /// cyclic, so releasing one above zero always buffered it and trial
+    /// deletion walked every element. A UI's `Row[]` -- rows holding strings --
+    /// cannot be in a cycle at all, and was walked at every checkpoint after an
+    /// event touched it.
+    ///
+    /// **A cycle through an array of objects passes through a layout and comes
+    /// back to it**, so that layout is cyclic in the graph `cycles` built: a
+    /// field leads to the array's type, which leads to its elements, which lead
+    /// on. So the array is acyclic when no layout its elements can reach is
+    /// cyclic. The only cycles with no layout in them are among containers
+    /// themselves -- an array of arrays, of erased values -- and an element that
+    /// is not a string or an object with a layout keeps the conservative answer.
+    ///
+    /// That argument is only as good as the graph, which is why this waited for
+    /// the graph to follow structural casts and erased fields. Trial deletion
+    /// still walks through an acyclic array when a cycle reaches it from a
+    /// candidate; this decides only whether the array is buffered on its own.
+    #[must_use]
+    pub fn array(&self, program: &Program, element: &HirType) -> bool {
+        let start = match element {
+            HirType::Managed(ManagedType::String | ManagedType::Template) => return false,
+            HirType::Managed(ManagedType::Object(id)) => {
+                match program.layouts.iter().position(|layout| layout.types.contains(id)) {
+                    Some(at) => at,
+                    None => return true,
+                }
+            }
+            _ => return true,
+        };
+        let mut seen = vec![false; self.cyclic.len()];
+        let mut stack = vec![start];
+        while let Some(at) = stack.pop() {
+            if std::mem::replace(&mut seen[at], true) {
+                continue;
+            }
+            if self.cyclic[at] {
+                return true;
+            }
+            stack.extend(self.subtypes[at].iter().copied());
+            stack.extend(self.edges[at].iter().copied());
+        }
+        false
+    }
 }
 
 const KEEPS_FIELD_BORROWS: &[&str] = &[

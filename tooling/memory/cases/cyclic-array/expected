@@ -1,51 +1,40 @@
-ideal 8
-allocated 4
+ideal 6
+allocated 2
 candidates 0
-because This case is a cost rather than an achievement. It is what 0056 charges,
-because held still, so that whoever makes the collector precise can watch the
-because charge come off.
-because
-because The same program before 0056, elided:
+because This case held a cost still, so that whoever made the collector precise
+because could watch the charge come off. It has: the numbers are the ones from
+because before 0056 charged it, and now they are safe.
 because
 because     retains=0 releases=6 allocated=2 candidates=0
 because
-because and under NTS_RC_NAIVE it exited 139. Two `Leaf`s sat in the frame --
-because `NtsObj_Leaf v1_frame`, and `grep` counted two -- with one of them
-because stored into a heap array. That placement is right by every reachability
-because argument: a `Leaf` here is made, put into an array, and dropped in the
-because same frame, and nothing in the program can see it afterwards.
+because The history, because it is the argument. Two `Leaf`s sat in the frame,
+because one of them stored into a heap array. That placement is right by every
+because reachability argument: a `Leaf` here is made, put into an array, and
+because dropped in the same frame, and nothing in the program can see it
+because afterwards. What reachability cannot see is the candidate buffer:
+because `nts_release` on a *buffered* object whose count reaches zero does not
+because free it, so the array outlived the frame and the frame-placed `Leaf`
+because inside it was dead stack by the time the collector walked the array. It
+because exited 139 under NTS_RC_NAIVE. So 0056 sent what a bufferable container
+because holds to the heap -- 2 allocations became 4, 6 operations became 8 --
+because and every array of references was bufferable, because they all shared
+because one descriptor that said nothing about what the elements point at.
 because
-because What reachability cannot see is the candidate buffer. `nts_release` on
-because a *buffered* object whose count reaches zero does not free it -- the
-because buffer is holding a pointer, so freeing there would leave that pointer
-because dangling and collection frees it later instead, from `nts_destroy` at
-because exit if nothing collects first. That defers the array's death past the
-because frame the release happened in, and the frame-placed `Leaf` inside it is
-because dead stack by the time the collector walks the array looking for
-because cycles. So being bufferable is a way of outliving a frame, and what
-because such a container holds cannot live in one.
+because Now an array's descriptor is chosen per element type (`Cycles::array`):
+because `Leaf[]` reaches a `Leaf`, which reaches a number, and no layout it can
+because reach is cyclic, so it gets `nts_desc_ref_acyclic` and is never buffered.
+because Escape analysis asks the same `Cycles` (`buffers`), so the array cannot
+because outlive its frame through the candidate buffer, and the `Leaf`s it holds
+because stay in the frame again. `HoldsOne` beside it never needed this: a
+because layout always had a cyclic flag of its own.
 because
-because Which containers are bufferable is the imprecision 0054 named. An
-because object of `T` can be in a cycle only if `T` is reachable from `T`
-because through reference fields, so neither `Leaf`, holding a number, nor
-because `HoldsOne`, holding a `Leaf`, ever is -- and `HoldsOne` still confines
-because what it holds, one line away from the array that cannot. `Leaf[]`
-because cannot be in a cycle either. But every array of references shares one
-because descriptor, that descriptor describes the element's *shape* rather than
-because what the element points at, so there is nothing per-element-type to be
-because precise with, and unknown has to mean yes.
+because Six operations, all releases: the two values the stores overwrite (the
+because first `Leaf`, `listA`), the two the frame holders give back where the
+because frame ends (the second `Leaf`, `listB`), and the two arrays the locals
+because hold. No retain: the `Leaf`s and both holders are frame objects, and the
+because arrays are taken by the stores rather than copied. Releasing `listA`
+because above zero is the moment that used to buffer it.
 because
-because So: 2 allocations become 4 and 6 operations become 8 -- two `Leaf`s to
-because the heap, one retain each. That is the price of the conservative
-because answer, and it is the number 0054 asked for and could not get.
-because
-because `candidates 0` is asserted rather than assumed. The naive column
-because buffers one, which is the array; the `HoldsOne` beside it buffers none.
-because Elision removes the releases that would ask, so the shipping build
-because offers the collector nothing here at all. Both halves are worth
-because holding: the 0 says elision still gets there first, and the naive
-because column is where the cost reappears if it ever stops.
-because
-because A descriptor per element type would take `allocated` back to 2 and the
-because naive `candidates` to 0 in one change. That is what makes it worth
-because doing, and this is what will show it.
+because `candidates 0`, and the naive column agrees now: under NTS_RC_NAIVE the
+because array was the one candidate, and an acyclic descriptor is never offered.
+because If this ever buffers again, a descriptor stopped matching its type.

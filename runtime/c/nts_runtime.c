@@ -446,8 +446,9 @@ void nts_counting_reset(void) {
   }
 }
 
-/* Cyclic, because one descriptor serves every array of references and says
-   nothing about what the elements point at. */
+/* Cyclic: an array of references whose elements the compiler could not prove
+   unable to lead back to it. The descriptor says nothing about what the
+   elements point at, so unknown has to mean yes. */
 const NtsDescriptor nts_desc_ref = {NTS_KIND_ARRAY,
                                     sizeof(void *),
                                     1,
@@ -460,6 +461,22 @@ const NtsDescriptor nts_desc_ref = {NTS_KIND_ARRAY,
                                     NTS_ARRAY_REFERENCE,
                                     0u,
                                     NULL};
+/* The same array of references, for one whose elements the compiler proved
+   can never lead back to it (`Cycles::array`): never buffered as a cycle
+   candidate. Trial deletion still walks through one when a cycle reaches it
+   from a candidate. */
+const NtsDescriptor nts_desc_ref_acyclic = {NTS_KIND_ARRAY,
+                                            sizeof(void *),
+                                            1,
+                                            0,
+                                            0,
+                                            0,
+                                            "reference",
+                                            0u,
+                                            0,
+                                            NTS_ARRAY_REFERENCE,
+                                            0u,
+                                            NULL};
 const NtsDescriptor nts_desc_string1 = {
     NTS_KIND_STRING,   1,  0,   0, 0, 0, "string", 0u, 0,
     NTS_ARRAY_UNKNOWN, 0u, NULL};

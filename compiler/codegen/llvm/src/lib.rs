@@ -160,6 +160,7 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
     let _ = writeln!(text, "declare double @llvm.ceil.f64(double) nounwind");
     let _ = writeln!(text, "declare double @llvm.trunc.f64(double) nounwind");
     let _ = writeln!(text, "@nts_desc_ref = external constant %NtsDescriptor");
+    let _ = writeln!(text, "@nts_desc_ref_acyclic = external constant %NtsDescriptor");
     let _ = writeln!(
         text,
         "@nts_closure_call_slot = constant i32 {}",
@@ -218,9 +219,12 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
         );
     }
     let templates = nts_core::hir::templates::present(program);
+    // Decided once: every allocation must name the descriptor the same answer
+    // chose, and the C backend asks the same `Cycles`.
+    let cycles = program.cycles();
     let mut bodies = String::new();
     for func in &program.funcs {
-        match function(program, func, platform, templates) {
+        match function(program, &cycles, func, platform, templates) {
             Ok(rendered) => {
                 let _ = writeln!(bodies, "\n{rendered}");
             }
@@ -2469,7 +2473,7 @@ fn symbol(raw: &str) -> String {
     format!("@{}", nts_codegen_common::symbols::c_identifier(raw))
 }
 
-fn function(program: &Program, func: &Func, platform: Platform, templates: bool) -> Result<String, Diagnostic> {
+fn function(program: &Program, cycles: &nts_core::hir::Cycles, func: &Func, platform: Platform, templates: bool) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let returns = return_ty_of(&func.return_type, func)?;
     let mut params = Vec::new();
@@ -2540,7 +2544,7 @@ fn function(program: &Program, func: &Func, platform: Platform, templates: bool)
     for block in &func.blocks {
         let mut lines = Vec::new();
         for value in &block.ops {
-            let line = operation(program, func, *value, platform, templates)?;
+            let line = operation(program, cycles, func, *value, platform, templates)?;
             if !line.is_empty() {
                 lines.push(line);
             }
@@ -2815,7 +2819,7 @@ fn field_at(
     Ok((offset, ty_of(ty, func)?))
 }
 
-fn operation(program: &Program, func: &Func, value: ValueId, platform: Platform, templates: bool) -> Result<String, Diagnostic> {
+fn operation(program: &Program, cycles: &nts_core::hir::Cycles, func: &Func, value: ValueId, platform: Platform, templates: bool) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     let out = name(value);
     Ok(match &op.kind {
@@ -2973,7 +2977,7 @@ fn operation(program: &Program, func: &Func, value: ValueId, platform: Platform,
                 }
             )
         }
-        _ => return memory_operation(program, func, value, &out, platform),
+        _ => return memory_operation(program, cycles, func, value, &out, platform),
     })
 }
 
@@ -3042,6 +3046,7 @@ fn representation_change(
 /// analysis is worth having.
 fn allocation(
     program: &Program,
+    cycles: &nts_core::hir::Cycles,
     func: &Func,
     value: ValueId,
     out: &str,
@@ -3062,7 +3067,12 @@ fn allocation(
                 "@nts_array_new_uninitialized"
             };
             let descriptor = if element.is_managed() {
-                "@nts_desc_ref".to_owned()
+                // The acyclic twin is never buffered. See `Cycles::array`.
+                if cycles.array(program, element) {
+                    "@nts_desc_ref".to_owned()
+                } else {
+                    "@nts_desc_ref_acyclic".to_owned()
+                }
             } else if let Some(counting) = nts_codegen_common::counting::counted_element(element) {
                 format!("@{}", nts_codegen_common::counting::array_descriptor_name(&counting))
             } else {
@@ -4094,6 +4104,7 @@ fn payload_into(func: &Func, out: &str, bits: &str, want: &HirType) -> Result<St
 /// something sits, and none of the arithmetic does.
 fn memory_operation(
     program: &Program,
+    cycles: &nts_core::hir::Cycles,
     func: &Func,
     value: ValueId,
     out: &str,
@@ -4127,7 +4138,7 @@ fn memory_operation(
         // implementation nothing routes to reads exactly like one that was never
         // written, and this file has had that happen with `Suspend` itself.
         | OpKind::PromiseSubscribe { .. } => {
-            return allocation(program, func, value, &out, platform);
+            return allocation(program, cycles, func, value, &out, platform);
         }
         OpKind::ArrayGet { .. } | OpKind::ArraySet { .. } => {
             return element_access(func, value, &out);

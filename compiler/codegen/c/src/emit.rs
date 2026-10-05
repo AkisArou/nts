@@ -477,6 +477,10 @@ fn values_read(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
 /// static.
 struct Context<'a> {
     program: &'a Program,
+    /// Which arrays of references can be in a cycle, decided once for the
+    /// program: the descriptor an allocation names is the answer the collector
+    /// acts on, so every allocation has to ask the same one.
+    cycles: &'a nts_core::hir::Cycles,
     /// The target's C ABI, which decides every size and offset emitted.
     abi: NativeAbi,
     literals: &'a [String],
@@ -1505,6 +1509,7 @@ fn emit_bodies<'a>(
 ) -> Vec<(String, CodeWriter, &'a Func)> {
     let mut bodies = Vec::new();
     let templates = nts_core::hir::templates::present(program);
+    let cycles = program.cycles();
     for func in &program.funcs {
         // An `abstract` method is a signature and no body. It is in `funcs` so
         // that a call through the slot can take its function-pointer type from
@@ -1519,6 +1524,7 @@ fn emit_bodies<'a>(
         let mut body = CodeWriter::new();
         let context = Context {
             program,
+            cycles: &cycles,
             abi,
             literals,
             templates,
@@ -3782,7 +3788,7 @@ fn element_type(program: &Program, array: &HirType, origin: &Origin) -> Result<S
     c_type_of(program, &element, origin)
 }
 
-fn element_descriptor(array: &HirType, origin: &Origin) -> Result<String, Diagnostic> {
+fn element_descriptor(array: &HirType, origin: &Origin, context: &Context<'_>) -> Result<String, Diagnostic> {
     let HirType::Managed(ManagedType::Array(element)) = array else {
         return Err(Diagnostic::error(
             "NTS2005",
@@ -3791,7 +3797,13 @@ fn element_descriptor(array: &HirType, origin: &Origin) -> Result<String, Diagno
         ));
     };
     if element.is_managed() {
-        return Ok("nts_desc_ref".to_owned());
+        // The acyclic twin is never buffered as a candidate. See `Cycles::array`.
+        return Ok(if context.cycles.array(context.program, element) {
+            "nts_desc_ref"
+        } else {
+            "nts_desc_ref_acyclic"
+        }
+        .to_owned());
     }
     if let Some(counting) = nts_codegen_common::counting::counted_element(element) {
         return Ok(nts_codegen_common::counting::array_descriptor_name(&counting));
@@ -5052,7 +5064,7 @@ fn memory_op(
             };
             format!(
                 "{name} = {allocate}(&{}, {});",
-                element_descriptor(&op.ty, &op.origin)?,
+                element_descriptor(&op.ty, &op.origin, context)?,
                 value_name(*length)
             )
         }

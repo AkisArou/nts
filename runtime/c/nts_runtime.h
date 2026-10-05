@@ -1000,6 +1000,7 @@ void nts_template_reflection(NtsValue value);
  * descriptor serves them all -- it describes the element's shape, not what the
  * element points at. `traced` is set, which is what a collector will read. */
 extern const NtsDescriptor nts_desc_ref;
+extern const NtsDescriptor nts_desc_ref_acyclic;
 extern const NtsDescriptor nts_desc_string1;
 extern const NtsDescriptor nts_desc_string2;
 
