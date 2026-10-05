@@ -4077,6 +4077,9 @@ pub struct Prepared {
     pub checks_removed: usize,
     /// Bounds checks that remain.
     pub checks_kept: usize,
+    /// Checked reads of an erased slot given `undefined` out of range rather
+    /// than a trap ([`bounds::answer_erased_reads`]).
+    pub erased_reads_answered: usize,
     /// Functions dropped because nothing reachable from an export calls them.
     pub pruned: usize,
     /// Retains and releases inserted, if the provider counts references.
@@ -6004,12 +6007,13 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // Specialization orphans values by design — a folded constant leaves its
     // unfolded original with no readers — and the C emitter declares a local for
     // everything it assigns.
-    for func in &mut program.funcs {
-        // Parameters first: dropping one can be what makes the value feeding
-        // it dead, and that is an operation for the pass below to collect.
-        dce::prune_parameters(func);
-        dce::eliminate(func);
-    }
+    collect_orphans(&mut program);
+
+    // What the first bounds pass left checked on an erased slot answers
+    // `undefined` out of range rather than trapping. After that pass, so a
+    // proven read keeps its load; before escape and counting, which have to see
+    // the call that replaces it.
+    let erased_reads_answered = program.funcs.iter_mut().map(bounds::answer_erased_reads).sum();
 
     // Escape analysis before reference counting, because an object that stays
     // in the frame should not be counted at all -- and after dead-code
@@ -6077,6 +6081,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
         specialized,
         conversions,
         checks_removed,
+        erased_reads_answered,
         checks_kept,
         pruned,
         counting,
@@ -6204,6 +6209,16 @@ fn reshape_calls(program: &mut Program, roots: reachable::Roots<'_>) -> (usize, 
 /// converted, which cost a separate bug the same night.
 fn narrow_widths(program: &mut Program) -> usize {
     program.funcs.iter_mut().map(narrow::narrow_truncated).sum()
+}
+
+/// Dead parameters and values, after specialization has orphaned them.
+fn collect_orphans(program: &mut Program) {
+    for func in &mut program.funcs {
+        // Parameters first: dropping one can be what makes the value feeding
+        // it dead, and that is an operation for the pass below to collect.
+        dce::prune_parameters(func);
+        dce::eliminate(func);
+    }
 }
 
 fn split_unions(program: &mut Program) -> usize {

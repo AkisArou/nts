@@ -10,7 +10,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_core::hir::{self, HirType, OpKind, lower::Lowered};
+use nts_core::hir::{self, HirType, ManagedType, OpKind, lower::Lowered};
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 
 fn lower_at(relative: &str) -> Option<Lowered> {
@@ -374,22 +374,30 @@ fn recovering_array_storage_requires_initialized_reads() {
     let Some(prepared) = prepared_at("../../examples/an-erased-array-read-keeps-missing-elements") else {
         return;
     };
-    for name in ["missing", "hole", "numberedHole", "conditionalStore", "partialFill",
+    let erased = HirType::Managed(ManagedType::Array(Box::new(HirType::Erased)));
+    let named = |name: &str| prepared.program.funcs.iter().find(|f| f.name == name)
+        .unwrap_or_else(|| panic!("{name} must stay admitted"));
+    let keeps_erased = |name: &str| named(name).values.iter()
+        .any(|op| matches!(op.kind, OpKind::ArrayNew { .. }) && op.ty == erased);
+    let answers = |name: &str| named(name).blocks.iter().flat_map(|b| &b.ops).any(|id|
+        matches!(&named(name).value(*id).kind, OpKind::Call { callee: hir::Callee::External(helper), .. }
+            if helper == "nts_array_element"));
+    // A read that may see a slot nothing wrote keeps the erased array, whose
+    // zeroed slot reads `undefined`; narrowing it would read a typed zero.
+    for name in ["hole", "numberedHole", "conditionalStore", "partialFill",
         "skippedFill", "interruptedFill", "readBeforeFill", "freshOnEachIteration"] {
-        let f = prepared.program.funcs.iter().find(|f| f.name == name)
-            .unwrap_or_else(|| panic!("{name} must stay admitted"));
-        assert!(f.blocks.iter().flat_map(|b| &b.ops).any(|id|
-            matches!(&f.value(*id).kind, OpKind::Call { callee: hir::Callee::External(name), .. }
-                if name == "nts_array_element")),
-            "{name} needs a read that preserves a missing slot");
+        assert!(keeps_erased(name), "{name} must keep its erased array");
+    }
+    // A read that may be out of range is answered by the runtime, which gives
+    // `undefined` rather than trapping (`bounds::answer_erased_reads`).
+    for name in ["missing", "globalPastTheEnd"] {
+        assert!(answers(name), "{name} needs the read that answers past the end");
     }
     for name in ["sameSlotControl", "completeFillControl", "mixedLiteralControl"] {
-        let f = prepared.program.funcs.iter().find(|f| f.name == name)
-            .unwrap_or_else(|| panic!("{name} must stay admitted"));
-        assert!(!f.blocks.iter().flat_map(|b| &b.ops).any(|id|
-            matches!(&f.value(*id).kind, OpKind::Call { callee: hir::Callee::External(name), .. }
-                if name == "nts_array_element")),
-            "{name} already proves its reads initialized");
+        assert!(!answers(name), "{name} proves its reads in range");
+    }
+    for name in ["sameSlotControl", "completeFillControl"] {
+        assert!(!keeps_erased(name), "{name} proves its reads initialized, so it narrows");
     }
 }
 

@@ -91,3 +91,11 @@ export function mixedLiteralControl(n: number): number {
   const held = values[n > 0 ? 0 : 1];
   return typeof held === "function" ? 103 : typeof held === "number" ? 107 : 109;
 }
+
+// A module's `unknown[]`, whose length no bounds proof reaches: the read stays
+// checked and answers `undefined` past the end (`bounds::answer_erased_reads`).
+const held: unknown[] = [1, "two", 3];
+export function globalPastTheEnd(n: number): number {
+  const v = held[n > 0 ? 2 : 5];
+  return v === undefined ? 89 : typeof v === "number" ? v : 97;
+}

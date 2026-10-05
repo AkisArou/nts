@@ -48356,12 +48356,10 @@ impl<'a> FuncBuilder<'a> {
         // call in the hottest loop of a benchmark. Caught by emitting the bench
         // program and grepping for the call, before any timing.
         //
-        // An out-of-range read of an erased array still traps, which is the
-        // same defect one representation over, and it wants `ArrayGet` to
-        // *answer* the undefined tag rather than a call to compute it --
-        // reachable, because that slot has room. Filed as
-        // `blockers/an-out-of-range-read-that-still-traps` rather than
-        // solved by making the fast case slow.
+        // So the read stays an `ArrayGet`, and an out-of-range one is answered
+        // after bounds elimination: `bounds::answer_erased_reads` gives what is
+        // still checked `undefined` rather than a trap, and a read proven in
+        // range keeps its load.
         let slot_holds_the_absence = matches!(
             self.values[array.0 as usize].ty,
             HirType::Managed(ManagedType::Array(ref element)) if **element == HirType::Erased

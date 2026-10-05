@@ -333,3 +333,57 @@ fn length_facts(
         _ => Facts::BOTTOM,
     }
 }
+
+/// Give each read of an erased slot that is still checked its JavaScript
+/// answer: `undefined` for an index that names no element, rather than a trap.
+/// Reports how many.
+///
+/// A checked read of a `double` slot traps out of range because there is no
+/// `undefined` to put in a double. An erased slot has room for one, so the trap
+/// is a refusal with nothing behind it: `const v = values[i]` over an
+/// `unknown[]`, out of range, answered nothing where node answers `undefined`.
+///
+/// **After [`eliminate_checks`], and only for what it left checked.** A read
+/// this file proved in range keeps its bare load; routing every erased read was
+/// measured to put a call in `benches/cases/erasure-stored-unknown`'s inner
+/// loop, which is the read this pass must never reach. Before `place_allocations`
+/// and `rc::insert`, because `nts_array_element` answers an owned value where
+/// an `ArrayGet` borrows, and both passes have to see the call.
+pub fn answer_erased_reads(func: &mut Func) -> usize {
+    use super::{Absent, Callee, ManagedType, Op};
+    let mut answered = 0;
+    for block in 0..func.blocks.len() {
+        let old = std::mem::take(&mut func.blocks[block].ops);
+        let mut ops = Vec::with_capacity(old.len());
+        for id in old {
+            if let OpKind::ArrayGet { array, index, checked: true } = func.value(id).kind
+                && matches!(&func.value(array).ty,
+                    HirType::Managed(ManagedType::Array(element)) if **element == HirType::Erased)
+            {
+                let origin = func.value(id).origin.clone();
+                let push = |func: &mut Func, ops: &mut Vec<ValueId>, kind, ty| {
+                    let value = ValueId(u32::try_from(func.values.len()).unwrap_or(u32::MAX));
+                    func.values.push(Op { kind, ty, origin: origin.clone() });
+                    ops.push(value);
+                    value
+                };
+                let erased = push(func, &mut ops,
+                    OpKind::Erase { value: array, absent: Absent::Impossible }, HirType::Erased);
+                let index = if func.value(index).ty == HirType::NUMBER {
+                    index
+                } else {
+                    push(func, &mut ops, OpKind::Convert(index), HirType::NUMBER)
+                };
+                func.values[id.0 as usize].kind = OpKind::Call {
+                    callee: Callee::External("nts_array_element".to_owned()),
+                    args: vec![erased, index],
+                    frame: None,
+                };
+                answered += 1;
+            }
+            ops.push(id);
+        }
+        func.blocks[block].ops = ops;
+    }
+    answered
+}
