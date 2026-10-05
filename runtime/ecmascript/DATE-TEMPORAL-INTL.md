@@ -52,7 +52,8 @@ and artifact-size evidence before becoming another provider.
 
 1. **Compiler integration.** Support canonical library unions, record projection,
    nested generic dispatch, standard builtin binding, actual supplied argument
-   counts and mutable Date representation. The compiler lane owns these changes.
+   counts, mutable Date representation and proof that provided builtin bindings
+   remain unchanged. The compiler lane owns these changes.
 2. **Shared foundations.** Complete locale validation, aliases, extension
    negotiation/matching, Locale, supportedValuesOf, clocks/default locale/zone,
    calendar metadata and conversion. Locale metadata uses public ICU primitives
@@ -1018,6 +1019,19 @@ make a probe pass. Main's local handoff contains the concrete integration cases.
 Separate digit-constructor probes also retain inferred optional-field and
 undefined generic-argument refusals. The provider witness uses an explicitly
 typed NumberFormatOptions record; it does not establish these public paths.
+
+The unchanged Date/all-eight-Temporal localization consumer was checked with
+private compiler sources `19f02aa9cb15` and `0279fe1d1ffc` using the same frozen
+frontend. Both emit commands exit zero but omit `main` on C-RC and JVM. Their
+diagnostics are identical: 808 on C-RC and 768 on JVM. The first consumer stop is
+unproved canonical `Error`/`TypeError` binding stability; canonical unions and
+provider/generic layout refusals also remain recorded. This is an additional
+compiler integration requirement, not a regression attributed to the newer pin.
+Its core/lint checks are scoped and its receipt still marks backend/recorded
+acceptance pending. Neither private pin establishes builtin execution. Exact
+pin/source hashes, refusals, diagnostic comparisons and emitted C/JVM method
+inspection are in
+`target/ecmascript/audit/completion-20261005/private0279-public-integration.json`.
 
 ## Acceptance still required
 
