@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Observed: shadowed Object.is(1, 2)=false;shadowed Math.max(1, 2)=2;shadowed Number.isNaN(1)=false;control Object.is(1, 2)=false;control Math.max(1, 2)=2;control Number.isNaN(1)=false;",
+  "node": "exit 1; nts: uncaught Observed: shadowed Object.is(1, 2)=true;shadowed Math.max(1, 2)=1;shadowed Number.isNaN(1)=true;control Object.is(1, 2)=false;control Math.max(1, 2)=2;control Number.isNaN(1)=false;",
+  "measured_with": "8a4396909b147563",
+  "source": "measured"
+}
