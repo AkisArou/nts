@@ -26,12 +26,12 @@ public final class IcuDateFormatter {
     private final String calendarType;
     private DateIntervalFormat range;
     private Calendar from, to;
-    private final ConstrainedFieldPosition rangePosition = new ConstrainedFieldPosition();
+    private ConstrainedFieldPosition rangePosition;
     private final StringBuffer text = new StringBuffer(64);
     private final FieldPosition noField = new FieldPosition(-1);
     private ArrayList<DateFieldLocator> locators;
     private StringBuffer scratch;
-    private int[] spans = new int[48];
+    private int[] spans;
     private int count;
     private boolean collapsed = true;
     private boolean yearNameOnly;
@@ -66,7 +66,7 @@ public final class IcuDateFormatter {
             for (Map.Entry<AttributedCharacterIterator.Attribute, Object> entry : iterator.getAttributes().entrySet()) {
                 int field = fieldCode(entry.getKey());
                 if (field < 0) continue;
-                if ((count + 1) * 3 > spans.length) spans = Arrays.copyOf(spans, spans.length * 2);
+                ensureSpanCapacity();
                 spans[count * 3] = field;
                 spans[count * 3 + 1] = index;
                 spans[count * 3 + 2] = limit;
@@ -76,6 +76,12 @@ public final class IcuDateFormatter {
         }
         locateFields();
         return text.toString();
+    }
+    private void ensureSpanCapacity() {
+        // Allocate on first parts use, then retain/grow the shared single-date
+        // and range buffer. Text-only formatting needs no span storage.
+        if (spans == null) spans = new int[48];
+        else if ((count + 1) * 3 > spans.length) spans = Arrays.copyOf(spans, spans.length * 2);
     }
     public void addFieldLocator(String marker, String pattern, int markerCode, int field) {
         if ((markerCode != 0 && markerCode != 1) || (field != 11 && field != 12) || pattern.isEmpty())
@@ -134,7 +140,7 @@ public final class IcuDateFormatter {
                 output++;
             }
             count = output;
-            if ((count + 1) * 3 > spans.length) spans = Arrays.copyOf(spans, spans.length * 2);
+            ensureSpanCapacity();
             int position = 0;
             while (position < count && spans[position * 3 + 1] <= start) position++;
             System.arraycopy(spans, position * 3, spans, (position + 1) * 3, (count - position) * 3);
@@ -240,6 +246,7 @@ public final class IcuDateFormatter {
             range.setTimeZone(formatter.getTimeZone());
             from = calendar.clone();
             to = calendar.clone();
+            rangePosition = new ConstrainedFieldPosition();
         }
         from.setTimeInMillis((long)start);
         to.setTimeInMillis((long)end);
@@ -255,7 +262,7 @@ public final class IcuDateFormatter {
                 hasSpan = true;
             } else field = fieldCode(rangePosition.getField());
             if (!fields || field < 0) continue;
-            if ((count + 1) * 3 > spans.length) spans = Arrays.copyOf(spans, spans.length * 2);
+            ensureSpanCapacity();
             spans[count * 3] = field;
             spans[count * 3 + 1] = rangePosition.getStart();
             spans[count * 3 + 2] = rangePosition.getLimit();

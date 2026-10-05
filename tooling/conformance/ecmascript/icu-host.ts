@@ -50,8 +50,12 @@ export function icuHost(root: string) {
   const input = resolve(directory, "input");
   const output = resolve(directory, "output");
   execFileSync("mkfifo", [input, output]);
-  const classes = resolve(root, "target/ecmascript/icu-check/java");
-  const jar = resolve(root, "target/ecmascript/icu-check/icu4j-78.3.jar");
+  const providerOutput = resolve(
+    root,
+    process.env.NTS_ICU_CHECK_OUT ?? "target/ecmascript/icu-check",
+  );
+  const classes = resolve(providerOutput, "java");
+  const jar = resolve(providerOutput, "icu4j-78.3.jar");
   const classpath = [classes, jar].join(delimiter);
   execFileSync("javac", [
     "--release",

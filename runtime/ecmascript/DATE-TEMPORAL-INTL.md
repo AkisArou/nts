@@ -73,7 +73,9 @@ and artifact-size evidence before becoming another provider.
    identity validation. All non-ISO date fields now come from the shared calendar
    contexts, including era years and ordinal/leap months. Shared interval
    selection exists; complete range/data coverage and compiled public acceptance
-   remain open.
+   remain open. Its stored bound format callback still captures the owning
+   facade; separate cached formatting state to remove that RC cycle while
+   preserving lazy selection and callback identity.
 4. **Date.** Complete standard constructor/call behavior, local operations,
    setters, localization and the Temporal bridge. Core arithmetic, parsing and
    serialization exist. UTC and multi-component setters distinguish omission
@@ -1349,4 +1351,53 @@ and `paired-report.json`. The five-configuration gate receipt is
 
 ```sh
 NTS_BIN=target/debug/nts NTS_ICU_CHECK_OUT=target/ecmascript/audit/date-span-icu-check node runtime/ecmascript/tools/icu.ts --pinned-native --date-fields --all-backends --sanitize
+```
+
+### JVM date span lifetime checkpoint — 2026-10-05
+
+The ordinary ICU4J Date provider now creates span storage on the first actual
+parts span and its range-position cursor on the first range request. One private
+capacity helper serves single-date spans, public year locators and range spans;
+growth and reuse preserve their existing behavior. Text-only single-date calls
+allocate neither buffer. No public signature, generated declaration or binding
+offset changed, and no JNI, mapped types, class implements or side table was added.
+
+Actual provider instances were measured in one JVM against the immutable
+20c9c699b source, with the same ICU4J jar and escaped constructor results.
+Three alternating per-thread allocation samples, with escape analysis disabled
+to separate compiler effects, save 255.72–255.95 bytes per construction on this
+VM. Each sample warms 5,000 constructors and measures another 5,000 on CPU 24.
+The normal tiered-compilation samples remain in the raw receipts; their timing
+and constructor allocation vary, so no speedup is inferred. Reused formatting
+allocates the same 376 bytes for text and 3,944 bytes for parts in both versions,
+including ICU4J's attributed-iterator allocations and an escaped result string.
+Those are provider measurements, not public bindings, startup or whole-app heap.
+
+The supplementary lifetime probe inspects private fields only in the probe.
+It verifies deferred storage, first-range parts initialization, independent
+cursor ownership, single/range reuse, clearing after text calls, and preserved
+24-span coordinates after growing from 48 to 96 integer slots. The main provider
+class changes from 12,146 to 12,181 bytes with identical public class names and
+Java-11 compilation. Full linked application/JAR size remains separate.
+
+The existing date-fields/template/provider gate passes all five configurations
+with native sanitizers, RC leak checks and JVM verification. Java binding drift
+checks pass. The original full Intl host rerun uses this freshly compiled
+provider: 3,357 rows, 3,172 passes and 185 retained failures, with no changed
+verdicts, missing rows or source hashes. DateTimeFormat remains 220/244 and
+Intl/Temporal 2,029/2,029. These are supplementary host/provider checks, with
+`compiledPublicApi: false`; all public compiler and platform gates remain open.
+The changed host tool typechecks under strict/unused/indexed-access checks.
+
+The Test262 host adapter now honors the same `NTS_ICU_CHECK_OUT` directory as the
+provider gate. This selects both the classes and pinned jar in an isolated build
+without overwriting the shared provider directory. Source/class/jar hashes,
+allocation/lifetime receipts and exact scope are retained in
+`target/ecmascript/audit/java-date-span-lifetime/summary.json`. Gate results and
+original rows/comparison are `java-date-span-provider-final.log` and
+`java-date-span-intl-{final-test262.jsonl,comparison.json}` in the audit directory.
+
+```sh
+NTS_BIN=target/debug/nts NTS_ICU_CHECK_OUT=target/ecmascript/audit/java-date-span-icu-check node runtime/ecmascript/tools/icu.ts --pinned-native --date-fields --all-backends --sanitize
+NTS_ICU_CHECK_OUT=target/ecmascript/audit/java-date-span-icu-check node tooling/conformance/ecmascript/test262.ts --under test/intl402 --rows target/ecmascript/audit/java-date-span-intl-final-test262.jsonl
 ```
