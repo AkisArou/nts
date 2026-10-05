@@ -2529,8 +2529,16 @@ fn returns_nulled(func: &Func, layouts: &[Layout]) -> rustc_hash::FxHashSet<u32>
 /// put the row at 2.36x C++ against 3.05x.
 ///
 /// A greatest fixpoint over call sites: assumed zero, and contradicted by a
-/// caller that passes something it cannot vouch for. A function nothing calls
-/// keeps the assumption, which is safe -- there is no caller to be wrong about.
+/// caller that passes something it cannot vouch for.
+///
+/// **Only for a function every caller of which is one of those call sites.**
+/// This said "a function nothing calls keeps the assumption, which is safe --
+/// there is no caller to be wrong about", and an exported function is called
+/// by nobody *here*: `ntsRowsDestroy(app)`, called from C with a full table,
+/// had `app.rows = []` emitted as a store over a zero, so the old array and
+/// every row in it leaked. A dispatch slot, a closure's call and a resumed
+/// suspension are callers this fixpoint never reads either. See
+/// [`invoked_only_directly`].
 ///
 /// What a caller can vouch for: a fresh allocation whose field it has not
 /// written, and the result of a call that nulls the field on its way out.
@@ -2545,11 +2553,15 @@ fn zeroed_parameters(
         .map(|func| (func.name.as_str(), returns_nulled(func, layouts)))
         .collect();
 
+    let direct_only = invoked_only_directly(program, layouts);
     let mut zeroed: rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<(u32, u32)>> = program
         .funcs
         .iter()
         .map(|func| {
             let mut slots = rustc_hash::FxHashSet::default();
+            if !direct_only.contains(func.name.as_str()) {
+                return (func.name.clone(), slots);
+            }
             for (slot, _) in func.params.iter().enumerate() {
                 let Ok(slot) = u32::try_from(slot) else {
                     continue;
@@ -2608,6 +2620,44 @@ fn zeroed_parameters(
             }
         }
     }
+}
+
+/// Functions whose every caller is a direct call in this program.
+///
+/// The callers `zeroed_parameters` can read, and so the only functions it may
+/// say anything about. Not exported, because the code calling an export is not
+/// here. Not in any layout's method table, because a dispatch or a closure call
+/// reaches it through a slot. Not a suspension's resume, because the runtime
+/// calls that. And called directly at least once: an assumption over no callers
+/// is true of every caller only because there are none to check.
+fn invoked_only_directly<'a>(program: &'a Program, layouts: &'a [Layout]) -> rustc_hash::FxHashSet<&'a str> {
+    let mut indirect: rustc_hash::FxHashSet<&str> = layouts
+        .iter()
+        .flat_map(|layout| layout.methods.iter().flatten())
+        .map(String::as_str)
+        .collect();
+    let mut called: rustc_hash::FxHashSet<&str> = rustc_hash::FxHashSet::default();
+    for func in &program.funcs {
+        if func.exported {
+            indirect.insert(func.name.as_str());
+        }
+        for op in &func.values {
+            match &op.kind {
+                OpKind::Call {
+                    callee: super::Callee::Direct(name),
+                    ..
+                } => {
+                    called.insert(name.as_str());
+                }
+                OpKind::Suspend { resume, .. } => {
+                    indirect.insert(resume.as_str());
+                }
+                _ => {}
+            }
+        }
+    }
+    called.retain(|name| !indirect.contains(name));
+    called
 }
 
 /// Parameter slots a function takes ownership of.

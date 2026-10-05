@@ -162,3 +162,38 @@ export function run(n: number): number {
         body(&text, "One__make")
     );
 }
+
+/// An export's caller is not in the program, so an export's parameter is not
+/// a fresh object.
+///
+/// `zeroed_parameters` assumed a parameter's fields zero when every caller it
+/// could see vouched for that -- and an export nothing here calls was vouched
+/// for by nobody, so `app.rows = []` became a store over a zero, skipping the
+/// load and release of what `app.rows` held. Its real caller, C, hands in a
+/// full table: the old array and every row in it leaked. Found as
+/// `ntsRowsDestroy` in the Chromium lane.
+#[test]
+fn an_export_gives_back_what_it_overwrites_in_a_parameter() {
+    let Some(text) = counted(
+        "ownership-export-overwrite",
+        r"
+interface Row { id: number }
+interface App { rows: Row[] }
+export function make(count: number): App {
+  const app: App = { rows: [] };
+  for (let i = 0; i < count; i = i + 1) { app.rows.push({ id: i }); }
+  return app;
+}
+export function reset(app: App): void { app.rows = []; }
+",
+    ) else {
+        eprintln!("SKIP ownership: tsgo is required");
+        return;
+    };
+    let reset = body(&text, "reset");
+    assert!(
+        reset.contains("= v0->rows;") && reset.contains("nts_release"),
+        "`reset` overwrites a field of a parameter its caller filled and must \
+         load and release what the field held; its body is:{reset}"
+    );
+}
