@@ -302,7 +302,7 @@ const selection: Selection[] = execFileSync(
 const rows: Row[] = [];
 // These locale methods still use Node intrinsics in this supplementary adapter.
 // Keep their original cases visible without counting that fallback as evidence.
-const unboundLocaleMethods = new Set(["Array", "BigInt", "Number", "String", "TypedArray"]);
+const unboundLocaleMethods = new Set(["Array", "TypedArray"]);
 let attempted = 0;
 for (const selected of selection) {
   if (!selected.path.includes(filter)) continue;
@@ -319,10 +319,7 @@ for (const selected of selection) {
     row.reason = selected.reason;
     continue;
   }
-  if (
-    profile === "intl" &&
-    unboundLocaleMethods.has(selected.path.split("/")[2]!)
-  ) {
+  if (profile === "intl" && unboundLocaleMethods.has(selected.path.split("/")[2]!)) {
     row.reason = "adapter:locale-method-not-bound";
     continue;
   }
@@ -352,6 +349,7 @@ for (const selected of selection) {
     __intlData: intlProvider?.data,
     __intlNumberOpen: intlProvider?.openNumber,
     __intlCollatorOpen: intlProvider?.openCollator,
+    __intlCaseMap: intlProvider?.mapCase,
     __intlPatternOpen: intlProvider?.openPatterns,
     __intlDateOpen: intlProvider?.openDate,
     __intlRelativeOpen: intlProvider?.openRelative,
@@ -393,6 +391,7 @@ for (const selected of selection) {
   if (profile === "intl") {
     intlProvider!.reset();
     new vm.Script(`
+      "use strict";
       (() => {
       const resolver = new __impl.LocaleResolver(__intlData);
       const timeZones = new __impl.TimeZoneRegistry(__intlData);
@@ -436,6 +435,25 @@ for (const selected of selection) {
         constructor(locales = undefined, options) { super(resolver, __intlSegmentOpen, locales, options); }
         static supportedLocalesOf(locales, options = undefined) { return __impl.supportedLocalesOf(resolver, locales, options); }
       }
+      // Intrinsic receiver-slot projection only. Text, options and formatting
+      // execute the shared entrypoints; Node's locale methods are not called.
+      const numberValue = Number.prototype.valueOf;
+      Number.prototype.toLocaleString = { toLocaleString(locales = undefined, options = undefined) {
+        return __impl.numberToLocaleString(resolver, __intlNumberOpen, numberValue.call(this), locales, options);
+      } }.toLocaleString;
+      const bigintValue = BigInt.prototype.valueOf;
+      BigInt.prototype.toLocaleString = { toLocaleString(locales = undefined, options = undefined) {
+        return __impl.numberToLocaleString(resolver, __intlNumberOpen, bigintValue.call(this), locales, options);
+      } }.toLocaleString;
+      String.prototype.localeCompare = { localeCompare(that, locales = undefined, options = undefined) {
+        return __impl.stringLocaleCompare(resolver, __intlCollatorOpen, this, that, locales, options);
+      } }.localeCompare;
+      String.prototype.toLocaleLowerCase = { toLocaleLowerCase(locales = undefined) {
+        return __impl.stringLocaleCase(__intlData, __intlCaseMap, this, false, locales);
+      } }.toLocaleLowerCase;
+      String.prototype.toLocaleUpperCase = { toLocaleUpperCase(locales = undefined) {
+        return __impl.stringLocaleCase(__intlData, __intlCaseMap, this, true, locales);
+      } }.toLocaleUpperCase;
       globalThis.Intl = {
         NumberFormat, Locale, Collator, DateTimeFormat, ListFormat, RelativeTimeFormat, PluralRules, DurationFormat, DisplayNames, Segmenter,
         getCanonicalLocales(locales) { return __impl.getCanonicalLocales(__intlData, locales); },

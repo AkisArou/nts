@@ -1,5 +1,5 @@
 // Reproducible provider/ABI validation, independent of the Java-8 core runtime.
-// node runtime/ecmascript/tools/icu.ts [--regenerate-bindings] [--all-backends] [--sanitize] [--duration|--calendar|--date-fields]
+// node runtime/ecmascript/tools/icu.ts [--regenerate-bindings] [--all-backends] [--sanitize] [--duration|--calendar|--date-fields|--string-case]
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
@@ -20,7 +20,7 @@ import {
 
 const root = resolve(import.meta.dirname, "../../..");
 const provider = resolve(root, "runtime/ecmascript/providers/icu");
-const out = resolve(root, "target/ecmascript/icu-check");
+const out = resolve(root, process.env.NTS_ICU_CHECK_OUT ?? "target/ecmascript/icu-check");
 const fixture = resolve(root, "tooling/conformance/ecmascript/icu-compiled");
 const nts = process.env.NTS_BIN ?? resolve(root, "target/release/nts");
 const env: NodeJS.ProcessEnv = {
@@ -39,50 +39,55 @@ for (const option of process.argv.slice(2)) {
       "--duration",
       "--calendar",
       "--date-fields",
+      "--string-case",
     ].includes(option)
   )
     throw new Error("Unknown option: " + option);
 }
-const duration = process.argv.includes("--duration");
-const calendar = process.argv.includes("--calendar");
-const dateFields = process.argv.includes("--date-fields");
-if (Number(duration) + Number(calendar) + Number(dateFields) > 1)
-  throw new Error("Choose one ICU witness: --duration, --calendar or --date-fields");
-if (
-  (duration || calendar || dateFields) &&
-  (process.argv.includes("--bench") || process.argv.includes("--android"))
-)
+const witnesses = [
+  {
+    scope: "calendar",
+    configuration: "tsconfig.calendar-data.",
+    javaDriver: "CalendarDrive",
+    cDriver: "calendar-drive.c",
+  },
+  {
+    scope: "duration",
+    configuration: "tsconfig.duration.",
+    javaDriver: "DurationDrive",
+    cDriver: "duration-drive.c",
+  },
+  {
+    scope: "date-fields",
+    configuration: "tsconfig.date-fields.",
+    javaDriver: "TextDrive",
+    cDriver: "text-drive.c",
+  },
+  {
+    scope: "string-case",
+    configuration: "tsconfig.string-case.",
+    javaDriver: "TextDrive",
+    cDriver: "text-drive.c",
+  },
+].filter((witness) => process.argv.includes("--" + witness.scope));
+if (witnesses.length > 1)
+  throw new Error("Choose one ICU witness: --duration, --calendar, --date-fields or --string-case");
+const witness = witnesses[0] ?? {
+  scope: "",
+  configuration: "tsconfig.",
+  javaDriver: "Drive",
+  cDriver: "drive.c",
+};
+const witnessScope = witness.scope;
+const { configuration, javaDriver, cDriver } = witness;
+const duration = witnessScope === "duration";
+const calendar = witnessScope === "calendar";
+const dateFields = witnessScope === "date-fields";
+const stringCase = witnessScope === "string-case";
+if (witnessScope !== "" && (process.argv.includes("--bench") || process.argv.includes("--android")))
   throw new Error(
     "This ICU witness uses its own driver; run benchmarks/Android on the general fixture",
   );
-const configuration = calendar
-  ? "tsconfig.calendar-data."
-  : duration
-    ? "tsconfig.duration."
-    : dateFields
-      ? "tsconfig.date-fields."
-      : "tsconfig.";
-const javaDriver = calendar
-  ? "CalendarDrive"
-  : duration
-    ? "DurationDrive"
-    : dateFields
-      ? "DateFieldsDrive"
-      : "Drive";
-const cDriver = calendar
-  ? "calendar-drive.c"
-  : duration
-    ? "duration-drive.c"
-    : dateFields
-      ? "date-fields-drive.c"
-      : "drive.c";
-const witnessScope = calendar
-  ? "calendar"
-  : duration
-    ? "duration"
-    : dateFields
-      ? "date-fields"
-      : "";
 if (process.argv.includes("--pinned-native")) {
   env.PKG_CONFIG_LIBDIR = resolve(root, "target/ecmascript/icu-native-pin/install/lib/pkgconfig");
 }
@@ -262,12 +267,14 @@ for (const [name, source] of [
   ["unicode", resolve(root, "runtime/c/nts_unicode.c")],
   ["provider", resolve(provider, "c/nts_icu.c")],
   ["collator", resolve(provider, "c/nts_icu_collator.c")],
+  ["case", resolve(provider, "c/nts_icu_case.c")],
   ["relative", resolve(provider, "c/nts_icu_relative.c")],
   ["display", resolve(provider, "c/nts_icu_display.c")],
   ["segment", resolve(provider, "c/nts_icu_segment.c")],
 ] as const) {
   if (calendar && name !== "unicode" && name !== "provider") continue;
   if (dateFields && name !== "unicode" && name !== "provider") continue;
+  if (stringCase && name !== "unicode" && name !== "provider" && name !== "case") continue;
   const object = resolve(native, name + ".o");
   run(cc, [
     "-std=c11",
@@ -286,6 +293,7 @@ for (const [name, source] of [
   providerObjects.push(object);
 }
 for (const name of ["locale", "number_range", "date_pattern", "date", "plural", "calendar"]) {
+  if (stringCase) continue;
   if (calendar && name !== "calendar") continue;
   if (dateFields && name !== "date" && name !== "date_pattern") continue;
   const object = resolve(native, name + ".o");
@@ -478,6 +486,7 @@ if (dateFields)
     "interval-data:order:fields:fallback:connector",
     "calendar-symbols:era:month-code:ordinal-month",
   ].join("\n");
+if (stringCase) expected = "case-mapping:context:utf16:growth:20000";
 if (duration)
   expected = [
     "1 yr, 2 mths, 3 wks, 4 days, 5 hr, 6 min, 7 sec, 8 ms, 9 μs, 10 ns",
@@ -549,7 +558,9 @@ console.log(
         ? "compiled-ICU-duration-text"
         : dateFields
           ? "compiled-ICU-date-fields"
-          : "compiled-ICU-ABI",
+          : stringCase
+            ? "compiled-ICU-case-mapping"
+            : "compiled-ICU-ABI",
     icu: version,
     backends: [...nativeResults.map((result) => result.backend), "jvm"],
     ...(calendar
@@ -579,31 +590,38 @@ console.log(
               intervalPatternData: true,
               compiledPublicApi: false,
             }
-          : {
-              exactDecimal: true,
-              utf16Parts: true,
-              dst: true,
-              temporalTimeZones: true,
-              temporalTimeZoneCache: true,
-              temporalZonedISOArithmetic: true,
-              temporalTimeZoneErrors: false,
-              numberOptions: true,
-              numberRanges: true,
-              localeData: true,
-              localePreferences: true,
-              collation: true,
-              datePatterns: true,
-              dateText: true,
-              dateRanges: true,
-              timeZoneIdentifiers: true,
-              supportedValues: true,
-              primaryTimeZoneIdentifiers: true,
-              displayNames: true,
-              segmenter: true,
-              listPatterns: true,
-              relativeTime: true,
-              pluralRules: true,
-            }),
+          : stringCase
+            ? {
+                contextualCasing: true,
+                utf16Transport: true,
+                outputGrowth: true,
+                compiledPublicApi: false,
+              }
+            : {
+                exactDecimal: true,
+                utf16Parts: true,
+                dst: true,
+                temporalTimeZones: true,
+                temporalTimeZoneCache: true,
+                temporalZonedISOArithmetic: true,
+                temporalTimeZoneErrors: false,
+                numberOptions: true,
+                numberRanges: true,
+                localeData: true,
+                localePreferences: true,
+                collation: true,
+                datePatterns: true,
+                dateText: true,
+                dateRanges: true,
+                timeZoneIdentifiers: true,
+                supportedValues: true,
+                primaryTimeZoneIdentifiers: true,
+                displayNames: true,
+                segmenter: true,
+                listPatterns: true,
+                relativeTime: true,
+                pluralRules: true,
+              }),
     sanitize: sanitize.length > 0,
     ...(sanitize.length > 0 ? { leakDetection: "RC; NoGC intentionally retains its heap" } : {}),
   }),

@@ -6,17 +6,25 @@
 #include <unicode/unumberformatter.h>
 #include <unicode/ufieldpositer.h>
 #include <stdlib.h>
+#include <stdatomic.h>
 
 bool nts_icu_versions_match(void) {
+  // ICU data are fixed for the provider's lifetime. Match ICU4J's one-time
+  // verification: repeated string operations need only an atomic flag read.
+  // Failed initialization is not cached, so configuring data can be retried.
+  static atomic_bool verified = ATOMIC_VAR_INIT(false);
+  if (atomic_load_explicit(&verified, memory_order_acquire)) return true;
   UVersionInfo icu, unicode, cldr;
   UErrorCode status = U_ZERO_ERROR;
   u_getVersion(icu);
   u_getUnicodeVersion(unicode);
   ulocdata_getCLDRVersion(cldr, &status);
   const char *tzdb = ucal_getTZDataVersion(&status);
-  return U_SUCCESS(status) && icu[0] == 78 && icu[1] == 3 &&
+  const bool matches = U_SUCCESS(status) && icu[0] == 78 && icu[1] == 3 &&
          unicode[0] == 17 && unicode[1] == 0 && cldr[0] == 48 &&
          cldr[1] == 0 && tzdb != NULL && strcmp(tzdb, "2026a") == 0;
+  if (matches) atomic_store_explicit(&verified, true, memory_order_release);
+  return matches;
 }
 
 static void close_calendar(void *calendar, size_t data) {

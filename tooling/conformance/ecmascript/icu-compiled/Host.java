@@ -8,6 +8,7 @@ import nts.intl.IcuLocaleData;
 import nts.intl.IcuNumberData;
 import nts.intl.IcuNumberFormatter;
 import nts.intl.IcuCollator;
+import nts.intl.IcuCaseMapping;
 import nts.intl.IcuDatePatterns;
 import nts.intl.IcuDateFormatter;
 import nts.intl.IcuRelativeFormatter;
@@ -66,6 +67,7 @@ public final class Host {
                             break;
                         }
                         case "canonicalize": result = data.canonicalize(first); break;
+                        case "mapCase": result = IcuCaseMapping.mapCase(first, decode(fields[2]), Boolean.parseBoolean(decode(fields[3]))); break;
                         case "maximize": result = data.maximize(first); break;
                         case "minimize": result = data.minimize(first); break;
                         case "defaultLocale": result = data.defaultLocale(); break;

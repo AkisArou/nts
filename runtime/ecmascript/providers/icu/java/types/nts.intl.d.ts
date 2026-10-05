@@ -16,6 +16,11 @@ declare module "java:nts.intl" {
     toEpochDay(a0: number, a1: number, a2: number): number;
   }
 
+  /** nts.intl.IcuCaseMapping Final: cannot be extended. */
+  export class IcuCaseMapping {
+    static mapCase(a0: string, a1: string, a2: boolean): string;
+  }
+
   /** nts.intl.IcuCollator Final: cannot be extended. */
   export class IcuCollator {
     constructor(a0: string, a1: number, a2: boolean, a3: boolean, a4: number);

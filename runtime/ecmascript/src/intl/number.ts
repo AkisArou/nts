@@ -1,5 +1,6 @@
 import { FieldSpans, NumberPartBuffer } from "./parts.ts";
 import type { NumberFormatterPrimitive } from "./number-data.ts";
+import { mathematicalValue } from "./mathematical-value.ts";
 export type { NumberFormatterPrimitive } from "./number-data.ts";
 
 // Typed integration API. ECMA-402 construction, options, locale resolution and
@@ -20,6 +21,10 @@ export class NumberFormatter<P extends NumberFormatterPrimitive> {
   }
   formatDecimal(value: string): string {
     return this.primitive.formatDecimal(value, false, value.startsWith("-"));
+  }
+  formatValue(input?: number | bigint | Intl.StringNumericLiteral): string {
+    const value = mathematicalValue(input);
+    return typeof value === "string" ? this.formatDecimal(value) : this.format(value);
   }
   formatToParts(value: number): Pick<Intl.NumberFormatPart, "type" | "value">[] {
     const text = this.primitive.format(value, true, value < 0 || Object.is(value, -0));

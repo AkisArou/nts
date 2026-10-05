@@ -3,6 +3,7 @@
 #include "nts_runtime.h"
 
 bool nts_icu_versions_match(void);
+NtsString *nts_icu_string_case(NtsString *locale, NtsString *input, bool upper);
 NtsHeader *nts_icu_calendar_open(NtsString *identifier);
 bool nts_icu_calendar_load(NtsHeader *handle, double epoch_day);
 double nts_icu_calendar_field(NtsHeader *handle, double index);

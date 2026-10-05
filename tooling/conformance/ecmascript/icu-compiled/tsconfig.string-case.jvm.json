@@ -1,0 +1,7 @@
+{
+  "extends": "../../../../tsconfig.fixtures.json",
+  "include": [
+    "src/string-case-jvm.ts",
+    "../../../../runtime/ecmascript/providers/icu/java/types/*.d.ts"
+  ]
+}

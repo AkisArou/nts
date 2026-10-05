@@ -118,9 +118,10 @@ and artifact-size evidence before becoming another provider.
    containment and iteration now exist through public C/JVM primitives.
    Locale's calendar/hour/week fallback and country zone identity now share
    cached algorithms. Common iterator helpers and compiled public acceptance
-   remain open. Number/BigInt localization, String locale comparison/casing and
-   Array/TypedArray locale-method binding also remain open; they must consume
-   the shared services rather than execute a host implementation in validation.
+   remain open. Number/BigInt localization and String locale comparison/casing
+   now consume the shared services; their compiled standard bindings remain open.
+   Array/TypedArray locale-method binding also remains open, and its original
+   cases are retained as unsupported rather than execute Node container methods.
 8. **Packaging and performance.** Finish reachability-controlled acquisition,
    platform/device acceptance and construction, format, parts, range, startup,
    heap and artifact-size measurements.
@@ -1171,3 +1172,86 @@ retain the remaining compiled boundaries; they are not covered by the text gate.
 After a Java provider API change, use `--regenerate-bindings` to refresh the
 declarations and binding table together. Never format the generated declarations
 independently: the binding table records byte offsets. The ICU tool checks drift.
+
+### Locale convenience methods checkpoint — 2026-10-05
+
+Number and BigInt localization call the NumberFormat mathematical-value and
+formatting kernel directly, preserving exact BigInt decimal text. The
+NumberFormat implementation now lives in its own service module; the builtin
+barrel re-exports it. Convenience calls avoid allocating the bound format
+callback. NumberFormat's retained callback captures only its formatter kernel;
+Collator's captures only its primitive. String locale comparison converts both
+operands before reading locales/options and calls the configured collator
+without allocating a public bound callback.
+
+String locale casing validates the entire canonical locale list, selects only
+its first entry (or the environmental default), and applies prefix selection
+for ICU's tr/az/lt/el/hy lower/upper tailorings. Unknown languages use the root
+mapping. ICU4C's public length-based string APIs and ICU4J's public UCharacter
+APIs supply contextual Unicode mappings. No locale matcher, new Unicode table,
+JNI, descriptor repairs, WeakMap or class implements clause was introduced.
+The C primitive borrows wide text directly, widens short Latin-1 on the stack,
+and grows output only when needed. Explicit lengths preserve embedded NUL and
+lone surrogates. Java reuses the immutable tailoring locale values.
+
+Original Test262 evidence at the unchanged pinned suite revision:
+
+- Intl Number 7/7, BigInt 11/11 and String 19/19; all 37 previously unbound cases
+  now pass the shared algorithms in the host adapter.
+- The built-in Number/BigInt/String comparison/casing slices pass 72/72 original
+  cases: 4 + 1 + 13 + 28 + 26 respectively.
+- The full 3,357-row Intl host run is 3,169 pass, 185 fail, 3 unsupported. Compared
+  with the prior guarded run, there are no pass regressions, missing rows or
+  source-hash changes. Only Array's two and TypedArray's one locale-method cases
+  remain unbound. Existing failures remain visible.
+- After Java locale reuse, the original Intl String slice remains 19/19.
+
+Receipts are `target/ecmascript/audit/locale-methods-*-test262.{jsonl,log}` and
+`locale-methods-intl-comparison.json`. The host adapter projects Number/BigInt
+receiver slots with intrinsic valueOf; it never calls Node locale formatters,
+comparison or casing. This is supplementary evidence, not compiled conformance.
+
+The new `--string-case` provider gate passes C, C-RC, LLVM, LLVM-RC and JVM with
+ASan/UBSan, RC leak detection and JVM verification. It exercises contextual
+mapping, embedded NUL, lone surrogates, supplementary characters, exact buffer
+boundaries, output expansion and 20,000 repeated operations per backend. It
+checks Java binding drift; generated declarations and byte-offset tables were
+regenerated together. The reused text driver also passes the date-fields gate
+on C-RC and JVM after the verification change. Strict source and both provider
+configurations typecheck. The repository's oxlint executable is unavailable in
+this environment; no lint pass is claimed.
+
+```sh
+NTS_BIN=target/debug/nts NTS_ICU_CHECK_OUT=target/ecmascript/audit/locale-methods-icu-check node runtime/ecmascript/tools/icu.ts --pinned-native --string-case --all-backends --sanitize
+```
+
+Performance was measured before changing the hot path. Native repeated pin
+verification cost about 131 ns of the short casing operation's 198 ns. Successful
+verification is now cached with a C11 atomic flag, matching ICU4J's lifetime
+verification; failed initialization is retried. Eight concurrent threads pass
+800,000 cold/hot checks; a linker-wrapped public version query reporting ICU 77
+is rejected on all 800,000 checks. The supplementary warmed RC casing probe now
+measures 68–69 ns (direct ICU plus the same managed result allocation: 54–55 ns).
+Java's equivalent probe changes from 254–269 ns to 138–141 ns by reusing locale
+values (direct ICU: 136–144 ns). Three alternating rounds use a pinned CPU and
+one million calls per sample. These are provider probes, excluding shared list
+conversion, startup, public compiler bindings and application artifact size.
+The ordinary-header native mapper has 721 bytes of code and 104 bytes of unwind
+information; its Java class is 1,380 bytes. Linked ICU data are excluded. Raw
+measurements and scope are retained in `locale-methods-case-performance/`.
+
+Full compiled public acceptance remains red at shipping compiler SHA-256
+`a406f657375a9f3fba72d93cfd5cd336201a35009996e6608f283cd9bada3dc8`
+and checker SHA-256
+`4ec6b1a5235e473fe20e6cef4972dfc867b6ea1b9fad1351a31d8557d66e7776`.
+The actual stringLocaleCase entrypoint retains canonical Intl.LocalesArgument
+and is refused for that union plus implicit provider dispatch/generic layout.
+Both emission commands exit zero while diagnosing and omitting main; those
+receipts are failures, not successful compiled bindings. Main/worker B owns
+this boundary. No reduced public input type, implements clause or erased cast
+is used to make the primitive gate appear to cover it.
+
+One retained DateTimeFormat failure is a data-dependent literal expectation:
+numbering-system.js expects an ASCII space before AM in the hanidec case, while
+pinned ICU returns U+202F. The digits and widths agree; the original failure is
+retained without replacing localized punctuation to satisfy that literal.

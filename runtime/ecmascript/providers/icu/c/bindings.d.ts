@@ -1,4 +1,6 @@
 declare module "c:nts_icu" {
+  /** @ntsAbi managed */
+  export function nts_icu_string_case(locale: string, input: string, upper: boolean): string | null;
   export type IcuCalendarHandle = import("./handle.ts").IcuCalendarHandle;
   /** @ntsAbi managed */
   export function nts_icu_calendar_open(identifier: string): IcuCalendarHandle | null;

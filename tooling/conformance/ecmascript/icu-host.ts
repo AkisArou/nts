@@ -404,6 +404,8 @@ export function icuHost(root: string) {
     nowNanoseconds: () => BigInt(required("nowNanoseconds")),
     openNumber,
     openCollator,
+    mapCase: (locale: string, value: string, upper: boolean): string =>
+      required("mapCase", locale, value, upper),
     openPatterns,
     openDate,
     openRelative,

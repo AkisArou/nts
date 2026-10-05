@@ -1,7 +1,7 @@
 import { LocaleResolver } from "./locale.ts";
 import { LocaleIdentifier, validUnicodeType } from "./locale-id.ts";
 import { getCanonicalLocales } from "./locale-list.ts";
-import { optionalString, stringOption } from "./options.ts";
+import { optionalString, stringOption, stringValue } from "./options.ts";
 import type { CollationData } from "./locale-data.ts";
 import type { CollatorPrimitive } from "./collation.ts";
 
@@ -162,14 +162,16 @@ export class NtsCollator<D extends CollationData, P extends CollatorPrimitive> {
     this.#configuration = config;
   }
   get compare(): Intl.Collator["compare"] {
-    if (this.#bound === undefined)
-      this.#bound = (one: string, two: string): number => {
-        if (typeof one === "symbol") throw new TypeError("Collator string inputs reject Symbols");
-        const first = String(one);
-        if (typeof two === "symbol") throw new TypeError("Collator string inputs reject Symbols");
-        return this.#primitive.compare(first, String(two));
-      };
+    if (this.#bound === undefined) {
+      const primitive = this.#primitive;
+      this.#bound = (one: string, two: string): number =>
+        primitive.compare(stringValue(one), stringValue(two));
+    }
     return this.#bound;
+  }
+  // localeCompare converts both operands before constructing its collator.
+  compareStrings(one: string, two: string): number {
+    return this.#primitive.compare(one, two);
   }
   resolvedOptions(): Intl.ResolvedCollatorOptions {
     const config = this.#configuration;
@@ -183,4 +185,25 @@ export class NtsCollator<D extends CollationData, P extends CollatorPrimitive> {
       caseFirst: config.caseFirst,
     };
   }
+}
+
+export function stringLocaleCompare<D extends CollationData, P extends CollatorPrimitive>(
+  resolver: LocaleResolver<D>,
+  open: (
+    locale: string,
+    sensitivity: number,
+    punctuation: boolean,
+    numeric: boolean,
+    caseFirst: number,
+  ) => P,
+  value: string,
+  other: string | undefined,
+  locales: Intl.LocalesArgument = undefined,
+  options?: Readonly<Intl.CollatorOptions>,
+): number {
+  if (value === null || value === undefined)
+    throw new TypeError("localeCompare requires a receiver");
+  const one = stringValue(value);
+  const two = other === undefined ? "undefined" : stringValue(other);
+  return new NtsCollator(resolver, open, locales, options).compareStrings(one, two);
 }

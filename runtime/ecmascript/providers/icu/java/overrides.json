@@ -1,4 +1,7 @@
 {
+  "nts.intl.IcuCaseMapping": {
+    "nullability": { "mapCase(Ljava/lang/String;Ljava/lang/String;Z)Ljava/lang/String;": "nonnull" }
+  },
   "nts.intl.IcuCalendar": {
     "nullability": { "monthCode()Ljava/lang/String;": "nonnull" }
   },
