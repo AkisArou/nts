@@ -63,6 +63,25 @@ pub(super) fn empty() -> String {
     format!("{PRELUDE}{RUNTIME_INCLUDE}\n#endif /* NTS_PROGRAM_H */\n")
 }
 
+/// The comment above an export's prototype: its published name, its C
+/// symbol, and the parameters it takes the caller's reference to, which a C
+/// caller must hand over rather than lend.
+fn export_comment(published: &str, internal: &str, consumed: Option<&FxHashSet<u32>>) -> String {
+    let display = published.escape_default().to_string().replace("*/", "* /");
+    let mut slots: Vec<u32> = consumed.map(|slots| slots.iter().copied().collect()).unwrap_or_default();
+    slots.sort_unstable();
+    let handover = if slots.is_empty() {
+        String::new()
+    } else {
+        let parameters: Vec<String> = slots.iter().map(|slot| format!("v{slot}")).collect();
+        format!(
+            " Takes over the caller's reference to {}: pass one of your own, with nts_retain or the handle family's retain.",
+            parameters.join(", ")
+        )
+    };
+    format!("/* Export: {display}. C symbol: {}.{handover} */", c_identifier(internal))
+}
+
 pub(super) fn emit(
     program: &Program,
     defined: &FxHashSet<String>,
@@ -101,6 +120,13 @@ pub(super) fn emit(
     );
     names.extend(program.layouts.iter().map(object_type_name));
     let next_entries = next_exports(program, defined, &mut names);
+    // What an export takes over is part of how C must call it, so the header
+    // says so: the N-API glue reads the same summary and hands its reference
+    // over, and a hand-written caller has nothing else to read it from. An
+    // export that stores a parameter keeps the caller's reference rather than
+    // taking one of its own, and a caller that passes a borrowed one has it
+    // released once more than it was taken.
+    let ownership = nts_core::hir::own::summarize(program, &program.layouts);
     for ((internal, published), next) in program.public_api.iter().zip(&next_entries) {
         let Some(func) = program
             .funcs
@@ -130,14 +156,7 @@ pub(super) fn emit(
                 )?;
                 params.push(format!("{ty} v{index}"));
             }
-            let display = published.escape_default().to_string().replace("*/", "* /");
-            writer.line(
-                &func.origin,
-                format!(
-                    "/* Export: {display}. C symbol: {}. */",
-                    c_identifier(internal)
-                ),
-            );
+            writer.line(&func.origin, export_comment(published, internal, ownership.consumes(internal)));
             writer.line(
                 &func.origin,
                 format!("{};", format_signature(internal, &returns, &params, true)),
