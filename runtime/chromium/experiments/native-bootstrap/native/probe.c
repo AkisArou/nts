@@ -534,6 +534,34 @@ void nts_chromium_rows_destroy(NtsChromiumRows* rows) {
   free(rows);
 }
 
+typedef struct KernelRun {
+  NtsDomContext* context;
+  uint32_t kernel;
+  double iterations;
+  double result;
+} KernelRun;
+static void run_kernel(void* state) {
+  KernelRun* run = state;
+  run->result = run->kernel == 0
+                    ? ntsKernelCreateElements(run->context, run->iterations)
+                    : ntsKernelCounterTrees(run->context, run->iterations);
+}
+double nts_chromium_kernel_run(NtsChromiumProbe* probe,
+                               NtsDomContext* context,
+                               uint32_t kernel,
+                               uint32_t iterations,
+                               size_t* allocations) {
+  ProbeScope scope = enter(probe);
+  nts_counting_reset();
+  KernelRun run = {context, kernel, iterations, -1};
+  if (nts_blink_dom_entry(context, run_kernel, &run) || nts_raising() ||
+      run.result < 0)
+    abort();
+  *allocations = nts_counted_allocations();
+  leave(&scope);
+  return run.result;
+}
+
 /* The general renderer host: Blink owns microtasks and checkpoints, and
    cycle collection runs in idle time instead of at every checkpoint, which
    costs a walk of everything reachable from the candidates -- the whole

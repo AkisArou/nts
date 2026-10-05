@@ -344,6 +344,52 @@ The run also found the renderer harness leaking its own `tbody` query lease
 assert zero leases after destroy. Evidence: `target/chromium/perf/
 rows-c-{layout,trace,noincremental,frames,frames-trace}/`.
 
+## Binding kernels from native-typescript
+
+native-typescript (`~/Projects/native-typescript`, ScriptC) measured
+create-element and detached-counter-tree at 0.56-0.92x V8. The same two
+kernels now run here (`--workload kernels`, `src/kernels.ts`,
+`kernels_benchmark.cc`, `kernels-benchmark-v8` with its `v8.js` kernels
+unchanged), in three lanes of one build: Blink C++ written as its host
+wrote it, the compiled program, and page JavaScript. 20,000 iterations per
+sample, one posted task per sample, `--cpu 4`, median ns per operation:
+
+| Kernel | Shape | C++ | Compiled | V8 | /C++ | /V8 | ScriptC /V8 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| create-element | loop | 55.6 | 81.9 | 115 | 1.47 | 0.71 | 0.635 |
+| create-element | per-call | 48.4 | 133.1 | 140 | 2.75 | 0.95 | 0.560 |
+| detached-counter-tree | loop | 329.1 | 262.4 | 305 | 0.80 | 0.86 | 0.868 |
+| detached-counter-tree | per-call | 323.5 | 356.8 | 300 | 1.10 | 1.19 | 0.920 |
+
+Why either native lane beats V8 here and not in the rows workload: these
+kernels are almost all binding. V8 creates a JS wrapper for every node
+`createElement` returns and checks every argument; the native lanes create
+none. In rows, Blink's cloning, insertion and layout dominate and both
+engines wait on Blink.
+
+Where this ABI differs from ScriptC's, by the numbers:
+
+- **A lease per returned node: about 26 ns.** create-element is 82 ns against
+  ScriptC's 62 over the same ~55 ns floor. ScriptC passed a node the compiler
+  proved frame-bounded as the raw Blink pointer (Oilpan finds it by stack
+  scan) and registered only escaping ones; here every handle goes through
+  the traced registry and is released by hand. The counter tree pays it
+  twice. That is the case for frame-bounded handles in the compiler
+  (request 2).
+- **Literal text is shared, not built.** The counter tree beats the C++
+  floor (262 against 329 ns): the C++ lane, as written, builds
+  `AtomicString("button")` and two Strings from literals every iteration,
+  while the compiled lane passes an interned tag and literal views that the
+  adapter copies once per document. (Inferred from the code; no lane yet
+  isolates it.)
+- **Per-call pays a native entry.** ScriptC's per-call called the compiled
+  function directly with the realm set once; here each call is a native
+  callback -- environment entry, microtask and handle scopes, and the
+  kernel's own interning -- about 50-95 ns. That is what an event handler
+  costs here, but it is not what ScriptC's per-call measured.
+
+Evidence: `target/chromium/perf/kernels-c/`.
+
 ## RC defects found by this lane and fixed in the compiler
 
 Measured with `tooling/memory`'s harness on the unmodified compiler (main

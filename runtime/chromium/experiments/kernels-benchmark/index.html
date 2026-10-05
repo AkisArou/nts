@@ -1,0 +1,11 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>NTS kernels benchmark</title>
+<style>
+body { font: 14px system-ui; padding: 16px; }
+#benchmark-result::after { content: attr(data-state); }
+</style>
+<h1>Kernels: compiled TypeScript on the entered DOM ABI</h1>
+<p>native-typescript's create-element and detached-counter-tree. Application scripts: zero.</p>
+<label><input type="checkbox" id="native-kernels-run"> Run kernels</label>
+<output id="benchmark-result" data-state="initializing"></output>

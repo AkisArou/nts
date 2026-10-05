@@ -64,7 +64,7 @@ function stage(input: string, path: string): void {
   copyFileSync(input, destination);
   files[`nts/${path}`] = hash(destination);
 }
-for (const file of ["BUILD.gn", "probe.gni", "probe.c", "probe.h", "probe_main.cc", "probe_observer.cc", "probe_observer.h", "dom_bridge.cc", "dom_bridge.h", "dom_bridge_bindings.h", "binding_benchmark.cc", "binding_benchmark.h", "rows_benchmark.cc", "rows_benchmark.h"]) {
+for (const file of ["BUILD.gn", "probe.gni", "probe.c", "probe.h", "probe_main.cc", "probe_observer.cc", "probe_observer.h", "dom_bridge.cc", "dom_bridge.h", "dom_bridge_bindings.h", "binding_benchmark.cc", "binding_benchmark.h", "rows_benchmark.cc", "rows_benchmark.h", "kernels_benchmark.cc", "kernels_benchmark.h"]) {
   stage(resolve(fixture, "native", file), file);
 }
 stage(resolve(fixture, "native/ffi/dom_abi.h"), "dom_abi.h");

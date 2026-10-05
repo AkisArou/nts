@@ -11,6 +11,8 @@ source_set("dom_bridge") {
     "//nts/dom_bridge_bindings.h",
     "//nts/binding_benchmark.cc",
     "//nts/binding_benchmark.h",
+    "//nts/kernels_benchmark.cc",
+    "//nts/kernels_benchmark.h",
     "//nts/rows_benchmark.cc",
     "//nts/rows_benchmark.h",
   ]

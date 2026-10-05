@@ -1,0 +1,77 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>V8 kernels benchmark</title>
+<style>
+body { font: 14px system-ui; padding: 16px; }
+#benchmark-result::after { content: attr(data-state); }
+</style>
+<h1>Kernels: ordinary page JavaScript</h1>
+<p>native-typescript's benchmarks/chromium/pages/v8.js kernels, unchanged, with normal V8 JIT.</p>
+<label><input type="checkbox" id="v8-kernels-run"> Run kernels</label>
+<output id="benchmark-result" data-state="initializing"></output>
+<script>
+// Ordinary application source, loaded by the HTML parser. CDP only supplies
+// input and reads results; it does not evaluate the measured application.
+function createElements(count) {
+  let checksum = 0;
+  for (let index = 0; index < count; index += 1) {
+    document.createElement("div");
+    checksum += 1;
+  }
+  return checksum;
+}
+
+function createDetachedCounterTrees(count) {
+  let checksum = 0;
+  for (let index = 0; index < count; index += 1) {
+    const button = document.createElement("button");
+    const label = document.createTextNode("Count: 0");
+    button.appendChild(label);
+    label.data = "Count: 1";
+    checksum += 1;
+  }
+  return checksum;
+}
+
+// The same table as kernels_benchmark.cc: 20,000 iterations per sample,
+// three discarded, twenty kept, one posted task per sample. `per-call` calls
+// the kernel with 1 from a loop, as native-typescript's v8.js does.
+const iterations = 20000, warm = 3, measured = 20;
+const kernels = [['create-element', createElements], ['detached-counter-tree', createDetachedCounterTrees]];
+function nextTask() {
+  return new Promise(resolve => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      channel.port1.close();
+      resolve();
+    };
+    channel.port2.postMessage(null);
+  });
+}
+const output = document.querySelector('#benchmark-result');
+document.querySelector('#v8-kernels-run').addEventListener('input', async () => {
+  const samples = [];
+  for (const [kernel, run] of kernels) {
+    for (const shape of ['loop', 'per-call']) {
+      for (let round = 0; round < warm + measured; ++round) {
+        await nextTask();
+        let checksum = 0;
+        const start = performance.now();
+        if (shape === 'loop') {
+          checksum = run(iterations);
+        } else {
+          for (let index = 0; index < iterations; index += 1) checksum += run(1);
+        }
+        const elapsedNs = (performance.now() - start) * 1e6;
+        if (checksum !== iterations) throw Error(`${kernel} checksum ${checksum}`);
+        if (round < warm) continue;
+        samples.push({kernel, shape, lane: 'v8', round: round - warm, iterations, nsPerOperation: elapsedNs / iterations});
+      }
+    }
+  }
+  output.setAttribute('data-result', JSON.stringify({samples, status: 0,
+    timing: 'Ordinary page script; performance.now around each sample; one posted task per sample'}));
+  output.setAttribute('data-state', 'done');
+});
+output.setAttribute('data-state', 'ready');
+</script>

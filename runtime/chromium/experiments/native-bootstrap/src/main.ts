@@ -3,6 +3,7 @@
 export { ntsChromiumDomProgram, ntsChromiumDomCounter } from "./dom.ts";
 export { ntsChromiumPrepareBenchmark, ntsChromiumBenchmarkLoop } from "./dom.ts";
 export { ntsRowsCreate, ntsRowsOperate, ntsRowsDestroy } from "./rows.ts";
+export { ntsKernelCreateElements, ntsKernelCounterTrees } from "./kernels.ts";
 export function ntsChromiumProbe(input: number): number {
   return input * input + 1;
 }

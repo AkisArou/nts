@@ -97,6 +97,16 @@ NtsChromiumRowsResult nts_chromium_rows_operate(NtsChromiumRows* rows,
                                                 uint32_t count);
 void nts_chromium_rows_destroy(NtsChromiumRows* rows);
 
+/* The binding kernels (src/kernels.ts): kernel 0 creates detached divs,
+   kernel 1 detached counter trees. One call is one native callback that runs
+   `iterations` of the kernel; returns the checksum, aborts on a raised
+   error. `allocations` receives the NTS allocations the call made. */
+double nts_chromium_kernel_run(NtsChromiumProbe* probe,
+                               NtsDomContext* context,
+                               uint32_t kernel,
+                               uint32_t iterations,
+                               size_t* allocations);
+
 #ifdef __cplusplus
 }
 #endif

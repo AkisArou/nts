@@ -14,6 +14,10 @@ interface EntrySample { entry: string; round: number; length: number; operations
 interface Measurements { samples: Sample[]; entrySamples?: EntrySample[]; status: number; finalLength: number; payload: string; timing: string; exactUnits?: number[] }
 // The rows workload (--workload rows): one sample per batch of an operation.
 interface RowsSample { case: string; round: number; batch: number; elapsedNs: number; nsPerOperation: number; rows: number; ntsAllocations?: number; ntsLiveObjects?: number; idleCollectNs?: number; layoutNs?: number }
+// The kernels workload (--workload kernels): native-typescript's binding
+// kernels, one sample per task, in blink-intrinsic, compiled and v8 lanes.
+interface KernelsSample { kernel: string; shape: string; lane: string; round: number; iterations: number; nsPerOperation: number; ntsAllocations?: number }
+interface KernelsMeasurements { samples: KernelsSample[]; status: number; liveLeases?: number; timing: string }
 interface RowsMeasurements { samples: RowsSample[]; status: number; finalRows: number; liveLeases?: number; leasesAfterDestroy?: number; dom?: string; structure?: string; timing: string }
 type Mode = "native" | "v8";
 interface LaunchResult { result: Measurements; executable: string; fixture: string; args: string[]; rendererPid: number; rendererStatus: string; loadBefore: string; loadAfter: string }
@@ -24,7 +28,7 @@ const backend = process.argv[4];
 assert(backend === "c" || backend === "llvm", "Usage: benchmark.ts <nts_shell> <output> <c|llvm> [--allow-debug] [--cpu N] [--runs N] [--workload binding|rows] [--collection idle|checkpoint] [--trace-gc]");
 let runs = 6;
 let cpu: number | undefined;
-let workload: "binding" | "rows" = "binding";
+let workload: "binding" | "rows" | "kernels" = "binding";
 let collection: "checkpoint" | "idle" = "idle";
 // --trace-gc: V8's GC trace in both launches. Oilpan collects inside V8's
 // unified heap, so its mark-compacts are in the same lines.
@@ -53,7 +57,7 @@ for (let i = 5; i < process.argv.length; ++i) {
   }
   else if (option === "--workload") {
     const value = process.argv[++i];
-    assert(value === "binding" || value === "rows", "--workload must be binding or rows");
+    assert(value === "binding" || value === "rows" || value === "kernels", "--workload must be binding, rows or kernels");
     workload = value;
   }
   else throw new Error(`Unknown option: ${option}`);
@@ -207,7 +211,7 @@ async function measure(run: number, mode: Mode): Promise<LaunchResult> {
     assert((rendererStatus.match(/^NSpid:\s+(.+)$/m)?.[1].split(/\s+/).length ?? 0) > 1);
     assert.equal(await evaluate<number>("document.scripts.length"), mode === "native" ? 0 : 1);
     const loadBefore = (await readFile("/proc/loadavg", "utf8")).trim();
-    const selector = `#${mode}-${workload === "binding" ? "benchmark" : "rows"}-run`;
+    const selector = `#${mode}-${workload === "binding" ? "benchmark" : workload}-run`;
     const point = await evaluate<{x:number;y:number}>(`(() => {const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
     if (trace) await cdp("Tracing.start", {transferMode:"ReturnAsStream", traceConfig:{recordMode:"recordAsMuchAsPossible",
       includedCategories:["devtools.timeline","disabled-by-default-devtools.timeline","blink.user_timing","v8.gc","disabled-by-default-v8.gc","blink_gc","cppgc"]}});
@@ -227,6 +231,18 @@ async function measure(run: number, mode: Mode): Promise<LaunchResult> {
     }
     const result = JSON.parse(await evaluate<string>("document.querySelector('#benchmark-result').getAttribute('data-result')")) as Measurements;
     assert.equal(result.status, 0);
+    if (workload === "kernels") {
+      const kernels = result as unknown as KernelsMeasurements;
+      // Two kernels x two shapes x twenty samples, per lane: two lanes native.
+      assert.equal(kernels.samples.length, mode === "native" ? 160 : 80);
+      if (mode === "native") {
+        assert.equal(kernels.liveLeases, 0, "every kernel lease must be released");
+        for (const sample of kernels.samples.filter(sample => sample.lane === "compiled"))
+          assert.equal(sample.ntsAllocations, 0, `${sample.kernel} ${sample.shape} allocated NTS objects`);
+      }
+      console.log(`Run ${run+1}/${runs}, ${mode}: ${kernels.samples.length} kernel samples; normal JIT, sandbox active`);
+      return {result,executable:engine,fixture,args,rendererPid,rendererStatus,loadBefore,loadAfter:(await readFile("/proc/loadavg","utf8")).trim()};
+    }
     if (workload === "rows") {
       const rows = result as unknown as RowsMeasurements;
       // Twelve cases of 15 measured rounds and two of six, on both engines.
@@ -303,7 +319,31 @@ const provenance = {observedAt:new Date().toISOString(),workload,gc,diagnosticJs
   chromiumRevision:execFileSync("git",["-C",source,"rev-parse","HEAD"],{encoding:"utf8"}).trim(),nativeManifestSha256:hash(await readFile(resolve(source,"nts/manifest.json"))),
   compilerCheck:JSON.parse(await readFile(resolve(root,"target/chromium/native-bootstrap/check-result.json"),"utf8")),
   cpuInfo:execFileSync("lscpu",[],{encoding:"utf8"})};
-if (workload === "rows") {
+if (workload === "kernels") {
+  const samplesOf = (result: Measurements) => (result as unknown as KernelsMeasurements).samples;
+  const all = measurements.flatMap(run => [...samplesOf(run.native), ...samplesOf(run.v8)]);
+  const median = (kernel: string, shape: string, lane: string) => {
+    const values = all.filter(sample => sample.kernel === kernel && sample.shape === shape && sample.lane === lane)
+      .map(sample => sample.nsPerOperation).sort((a,b) => a-b);
+    return {samples:values.length,medianNs:percentile(values,.5),q1Ns:percentile(values,.25),q3Ns:percentile(values,.75)};
+  };
+  const summaries = [];
+  for (const kernel of ["create-element", "detached-counter-tree"]) {
+    for (const shape of ["loop", "per-call"]) {
+      const intrinsic = median(kernel, shape, "blink-intrinsic"), compiled = median(kernel, shape, "compiled"), v8 = median(kernel, shape, "v8");
+      summaries.push({kernel,shape,intrinsic,compiled,v8,compiledOverIntrinsic:compiled.medianNs/intrinsic.medianNs,compiledOverV8:compiled.medianNs/v8.medianNs});
+    }
+  }
+  await writeFile(resolve(output,"result.json"),`${JSON.stringify({...provenance,
+    methodology:{launchOrder:"Balanced native-first/V8-first",cases:"kernels_benchmark.cc and kernels-benchmark-v8 share one case table; kernels from native-typescript benchmarks/chromium",
+      v8:"HTML-loaded vanilla JS in unmodified content_shell, normal JIT; no measured Runtime.evaluate application",
+      timers:"Native TimeTicks and page performance.now around 20,000-iteration samples, one posted task per sample",
+      limits:"compiled per-call pays one environment and DOM entry per call; native-typescript's per-call called the compiled function directly. Handles are leases released by hand"},
+    measurements,summaries},null,2)}\n`);
+  console.table(summaries.map(({kernel,shape,intrinsic,compiled,v8,compiledOverIntrinsic,compiledOverV8}) => ({kernel,shape,
+    cppNs:+intrinsic.medianNs.toFixed(1),compiledNs:+compiled.medianNs.toFixed(1),v8Ns:+v8.medianNs.toFixed(1),
+    compiledOverCpp:+compiledOverIntrinsic.toFixed(3),compiledOverV8:+compiledOverV8.toFixed(3)})));
+} else if (workload === "rows") {
   const rowsOf = (result: Measurements) => (result as unknown as RowsMeasurements).samples;
   const summaries = [];
   for (const name of [...new Set(measurements.flatMap(run => rowsOf(run.native).map(sample => sample.case)))]) {

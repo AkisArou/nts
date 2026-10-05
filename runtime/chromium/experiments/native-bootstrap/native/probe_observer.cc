@@ -13,6 +13,7 @@
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_thread.h"
 #include "nts/binding_benchmark.h"
+#include "nts/kernels_benchmark.h"
 #include "nts/rows_benchmark.h"
 #include "nts/dom_bridge_bindings.h"
 #include "nts/probe.h"
@@ -82,6 +83,23 @@ class ProbeObserver final : public content::RenderFrameObserver {
       counter_listener_ = rows.AddEventListener(
           blink::WebNode::EventType::kInput,
           base::BindRepeating(&ProbeObserver::RunRows,
+                              weak_factory_.GetWeakPtr()));
+      counter_output_.SetAttribute(blink::WebString::FromAscii("data-state"),
+                                   blink::WebString::FromAscii("ready"));
+      return;
+    }
+    auto kernels = document.GetElementById(
+        blink::WebString::FromAscii("native-kernels-run"));
+    if (!kernels.IsNull()) {
+      dom_.reset(CreateDomContext(document));
+      if (command.GetSwitchValueASCII("nts-collection") != "checkpoint")
+        nts_chromium_probe_install_host(probe_.get(), dom_.get());
+      counter_output_ = document.GetElementById(
+          blink::WebString::FromAscii("benchmark-result"));
+      CHECK(!counter_output_.IsNull());
+      counter_listener_ = kernels.AddEventListener(
+          blink::WebNode::EventType::kInput,
+          base::BindRepeating(&ProbeObserver::RunKernels,
                               weak_factory_.GetWeakPtr()));
       counter_output_.SetAttribute(blink::WebString::FromAscii("data-state"),
                                    blink::WebString::FromAscii("ready"));
@@ -166,16 +184,24 @@ class ProbeObserver final : public content::RenderFrameObserver {
     CHECK(probe_ && dom_);
     StartRowsBenchmark(render_frame()->GetWebFrame()->GetDocument(), dom_.get(),
                        probe_.get(),
-                       base::BindOnce(&ProbeObserver::RowsDone,
+                       base::BindOnce(&ProbeObserver::WorkloadDone,
                                       weak_factory_.GetWeakPtr()));
   }
 
-  void RowsDone(std::string result) {
+  void RunKernels(blink::WebDOMEvent) {
+    CHECK(probe_ && dom_);
+    StartKernelsBenchmark(render_frame()->GetWebFrame()->GetDocument(),
+                          dom_.get(), probe_.get(),
+                          base::BindOnce(&ProbeObserver::WorkloadDone,
+                                         weak_factory_.GetWeakPtr()));
+  }
+
+  void WorkloadDone(std::string result) {
     counter_output_.SetAttribute(blink::WebString::FromAscii("data-result"),
                                  blink::WebString::FromUtf8(result));
     counter_output_.SetAttribute(blink::WebString::FromAscii("data-state"),
                                  blink::WebString::FromAscii("done"));
-    LOG(INFO) << "NTS_ROWS done backend=" << NTS_CHROMIUM_PROBE_BACKEND;
+    LOG(INFO) << "NTS_WORKLOAD done backend=" << NTS_CHROMIUM_PROBE_BACKEND;
   }
 
   void RunBenchmark(blink::WebDOMEvent) {
