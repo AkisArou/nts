@@ -406,6 +406,7 @@ fn value_external(name: &str) -> Option<(&'static str, &'static str, &'static st
     Some(match name {
         "nts_template_reflection" => (types::VALUE, "templateReflection", "(Lnts/rt/NtsValue;)V"),
         "nts_array_writable" => (types::VALUE, "arrayReference", "(Ljava/lang/Object;)Ljava/lang/Object;"),
+        "nts_array_length" => (types::VALUE, "arrayLength", "(Lnts/rt/NtsValue;)I"),
         "nts_value_to_string" => {
             (types::VALUE, "valueToString", "(Lnts/rt/NtsValue;)Ljava/lang/String;")
         }
