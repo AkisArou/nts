@@ -78,9 +78,11 @@ and artifact-size evidence before becoming another provider.
 4. **Date.** Complete standard constructor/call behavior, local operations,
    setters, localization and the Temporal bridge. Core arithmetic, parsing and
    serialization exist. UTC and multi-component setters distinguish omission
-   from explicit undefined. Their emitted optional-tuple witness still exposes
-   a compiler argument-count defect. The three locale methods now use shared
-   Intl. Original-value snapshots, intrinsic slot reads/writes and the optional
+   from explicit undefined. The shipping optional-tuple witness exposes an
+   argument-count defect; the private compiler still omits its consumer at
+   structural time-zone dispatch, leaving argument counts unverified. The three
+   locale methods now use shared Intl. Original-value snapshots, intrinsic slot
+   reads/writes and the optional
    Temporal bridge now pass the host environment witness. Complete shipping
    standard binding and local environment wiring remain open.
 5. **Temporal.** Complete Instant, Duration, PlainDate, PlainTime, PlainDateTime,
@@ -1028,6 +1030,33 @@ Validate Linux, Windows, macOS/iOS, JVM and Android; Android API 29, 30, 33 and
 current, plus desktop Java 11 and current LTS. Existing Android evidence covers
 API-29 dex/resource packaging, not device execution. The APK packager preserves
 dependency resources, dex files and licenses and rejects conflicting resources.
+
+The desktop provider checkpoint uses actual Temurin 11.0.32.1+1 and
+25.0.4.1+1 runtimes on Linux x64, from SHA-256-verified official archives.
+[Adoptium's release metadata](https://api.adoptium.net/v3/info/available_releases)
+identifies Java 25 as the current LTS. Each JDK compiles the production provider
+with `--release 11`, passes generated-binding drift checks and runs the Date
+fields and existing compiled number-range consumers with `-Xverify:all`.
+The paired Date gate also passes native ASan/UBSan and RC leak checks.
+Original full Intl host runs before and after the number scratch change each
+retain 3,357 rows: 3,172 passes and 185 failures, with no verdict, source-hash,
+failure-reason or row-set changes against the Java 21 checkpoint. This establishes
+provider/host compatibility on these desktop JDKs; whole-class canonical unions,
+compiled standard bindings, device execution, startup and application size
+remain open. Runtime/source hashes, logs and original comparisons are retained
+in `target/ecmascript/audit/jdk-platform/summary.json`.
+
+ICU4J NumberFormat now allocates its field cursor and span buffer on first parts
+use and retains them across scalar, decimal and range calls. Three escaped
+constructor pairs with escape analysis disabled save about 256 bytes per
+formatter on each JDK. Exact UTF-16 text and span comparison passes 672 calls
+per JDK across six locales, eight configurations and growth to 128 spans.
+Public signatures and generated bindings are unchanged; the Java 11 class
+grows by 19 bytes. Mixed tiered-JIT timings varied. Separate single-mode runs
+with synchronous C2 compilation, escape analysis enabled, one million warmup
+and one million measured calls keep reused allocations identical; medians
+remain within 1.6%. These are provider measurements, not public API throughput
+or total application heap. The raw mixed and isolated timings are both retained.
 
 The reused-number-formatter sample measured approximately 592 ns on C RC and
 625 ns on JVM for 50,000 calls, with matching checksums. This is a provider

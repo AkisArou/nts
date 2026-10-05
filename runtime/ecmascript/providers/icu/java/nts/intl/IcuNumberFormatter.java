@@ -20,8 +20,8 @@ public final class IcuNumberFormatter {
     private final ULocale locale;
     private LocalizedNumberRangeFormatter[] rangeFormatters;
     private final boolean hasVariant;
-    private final ConstrainedFieldPosition position = new ConstrainedFieldPosition();
-    private int[] spans = new int[48];
+    private ConstrainedFieldPosition position;
+    private int[] spans;
     private int count;
 
     public IcuNumberFormatter(String locale, String skeleton, String negativeSkeleton) {
@@ -58,12 +58,14 @@ public final class IcuNumberFormatter {
     private String finish(FormattedValue number, boolean fields) {
         count = 0;
         if (fields) {
+            if (position == null) position = new ConstrainedFieldPosition();
             position.reset();
             while (number.nextPosition(position)) {
                 int field = position.getField() == NumberRangeFormatter.SpanField.NUMBER_RANGE_SPAN
                     ? 14 + ((Integer) position.getFieldValue()).intValue() : fieldCode(position.getField());
                 if (field < 0) continue;
-                if ((count + 1) * 3 > spans.length) spans = Arrays.copyOf(spans, spans.length * 2);
+                if (spans == null) spans = new int[48];
+                else if ((count + 1) * 3 > spans.length) spans = Arrays.copyOf(spans, spans.length * 2);
                 spans[count * 3] = field;
                 spans[count * 3 + 1] = position.getStart();
                 spans[count * 3 + 2] = position.getLimit();
