@@ -1,5 +1,8 @@
 # Main compiler delivery
 
+The working process for isolated subagents, serial integration and efficient
+validation is documented in [parallel-compiler-workflow.md](parallel-compiler-workflow.md).
+
 Current plan, 2026-10-04. The original baseline was `c132dbf6e`; delivered
 changes and their acceptance evidence are recorded below. Main owns this plan
 and the compiler work; platform and runtime peers retain their lanes.
