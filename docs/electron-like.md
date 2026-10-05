@@ -2771,3 +2771,1479 @@ inside a normal Chromium-sandboxed renderer.
 If that works correctly and performs well, the remaining work becomes engineering rather than validation of the underlying architecture.
 
 This is the version I’d treat as **RFC-0001**. The next useful document would be a much more concrete **RFC-0002 / implementation specification** defining the actual `WebRef` bit layout, native module ABI, WebIDL type lowering table, HIR opcodes, Blink bridge classes, Mojo interfaces, and the exact Chromium source directories/hooks to modify.
+
+Extra
+------
+
+Question:
+One more thing. For example, if a developer does not use indexeddb or webrtc or some other module, how could we strip chromium and not include it in the resulting app? think it nicely!!
+
+Answer:
+Yes. I think this can become another major architectural differentiator of your runtime.
+
+I would **not** think of Chromium as one binary that you shrink afterward. I would introduce a **Web Capability Linker** that sits between your application compiler and the Chromium build.
+
+The application effectively tells the browser engine:
+
+> “This is the exact subset of the Web platform this application can ever reach.”
+
+Then you build/package only the transitive closure of that subset.
+
+## 1. Make Web APIs linkable capabilities
+
+Today:
+
+```text
+Application
+    ↓
+Chromium
+    ↓
+EVERYTHING
+```
+
+I'd make your build look like:
+
+```text
+TS / React / HTML / CSS
+          │
+          ▼
+         HIR
+          │
+          ▼
+┌─────────────────────────┐
+│ Web Capability Linker   │
+│                         │
+│ discovers reachable:    │
+│                         │
+│ DOM            ✓        │
+│ CSS            ✓        │
+│ fetch          ✓        │
+│ IndexedDB      ✗        │
+│ WebRTC         ✗        │
+│ WebGPU         ✗        │
+│ WebGL          ✗        │
+│ ServiceWorker  ✗        │
+│ Printing       ✗        │
+│ media          ✗        │
+└────────────┬────────────┘
+             │
+             ▼
+      capability closure
+             │
+     ┌───────┴────────┐
+     ▼                ▼
+ native app        Chromium
+ linking           feature linking
+```
+
+I might literally call this thing **WPL — Web Platform Linker**.
+
+---
+
+# 2. Your compiler is uniquely positioned to do this
+
+Normal Chromium cannot know whether a website will execute:
+
+```js
+indexedDB.open(...)
+```
+
+tomorrow.
+
+Your compiler frequently can.
+
+Given:
+
+```tsx
+function App() {
+    return (
+        <button onClick={save}>
+            Save
+        </button>
+    );
+}
+
+async function save() {
+    await fetch("/api/save", ...);
+}
+```
+
+your HIR might eventually contain:
+
+```text
+Web capabilities referenced:
+
+DOM.Document
+DOM.Element
+DOM.EventTarget
+DOM.Node
+Fetch
+URL
+Promise
+```
+
+but not:
+
+```text
+IndexedDB
+RTCPeerConnection
+MediaStream
+WebGPU
+WebGL
+ServiceWorker
+```
+
+So compilation emits something like:
+
+```json
+{
+  "webProfile": {
+    "dom": true,
+    "fetch": true,
+    "indexeddb": false,
+    "webrtc": false,
+    "webgpu": false,
+    "serviceWorker": false,
+    "media": false
+  }
+}
+```
+
+That's not merely a permissions manifest.
+
+It's **linker input**.
+
+---
+
+# 3. Then strip a feature vertically
+
+This is important.
+
+If IndexedDB isn't used, don't merely remove:
+
+```js
+window.indexedDB;
+```
+
+You want to remove the **entire vertical slice**.
+
+Today Chromium's IndexedDB implementation spans the Blink-facing frontend and browser-side backing-store implementation; Chromium explicitly documents those as separate sides of the implementation. [Chromium Go Source](https://chromium.googlesource.com/chromium/src/%2Bshow/refs/heads/main/third_party/blink/renderer/modules/indexeddb/docs/idb_data_path.md?utm_source=chatgpt.com)
+
+So:
+
+```text
+                    IndexedDB capability
+                           │
+       ┌───────────────────┼────────────────────┐
+       ▼                   ▼                    ▼
+ WebIDL / bindings    renderer frontend    browser backend
+       │                   │                    │
+ IDBFactory           Blink IndexedDB      persistence code
+ IDBDatabase          implementation       Mojo endpoints
+ IDBRequest                                backing store
+ ...
+```
+
+If `indexeddb = false`, the WPL removes all of those where they aren't needed by something else.
+
+Blink already gives you a useful seam: IndexedDB has its own `blink_modules_sources("indexeddb")` GN target containing its implementation sources. [Chromium Go Source](https://chromium.googlesource.com/chromium/src/%2B/refs/heads/main/third_party/blink/renderer/modules/indexeddb/BUILD.gn?utm_source=chatgpt.com)
+
+So your modified build could turn:
+
+```gn
+blink_modules_sources("indexeddb") {
+   ...
+}
+```
+
+into effectively:
+
+```gn
+if (native_web_profile.enable_indexeddb) {
+    blink_modules_sources("indexeddb") {
+        ...
+    }
+}
+```
+
+And your WebIDL generator excludes the IDB interfaces entirely.
+
+Then:
+
+```js
+"indexedDB" in window;
+```
+
+is simply:
+
+```text
+false
+```
+
+because that Web API genuinely doesn't exist in this particular runtime.
+
+---
+
+# 4. WebRTC is an even better example
+
+If the app doesn't use:
+
+```ts
+new RTCPeerConnection()
+navigator.mediaDevices.getUserMedia(...)
+```
+
+then remove:
+
+```text
+RTCPeerConnection WebIDL
+Blink peerconnection
+MediaStream capture portions
+WebRTC IPC
+third_party/webrtc
+associated codecs where otherwise unused
+device-enumeration pieces where otherwise unused
+...
+```
+
+Blink already has a separate `peerconnection` module target, and Chromium's media build infrastructure has explicit WebRTC-related build flags. [Chromium Go Source](https://chromium.googlesource.com/chromium/src/%2B/dfc50ade1c2594642e81125e05d8ec00e8cd8b36/third_party/blink/renderer/modules/peerconnection/BUILD.gn?utm_source=chatgpt.com)
+
+That's exactly the kind of subsystem where the size win could be meaningful.
+
+---
+
+# 5. Chromium already has some useful modularity — just not enough
+
+This is where your fork would need structural work.
+
+Blink conceptually separates:
+
+```text
+core/
+modules/
+platform/
+```
+
+and Chromium explicitly says the `core` vs `modules` distinction exists partly for implementation modularity. [Chromium Go Source](https://chromium.googlesource.com/chromium/src/%2B/68.0.3419.0/third_party/blink/renderer/?utm_source=chatgpt.com)
+
+There are already individual source groups such as:
+
+```text
+modules/indexeddb
+modules/peerconnection
+modules/webgpu
+modules/websockets
+...
+```
+
+But the normal Blink production target broadly depends on the complete `renderer/modules` component. [Chromium Go Source](https://chromium.googlesource.com/chromium/src/%2B/HEAD/third_party/blink/public/BUILD.gn?utm_source=chatgpt.com)
+
+So today it's more like:
+
+```text
+blink
+ ├── core
+ ├── platform
+ └── ALL modules
+```
+
+You want to transform it into:
+
+```text
+blink
+ ├── core
+ ├── platform
+ └── selected modules
+       ├── fetch
+       ├── webstorage
+       └── ...
+```
+
+That refactoring is very compatible with your overall direction.
+
+---
+
+# 6. I would generate a **capability graph**
+
+Don't maintain ad-hoc flags:
+
+```text
+ENABLE_INDEXEDDB
+ENABLE_WEBRTC
+ENABLE_WEBGPU
+...
+```
+
+everywhere.
+
+Define a database:
+
+```text
+web.fetch
+ ├── network
+ ├── streams
+ ├── headers
+ ├── blob
+ └── url
+
+web.indexeddb
+ ├── storage
+ ├── blob
+ ├── structured-clone
+ └── idb-backend
+
+web.webrtc
+ ├── mediastream
+ ├── peerconnection
+ ├── audio
+ ├── video
+ ├── network-rtc
+ └── third_party/webrtc
+
+web.webgpu
+ ├── gpu-process
+ ├── dawn
+ └── blink-webgpu
+```
+
+Then your compiler produces roots:
+
+```text
+Roots:
+
+web.dom
+web.css
+web.fetch
+web.websocket
+web.localstorage
+```
+
+WPL calculates:
+
+```text
+closure(roots)
+```
+
+just like a normal linker resolves symbols.
+
+So you literally have:
+
+```text
+normal linker:
+
+foo()
+ ↓
+bar()
+ ↓
+libmath
+
+
+Web Platform Linker:
+
+fetch()
+ ↓
+Fetch
+ ↓
+Streams
+ ↓
+NetworkService
+```
+
+That's why I think **linker** is the correct abstraction.
+
+---
+
+# 7. And WebIDL becomes analogous to header symbols
+
+Your compiler already knows:
+
+```ts
+document.querySelector(...)
+```
+
+corresponds to:
+
+```text
+web.dom.ParentNode.querySelector
+```
+
+while:
+
+```ts
+navigator.mediaDevices.getUserMedia(...)
+```
+
+introduces:
+
+```text
+web.mediacapture
+```
+
+and:
+
+```ts
+indexedDB.open(...)
+```
+
+introduces:
+
+```text
+web.indexeddb
+```
+
+So your WebIDL database gets annotated:
+
+```text
+[Capability=web.indexeddb]
+interface IDBDatabase { ... }
+
+[Capability=web.webrtc]
+interface RTCPeerConnection { ... }
+
+[Capability=web.gpu]
+interface GPU { ... }
+```
+
+Then the same database drives **both**:
+
+```text
+Native Web ABI generation
++
+Chromium feature linking
+```
+
+That is beautifully self-consistent.
+
+---
+
+# 8. Your app's HIR provides automatic discovery
+
+Say some npm library has:
+
+```ts
+if ("indexedDB" in globalThis) {
+   ...
+}
+```
+
+If tree shaking proves that code unreachable:
+
+```text
+doesn't contribute capability
+```
+
+If reachable:
+
+```text
+web.indexeddb
+```
+
+gets added to the graph.
+
+For direct APIs this is easy.
+
+Your HIR can track things like:
+
+```text
+WebCapability(DOM)
+WebCapability(Fetch)
+WebCapability(WebSocket)
+WebCapability(IndexedDB)
+WebCapability(WebRTC)
+```
+
+The capability set becomes part of compilation output.
+
+---
+
+# 9. But you need an escape hatch for dynamic access
+
+This code is impossible to analyze fully:
+
+```ts
+const api = globalThis[userInput];
+```
+
+Likewise:
+
+```ts
+eval(code);
+```
+
+or downloaded V8 JavaScript.
+
+So I would distinguish:
+
+### Static application mode
+
+```toml
+[web]
+dynamic_js = false
+profile = "inferred"
+```
+
+Then the compiler can be aggressive.
+
+Using something unavailable becomes a compile error or feature absence.
+
+### Controlled dynamic mode
+
+```toml
+[web]
+dynamic_js = true
+
+dynamic_capabilities = [
+    "dom",
+    "fetch",
+    "websocket"
+]
+```
+
+Downloaded JS runs in V8, but it sees only those Web platform features.
+
+### Full Web compatibility mode
+
+```toml
+[web]
+profile = "full"
+```
+
+Then you ship essentially the full browser platform.
+
+This is necessary for:
+
+```text
+arbitrary websites
+unknown remote SDKs
+general browser views
+```
+
+because there's no way to know what APIs tomorrow's downloaded JavaScript will request.
+
+---
+
+# 10. This actually gives you a nice security property too
+
+Consider an application that declares:
+
+```toml
+[web]
+webrtc = false
+camera = false
+microphone = false
+webusb = false
+webbluetooth = false
+```
+
+A compromised V8 script can't merely find a browser bug in those APIs.
+
+**The implementation isn't in the binary.**
+
+That's much stronger than:
+
+```text
+API exists
++
+permission denied
+```
+
+You reduce attack surface alongside binary size.
+
+For a desktop runtime, that's potentially a very appealing property.
+
+---
+
+# 11. I would classify Chromium features into three groups
+
+Don't try to make _everything_ optional immediately.
+
+### Tier A — Core
+
+Always include:
+
+```text
+HTML
+DOM
+events
+CSS parser
+style engine
+layout
+painting
+basic forms
+URL
+encoding
+scheduler
+core networking infrastructure
+sandbox
+GPU compositor
+```
+
+Trying to remove individual CSS properties or DOM methods will give you huge engineering complexity for tiny wins.
+
+Don't do:
+
+```text
+this app doesn't use display:grid
+→ remove Grid
+```
+
+at least not initially.
+
+That's way too granular.
+
+### Tier B — Good stripping candidates
+
+These are where I'd spend effort:
+
+```text
+IndexedDB
+Service Workers
+WebRTC
+media capture
+WebGPU
+WebGL
+WebAudio
+media playback/codecs
+WebBluetooth
+WebUSB
+WebSerial
+WebMIDI
+speech
+printing
+PDF
+spellcheck
+notifications
+payment APIs
+screen capture
+device APIs
+```
+
+They're relatively discrete and some pull in large dependencies.
+
+### Tier C — Later / questionable
+
+Things like:
+
+```text
+SVG
+Canvas
+workers
+accessibility
+complex CSS modules
+```
+
+They're deeply interconnected or commonly assumed.
+
+Strip them only after you have measurements proving it's worthwhile.
+
+---
+
+# 12. But I would go further: **feature packs**
+
+Doing a custom Chromium compile for every individual app is expensive.
+
+Instead, refactor your Chromium fork into something like:
+
+```text
+runtime-core
+│
+├── DOM
+├── HTML
+├── CSS
+├── layout
+├── paint
+├── network
+└── sandbox
+
+
+optional packs:
+
+web-storage
+web-indexeddb
+web-workers
+web-serviceworker
+web-webrtc
+web-media
+web-webgl
+web-webgpu
+web-devtools
+web-printing
+web-pdf
+web-device
+```
+
+Then an application:
+
+```text
+Notes App
+```
+
+might ship:
+
+```text
+runtime-core
+web-indexeddb
+```
+
+A conferencing app:
+
+```text
+runtime-core
+web-indexeddb
+web-media
+web-webrtc
+```
+
+A 3D editor:
+
+```text
+runtime-core
+web-indexeddb
+web-webgpu
+```
+
+This is where it becomes much more practical operationally.
+
+---
+
+# 13. I would make packs **signed native engine components**
+
+Something like:
+
+```text
+engine/
+├── runtime-core.dll
+├── web-storage.dll
+├── web-indexeddb.dll
+├── web-webrtc.dll
+├── web-webgpu.dll
+└── ...
+```
+
+or platform equivalents.
+
+At build/package time:
+
+```text
+myruntime build
+```
+
+computes:
+
+```text
+application capabilities
+       ↓
+required engine packs
+       ↓
+copy/link only those
+```
+
+The app manifest might say:
+
+```json
+{
+  "runtime": {
+    "abi": 12,
+    "packs": ["core", "indexeddb"]
+  }
+}
+```
+
+Renderer initialization loads exactly those trusted engine components.
+
+### Important
+
+I would **not** make these downloadable arbitrary plugins from webpages.
+
+They are:
+
+```text
+runtime-signed
+version-matched
+trusted engine components
+```
+
+not Web extensions.
+
+---
+
+# 14. However: packs and static linking can coexist
+
+You can offer two distribution modes.
+
+### Development / fast build
+
+```text
+runtime-core.so
+web-indexeddb.so
+web-media.so
+...
+app.so
+```
+
+No huge final Chromium link for every developer build.
+
+### Release / maximum compactness
+
+Feed the exact profile into GN:
+
+```text
+core
+indexeddb
+fetch
+```
+
+then build one application-specific renderer with:
+
+```text
+ThinLTO
+dead code elimination
+identical-code folding
+resource pruning
+```
+
+giving:
+
+```text
+app-specific engine
+```
+
+That would produce the smallest possible self-contained distribution.
+
+So:
+
+```text
+development:
+    composable feature packs
+
+release:
+    whole-program Web Platform link
+```
+
+I really like this model.
+
+---
+
+# 15. Generated GN input
+
+Your compiler could output:
+
+```text
+out/app.webprofile
+```
+
+containing:
+
+```text
+dom=true
+fetch=true
+websocket=true
+localstorage=true
+
+indexeddb=false
+webrtc=false
+webgpu=false
+webgl=false
+serviceworker=false
+printing=false
+pdf=false
+media=false
+```
+
+Then generate GN:
+
+```gn
+native_enable_indexeddb = false
+native_enable_webrtc = false
+native_enable_webgpu = false
+...
+```
+
+Chromium already uses generated buildflag headers and localized feature/build flags rather than wanting every feature to become one giant global configuration file. [Chromium Go Source](https://chromium.googlesource.com/chromium/src/%2B/master/build/config/features.gni?utm_source=chatgpt.com)
+
+Your fork can extend that pattern systematically.
+
+---
+
+# 16. But source selection is only one piece
+
+To really strip IndexedDB, for example, WPL should control:
+
+```text
+1. Blink WebIDL files
+2. generated V8 bindings
+3. generated Native Web bindings
+4. Blink implementation sources
+5. Mojo interfaces
+6. browser-side implementation
+7. storage dependencies used only by IDB
+8. resources
+9. tests in release builds
+```
+
+So removal looks like:
+
+```text
+           Web capability graph
+                   │
+     ┌─────────────┼─────────────┐
+     ▼             ▼             ▼
+  WebIDL       renderer        browser
+ generation      GN              GN
+     │             │             │
+     └─────────────┼─────────────┘
+                   ▼
+                  link
+```
+
+If you only disable the JavaScript property, you haven't accomplished much.
+
+---
+
+# 17. Let the linker compute dependency closure
+
+For example:
+
+```text
+app uses IndexedDB
+```
+
+could expand into something conceptually like:
+
+```text
+indexeddb
+ ├── structured-clone
+ ├── blob
+ ├── storage-backend
+ ├── origin-storage
+ ├── mojo-idb
+ └── ...
+```
+
+But suppose:
+
+```text
+fetch()
+```
+
+already requires `Blob`.
+
+Then:
+
+```text
+Blob
+```
+
+remains.
+
+This is exactly standard linker behavior:
+
+```text
+remove a subsystem
+unless some other retained subsystem still needs it
+```
+
+Do **not** encode:
+
+```text
+if !indexeddb:
+    remove LevelDB
+```
+
+because something else may eventually depend on it.
+
+Encode:
+
+```text
+indexeddb -> X
+featureY  -> X
+```
+
+and let graph reachability decide whether `X` survives.
+
+---
+
+# 18. It can apply to Chromium processes too
+
+Suppose the app has:
+
+```text
+no media
+no WebRTC
+no WebGPU
+```
+
+Maybe it still requires Chromium's GPU process for compositing, so:
+
+```text
+GPU process stays
+```
+
+but large media/GPU API machinery doesn't.
+
+Similarly:
+
+```text
+no Service Workers
+```
+
+could remove service-worker-specific browser machinery while ordinary networking remains.
+
+Think vertically rather than:
+
+```text
+"remove process X"
+```
+
+because Chromium services are shared.
+
+---
+
+# 19. Your Native Web ABI gets smaller too
+
+This is a pleasant side effect.
+
+Instead of every renderer exporting thousands of Web API calls:
+
+```text
+NativeWebABI = ALL WEBIDL
+```
+
+your application gets:
+
+```text
+NativeWebABI {
+    Document.querySelector
+    Document.createElement
+    Node.appendChild
+    Element.setAttribute
+    fetch
+    ...
+}
+```
+
+Only operations actually referenced by compiled code need entries.
+
+That's effectively **symbol-level linking of the Web platform ABI**.
+
+You might even have:
+
+```text
+Web API ID #182
+Web API ID #397
+Web API ID #814
+```
+
+resolved at startup, instead of a giant static function table.
+
+---
+
+# 20. React makes this particularly effective
+
+Your compiler can analyze actual compiled ReactDOM.
+
+Suppose ReactDOM contains compatibility paths for:
+
+```text
+SVG
+MathML
+certain form types
+certain browser quirks
+```
+
+but the application never reaches those code paths.
+
+Normal tree shaking may eliminate parts of ReactDOM itself.
+
+Then WPL sees only remaining Web Host operations.
+
+So:
+
+```text
+application
+ ↓
+React
+ ↓
+ReactDOM
+ ↓
+HIR optimization
+ ↓
+reachable Web API set
+```
+
+is computed **after application specialization**, rather than just looking at the original ReactDOM source.
+
+This is significantly more powerful.
+
+---
+
+# 21. HTML and CSS also contribute capabilities
+
+Don't analyze only TS.
+
+For example:
+
+```html
+<video src="..."></video>
+```
+
+introduces:
+
+```text
+web.media
+```
+
+while:
+
+```html
+<canvas></canvas>
+```
+
+may introduce Canvas 2D.
+
+And potentially CSS such as:
+
+```css
+background: paint(foo);
+```
+
+could introduce relevant subsystems.
+
+So your frontend pipeline becomes:
+
+```text
+TS / JS
+   │
+HTML
+   │
+CSS
+   │
+manifest
+   │
+   └──────────────┐
+                  ▼
+          Capability Linker
+```
+
+For runtime-generated strings such as:
+
+```ts
+document.createElement(tagFromNetwork);
+```
+
+you fall back to the app's explicit declared capabilities.
+
+Static inference provides the minimum; the manifest may widen it.
+
+---
+
+# 22. Use **minimum inferred + explicit maximum**
+
+I would make this developer experience:
+
+```toml
+[web]
+profile = "inferred"
+
+allow = [
+    "indexeddb"
+]
+
+deny = [
+    "webrtc",
+    "camera",
+    "microphone",
+    "webusb"
+]
+```
+
+Compiler says:
+
+```text
+Inferred:
+  dom
+  css
+  fetch
+
+Explicit:
+  indexeddb
+
+Final:
+  dom
+  css
+  fetch
+  indexeddb
+```
+
+If application code then tries:
+
+```ts
+new RTCPeerConnection();
+```
+
+build fails:
+
+```text
+error: Web capability `webrtc`
+is disabled by the application profile.
+
+Referenced from:
+  src/call.ts:42
+```
+
+That's a **much nicer developer experience than silently shipping all of Chromium**.
+
+---
+
+# 23. Dynamic V8 JavaScript needs its own profile
+
+This follows directly from our previous architecture.
+
+You might have:
+
+```toml
+[native-web]
+profile = "inferred"
+
+[v8-web]
+capabilities = [
+    "dom",
+    "fetch"
+]
+```
+
+So your packaged Native Realm can use IndexedDB:
+
+```text
+Native Realm:
+    DOM
+    fetch
+    IndexedDB
+```
+
+while remote V8 code sees:
+
+```text
+Web Realm:
+    DOM
+    fetch
+```
+
+but:
+
+```js
+indexedDB;
+```
+
+is absent.
+
+Same Blink renderer, **different exposed capability surfaces**.
+
+That is very powerful.
+
+---
+
+# 24. There's an even more radical distribution model
+
+I would consider eventually having a **shared runtime installation**, similar conceptually to WebView2:
+
+```text
+NativeWeb Runtime 12
+├── core
+├── storage pack
+├── media pack
+├── rtc pack
+└── GPU pack
+```
+
+Then individual applications ship only:
+
+```text
+MyApp/
+├── main.native
+├── renderer.native
+├── assets/
+└── manifest
+```
+
+Maybe tens of applications share one engine installation.
+
+Then:
+
+```text
+"Electron app is 150 MB"
+```
+
+stops being structurally necessary.
+
+Your installer could say:
+
+```text
+Requires NativeWeb Runtime >= 12.4
+Capabilities:
+   core
+   storage
+```
+
+and install missing packs once.
+
+You could support both:
+
+```text
+portable/self-contained build
+```
+
+and:
+
+```text
+shared-runtime build
+```
+
+This is something Electron cannot easily offer because every Electron application traditionally carries its chosen Electron/Chromium runtime.
+
+---
+
+# 25. What I wouldn't strip initially
+
+I'd resist the temptation to make this:
+
+```text
+CSS flexbox used?
+CSS grid used?
+:has() used?
+SVG circle used?
+<input type=date> used?
+```
+
+and produce a bizarre hyper-specialized browser.
+
+You'll spend enormous engineering effort and inevitably hit dynamic content.
+
+I'd target **coarse, expensive vertical features** first.
+
+My initial capability groups would probably be:
+
+| Pack            | Examples                       |
+| --------------- | ------------------------------ |
+| `core`          | HTML, DOM, CSS, layout, events |
+| `network`       | fetch, XHR, URL, streams       |
+| `storage-basic` | localStorage/sessionStorage    |
+| `indexeddb`     | IndexedDB                      |
+| `workers`       | Worker/SharedWorker            |
+| `serviceworker` | SW + related machinery         |
+| `canvas`        | Canvas2D                       |
+| `webgl`         | WebGL                          |
+| `webgpu`        | WebGPU/Dawn                    |
+| `media`         | audio/video/MSE                |
+| `webaudio`      | WebAudio                       |
+| `webrtc`        | RTC + capture                  |
+| `devices`       | USB/Bluetooth/Serial/MIDI      |
+| `print-pdf`     | printing/PDF                   |
+| `devtools`      | DevTools resources/backend     |
+
+Then profile actual binary size.
+
+Split only where measurement justifies it.
+
+---
+
+# 26. One warning: Chromium isn't ready-made for this
+
+You should expect real refactoring.
+
+For example, current Blink's high-level build still depends on its whole `renderer/modules` target, even though internal APIs such as IndexedDB and PeerConnection already have their own source groups. [Chromium Go Source](https://chromium.googlesource.com/chromium/src/%2B/master/third_party/blink/renderer/modules/BUILD.gn?utm_source=chatgpt.com)
+
+So this won't be:
+
+```text
+flip 20 GN switches
+→ tiny Chromium
+```
+
+It will be a project:
+
+> **Turn Chromium's conceptual module boundaries into actual link boundaries.**
+
+But that's a reasonably scoped Chromium fork objective compared with implementing a browser engine.
+
+And you don't need to do it all at once.
+
+---
+
+# 27. I would add this to the RFC as a first-class subsystem
+
+I'd modify our architecture to:
+
+```text
+                         Application
+
+ TS / JS / React      HTML/CSS       Manifest
+        │                │              │
+        └────────────────┼──────────────┘
+                         ▼
+                    Compiler HIR
+                         │
+            ┌────────────┴────────────┐
+            │                         │
+            ▼                         ▼
+     Native code             Web Capability IR
+                                      │
+                                      ▼
+                            Web Platform Linker
+                                      │
+                    ┌─────────────────┼─────────────┐
+                    ▼                 ▼             ▼
+              Native Web ABI      Blink profile   browser profile
+                    │                 │             │
+                    └─────────────────┼─────────────┘
+                                      ▼
+                                 final runtime
+```
+
+So your toolchain has **two linkers**:
+
+```text
+LLVM linker
+    → "Which native program symbols survive?"
+
+Web Platform Linker
+    → "Which browser capabilities survive?"
+```
+
+That symmetry is extremely nice.
+
+---
+
+## And there is a bigger idea hiding here
+
+You're no longer really embedding Chromium as a browser.
+
+You're treating the **Web platform itself as a linkable standard library**.
+
+That means:
+
+```text
+React application uses DOM + fetch
+```
+
+doesn't imply:
+
+```text
+ship a general-purpose browser containing
+video conferencing, MIDI, Bluetooth,
+WebGPU, databases, printing, PDF, etc.
+```
+
+any more than:
+
+```cpp
+#include <vector>
+```
+
+should imply linking every library installed on the machine.
+
+For your runtime I'd make this one of the core design principles:
+
+> **Web APIs are capabilities and linkable dependencies, not an indivisible browser payload.**
+
+Combined with native TS/React execution and the Native/V8 realm split we already designed, that makes the project much more than “a lighter Electron.” It becomes a **specializing Web runtime**: the compiler specializes not only the application, but the browser engine beneath it.
