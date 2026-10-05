@@ -1,0 +1,45 @@
+ideal 77
+allocated 30
+candidates 0
+because seventeen retains and sixty releases, and none of them is `rows.items`.
+because
+because Retains, seventeen: the array's own reference to each item `push`
+because stores. Nothing else in the program needs one.
+because
+because Releases, sixty:
+because
+because   17  `work` giving up each `new Item` once `add` returns. Arguments are
+because       borrowed, so `add` stores a reference of its own and the caller
+because       drops the one `new` gave it. A callee that took the caller's
+because       reference -- Record 0024's `consumes` -- would save both halves of
+because       these thirty four; this floor does not claim it.
+because   24  each of eight `splice`s hands back the removed run as a new array:
+because       releasing it frees the item, and the item its label.
+because   19  teardown: the items array, its nine remaining items, their labels.
+because       `rows` itself never leaves `work`, so it lives in the frame and has
+because       no count to give up.
+because
+because What is not here is the point. `add` and `remove` read `rows.items`
+because out of a parameter and hand it to a runtime array helper. The helper
+because writes element storage and runs no program code, so it can neither
+because overwrite the field nor give up `rows`, which the caller holds -- the
+because read is borrowed, and costs nothing. Retaining it cost two operations
+because a call, fifty here, and that was the cheap half.
+because
+because Candidates: zero, and this is the line that matters. Each of those
+because releases left the array with a count above zero, which makes it a cycle
+because candidate -- every array of references shares one cyclic descriptor --
+because and trial deletion at the next checkpoint walks every element. A UI
+because that keeps its rows in a field pays that walk once per event, over its
+because whole state: removing one row of a thousand cost 16.7us against 0.16us
+because (runtime/chromium/experiments/rows-standalone). The control compiler
+because leaves one candidate here, and it is this array.
+because
+because It also hid part of its bill. A buffered object whose count reaches zero
+because is not freed until the collector runs, so the control's teardown of
+because the array, its nine items and their labels happened in the collection
+because after the count was read -- 109 operations measured, more spent.
+because
+because Allocations: thirty. Seventeen items; the items array's header and the
+because four blocks `push` grows it through (4, 8, 16, 32); and the eight arrays
+because `splice` returns. `Rows` is in the frame.

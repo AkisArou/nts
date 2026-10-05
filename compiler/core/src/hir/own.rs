@@ -2993,6 +2993,14 @@ fn borrows_safely(
                 callee: super::Callee::Virtual { slot, .. },
                 ..
             } => around.mutating_slots.contains(slot),
+            // A runtime array helper writes element storage and runs no
+            // program code, so it cannot overwrite a field, and it cannot give
+            // up a parameter, which the caller holds. `app.rows.splice(i, 1)`
+            // borrows `app.rows` across the call -- see `keeps_field_borrows`.
+            OpKind::Call {
+                callee: super::Callee::External(name),
+                ..
+            } => !(super::keeps_field_borrows(name) && parameter_field(func, value)),
             OpKind::Call { .. } => true,
             // A store *into* this value cannot invalidate it. It overwrites a
             // slot inside the container and leaves the reference that names the
@@ -3018,6 +3026,21 @@ fn borrows_safely(
             _ => false,
         }
     })
+}
+
+/// Whether `value` is read out of a field of one of this function's parameters.
+///
+/// The narrow case [`super::keeps_field_borrows`] is safe for. A field is not
+/// element storage, so no runtime array helper writes it, and a parameter is
+/// held by the caller for the whole call, so no helper's release frees it. A
+/// field of anything else -- an element, a value a load borrowed -- could be
+/// freed by a removal the helper performs, and keeps its retain.
+fn parameter_field(func: &Func, value: ValueId) -> bool {
+    matches!(
+        func.values[value.0 as usize].kind,
+        OpKind::FieldGet { object, .. }
+            if matches!(func.values[object.0 as usize].kind, OpKind::Param(_))
+    )
 }
 
 /// Which slots are known to hold nothing yet.

@@ -3421,6 +3421,81 @@ fn changes_array_length(name: &str) -> bool {
     .any(|family| name.starts_with(family))
 }
 
+/// Whether a runtime helper leaves a borrowed field of a parameter intact.
+///
+/// `own::borrows_safely` lets a load go without a retain across a stretch in
+/// which nothing can overwrite the slot it came from or give up its container,
+/// and a call it cannot see into ends that stretch. These are calls it can see
+/// into. Each reads, or writes, the element storage of an array it is handed --
+/// a write may release the elements it replaces or removes -- and none runs
+/// program code. An object's field is not element storage, so none of them can
+/// overwrite one; and a parameter is held by the caller for the whole call, so
+/// nothing a helper releases can be the last reference to it.
+///
+/// Found by a UI that keeps its rows in a field and changes them one event at a
+/// time. Retaining `app.rows` around `splice` and releasing it after left the
+/// array a cycle candidate, and the next checkpoint's trial deletion walked
+/// every row: removing one row of a thousand cost 16.7us, against 0.16us
+/// without the walk (`runtime/chromium/experiments/rows-standalone`).
+///
+/// By exact name, not by family, unlike [`changes_array_length`]: a name there
+/// by mistake costs an optimisation, and a name here by mistake is a
+/// use-after-free. The `_foreign` variants are absent because retaining or
+/// releasing a foreign element can run foreign code -- a `dispose` handler --
+/// that reaches back into the program, and so is `set_length_value`, whose
+/// truncated elements may be foreign handles; the loans to C are absent because
+/// C runs while the block is lent. What remains releases only managed objects.
+/// One of those can hold a foreign field in turn, and its release reach foreign
+/// code that way: `borrows_safely` already does not follow that path for a
+/// store into the borrowed container or a call that stores nothing, and this
+/// list makes the same assumption, no wider.
+fn keeps_field_borrows(name: &str) -> bool {
+    KEEPS_FIELD_BORROWS.contains(&name)
+}
+
+const KEEPS_FIELD_BORROWS: &[&str] = &[
+    // Reads, and arrays made new. Nothing is written.
+    "nts_array_at",
+    "nts_array_at_ref",
+    "nts_array_at_value",
+    "nts_array_element",
+    "nts_array_includes",
+    "nts_array_includes_ref",
+    "nts_array_includes_str",
+    "nts_array_includes_str_value",
+    "nts_array_index_of",
+    "nts_array_index_of_ref",
+    "nts_array_index_of_str",
+    "nts_array_index_of_str_value",
+    "nts_array_last_index_of",
+    "nts_array_slice",
+    "nts_array_slice_ref",
+    "nts_array_concat",
+    "nts_array_concat_ref",
+    "nts_array_concat_value",
+    "nts_array_new",
+    "nts_array_new_uninitialized",
+    // Writes into the element storage of the array they are given, releasing
+    // what they replace or remove.
+    "nts_array_push",
+    "nts_array_push_ref",
+    "nts_array_push_value",
+    "nts_array_pop",
+    "nts_array_shift",
+    "nts_array_shift_ref",
+    "nts_array_shift_value",
+    "nts_array_unshift",
+    "nts_array_unshift_ref",
+    "nts_array_splice",
+    "nts_array_splice_ref",
+    "nts_array_set_length",
+    "nts_array_set_length_ref",
+    "nts_array_fill",
+    "nts_array_fill_bool",
+    "nts_array_extend",
+    "nts_array_extend_ref",
+];
+
 /// Whether any array in this program can change length.
 ///
 /// A program that changes none has arrays whose length is decided where they
@@ -6142,6 +6217,70 @@ mod tests {
              `false` and every array in the program take a representation that \
              cannot change length."
         );
+    }
+
+    /// Every `nts_array_` helper is decided for whether a field borrow survives it.
+    ///
+    /// [`keeps_field_borrows`] is a list of exact names, and a helper left off
+    /// it is merely retained around -- so silence is safe and this test is not
+    /// guarding against a wrong answer. It is guarding against an unasked
+    /// question: a new helper should be *decided*, and one that runs program
+    /// code, or releases a foreign element, must be decided **no** with a
+    /// reason beside it, or the next person to see the list short will add it.
+    #[test]
+    fn every_array_helper_is_decided_for_field_borrows() {
+        // Each of these can run code that is not a runtime array operation, so
+        // a borrow across it is not safe. Adding a name is a claim; say why.
+        const MAY_RUN_OTHER_CODE: &[&str] = &[
+            // Retaining or releasing a foreign element can call into the
+            // platform (a GObject `dispose`, a COM `Release`), which can call
+            // back into the program.
+            "nts_array_at_foreign",
+            "nts_array_concat_foreign",
+            "nts_array_extend_foreign",
+            "nts_array_set_length_foreign",
+            "nts_array_slice_foreign",
+            // Truncation releases the cut values, and a value can be a handle.
+            "nts_array_set_length_value",
+            // A loan of the element block to C for one call, and its end; C
+            // runs while the block is lent.
+            "nts_array_handles",
+            "nts_array_unlend",
+            // An array made from C's handles, retaining each.
+            "nts_array_from_handles",
+            // Checks the immutable flag before a store and returns the same
+            // array. Probably harmless; kept out until a measured borrow across
+            // it is wanted, since being wrong here is a use-after-free.
+            "nts_array_writable",
+        ];
+        let mut undecided = Vec::new();
+        for name in crate::hir::runtime::declared_names() {
+            if !name.starts_with("nts_array_") {
+                continue;
+            }
+            let keeps = keeps_field_borrows(name);
+            let refused = MAY_RUN_OTHER_CODE.contains(&name);
+            assert!(!(keeps && refused), "`{name}` is both kept and refused");
+            if !keeps && !refused {
+                undecided.push(name);
+            }
+        }
+        assert!(
+            undecided.is_empty(),
+            "these `nts_array_` helpers are decided nowhere for field borrows: \
+             {undecided:?}. Add each to `KEEPS_FIELD_BORROWS` if it touches only \
+             element storage of its array and runs no other code, or to \
+             `MAY_RUN_OTHER_CODE` above with the reason it can."
+        );
+        // And nothing on the list that the runtime does not declare: a renamed
+        // helper must not leave a stale name standing for a contract nobody
+        // checks any more.
+        for name in KEEPS_FIELD_BORROWS {
+            assert!(
+                crate::hir::runtime::declared_names().any(|declared| declared == *name),
+                "`{name}` is in `KEEPS_FIELD_BORROWS` but the runtime declares no such helper"
+            );
+        }
     }
 
     fn layout(name: &str, id: u32, fields: Vec<Field>) -> Layout {
