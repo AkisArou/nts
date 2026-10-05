@@ -1033,6 +1033,16 @@ pin/source hashes, refusals, diagnostic comparisons and emitted C/JVM method
 inspection are in
 `target/ecmascript/audit/completion-20261005/private0279-public-integration.json`.
 
+The newer immutable private source `f2c4df4a04d6` includes finite source interface
+operation work. Rechecking the unchanged consumers retains the same localization
+diagnostic counts and first stops; only one blocked LocaleResolver call's source
+location changes. All four calendar-topology exports still refuse
+CalendarPrimitive load/estimate operations on C-RC and JVM, and Date's consumer of
+supplied argument counts still omits `main` at TimeZoneRules offset dispatch. Its runtime
+argument counts remain unverified. Exact source, pin, fixture, header/method and
+diagnostic comparisons are in
+`target/ecmascript/audit/completion-20261005/privatef2-integration.json`.
+
 ## Acceptance still required
 
 Run original Test262 through actual compiled standard bindings on C, LLVM, JVM,
@@ -1059,6 +1069,27 @@ provider/host compatibility on these desktop JDKs; whole-class canonical unions,
 compiled standard bindings, device execution, startup and application size
 remain open. Runtime/source hashes, logs and original comparisons are retained
 in `target/ecmascript/audit/jdk-platform/summary.json`.
+
+The existing compiled Date-fields fixture now also executes on actual macOS
+26.6.2 x86_64 with Apple Clang 21 and a separately built, hash-verified ICU 78.3
+source pin. Fresh shipping C-RC emission retains its entrypoint without
+refusals. Ordinary, stripped and ASan/UBSan executions produce the same 324
+output bytes as the existing fixture, covering prepared fields, 2,000 field
+replacements, UTF-16 spans, interval data and calendar symbols. Provider
+translation units pass `-Wall -Wextra -Werror`; this is not a whole generated
+program warning gate. A separate lifetime probe returns managed objects to
+zero, and macOS `leaks --atExit` reports zero leaked bytes. Apple's ASan runtime
+rejects `detect_leaks=1`; that exit-134 attempt is retained, while the supported
+ASan/UBSan run disables LSan and uses the independent native leak check.
+
+The standalone stripped fixture is 35,488,696 bytes with full static ICU data;
+the packed ICU data payload is 33,107,232 bytes. Its dynamic dependencies are
+libSystem and libc++. These are actual adapter measurements, excluding arm64,
+iOS, standard-bound builtin conformance and final application acquisition,
+startup, heap and size acceptance. The temporary Mac build leaves other lanes'
+trees untouched. Source/compiler/data/executable hashes, raw commands, sanitizer
+and leak logs, section sizes and the copied executable are retained under
+`target/ecmascript/audit/macos-icu`, with `summary.json` recording their scope.
 
 ICU4J NumberFormat now allocates its field cursor and span buffer on first parts
 use and retains them across scalar, decimal and range calls. Three escaped
