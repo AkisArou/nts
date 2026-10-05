@@ -91,6 +91,39 @@ returns to zero live leases after `clear`.
 
 ## 3. Integer-typed results and loop counters stay integer
 
+**Re-measured 2026-10-06, on main after the HostClass work; still open, and
+not urgent for this lane.** What the C backend emits today:
+
+- a `for (let i = 0; i < n; ++i)` counter whose bound is a `number`
+  parameter is a `double`, and `i % 2` is a libm `fmod` call;
+- a `c_int32` result folded with `failed |= ...` is widened to `double`
+  (`(double)v32`) and narrowed again by the next `|=`;
+- `seed * 16807 % 2147483647` (the rows app's Park-Miller step) is `fmod`,
+  correctly: the product exceeds int32 and is exact in a double.
+
+Cost, `-O2` on this machine: `fmod(i, 2)` 3.3 ns against 1.1 ns for an
+`int64_t` remainder -- about 2 ns per use, 2% of a 120 ns DOM write. The
+case for this is compute-heavy code, not the DOM boundary.
+
+The design that is sound, for whoever takes it:
+
+1. **An "integral" fact before a width.** An induction variable that starts
+   at an integer and steps by an integer holds only integers, whatever its
+   bound; while it stays below 2^53 the integer and the double agree exactly,
+   so `int64_t` represents it with no rounding question.
+2. **`%` lowers to an integer remainder when both operands are integral and
+   the divisor is non-zero.** C's `%` truncates toward zero as JavaScript's
+   does, so the value agrees -- **except the sign of a zero**: `-4 % 2` is
+   `-0` in JavaScript and `0` in C. Either the dividend is proved
+   non-negative (a counter from 0 is), or the result keeps the dividend's
+   sign when it is zero.
+3. **`|`, `&`, `^`, `<<`, `>>` already produce int32 values**; a local that
+   only ever receives them (an accumulator from `0` folded with `|=`) can stay
+   `int32_t` with no conversion at all.
+
+Each of these is a fact the existing `flow`/`globals` representation passes
+could carry; none needs a new IR. The original request follows.
+
 **Observed.** In `failed |= host.nts_dom_set_text_atom(...)` the `int32_t`
 result is widened to `double`, then `nts_to_int32` and two `nts_to_uint32`
 calls rebuild an `int32` for `|`, every iteration

@@ -450,6 +450,13 @@ Per-call allocates the closure and its state per listen and pays an entry;
 ScriptC's per-call did neither. Evidence: `target/chromium/perf/
 kernels-c-events/`, `events-dom-c-smoke`.
 
+Sanitizers: the standalone rows path built from source with ASan and UBSan
+(`-fsanitize=address,undefined -fno-sanitize-recover=undefined`; the
+program, the runtime, the mini-DOM and the driver) runs both collection
+policies clean -- no memory error, no undefined behaviour, and no leak once
+the mini-DOM's deliberately never-freed nodes are suppressed -- and ends at
+999 rows, 2000 roots while the app lives, 0 after destroy.
+
 ## RC defects found by this lane and fixed in the compiler
 
 Measured with `tooling/memory`'s harness on the unmodified compiler (main
