@@ -33,6 +33,8 @@ window.domWitness = (() => {
   label.textContent = exact;
   if (label.textContent !== exact) return 8;
   label.setAttribute('data-exact', exact);
+  label.className = 'counter';
+  if (label.className !== 'counter') return 9;
   container.removeChild(label);
   gc();
   if (document.querySelector('#native-dom-count') !== null) return 9;

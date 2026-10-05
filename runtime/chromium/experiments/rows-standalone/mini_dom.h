@@ -2,6 +2,7 @@
 #define NTS_CHROMIUM_MINI_DOM_H_
 /* The entered DOM ABI over a minimal in-process tree; see mini_dom.c. */
 #include "dom_abi.h"
+#include "dom_idl.h"
 
 NtsDomContext* mini_dom_create(void);
 /* Brackets one native callback, as nts_blink_dom_entry does in Blink. */

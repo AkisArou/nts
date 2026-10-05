@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
+import { stripTypeScriptTypes } from "node:module";
 import { mkdir, mkdtemp, readFile, readdir, readlink, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -197,6 +198,34 @@ try {
   // can still be complete. Wait for the committed fixture and its control.
   await until(() => evaluate<boolean>(`location.href === ${JSON.stringify(fixture)} && document.readyState === 'complete' && document.querySelector('${inputSelector}') !== null && document.querySelector('${outputSelector}') !== null`), "loaded fixture document");
   const readyMs = performance.now() - started;
+  // The differential vectors (native-bootstrap/src/idl-vectors.ts): the
+  // program ran them through the generated bindings while the page loaded;
+  // the oracle runs the same source, types stripped, through V8's, and
+  // leaves its transcript in the same place, so the compared DOM holds both
+  // answers. `asText` and the like are the program's narrowing, which page
+  // script spells `instanceof`.
+  if (domOracle && !mixedMicrotasks) {
+    const vectors = stripTypeScriptTypes(await readFile(resolve(root, "runtime/chromium/experiments/native-bootstrap/src/idl-vectors.ts"), "utf8"))
+      .replace(/^\s*import\s[^;]*;\s*$/gm, "").replace(/^export /gm, "");
+    await evaluate(`(() => {
+      const asHTMLElement = (node) => node instanceof HTMLElement ? node : null;
+      const asHTMLInputElement = (node) => node instanceof HTMLInputElement ? node : null;
+      const asText = (node) => node instanceof Text ? node : null;
+      ${vectors}
+      // V8's message carries the binding's context ("Failed to execute 'x'
+      // on 'Y': "), which the generated binding's does not.
+      const failure = (error) => error.name + ": " + error.message
+        .replace(/^Failed to (?:execute '[^']*'|set the '[^']*' property|read the '[^']*' property) on '[^']*': /, "");
+      const container = document.querySelector('#native-dom');
+      const section = document.createElement('section');
+      container.appendChild(section);
+      const transcript = idlTranscript(document, section, { failure });
+      const pre = document.createElement('pre');
+      pre.id = 'native-idl';
+      pre.textContent = transcript;
+      container.appendChild(pre);
+    })()`);
+  }
   const before = await evaluate<Layout>(`(() => {
     const r = document.querySelector('${inputSelector}').getBoundingClientRect();
     return {title: document.title, count: ${readCount},

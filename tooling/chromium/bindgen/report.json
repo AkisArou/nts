@@ -1,0 +1,3875 @@
+{
+  "bound": 433,
+  "skipped": [
+    {
+      "interface": "Node",
+      "member": "get childNodes",
+      "why": "interface NodeList is not bound"
+    },
+    {
+      "interface": "Node",
+      "member": "getRootNode/1",
+      "why": "parameter type optional GetRootNodeOptions"
+    },
+    {
+      "interface": "Node",
+      "member": "getRootNode/0",
+      "why": "default `{}` of argument options"
+    },
+    {
+      "interface": "Element",
+      "member": "get classList",
+      "why": "interface DOMTokenList is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "get attributes",
+      "why": "interface NamedNodeMap is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "get shadowRoot",
+      "why": "interface ShadowRoot is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "get part",
+      "why": "interface DOMTokenList is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "get assignedSlot",
+      "why": "interface HTMLSlotElement is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "get currentCSSZoom",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "get computedRole",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "get computedName",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "get onbeforecopy",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Element",
+      "member": "set onbeforecopy",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Element",
+      "member": "get onbeforecut",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Element",
+      "member": "set onbeforecut",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Element",
+      "member": "get onbeforepaste",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Element",
+      "member": "set onbeforepaste",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Element",
+      "member": "get onsearch",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Element",
+      "member": "set onsearch",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Element",
+      "member": "get containerTiming",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "set containerTiming",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "get containerTimingIgnore",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "set containerTimingIgnore",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "get headingOffset",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "set headingOffset",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "get headingReset",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "set headingReset",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "get customElementRegistry",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Element",
+      "member": "get onfullscreenchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Element",
+      "member": "set onfullscreenchange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Element",
+      "member": "get onfullscreenerror",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Element",
+      "member": "set onfullscreenerror",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Element",
+      "member": "get onwebkitfullscreenchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Element",
+      "member": "set onwebkitfullscreenchange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Element",
+      "member": "get onwebkitfullscreenerror",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Element",
+      "member": "set onwebkitfullscreenerror",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Element",
+      "member": "get activeViewTransition",
+      "why": "interface ViewTransition is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "get ariaColIndexText",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "set ariaColIndexText",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "get ariaRowIndexText",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "set ariaRowIndexText",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "get ariaActionsElements",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "set ariaActionsElements",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "get ariaControlsElements",
+      "why": "result type FrozenArray<Element>?"
+    },
+    {
+      "interface": "Element",
+      "member": "set ariaControlsElements",
+      "why": "parameter type FrozenArray<Element>?"
+    },
+    {
+      "interface": "Element",
+      "member": "get ariaDescribedByElements",
+      "why": "result type FrozenArray<Element>?"
+    },
+    {
+      "interface": "Element",
+      "member": "set ariaDescribedByElements",
+      "why": "parameter type FrozenArray<Element>?"
+    },
+    {
+      "interface": "Element",
+      "member": "get ariaDetailsElements",
+      "why": "result type FrozenArray<Element>?"
+    },
+    {
+      "interface": "Element",
+      "member": "set ariaDetailsElements",
+      "why": "parameter type FrozenArray<Element>?"
+    },
+    {
+      "interface": "Element",
+      "member": "get ariaErrorMessageElements",
+      "why": "result type FrozenArray<Element>?"
+    },
+    {
+      "interface": "Element",
+      "member": "set ariaErrorMessageElements",
+      "why": "parameter type FrozenArray<Element>?"
+    },
+    {
+      "interface": "Element",
+      "member": "get ariaFlowToElements",
+      "why": "result type FrozenArray<Element>?"
+    },
+    {
+      "interface": "Element",
+      "member": "set ariaFlowToElements",
+      "why": "parameter type FrozenArray<Element>?"
+    },
+    {
+      "interface": "Element",
+      "member": "get ariaLabelledByElements",
+      "why": "result type FrozenArray<Element>?"
+    },
+    {
+      "interface": "Element",
+      "member": "set ariaLabelledByElements",
+      "why": "parameter type FrozenArray<Element>?"
+    },
+    {
+      "interface": "Element",
+      "member": "get ariaOwnsElements",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "set ariaOwnsElements",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "get children",
+      "why": "interface HTMLCollection is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "after/1",
+      "why": "variadic"
+    },
+    {
+      "interface": "Element",
+      "member": "afterHTML/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "afterHTMLUnsafe/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "animate/2",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Element",
+      "member": "append/1",
+      "why": "variadic"
+    },
+    {
+      "interface": "Element",
+      "member": "appendHTML/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "appendHTMLUnsafe/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "ariaNotify/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "attachShadow/1",
+      "why": "interface ShadowRoot is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "before/1",
+      "why": "variadic"
+    },
+    {
+      "interface": "Element",
+      "member": "beforeHTML/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "beforeHTMLUnsafe/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "checkVisibility/1",
+      "why": "parameter type optional CheckVisibilityOptions"
+    },
+    {
+      "interface": "Element",
+      "member": "checkVisibility/0",
+      "why": "default `{}` of argument options"
+    },
+    {
+      "interface": "Element",
+      "member": "computedStyleMap/0",
+      "why": "interface StylePropertyMapReadOnly is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "convertPointFromNode/3",
+      "why": "interface DOMPoint is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "convertQuadFromNode/3",
+      "why": "interface DOMQuad is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "convertRectFromNode/3",
+      "why": "interface DOMQuad is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "getAnimations/1",
+      "why": "result type sequence<Animation>"
+    },
+    {
+      "interface": "Element",
+      "member": "getAttributeNames/0",
+      "why": "result type sequence<DOMString>"
+    },
+    {
+      "interface": "Element",
+      "member": "getAttributeNode/1",
+      "why": "interface Attr is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "getAttributeNodeNS/2",
+      "why": "interface Attr is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "getBoundingClientRect/0",
+      "why": "interface DOMRect is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "getBoxQuads/1",
+      "why": "result type sequence<DOMQuad>"
+    },
+    {
+      "interface": "Element",
+      "member": "getClientRects/0",
+      "why": "interface DOMRectList is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "getElementsByClassName/1",
+      "why": "interface HTMLCollection is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "getElementsByTagName/1",
+      "why": "interface HTMLCollection is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "getElementsByTagNameNS/2",
+      "why": "interface HTMLCollection is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "getHTML/1",
+      "why": "parameter type optional GetHTMLOptions"
+    },
+    {
+      "interface": "Element",
+      "member": "getHTML/0",
+      "why": "default `{}` of argument options"
+    },
+    {
+      "interface": "Element",
+      "member": "matchContainer/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "prepend/1",
+      "why": "variadic"
+    },
+    {
+      "interface": "Element",
+      "member": "prependHTML/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "prependHTMLUnsafe/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "pseudo/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "querySelectorAll/1",
+      "why": "interface NodeList is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "removeAttributeNode/1",
+      "why": "interface Attr is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "replaceChildren/1",
+      "why": "variadic"
+    },
+    {
+      "interface": "Element",
+      "member": "replaceWith/1",
+      "why": "variadic"
+    },
+    {
+      "interface": "Element",
+      "member": "replaceWithHTML/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "replaceWithHTMLUnsafe/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "requestFullscreen/1",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Element",
+      "member": "requestPointerLock/1",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Element",
+      "member": "scroll/1",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Element",
+      "member": "scroll/2",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Element",
+      "member": "scrollBy/1",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Element",
+      "member": "scrollBy/2",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Element",
+      "member": "scrollIntoView/1",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Element",
+      "member": "scrollTo/1",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Element",
+      "member": "scrollTo/2",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Element",
+      "member": "setAttribute/2",
+      "why": "parameter type TrustedType"
+    },
+    {
+      "interface": "Element",
+      "member": "setAttributeNS/3",
+      "why": "parameter type TrustedType"
+    },
+    {
+      "interface": "Element",
+      "member": "setAttributeNode/1",
+      "why": "interface Attr is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "setAttributeNodeNS/1",
+      "why": "interface Attr is not bound"
+    },
+    {
+      "interface": "Element",
+      "member": "setHTML/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "setHTMLUnsafe/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "setHTMLUnsafe/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "startViewTransition/0",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Element",
+      "member": "startViewTransition/1",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Element",
+      "member": "startViewTransition/1",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Element",
+      "member": "streamAfterHTML/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "streamAfterHTMLUnsafe/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "streamAppendHTML/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "streamAppendHTMLUnsafe/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "streamBeforeHTML/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "streamBeforeHTMLUnsafe/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "streamHTML/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "streamHTMLUnsafe/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "streamPrependHTML/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "streamPrependHTMLUnsafe/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "streamReplaceWithHTML/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "streamReplaceWithHTMLUnsafe/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Element",
+      "member": "webkitRequestFullScreen/1",
+      "why": "parameter type optional FullscreenOptions"
+    },
+    {
+      "interface": "Element",
+      "member": "webkitRequestFullScreen/0",
+      "why": "default `{}` of argument options"
+    },
+    {
+      "interface": "Element",
+      "member": "webkitRequestFullscreen/1",
+      "why": "parameter type optional FullscreenOptions"
+    },
+    {
+      "interface": "Element",
+      "member": "webkitRequestFullscreen/0",
+      "why": "default `{}` of argument options"
+    },
+    {
+      "interface": "CharacterData",
+      "member": "after/1",
+      "why": "variadic"
+    },
+    {
+      "interface": "CharacterData",
+      "member": "afterHTML/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CharacterData",
+      "member": "afterHTMLUnsafe/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CharacterData",
+      "member": "before/1",
+      "why": "variadic"
+    },
+    {
+      "interface": "CharacterData",
+      "member": "beforeHTML/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CharacterData",
+      "member": "beforeHTMLUnsafe/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CharacterData",
+      "member": "replaceWith/1",
+      "why": "variadic"
+    },
+    {
+      "interface": "CharacterData",
+      "member": "replaceWithHTML/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CharacterData",
+      "member": "replaceWithHTMLUnsafe/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CharacterData",
+      "member": "streamAfterHTML/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CharacterData",
+      "member": "streamAfterHTMLUnsafe/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CharacterData",
+      "member": "streamBeforeHTML/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CharacterData",
+      "member": "streamBeforeHTMLUnsafe/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CharacterData",
+      "member": "streamReplaceWithHTML/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CharacterData",
+      "member": "streamReplaceWithHTMLUnsafe/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Text",
+      "member": "get assignedSlot",
+      "why": "interface HTMLSlotElement is not bound"
+    },
+    {
+      "interface": "Text",
+      "member": "convertPointFromNode/3",
+      "why": "interface DOMPoint is not bound"
+    },
+    {
+      "interface": "Text",
+      "member": "convertQuadFromNode/3",
+      "why": "interface DOMQuad is not bound"
+    },
+    {
+      "interface": "Text",
+      "member": "convertRectFromNode/3",
+      "why": "interface DOMQuad is not bound"
+    },
+    {
+      "interface": "Text",
+      "member": "getBoxQuads/1",
+      "why": "result type sequence<DOMQuad>"
+    },
+    {
+      "interface": "Document",
+      "member": "get implementation",
+      "why": "interface DOMImplementation is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "get doctype",
+      "why": "interface DocumentType is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "get location",
+      "why": "interface Location is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "get readyState",
+      "why": "result type DocumentReadyState"
+    },
+    {
+      "interface": "Document",
+      "member": "get head",
+      "why": "interface HTMLHeadElement is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "get images",
+      "why": "interface HTMLCollection is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "get embeds",
+      "why": "interface HTMLCollection is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "get plugins",
+      "why": "interface HTMLCollection is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "get links",
+      "why": "interface HTMLCollection is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "get forms",
+      "why": "interface HTMLCollection is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "get scripts",
+      "why": "interface HTMLCollection is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "get currentScript",
+      "why": "result type HTMLOrSVGScriptElement?"
+    },
+    {
+      "interface": "Document",
+      "member": "get defaultView",
+      "why": "interface Window is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "get onreadystatechange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onreadystatechange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get anchors",
+      "why": "interface HTMLCollection is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "get applets",
+      "why": "interface HTMLCollection is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "get all",
+      "why": "interface HTMLAllCollection is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "get onpointerlockchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onpointerlockchange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onpointerlockerror",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onpointerlockerror",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get visibilityState",
+      "why": "result type VisibilityState"
+    },
+    {
+      "interface": "Document",
+      "member": "get fragmentDirective",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "get featurePolicy",
+      "why": "interface PermissionsPolicy is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "get permissionsPolicy",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "get onautofill",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "set onautofill",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "get onbeforecopy",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onbeforecopy",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onbeforecut",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onbeforecut",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onbeforepaste",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onbeforepaste",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onfreeze",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onfreeze",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onprerenderingchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onprerenderingchange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onresume",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onresume",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onsearch",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onsearch",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onvisibilitychange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onvisibilitychange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get timeline",
+      "why": "interface DocumentTimeline is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "get onfullscreenchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onfullscreenchange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onfullscreenerror",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onfullscreenerror",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onwebkitfullscreenchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onwebkitfullscreenchange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onwebkitfullscreenerror",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onwebkitfullscreenerror",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get rootElement",
+      "why": "interface SVGSVGElement is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "get activeViewTransition",
+      "why": "interface ViewTransition is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "get modelContext",
+      "why": "interface ModelContext is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "get pictureInPictureEnabled",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Document",
+      "member": "get spellCheckCustomDictionary",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Document",
+      "member": "get onabort",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onabort",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onbeforefilter",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "set onbeforefilter",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "get onbeforeinput",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onbeforeinput",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onbeforematch",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onbeforematch",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onbeforetoggle",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onbeforetoggle",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onblur",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onblur",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get oncancel",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set oncancel",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get oncanplay",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set oncanplay",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get oncanplaythrough",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set oncanplaythrough",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onchange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onclick",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onclick",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onclose",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onclose",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get oncommand",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set oncommand",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get oncomplete",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "set oncomplete",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "get oncontentvisibilityautostatechange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set oncontentvisibilityautostatechange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get oncontextlost",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set oncontextlost",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get oncontextmenu",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set oncontextmenu",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get oncontextrestored",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set oncontextrestored",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get oncuechange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set oncuechange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get ondblclick",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set ondblclick",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get ondrag",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set ondrag",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get ondragend",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set ondragend",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get ondragenter",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set ondragenter",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get ondragleave",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set ondragleave",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get ondragover",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set ondragover",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get ondragstart",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set ondragstart",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get ondrop",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set ondrop",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get ondurationchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set ondurationchange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onemptied",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onemptied",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onended",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onended",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onerror",
+      "why": "result type OnErrorEventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onerror",
+      "why": "parameter type OnErrorEventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onfocus",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onfocus",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onformdata",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onformdata",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get oninput",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set oninput",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get oninvalid",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set oninvalid",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onkeydown",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onkeydown",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onkeypress",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onkeypress",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onkeyup",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onkeyup",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onload",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onload",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onloadeddata",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onloadeddata",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onloadedmetadata",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onloadedmetadata",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onloadstart",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onloadstart",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onmousedown",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onmousedown",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onmouseenter",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onmouseenter",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onmouseleave",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onmouseleave",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onmousemove",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onmousemove",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onmouseout",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onmouseout",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onmouseover",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onmouseover",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onmouseup",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onmouseup",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onmousewheel",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onmousewheel",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onoverscrollcancel",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "set onoverscrollcancel",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "get onoverscrollchanging",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "set onoverscrollchanging",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "get onoverscrollend",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "set onoverscrollend",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "get onoverscrollstart",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "set onoverscrollstart",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "get onpause",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onpause",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onplay",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onplay",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onplaying",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onplaying",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onprogress",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onprogress",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onratechange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onratechange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onreset",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onreset",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onresize",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onresize",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onscroll",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onscroll",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onscrollend",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onscrollend",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onsecuritypolicyviolation",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onsecuritypolicyviolation",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onseeked",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onseeked",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onseeking",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onseeking",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onselect",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onselect",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onslotchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onslotchange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onscrollsnapchange",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "set onscrollsnapchange",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "get onscrollsnapchanging",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "set onscrollsnapchanging",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "get onstalled",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onstalled",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onsubmit",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onsubmit",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onsuspend",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onsuspend",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get ontimeupdate",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set ontimeupdate",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get ontoggle",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set ontoggle",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onvolumechange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onvolumechange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onwaiting",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onwaiting",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onwebkitanimationend",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onwebkitanimationend",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onwebkitanimationiteration",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onwebkitanimationiteration",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onwebkitanimationstart",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onwebkitanimationstart",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onwebkittransitionend",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onwebkittransitionend",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onwheel",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onwheel",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onauxclick",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onauxclick",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get ongotpointercapture",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set ongotpointercapture",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onlostpointercapture",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onlostpointercapture",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onpointerdown",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onpointerdown",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onpointermove",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onpointermove",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onpointerrawupdate",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onpointerrawupdate",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onpointerup",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onpointerup",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onpointercancel",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onpointercancel",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onpointerover",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onpointerover",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onpointerout",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onpointerout",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onpointerenter",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onpointerenter",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onpointerleave",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onpointerleave",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get ontouchcancel",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "set ontouchcancel",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "get ontouchend",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "set ontouchend",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "get ontouchmove",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "set ontouchmove",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "get ontouchstart",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "set ontouchstart",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "get onselectstart",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onselectstart",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onselectionchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onselectionchange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onanimationcancel",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onanimationcancel",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onanimationend",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onanimationend",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onanimationiteration",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onanimationiteration",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onanimationstart",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onanimationstart",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get ontransitionrun",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set ontransitionrun",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get ontransitionstart",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set ontransitionstart",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get ontransitionend",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set ontransitionend",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get ontransitioncancel",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set ontransitioncancel",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onbeforexrselect",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Document",
+      "member": "set onbeforexrselect",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Document",
+      "member": "get oncopy",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set oncopy",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get oncut",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set oncut",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get onpaste",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "set onpaste",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "Document",
+      "member": "get children",
+      "why": "interface HTMLCollection is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "get styleSheets",
+      "why": "interface StyleSheetList is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "get adoptedStyleSheets",
+      "why": "result type ObservableArray<CSSStyleSheet>"
+    },
+    {
+      "interface": "Document",
+      "member": "set adoptedStyleSheets",
+      "why": "parameter type ObservableArray<CSSStyleSheet>"
+    },
+    {
+      "interface": "Document",
+      "member": "get customElementRegistry",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Document",
+      "member": "get fonts",
+      "why": "interface FontFaceSet is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "append/1",
+      "why": "variadic"
+    },
+    {
+      "interface": "Document",
+      "member": "ariaNotify/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "browsingTopics/1",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Document",
+      "member": "caretPositionFromPoint/3",
+      "why": "interface CaretPosition is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "caretRangeFromPoint/2",
+      "why": "interface Range is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "convertPointFromNode/3",
+      "why": "interface DOMPoint is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "convertQuadFromNode/3",
+      "why": "interface DOMQuad is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "convertRectFromNode/3",
+      "why": "interface DOMQuad is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "createAttribute/1",
+      "why": "interface Attr is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "createAttributeNS/2",
+      "why": "interface Attr is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "createCDATASection/1",
+      "why": "interface CDATASection is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "createComment/1",
+      "why": "interface Comment is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "createEvent/1",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Document",
+      "member": "createExpression/2",
+      "why": "interface XPathExpression is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "createNodeIterator/3",
+      "why": "interface NodeIterator is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "createProcessingInstruction/2",
+      "why": "interface ProcessingInstruction is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "createRange/0",
+      "why": "interface Range is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "createTreeWalker/3",
+      "why": "interface TreeWalker is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "elementsFromPoint/2",
+      "why": "result type sequence<Element>"
+    },
+    {
+      "interface": "Document",
+      "member": "evaluate/5",
+      "why": "interface XPathResult is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "execCommand/2",
+      "why": "default `\"\"` of argument value"
+    },
+    {
+      "interface": "Document",
+      "member": "execCommand/1",
+      "why": "default `\"\"` of argument value"
+    },
+    {
+      "interface": "Document",
+      "member": "exitFullscreen/0",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Document",
+      "member": "exitPictureInPicture/0",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Document",
+      "member": "getAnimations/0",
+      "why": "result type sequence<Animation>"
+    },
+    {
+      "interface": "Document",
+      "member": "getBoxQuads/1",
+      "why": "result type sequence<DOMQuad>"
+    },
+    {
+      "interface": "Document",
+      "member": "getElementsByClassName/1",
+      "why": "interface HTMLCollection is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "getElementsByName/1",
+      "why": "interface NodeList is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "getElementsByTagName/1",
+      "why": "interface HTMLCollection is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "getElementsByTagNameNS/2",
+      "why": "interface HTMLCollection is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "getSelection/0",
+      "why": "interface Selection is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "hasPrivateToken/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "hasRedemptionRecord/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "hasStorageAccess/0",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Document",
+      "member": "hasUnpartitionedCookieAccess/0",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Document",
+      "member": "importNode/2",
+      "why": "parameter type optional (boolean or ImportNodeOptions)"
+    },
+    {
+      "interface": "Document",
+      "member": "open/3",
+      "why": "interface Window is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "prepend/1",
+      "why": "variadic"
+    },
+    {
+      "interface": "Document",
+      "member": "querySelectorAll/1",
+      "why": "interface NodeList is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "replaceChildren/1",
+      "why": "variadic"
+    },
+    {
+      "interface": "Document",
+      "member": "requestStorageAccess/0",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Document",
+      "member": "requestStorageAccess/1",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Document",
+      "member": "requestStorageAccessFor/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "setSequentialFocusStartingPoint/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "startViewTransition/0",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Document",
+      "member": "startViewTransition/1",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Document",
+      "member": "startViewTransition/1",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Document",
+      "member": "write/1",
+      "why": "variadic"
+    },
+    {
+      "interface": "Document",
+      "member": "write/1",
+      "why": "interface TrustedHTML is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "write/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "writeln/1",
+      "why": "variadic"
+    },
+    {
+      "interface": "Document",
+      "member": "writeln/1",
+      "why": "interface TrustedHTML is not bound"
+    },
+    {
+      "interface": "Document",
+      "member": "writeln/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Document",
+      "member": "parseHTML/2",
+      "why": "static"
+    },
+    {
+      "interface": "Document",
+      "member": "parseHTMLUnsafe/1",
+      "why": "static"
+    },
+    {
+      "interface": "Document",
+      "member": "parseHTMLUnsafe/2",
+      "why": "static"
+    },
+    {
+      "interface": "Document",
+      "member": "parseHTMLUnsafe/2",
+      "why": "static"
+    },
+    {
+      "interface": "DocumentFragment",
+      "member": "get children",
+      "why": "interface HTMLCollection is not bound"
+    },
+    {
+      "interface": "DocumentFragment",
+      "member": "append/1",
+      "why": "variadic"
+    },
+    {
+      "interface": "DocumentFragment",
+      "member": "prepend/1",
+      "why": "variadic"
+    },
+    {
+      "interface": "DocumentFragment",
+      "member": "querySelectorAll/1",
+      "why": "interface NodeList is not bound"
+    },
+    {
+      "interface": "DocumentFragment",
+      "member": "replaceChildren/1",
+      "why": "variadic"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get hidden",
+      "why": "needs ${script_state}"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get accessKeyLabel",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get autocorrect",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set autocorrect",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get editContext",
+      "why": "interface EditContext is not bound"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set editContext",
+      "why": "interface EditContext is not bound"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get overscrollcontainer",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set overscrollcontainer",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get overscrollarea",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set overscrollarea",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onabort",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onabort",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onbeforefilter",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onbeforefilter",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onbeforeinput",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onbeforeinput",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onbeforematch",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onbeforematch",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onbeforetoggle",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onbeforetoggle",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onblur",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onblur",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get oncancel",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set oncancel",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get oncanplay",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set oncanplay",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get oncanplaythrough",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set oncanplaythrough",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onchange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onclick",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onclick",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onclose",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onclose",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get oncommand",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set oncommand",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get oncomplete",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set oncomplete",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get oncontentvisibilityautostatechange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set oncontentvisibilityautostatechange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get oncontextlost",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set oncontextlost",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get oncontextmenu",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set oncontextmenu",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get oncontextrestored",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set oncontextrestored",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get oncuechange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set oncuechange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get ondblclick",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set ondblclick",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get ondrag",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set ondrag",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get ondragend",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set ondragend",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get ondragenter",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set ondragenter",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get ondragleave",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set ondragleave",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get ondragover",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set ondragover",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get ondragstart",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set ondragstart",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get ondrop",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set ondrop",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get ondurationchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set ondurationchange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onemptied",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onemptied",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onended",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onended",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onerror",
+      "why": "result type OnErrorEventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onerror",
+      "why": "parameter type OnErrorEventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onfocus",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onfocus",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onformdata",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onformdata",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get oninput",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set oninput",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get oninvalid",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set oninvalid",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onkeydown",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onkeydown",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onkeypress",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onkeypress",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onkeyup",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onkeyup",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onload",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onload",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onloadeddata",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onloadeddata",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onloadedmetadata",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onloadedmetadata",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onloadstart",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onloadstart",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onmousedown",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onmousedown",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onmouseenter",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onmouseenter",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onmouseleave",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onmouseleave",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onmousemove",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onmousemove",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onmouseout",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onmouseout",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onmouseover",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onmouseover",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onmouseup",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onmouseup",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onmousewheel",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onmousewheel",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onoverscrollcancel",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onoverscrollcancel",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onoverscrollchanging",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onoverscrollchanging",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onoverscrollend",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onoverscrollend",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onoverscrollstart",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onoverscrollstart",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onpause",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onpause",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onplay",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onplay",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onplaying",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onplaying",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onprogress",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onprogress",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onratechange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onratechange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onreset",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onreset",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onresize",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onresize",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onscroll",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onscroll",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onscrollend",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onscrollend",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onsecuritypolicyviolation",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onsecuritypolicyviolation",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onseeked",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onseeked",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onseeking",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onseeking",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onselect",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onselect",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onslotchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onslotchange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onscrollsnapchange",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onscrollsnapchange",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onscrollsnapchanging",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onscrollsnapchanging",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onstalled",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onstalled",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onsubmit",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onsubmit",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onsuspend",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onsuspend",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get ontimeupdate",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set ontimeupdate",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get ontoggle",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set ontoggle",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onvolumechange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onvolumechange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onwaiting",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onwaiting",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onwebkitanimationend",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onwebkitanimationend",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onwebkitanimationiteration",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onwebkitanimationiteration",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onwebkitanimationstart",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onwebkitanimationstart",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onwebkittransitionend",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onwebkittransitionend",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onwheel",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onwheel",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onauxclick",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onauxclick",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get ongotpointercapture",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set ongotpointercapture",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onlostpointercapture",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onlostpointercapture",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onpointerdown",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onpointerdown",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onpointermove",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onpointermove",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onpointerrawupdate",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onpointerrawupdate",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onpointerup",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onpointerup",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onpointercancel",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onpointercancel",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onpointerover",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onpointerover",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onpointerout",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onpointerout",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onpointerenter",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onpointerenter",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onpointerleave",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onpointerleave",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get ontouchcancel",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set ontouchcancel",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get ontouchend",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set ontouchend",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get ontouchmove",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set ontouchmove",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get ontouchstart",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set ontouchstart",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onselectstart",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onselectstart",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onselectionchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onselectionchange",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onanimationcancel",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onanimationcancel",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onanimationend",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onanimationend",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onanimationiteration",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onanimationiteration",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onanimationstart",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onanimationstart",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get ontransitionrun",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set ontransitionrun",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get ontransitionstart",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set ontransitionstart",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get ontransitionend",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set ontransitionend",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get ontransitioncancel",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set ontransitioncancel",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onbeforexrselect",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onbeforexrselect",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get oncopy",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set oncopy",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get oncut",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set oncut",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get onpaste",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set onpaste",
+      "why": "parameter type EventHandler"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get dataset",
+      "why": "interface DOMStringMap is not bound"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get focusGroup",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get focusGroupStart",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set focusGroupStart",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get style",
+      "why": "interface CSSStyleDeclaration is not bound"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "get attributeStyleMap",
+      "why": "interface StylePropertyMap is not bound"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "attachInternals/1",
+      "why": "interface ElementInternals is not bound"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "focus/1",
+      "why": "parameter type optional FocusOptions"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "focus/0",
+      "why": "default `{}` of argument options"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "hideUnboundedElement/0",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "scrollParent/0",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "showPopover/1",
+      "why": "parameter type optional ShowPopoverOptions"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "showUnboundedElement/0",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "togglePopover/1",
+      "why": "parameter type optional (TogglePopoverOptions or boolean)"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "get alpha",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "set alpha",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "get colorSpace",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "set colorSpace",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "get files",
+      "why": "interface FileList is not bound"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "set files",
+      "why": "interface FileList is not bound"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "get switch",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "set switch",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "get valueAsDate",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "set valueAsDate",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "get validity",
+      "why": "interface ValidityState is not bound"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "get labels",
+      "why": "interface NodeList is not bound"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "get selectionStart",
+      "why": "result type unsigned long?"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "set selectionStart",
+      "why": "parameter type unsigned long?"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "get selectionEnd",
+      "why": "result type unsigned long?"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "set selectionEnd",
+      "why": "parameter type unsigned long?"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "get capture",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "set capture",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "get webkitEntries",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "createValueRange/2",
+      "why": "interface OpaqueRange is not bound"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "setRangeText/4",
+      "why": "parameter type optional SelectionMode"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "setRangeText/3",
+      "why": "default `\"preserve\"` of argument selectionMode"
+    }
+  ]
+}

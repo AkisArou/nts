@@ -219,3 +219,65 @@ attribute, event type, selector), the program could intern it once through a
 host hook at module initialization and pass the id afterwards. The experiment
 does this explicitly with `nts_dom_intern`. Requested only after items 1–2,
 and only if measurements show the explicit form is a burden.
+
+## 7. Defect: `===` between related handle types is invalid C
+
+Found 2026-10-06 by the generated DOM bindings (`target === button`, a `Node`
+against an `HTMLElement`). The C backend compares two handles of related
+`HostClass`/`Class` types as the raw pointers they are, `v22 = v21 == v5`,
+where `v21` is a `struct NtsDomNode *` and `v5` a `struct NtsDomElement *`.
+Comparing pointers to distinct struct types is a constraint violation in C
+(C11 6.5.9p2); clang accepts it with `-Wcompare-distinct-pointer-types`, and
+`-pedantic-errors` or `-Werror` rejects it. The answer at run time is right:
+the addresses are the same object's. LLVM compares `ptr`s and is unaffected.
+
+Reduction (with `types/dom-idl.d.ts` and `types/dom-abi.d.ts` beside it,
+`nts emit-c --rc`):
+
+```ts
+import { document } from "nts:dom";
+export function same(): boolean {
+  const tr = document().createElement("tr");
+  return tr.firstChild === tr; // Node | null against Element
+}
+```
+
+Control: `tr.firstChild === tr.firstChild` (two `Node`s) emits no warning.
+
+**Proposed.** Compare handles as `void *` (or convert the narrower to the
+wider family's struct) in the C backend, as LLVM already does.
+
+**Accept.** The reduction's `program.c` compiles with `-pedantic-errors`.
+
+## 8. A `HostClass` handle through an interface method
+
+Found 2026-10-06 writing the differential vectors. A host handle may not be
+the parameter or the result of a method called through an interface or an
+object type -- the shape every component interface in an application has
+(`render(parent: Element)`, `create(): Node`):
+
+```ts
+interface Host { empty(node: Node): boolean; }   // or { make(): Node; }
+const host: Host = { empty: (node: Node) => node.firstChild === null };
+host.empty(tr);
+// NTS1001 an opaque C pointer converted to a different representation is
+//         not supported by this lowering yet
+// result form: NTS2008 a value of type NativePointer(Opaque(Handle { tag:
+//         "NtsDomNode", ... family: Host(..) })) cannot be read back yet
+```
+
+Controls that compile: the same arrow as a local closure called directly,
+and the same function at module level (direct calls with an upcast,
+`Element` into `Node`, included). So the gap is erasure: a method call
+through an object passes erased values, and `HostClass` has no erasure tag
+(`tags.rs` `handle_tag(Host) = None`, left out deliberately when the family
+was introduced, until a program needed it).
+
+**Proposed.** Give the host family an erasure tag, as the GObject and
+Objective-C families have one: erased, the handle is the pointer with its
+family's tag; read back, it is checked and borrowed (stack-rooted, as any
+host result); kept, it is retained through the family's pair.
+
+**Accept.** Arms `{ empty(node: Node): boolean }` and `{ make(): Node }`
+compile on both backends, with no retain for a handle that stays on the
+stack, and `leak=0` under RC.

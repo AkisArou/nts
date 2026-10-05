@@ -1,17 +1,19 @@
-// Two binding kernels from native-typescript's Chromium matrix
-// (benchmarks/chromium: create-element, detached-counter-tree), on the
-// entered DOM ABI, for comparison with its numbers. The work per iteration
-// is the same: create a detached div; or create a button and a text node,
-// append, and change the text. No node here leaves the frame, so none is
-// rooted: each is Blink's own pointer, found by Oilpan on the native stack,
-// as ScriptC passed nodes its compiler proved frame-bounded.
-import * as dom from "nts:chromium-dom";
-import type { DomContext } from "nts:chromium-dom";
+// Three binding kernels from native-typescript's Chromium matrix
+// (benchmarks/chromium: create-element, detached-counter-tree,
+// synchronous-event-round-trip), written as page script writes them, for
+// comparison with its numbers. The work per iteration is the same: create a
+// detached div; create a button and a text node, append, and change the
+// text; click the body, dispatching to a compiled closure. No node here
+// leaves the frame, so none is rooted: each is Blink's own pointer, found by
+// Oilpan on the native stack.
+import { document } from "nts:dom";
 
-export function ntsKernelCreateElements(c: DomContext, iterations: number): number {
+export function ntsKernelCreateElements(iterations: number): number {
+  const d = document();
   let checksum = 0;
   for (let i = 0; i < iterations; i += 1) {
-    if (dom.nts_dom_create_element(c, "div") !== null) checksum += 1;
+    d.createElement("div");
+    checksum += 1;
   }
   return checksum;
 }
@@ -19,29 +21,27 @@ export function ntsKernelCreateElements(c: DomContext, iterations: number): numb
 // native-typescript's synchronous-event-round-trip: listen on the body, click
 // it `iterations` times, each dispatching to a compiled closure, and remove
 // the listener.
-export function ntsKernelEventRoundTrips(c: DomContext, iterations: number): number {
-  const document = dom.nts_dom_document(c);
-  const body = document === null ? null : dom.nts_dom_query(c, document, "body");
+export function ntsKernelEventRoundTrips(iterations: number): number {
+  const body = document().body;
   if (body === null) return 0;
   const state = { checksum: 0 };
-  const listener = dom.nts_dom_listen(c, body, "click", (): void => {
+  const listener = body.listen("click", (): void => {
     state.checksum += 1;
   });
-  if (listener === null) return 0;
-  for (let i = 0; i < iterations; i += 1) dom.nts_dom_click(c, body);
-  dom.nts_dom_unlisten(c, listener);
+  for (let i = 0; i < iterations; i += 1) body.click();
+  listener.remove();
   return state.checksum;
 }
 
-export function ntsKernelCounterTrees(c: DomContext, iterations: number): number {
+export function ntsKernelCounterTrees(iterations: number): number {
+  const d = document();
   let checksum = 0;
   for (let i = 0; i < iterations; i += 1) {
-    const button = dom.nts_dom_create_element(c, "button");
-    const label = dom.nts_dom_create_text(c, "Count: 0");
-    if (button !== null && label !== null && dom.nts_dom_append_child(c, button, label) === 0 &&
-      dom.nts_dom_set_text_content(c, label, "Count: 1") === 0) {
-      checksum += 1;
-    }
+    const button = d.createElement("button");
+    const label = d.createTextNode("Count: 0");
+    button.appendChild(label);
+    label.data = "Count: 1";
+    checksum += 1;
   }
   return checksum;
 }

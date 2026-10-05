@@ -1,4 +1,4 @@
 {
   "extends": "../../../../tsconfig.fixtures.json",
-  "files": ["src/main.ts", "src/dom.ts", "src/rows.ts", "types/dom-host.d.ts", "types/dom-abi.d.ts", "../../../native/libc.d.ts"]
+  "files": ["src/main.ts", "src/dom.ts", "src/rows.ts", "src/idl-vectors.ts", "types/dom-host.d.ts", "types/dom-abi.d.ts", "types/dom-idl.d.ts", "../../../native/libc.d.ts"]
 }

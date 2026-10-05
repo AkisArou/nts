@@ -31,13 +31,17 @@ worker's thread; nothing here assumes a single thread except the node root set
 ## 2. Entry: one per native callback
 
 Every native callback -- an event, a task, a microtask, an idle period -- is
-one *entry* (`nts_blink_dom_entry`): it holds a `v8::HandleScope` and a
-`v8::MicrotasksScope(kRunMicrotasks)` on the document agent's own queue (the
-agent's `EventLoop::microtask_queue()`, not the isolate's default:
-`core/execution_context/window_agent.cc:15-26`), and nothing per operation.
-Operations inside it enter no V8 context and create no `TryCatch`: a DOM
-exception is recorded with `DummyExceptionStateForTesting` and returned as the
-operation's own status code.
+one *entry* (`nts_blink_dom_entry`, a listener's dispatch, a queued job): it
+holds a `v8::HandleScope` and a `v8::MicrotasksScope(kRunMicrotasks)` on the
+document agent's own queue (the agent's `EventLoop::microtask_queue()`, not the
+isolate's default: `core/execution_context/window_agent.cc:15-26`), and
+nothing per operation. It also makes its context the thread's *entered* one
+(`nts_dom::entered`, restored on return), which is how a DOM call finds the
+document and caches it needs: no call carries a context, so a method's
+receiver is its first argument, and a call outside an entry -- an embedder
+error, since program code runs only inside one -- stops the renderer.
+Operations enter no V8 context and create no `TryCatch`: a DOM exception is
+recorded with `DummyExceptionStateForTesting` (section 7).
 
 That is what `V8ScriptRunner::CallFunction` supplies a JavaScript callback, and
 for the same reason: nested script (a custom element's reaction, say) cannot
@@ -196,19 +200,60 @@ a far larger change for the same answer.
 
 ## 7. Errors
 
-Each operation returns its DOM exception code, or a node and
-`nts_dom_last_error`. That is complete but untyped; the path to typed
-exceptions is a binding-level convention the compiler can lower -- a status
-result mapped to a thrown `DOMException` by the binding's declaration -- once
-the bindings are generated (section 8).
+A member Blink marks as raising (`[RaisesException]`, which bind_gen reads as
+`may_throw_exception`) takes a last `NtsDomException **` -- the compiler's
+`@ntsThrows` slot, GLib's `GError **` convention -- and no other member pays
+for one. Blink records the exception's code and message without V8; the
+adapter reports it through the slot, and the program throws an `Error` whose
+message is "Name: message": the DOMException's name, or the ECMAScript
+error's (`TypeError`), then Blink's own text -- page script's, without the
+binding's "Failed to execute 'x' on 'Y'" prefix. So `try`/`catch` in the
+program is page script's, and a status code is never read by hand. Open: the
+thrown value is an `Error`, not a `DOMException` with `name` and `code`.
 
-## 8. Bindings
+## 8. Bindings, generated from Blink's IDL
 
-The ABI is hand-written today and is the template for generation from Blink's
-resolved IDL facts: operations named by IDL member, `[CEReactions]` from the
-IDL, nullability from the IDL, node results typed by interface. WebIDL
-generation is deliberately not started yet: the representation it will
-generate -- pointer nodes, views, entries, statuses -- had to be proven first.
+`tooling/chromium/bindgen/generate.py` reads the resolved IDL database
+Blink's build writes (`web_idl_database.pickle`) with Blink's `web_idl`, and
+asks Blink's binding generator (`bind_gen._make_blink_api_call`) for each
+member's C++ call. So `[Reflect]`, `[ImplementedAs]`, partial interfaces and
+mixins, `[CallWith]`, which members take an `ExceptionState`, `[CEReactions]`
+(setters and operations only, as bind_gen opens it) and which arities exist
+are decided by the code that decides them for page script, not re-derived.
+An optional argument with a default is passed it, one without truncates the
+call (`num_of_args`), exactly as V8's binding does.
+
+It emits three files for an allowlist of interfaces
+(`bindgen/allowlist.json`: Node, Element, CharacterData, Text, Document,
+DocumentFragment, HTMLElement, HTMLInputElement today):
+
+- `native/ffi/dom_idl.h`, one C function per member and arity;
+- `native/dom_idl.cc`, each one's body: Blink's call, inside Blink's namespace;
+- `types/dom-idl.d.ts`, module `nts:dom` as a program writes it.
+
+The surface is GTK's (`nts bind-gir`), which is GJS's: an interface is a
+`HostClass` handle intersected with its methods by IDL inheritance, an
+operation is a method with `@ntsSymbol`, an attribute a property read and
+written through two methods (`@ntsGet`/`@ntsSet`). A program writes
+`el.setAttribute("class", c)`, `tr.firstChild`, `text.nodeValue = label`,
+`d.createElement("tr")` -- page script's code, with `asElement(node)` where
+page script would just use the node. Text is a `StringView` both ways,
+numbers are `CNumber`s (plain numbers converted at the call), a union with
+one string member takes the string, and `asX` narrows with Blink's
+`DynamicTo`. A member whose types do not map yet (sequences, dictionaries,
+callbacks, enumerations, unbound interfaces, `[RuntimeEnabled]`, the modules
+component) is skipped and listed in `bindgen/report.json`, never guessed: 433
+functions bound, 774 members listed.
+
+The hand-written rest (`dom_abi.h`, `types/dom-abi.d.ts`) is what the IDL does
+not say: roots, the document, exception messages, listening with a compiled
+closure. Generation changed no cost: the rows workload allocates exactly what
+it did, and keeps exactly two roots per row.
+
+Correctness is differential (`src/idl-vectors.ts`): one source, run compiled
+through these bindings and, types stripped, as page script through V8's on
+the oracle page; both transcripts -- values, node shapes, each exception's
+name and message -- land in the DOM the smoke compares.
 
 ## 9. No Web Host IR
 

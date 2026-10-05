@@ -1,4 +1,4 @@
-// A js-framework-benchmark-shaped table app on the entered DOM ABI. The page
+// A js-framework-benchmark-shaped table app on the DOM generated from Blink's IDL. The page
 // script in rows-benchmark-v8 is the same algorithm in idiomatic vanilla JS:
 // clone a template row, fill its two text nodes, keep the row and its label.
 // Same seeds, same operations, so both must build the same DOM.
@@ -6,9 +6,8 @@
 // State is explicit (a fresh environment does not re-run module globals).
 // Nodes are Blink's own: the ones this state keeps are rooted and unrooted
 // by the compiler, and the ones a row is built through cost nothing.
-import * as dom from "nts:chromium-dom";
-import type { DomContext, Element, Node } from "nts:chromium-dom";
-import type { c_int32 } from "c:types";
+import { asElement, document } from "nts:dom";
+import type { Document, Element, Node } from "nts:dom";
 
 interface Row {
   id: number;
@@ -18,7 +17,6 @@ interface Row {
 }
 
 export interface RowsApp {
-  context: DomContext;
   tbody: Element;
   template: Element;
   rows: Row[];
@@ -30,42 +28,36 @@ export interface RowsApp {
   nouns: string[];
 }
 
-function element(c: DomContext, tag: string, className: string): Element {
-  const node = dom.nts_dom_create_element(c, tag)!;
-  if (className.length > 0) dom.nts_dom_set_attribute(c, node, "class", className);
+function element(d: Document, tag: string, className: string): Element {
+  const node = d.createElement(tag);
+  if (className.length > 0) node.setAttribute("class", className);
   return node;
 }
-function text(c: DomContext, data: string): Node {
-  return dom.nts_dom_create_text(c, data)!;
-}
 
-// <tr><td class=col-md-1> </td><td class=col-md-4><a class=lbl> </a></td>
-// <td class=col-md-1><a class=remove><span class="remove glyphicon
-// glyphicon-remove" aria-hidden=true></span></a></td><td class=col-md-6></td></tr>
-function buildTemplate(c: DomContext): Element {
-  const tr = element(c, "tr", "");
-  const id = element(c, "td", "col-md-1");
-  dom.nts_dom_append_child(c, id, text(c, " "));
-  dom.nts_dom_append_child(c, tr, id);
-  const labelCell = element(c, "td", "col-md-4");
-  const label = element(c, "a", "lbl");
-  dom.nts_dom_append_child(c, label, text(c, " "));
-  dom.nts_dom_append_child(c, labelCell, label);
-  dom.nts_dom_append_child(c, tr, labelCell);
-  const removeCell = element(c, "td", "col-md-1");
-  const remove = element(c, "a", "remove");
-  const icon = element(c, "span", "remove glyphicon glyphicon-remove");
-  dom.nts_dom_set_attribute(c, icon, "aria-hidden", "true");
-  dom.nts_dom_append_child(c, remove, icon);
-  dom.nts_dom_append_child(c, removeCell, remove);
-  dom.nts_dom_append_child(c, tr, removeCell);
-  dom.nts_dom_append_child(c, tr, element(c, "td", "col-md-6"));
+function buildTemplate(d: Document): Element {
+  const tr = element(d, "tr", "");
+  const id = element(d, "td", "col-md-1");
+  id.appendChild(d.createTextNode(" "));
+  tr.appendChild(id);
+  const labelCell = element(d, "td", "col-md-4");
+  const label = element(d, "a", "lbl");
+  label.appendChild(d.createTextNode(" "));
+  labelCell.appendChild(label);
+  tr.appendChild(labelCell);
+  const removeCell = element(d, "td", "col-md-1");
+  const remove = element(d, "a", "remove");
+  const icon = element(d, "span", "remove glyphicon glyphicon-remove");
+  icon.setAttribute("aria-hidden", "true");
+  remove.appendChild(icon);
+  removeCell.appendChild(remove);
+  tr.appendChild(removeCell);
+  tr.appendChild(element(d, "td", "col-md-6"));
   return tr;
 }
 
-export function ntsRowsCreate(c: DomContext, tbody: Element): RowsApp {
+export function ntsRowsCreate(tbody: Element): RowsApp {
   return {
-    context: c, tbody, template: buildTemplate(c), rows: [], nextId: 1, seed: 1, selected: null,
+    tbody, template: buildTemplate(document()), rows: [], nextId: 1, seed: 1, selected: null,
     adjectives: ["pretty", "large", "big", "small", "tall", "short", "long", "handsome", "plain", "quaint",
       "clean", "elegant", "easy", "angry", "crazy", "helpful", "mushy", "odd", "unsightly", "adorable",
       "important", "inexpensive", "cheap", "expensive", "fancy"],
@@ -82,24 +74,22 @@ function random(app: RowsApp, max: number): number {
 }
 
 function appendRows(app: RowsApp, count: number): void {
-  const c = app.context;
   for (let i = 0; i < count; ++i) {
     const id = app.nextId++;
     const label = app.adjectives[random(app, app.adjectives.length)] + " " +
       app.colours[random(app, app.colours.length)] + " " + app.nouns[random(app, app.nouns.length)];
-    const tr = dom.nts_dom_clone_element(c, app.template, 1 as c_int32)!;
-    const idCell = dom.nts_dom_first_child(c, tr)!;
-    dom.nts_dom_set_text_content(c, dom.nts_dom_first_child(c, idCell)!, "" + id);
-    const anchor = dom.nts_dom_first_child(c, dom.nts_dom_next_sibling(c, idCell)!)!;
-    const text = dom.nts_dom_first_child(c, anchor)!;
-    dom.nts_dom_set_text_content(c, text, label);
-    dom.nts_dom_append_child(c, app.tbody, tr);
+    const tr = asElement(app.template.cloneNode(true))!;
+    const idCell = tr.firstChild!;
+    idCell.firstChild!.nodeValue = "" + id;
+    const text = idCell.nextSibling!.firstChild!.firstChild!;
+    text.nodeValue = label;
+    app.tbody.appendChild(tr);
     app.rows.push({id, label, tr, text});
   }
 }
 
 function clearRows(app: RowsApp): void {
-  dom.nts_dom_set_text_content(app.context, app.tbody, "");
+  app.tbody.textContent = "";
   app.rows = [];
   app.selected = null;
 }
@@ -108,7 +98,6 @@ function clearRows(app: RowsApp): void {
 // `count` rows, 1 append `count`, 2 update every 10th label, 3 select row
 // `count`, 4 swap rows 1 and 998, 5 remove row `count`, 6 clear.
 export function ntsRowsOperate(app: RowsApp, operation: number, count: number): number {
-  const c = app.context;
   if (operation === 0) {
     clearRows(app);
     appendRows(app, count);
@@ -118,27 +107,27 @@ export function ntsRowsOperate(app: RowsApp, operation: number, count: number): 
     for (let i = 0; i < app.rows.length; i += 10) {
       const row = app.rows[i];
       row.label = row.label + " !!!";
-      dom.nts_dom_set_text_content(c, row.text, row.label);
+      row.text.nodeValue = row.label;
     }
   } else if (operation === 3) {
-    if (app.selected !== null) dom.nts_dom_set_attribute(c, app.selected, "class", "");
+    if (app.selected !== null) app.selected.setAttribute("class", "");
     const selected = app.rows[count].tr;
-    dom.nts_dom_set_attribute(c, selected, "class", "danger");
+    selected.setAttribute("class", "danger");
     app.selected = selected;
   } else if (operation === 4) {
     if (app.rows.length > 998) {
       const a = app.rows[1];
       const b = app.rows[998];
-      const after = dom.nts_dom_next_sibling(c, b.tr);
-      dom.nts_dom_insert_before(c, app.tbody, b.tr, a.tr);
-      dom.nts_dom_insert_before(c, app.tbody, a.tr, after);
+      const after = b.tr.nextSibling;
+      app.tbody.insertBefore(b.tr, a.tr);
+      app.tbody.insertBefore(a.tr, after);
       app.rows[1] = b;
       app.rows[998] = a;
     }
   } else if (operation === 5) {
     const row = app.rows[count];
     if (row.tr === app.selected) app.selected = null;
-    dom.nts_dom_remove(c, row.tr);
+    row.tr.remove();
     app.rows.splice(count, 1);
   } else {
     clearRows(app);

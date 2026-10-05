@@ -1,0 +1,14 @@
+{
+  "chromiumRevision": "b510e9d7cd3a2fbd78d0ddc42234103206c5f78d",
+  "root": "Node",
+  "interfaces": [
+    "Node",
+    "Element",
+    "CharacterData",
+    "Text",
+    "Document",
+    "DocumentFragment",
+    "HTMLElement",
+    "HTMLInputElement"
+  ]
+}

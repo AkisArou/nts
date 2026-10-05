@@ -1,0 +1,164 @@
+// Differential vectors for the DOM generated from Blink's IDL. The same file
+// runs twice on the same page: compiled, through the generated bindings, and
+// with its types stripped, as page script through V8's. Each step appends a
+// line to a transcript; the two transcripts, and the DOM each leaves behind,
+// must be equal. One source, so the two sides cannot drift apart.
+//
+// It exercises one of each thing the generator maps: text, nullable text and
+// numbers both ways; [Reflect]ed and enumerated attributes; booleans; node
+// results; an optional argument with a default (`cloneNode()`) beside the
+// arity that passes it; overloads by count; a union taking a string
+// (`textContent`); and the exceptions members raise, by name and message.
+// Page script has no `asText`/`asHTMLElement`/`asHTMLInputElement`; the
+// oracle defines them (`instanceof`) where the import stood. What a caught
+// error reads as is passed in.
+import { asHTMLElement, asHTMLInputElement, asText } from "nts:dom";
+import type { Document, Element, Node } from "nts:dom";
+
+export interface VectorHost {
+  // "Name: message", the binding's own context prefix left out.
+  failure(error: unknown): string;
+}
+
+function describe(node: Node | null): string {
+  return node === null ? "null" : node.nodeName;
+}
+
+export function idlTranscript(d: Document, root: Element, host: VectorHost): string {
+  const lines: string[] = [];
+  const log = (label: string, value: string): void => {
+    lines.push(label + "=" + value);
+  };
+  const thrown = (label: string, run: () => void): void => {
+    try {
+      run();
+      log(label, "ok");
+    } catch (error) {
+      log(label, host.failure(error));
+    }
+  };
+
+  // Text attributes, reflected and not; an enumerated one normalizes.
+  const div = asHTMLElement(d.createElement("div"))!;
+  root.appendChild(div);
+  div.id = "vectors";
+  div.className = "a b";
+  div.title = "TéΩ";
+  div.lang = "el";
+  div.dir = "RTL";
+  log("id", div.id);
+  log("className", div.className);
+  log("classAttr", "" + div.getAttribute("class"));
+  log("title", div.title);
+  log("lang", div.lang);
+  log("dir", div.dir);
+  log("tagName", div.tagName);
+  log("localName", div.localName);
+  log("missingAttr", "" + div.getAttribute("data-none"));
+  log("hasAttr", "" + div.hasAttribute("title"));
+  div.removeAttribute("title");
+  log("hasAttrAfter", "" + div.hasAttribute("title"));
+  log("toggle1", "" + div.toggleAttribute("data-flag"));
+  log("toggle2", "" + div.toggleAttribute("data-flag", true));
+  log("toggle3", "" + div.toggleAttribute("data-flag"));
+
+  // Nullable text: an element's nodeValue is null; setting it does nothing.
+  log("elementNodeValue", "" + div.nodeValue);
+  div.nodeValue = "ignored";
+  log("elementNodeValueAfter", "" + div.nodeValue);
+
+  // Tree shape through node results.
+  const first = d.createElement("span");
+  const second = d.createElement("b");
+  const words = d.createTextNode("hello");
+  div.appendChild(first);
+  div.appendChild(words);
+  div.insertBefore(second, words);
+  log("first", describe(div.firstChild));
+  log("last", describe(div.lastChild));
+  log("secondPrev", describe(second.previousSibling));
+  log("wordsNext", describe(words.nextSibling));
+  log("parent", describe(words.parentNode));
+  log("parentElement", describe(words.parentElement));
+  log("firstElement", describe(div.firstElementChild));
+  log("lastElement", describe(div.lastElementChild));
+  log("elementCount", "" + div.childElementCount);
+  log("nodeType", "" + words.nodeType);
+  log("hasChildren", "" + div.hasChildNodes());
+  log("contains", "" + div.contains(words));
+  log("connected", "" + div.isConnected);
+  log("position", "" + first.compareDocumentPosition(second));
+  log("closest", describe(second.closest("#vectors")));
+  log("matches", "" + div.matches("div.a.b"));
+  log("query", describe(d.querySelector("#vectors > b")));
+  log("byId", describe(d.getElementById("vectors")));
+
+  // An optional argument with a default, and the arity that passes it.
+  const shallow = div.cloneNode();
+  const deep = div.cloneNode(true);
+  log("shallowChildren", "" + shallow.hasChildNodes());
+  log("deepChildren", "" + deep.hasChildNodes());
+  log("deepEqual", "" + deep.isEqualNode(div));
+  log("sameNode", "" + deep.isSameNode(div));
+
+  // Character data, and a union that takes a string.
+  const text = words;
+  text.appendData(" world");
+  text.insertData(0, ">");
+  text.deleteData(1, 1);
+  text.replaceData(0, 1, "<");
+  log("data", text.data);
+  log("length", "" + text.length);
+  log("substring", text.substringData(1, 4));
+  const tail = text.splitText(5);
+  log("split", text.data + "|" + tail.data);
+  log("whole", text.wholeText);
+  div.normalize();
+  log("normalized", asText(div.lastChild!)!.data);
+  div.textContent = "replaced";
+  log("textContent", "" + div.textContent);
+  log("docTextContent", "" + d.textContent);
+
+  // An input: text both ways, booleans, numbers, and the arity overloads.
+  const input = asHTMLInputElement(d.createElement("input"))!;
+  root.appendChild(input);
+  input.value = "typed";
+  input.defaultValue = "default";
+  input.placeholder = "hint";
+  input.maxLength = 5;
+  input.size = 7;
+  input.required = true;
+  log("value", input.value);
+  log("valueAttr", "" + input.getAttribute("value"));
+  log("placeholder", input.placeholder);
+  log("maxLength", "" + input.maxLength);
+  log("size", "" + input.size);
+  log("required", "" + input.required);
+  input.setSelectionRange(1, 3);
+  input.type = "checkbox";
+  input.checked = true;
+  log("type", input.type);
+  log("checked", "" + input.checked);
+
+  // What the members raise: each exception's name and Blink's message.
+  thrown("syntax", () => d.querySelector("["));
+  thrown("hierarchy", () => div.appendChild(div));
+  thrown("notFound", () => root.removeChild(words));
+  thrown("badName", () => d.createElement("bad name"));
+  thrown("badAttr", () => div.setAttribute("1bad", "x"));
+  thrown("insertNotChild", () => div.insertBefore(d.createElement("i"), root));
+  thrown("indexSize", () => text.substringData(99, 1));
+  thrown("negativeMaxLength", () => {
+    input.type = "text";
+    input.maxLength = -1;
+  });
+  thrown("zeroSize", () => {
+    input.size = 0;
+  });
+  thrown("selectionOnCheckbox", () => {
+    input.type = "checkbox";
+    input.setSelectionRange(0, 1);
+  });
+  thrown("fine", () => div.setAttribute("data-ok", "1"));
+  return lines.join("\n");
+}

@@ -5,6 +5,9 @@ source_set("dom_bridge") {
   visibility = [ "//nts:*" ]
   sources = [
     "//nts/dom_bridge.cc",
+    "//nts/dom_context.h",
+    "//nts/dom_idl.cc",
+    "//nts/dom_idl.h",
     "//nts/dom_abi.h",
     "//nts/nts_string_view.h",
     "//nts/dom_bridge.h",

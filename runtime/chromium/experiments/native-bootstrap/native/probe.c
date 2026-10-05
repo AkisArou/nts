@@ -108,11 +108,11 @@ typedef struct DomInvocation {
 } DomInvocation;
 static void run_dom_program(void* state) {
   DomInvocation* call = state;
-  call->result = ntsChromiumDomProgram(call->context);
+  call->result = ntsChromiumDomProgram();
 }
 static void run_dom_counter(void* state) {
   DomInvocation* call = state;
-  ntsChromiumDomCounter(call->context, call->count);
+  ntsChromiumDomCounter(call->count);
 }
 
 double nts_chromium_probe_dom_run(NtsChromiumProbe* probe,
@@ -358,6 +358,11 @@ struct NtsChromiumBenchmark {
   uint32_t mode;
   double result;
 };
+static void prepare_benchmark(void* state) {
+  NtsChromiumBenchmark* benchmark = state;
+  benchmark->state =
+      ntsChromiumPrepareBenchmark(benchmark->first, benchmark->second);
+}
 NtsChromiumBenchmark* nts_chromium_benchmark_create(NtsChromiumProbe* probe,
                                                     NtsDomContext* context,
                                                     NtsDomNode* node,
@@ -369,12 +374,11 @@ NtsChromiumBenchmark* nts_chromium_benchmark_create(NtsChromiumProbe* probe,
     abort();
   ProbeScope scope = enter(probe);
   benchmark->live_before_setup = nts_live_count();
-  NtsString* first = nts_string_from_utf8(a, bytes);
-  NtsString* second = nts_string_from_utf8(b, bytes);
-  benchmark->state = ntsChromiumPrepareBenchmark(context, first, second);
-  benchmark->first = first;
-  benchmark->second = second;
-  if (nts_raising() || !benchmark->state)
+  benchmark->first = nts_string_from_utf8(a, bytes);
+  benchmark->second = nts_string_from_utf8(b, bytes);
+  /* Interning the two texts is a DOM call, so preparing is an entry. */
+  if (nts_blink_dom_entry(context, prepare_benchmark, benchmark) ||
+      nts_raising() || !benchmark->state)
     abort();
   benchmark->probe = probe;
   benchmark->context = context;
@@ -385,7 +389,7 @@ NtsChromiumBenchmark* nts_chromium_benchmark_create(NtsChromiumProbe* probe,
 static void run_benchmark(void* state) {
   NtsChromiumBenchmark* benchmark = state;
   benchmark->result = ntsChromiumBenchmarkLoop(
-      benchmark->context, benchmark->node, benchmark->state, benchmark->first,
+      benchmark->node, benchmark->state, benchmark->first,
       benchmark->second, (double)benchmark->iterations,
       (double)benchmark->mode);
 }
@@ -471,9 +475,8 @@ static void create_rows(void* state) {
   RowsSetup* setup = state;
   /* The app keeps the table, and program.h says ntsRowsCreate takes over
      the caller's reference to it: hand it a root of its own. */
-  setup->rows->app = ntsRowsCreate(
-      setup->rows->context,
-      (struct NtsDomElement*)nts_dom_retain(setup->tbody));
+  setup->rows->app =
+      ntsRowsCreate((struct NtsDomElement*)nts_dom_retain(setup->tbody));
 }
 NtsChromiumRows* nts_chromium_rows_create(NtsChromiumProbe* probe,
                                           NtsDomContext* context,
@@ -521,7 +524,7 @@ static void destroy_rows(void* state) {
 void nts_chromium_rows_destroy(NtsChromiumRows* rows) {
   ProbeScope scope = enter(rows->probe);
   /* A disposed document refuses the entry; the app still drops its state,
-     and its DOM calls refuse outside an entry without touching Blink. */
+     which makes no DOM call -- only releases, which need none. */
   if (nts_blink_dom_entry(rows->context, destroy_rows, rows))
     destroy_rows(rows);
   nts_release((NtsHeader*)rows->app);
@@ -541,9 +544,9 @@ typedef struct KernelRun {
 static void run_kernel(void* state) {
   KernelRun* run = state;
   run->result =
-      run->kernel == 0   ? ntsKernelCreateElements(run->context, run->iterations)
-      : run->kernel == 1 ? ntsKernelCounterTrees(run->context, run->iterations)
-                         : ntsKernelEventRoundTrips(run->context, run->iterations);
+      run->kernel == 0   ? ntsKernelCreateElements(run->iterations)
+      : run->kernel == 1 ? ntsKernelCounterTrees(run->iterations)
+                         : ntsKernelEventRoundTrips(run->iterations);
 }
 double nts_chromium_kernel_run(NtsChromiumProbe* probe,
                                NtsDomContext* context,

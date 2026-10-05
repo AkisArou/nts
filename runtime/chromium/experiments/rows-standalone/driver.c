@@ -97,7 +97,7 @@ int main(int argc, char** argv) {
     /* ntsRowsCreate takes over the caller's reference to the table it keeps
        (program.h): hand it a root of its own. */
     app = ntsRowsCreate(
-        dom, (struct NtsDomElement*)nts_dom_retain(mini_dom_find(dom, "tbody")));
+        (struct NtsDomElement*)nts_dom_retain(mini_dom_find(dom, "tbody")));
     mini_dom_leave(dom);
     if (nts_raising() || !app)
       abort();

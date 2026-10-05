@@ -64,10 +64,12 @@ function stage(input: string, path: string): void {
   copyFileSync(input, destination);
   files[`nts/${path}`] = hash(destination);
 }
-for (const file of ["BUILD.gn", "probe.gni", "probe.c", "probe.h", "probe_main.cc", "probe_observer.cc", "probe_observer.h", "dom_bridge.cc", "dom_bridge.h", "dom_bridge_bindings.h", "binding_benchmark.cc", "binding_benchmark.h", "rows_benchmark.cc", "rows_benchmark.h", "kernels_benchmark.cc", "kernels_benchmark.h"]) {
+for (const file of ["BUILD.gn", "probe.gni", "probe.c", "probe.h", "probe_main.cc", "probe_observer.cc", "probe_observer.h", "dom_bridge.cc", "dom_bridge.h", "dom_bridge_bindings.h", "dom_context.h", "dom_idl.cc", "binding_benchmark.cc", "binding_benchmark.h", "rows_benchmark.cc", "rows_benchmark.h", "kernels_benchmark.cc", "kernels_benchmark.h"]) {
   stage(resolve(fixture, "native", file), file);
 }
 stage(resolve(fixture, "native/ffi/dom_abi.h"), "dom_abi.h");
+// Generated from Blink's IDL (tooling/chromium/bindgen); dom_abi.h includes it.
+stage(resolve(fixture, "native/ffi/dom_idl.h"), "dom_idl.h");
 // Beside dom_abi.h and dom_bridge.h, which include it: the one C++ half of
 // StringView, the same for both backends.
 stage(resolve(root, "runtime/c/nts_string_view.h"), "nts_string_view.h");

@@ -23,30 +23,32 @@ typedef void (*NtsDomInvoke)(void* host, void (*call)(void*), void* state);
 void nts_blink_dom_set_invoker(NtsDomContext* context,
                                NtsDomInvoke invoke,
                                void* host);
-// Entered calls. One entry per native callback supplies what
-// V8ScriptRunner::CallFunction supplies a JS callback -- the agent's
-// microtask scope, so nested script cannot checkpoint mid-callback and the
-// outermost entry checkpoints on return. Operations inside it touch no V8
-// context, TryCatch or V8 exception object: Blink records the DOM exception
-// code without V8, and each result carries its own status. Outside an entry
-// they return kNtsDomNoEntry and do nothing.
-enum { kNtsDomNoEntry = 1001 };
+// Runs program code: `run(state)` as an entry. One entry per native callback
+// supplies what V8ScriptRunner::CallFunction supplies a JS callback -- the
+// agent's microtask scope, so nested script cannot checkpoint mid-callback
+// and the outermost entry checkpoints on return -- and makes the context the
+// one every DOM call inside it is part of. Calls touch no V8 context,
+// TryCatch or V8 exception object: Blink records a DOM exception without V8,
+// and the program throws it. 11 (InvalidStateError), without running, for a
+// closed context or an inactive document.
 int32_t nts_blink_dom_entry(NtsDomContext* context,
                             void (*run)(void*),
                             void* state);
+// The document's element with this id, or NULL: how native code outside
+// Blink's boundary hands the program a node to start from.
+NtsDomNode* nts_blink_dom_element_by_id(NtsDomContext* context,
+                                        const char* id);
 // The nodes the program keeps off the stack, rooted by nts_dom_retain: how
 // many distinct ones, on this thread.
 size_t nts_blink_dom_roots(void);
-// A conservative collection now, as one triggered by an allocation would be:
-// what a node only the native stack refers to must survive.
-void nts_blink_dom_collect_for_testing(NtsDomContext* context);
-// Text from a prepared buffer, as a view of its width: the benchmark's
-// control for the program's own `string`, which crosses the same way.
-int32_t nts_blink_dom_set_text_view(NtsDomContext* context,
-                                    NtsDomNode* node,
-                                    NtsStringView text);
-// Interns text native code holds for an id (nts_dom_intern for the program).
-uint32_t nts_blink_dom_intern(NtsDomContext* context, NtsStringView text);
+// Inside an entry. A conservative collection now, as one triggered by an
+// allocation would be: what a node only the native stack refers to must
+// survive.
+void nts_blink_dom_collect_for_testing(void);
+// Inside an entry. Text from a prepared buffer, as a view of its width: the
+// benchmark's control for the program's own `string`, which crosses the
+// same way.
+int32_t nts_blink_dom_set_text_view(NtsDomNode* node, NtsStringView text);
 void nts_blink_dom_callback(NtsDomContext* context,
                             void (*run)(void*),
                             void* state);
