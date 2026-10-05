@@ -554,6 +554,30 @@ int main(void) {{
 }
 
 #[test]
+fn pattern_extraction_does_not_rename_later_arguments() {
+    let harness = format!(
+        r#"{CHECK}
+double ordered(double n);
+double swapped(double n);
+double unused(double n);
+int main(void) {{
+    check("ordered(7)", ordered(7), 30);
+    check("swapped(-7)", swapped(-7), 25);
+    check("unused(7)", unused(7), 12);
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let Some(result) = build_and_run_with("a-pattern-parameter-before-scalars", &harness, provider) else {
+            return;
+        };
+        assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+        assert!(String::from_utf8_lossy(&result.stdout).contains("unused(7) = 12"));
+    }
+}
+
+#[test]
 fn facts_cross_function_boundaries() {
     // A parameter is written by callers and a call's result by the callee, so a
     // function analyzed alone knows neither. `pipeline` is fully provable only

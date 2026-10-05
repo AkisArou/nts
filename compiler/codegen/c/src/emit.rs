@@ -4256,14 +4256,30 @@ fn signature(program: &Program, func: &Func) -> Result<String, Diagnostic> {
     let returns = return_c_type(program, &func.return_type, &func.origin)?;
     let public = nts_codegen_common::symbols::is_public(program, func);
     let mut params = Vec::new();
-    for (index, param) in func.params.iter().enumerate() {
+    for (param, value) in func.params.iter().zip(parameter_values(func)?) {
         let ty = c_type_of(program, &param.ty, &param.origin)?;
-        params.push(format!(
-            "{ty} {}",
-            value_name(ValueId(u32::try_from(index).unwrap_or(0)))
-        ));
+        params.push(format!("{ty} {}", value_name(value)));
     }
     Ok(format_signature(&func.name, &returns, &params, public))
+}
+
+/// Argument positions locate actual parameter definitions, not arena indices.
+/// A binding pattern can emit extraction operations before the next argument.
+/// Dead definitions remain in the arena, so unused arguments keep their names.
+fn parameter_values(func: &Func) -> Result<Vec<ValueId>, Diagnostic> {
+    let invalid = || Diagnostic::error(
+        "NTS2006", "a parameter has no unique value definition", func.origin.location);
+    let mut values = vec![None; func.params.len()];
+    for (index, op) in func.values.iter().enumerate() {
+        if let OpKind::Param(at) = op.kind {
+            let slot = values.get_mut(at as usize).ok_or_else(invalid)?;
+            let value = ValueId(u32::try_from(index).map_err(|_| invalid())?);
+            if slot.replace(value).is_some() {
+                return Err(invalid());
+            }
+        }
+    }
+    values.into_iter().map(|value| value.ok_or_else(invalid)).collect()
 }
 
 fn format_signature(name: &str, returns: &str, params: &[String], public: bool) -> String {
@@ -4278,9 +4294,8 @@ fn format_signature(name: &str, returns: &str, params: &[String], public: bool) 
 
 /// The C name of a value.
 ///
-/// A parameter's value is the C parameter itself, which is why the arena is
-/// numbered so that `%0..%n` are the parameters — no copy is needed to get an
-/// argument into a local.
+/// A parameter definition is the C parameter itself. Its name uses its actual
+/// arena index, just like every other value; argument position is independent.
 fn value_name(value: ValueId) -> String {
     format!("v{}", value.0)
 }
@@ -4341,11 +4356,10 @@ fn emit_body(
     // to `64` and stops looking at its argument. The signature still has to
     // match, so the parameter stays and is discarded explicitly.
     writer.indent();
-    for index in 0..func.params.len() {
-        let id = ValueId(u32::try_from(index).unwrap_or(0));
+    for (param, id) in func.params.iter().zip(parameter_values(func)?) {
         if !read.contains(&id) {
             writer.line(
-                &func.params[index].origin,
+                &param.origin,
                 format!("(void){};", value_name(id)),
             );
         }
