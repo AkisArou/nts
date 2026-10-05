@@ -68,7 +68,13 @@ struct DateFormatter {
   CalendarFields *prepared = nullptr; // Borrowed from formatter's owned calendar.
   icu::Calendar *calendar = nullptr; // Borrowed from formatter's owned calendar.
   DateFormatter(const icu::UnicodeString &pattern, const icu::Locale &locale, UErrorCode &status)
-      : formatter(pattern, locale, status), locale(locale) { spans.reserve(16); }
+      : formatter(pattern, locale, status), locale(locale) {}
+  void resetSpans(bool fields) {
+    spans.clear();
+    // Text-only formatters need no span storage. Reserve on the first parts
+    // request, then retain the capacity across single-date and range calls.
+    if (fields && spans.capacity() == 0) spans.reserve(16);
+  }
 };
 static void close_date(void *state, size_t data) { (void)data; delete static_cast<DateFormatter *>(state); }
 static DateFormatter *date_state(NtsHeader *handle) {
@@ -250,7 +256,7 @@ extern "C" NtsString *nts_icu_date_format(NtsHeader *handle, double milliseconds
   if (!isfinite(milliseconds)) return nullptr;
   DateFormatter *state = date_state(handle);
   state->text.remove();
-  state->spans.clear();
+  state->resetSpans(fields);
   state->collapsed = true;
   UErrorCode status = U_ZERO_ERROR;
   state->calendar->setTime(milliseconds, status);
@@ -331,7 +337,7 @@ extern "C" NtsString *nts_icu_date_range(NtsHeader *handle, double start, double
   state->from->setTime(start, status);
   state->to->setTime(end, status);
   auto result = state->range->formatToValue(*state->from, *state->to, status);
-  state->spans.clear();
+  state->resetSpans(fields);
   state->range_position.reset();
   if (!fields) state->range_position.constrainCategory(UFIELD_CATEGORY_DATE_INTERVAL_SPAN);
   bool range = false;

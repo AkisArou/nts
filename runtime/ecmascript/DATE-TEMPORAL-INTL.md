@@ -1314,3 +1314,39 @@ application and performance on this actual kernel remain unverified while its
 ArrayLike representation is refused. Native non-RC accumulation also remains
 an explicit performance follow-up; no backend performance result is inferred
 from the host samples.
+
+### Native date span lifetime checkpoint — 2026-10-05
+
+The native Date formatter now reserves its span buffer on the first parts
+request rather than at construction. Single-date and range calls share this
+policy and retain the capacity. Text-only callers avoid one C++ allocation
+requesting 192 bytes. The immutable before source and changed provider were
+measured through their real C ABI in one executable with the same pinned ICU
+and caller. C++ operator-new requests at construction change from two/920 bytes
+to one/728 bytes; the deferred 192-byte request occurs once on the first parts
+call. Repeated parts and following text calls request no C++ allocations in
+this sample. These counts exclude ICU/runtime malloc and total heap size.
+
+The probe covers both first-single-date and first-range parts use, span bounds,
+endpoint sources, clearing after text-only calls, exact equal range checksums
+and RC release back to zero managed objects. Three warmed pairs use 100,000
+warmup and 500,000 measured calls per mode on CPU 24. Current-baseline and changed
+Gregorian text medians are 596.21 and 596.53 ns; parts medians are 723.94 and
+721.12 ns, within sample variation. This allocation improvement makes no claim
+to close the earlier Gregorian parts cost against the older calendar adapter.
+Ordinary-header -O2 object text/data/bss size changes from 16,772 to 16,766 bytes;
+full linked ICU/application size and public formatting remain separate gates.
+
+The existing compiled date-fields/template/provider witness passes C, C-RC,
+LLVM, LLVM-RC and JVM with ASan/UBSan, RC leak checks and JVM verification.
+This is provider/ABI evidence, with `compiledPublicApi: false`; canonical public
+contracts and standard bindings remain open. Original shared Test262 source
+and its host algorithms are unchanged by this provider allocation change.
+Commands, source hashes, raw allocation/timing receipts and scope are retained
+under `target/ecmascript/audit/date-span-lifetime/`, particularly `summary.json`
+and `paired-report.json`. The five-configuration gate receipt is
+`target/ecmascript/audit/date-span-provider-final.log`.
+
+```sh
+NTS_BIN=target/debug/nts NTS_ICU_CHECK_OUT=target/ecmascript/audit/date-span-icu-check node runtime/ecmascript/tools/icu.ts --pinned-native --date-fields --all-backends --sanitize
+```
