@@ -3072,18 +3072,19 @@ impl Emitter<'_> {
             code.get_static(origin, pool, types::VALUE, "UNDEFINED_VALUE", types::VALUE_DESCRIPTOR);
             return Ok(Placed::OnStack);
         }
-        // A closure erases to `function`, not `object`. `hir::tags` already
-        // says so -- `of_reference` answers `FUNCTION` for a synthetic closure
-        // type -- and flattening every managed reference to `ofObject` threw
-        // that away: `examples/absent` computed 42 where node computes 45,
-        // because `typeof f === "function"` was false and `typeof f ===
-        // "object"` was true for the same arrow.
+        // A closure erases to `function`, not `object`, and so does a value of
+        // a function *signature* type, held as its callable face, which is no
+        // closure's own type. `tags::of_prepared` is the one answer for both,
+        // from the closure ids and `program.signature_faces`. Flattening every
+        // managed reference to `ofObject` threw the first away:
+        // `examples/absent` computed 42 where node computes 45, because
+        // `typeof f === "function"` was false for an arrow.
         //
         // The tag goes on the stack *before* the value, because `ofTagged`
         // takes it first, which is why this is a branch here rather than one
         // more row in the table below.
         if let HirType::Managed(managed) = &from {
-            let tag = nts_core::hir::tags::of_reference(managed);
+            let tag = nts_core::hir::tags::of_prepared(self.program, &from);
             if tag != nts_core::hir::tags::OBJECT
                 && !matches!(managed, ManagedType::String)
             {

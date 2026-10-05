@@ -2875,7 +2875,7 @@ fn operation(program: &Program, cycles: &nts_core::hir::Cycles, func: &Func, val
             format!("{out} = add i1 0, {}", u8::from(*flag))
         }
         OpKind::Erase { .. } | OpKind::Unerase { .. } | OpKind::TagOf { .. } => {
-            return tagging(func, value, &out, platform, templates);
+            return tagging(program, func, value, &out, platform, templates);
         }
         // See `instance_of`, which is where the reasoning is.
         OpKind::InstanceOf {
@@ -2896,7 +2896,7 @@ fn operation(program: &Program, cycles: &nts_core::hir::Cycles, func: &Func, val
         } if func.values[lhs.0 as usize].ty == HirType::Erased
             || func.values[rhs.0 as usize].ty == HirType::Erased =>
         {
-            return tagging(func, value, &out, platform, templates);
+            return tagging(program, func, value, &out, platform, templates);
         }
         // And before it again, for the same reason one step over: two strings
         // are equal when their *contents* are, and `icmp eq` compares the
@@ -3583,7 +3583,7 @@ fn mixed_equality(
 /// only a tag can answer, and the runtime answers them. The payload eightbyte
 /// holds the union's first member, the `double`, so an integer is converted
 /// before it is stored -- the same conversion `nts_value_of_number(x)` makes.
-fn tagging(func: &Func, value: ValueId, out: &str, platform: Platform, templates: bool) -> Result<String, Diagnostic> {
+fn tagging(program: &Program, func: &Func, value: ValueId, out: &str, platform: Platform, templates: bool) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     let out = out.to_owned();
     Ok(match &op.kind {
@@ -3633,6 +3633,9 @@ fn tagging(func: &Func, value: ValueId, out: &str, platform: Platform, templates
             let from = &func.values[value.0 as usize].ty;
             let tag = tag_of(from)
                 .ok_or_else(|| refuse(func, &format!("erasing a value of type {from:?}")))?;
+            // A function value held at its signature's type is still a
+            // function to `typeof`; see `tags::of_prepared`.
+            let tag = if tag == tags::OBJECT { tags::of_prepared(program, from) } else { tag };
             let bits = format!("{out}.bits");
             let widen = payload_from(func, &out, &bits, from, *value)?;
             // **A null reference is not an object**, and which absence it is

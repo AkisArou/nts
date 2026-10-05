@@ -81,10 +81,12 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::{Func, HirType, Op, OpKind, Terminator, ValueId, tags};
+use std::collections::BTreeMap;
+
+use super::{Func, HirType, Op, OpKind, SignatureFace, Terminator, TypeId, ValueId, tags};
 
 /// Split every erased block parameter this function can. Reports how many.
-pub fn split_unions(func: &mut Func) -> usize {
+pub fn split_unions(func: &mut Func, faces: &BTreeMap<TypeId, SignatureFace>) -> usize {
     let members = erased_params(func);
     if members.is_empty() {
         return 0;
@@ -93,7 +95,7 @@ pub fn split_unions(func: &mut Func) -> usize {
     let mut split = 0;
     for web in webs(func, &members) {
         if let Some(payload) = splittable(func, &web) {
-            rewrite(func, &web, &payload);
+            rewrite(func, &web, &payload, faces);
             split += web.len();
         }
     }
@@ -289,7 +291,7 @@ fn splittable(func: &Func, web: &[ValueId]) -> Option<HirType> {
 
 /// Give every member a tag parameter and a payload parameter, and move every
 /// edge and every use onto them.
-fn rewrite(func: &mut Func, web: &[ValueId], payload_ty: &HirType) {
+fn rewrite(func: &mut Func, web: &[ValueId], payload_ty: &HirType, faces: &BTreeMap<TypeId, SignatureFace>) {
     let members: FxHashSet<ValueId> = web.iter().copied().collect();
 
     // The tag reuses the member's slot, so nothing has to renumber; the payload
@@ -333,7 +335,7 @@ fn rewrite(func: &mut Func, web: &[ValueId], payload_ty: &HirType) {
         payloads.insert(member, id);
     }
 
-    fill_edges(func, &members, &payloads, payload_ty);
+    fill_edges(func, &members, &payloads, payload_ty, faces);
 
     // The reads. A tag read *is* the tag parameter and an unerase *is* the
     // payload parameter, so both become substitutions rather than operations.
@@ -381,6 +383,7 @@ fn fill_edges(
     members: &FxHashSet<ValueId>,
     payloads: &FxHashMap<ValueId, ValueId>,
     payload_ty: &HirType,
+    faces: &BTreeMap<TypeId, SignatureFace>,
 ) {
     // Collected first because filling one needs new constants, which is a
     // mutation of the same arena the scan is reading.
@@ -403,7 +406,7 @@ fn fill_edges(
             OpKind::ConstUndefined => (tags::UNDEFINED, None),
             OpKind::ConstNull => (tags::NULL, None),
             OpKind::Erase { value, .. } => (
-                tags::of_representation(&func.values[value.0 as usize].ty),
+                tags::of_registered(faces, &func.values[value.0 as usize].ty),
                 Some(value),
             ),
             // A member, already split above.
@@ -587,7 +590,7 @@ mod tests {
             ],
             Terminator::Return(None),
         );
-        assert_eq!(split_unions(&mut it), 1);
+        assert_eq!(split_unions(&mut it, &BTreeMap::new()), 1);
 
         // Two parameters where there was one: the tag in the old slot, the
         // payload appended.
@@ -630,7 +633,7 @@ mod tests {
     #[test]
     fn a_member_that_is_returned_is_left_alone() {
         let mut it = merged(Vec::new(), Terminator::Return(Some(ValueId(4))));
-        assert_eq!(split_unions(&mut it), 0);
+        assert_eq!(split_unions(&mut it, &BTreeMap::new()), 0);
         assert_eq!(it.blocks[3].params.len(), 1);
         assert_eq!(it.values[4].ty, HirType::Erased);
     }
@@ -645,7 +648,7 @@ mod tests {
             Terminator::Return(None),
         );
         it.values[0].ty = HirType::Managed(ManagedType::Object(TypeId(1)));
-        assert_eq!(split_unions(&mut it), 0);
+        assert_eq!(split_unions(&mut it, &BTreeMap::new()), 0);
         assert_eq!(it.values[4].ty, HirType::Erased);
     }
 
@@ -689,7 +692,7 @@ mod tests {
                 ),
             ],
         );
-        assert_eq!(split_unions(&mut it), 2);
+        assert_eq!(split_unions(&mut it, &BTreeMap::new()), 2);
 
         let params = it.blocks[1].params.clone();
         assert_eq!(params.len(), 4);
@@ -754,7 +757,7 @@ mod tests {
             ],
         );
         // Both halves of the chain, in one go.
-        assert_eq!(split_unions(&mut it), 2);
+        assert_eq!(split_unions(&mut it, &BTreeMap::new()), 2);
         assert_eq!(it.blocks[3].params.len(), 2);
         assert_eq!(it.blocks[4].params.len(), 2);
 

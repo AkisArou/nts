@@ -6206,7 +6206,8 @@ fn narrow_widths(program: &mut Program) -> usize {
 }
 
 fn split_unions(program: &mut Program) -> usize {
-    program.funcs.iter_mut().map(split::split_unions).sum()
+    let faces = &program.signature_faces;
+    program.funcs.iter_mut().map(|func| split::split_unions(func, faces)).sum()
 }
 
 /// Objects whose reference reaches a block the object does not dominate.

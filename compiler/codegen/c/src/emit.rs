@@ -3956,6 +3956,16 @@ fn erased_conversion(
         OpKind::Erase { value, absent } => {
             let from = &func.value(*value).ty;
             let (tag, field) = erased_tag(from).ok_or_else(|| refuse(from, "erased"))?;
+            // A function value held at its signature's type is no closure's own
+            // type, so `erased_tag` sees an object; `tags::of_prepared` knows the
+            // program's signature faces and answers "function", as `typeof` does.
+            let tag = if tag == "NTS_TAG_OBJECT"
+                && nts_core::hir::tags::of_prepared(context.program, from) == nts_core::hir::tags::FUNCTION
+            {
+                "NTS_TAG_FUNCTION"
+            } else {
+                tag
+            };
             // The payload is one `NtsHeader *` for every reference, because
             // that is what retain, release and the tracer all take. The cast is
             // the same one `nts_retain` needs and for the same reason: a class
