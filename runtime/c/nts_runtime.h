@@ -2317,6 +2317,17 @@ NTS_ALLOCATES_OR_NULL NtsString *nts_string_from_cstring(const char *c);
  * ends the process rather than becoming a null the program's types say
  * cannot exist. */
 NTS_ALLOCATES NtsString *nts_string_from_required_cstring(const char *c);
+/* A string a foreign function returned as a view of its own storage -- a
+ * `StringView` result, `const NtsStringView *`: the view is the callee's and
+ * holds only until it is called again, so it is copied here, exactly, at the
+ * narrowest width that holds it. NUL and lone surrogates are units like any
+ * other. NULL is `null`, for a binding declared `StringView | null`. */
+NTS_ALLOCATES_OR_NULL NtsString *
+nts_string_from_view(const NtsStringView *view);
+/* The same for a binding declared plain `StringView`, which promised one: a
+ * NULL ends the process. */
+NTS_ALLOCATES NtsString *
+nts_string_from_required_view(const NtsStringView *view);
 /* A closure lent to C as the `void *` a callback API carries beside its
  * function pointer -- GLib's `user_data`, and what an Objective-C block's
  * copy helper holds.

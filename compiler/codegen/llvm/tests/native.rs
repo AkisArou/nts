@@ -4049,6 +4049,55 @@ export function nothing(): number { return is_null(null); }
         }
     }
 }
+
+/// A `StringView` *result*: C returns `const NtsStringView *`, a view of its
+/// own storage that holds until it is called again, and the call copies it
+/// exactly into a string the program owns.
+///
+/// - `echo` hands a string straight back: one with U+0000 and a lone
+///   surrogate in it compares equal to what was passed, which a UTF-8 result
+///   could not -- it would end at the NUL and turn the surrogate into U+FFFD.
+/// - `fixed` returns two-byte units C owns: each arrives as the unit it is.
+/// - `maybe` returns NULL for 0, which `StringView | null` reads as `null`.
+///
+/// Under reference counting fifty more rounds leave nothing live, so the copy
+/// is the program's and is given back.
+#[test]
+fn a_string_view_result_is_copied_exactly_on_both_backends() {
+    let source = r#"
+import type { StringView, c_int } from "c:types";
+declare function echo(s: StringView): StringView;
+declare function fixed(): StringView;
+declare function maybe(flag: c_int): StringView | null;
+export function roundTrip(): number {
+    const s = "a" + String.fromCharCode(0) + "b" + String.fromCharCode(0xd800);
+    return echo(s) === s ? 1 : 0;
+}
+export function fixedUnits(): number {
+    const f = fixed();
+    return f.length * 100000 + f.charCodeAt(0) + f.charCodeAt(1) + f.charCodeAt(2) + f.charCodeAt(3);
+}
+export function nulls(): number { return (maybe(0 as c_int) === null ? 10 : 0) + (maybe(1 as c_int) === "x" ? 1 : 0); }
+"#;
+    let library = "#include <stddef.h>\n#include <stdint.h>\n#include \"nts_string_view.h\"\n\
+        static NtsStringView last;\n\
+        const NtsStringView *echo(const NtsBorrowedString *s) { last = nts_string_view(s); return &last; }\n\
+        static const uint16_t units[] = {0x41, 0, 0xd800, 0x3b1};\n\
+        const NtsStringView *fixed(void) { last = (NtsStringView){units, 4, NTS_STRING_VIEW_WIDE}; return &last; }\n\
+        const NtsStringView *maybe(int flag) { if (!flag) return NULL; last = (NtsStringView){\"x\", 1, 0}; return &last; }\n";
+    let caller = counted_caller(
+        r#"printf("%.0f %.0f %.0f", roundTrip(), fixedUnits(), nulls());"#,
+        "roundTrip(); fixedUnits(); nulls();",
+    );
+    // 4 units: 65 + 0 + 55296 + 945.
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let Some((text, outputs)) = run_on_both_backends("string-view-result", source, provider, library, &caller) else { return; };
+        assert!(text.contains("nts_string_from_required_view(") && text.contains("nts_string_from_view("), "the view was not copied");
+        for output in outputs {
+            assert_eq!(output, expect("1 456306 11", provider), "{provider:?}");
+        }
+    }
+}
 /// Only `string` beside the optional `__c_utf16` marker is a `Utf16String`.
 /// `string & { real: number }` has a property a program can read, so it is a
 /// value with a layout: taken for a plain string, a read of `.real` would be

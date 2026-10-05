@@ -291,6 +291,12 @@ pub struct ReturnedString {
     /// array's own C type -- `g_strfreev(gchar **)` -- where a string's takes
     /// `void *`, which is `g_free`'s and `free`'s.
     pub array: bool,
+    /// `StringView` rather than `string`: C returns `const NtsStringView *`,
+    /// a view of its own storage at its own width that holds until C is
+    /// called again, and the call copies it exactly (`nts_string_from_view`)
+    /// -- where a `string` result is UTF-8, scanned for its terminator, and
+    /// cannot carry U+0000 or a lone surrogate.
+    pub view: bool,
 }
 
 /// What one C parameter of a foreign function receives.
@@ -3136,11 +3142,18 @@ fn managed_abi_type(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
 /// The C result a returned `string[]` or `string` is read from: borrowed
 /// until `@ntsFree` says otherwise, which makes it `char **` / `char *` --
 /// the rule both follow, and `GLib`'s own spelling of both.
-fn returned_text(array: bool, string: bool) -> Option<Type> {
+fn returned_text(array: bool, string: Option<&ReturnedString>) -> Option<Type> {
     let char = Pointee::Scalar(Scalar::Char);
     if array {
         Some(Type::Pointer(Pointee::Const(Box::new(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char))))))))
-    } else if string {
+    } else if string.is_some_and(|string| string.view) {
+        Some(Type::Pointer(Pointee::Const(Box::new(Pointee::Opaque(Handle {
+            tag: "NtsStringView".to_owned(),
+            ancestors: Vec::new(),
+            family: Family::C,
+            interface: false,
+        })))))
+    } else if string.is_some() {
         Some(Type::Pointer(Pointee::Const(Box::new(char))))
     } else {
         None
@@ -3433,7 +3446,7 @@ fn returned(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option<&st
             program: None,
         });
     }
-    let result = match (returned_text(array.is_some(), string.is_some()), &declared) {
+    let result = match (returned_text(array.is_some(), string.as_ref()), &declared) {
         (Some(text), _) => text,
         (None, Some((c, _))) => c.clone(),
         (None, None) => if abi == Some("managed") { managed_abi_type(snapshot, ty) } else { abi_type(snapshot, ty) }
@@ -3444,7 +3457,7 @@ fn returned(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option<&st
         array: None,
         dictionary: None,
         set: None,
-        string: array.map(|nullable| ReturnedString { nullable, free: None, array: true }).or(string),
+        string: array.map(|nullable| ReturnedString { nullable, free: None, array: true, view: false }).or(string),
         owned: owned_result(snapshot, name, ty)?,
         // A `CBool`'s integer, read back as a boolean.
         program: declared.map(|(_, program)| program).or_else(|| int_bool(snapshot, ty).map(|_| Type::Bool)),
@@ -4624,12 +4637,19 @@ pub(crate) fn is_object_pointer(snapshot: &SemanticSnapshot, ty: TypeId) -> bool
 
 /// A `string` result is C's `const char *`, copied into a string at the call;
 /// `string | null` makes NULL a `null`. The free function, if any, comes from
-/// the declaration's `@ntsFree`, where the callee is resolved.
+/// the declaration's `@ntsFree`, where the callee is resolved. A `StringView`
+/// result is C's `const NtsStringView *`, copied exactly; `StringView | null`
+/// makes NULL a `null`.
 fn returned_string(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<ReturnedString> {
-    is_string(snapshot, ty).then(|| ReturnedString {
-        nullable: !matches!(snapshot.types.get(ty.0 as usize).map(|record| &record.kind), Some(TypeKind::String)),
+    let kind = snapshot.types.get(ty.0 as usize).map(|record| &record.kind);
+    if string_encoding(snapshot, ty) == Some(Encoding::View) {
+        return Some(ReturnedString { nullable: matches!(kind, Some(TypeKind::Union(_))), free: None, array: false, view: true });
+    }
+    is_string(snapshot, ty).then_some(ReturnedString {
+        nullable: !matches!(kind, Some(TypeKind::String)),
         free: None,
         array: false,
+        view: false,
     })
 }
 /// A returned `string[]`, or `string[] | null` -- whether it is nullable --

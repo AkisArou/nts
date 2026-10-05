@@ -57344,7 +57344,13 @@ impl<'a> FuncBuilder<'a> {
             let ty = typed.or_else(|| self.type_of(id)).ok_or_else(|| self.unrepresentable(id, "a returned string"))?;
             return Ok(self.runtime_call("nts_string_of_nsstring", vec![pointer], ty, origin));
         }
-        let value = if string.array {
+        let value = if string.view {
+            // C's view holds only until C is called again, so it is copied
+            // now, exactly, at the narrowest width that holds it.
+            let ty = typed.or_else(|| self.type_of(id)).ok_or_else(|| self.unrepresentable(id, "a returned string"))?;
+            let copy = if string.nullable { "nts_string_from_view" } else { "nts_string_from_required_view" };
+            self.runtime_call(copy, vec![pointer], ty, origin.clone())
+        } else if string.array {
             // Every element copied, so the array is the program's whatever C
             // does with its own afterwards. `required` is the declaration's
             // promise that C returns one, which a NULL breaks.

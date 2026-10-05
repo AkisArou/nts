@@ -310,4 +310,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 ///
 /// 130 for `nts_winrt_reference`, an `IReference<T>` made for a Windows
 /// Runtime call that takes a `T | null`: Windows again.
-const REFUSED_FLOOR: usize = 130;
+///
+/// 132 for `nts_string_from_view` and `nts_string_from_required_view`, which
+/// copy a `StringView` a C function returned: native calls again.
+const REFUSED_FLOOR: usize = 132;

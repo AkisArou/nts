@@ -5332,6 +5332,30 @@ NtsString *nts_string_from_required_cstring(const char *c) {
   return nts_string_from_utf8(c, strlen(c));
 }
 
+NtsString *nts_string_from_view(const NtsStringView *view) {
+  if (view == NULL) {
+    return NULL;
+  }
+  if (view->flags & NTS_STRING_VIEW_WIDE) {
+    return nts_str_alloc((const uint16_t *)view->units, view->length);
+  }
+  NtsString *out = nts_str_raw(view->length, 0);
+  if (view->length) {
+    memcpy(NTS_ELEMENTS(out, unsigned char), view->units, view->length);
+  }
+  return out;
+}
+
+NtsString *nts_string_from_required_view(const NtsStringView *view) {
+  if (view == NULL) {
+    fprintf(stderr, "nts: a native function declared to return a "
+                    "`StringView` returned NULL; declare it `StringView | "
+                    "null`\n");
+    abort();
+  }
+  return nts_string_from_view(view);
+}
+
 void *nts_closure_lend(NtsHeader *closure) {
   nts_retain(closure);
   return closure;
