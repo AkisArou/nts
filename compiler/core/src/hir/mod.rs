@@ -6417,6 +6417,46 @@ fn frame_capacity(func: &Func, value: ValueId) -> Option<u32> {
 mod tests {
     use super::*;
 
+    #[test]
+    #[allow(clippy::unwrap_used, clippy::expect_used)]
+    fn awaited_catch_reasons_are_read_only_on_rejected_edges() {
+        use nts_frontend_ts::{SemanticSource, TsgoApi};
+        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else { return; };
+        let config = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/programs/caught-await-reasons/tsconfig.json");
+        let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+        assert!(!snapshot.has_errors());
+        let prepared = prepare(&snapshot).expect("the actual fully prepared program verifies");
+        let mut tested = 0;
+        for func in &prepared.program.funcs {
+            for (index, block) in func.blocks.iter().enumerate() {
+                for value in &block.ops {
+                    let OpKind::Call { callee: Callee::External(name), args, .. } = &func.value(*value).kind else { continue; };
+                    if name != "nts_promise_reason" { continue; }
+                    tested += 1;
+                    let target = BlockId(u32::try_from(index).unwrap());
+                    let mut guarded = 0;
+                    for predecessor in &func.blocks {
+                        assert!(!matches!(&predecessor.terminator,
+                            Terminator::Jump { target: jumped, .. } if *jumped == target),
+                            "a reason read cannot have an unchecked incoming edge");
+                        let Terminator::Branch { cond, then_target, else_target, .. } = &predecessor.terminator else { continue; };
+                        if *then_target != target { continue; }
+                        assert_ne!(*else_target, target);
+                        let OpKind::Call { callee: Callee::External(check), args: checked, .. } = &func.value(*cond).kind else { panic!("unguarded rejection read"); };
+                        assert_eq!(check, "nts_promise_is_rejected");
+                        assert_eq!(func.value(args[0]).kind, func.value(checked[0]).kind,
+                            "the branch tests the same awaited frame slot");
+                        assert!(!predecessor.ops.contains(value));
+                        guarded += 1;
+                    }
+                    assert_eq!(guarded, 1, "each reason has a dedicated rejected edge");
+                }
+            }
+        }
+        assert_eq!(tested, 2, "both actual catch consumers must survive production");
+    }
+
     /// Every `nts_array_` helper is classified for whether it changes a length.
     ///
     /// [`changes_array_length`] is a literal list of five prefixes, and

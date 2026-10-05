@@ -1116,8 +1116,6 @@ fn resume_function(
     // Immediately after the dispatch chain, which is what `segment_layout`
     // reserved the extra block for. A generator has no such block: a `yield`
     // cannot reject, and neither has a function whose every `await` is caught.
-    let reject = super::BlockId(base.saturating_sub(1));
-
     let mut body: Vec<super::Block> = Vec::new();
     let mut resume_at: Vec<super::BlockId> = vec![super::BlockId(starts[0])];
 
@@ -1202,14 +1200,19 @@ fn resume_function(
             // They are *reloaded* here because a value defined before the
             // suspension lives in the frame by now, which is the same thing
             // every other operand in a resumption gets.
-            let caught = caught_by(&mut build, frame, slot_of, &starts, awaited);
+            // A caught reason is read only on the rejected branch. Computing
+            // caught_edge's operands here would read the reason of a
+            // fulfilled promise before rejection_check can distinguish it.
+            let caught = matches!(&build.values[awaited.0 as usize].kind,
+                OpKind::Await { rejects_to: Some(_), .. });
             body.push(rejection_check(
                 &mut build,
                 frame,
                 std::mem::take(&mut params),
-                caught.unwrap_or((reject, Vec::new())),
-                super::BlockId(landing + 1),
+                (super::BlockId(if caught { landing + 1 } else { base.saturating_sub(1) }), Vec::new()),
+                super::BlockId(landing + 1 + u32::from(caught)),
             ));
+            body.extend(caught_edge(&mut build, frame, slot_of, &starts, awaited));
             read_settled(&mut build, frame, awaited, slot_of);
             from = op + 1;
         }
@@ -1424,11 +1427,13 @@ fn segment_layout(
     // async generator two blocks for every `yield` and leave the block indices
     // one short per await, which is a jump to the wrong segment rather than an
     // error.
+    // A caught await additionally needs its rejected-edge operand block, so
+    // neither the reason nor a handler's frame reload runs on fulfillment.
     let blocks_for = |value: ValueId| {
-        1 + usize::from(matches!(
-            func.values[value.0 as usize].kind,
-            OpKind::Await { .. }
-        ))
+        match &func.values[value.0 as usize].kind {
+            OpKind::Await { rejects_to, .. } => 2 + usize::from(rejects_to.is_some()),
+            _ => 1,
+        }
     };
     let base = u32::try_from(points.len() + 2 + usize::from(shared_exit)).unwrap_or(0);
     let mut starts = Vec::new();
@@ -1532,13 +1537,13 @@ fn rejection_check(
 ///
 /// `None` where the lowering recorded no handler: the rejection then rejects
 /// this function's own promise, through the shared exit.
-fn caught_by(
+fn caught_edge(
     build: &mut Build,
     frame: ValueId,
     slot_of: &rustc_hash::FxHashMap<ValueId, u32>,
     starts: &[u32],
     awaited: ValueId,
-) -> Option<(super::BlockId, Vec<ValueId>)> {
+) -> Option<super::Block> {
     let it = rejection_of(build, awaited)?;
     let reason = read_reason(build, frame);
     let args = it
@@ -1560,7 +1565,11 @@ fn caught_by(
             }
         })
         .collect();
-    Some((super::BlockId(starts[it.handler.0 as usize]), args))
+    Some(super::Block {
+        params: Vec::new(),
+        ops: std::mem::take(&mut build.ops),
+        terminator: Terminator::Jump { target: super::BlockId(starts[it.handler.0 as usize]), args },
+    })
 }
 
 /// The handler a rejected `await` jumps to, where the lowering recorded one.

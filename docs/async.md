@@ -230,12 +230,18 @@ The runtime never learns the *type* of a promise's value, for the same reason
 it never learns a closure's signature: whoever reads it was compiled knowing,
 and `NtsTask.run` is a compiler-emitted trampoline.
 
-It still has to *store* it, so the payload is a closed two-slot union — a
-`double`, or a managed reference — with a tag saying which is live, and a third
-state for `void`. That is not `any` creeping in: it is the same closed set of
-machine representations as the typed-array element table, written down rather
-than discovered. A rejection reason is always a reference, so it uses the same
-slot.
+It stores fulfillment and rejection in one tagged settlement slot. Promise
+state selects the reader; the value tag distinguishes numbers, booleans,
+undefined, explicit null, references and boxed BigInts. Forwarding preserves the
+complete value, including a closure's FUNCTION tag and reference identity.
+The promise owns one count for a managed payload; accessors return a borrow.
+Its descriptor visits this erased slot once, rather than listing the same
+payload again among ordinary reference fields.
+
+This runtime contract is implemented in the private full-rejection-value
+checkpoint. Compiler support for each throwing or rejection expression still
+requires its actual erasure and control-flow checks; a tagged runtime slot
+alone does not establish those source capabilities.
 
 The reaction list is the part that constrains the design, because the collector
 has to walk it. `nts_each_reference` knows two shapes — an array of references,
@@ -324,10 +330,11 @@ assert. `await` of one *aborted the program* — not a wrong answer, a crash, an
 one that no test which only awaits successes can reach. It was found by writing
 `Promise.all` with a rejecting element, which is to say by accident.
 
-The resumption now tests before it reads, and a rejection goes to a single
-block the whole function shares: reject this function's own promise with the
-same reason, and return. Shared because it needs nothing from the suspension —
-the awaited promise is a frame field, so one block serves every resumption.
+The resumption must test before either settlement reader runs. A caught await
+has a separate rejected edge that reads the reason and reloads the handler's
+arguments. Uncaught rejections go to one shared block: reject this function's
+own promise with the same complete value and return. The awaited promise is a
+frame field, so one block serves every uncaught resumption.
 
 With no `try`/`catch` across an `await`, that is the whole of what a rejection
 can do, and it is the same thing node does with an uncaught one. `nts check`
