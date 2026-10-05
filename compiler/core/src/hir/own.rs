@@ -483,9 +483,16 @@ fn classify(
                 // result is not an object at all: `performSelector:withObject:`
                 // on a `void` method answers whatever the return register
                 // held, and `objc_retain` of that ended the process.
+                //
+                // **Nor one the host keeps alive on the stack**
+                // (`Family::stack_rooted`): there the value is alive for as
+                // long as the program holds it in the frame, so it is
+                // borrowed for as long as it is read, and counted only
+                // where it leaves the frame -- a store, a capture, a return
+                // -- as any borrowed value is.
                 if target.returns_owned {
                     Ownership::Produced
-                } else if read.contains(value) {
+                } else if read.contains(value) && !stack_rooted(func, *value) {
                     Ownership::Copied
                 } else {
                     Ownership::Borrowed
@@ -495,7 +502,11 @@ fn classify(
             } else if produces_owned(kind) {
                 Ownership::Produced
             } else if (is_load(kind) || repackages(kind))
-                && (decided.crossing.contains(value) || safely())
+                && (decided.crossing.contains(value)
+                    || safely()
+                    // A handle the host keeps alive on the stack needs no
+                    // count of its own to survive its container letting go.
+                    || stack_rooted(func, *value))
             {
                 Ownership::Borrowed
             } else {
@@ -1636,6 +1647,13 @@ fn anchors(
 /// it. A load survives only while its container is anchored and the slot goes
 /// on holding what it holds, which is a claim about stores and calls and is not
 /// circular at all.
+/// Whether `value` is a handle its host keeps alive on the native stack
+/// (`native::Family::stack_rooted`): one that needs no count while it is in
+/// the frame, whatever lets go of it elsewhere.
+fn stack_rooted(func: &Func, value: ValueId) -> bool {
+    func.values[value.0 as usize].ty.counted_family().is_some_and(super::native::Family::stack_rooted)
+}
+
 fn crossing_borrows(
     func: &Func,
     layouts: &[Layout],
@@ -1685,6 +1703,19 @@ fn crossing_borrows(
             }
         }
     }
+    // And a handle its host keeps alive on the stack, as a foreign call hands
+    // it back (+0): borrowed for its whole life by the stack itself, so that
+    // a cursor walking siblings -- `n = next(n)` round a loop -- is carried
+    // by its edges without a count, as a loaded cursor is. Not one declared
+    // `Owned`, which arrives with a reference that must be given back.
+    for (index, op) in func.values.iter().enumerate() {
+        let value = ValueId(u32::try_from(index).unwrap_or(u32::MAX));
+        if stack_rooted(func, value)
+            && matches!(&op.kind, OpKind::Call { callee: super::Callee::Native(target), .. } if !target.returns_owned)
+        {
+            crossing.insert(value);
+        }
+    }
     // Loads and block parameters in **one** fixpoint, not two, and running
     // down rather than up. In a loop they depend on each other circularly:
     // `at` is a block parameter carrying `head` and `at.next`, the load is good
@@ -1706,7 +1737,8 @@ fn crossing_borrows(
         };
         for &value in &crossing {
             let kind = &func.values[value.0 as usize].kind;
-            if !is_load(kind) {
+            // A stack-rooted handle needs no anchor: the stack is one.
+            if !is_load(kind) || stack_rooted(func, value) {
                 continue;
             }
             let (container, field) = match kind {

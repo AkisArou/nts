@@ -783,7 +783,7 @@ fn array_descriptors(out: &mut String, program: &Program) {
     for (counting, family) in nts_codegen_common::counting::array_families(program) {
         let descriptor = nts_codegen_common::counting::array_descriptor_name(&counting);
         let ops = nts_codegen_common::counting::ops_name(&counting);
-        let name = format!("{family:?}[]");
+        let name = format!("{}[]", family.name());
         let _ = writeln!(*out, "@{descriptor}.name = internal constant [{} x i8] c\"{name}\\00\"", name.len() + 1);
         let _ = writeln!(
             *out,

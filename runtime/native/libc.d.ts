@@ -227,6 +227,31 @@ declare module "c:types" {
       readonly __c_implements: { readonly [K in Tag | Implements]: true };
     };
   type ImplementsOf<P> = P extends { readonly __c_implements: infer I } ? I : {};
+  // An object a host's garbage collector owns and finds on the native stack
+  // -- Blink's Oilpan, which scans the stack conservatively at every
+  // collection that can run under a native call. A handle on the stack is
+  // therefore alive with nothing done for it: the compiler passes one the
+  // program does not keep as the raw pointer, with no count, and counts it
+  // only where it leaves the stack -- a field, an array, a closure, a module
+  // global, an `await`, a return to C -- with the pair the host names here,
+  // `void *Retain(void *)` and `void Release(void *)`, which root and unroot
+  // it. So a program never calls either. A subclass inherits its parent's
+  // pair:
+  //
+  //     type Node = HostClass<"NtsDomNode", null, "nts_dom_retain", "nts_dom_release">;
+  //     type Element = HostClass<"NtsDomElement", Node>;
+  //
+  // Only for a host that does scan the stack: a library that frees what it
+  // has not counted wants `GObjectClass` and its kin. Needs the
+  // reference-counting provider; a never-free program cannot root what it
+  // keeps, and is refused.
+  export type HostClass<
+    Tag extends string,
+    Parent extends ClassChain | null = null,
+    Retain extends string = HostPairOf<Parent>[0],
+    Release extends string = HostPairOf<Parent>[1],
+  > = Class<Tag, Parent> & { readonly __c_host: readonly [Retain, Release] };
+  type HostPairOf<P> = P extends { readonly __c_host: infer Pair extends readonly [string, string] } ? Pair : [never, never];
   // A result the caller owns -- GIR's `transfer-ownership="full"`: the
   // reference comes with it, and is not taken again.
   export type Owned<T extends ClassChain> = T & { readonly __c_owned?: true };

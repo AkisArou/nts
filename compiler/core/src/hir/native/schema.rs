@@ -103,6 +103,14 @@ fn handle(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
         super::Family::GObject
     } else if marker(snapshot, ty, "___com").is_some() {
         super::Family::Com
+    } else if let Some(pair) = marker(snapshot, ty, "___c_host") {
+        // `HostClass`: the pair is two string literals. Anything else -- a
+        // subclass of a parent that named none -- has no family to give, and
+        // a handle taken for a plain C pointer would be held uncounted where
+        // the host frees it: so it has no native type at all, and is refused.
+        let TypeKind::Tuple(names) = &snapshot.types.get(pair.0 as usize)?.kind else { return None };
+        let [retain, release] = names.as_slice() else { return None };
+        super::Family::Host(super::HostFamily::of(text(snapshot, *retain)?, text(snapshot, *release)?))
     } else {
         super::Family::C
     };

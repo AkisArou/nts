@@ -1203,6 +1203,59 @@ pub enum Family {
     /// `Release`, which are slots 1 and 2 of its table rather than symbols,
     /// so the pair is the runtime's shims (`nts_com_addref`/`nts_com_release`).
     Com,
+    /// An object a host's collector owns and finds on the native stack
+    /// (`HostClass`): Blink's Oilpan, which scans the stack conservatively
+    /// at every collection that can run under a native call. The binding
+    /// names the pair that roots and unroots one, so the compiler knows no
+    /// host. See [`Family::stack_rooted`] for what the stack buys.
+    Host(HostFamily),
+}
+
+/// A host family's pair, by its place in a process-wide table of the pairs
+/// bindings have declared: two bytes, so a `Handle` -- inside every `HirType`
+/// that points at one -- is no larger for carrying a family the compiler does
+/// not know. Names the symbols that root and unroot one of its objects.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct HostFamily(u16);
+
+type HostPairs = Vec<(&'static str, &'static str)>;
+
+fn host_pairs() -> std::sync::MutexGuard<'static, HostPairs> {
+    static PAIRS: std::sync::OnceLock<std::sync::Mutex<HostPairs>> = std::sync::OnceLock::new();
+    PAIRS.get_or_init(Default::default).lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+impl HostFamily {
+    /// The family whose pair is `retain`/`release`: the same one for the
+    /// same pair, wherever a binding names it. The symbols are kept for the
+    /// life of the process, once each, so the table is bounded by the pairs
+    /// the program's bindings declare.
+    ///
+    /// # Panics
+    ///
+    /// Past 65,536 distinct pairs in one process.
+    #[must_use]
+    pub fn of(retain: &str, release: &str) -> Self {
+        let mut pairs = host_pairs();
+        if let Some(at) = pairs.iter().position(|(r, l)| *r == retain && *l == release) {
+            return Self(u16::try_from(at).expect("a host family's index fits its width"));
+        }
+        let keep = |name: &str| -> &'static str { Box::leak(name.to_owned().into_boxed_str()) };
+        pairs.push((keep(retain), keep(release)));
+        Self(u16::try_from(pairs.len() - 1).expect("fewer than 65,536 host families in one process"))
+    }
+
+    /// The symbol that roots one of this family's objects.
+    #[must_use]
+    pub fn retain(self) -> &'static str {
+        host_pairs()[usize::from(self.0)].0
+    }
+
+    /// The symbol that unroots one.
+    #[must_use]
+    pub fn release(self) -> &'static str {
+        host_pairs()[usize::from(self.0)].1
+    }
 }
 
 /// The two functions a counted handle is retained and released with. Both
@@ -1237,6 +1290,20 @@ impl Counting {
 }
 
 impl Family {
+    /// Whether a handle of this family is alive while it is on the native
+    /// stack, with nothing done for it: the host's collector scans the stack.
+    ///
+    /// So a handle a foreign call returns is borrowed even when the program
+    /// reads it, and is counted only where it leaves the stack -- a store,
+    /// a capture, an `await`, a return to C -- which the counting pass does
+    /// already for every counted family. Holding a count for a value on the
+    /// stack would root it twice. A never-free program counts nothing, so it
+    /// cannot keep one off the stack, and is refused (`refuse_host_handles` in `hir`).
+    #[must_use]
+    pub const fn stack_rooted(self) -> bool {
+        matches!(self, Self::Host(_))
+    }
+
     /// Whether this family's objects hold closures the program lends them: a
     /// `GObject` holds each of its signal handlers'. A cycle through one is
     /// then possible -- a handler capturing its own instance -- so a layout
@@ -1247,13 +1314,28 @@ impl Family {
         matches!(self, Self::GObject)
     }
 
+    /// The family as a name a program's output can carry -- a descriptor's,
+    /// read by debuggers and the collector's diagnostics: the object system,
+    /// or for a host family the binding's retain symbol, which is what tells
+    /// two hosts apart. Not `Debug`, which quotes a host's pair.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::C => "C",
+            Self::Objc => "Objc",
+            Self::GObject => "GObject",
+            Self::Com => "Com",
+            Self::Host(host) => host.retain(),
+        }
+    }
+
     /// `NTS_FAMILY_*` in `nts_runtime.h`: what a foreign slot says it holds,
     /// for a family the runtime asks more of than a release.
     #[must_use]
     pub const fn runtime_id(self) -> u32 {
         match self {
             Self::GObject => 1,
-            Self::C | Self::Objc | Self::Com => 0,
+            Self::C | Self::Objc | Self::Com | Self::Host(_) => 0,
         }
     }
 
@@ -1262,7 +1344,7 @@ impl Family {
     /// ownership pass asks it whether to count, and each backend asks it
     /// what to call.
     #[must_use]
-    pub const fn counting(self) -> Option<Counting> {
+    pub fn counting(self) -> Option<Counting> {
         match self {
             Self::C => None,
             Self::Objc => Some(Counting { retain: "objc_retain", release: "objc_release", null_safe: true }),
@@ -1272,6 +1354,9 @@ impl Family {
             // otherwise nothing would ever drop.
             Self::GObject => Some(Counting { retain: "g_object_ref_sink", release: "g_object_unref", null_safe: false }),
             Self::Com => Some(Counting { retain: "nts_com_addref", release: "nts_com_release", null_safe: true }),
+            // Not null-safe, as no promise about a host's pair is made: a
+            // nullable handle's count goes through the guard.
+            Self::Host(host) => Some(Counting { retain: host.retain(), release: host.release(), null_safe: false }),
         }
     }
 }
@@ -1296,7 +1381,9 @@ pub fn handle_box(family: Family) -> Option<(super::TypeId, Pointee, &'static st
             Pointee::Opaque(Handle { tag: "IInspectable".to_owned(), ancestors: Vec::new(), family: Family::Com, interface: false }),
             "HandleBoxCom",
         )),
-        Family::C => None,
+        // No box yet: a host family has no root type the compiler knows, so
+        // a promise settling with one is refused by name.
+        Family::C | Family::Host(_) => None,
     }
 }
 

@@ -47,14 +47,16 @@ pub const HANDLE_COM: u32 = 10;
 pub const BIGINT: u32 = 16;
 /// The tag a counted handle of `family` carries in an erased value, which is
 /// its family's place in the block; `None` for a C pointer nothing counts,
-/// which no erased value holds. The one answer every backend asks.
+/// which no erased value holds, and for a host family, which has no place
+/// in the block yet: its pair is the binding's, and an erased value's
+/// release would need it at run time. The one answer every backend asks.
 #[must_use]
 pub fn handle_tag(family: super::native::Family) -> Option<u32> {
     match family {
         super::native::Family::GObject => Some(HANDLE_GOBJECT),
         super::native::Family::Objc => Some(HANDLE_OBJC),
         super::native::Family::Com => Some(HANDLE_COM),
-        super::native::Family::C => None,
+        super::native::Family::C | super::native::Family::Host(_) => None,
     }
 }
 
@@ -418,5 +420,15 @@ mod representation {
     fn a_c_pointer_has_no_family_tag_to_give() {
         assert_eq!(handle_tag(Family::C), None);
         assert_eq!(of_representation(&handle(Family::C)), super::NUMBER);
+    }
+
+    /// Nor a host family yet: it is counted, but with a pair only its binding
+    /// names, so no erased value can hold one until the block has a place
+    /// that carries the pair.
+    #[test]
+    fn a_host_handle_has_no_family_tag_yet() {
+        let host = Family::Host(crate::hir::native::HostFamily::of("host_retain", "host_release"));
+        assert_eq!(handle_tag(host), None);
+        assert_eq!(of_representation(&handle(host)), super::NUMBER);
     }
 }

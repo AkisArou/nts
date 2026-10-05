@@ -2798,6 +2798,136 @@ export function live(): number { return live_objects(); }
     }
 }
 
+
+/// A fake host for `HostClass`: nodes it owns and never frees, a pair that
+/// roots and unroots one, and counts of both, so a test reads how many
+/// times the program rooted a node rather than inferring it from a leak.
+const HOST_LIBRARY: &str = r"
+#include <stddef.h>
+typedef struct HostNode { int value; int roots; struct HostNode *next; } HostNode;
+static HostNode nodes[4];
+static int retains, errors;
+void *host_retain(void *p) {
+    HostNode *n = p;
+    if (!n) { errors++; return p; }
+    n->roots++; retains++;
+    return p;
+}
+void host_release(void *p) {
+    HostNode *n = p;
+    if (!n || n->roots <= 0) { errors++; return; }
+    n->roots--;
+}
+struct HostElement *node_at(int i) {
+    for (int k = 0; k < 4; k++) { nodes[k].value = (k + 1) * 10; nodes[k].next = k < 3 ? &nodes[k + 1] : NULL; }
+    return (struct HostElement *)&nodes[i];
+}
+struct HostNode *node_next(struct HostNode *n) { return n->next; }
+int node_value(struct HostNode *n) { return n->value; }
+int roots_held(void) { int r = 0; for (int k = 0; k < 4; k++) r += nodes[k].roots; return r; }
+int retains_seen(void) { return retains; }
+int errors_seen(void) { return errors; }
+";
+
+/// A `HostClass` handle is rooted only where it leaves the stack.
+///
+/// The host's collector finds a handle on the native stack (Oilpan scans it),
+/// so one the program only uses in the frame -- a result read and passed on,
+/// an upcast, a loop walking siblings -- is borrowed and costs no call at
+/// all. One it keeps is rooted with the binding's pair: a module global (one
+/// root while held, none after), an array, a closure's capture, a handle held
+/// across an `await` (one root while the suspended frame -- heap memory, which
+/// no stack scan reaches -- holds it), and a handle returned to C, which the
+/// caller then owns and releases. Every root is given back: fifty more rounds
+/// end with none held and no unbalanced call.
+#[test]
+fn a_host_handle_is_rooted_only_where_it_leaves_the_stack_on_both_backends() {
+    let source = r#"
+import type { HostClass, c_int } from "c:types";
+type Node = HostClass<"HostNode", null, "host_retain", "host_release">;
+type Element = HostClass<"HostElement", Node>;
+declare function node_at(i: c_int): Element;
+declare function node_next(n: Node): Node | null;
+declare function node_value(n: Node): c_int;
+declare function roots_held(): c_int;
+declare function retains_seen(): c_int;
+declare function errors_seen(): c_int;
+let kept: Node | null = null;
+export function local(): number { const e = node_at(0 as c_int); return node_value(e) + node_value(node_at(1 as c_int)); }
+export function walk(): number {
+    let n: Node | null = node_at(0 as c_int);
+    let sum = 0;
+    while (n !== null) { sum += node_value(n); n = node_next(n); }
+    return sum;
+}
+export function keep(): number { kept = node_at(2 as c_int); return roots_held(); }
+export function drop(): number { kept = null; return roots_held(); }
+export function listed(): number {
+    const xs: Node[] = [node_at(0 as c_int), node_at(1 as c_int)];
+    let sum = 0;
+    for (const x of xs) sum += node_value(x);
+    return sum;
+}
+export function captured(): number { const e = node_at(1 as c_int); const f = (): number => node_value(e); return f(); }
+export function give(): Node { return node_at(3 as c_int); }
+let across = 0;
+let rootedAcross = 0;
+async function tick(): Promise<number> { return 1; }
+async function hold(): Promise<void> {
+    const e = node_at(2 as c_int);
+    await tick();
+    rootedAcross = roots_held() as number;
+    across = node_value(e) as number;
+}
+export function startAcross(): void { across = 0; void hold(); }
+export function settledAcross(): number { return across * 10 + rootedAcross; }
+export function retains(): number { return retains_seen(); }
+export function roots(): number { return roots_held(); }
+export function errors(): number { return errors_seen(); }
+"#;
+    let caller = counted_caller(
+        r#"void host_release(void *);
+  double r0 = retains(); double l = local(); double r1 = retains(); double w = walk(); double r2 = retains();
+  printf("local=%.0f/%.0f walk=%.0f/%.0f", l, r1 - r0, w, r2 - r1);
+  printf(" keep=%.0f drop=%.0f", keep(), drop());
+  printf(" listed=%.0f captured=%.0f", listed(), captured());
+  void *given = give(); printf(" given=%.0f", roots()); host_release(given);
+  startAcross(); nts_checkpoint(); printf(" across=%.0f", settledAcross());
+  for (int i = 0; i < 50; i++) { local(); walk(); keep(); drop(); listed(); captured(); host_release(give()); startAcross(); nts_checkpoint(); }
+  printf(" roots=%.0f errors=%.0f", roots(), errors());"#,
+        "local(); walk(); listed(); captured();",
+    );
+    let Some((text, outputs)) =
+        run_on_both_backends("host-handle", source, hir::Provider::ReferenceCounting, HOST_LIBRARY, &caller)
+    else {
+        return;
+    };
+    assert!(text.contains("host_retain"), "nothing was ever rooted: the escapes went uncounted");
+    for output in outputs {
+        assert_eq!(output, "local=30/0 walk=100/0 keep=1 drop=0 listed=30 captured=20 given=1 across=301 roots=0 errors=0 leak=0");
+    }
+}
+
+/// Without counting nothing roots a handle the program keeps, so a program
+/// holding a `HostClass` handle under the no-GC provider is refused, naming
+/// the provider it needs, rather than compiled into a use after free.
+#[test]
+fn a_host_handle_needs_the_reference_counting_provider() {
+    let source = r#"
+import type { HostClass, c_int } from "c:types";
+type Node = HostClass<"HostNode", null, "host_retain", "host_release">;
+declare function node_at(i: c_int): Node;
+declare function node_value(n: Node): c_int;
+export function local(): number { return node_value(node_at(0 as c_int)); }
+"#;
+    let Some((_, prepared)) = prepare_with_provider("host-handle-nogc", source, hir::Provider::NoGc) else { return; };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d.message.contains("needs the reference-counting provider")),
+        "{:?}",
+        prepared.diagnostics
+    );
+    assert!(!prepared.program.funcs.iter().any(|f| f.name == "local"), "a never-free program kept a host handle");
+}
 /// A promise of a counted `GObject`: `await file.query_info_async(…)` under
 /// reference counting. The promise's own slot for a C handle holds no
 /// reference, so a counted one settles boxed -- an ordinary reference whose

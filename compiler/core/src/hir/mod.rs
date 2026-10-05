@@ -5073,6 +5073,26 @@ fn relate_tokens_to_the_slot_they_reach(program: &mut Program) {
     }
 }
 
+/// What a never-free program cannot hold: a handle a host's collector keeps
+/// alive only on the stack (`native::Family::stack_rooted`). Such a handle is
+/// counted where it leaves the stack, and without counting nothing roots it
+/// there -- a node in a field is collected by its host under the field. So
+/// every function holding one is refused, reported and recorded as `settle`
+/// does, rather than compiled into a use after free.
+fn refuse_host_handles(lowered: &mut lower::Lowered) {
+    const WHY: &str = "a handle its host keeps alive on the stack (`HostClass`) needs the reference-counting provider (`--rc`): a never-free program roots nothing it keeps";
+    let mut refused = rustc_hash::FxHashSet::default();
+    for func in &lowered.program.funcs {
+        let Some(op) = func.values.iter().find(|op| op.ty.counted_family().is_some_and(native::Family::stack_rooted)) else {
+            continue;
+        };
+        lowered.diagnostics.push(nts_diagnostics::Diagnostic::error("NTS2006", WHY, op.origin.location));
+        lowered.program.uncompiled.push((func.name.clone(), WHY.to_owned()));
+        refused.insert(func.name.clone());
+    }
+    lowered.program.funcs.retain(|f| !refused.contains(&f.name));
+}
+
 fn settle(lowered: &mut lower::Lowered) {
     // Before that: a branch whose condition is already a constant is not two
     // arms, and the arm nothing can enter may be code this compiler cannot
@@ -5850,6 +5870,9 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
         .map(|bound| (bound.key.clone(), bound.clone()))
         .collect();
     settle(&mut lowered);
+    if options.provider != Provider::ReferenceCounting {
+        refuse_host_handles(&mut lowered);
+    }
     let mut program = lowered.program;
 
     // First, before anything expensive. Everything that survives here gets

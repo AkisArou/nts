@@ -5602,12 +5602,14 @@ mod tests {
     }
 
     /// And for a handle of each family, which both lists answer from
-    /// `tags::erased_handle_tag`: a counted family's is tagged, and a C
-    /// pointer nothing counts never is.
+    /// `tags::erased_handle_tag`: a family with a place in the block is
+    /// tagged, and a C pointer nothing counts never is, nor a host family,
+    /// whose pair only its binding names.
     #[test]
     fn the_two_erasure_lists_agree_about_handles() {
         use nts_core::hir::native::{Family, Handle, Pointee};
-        for family in [Family::C, Family::Objc, Family::GObject, Family::Com] {
+        let host = Family::Host(nts_core::hir::native::HostFamily::of("host_retain", "host_release"));
+        for family in [Family::C, Family::Objc, Family::GObject, Family::Com, host] {
             let ty = HirType::NativePointer(Pointee::Opaque(Handle {
                 tag: "_Thing".to_owned(),
                 ancestors: Vec::new(),
@@ -5619,7 +5621,7 @@ mod tests {
                 erased_tag(&ty).is_some(),
                 "`erasable` and `erased_tag` disagree about a {family:?} handle"
             );
-            assert_eq!(erased_tag(&ty).is_some(), family != Family::C, "{family:?}");
+            assert_eq!(erased_tag(&ty).is_some(), !matches!(family, Family::C | Family::Host(_)), "{family:?}");
         }
     }
 
@@ -6149,13 +6151,13 @@ fn counting_declarations(writer: &mut CodeWriter, origin: &Origin, program: &Pro
         if let Some((_, family)) = arrays.iter().find(|(known, _)| *known == counting) {
             let descriptor = nts_codegen_common::counting::array_descriptor_name(&counting);
             let cyclic = u32::from(family.holds_closures());
-            let family_name = *family;
+            let family_name = family.name();
             let family = family.runtime_id();
             writer.line(origin, format!("static const NtsForeignSlot {descriptor}_slot[] = {{ {{ 0u, {family}u, &{ops} }} }};"));
             writer.line(
                 origin,
                 format!(
-                    "static const NtsDescriptor {descriptor} = {{ NTS_KIND_ARRAY, sizeof(void *), 0u, {cyclic}u, 0, 0, \"{family_name:?}[]\", 0u, 0, NTS_ARRAY_FOREIGN, 1u, {descriptor}_slot }};"
+                    "static const NtsDescriptor {descriptor} = {{ NTS_KIND_ARRAY, sizeof(void *), 0u, {cyclic}u, 0, 0, \"{family_name}[]\", 0u, 0, NTS_ARRAY_FOREIGN, 1u, {descriptor}_slot }};"
                 ),
             );
         }
