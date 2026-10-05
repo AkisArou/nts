@@ -4267,19 +4267,8 @@ fn signature(program: &Program, func: &Func) -> Result<String, Diagnostic> {
 /// A binding pattern can emit extraction operations before the next argument.
 /// Dead definitions remain in the arena, so unused arguments keep their names.
 fn parameter_values(func: &Func) -> Result<Vec<ValueId>, Diagnostic> {
-    let invalid = || Diagnostic::error(
-        "NTS2006", "a parameter has no unique value definition", func.origin.location);
-    let mut values = vec![None; func.params.len()];
-    for (index, op) in func.values.iter().enumerate() {
-        if let OpKind::Param(at) = op.kind {
-            let slot = values.get_mut(at as usize).ok_or_else(invalid)?;
-            let value = ValueId(u32::try_from(index).map_err(|_| invalid())?);
-            if slot.replace(value).is_some() {
-                return Err(invalid());
-            }
-        }
-    }
-    values.into_iter().map(|value| value.ok_or_else(invalid)).collect()
+    func.parameter_values().ok_or_else(|| Diagnostic::error(
+        "NTS2006", "a parameter has no unique value definition", func.origin.location))
 }
 
 fn format_signature(name: &str, returns: &str, params: &[String], public: bool) -> String {

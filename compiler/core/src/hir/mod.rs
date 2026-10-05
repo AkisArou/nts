@@ -632,6 +632,23 @@ pub struct GeneratorResumption {
 }
 
 impl Func {
+    /// Actual parameter definitions in ABI order, including dead definitions.
+    /// Binding patterns can insert operations between arguments, so a formal
+    /// position is not a value-arena index. Missing or repeated definitions
+    /// cannot supply a parameter mapping.
+    #[must_use]
+    pub fn parameter_values(&self) -> Option<Vec<ValueId>> {
+        let mut values = vec![None; self.params.len()];
+        for (index, op) in self.values.iter().enumerate() {
+            if let OpKind::Param(at) = op.kind {
+                let slot = values.get_mut(at as usize)?;
+                let value = ValueId(u32::try_from(index).ok()?);
+                if slot.replace(value).is_some() { return None; }
+            }
+        }
+        values.into_iter().collect()
+    }
+
     /// The op defining a value.
     #[must_use]
     pub fn value(&self, id: ValueId) -> &Op {

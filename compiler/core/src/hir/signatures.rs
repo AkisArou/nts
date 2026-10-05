@@ -37,7 +37,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::facts;
 use super::flow::Analysis;
-use super::{HirType, OpKind, Program, ValueId};
+use super::{HirType, OpKind, Program};
 
 /// The smallest and largest `int32`.
 const I32_MIN: f64 = -2_147_483_648.0;
@@ -61,13 +61,11 @@ pub fn specialize(
         if fixed.contains(&func.name) {
             continue;
         }
-        for slot in 0..func.params.len() {
+        let Some(parameters) = func.parameter_values() else { continue };
+        for (slot, value) in parameters.into_iter().enumerate() {
             if !matches!(func.params[slot].ty, HirType::Float { .. }) {
                 continue;
             }
-            // Parameter `i` is value `i`, the convention the whole backend
-            // shares.
-            let value = ValueId(u32::try_from(slot).unwrap_or(u32::MAX));
             // The strict form: a parameter that might be a negative zero cannot
             // be an integer, and unlike a local there is no single place
             // downstream to ask whether anything can tell the two apart.

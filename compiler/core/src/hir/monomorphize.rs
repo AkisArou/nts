@@ -44,7 +44,7 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::{Callee, Func, HirType, ManagedType, OpKind, Program, TypeId, ValueId};
+use super::{Callee, Func, HirType, ManagedType, OpKind, Program, TypeId};
 
 /// How many clones one program may grow.
 ///
@@ -221,7 +221,9 @@ fn find_request(
 /// or handed on is one whose new type would have to travel with it, and the
 /// profit is in the call rather than in the type.
 fn only_called(func: &Func, slot: u32) -> bool {
-    let param = ValueId(slot);
+    let Some(param) = func.parameter_values().and_then(|values| values.get(slot as usize).copied()) else {
+        return false;
+    };
     for block in &func.blocks {
         for value in &block.ops {
             let reads = super::verify::operands(&func.values[value.0 as usize].kind);
@@ -256,7 +258,9 @@ fn retype_parameter(
     written: (String, usize, HirType),
     result_absent: super::Absent,
 ) {
-    let param = ValueId(slot);
+    let Some(param) = clone.parameter_values().and_then(|values| values.get(slot as usize).copied()) else {
+        return;
+    };
     let ty = HirType::Managed(ManagedType::Object(concrete));
     clone.values[param.0 as usize].ty = ty;
 

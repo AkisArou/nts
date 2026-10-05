@@ -598,12 +598,13 @@ pub fn analyze(
 ) -> Map {
     // What its callers were told it takes over (`Summaries::consumes`), so
     // the callee and every caller answer from one derivation.
+    let parameters = func.parameter_values().unwrap_or_default();
     let owns: rustc_hash::FxHashSet<ValueId> = summaries
         .consumes
         .get(&func.name)
         .into_iter()
         .flatten()
-        .map(|slot| ValueId(*slot))
+        .filter_map(|slot| parameters.get(*slot as usize).copied())
         .collect();
     let held = entry_owned(func, layouts);
     let vouched = summaries
@@ -2676,11 +2677,11 @@ fn zeroed_parameters(
             if !direct_only.contains(func.name.as_str()) {
                 return (func.name.clone(), slots);
             }
-            for (slot, _) in func.params.iter().enumerate() {
+            for (slot, parameter) in func.parameter_values().unwrap_or_default().into_iter().enumerate() {
                 let Ok(slot) = u32::try_from(slot) else {
                     continue;
                 };
-                for field in reference_fields(func, layouts, ValueId(slot)) {
+                for field in reference_fields(func, layouts, parameter) {
                     slots.insert((slot, field));
                 }
             }
@@ -2831,9 +2832,8 @@ fn consuming(func: &Func, layouts: &[Layout]) -> rustc_hash::FxHashSet<u32> {
         false
     };
 
-    for (slot, _) in func.params.iter().enumerate() {
+    for (slot, parameter) in func.parameter_values().unwrap_or_default().into_iter().enumerate() {
         let Ok(slot) = u32::try_from(slot) else { continue };
-        let parameter = ValueId(slot);
         if !counted(func, layouts, parameter) {
             continue;
         }
@@ -3340,8 +3340,9 @@ impl Fresh {
         // `zeroed_parameters`. The fields nobody vouched for are marked written
         // straight away, so the base says only what was actually promised.
         if block == BlockId(0) {
+            let parameters = func.parameter_values().unwrap_or_default();
             for (slot, _) in zeroed {
-                let parameter = ValueId(*slot);
+                let Some(parameter) = parameters.get(*slot as usize).copied() else { continue };
                 fresh.bases.insert(parameter);
                 for field in reference_fields(func, layouts, parameter) {
                     if !zeroed.contains(&(*slot, field)) {
@@ -3352,18 +3353,11 @@ impl Fresh {
         }
         // A constructor's receiver arrives freshly allocated. Only in the entry
         // block: a later block may be reached by a path that already wrote.
-        // Parameter `i` is value `i`, which the whole backend relies on -- but
-        // it is checked here rather than assumed, because being wrong about
-        // which value the receiver is would mean treating some other object's
-        // stores as initializing.
         if func.initializes_receiver
             && block == BlockId(0)
-            && matches!(
-                func.values.first().map(|op| &op.kind),
-                Some(OpKind::Param(0))
-            )
+            && let Some(receiver) = func.parameter_values().and_then(|values| values.first().copied())
         {
-            fresh.bases.insert(ValueId(0));
+            fresh.bases.insert(receiver);
         }
         fresh
     }

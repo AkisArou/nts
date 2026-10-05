@@ -73,13 +73,14 @@ pub fn install(program: &mut super::Program, roots: &super::reachable::RootNames
 
     let mut made = 0;
     for index in candidates {
+        let Some(arguments) = program.funcs[index].parameter_values() else { continue };
         // Which parameters need the extra `!= 0`: the ones whose zero's sign
         // something downstream can distinguish.
         let observed = zero_sign::observed(&program.funcs[index]);
         let clone = clone_for_whole_numbers(&program.funcs[index]);
         let name = clone.name.clone();
         program.funcs.push(clone);
-        rewrite_as_guard(&mut program.funcs[index], &name, &observed);
+        rewrite_as_guard(&mut program.funcs[index], &name, &observed, &arguments);
         made += 1;
     }
     made
@@ -206,7 +207,7 @@ fn clone_for_whole_numbers(func: &Func) -> Func {
 /// The original entry block's contents move to a block of their own and block
 /// zero becomes the test, so nothing is renumbered — a `BlockId` is an index,
 /// and shifting them would mean rewriting every terminator in the function.
-fn rewrite_as_guard(func: &mut Func, whole: &str, observed: &FxHashSet<ValueId>) {
+fn rewrite_as_guard(func: &mut Func, whole: &str, observed: &FxHashSet<ValueId>, arguments: &[ValueId]) {
     let origin = func.origin.clone();
     let mut entry = std::mem::replace(
         &mut func.blocks[0],
@@ -245,7 +246,7 @@ fn rewrite_as_guard(func: &mut Func, whole: &str, observed: &FxHashSet<ValueId>)
         .map(|slot| u32::try_from(slot).unwrap_or(u32::MAX))
         .collect();
 
-    let (tests, handed) = build_tests(func, &guarded, observed);
+    let (tests, handed) = build_tests(func, &guarded, observed, arguments);
 
     let call = ValueId(u32::try_from(func.values.len()).unwrap_or(u32::MAX));
     func.values.push(Op {
@@ -318,6 +319,7 @@ fn build_tests(
     func: &mut Func,
     guarded: &[u32],
     observed: &FxHashSet<ValueId>,
+    arguments: &[ValueId],
 ) -> (Vec<(Vec<ValueId>, ValueId)>, Vec<ValueId>) {
     let origin = func.origin.clone();
     let push = |values: &mut Vec<Op>, kind: OpKind, ty: HirType| {
@@ -330,12 +332,10 @@ fn build_tests(
         id
     };
     let mut tests: Vec<(Vec<ValueId>, ValueId)> = Vec::new();
-    let mut handed: Vec<ValueId> = (0..func.params.len())
-        .map(|slot| ValueId(u32::try_from(slot).unwrap_or(u32::MAX)))
-        .collect();
+    let mut handed = arguments.to_vec();
 
     for slot in guarded {
-        let param = ValueId(*slot);
+        let param = arguments[*slot as usize];
         let truncated = push(
             &mut func.values,
             OpKind::Unary {

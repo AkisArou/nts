@@ -23,6 +23,15 @@ use super::{
 pub enum Invalid {
     /// Native local storage escaped or could be reused while an alias survives.
     NativeStorage { func: String, reason: &'static str },
+    /// A live parameter definition differs from the actual incoming ABI.
+    /// C may silently convert such a mismatch; LLVM/JVM must reject it.
+    ParameterType {
+        func: String,
+        value: ValueId,
+        position: u32,
+        expected: Option<HirType>,
+        found: HirType,
+    },
     /// A branch names a block that does not exist.
     DanglingSuccessor { func: String, target: BlockId },
     /// A layout's base is not laid out as its prefix.
@@ -1159,6 +1168,7 @@ fn check_stores(program: &Program, func: &Func, problems: &mut Vec<Invalid>) {
 }
 
 fn verify_func(func: &Func, problems: &mut Vec<Invalid>) {
+    check_parameters(func, problems);
     if !func.blocks.is_empty() && !func.entry().params.is_empty() {
         problems.push(Invalid::EntryHasParams {
             func: func.name.clone(),
@@ -1212,6 +1222,20 @@ fn verify_func(func: &Func, problems: &mut Vec<Invalid>) {
 
     check_operands(func, problems);
     check_dominance(func, &reachable, problems);
+}
+
+fn check_parameters(func: &Func, problems: &mut Vec<Invalid>) {
+    for value in func.blocks.iter().flat_map(|block| &block.ops) {
+        let Some(op) = func.values.get(value.0 as usize) else { continue };
+        let OpKind::Param(position) = op.kind else { continue };
+        let expected = func.params.get(position as usize).map(|param| &param.ty);
+        if expected != Some(&op.ty) {
+            problems.push(Invalid::ParameterType {
+                func: func.name.clone(), value: *value, position,
+                expected: expected.cloned(), found: op.ty.clone(),
+            });
+        }
+    }
 }
 
 /// An operator's operands must be things it can be applied to.
@@ -1810,12 +1834,20 @@ mod tests {
     }
 
     fn func(values: Vec<Op>, blocks: Vec<Block>) -> Program {
+        let params = values.iter().filter_map(|op| match op.kind {
+            OpKind::Param(at) => Some((at, Param {
+                name: format!("arg{at}"), ty: op.ty.clone(), origin: op.origin.clone(),
+                shape: super::super::ParamShape::Ordinary,
+                known: super::super::facts::Facts::TOP,
+            })),
+            _ => None,
+        }).collect::<std::collections::BTreeMap<_, _>>().into_values().collect();
         Program {
             layouts: Vec::new(),
             globals: Vec::new(),
             funcs: vec![Func {
                 name: "f".to_owned(),
-                params: Vec::<Param>::new(),
+                params,
                 return_type: HirType::Float { bits: 64 },
                 values,
                 blocks,

@@ -365,10 +365,9 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
 
         let mut changed = false;
         for (index, func) in program.funcs.iter().enumerate() {
-            for slot in 0..u32::try_from(func.params.len()).unwrap_or(0) {
-                // Parameter `i` is value `i`, the convention the whole backend
-                // shares.
-                if results[index].escapes(ValueId(slot)) && escaping_params[index].insert(slot) {
+            for (slot, parameter) in func.parameter_values().unwrap_or_default().into_iter().enumerate() {
+                let Ok(slot) = u32::try_from(slot) else { continue };
+                if results[index].escapes(parameter) && escaping_params[index].insert(slot) {
                     changed = true;
                 }
             }

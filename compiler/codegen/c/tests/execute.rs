@@ -560,10 +560,15 @@ fn pattern_extraction_does_not_rename_later_arguments() {
 double ordered(double n);
 double swapped(double n);
 double unused(double n);
+double guarded(double n);
+double owned(double n);
 int main(void) {{
     check("ordered(7)", ordered(7), 30);
     check("swapped(-7)", swapped(-7), 25);
     check("unused(7)", unused(7), 12);
+    check("guarded(3.5)", guarded(3.5), 21);
+    check("guarded(-7)", guarded(-7), -42);
+    check("owned(7)", owned(7), 15);
     return failures ? 1 : 0;
 }}
 "#
