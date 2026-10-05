@@ -300,9 +300,6 @@ const selection: Selection[] = execFileSync(
   .filter(Boolean)
   .map((line) => JSON.parse(line) as Selection);
 const rows: Row[] = [];
-// These locale methods still use Node intrinsics in this supplementary adapter.
-// Keep their original cases visible without counting that fallback as evidence.
-const unboundLocaleMethods = new Set(["Array", "TypedArray"]);
 let attempted = 0;
 for (const selected of selection) {
   if (!selected.path.includes(filter)) continue;
@@ -317,10 +314,6 @@ for (const selected of selection) {
   if (selected.schedule !== "planned") {
     row.verdict = selected.schedule;
     row.reason = selected.reason;
-    continue;
-  }
-  if (profile === "intl" && unboundLocaleMethods.has(selected.path.split("/")[2]!)) {
-    row.reason = "adapter:locale-method-not-bound";
     continue;
   }
   if (selected.variant_id?.endsWith("#module")) {
@@ -454,6 +447,21 @@ for (const selected of selection) {
       String.prototype.toLocaleUpperCase = { toLocaleUpperCase(locales = undefined) {
         return __impl.stringLocaleCase(__intlData, __intlCaseMap, this, true, locales);
       } }.toLocaleUpperCase;
+      Array.prototype.toLocaleString = { toLocaleString(locales = undefined, options = undefined) {
+        if (this === null || this === undefined) throw new TypeError("Array locale method requires a receiver");
+        // ToObject is a host receiver projection; traversal stays in shared TS.
+        return __impl.arrayLocaleString(Object(this), (value) => value.toLocaleString(locales, options));
+      } }.toLocaleString;
+      const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
+      const typedArrayValues = typedArrayPrototype.values;
+      const typedArrayLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, "length").get;
+      typedArrayPrototype.toLocaleString = { toLocaleString(locales = undefined, options = undefined) {
+        // Intrinsic brand/bounds projection only; the shared TS traverses and
+        // formats. Never call Node's Array/TypedArray toLocaleString algorithm.
+        typedArrayValues.call(this);
+        const length = typedArrayLength.call(this);
+        return __impl.arrayLocaleString(this, (value) => value.toLocaleString(locales, options), length);
+      } }.toLocaleString;
       globalThis.Intl = {
         NumberFormat, Locale, Collator, DateTimeFormat, ListFormat, RelativeTimeFormat, PluralRules, DurationFormat, DisplayNames, Segmenter,
         getCanonicalLocales(locales) { return __impl.getCanonicalLocales(__intlData, locales); },

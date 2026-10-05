@@ -120,8 +120,10 @@ and artifact-size evidence before becoming another provider.
    cached algorithms. Common iterator helpers and compiled public acceptance
    remain open. Number/BigInt localization and String locale comparison/casing
    now consume the shared services; their compiled standard bindings remain open.
-   Array/TypedArray locale-method binding also remains open, and its original
-   cases are retained as unsupported rather than execute Node container methods.
+   Array/TypedArray locale traversal now shares a length snapshot, ordered reads
+   and element formatting callback. Its original cases execute this shared
+   algorithm in the host adapter. Compiled ArrayLike representation, intrinsic
+   receiver validation and standard locale-method binding remain open.
 8. **Packaging and performance.** Finish reachability-controlled acquisition,
    platform/device acceptance and construction, format, parts, range, startup,
    heap and artifact-size measurements.
@@ -526,7 +528,7 @@ in UTC and both 23:59 fixed offsets; all retain available calendar data.
 The compiled field witness additionally verifies twelve era/month symbol cases
 on all five configurations, with native sanitizers, RC leak checks and JVM
 verification. These receipts are in target/ecmascript/audit/calendar-presentation
-and target/ecmascript/icu-check/*calendar-presentation*.
+and `target/ecmascript/icu-check/*calendar-presentation*`.
 The complete compiled provider/public gate still refuses implicit calendar/zone
 dispatch and the DateTimeFormatter range storage layout; its diagnostics are
 general-public-gate.log. Canonical public unions and standard binding remain
@@ -1255,3 +1257,60 @@ One retained DateTimeFormat failure is a data-dependent literal expectation:
 numbering-system.js expects an ASCII space before AM in the hanidec case, while
 pinned ICU returns U+202F. The digits and widths agree; the original failure is
 retained without replacing localized punctuation to satisfy that literal.
+
+### Container locale methods checkpoint — 2026-10-05
+
+Array and TypedArray localization now share `arrayLocaleString` in
+`src/intl/array-locale.ts`. It uses the standard `ArrayLike<T>` library type,
+snapshots and clips the length once, reads elements in order, skips null and
+undefined values, and stringifies each formatting result. A callback supplies
+element invocation with exactly the requested locales and options. TypedArray
+bindings supply their validated intrinsic length; an overridable length property
+must not replace that slot. Comma is the implementation-selected separator.
+The traversal uses one string accumulator without an intermediate parts array.
+
+The host adapter projects Array's ToObject receiver and TypedArray's intrinsic
+brand/bounds/length operations, then executes this shared traversal. It never
+calls Node's Array or TypedArray locale-string algorithm. The final Array slices
+were rerun after adding the ToObject projection. Original Test262 evidence:
+
+- Intl Array 2/2 and TypedArray 1/1.
+- Built-in Array 12/12 and TypedArray 37 passes with two retained unsupported
+  detach-buffer facility cases. These slices include element argument counts,
+  receiver rejection, overridden lengths and buffer growth/shrinkage.
+- Full Intl: 3,357 original rows, 3,172 passes and 185 retained failures. All three
+  previously unsupported container cases now pass. There are no pass
+  regressions, missing rows or changed source hashes against the preceding
+  checkpoint. These are supplementary host results, not compiled conformance.
+
+Receipts are `target/ecmascript/audit/container-locale-*-test262.{jsonl,log}` and
+`container-locale-intl-comparison.json`. Strict runtime and both existing provider
+fixture typechecks, formatting and diff checks pass. No class implements clause,
+mapped type, descriptor repair, WeakMap or duplicate standard type was added.
+
+Actual C-RC and JVM emission of a consumer of this unchanged production API
+refuses the canonical `ArrayLike` parameter and omits main. The shipping compiler
+and checker hashes are unchanged from the preceding checkpoint. The immutable
+private integration `58d00c1dc222` also refuses the same consumer on both targets,
+using compiler SHA-256
+`b63214bfcda3c21470e73cd178db2068a5d3949307c03693724c2c9f06ae2227`
+and frontend SHA-256
+`787b38dccd9b3d228a792ec4a683ce47689b09e435575f6d826d77845716c691`.
+All four commands exit zero despite their diagnostics; all four are red
+acceptance receipts. Main/worker B owns this representation and standard binding
+boundary. The public type remains ArrayLike; no narrowed stand-in supplies a
+compiled or performance acceptance claim. Reproductions and logs are
+`container-locale-{private-,}kernel-{c,jvm}.log` and
+`container-locale-compiled-report.json` under the same audit directory.
+
+The actual shared kernel's supplementary host measurement includes forced
+output materialization, with mixed empty/Latin/Greek/supplementary strings at
+16, 256, 4,096 and 65,536 elements. Five warmed samples have medians of about
+19, 12, 12 and 14 ns per element. This does not measure Intl element formatting,
+allocation, startup or native/JVM execution. Raw samples, source hash and scope
+are in `container-locale-performance.{ts,json,log}`. C-RC's append pass and JVM's
+builder pass recognize unobserved string accumulators in their source, but their
+application and performance on this actual kernel remain unverified while its
+ArrayLike representation is refused. Native non-RC accumulation also remains
+an explicit performance follow-up; no backend performance result is inferred
+from the host samples.

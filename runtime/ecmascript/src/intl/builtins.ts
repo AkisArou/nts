@@ -4,6 +4,7 @@ export { getCanonicalLocales, supportedLocalesOf } from "./locale-list.ts";
 export { NtsLocale } from "./locale-object.ts";
 export { NtsCollator, stringLocaleCompare } from "./collator.ts";
 export { stringLocaleCase } from "./string-case.ts";
+export { arrayLocaleString } from "./array-locale.ts";
 export { NtsDateTimeFormat } from "./date-time-builtins.ts";
 export { TimeLocaleContext } from "./time-locale.ts";
 export { NtsListFormat } from "./list.ts";
