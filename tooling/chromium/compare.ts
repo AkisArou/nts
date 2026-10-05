@@ -6,7 +6,9 @@ import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const output = resolve(import.meta.dirname, "../../target/chromium");
+// The evidence directory: target/chromium (baseline) by default, or e.g.
+// target/chromium/perf for the optimized profile's runs.
+const output = resolve(process.argv[2] ?? resolve(import.meta.dirname, "../../target/chromium"));
 interface Result {
   chromiumRevision: string;
   fixture: string;

@@ -1,6 +1,8 @@
 #include "nts/dom_bridge_bindings.h"
+#include "nts/dom_abi.h"
 
 #include <limits>
+#include <string_view>
 #include <utility>
 
 #include "base/auto_reset.h"
@@ -13,6 +15,7 @@
 #include "base/memory/weak_ptr.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_dom_exception.h"
+#include "third_party/blink/renderer/core/dom/container_node.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -28,6 +31,8 @@
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/heap/thread_state.h"
 #include "third_party/blink/renderer/platform/scheduler/public/event_loop.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
+#include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_impl.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -104,12 +109,83 @@ blink::String CopyString(NtsDomString input) {
   return blink::String(std::move(impl));
 }
 
+// Blink keeps one-byte text one byte wide, as NTS does: no widening.
+blink::String CopyLatin1(const uint8_t *data, size_t length) {
+  CHECK(data || length == 0);
+  CHECK_LE(length, std::numeric_limits<uint32_t>::max());
+  if (!length)
+    return blink::g_empty_string;
+  const auto units = UNSAFE_BUFFERS(base::span(data, length));
+  base::span<blink::LChar> destination;
+  auto impl = blink::StringImpl::CreateUninitialized(length, destination);
+  base::as_writable_bytes(destination).copy_from(units);
+  return blink::String(std::move(impl));
+}
+
 } // namespace
 
 struct NtsDomContext : public base::RefCounted<NtsDomContext> {
   explicit NtsDomContext(blink::Document *document)
       : roots(blink::MakeGarbageCollected<NodeRegistry>(document)),
-        event_loop(document->GetExecutionContext()->GetAgent()->event_loop()) {}
+        event_loop(document->GetExecutionContext()->GetAgent()->event_loop()),
+        v8_isolate(document->GetExecutionContext()->GetIsolate()) {}
+
+  // A handle is slot + 1 in its low 24 bits and the slot's generation above
+  // them, so a released handle cannot name the slot's next node. The first
+  // lease of a fresh slot has generation 0: the original API's index.
+  static constexpr uint32_t kSlotBits = 24;
+  static constexpr uint32_t kSlotMask = (1u << kSlotBits) - 1;
+  static uint32_t Handle(uint32_t slot, uint8_t generation) {
+    return (uint32_t{generation} << kSlotBits) | (slot + 1);
+  }
+  // The live slot a handle names, or kSlotMask if it names none.
+  uint32_t Slot(uint32_t handle) const {
+    const uint32_t slot = (handle & kSlotMask) - 1;
+    return (handle & kSlotMask) && slot < roots->nodes.size() &&
+                   roots->nodes[slot] &&
+                   generations[slot] == handle >> kSlotBits
+               ? slot
+               : kSlotMask;
+  }
+  blink::Node *Lookup(uint32_t handle) {
+    const uint32_t slot = Slot(handle);
+    return slot == kSlotMask ? nullptr : roots->nodes[slot].Get();
+  }
+  // Ends one lease; the last one unroots the node and retires the handle.
+  void ReleaseLease(uint32_t handle) {
+    const uint32_t slot = Slot(handle);
+    if (slot == kSlotMask || --leases[slot])
+      return;
+    roots->identity.erase(roots->nodes[slot]);
+    roots->nodes[slot] = nullptr;
+    ++generations[slot];
+    free_slots.push_back(slot);
+  }
+
+  // An entered operation. The entry holds the context alive and owns the
+  // microtask scope; the operation owns only what its IDL member requires.
+  // DummyExceptionStateForTesting is the ExceptionState that records a code
+  // with no isolate: nothing is thrown into V8, so nothing needs catching.
+  template <class Operation> int32_t Entered(Operation &&operation) {
+    if (!entry_depth)
+      return kNtsDomNoEntry;
+    if (closed)
+      return 11; // InvalidStateError
+    blink::DummyExceptionStateForTesting exception;
+    const int32_t result = std::forward<Operation>(operation)(exception);
+    return exception.HadException() ? static_cast<int32_t>(exception.Code())
+                                    : result;
+  }
+
+  // An entered operation yielding a node: one lease for the caller, or 0 on
+  // null or failure with the code kept for nts_dom_last_error.
+  template <class Operation> uint32_t EnteredNode(Operation &&operation) {
+    blink::Node *node = nullptr;
+    last_error = Entered([&](blink::ExceptionState &exception) {
+      return std::forward<Operation>(operation)(exception, node);
+    });
+    return last_error ? 0 : Bind(node);
+  }
 
   uint32_t Bind(blink::Node *node) {
     if (closed) {
@@ -118,22 +194,35 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
     }
     if (!node)
       return 0;
+    // Each returned handle is one lease; identity keeps it one handle.
     const auto existing = roots->identity.find(node);
-    if (existing != roots->identity.end())
+    if (existing != roots->identity.end()) {
+      ++leases[Slot(existing->value)];
       return existing->value;
-    CHECK_LT(roots->nodes.size(), std::numeric_limits<uint32_t>::max());
-    roots->nodes.push_back(node);
-    const uint32_t handle = roots->nodes.size();
+    }
+    uint32_t slot;
+    if (free_slots.empty()) {
+      CHECK_LT(roots->nodes.size(), kSlotMask - 1);
+      slot = roots->nodes.size();
+      roots->nodes.push_back(node);
+      leases.push_back(1);
+      generations.push_back(0);
+    } else {
+      slot = free_slots.back();
+      free_slots.pop_back();
+      roots->nodes[slot] = node;
+      leases[slot] = 1;
+    }
+    const uint32_t handle = Handle(slot, generations[slot]);
     roots->identity.insert(node, handle);
     return handle;
   }
 
   blink::Node *Node(uint32_t id) {
-    if (!id || id > roots->nodes.size()) {
+    auto *node = Lookup(id);
+    if (!node)
       status = 1000; // Experimental boundary TypeError, not a DOM legacy code.
-      return nullptr;
-    }
-    return roots->nodes[id - 1].Get();
+    return node;
   }
 
   template <class Operation>
@@ -198,6 +287,35 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
     else
       event_loop->EnqueueMicrotask(std::move(callback));
   }
+  // Idle work runs between frames, as V8 and Oilpan schedule theirs; it
+  // is revoked with the document like any other queued job.
+  void PostIdle(NativeJob::Callback run, NativeJob::Callback drop,
+                void *state) {
+    auto job = base::MakeRefCounted<NativeJob>(run, drop, state);
+    if (closed) {
+      job->Drop();
+      return;
+    }
+    jobs.push_back(job);
+    blink::ThreadScheduler::Current()->PostIdleTask(
+        FROM_HERE, base::BindOnce(&NtsDomContext::RunIdle,
+                                  weak_factory.GetWeakPtr(), job));
+  }
+  void RunIdle(scoped_refptr<NativeJob> job, base::TimeTicks) {
+    scoped_refptr<NtsDomContext> keep_alive(this);
+    if (!closed)
+      job->Run();
+    job->Drop();
+    Forget(job);
+  }
+  void Forget(const scoped_refptr<NativeJob> &job) {
+    for (blink::wtf_size_t i = 0; i < jobs.size(); ++i) {
+      if (jobs[i] == job) {
+        jobs.EraseAt(i);
+        break;
+      }
+    }
+  }
   void RunJob(scoped_refptr<NativeJob> job, bool end_checkpoint) {
     scoped_refptr<NtsDomContext> keep_alive(this);
     if (closed) {
@@ -224,12 +342,7 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
       job->Run();
     });
     job->Drop(); // A realm that closed before execution still consumes state.
-    for (blink::wtf_size_t i = 0; i < jobs.size(); ++i) {
-      if (jobs[i] == job) {
-        jobs.EraseAt(i);
-        break;
-      }
-    }
+    Forget(job);
   }
   void Close() {
     closed = true;
@@ -239,6 +352,31 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
     jobs.clear();
     roots->nodes.clear();
     roots->identity.clear();
+    leases.clear();
+    generations.clear();
+    free_slots.clear();
+    atoms.clear();
+    atom_ids.clear();
+  }
+
+  // Names and literal text are interned once; operations then pass an id.
+  // An AtomicString shares its StringImpl with String, so a text write from
+  // the table is a reference, not a copy -- what V8 externalization gives
+  // page script for a repeated string. Ids are dense and never reused.
+  uint32_t Intern(const blink::String &text) {
+    if (closed || text.IsNull())
+      return 0;
+    blink::AtomicString atom(text);
+    const auto existing = atom_ids.find(atom);
+    if (existing != atom_ids.end())
+      return existing->value;
+    CHECK_LT(atoms.size(), std::numeric_limits<uint32_t>::max());
+    atoms.push_back(atom);
+    atom_ids.insert(atom, atoms.size());
+    return atoms.size();
+  }
+  const blink::AtomicString *Atom(uint32_t id) const {
+    return id && id <= atoms.size() ? &atoms[id - 1] : nullptr;
   }
 
   blink::Persistent<NodeRegistry> roots;
@@ -248,9 +386,17 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
   // shared.
   const scoped_refptr<blink::scheduler::EventLoop> event_loop;
   blink::Vector<uint16_t> read_buffer;
+  blink::Vector<uint32_t> leases;
+  blink::Vector<uint8_t> generations;
+  blink::Vector<uint32_t> free_slots;
+  int32_t last_error = 0;
+  blink::Vector<blink::AtomicString> atoms;
+  blink::HashMap<blink::AtomicString, uint32_t> atom_ids;
   int32_t status = 0;
   bool closed = false;
   uint32_t native_entry_depth = 0;
+  const raw_ptr<v8::Isolate> v8_isolate;
+  uint32_t entry_depth = 0;
   uint32_t job_sequence = 0;
   blink::Vector<scoped_refptr<NativeJob>> jobs;
   base::WeakPtrFactory<NtsDomContext> weak_factory{this};
@@ -295,6 +441,73 @@ void nts_blink_dom_native_scope(NtsDomContext *context, NativeJob::Callback run,
   base::AutoReset<uint32_t> depth(&context->native_entry_depth,
                                   context->native_entry_depth + 1);
   run(state);
+}
+int32_t nts_blink_dom_entry(NtsDomContext *context, NativeJob::Callback run,
+                            void *state) {
+  scoped_refptr<NtsDomContext> keep_alive(context);
+  if (context->closed || !context->roots->document->IsActive())
+    return 11;
+  v8::HandleScope handles(context->v8_isolate);
+  v8::MicrotasksScope microtasks(context->v8_isolate,
+                                 context->event_loop->microtask_queue(),
+                                 v8::MicrotasksScope::kRunMicrotasks);
+  base::AutoReset<uint32_t> depth(&context->entry_depth,
+                                  context->entry_depth + 1);
+  run(state);
+  return 0;
+}
+int32_t nts_blink_dom_set_text16(NtsDomContext *context, uint32_t id,
+                                 NtsDomString text) {
+  return context->Entered([&](blink::ExceptionState &) {
+    auto *node = context->Lookup(id);
+    if (!node)
+      return 1000;
+    blink::CEReactionsScope reactions(context->v8_isolate); // [CEReactions]
+    node->setTextContent(CopyString(text));
+    return 0;
+  });
+}
+int32_t nts_blink_dom_set_text8(NtsDomContext *context, uint32_t id,
+                                const uint8_t *latin1, size_t length) {
+  return context->Entered([&](blink::ExceptionState &) {
+    auto *node = context->Lookup(id);
+    if (!node)
+      return 1000;
+    blink::CEReactionsScope reactions(context->v8_isolate);
+    node->setTextContent(CopyLatin1(latin1, length));
+    return 0;
+  });
+}
+int32_t nts_blink_dom_set_text_utf8(NtsDomContext *context, uint32_t id,
+                                    const char *utf8) {
+  return context->Entered([&](blink::ExceptionState &) {
+    auto *node = context->Lookup(id);
+    if (!node || !utf8)
+      return 1000;
+    // FromUtf8 makes ASCII an 8-bit StringImpl in one copy.
+    auto text = blink::String::FromUtf8(std::string_view(utf8));
+    if (text.IsNull())
+      return 1000;
+    blink::CEReactionsScope reactions(context->v8_isolate);
+    node->setTextContent(text);
+    return 0;
+  });
+}
+uint32_t nts_blink_dom_intern_utf8(NtsDomContext *context, const char *utf8) {
+  return utf8 ? context->Intern(blink::String::FromUtf8(std::string_view(utf8)))
+              : 0;
+}
+int32_t nts_blink_dom_set_text_atom(NtsDomContext *context, uint32_t id,
+                                    uint32_t atom) {
+  return context->Entered([&](blink::ExceptionState &) {
+    auto *node = context->Lookup(id);
+    const auto *text = context->Atom(atom);
+    if (!node || !text)
+      return 1000;
+    blink::CEReactionsScope reactions(context->v8_isolate);
+    node->setTextContent(*text);
+    return 0;
+  });
 }
 int32_t nts_blink_dom_set_text_vector_for_benchmark(NtsDomContext *context,
                                                     uint32_t id,
@@ -422,7 +635,7 @@ int32_t nts_blink_dom_status(NtsDomContext *context) {
   return context->status;
 }
 size_t nts_blink_dom_roots(NtsDomContext *context) {
-  return context->roots->nodes.size();
+  return context->roots->identity.size();
 }
 void nts_blink_dom_collect_for_testing(NtsDomContext *context) {
   scoped_refptr<NtsDomContext> keep_alive(context);
@@ -451,10 +664,159 @@ void nts_blink_dom_enqueue(NtsDomContext *context, NativeJob::Callback run,
   scoped_refptr<NtsDomContext> keep_alive(context);
   context->Enqueue(run, drop, state, false);
 }
+void nts_blink_dom_post_idle(NtsDomContext *context, NativeJob::Callback run,
+                             NativeJob::Callback drop, void *state) {
+  context->PostIdle(run, drop, state);
+}
 void nts_blink_dom_end_checkpoint(NtsDomContext *context,
                                   NativeJob::Callback run,
                                   NativeJob::Callback drop, void *state) {
   scoped_refptr<NtsDomContext> keep_alive(context);
   context->Enqueue(run, drop, state, true);
+}
+
+// The entered DOM ABI (ffi/dom_abi.h). Operations follow their IDL members:
+// [CEReactions] members open a reaction scope, the rest do not; nothing here
+// enters a V8 context or creates a V8 exception.
+uint32_t nts_dom_intern(NtsDomContext *context, const char *text) {
+  return nts_blink_dom_intern_utf8(context, text);
+}
+void nts_dom_release(NtsDomContext *context, uint32_t node) {
+  context->ReleaseLease(node);
+}
+int32_t nts_dom_last_error(NtsDomContext *context) {
+  return context->last_error;
+}
+uint32_t nts_dom_document(NtsDomContext *context) {
+  return context->EnteredNode(
+      [&](blink::ExceptionState &, blink::Node *&result) {
+        result = context->roots->document.Get();
+        return 0;
+      });
+}
+uint32_t nts_dom_query_atom(NtsDomContext *context, uint32_t root,
+                            uint32_t selector) {
+  return context->EnteredNode(
+      [&](blink::ExceptionState &exception, blink::Node *&result) {
+        auto *scope = blink::DynamicTo<blink::ContainerNode>(
+            context->Lookup(root));
+        const auto *text = context->Atom(selector);
+        if (!scope || !text)
+          return 1000;
+        result = scope->QuerySelector(*text, exception);
+        return 0;
+      });
+}
+uint32_t nts_dom_create_element(NtsDomContext *context, uint32_t tag) {
+  return context->EnteredNode(
+      [&](blink::ExceptionState &exception, blink::Node *&result) {
+        const auto *name = context->Atom(tag);
+        if (!name)
+          return 1000;
+        result = context->roots->document->CreateElementForBinding(*name,
+                                                                   exception);
+        return 0;
+      });
+}
+uint32_t nts_dom_create_text(NtsDomContext *context, const char *text) {
+  return context->EnteredNode(
+      [&](blink::ExceptionState &, blink::Node *&result) {
+        if (!text)
+          return 1000;
+        const auto value = blink::String::FromUtf8(std::string_view(text));
+        if (value.IsNull())
+          return 1000;
+        result = context->roots->document->createTextNode(value);
+        return 0;
+      });
+}
+uint32_t nts_dom_clone(NtsDomContext *context, uint32_t node, int32_t deep) {
+  return context->EnteredNode(
+      [&](blink::ExceptionState &exception, blink::Node *&result) {
+        auto *source = context->Lookup(node);
+        if (!source)
+          return 1000;
+        // cloneNode is [CEReactions]: cloning a custom element upgrades it.
+        blink::CEReactionsScope reactions(context->v8_isolate);
+        result = source->cloneNode(deep != 0, exception);
+        return 0;
+      });
+}
+uint32_t nts_dom_first_child(NtsDomContext *context, uint32_t node) {
+  return context->EnteredNode(
+      [&](blink::ExceptionState &, blink::Node *&result) {
+        auto *parent = context->Lookup(node);
+        if (!parent)
+          return 1000;
+        result = parent->firstChild();
+        return 0;
+      });
+}
+uint32_t nts_dom_next_sibling(NtsDomContext *context, uint32_t node) {
+  return context->EnteredNode(
+      [&](blink::ExceptionState &, blink::Node *&result) {
+        auto *self = context->Lookup(node);
+        if (!self)
+          return 1000;
+        result = self->nextSibling();
+        return 0;
+      });
+}
+int32_t nts_dom_append_child(NtsDomContext *context, uint32_t parent,
+                             uint32_t child) {
+  return context->Entered([&](blink::ExceptionState &exception) {
+    auto *p = context->Lookup(parent);
+    auto *c = context->Lookup(child);
+    if (!p || !c)
+      return 1000;
+    blink::CEReactionsScope reactions(context->v8_isolate);
+    p->appendChild(c, exception);
+    return 0;
+  });
+}
+int32_t nts_dom_insert_before(NtsDomContext *context, uint32_t parent,
+                              uint32_t child, uint32_t reference) {
+  return context->Entered([&](blink::ExceptionState &exception) {
+    auto *p = context->Lookup(parent);
+    auto *c = context->Lookup(child);
+    auto *r = reference ? context->Lookup(reference) : nullptr;
+    if (!p || !c || (reference && !r))
+      return 1000;
+    blink::CEReactionsScope reactions(context->v8_isolate);
+    p->insertBefore(c, r, exception);
+    return 0;
+  });
+}
+int32_t nts_dom_remove_node(NtsDomContext *context, uint32_t node) {
+  return context->Entered([&](blink::ExceptionState &exception) {
+    auto *self = context->Lookup(node);
+    if (!self)
+      return 1000;
+    blink::CEReactionsScope reactions(context->v8_isolate);
+    self->remove(exception);
+    return 0;
+  });
+}
+int32_t nts_dom_set_text_value(NtsDomContext *context, uint32_t node,
+                               const char *text) {
+  return nts_blink_dom_set_text_utf8(context, node, text);
+}
+int32_t nts_dom_set_text_interned(NtsDomContext *context, uint32_t node,
+                                  uint32_t atom) {
+  return nts_blink_dom_set_text_atom(context, node, atom);
+}
+int32_t nts_dom_set_attribute_interned(NtsDomContext *context,
+                                       uint32_t element, uint32_t name,
+                                       uint32_t value) {
+  return context->Entered([&](blink::ExceptionState &exception) {
+    auto *target = blink::DynamicTo<blink::Element>(context->Lookup(element));
+    const auto *n = context->Atom(name);
+    const auto *v = context->Atom(value);
+    if (!target || !n || !v)
+      return 1000;
+    blink::CEReactionsScope reactions(context->v8_isolate);
+    target->setAttribute(*n, *v, exception);
+    return 0;
+  });
 }
 } // extern "C"

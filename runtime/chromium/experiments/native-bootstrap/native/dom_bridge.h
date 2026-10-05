@@ -44,6 +44,36 @@ void nts_blink_dom_collect_for_testing(NtsDomContext* context);
 void nts_blink_dom_native_scope(NtsDomContext* context,
                                 void (*run)(void*),
                                 void* state);
+// Entered calls: the architecture under test. One entry per native callback
+// supplies what V8ScriptRunner::CallFunction supplies a JS callback -- the
+// agent's microtask scope, so nested script cannot checkpoint mid-callback
+// and the outermost entry checkpoints on return. Operations inside it touch
+// no V8 context, TryCatch or V8 exception object: Blink records the DOM
+// exception code without V8, and each result carries its own status.
+// Text crosses at its own width -- Latin-1 or UTF-16 -- with one copy.
+// Outside an entry these return kNtsDomNoEntry and do nothing.
+enum { kNtsDomNoEntry = 1001 };
+int32_t nts_blink_dom_entry(NtsDomContext* context,
+                            void (*run)(void*),
+                            void* state);
+int32_t nts_blink_dom_set_text16(NtsDomContext* context,
+                                 uint32_t node,
+                                 NtsDomString text);
+int32_t nts_blink_dom_set_text8(NtsDomContext* context,
+                                uint32_t node,
+                                const uint8_t* latin1,
+                                size_t length);
+// UTF-8 as the compiler lends a `string` today: ASCII in place, else a copy.
+int32_t nts_blink_dom_set_text_utf8(NtsDomContext* context,
+                                    uint32_t node,
+                                    const char* utf8);
+// Interns a name or literal text once (no entry needed: no DOM change);
+// 0 is failure. Valid until the context is destroyed.
+uint32_t nts_blink_dom_intern_utf8(NtsDomContext* context, const char* utf8);
+// Writes interned text: a reference to the shared StringImpl, no copy.
+int32_t nts_blink_dom_set_text_atom(NtsDomContext* context,
+                                    uint32_t node,
+                                    uint32_t atom);
 // Retained historical copying path for paired cost measurements only.
 int32_t nts_blink_dom_set_text_vector_for_benchmark(NtsDomContext* context,
                                                     uint32_t node,
@@ -56,6 +86,12 @@ void nts_blink_dom_enqueue(NtsDomContext* context,
                            void (*run)(void*),
                            void (*drop)(void*),
                            void* state);
+// Runs once in an idle period (or drops on disposal); for deferred work such
+// as cycle collection that must stay off the interaction path.
+void nts_blink_dom_post_idle(NtsDomContext* context,
+                             void (*run)(void*),
+                             void (*drop)(void*),
+                             void* state);
 void nts_blink_dom_end_checkpoint(NtsDomContext* context,
                                   void (*run)(void*),
                                   void (*drop)(void*),

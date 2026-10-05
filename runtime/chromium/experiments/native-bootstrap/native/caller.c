@@ -1,6 +1,20 @@
 #include "probe.h"
 
 #include <stdio.h>
+#include <stdlib.h>
+
+/* The standalone check never installs the renderer host, so it posts no idle
+   work; reaching this would mean the policy leaked outside Chromium. */
+void nts_blink_dom_post_idle(NtsDomContext* context,
+                             void (*run)(void*),
+                             void (*drop)(void*),
+                             void* state) {
+  (void)context;
+  (void)run;
+  (void)drop;
+  (void)state;
+  abort();
+}
 
 int main(void) {
   for (int document = 0; document < 20; ++document) {

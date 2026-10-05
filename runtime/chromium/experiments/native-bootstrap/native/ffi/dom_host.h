@@ -27,6 +27,14 @@ int32_t nts_dom_set_attribute(NtsDomContext* context,
                               uint32_t name_length,
                               const uint16_t* value,
                               uint32_t value_length);
+int32_t nts_dom_set_text16(NtsDomContext* context,
+                           uint32_t node,
+                           const uint16_t* text,
+                           uint32_t length);
+int32_t nts_dom_set_text8(NtsDomContext* context,
+                          uint32_t node,
+                          const uint8_t* text,
+                          uint32_t length);
 uint32_t nts_dom_text_length(NtsDomContext* context, uint32_t node);
 int32_t nts_dom_copy_text(NtsDomContext* context,
                           uint32_t node,

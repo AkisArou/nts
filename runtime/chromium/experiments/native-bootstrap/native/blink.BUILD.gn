@@ -5,10 +5,13 @@ source_set("dom_bridge") {
   visibility = [ "//nts:*" ]
   sources = [
     "//nts/dom_bridge.cc",
+    "//nts/dom_abi.h",
     "//nts/dom_bridge.h",
     "//nts/dom_bridge_bindings.h",
     "//nts/binding_benchmark.cc",
     "//nts/binding_benchmark.h",
+    "//nts/rows_benchmark.cc",
+    "//nts/rows_benchmark.h",
   ]
   configs += [ "//third_party/blink/renderer:config" ]
   deps = [

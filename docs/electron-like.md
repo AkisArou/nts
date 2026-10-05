@@ -22,6 +22,17 @@ maintenance and task/timer posting are unresolved. React is outside the
 current work. See [bring-up](../runtime/chromium/experiments/bringup.md) and
 [DOM/scheduling evidence](../runtime/chromium/experiments/dom-and-microtasks.md).
 
+V8 stays enabled. The investigation covers the complete native renderer
+architecture: callback entry, document/module lifetime, heap ownership,
+scheduling, typed binding generation, explicit V8 interop, and deployment.
+The first cost experiment compares per-operation and per-callback Blink entry,
+fresh versus prepared native inputs, and short versus long callbacks against
+ordinary page JavaScript on unmodified Chromium. See
+[architecture and cost experiments](../runtime/chromium/experiments/architecture-and-costs.md).
+Debug timing is diagnostic; production choices require optimized-engine
+measurements and semantic acceptance. This does not finalize the original
+proposal's handle, HIR, GC or ABI designs.
+
 ## Recommendation
 
 Investigate a Chromium `content/` embedder with NTS application code statically

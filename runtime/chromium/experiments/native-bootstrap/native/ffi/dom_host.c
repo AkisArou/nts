@@ -69,3 +69,15 @@ int32_t nts_dom_copy_text(NtsDomContext* context,
 int32_t nts_dom_status(NtsDomContext* context) {
   return nts_blink_dom_status(context);
 }
+int32_t nts_dom_set_text16(NtsDomContext* context,
+                           uint32_t node,
+                           const uint16_t* text,
+                           uint32_t length) {
+  return nts_blink_dom_set_text16(context, node, (NtsDomString){text, length});
+}
+int32_t nts_dom_set_text8(NtsDomContext* context,
+                          uint32_t node,
+                          const uint8_t* text,
+                          uint32_t length) {
+  return nts_blink_dom_set_text8(context, node, text, length);
+}

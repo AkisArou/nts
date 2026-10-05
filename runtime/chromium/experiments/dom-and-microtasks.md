@@ -87,8 +87,11 @@ surrogates round-trip through text and attributes. Inspection compares actual
 Blink code units against V8, avoiding a self-consistent but corrupted native
 round trip. `--js-flags=--expose-gc` permits the forced-GC test in both variants.
 The separate available-compiler literal defect is recorded in the reductions.
-Copied buffers and the TS helper are correctness prototypes, not optimized
-string storage or a measured production binding path.
+This correctness path is still not a production string ABI. The subsequent
+[architecture and cost experiment](architecture-and-costs.md) introduces a
+single-copy Blink string path, a lexical DOM entry scope, and prepared-input
+comparisons against ordinary HTML-loaded V8 code. The original vector copy
+remains as a benchmark control; optimized-engine measurements remain pending.
 
 ## Scheduling and lifetime
 

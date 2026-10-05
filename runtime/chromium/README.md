@@ -107,3 +107,17 @@ experiment. Keep integration sources here and carry upstream patches only
 where a later experiment demonstrates a need. Compiler, common runtime,
 React, Node, and JVM changes remain with their
 owning lanes; reduce any blocker to a fixture before requesting a change.
+
+The [architecture/cost investigation](experiments/architecture-and-costs.md)
+covers callback entry, scheduling, root leases, module instances, binding
+generation, explicit V8 interop and deployment. Its paired benchmark compares
+C/LLVM native paths against ordinary HTML-loaded JavaScript on unmodified
+`content_shell`, with normal V8 JIT, matched payloads, rotating length order
+and balanced process launch order. `tooling/chromium/benchmark.ts` records raw
+samples and provenance. Debug runs require `--allow-debug`; the separate
+`--profile perf` generates optimized component Chromium without feature
+removal. V8 stays enabled and React remains deferred.
+
+The [handoff](experiments/HANDOFF.md) records the completed C/LLVM debug
+benchmarks, current build state, open contracts and commands for the next
+agent. No optimized-engine build has started.

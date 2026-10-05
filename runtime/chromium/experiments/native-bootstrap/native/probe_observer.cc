@@ -13,6 +13,7 @@
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_thread.h"
 #include "nts/binding_benchmark.h"
+#include "nts/rows_benchmark.h"
 #include "nts/dom_bridge_bindings.h"
 #include "nts/probe.h"
 #include "third_party/blink/public/platform/web_string.h"
@@ -67,6 +68,25 @@ class ProbeObserver final : public content::RenderFrameObserver {
     // A bounded public-API input witness, not a general DOM binding surface.
     // The ordinary E1 fixture has neither of these native-counter elements.
     const auto document = frame->GetDocument();
+    auto rows = document.GetElementById(
+        blink::WebString::FromAscii("native-rows-run"));
+    if (!rows.IsNull()) {
+      dom_.reset(CreateDomContext(document));
+      // Idle-time collection is the architecture under test;
+      // --nts-collection=checkpoint keeps the runtime default for an A/B.
+      if (command.GetSwitchValueASCII("nts-collection") != "checkpoint")
+        nts_chromium_probe_install_host(probe_.get(), dom_.get());
+      counter_output_ = document.GetElementById(
+          blink::WebString::FromAscii("benchmark-result"));
+      CHECK(!counter_output_.IsNull());
+      counter_listener_ = rows.AddEventListener(
+          blink::WebNode::EventType::kInput,
+          base::BindRepeating(&ProbeObserver::RunRows,
+                              weak_factory_.GetWeakPtr()));
+      counter_output_.SetAttribute(blink::WebString::FromAscii("data-state"),
+                                   blink::WebString::FromAscii("ready"));
+      return;
+    }
     auto benchmark = document.GetElementById(
         blink::WebString::FromAscii("native-benchmark-run"));
     if (!benchmark.IsNull()) {
@@ -142,11 +162,22 @@ class ProbeObserver final : public content::RenderFrameObserver {
               << " live=" << result.live_objects_after;
   }
 
+  void RunRows(blink::WebDOMEvent) {
+    CHECK(probe_ && dom_);
+    const auto result = RunRowsBenchmark(
+        render_frame()->GetWebFrame()->GetDocument(), dom_.get(), probe_.get());
+    counter_output_.SetAttribute(blink::WebString::FromAscii("data-result"),
+                                 blink::WebString::FromUtf8(result));
+    counter_output_.SetAttribute(blink::WebString::FromAscii("data-state"),
+                                 blink::WebString::FromAscii("done"));
+    LOG(INFO) << "NTS_ROWS done backend=" << NTS_CHROMIUM_PROBE_BACKEND;
+  }
+
   void RunBenchmark(blink::WebDOMEvent) {
     CHECK(probe_ && dom_);
     uint32_t order = 0;
     const auto value =
-        base::CommandLine::ForCurrentProcess().GetSwitchValueASCII(
+        base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
             "nts-benchmark-order");
     if (!value.empty())
       CHECK(base::StringToUint(value, &order));

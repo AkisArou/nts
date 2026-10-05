@@ -1,6 +1,7 @@
 // Explicit experiment API. Every operation calls Blink immediately; this is
 // not a DOM effect tape or a declaration pretending to implement lib.dom.
 import * as host from "nts:chromium-dom-experiment";
+import * as dom from "nts:chromium-dom";
 import type { DomContext } from "nts:chromium-dom-experiment";
 import type { c_uint32 } from "c:types";
 
@@ -84,21 +85,55 @@ export function ntsChromiumDomCounter(context: DomContext, count: number): void 
 export interface ChromiumBenchmarkState {
   aUnits: Uint16Array;
   bUnits: Uint16Array;
+  aBytes: Uint8Array;
+  bBytes: Uint8Array;
+  prefix: string;
+  aAtom: c_uint32;
+  bAtom: c_uint32;
 }
-export function ntsChromiumPrepareBenchmark(a: string, b: string): ChromiumBenchmarkState {
-  return {aUnits: units(a), bUnits: units(b)};
+// Latin-1 storage for a one-byte payload; only Latin-1 rows use it.
+function latin1(text: string): Uint8Array {
+  const result = new Uint8Array(text.length);
+  for (let i = 0; i < text.length; ++i) result[i] = text.charCodeAt(i) & 0xff;
+  return result;
 }
+export function ntsChromiumPrepareBenchmark(context: DomContext, a: string, b: string): ChromiumBenchmarkState {
+  return {aUnits: units(a), bUnits: units(b), aBytes: latin1(a), bBytes: latin1(b),
+    prefix: a.substring(0, a.length - 1), aAtom: dom.nts_dom_intern(context, a), bAtom: dom.nts_dom_intern(context, b)};
+}
+// Modes match binding_benchmark.cc. 0-1 are the original bridge, which reads
+// a context-wide status; 2-5 are entered calls returning their own status.
+// 0 converts each string through `units` -- the cost today's string ABI forces
+// on exact text -- 5 builds a fresh string per mutation, as UI code does, and
+// 6 writes interned text by id, as a literal would once the compiler interns it.
 export function ntsChromiumBenchmarkLoop(context: DomContext, node: c_uint32,
-  state: ChromiumBenchmarkState, a: string, b: string, iterations: number, prepared: boolean): number {
+  state: ChromiumBenchmarkState, a: string, b: string, iterations: number, mode: number): number {
   const length = a.length as c_uint32;
-  if (prepared) {
+  let failed = 0;
+  if (mode === 0) {
+    for (let i = 0; i < iterations; ++i) setText(context, node, i % 2 === 0 ? a : b);
+  } else if (mode === 1) {
     for (let i = 0; i < iterations; ++i) {
       host.nts_dom_set_text(context, node, i % 2 === 0 ? state.aUnits : state.bUnits, length);
     }
+  } else if (mode === 2) {
+    for (let i = 0; i < iterations; ++i) {
+      failed |= host.nts_dom_set_text16(context, node, i % 2 === 0 ? state.aUnits : state.bUnits, length);
+    }
+  } else if (mode === 3) {
+    for (let i = 0; i < iterations; ++i) {
+      failed |= host.nts_dom_set_text8(context, node, i % 2 === 0 ? state.aBytes : state.bBytes, length);
+    }
+  } else if (mode === 4) {
+    for (let i = 0; i < iterations; ++i) failed |= dom.nts_dom_set_text_value(context, node, i % 2 === 0 ? a : b);
+  } else if (mode === 6) {
+    for (let i = 0; i < iterations; ++i) {
+      failed |= dom.nts_dom_set_text_interned(context, node, i % 2 === 0 ? state.aAtom : state.bAtom);
+    }
   } else {
     for (let i = 0; i < iterations; ++i) {
-      setText(context, node, i % 2 === 0 ? a : b);
+      failed |= dom.nts_dom_set_text_value(context, node, state.prefix + (i % 2 === 0 ? "A" : "B"));
     }
   }
-  return status(context);
+  return mode < 2 ? status(context) : failed;
 }

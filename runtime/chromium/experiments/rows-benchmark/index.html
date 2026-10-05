@@ -1,0 +1,13 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>NTS rows benchmark</title>
+<style>
+body { font: 14px system-ui; padding: 16px; }
+#benchmark-result::after { content: attr(data-state); }
+.danger { background: #fdd; }
+</style>
+<h1>Rows: compiled TypeScript on the entered DOM ABI</h1>
+<p>js-framework-benchmark-shaped operations. Application scripts: zero.</p>
+<label><input type="checkbox" id="native-rows-run"> Run cases</label>
+<output id="benchmark-result" data-state="initializing"></output>
+<table><tbody id="tbody"></tbody></table>

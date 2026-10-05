@@ -1,6 +1,6 @@
 /** @ntsHeader "dom_host.h" */
 declare module "nts:chromium-dom-experiment" {
-  import type { Opaque, CElements, c_uint32, c_int32 } from "c:types";
+  import type { Opaque, CBytes, CElements, c_uint32, c_int32 } from "c:types";
   export type DomContext = Opaque<"NtsDomContext">;
   type Units = CElements<Uint16Array, "const uint16_t">;
   export function nts_dom_body(context: DomContext): c_uint32;
@@ -28,6 +28,11 @@ declare module "nts:chromium-dom-experiment" {
     value: Units,
     valueLength: c_uint32,
   ): c_int32;
+  // Entered operations: valid only inside a native entry; status per result.
+  /** @ntsNoEscape text */
+  export function nts_dom_set_text16(context: DomContext, node: c_uint32, text: Units, length: c_uint32): c_int32;
+  /** @ntsNoEscape text */
+  export function nts_dom_set_text8(context: DomContext, node: c_uint32, text: CBytes, length: c_uint32): c_int32;
   export function nts_dom_text_length(context: DomContext, node: c_uint32): c_uint32;
   /** @ntsNoEscape output */
   export function nts_dom_copy_text(

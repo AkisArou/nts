@@ -3,31 +3,54 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { activeChromiumBuild } from "./profiles.ts";
 
-interface Sample { path: string; round: number; length: number; iterations: number; elapsedNs: number; nsPerOperation: number; ntsAllocations?: number; ntsRetains?: number; ntsReleases?: number; ntsLiveObjects?: number }
-interface EntrySample { scoped: boolean; round: number; length: number; operationsPerEntry: number; entries: number; elapsedNs: number; nsPerEntry: number; ntsAllocations: number }
-interface Measurements { samples: Sample[]; entrySamples?: EntrySample[]; status: number; finalLength: number; payload: string; timing: string }
+interface Sample { payload: string; path: string; round: number; length: number; iterations: number; elapsedNs: number; nsPerOperation: number; ntsAllocations?: number; ntsRetains?: number; ntsReleases?: number; ntsLiveObjects?: number }
+interface EntrySample { entry: string; round: number; length: number; operationsPerEntry: number; entries: number; elapsedNs: number; nsPerEntry: number; ntsAllocations: number }
+interface Measurements { samples: Sample[]; entrySamples?: EntrySample[]; status: number; finalLength: number; payload: string; timing: string; exactUnits?: number[] }
+// The rows workload (--workload rows): one sample per batch of an operation.
+interface RowsSample { case: string; round: number; batch: number; elapsedNs: number; nsPerOperation: number; rows: number; ntsAllocations?: number; ntsLiveObjects?: number; idleCollectNs?: number }
+interface RowsMeasurements { samples: RowsSample[]; status: number; finalRows: number; liveLeases?: number; dom?: string; timing: string }
+type Mode = "native" | "v8";
+interface LaunchResult { result: Measurements; executable: string; fixture: string; args: string[]; rendererPid: number; rendererStatus: string; loadBefore: string; loadAfter: string }
 const root = resolve(import.meta.dirname, "../..");
 const executable = resolve(process.argv[2] ?? "third_party/chromium/src/out/NtsBaseline/nts_shell");
 const output = resolve(process.argv[3] ?? "target/chromium/binding-benchmark");
 const backend = process.argv[4];
-assert(backend === "c" || backend === "llvm", "Usage: benchmark.ts <nts_shell> <output> <c|llvm> [--allow-debug] [--cpu N] [--runs N]");
-let runs = 3;
+assert(backend === "c" || backend === "llvm", "Usage: benchmark.ts <nts_shell> <output> <c|llvm> [--allow-debug] [--cpu N] [--runs N] [--workload binding|rows] [--collection idle|checkpoint] [--trace-gc]");
+let runs = 6;
 let cpu: number | undefined;
+let workload: "binding" | "rows" = "binding";
+let collection: "checkpoint" | "idle" = "idle";
+// --trace-gc: V8's GC trace in both launches. Oilpan collects inside V8's
+// unified heap, so its mark-compacts are in the same lines.
+let traceGc = false;
 const allowDebug = process.argv.includes("--allow-debug");
 for (let i = 5; i < process.argv.length; ++i) {
   const option = process.argv[i];
   if (option === "--allow-debug") continue;
   if (option === "--cpu") cpu = Number(process.argv[++i]);
   else if (option === "--runs") runs = Number(process.argv[++i]);
+  else if (option === "--trace-gc") traceGc = true;
+  else if (option === "--collection") {
+    const value = process.argv[++i];
+    assert(value === "checkpoint" || value === "idle", "--collection must be checkpoint or idle");
+    collection = value;
+  }
+  else if (option === "--workload") {
+    const value = process.argv[++i];
+    assert(value === "binding" || value === "rows", "--workload must be binding or rows");
+    workload = value;
+  }
   else throw new Error(`Unknown option: ${option}`);
 }
-assert(Number.isSafeInteger(runs) && runs > 0);
+// Binding runs rotate three payload orders; rows only alternates launch order.
+assert(Number.isSafeInteger(runs) && runs > 0 && runs % (workload === "binding" ? 6 : 2) === 0,
+  workload === "binding" ? "Use a multiple of six runs to balance three payload orders and both launch orders" : "Use an even number of runs to balance launch order");
 assert(cpu === undefined || Number.isSafeInteger(cpu) && cpu >= 0);
 const argsText = await readFile(resolve(dirname(executable), "args.gn"), "utf8");
 const debugEngine = /is_debug\s*=\s*true/.test(argsText);
@@ -39,22 +62,54 @@ assert.equal(execFileSync("git", ["-C", source, "diff", "HEAD", "--binary"], {en
 const hash = (bytes: Uint8Array | string): string => createHash("sha256").update(bytes).digest("hex");
 const evidenceDirectory = dirname(executable).endsWith("/NtsPerf") ? "target/chromium/perf" : "target/chromium";
 const buildRecord = JSON.parse(await readFile(resolve(root, evidenceDirectory, "build-result.json"), "utf8")) as {
-  state: string; target: string; gnArgsSha256: string; executableSha256: string; nativeManifestSha256: string;
+  state: string; target: string; gnArgsSha256: string; executableSha256: string; nativeManifestSha256: string; v8ControlExecutableSha256: string;
 };
 assert.equal(buildRecord.state, "passed", "Require a completed successful build");
 assert.equal(buildRecord.target, "nts_shell");
 assert.equal(buildRecord.gnArgsSha256, hash(argsText), "Build arguments changed after building");
 assert.equal(buildRecord.executableSha256, hash(await readFile(executable)), "Executable changed after building");
 assert.equal(buildRecord.nativeManifestSha256, hash(await readFile(resolve(source, "nts/manifest.json"))), "Staging changed after building; rebuild first");
-const fixturePath = resolve(root, "runtime/chromium/experiments/binding-benchmark/index.html");
-const fixture = pathToFileURL(fixturePath).href;
+const fixturePath = resolve(root, `runtime/chromium/experiments/${workload}-benchmark/index.html`);
+const v8Executable = resolve(dirname(executable), "content_shell");
+const v8FixturePath = resolve(root, `runtime/chromium/experiments/${workload}-benchmark-v8/index.html`);
+assert.equal(buildRecord.v8ControlExecutableSha256, hash(await readFile(v8Executable)), "Build the unmodified V8 control with the same profile");
 await mkdir(output, {recursive:true});
-const measurements: Array<{ run: number; native: Measurements; v8: Measurements; rendererStatus: string; loadBefore: string; loadAfter: string }> = [];
+const measurements: Array<{ run: number; order: Mode[]; native: Measurements; v8: Measurements; launches: Record<Mode, LaunchResult> }> = [];
 
-for (let run = 0; run < runs; ++run) {
-  const profile = await mkdtemp(resolve(output, `profile-${run}-`));
-  const args = ["--ozone-platform=x11", "--enable-logging=stderr", "--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1", `--user-data-dir=${profile}`, `--nts-probe-url=${fixture}`, fixture];
-  const child = spawn("xvfb-run", ["-a", "-s", "-screen 0 1280x900x24", executable, ...args], {detached:true, stdio:["ignore","pipe","pipe"]});
+async function rendererDescendants(parentPid: number, engine: string): Promise<number[]> {
+  const candidates = await Promise.all((await readdir("/proc")).filter(name => /^\d+$/.test(name)).map(async name => {
+    try {
+      const command = (await readFile(`/proc/${name}/cmdline`, "utf8")).replaceAll("\0", " ");
+      if (!command.startsWith(`${engine} `) || !command.includes("--type=renderer")) return undefined;
+      let parent = Number((await readFile(`/proc/${name}/status`, "utf8")).match(/^PPid:\s+(\d+)/m)?.[1]);
+      const seen = new Set<number>();
+      while (parent > 1 && parent !== parentPid && !seen.has(parent)) {
+        seen.add(parent);
+        parent = Number((await readFile(`/proc/${parent}/status`, "utf8")).match(/^PPid:\s+(\d+)/m)?.[1]);
+      }
+      return parent === parentPid ? Number(name) : undefined;
+    } catch (error) {
+      if (error instanceof Error && "code" in error && ["ENOENT","ESRCH","EACCES"].includes(String(error.code))) return undefined;
+      throw error;
+    }
+  }));
+  return candidates.filter((pid): pid is number => pid !== undefined);
+}
+
+async function measure(run: number, mode: Mode): Promise<LaunchResult> {
+  const profile = await mkdtemp(resolve(output, `profile-${run}-${mode}-`));
+  const engine = mode === "native" ? executable : v8Executable;
+  const url = pathToFileURL(mode === "native" ? fixturePath : v8FixturePath);
+  url.searchParams.set("order", String(run % 3));
+  const fixture = url.href;
+  // Suppress only spare-process prewarming, equally for both arms, to make
+  // the measured tab's PID unambiguous. V8/JIT/Web-platform flags stay normal.
+  const args = ["--ozone-platform=x11", "--disable-features=SpareRendererForSitePerProcess", "--enable-logging=stderr", "--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1", `--user-data-dir=${profile}`];
+  if (mode === "native") args.push(`--nts-probe-url=${fixture}`, `--nts-benchmark-order=${run % 3}`);
+  if (mode === "native" && workload === "rows") args.push(`--nts-collection=${collection}`);
+  if (traceGc) args.push("--js-flags=--trace-gc");
+  args.push(fixture);
+  const child = spawn("xvfb-run", ["-a", "-s", "-screen 0 1280x900x24", engine, ...args], {detached:true, stdio:["ignore","pipe","pipe"]});
   let log = "";
   let launchError: Error | undefined;
   let exited = false;
@@ -80,7 +135,7 @@ for (let run = 0; run < runs; ++run) {
       if (value) return value as NonNullable<T>;
       await delay(100);
     } while (performance.now() < deadline);
-    throw new Error(`Benchmark timed out; see ${output}/launch-${run}.log`);
+    throw new Error(`Benchmark timed out; see ${output}/launch-${run}-${mode}.log`);
   }
   try {
     const endpoint = await until(() => log.match(/DevTools listening on (ws:\/\/[^\s]+)/)?.[1]);
@@ -124,84 +179,143 @@ for (let run = 0; run < runs; ++run) {
       return result.result.value;
     }
     await until(() => evaluate<boolean>(`location.href === ${JSON.stringify(fixture)} && document.querySelector('#benchmark-result')?.getAttribute('data-state') === 'ready'`));
-    const rendererPid = Number(log.match(/^\[(\d+):[^\]]+\][^\n]*NTS_PROBE attach/m)?.[1]);
+    assert(child.pid);
+    const renderers = await rendererDescendants(child.pid, engine);
+    assert.equal(renderers.length, 1, "Require an unambiguous measured renderer; do not guess among spare processes");
+    const rendererPid = renderers[0];
+    if (mode === "native") assert.equal(rendererPid, Number(log.match(/^\[(\d+):[^\]]+\][^\n]*NTS_PROBE attach/m)?.[1]));
     assert(Number.isSafeInteger(rendererPid) && rendererPid > 1);
     const command = (await readFile(`/proc/${rendererPid}/cmdline`, "utf8")).replaceAll("\0", " ");
-    assert(command.startsWith(executable) && command.includes("--type=renderer"));
+    assert(command.startsWith(engine) && command.includes("--type=renderer"));
     if (cpu !== undefined) execFileSync("taskset", ["-pc", String(cpu), String(rendererPid)], {stdio:"pipe"});
     const rendererStatus = await readFile(`/proc/${rendererPid}/status`, "utf8");
     assert(/^Seccomp:\s+2$/m.test(rendererStatus));
     assert(/^NoNewPrivs:\s+1$/m.test(rendererStatus));
     assert((rendererStatus.match(/^NSpid:\s+(.+)$/m)?.[1].split(/\s+/).length ?? 0) > 1);
-    assert.equal(await evaluate<number>("document.scripts.length"), 0);
+    assert.equal(await evaluate<number>("document.scripts.length"), mode === "native" ? 0 : 1);
     const loadBefore = (await readFile("/proc/loadavg", "utf8")).trim();
-    const point = await evaluate<{x:number;y:number}>("(() => {const r=document.querySelector('#native-benchmark-run').getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2};})()");
+    const selector = `#${mode}-${workload === "binding" ? "benchmark" : "rows"}-run`;
+    const point = await evaluate<{x:number;y:number}>(`(() => {const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
     for (const type of ["mousePressed", "mouseReleased"]) await cdp("Input.dispatchMouseEvent", {type,...point,button:"left",clickCount:1});
     await until(() => evaluate<boolean>("document.querySelector('#benchmark-result').getAttribute('data-state') === 'done'"));
-    const native = JSON.parse(await evaluate<string>("document.querySelector('#benchmark-result').getAttribute('data-result')")) as Measurements;
-    assert.equal(native.status, 0);
-    assert.equal(native.finalLength, 4096);
-    assert.equal(native.samples.length, 168);
-    assert.equal(native.entrySamples?.length, 168);
-    for (const sample of native.entrySamples ?? []) assert.equal(sample.ntsAllocations, 0);
-    for (const sample of native.samples.filter(sample => sample.path.startsWith("compiled-"))) {
-      if (sample.path.includes("prepared")) assert.equal(sample.ntsAllocations, 0, "prepared input must allocate no NTS objects per loop");
-      else assert((sample.ntsAllocations ?? 0) >= sample.iterations, "fresh conversion must be counted");
+    const result = JSON.parse(await evaluate<string>("document.querySelector('#benchmark-result').getAttribute('data-result')")) as Measurements;
+    assert.equal(result.status, 0);
+    if (workload === "rows") {
+      const rows = result as unknown as RowsMeasurements;
+      // Twelve cases of 15 measured rounds and two of six, on both engines.
+      assert.equal(rows.samples.length, 192);
+      assert.equal(rows.finalRows, 999);
+      // tbody + template + (tr, label text) per row: every other lease released.
+      if (mode === "native") assert.equal(rows.liveLeases, 2 + 2 * rows.finalRows, "native handles leaked");
+      rows.dom = await evaluate<string>("[...document.querySelector('#tbody').rows].map(r => r.className + '|' + r.textContent).join('\\n')");
+      const shape = await evaluate<string>("(() => { const t = document.querySelector('#tbody'); const c = t.firstElementChild; return JSON.stringify({children: t.children.length, rows: t.rows.length, first: c && {tag: c.tagName, ns: c.namespaceURI, kind: Object.prototype.toString.call(c)}}); })()");
+      assert.equal(rows.dom.split("\n").length, rows.finalRows, `Inspect actual Blink output, not only the benchmark's self-check: ${shape}`);
+      console.log(`Run ${run+1}/${runs}, ${mode}: ${rows.samples.length} rows samples; normal JIT, sandbox active`);
+      return {result,executable:engine,fixture,args,rendererPid,rendererStatus,loadBefore,loadAfter:(await readFile("/proc/loadavg","utf8")).trim()};
     }
-    // Separate V8 control on the same node. Its timer is inside the renderer;
-    // native/V8 groups are ordered, so this is not a randomized ranking trial.
-    const v8 = await evaluate<Measurements>(`(() => {
-      const node=document.querySelector('#benchmark-text').firstChild;
-      const samples=[];
-      for(const length of [16,256,4096]) {
-        const a='\u0100'+'x'.repeat(length-2)+'A', b='\u0100'+'x'.repeat(length-2)+'B';
-        const loop=n=>{for(let i=0;i<n;i++) node.textContent=i%2?b:a;};
-        loop(2048);
-        let start=performance.now(); loop(2048); const calibration=Math.max(performance.now()-start,.001);
-        const iterations=Math.max(32,Math.min(100000,Math.ceil((8*2048/calibration)/2)*2));
-        for(let round=1;round<=7;round++) {
-          start=performance.now(); loop(iterations); const elapsedNs=(performance.now()-start)*1e6;
-          if(node.textContent!==b) throw Error('V8 output mismatch');
-          samples.push({path:'v8-prepared',length,iterations,round,elapsedNs,nsPerOperation:elapsedNs/iterations});
-        }
-      }
-      return {samples,status:0,finalLength:node.length,payload:'Alternating UTF-16 strings beginning with U+0100, ending A/B',timing:'Renderer performance.now around warmed loops; native and V8 groups ordered'};
-    })()`);
-    assert.equal(v8.finalLength, 4096);
-    measurements.push({run,native,v8,rendererStatus,loadBefore,loadAfter:(await readFile("/proc/loadavg","utf8")).trim()});
-    console.log(`Run ${run+1}/${runs}: ${native.samples.length} operation, ${native.entrySamples?.length} entry and ${v8.samples.length} V8 samples; sandbox active`);
+    const finalLength = [16,256,4096][(run % 3 + 2) % 3];
+    assert.equal(result.finalLength, finalLength);
+    // Two payload families x three lengths x rows x seven rounds; the entry
+    // matrix is four operation counts (even, so each ends on B) x three entry kinds x seven rounds.
+    assert.equal(result.samples.length, mode === "native" ? 294 : 84);
+    if (mode === "native") assert.equal(result.entrySamples?.length, 84);
+    for (const sample of result.entrySamples ?? []) assert.equal(sample.ntsAllocations, 0);
+    for (const sample of result.samples.filter(sample => sample.path.startsWith("compiled-"))) {
+      if (sample.path.includes("prepared")) assert.equal(sample.ntsAllocations, 0, "prepared input must allocate no NTS objects per loop");
+      else if (sample.path.includes("converted") || sample.path.includes("fresh"))
+        assert((sample.ntsAllocations ?? 0) >= sample.iterations, "per-mutation strings must be counted");
+    }
+    const exactUnits = await evaluate<number[]>("(() => {const s=document.querySelector('#benchmark-text').textContent; return Array.from({length:s.length},(_,i)=>s.charCodeAt(i));})()");
+    assert.deepEqual(exactUnits, [256,...Array<number>(finalLength-2).fill(120),66], "Inspect actual Blink output, not only the benchmark's self-check");
+    if (result.exactUnits) assert.deepEqual(result.exactUnits, exactUnits);
+    result.exactUnits = exactUnits;
+    console.log(`Run ${run+1}/${runs}, ${mode}: ${result.samples.length} operation and ${result.entrySamples?.length ?? 0} entry samples; normal JIT, sandbox active`);
+    return {result,executable:engine,fixture,args,rendererPid,rendererStatus,loadBefore,loadAfter:(await readFile("/proc/loadavg","utf8")).trim()};
   } finally {
     for (const entry of pending.values()) {clearTimeout(entry.timeout); entry.reject(new Error("Benchmark closed"));}
     pending.clear(); socket?.close();
     if (child.pid) {try {process.kill(-child.pid,"SIGTERM");} catch(error) {if (!(error instanceof Error && "code" in error && error.code === "ESRCH")) throw error;}}
-    await writeFile(resolve(output, `launch-${run}.log`), log);
+    await writeFile(resolve(output, `launch-${run}-${mode}.log`), log);
   }
 }
-const all = measurements.flatMap(run => [...run.native.samples,...run.v8.samples]);
+for (let run = 0; run < runs; ++run) {
+  const order: Mode[] = run % 2 ? ["v8", "native"] : ["native", "v8"];
+  const launches: Partial<Record<Mode, LaunchResult>> = {};
+  for (const mode of order) launches[mode] = await measure(run, mode);
+  const native = launches.native;
+  const v8 = launches.v8;
+  assert(native && v8);
+  if (workload === "rows") assert.equal((native.result as unknown as RowsMeasurements).dom, (v8.result as unknown as RowsMeasurements).dom, "native and V8 must build the same rows");
+  else assert.deepEqual(native.result.exactUnits, v8.result.exactUnits);
+  measurements.push({run,order,native:native.result,v8:v8.result,launches:{native,v8}});
+}
+// GC pauses per launch, from the renderer's --trace-gc lines: `Scavenge` and
+// the unified mark-compacts that collect Blink's Oilpan heap with V8's.
+const gcPattern = /(Scavenge|Mark-Compact|Mark-Sweep)[^\n]*?([0-9.]+) \/ [0-9.]+ ms/;
+const gc = traceGc ? await Promise.all(measurements.flatMap(run => (["native", "v8"] as const).map(async mode => {
+  const text = await readFile(resolve(output, `launch-${run.run}-${mode}.log`), "utf8");
+  const pauses = text.split("\n").map(line => line.match(gcPattern)).filter((match): match is RegExpMatchArray => match !== null);
+  return {run: run.run, mode, collections: pauses.length, majors: pauses.filter(match => match[1] !== "Scavenge").length,
+    pauseMs: +pauses.reduce((sum, match) => sum + Number(match[2]), 0).toFixed(1)};
+}))) : undefined;
 const percentile = (values:number[], fraction:number):number => values[Math.floor((values.length-1)*fraction)];
-const summaries=[];
-for (const length of [16,256,4096]) {
-  for (const path of [...new Set(all.map(sample=>sample.path))]) {
-    const samples=all.filter(sample=>sample.length===length&&sample.path===path);
-    const values=samples.map(sample=>sample.nsPerOperation).sort((a,b)=>a-b);
-    summaries.push({length,path,samples:values.length,medianNs:percentile(values,.5),q1Ns:percentile(values,.25),q3Ns:percentile(values,.75),
-      minSampleMs:Math.min(...samples.map(sample=>sample.elapsedNs))/1e6,
-      ntsAllocationsPerOperation:samples[0].ntsAllocations===undefined?undefined:samples[0].ntsAllocations/samples[0].iterations,
-      ntsRetainsPerOperation:samples[0].ntsRetains===undefined?undefined:samples[0].ntsRetains/samples[0].iterations});
-  }
-}
-const allEntries = measurements.flatMap(run => run.native.entrySamples ?? []);
-const entrySummaries = [];
-for (const length of [16,256,4096]) for (const operationsPerEntry of [0,2,8,32]) for (const scoped of [false,true]) {
-  const samples = allEntries.filter(sample => sample.length === length && sample.operationsPerEntry === operationsPerEntry && sample.scoped === scoped);
-  const values = samples.map(sample => sample.nsPerEntry).sort((a,b) => a-b);
-  entrySummaries.push({length,operationsPerEntry,scoped,samples:values.length,medianNsPerEntry:percentile(values,.5),q1Ns:percentile(values,.25),q3Ns:percentile(values,.75),minSampleMs:Math.min(...samples.map(sample=>sample.elapsedNs))/1e6});
-}
-await writeFile(resolve(output,"result.json"),`${JSON.stringify({observedAt:new Date().toISOString(),backend,debugEngine,
-  scope:debugEngine?"Diagnostic architecture comparison in debug Chromium; not a production performance claim":"Optimized component Chromium architecture comparison; not a final distribution or whole-application speedup",
+const provenance = {observedAt:new Date().toISOString(),workload,gc,collection:workload === "rows" ? collection : undefined,backend,debugEngine,
+  scope:debugEngine?"Diagnostic architecture comparison in debug Chromium; not a production performance claim":"Optimized static Chromium (no DCHECKs) architecture comparison; not an official/PGO distribution or whole-application speedup",
   argsText,cpu,runs,buildRecord,executable,executableSha256:hash(await readFile(executable)),fixtureSha256:hash(await readFile(fixturePath)),
+  v8Executable,v8ExecutableSha256:hash(await readFile(v8Executable)),v8FixtureSha256:hash(await readFile(v8FixturePath)),
   chromiumRevision:execFileSync("git",["-C",source,"rev-parse","HEAD"],{encoding:"utf8"}).trim(),nativeManifestSha256:hash(await readFile(resolve(source,"nts/manifest.json"))),
   compilerCheck:JSON.parse(await readFile(resolve(root,"target/chromium/native-bootstrap/check-result.json"),"utf8")),
-  cpuInfo:execFileSync("lscpu",[],{encoding:"utf8"}),measurements,summaries,entrySummaries},null,2)}\n`);
-console.table(summaries.map(({length,path,medianNs,ntsAllocationsPerOperation})=>({length,path,ns:Math.round(medianNs),ntsAllocationsPerOperation})));
+  cpuInfo:execFileSync("lscpu",[],{encoding:"utf8"})};
+if (workload === "rows") {
+  const rowsOf = (result: Measurements) => (result as unknown as RowsMeasurements).samples;
+  const summaries = [];
+  for (const name of [...new Set(measurements.flatMap(run => rowsOf(run.native).map(sample => sample.case)))]) {
+    const median = (engine: "native" | "v8") => {
+      const samples = measurements.flatMap(run => rowsOf(run[engine])).filter(sample => sample.case === name);
+      const values = samples.map(sample => sample.nsPerOperation).sort((a,b) => a-b);
+      return {samples:values.length,medianNs:percentile(values,.5),q1Ns:percentile(values,.25),q3Ns:percentile(values,.75),
+        meanNs:values.reduce((sum,value) => sum+value,0)/values.length,
+        ntsAllocationsPerOperation:samples[0].ntsAllocations===undefined?undefined:samples[0].ntsAllocations/samples[0].batch};
+    };
+    const native = median("native"), v8 = median("v8");
+    summaries.push({case:name,native,v8,nativeOverV8:native.medianNs/v8.medianNs});
+  }
+  await writeFile(resolve(output,"result.json"),`${JSON.stringify({...provenance,
+    methodology:{launchOrder:"Balanced native-first/V8-first",cases:"rows_benchmark.cc and rows-benchmark-v8 share one case table",
+      v8:"HTML-loaded vanilla JS in unmodified content_shell, normal JIT; no measured Runtime.evaluate application",
+      timers:"Native TimeTicks and page performance.now (coarsened in a file: page) around batches sized for multi-millisecond samples",
+      limits:"Script time, plus forced style and layout in +layout cases; no paint; native pays one environment and DOM entry per operation, V8 one function call; native releases handles by hand"},
+    measurements,summaries},null,2)}\n`);
+  console.table(summaries.map(({case:name,native,v8,nativeOverV8}) => ({case:name,nativeUs:+(native.medianNs/1e3).toFixed(2),
+    v8Us:+(v8.medianNs/1e3).toFixed(2),nativeOverV8:+nativeOverV8.toFixed(3),ntsAllocations:native.ntsAllocationsPerOperation})));
+} else {
+  const all = measurements.flatMap(run => [...run.native.samples,...run.v8.samples]);
+  const summaries=[];
+  for (const payload of ["latin1","wide"]) for (const length of [16,256,4096]) {
+    for (const path of [...new Set(all.map(sample=>sample.path))]) {
+      const samples=all.filter(sample=>sample.payload===payload&&sample.length===length&&sample.path===path);
+      if (!samples.length) continue;
+      const values=samples.map(sample=>sample.nsPerOperation).sort((a,b)=>a-b);
+      summaries.push({payload,length,path,samples:values.length,medianNs:percentile(values,.5),q1Ns:percentile(values,.25),q3Ns:percentile(values,.75),
+        minSampleMs:Math.min(...samples.map(sample=>sample.elapsedNs))/1e6,
+        ntsAllocationsPerOperation:samples[0].ntsAllocations===undefined?undefined:samples[0].ntsAllocations/samples[0].iterations,
+        ntsRetainsPerOperation:samples[0].ntsRetains===undefined?undefined:samples[0].ntsRetains/samples[0].iterations});
+    }
+  }
+  const allEntries = measurements.flatMap(run => run.native.entrySamples ?? []);
+  const entrySummaries = [];
+  for (const operationsPerEntry of [0,2,8,32]) for (const entry of ["legacy-per-call","legacy-scope","entered"]) {
+    const samples = allEntries.filter(sample => sample.operationsPerEntry === operationsPerEntry && sample.entry === entry);
+    const values = samples.map(sample => sample.nsPerEntry).sort((a,b) => a-b);
+    entrySummaries.push({operationsPerEntry,entry,samples:values.length,medianNsPerEntry:percentile(values,.5),q1Ns:percentile(values,.25),q3Ns:percentile(values,.75),minSampleMs:Math.min(...samples.map(sample=>sample.elapsedNs))/1e6});
+  }
+  await writeFile(resolve(output,"result.json"),`${JSON.stringify({...provenance,
+    methodology:{launchOrder:"Balanced native-first/V8-first",payloadOrder:"All three rotations, twice per six pairs",warmupOperations:16384,targetSampleMs:16,
+      v8:"HTML-loaded application code in unmodified content_shell, normal JIT; no measured Runtime.evaluate application",timers:"Native TimeTicks and page performance.now; long samples reduce page-clock quantization; timings include native runtime counters",
+      limits:"Text mutation microbenchmark, repeated and per-mutation strings; no layout/paint/startup claim; intrinsic Blink path omits binding semantics; native entry matrix has no V8 callback-latency equivalent"},
+    measurements,summaries,entrySummaries},null,2)}\n`);
+  console.table(summaries.map(({payload,length,path,medianNs,q1Ns,q3Ns,ntsAllocationsPerOperation})=>({payload,length,path,ns:Math.round(medianNs),q1:Math.round(q1Ns),q3:Math.round(q3Ns),ntsAllocationsPerOperation})));
+  console.table(entrySummaries.map(({operationsPerEntry,entry,medianNsPerEntry})=>({operationsPerEntry,entry,nsPerEntry:Math.round(medianNsPerEntry)})));
+}
+if (gc) console.table(gc);
 console.log(`Evidence: ${output}/result.json`);

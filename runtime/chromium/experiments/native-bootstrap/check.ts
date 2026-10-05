@@ -8,7 +8,9 @@ import { resolve } from "node:path";
 const root = resolve(import.meta.dirname, "../../../..");
 const fixture = import.meta.dirname;
 const source = resolve(root, "third_party/chromium/src");
-const output = resolve(root, "target/chromium/native-bootstrap");
+// NTS_CHROMIUM_NATIVE_OUT keeps an experimental compiler's archives away from
+// the ones probe.ts stages into Chromium.
+const output = resolve(root, process.env.NTS_CHROMIUM_NATIVE_OUT ?? "target/chromium/native-bootstrap");
 const nts = resolve(root, process.env.NTS_BIN ?? "target/release/nts");
 const clang = resolve(source, "third_party/llvm-build/Release+Asserts/bin/clang");
 const archiver = resolve(source, "third_party/llvm-build/Release+Asserts/bin/llvm-ar");
@@ -57,7 +59,7 @@ if (hash(nts) !== compilerSha256) throw new Error("The NTS compiler binary chang
 writeFileSync(resolve(output, "check-result.json"), `${JSON.stringify({
   observedAt: new Date().toISOString(), repositoryHeadAtCheck: gitRevision(root),
   compiler: { path: nts, sha256: compilerSha256, mtime: compilerMtime },
-  inputs: Object.fromEntries(["src/main.ts", "src/dom.ts", "types/dom-host.d.ts", "native/ffi/dom_host.h", "tsconfig.json", "nts.config.ts"].map(path => [path, hash(resolve(fixture, path))])),
+  inputs: Object.fromEntries(["src/main.ts", "src/dom.ts", "src/rows.ts", "types/dom-host.d.ts", "types/dom-abi.d.ts", "native/ffi/dom_host.h", "native/ffi/dom_abi.h", "tsconfig.json", "nts.config.ts"].map(path => [path, hash(resolve(fixture, path))])),
   chromiumRevision: gitRevision(source), clangVersion: execFileSync(clang, ["--version"], { encoding: "utf8" }).trim(),
   sysroot, checks, scope: "Standalone embedding; does not establish sandboxed renderer execution.",
 }, null, 2)}\n`);

@@ -24,6 +24,10 @@ class ProbeBrowserClient final : public content::ShellContentBrowserClient {
         browser.HasSwitch("nts-probe-url")) {
       child->AppendSwitchASCII("nts-probe-url",
                                browser.GetSwitchValueASCII("nts-probe-url"));
+      for (const char* name : {"nts-benchmark-order", "nts-collection"}) {
+        if (browser.HasSwitch(name))
+          child->AppendSwitchASCII(name, browser.GetSwitchValueASCII(name));
+      }
     }
   }
 };

@@ -16,6 +16,10 @@ struct NtsChromiumProbe {
   bool collector_queued;
   size_t entries;
   bool closing;
+  /* Idle-time cycle collection (nts_chromium_probe_install_host). */
+  bool idle_policy;
+  bool idle_queued;
+  bool idle_running;
 };
 
 typedef struct ProbeScope {
@@ -33,12 +37,24 @@ static ProbeScope enter(NtsChromiumProbe* probe) {
   return (ProbeScope){scope, probe};
 }
 
+static void idle_collect(void* state);
+static void idle_drop(void* state);
 static void leave(ProbeScope* scope) {
+  NtsChromiumProbe* probe = scope->probe;
   nts_leave();
   nts_callback_leave();
   nts_environment_leave(&scope->environment);
-  if (--scope->probe->entries == 0 && scope->probe->closing)
-    finalize_probe(scope->probe);
+  if (--probe->entries)
+    return;
+  if (probe->closing) {
+    finalize_probe(probe);
+    return;
+  }
+  /* One idle collection per busy period, never from the collection itself. */
+  if (probe->idle_policy && !probe->idle_queued && !probe->idle_running) {
+    probe->idle_queued = true;
+    nts_blink_dom_post_idle(probe->dom, idle_collect, idle_drop, probe);
+  }
 }
 
 NtsChromiumProbe* nts_chromium_probe_create(void) {
@@ -337,7 +353,7 @@ struct NtsChromiumBenchmark {
   NtsString* second;
   size_t live_before_setup;
   uint32_t iterations;
-  bool prepared;
+  uint32_t mode;
   double result;
 };
 NtsChromiumBenchmark* nts_chromium_benchmark_create(NtsChromiumProbe* probe,
@@ -353,7 +369,7 @@ NtsChromiumBenchmark* nts_chromium_benchmark_create(NtsChromiumProbe* probe,
   benchmark->live_before_setup = nts_live_count();
   NtsString* first = nts_string_from_utf8(a, bytes);
   NtsString* second = nts_string_from_utf8(b, bytes);
-  benchmark->state = ntsChromiumPrepareBenchmark(first, second);
+  benchmark->state = ntsChromiumPrepareBenchmark(context, first, second);
   benchmark->first = first;
   benchmark->second = second;
   if (nts_raising() || !benchmark->state)
@@ -368,23 +384,30 @@ static void run_benchmark(void* state) {
   NtsChromiumBenchmark* benchmark = state;
   benchmark->result = ntsChromiumBenchmarkLoop(
       benchmark->context, benchmark->node, benchmark->state, benchmark->first,
-      benchmark->second, (double)benchmark->iterations, benchmark->prepared);
+      benchmark->second, (double)benchmark->iterations,
+      (double)benchmark->mode);
+}
+static void run_entered(NtsChromiumBenchmark* benchmark,
+                        NtsChromiumEntry entry) {
+  if (entry == kNtsChromiumNoEntry)
+    run_benchmark(benchmark);
+  else if (entry == kNtsChromiumLegacyScope)
+    nts_blink_dom_native_scope(benchmark->context, run_benchmark, benchmark);
+  else if (nts_blink_dom_entry(benchmark->context, run_benchmark, benchmark))
+    abort();
 }
 NtsChromiumBenchmarkStats nts_chromium_benchmark_run(
     NtsChromiumBenchmark* benchmark,
     uint32_t iterations,
-    bool prepared,
-    bool scoped) {
+    uint32_t mode,
+    NtsChromiumEntry entry) {
   ProbeScope scope = enter(benchmark->probe);
   const size_t before = nts_live_count();
   benchmark->iterations = iterations;
-  benchmark->prepared = prepared;
+  benchmark->mode = mode;
   benchmark->result = -1;
   nts_counting_reset();
-  if (scoped)
-    nts_blink_dom_native_scope(benchmark->context, run_benchmark, benchmark);
-  else
-    run_benchmark(benchmark);
+  run_entered(benchmark, entry);
   if (nts_raising() || benchmark->result != 0 || nts_live_count() != before)
     abort();
   NtsChromiumBenchmarkStats stats = {nts_counted_allocations(),
@@ -397,7 +420,8 @@ NtsChromiumBenchmarkStats nts_chromium_benchmark_entries(
     NtsChromiumBenchmark* benchmark,
     uint32_t operations_per_entry,
     uint32_t entries,
-    bool scoped) {
+    uint32_t mode,
+    NtsChromiumEntry entry) {
   /* Selecting the environment for counters does not open a managed callback.
      Every measured callback below enters/leaves normally, including its empty
      runtime checkpoint; instrumentation is outside those repeated entries. */
@@ -405,15 +429,12 @@ NtsChromiumBenchmarkStats nts_chromium_benchmark_entries(
       nts_environment_enter(benchmark->probe->environment);
   const size_t before = nts_live_count();
   benchmark->iterations = operations_per_entry;
-  benchmark->prepared = true;
+  benchmark->mode = mode;
   nts_counting_reset();
   for (uint32_t i = 0; i < entries; ++i) {
     ProbeScope scope = enter(benchmark->probe);
     benchmark->result = -1;
-    if (scoped)
-      nts_blink_dom_native_scope(benchmark->context, run_benchmark, benchmark);
-    else
-      run_benchmark(benchmark);
+    run_entered(benchmark, entry);
     if (nts_raising() || benchmark->result != 0)
       abort();
     leave(&scope);
@@ -436,4 +457,120 @@ void nts_chromium_benchmark_destroy(NtsChromiumBenchmark* benchmark) {
     abort();
   leave(&scope);
   free(benchmark);
+}
+
+struct NtsChromiumRows {
+  NtsChromiumProbe* probe;
+  NtsDomContext* context;
+  ntsRowsCreate_return_t* app;
+  size_t live_before_setup;
+  uint32_t operation;
+  uint32_t count;
+  double result;
+};
+typedef struct RowsSetup {
+  NtsChromiumRows* rows;
+  uint32_t tbody;
+} RowsSetup;
+static void create_rows(void* state) {
+  RowsSetup* setup = state;
+  setup->rows->app =
+      ntsRowsCreate(setup->rows->context, (double)setup->tbody);
+}
+NtsChromiumRows* nts_chromium_rows_create(NtsChromiumProbe* probe,
+                                          NtsDomContext* context,
+                                          uint32_t tbody) {
+  NtsChromiumRows* rows = calloc(1, sizeof(*rows));
+  if (!rows)
+    abort();
+  rows->probe = probe;
+  rows->context = context;
+  ProbeScope scope = enter(probe);
+  rows->live_before_setup = nts_live_count();
+  /* Building the row template creates DOM nodes, so it is a native callback
+     like any other: outside an entry every DOM call refuses. */
+  RowsSetup setup = {rows, tbody};
+  if (nts_blink_dom_entry(context, create_rows, &setup) || nts_raising() ||
+      !rows->app)
+    abort();
+  leave(&scope);
+  return rows;
+}
+static void run_rows(void* state) {
+  NtsChromiumRows* rows = state;
+  rows->result =
+      ntsRowsOperate(rows->app, (double)rows->operation, (double)rows->count);
+}
+NtsChromiumRowsResult nts_chromium_rows_operate(NtsChromiumRows* rows,
+                                                uint32_t operation,
+                                                uint32_t count) {
+  ProbeScope scope = enter(rows->probe);
+  nts_counting_reset();
+  rows->operation = operation;
+  rows->count = count;
+  rows->result = -1;
+  if (nts_blink_dom_entry(rows->context, run_rows, rows) || nts_raising() ||
+      rows->result < 0)
+    abort();
+  NtsChromiumRowsResult result = {rows->result, nts_counted_allocations(),
+                                  nts_live_count()};
+  leave(&scope);
+  return result;
+}
+static void destroy_rows(void* state) {
+  ntsRowsDestroy(((NtsChromiumRows*)state)->app);
+}
+void nts_chromium_rows_destroy(NtsChromiumRows* rows) {
+  ProbeScope scope = enter(rows->probe);
+  /* A disposed document refuses the entry; the app still drops its state,
+     and its DOM calls refuse outside an entry without touching Blink. */
+  if (nts_blink_dom_entry(rows->context, destroy_rows, rows))
+    destroy_rows(rows);
+  nts_release((NtsHeader*)rows->app);
+  nts_collect_cycles();
+  if (nts_raising() || nts_live_count() != rows->live_before_setup)
+    abort();
+  leave(&scope);
+  free(rows);
+}
+
+/* The general renderer host: Blink owns microtasks and checkpoints, and
+   cycle collection runs in idle time instead of at every checkpoint, which
+   costs a walk of everything reachable from the candidates -- the whole
+   application state -- per callback (contracts/compiler-requests.md, 5).
+   The runtime's candidate threshold remains the backstop. */
+static void enqueue_microtask(void* state, NtsTask task) {
+  NtsChromiumProbe* probe = state;
+  QueuedTask* queued = malloc(sizeof(*queued));
+  if (!queued)
+    abort();
+  *queued = (QueuedTask){probe, task};
+  nts_blink_dom_enqueue(probe->dom, run_native_task, drop_native_task, queued);
+}
+void nts_chromium_probe_install_host(NtsChromiumProbe* probe,
+                                     NtsDomContext* context) {
+  ProbeScope scope = enter(probe);
+  probe->dom = context;
+  probe->owner = pthread_self();
+  const NtsHost host = {.enqueue_microtask = enqueue_microtask,
+                        .is_owner_thread = on_owner_thread,
+                        .state = probe};
+  nts_host_install(&host);
+  probe->idle_policy = true;
+  leave(&scope);
+}
+void nts_chromium_probe_collect_idle(NtsChromiumProbe* probe) {
+  probe->idle_running = true;
+  ProbeScope scope = enter(probe);
+  nts_collect_cycles();
+  leave(&scope);
+  probe->idle_running = false;
+}
+static void idle_collect(void* state) {
+  NtsChromiumProbe* probe = state;
+  probe->idle_queued = false;
+  nts_chromium_probe_collect_idle(probe);
+}
+static void idle_drop(void* state) {
+  ((NtsChromiumProbe*)state)->idle_queued = false;
 }

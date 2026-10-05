@@ -18,37 +18,53 @@ label { display: block; margin: 24px 0; }
 const text = document.createTextNode('');
 document.querySelector('#benchmark-text').appendChild(text);
 const output = document.querySelector('#benchmark-result');
-const payloads = [16, 256, 4096].map(length => ({
-  length, a: '\u0100' + 'x'.repeat(length - 2) + 'A',
-  b: '\u0100' + 'x'.repeat(length - 2) + 'B',
-}));
-function mutate(node, a, b, iterations) {
-  for (let i = 0; i < iterations; ++i) node.textContent = i % 2 ? b : a;
-}
+// Latin-1 then UTF-16 (U+0100-led), matching the native fixture's order.
+const families = [['latin1', 'x'], ['wide', '\u0100']];
+const payloads = [16, 256, 4096].map(length => ({length}));
+// Repeated strings let V8 and Blink reuse one converted string; fresh ones
+// are built per mutation, as UI code usually builds text.
+const paths = {
+  'v8-repeated'(node, a, b, prefix, iterations) {
+    for (let i = 0; i < iterations; ++i) node.textContent = i % 2 ? b : a;
+  },
+  'v8-fresh-string'(node, a, b, prefix, iterations) {
+    for (let i = 0; i < iterations; ++i) node.textContent = prefix + (i % 2 ? 'B' : 'A');
+  },
+};
 document.querySelector('#v8-benchmark-run').addEventListener('input', () => {
   const samples = [];
   const shift = Number(new URL(location.href).searchParams.get('order') ?? 0);
   const order = payloads.slice(shift).concat(payloads.slice(0, shift));
-  for (const {length, a, b} of order) {
-    const warmup = 16384;
-    let start = performance.now();
-    mutate(text, a, b, warmup);
-    const calibration = Math.max(performance.now() - start, .001);
-    const iterations = Math.max(32, Math.min(100000,
-      Math.ceil((16 * warmup / calibration) / 2) * 2));
-    for (let round = 1; round <= 7; ++round) {
-      start = performance.now();
-      mutate(text, a, b, iterations);
-      const elapsedNs = (performance.now() - start) * 1e6;
-      if (text.data !== b || text.length !== length) throw Error('V8 output mismatch');
-      samples.push({path: 'v8-prepared', length, iterations, round, elapsedNs,
-        nsPerOperation: elapsedNs / iterations});
+  const names = Object.keys(paths);
+  for (const [payload, lead] of families) {
+    for (const {length} of order) {
+      const prefix = lead + 'x'.repeat(length - 2);
+      const a = prefix + 'A', b = prefix + 'B';
+      // One calibrating warm-up round, then seven with rotating path order.
+      const counts = names.map(() => 16384);
+      for (let round = 0; round <= 7; ++round) {
+        for (let offset = 0; offset < names.length; ++offset) {
+          const index = (offset + round) % names.length;
+          const iterations = counts[index];
+          const start = performance.now();
+          paths[names[index]](text, a, b, prefix, iterations);
+          const elapsedNs = Math.max(performance.now() - start, .001) * 1e6;
+          if (text.data !== b || text.length !== length) throw Error('V8 output mismatch');
+          if (!round) {
+            counts[index] = Math.max(32, Math.min(100000,
+              Math.ceil((16e6 * iterations / elapsedNs) / 2) * 2));
+            continue;
+          }
+          samples.push({payload, path: names[index], length, iterations, round, elapsedNs,
+            nsPerOperation: elapsedNs / iterations});
+        }
+      }
     }
   }
   const exactUnits = Array.from({length: text.length}, (_, i) => text.data.charCodeAt(i));
   output.setAttribute('data-result', JSON.stringify({samples, status: 0,
     finalLength: text.length, exactUnits,
-    payload: 'Alternating UTF-16 strings beginning with U+0100, ending A/B',
+    payload: 'Latin-1 then UTF-16 (U+0100-led) strings ending A/B; fresh rows build prefix + A/B per mutation',
     timing: 'Ordinary page input handler; renderer performance.now around warmed loops'}));
   output.setAttribute('data-state', 'done');
 });

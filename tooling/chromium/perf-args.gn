@@ -1,7 +1,11 @@
-# Optimized component build for architecture measurements. Full V8/Web platform.
-# This is not the final static/LTO application distribution profile.
+# Optimized static build for architecture measurements. Full V8/Web platform.
+# Non-official Linux builds default dcheck_always_on (and expensive DCHECKs)
+# to true, so a plain is_debug=false still times assertion-laden Blink and V8.
+# A component build would also put every adapter->Blink->V8 call behind a PLT.
+# This is not the final official/ThinLTO/PGO distribution profile.
 is_debug = false
-is_component_build = true
+is_component_build = false
+dcheck_always_on = false
 symbol_level = 0
 blink_symbol_level = 0
 v8_symbol_level = 0

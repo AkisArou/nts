@@ -108,6 +108,31 @@ at each source bump even without a patch set. The
 [DOM/scheduling record](../../runtime/chromium/experiments/dom-and-microtasks.md)
 documents the passing C/LLVM/V8 comparisons and reproduction commands.
 
+The architecture benchmark also builds unmodified `content_shell` alongside
+`nts_shell` as its ordinary page-JavaScript/V8 reference. Successful build
+records include both executable hashes, GN arguments and staging identity.
+The runner rejects stale build inputs and never performs measured application
+work through debugger evaluation. See the
+[architecture/cost record](../../runtime/chromium/experiments/architecture-and-costs.md).
+
+A separate optimized component profile is available without changing the
+debug output directory:
+
+```sh
+node tooling/chromium/probe.ts c --profile perf
+node tooling/chromium/chromium.ts build --profile perf --jobs 8 --background
+node tooling/chromium/chromium.ts status --profile perf
+```
+
+This uses `tooling/chromium/perf-args.gn`, `src/out/NtsPerf`, and evidence under
+`target/chromium/perf`. It preserves normal V8 and the Web platform and uses
+Chromium's optimized compilation settings. It is not a final static/LTO
+distribution. All profiles share `target/chromium/build.pid`; concurrent
+builds and staging are refused because their staged integration is shared.
+The benchmark additionally suppresses spare-renderer prewarming equally in
+both arms to identify the measured tab without guessing; it does not disable
+V8 JIT or renderer sandboxing.
+
 ## Evidence
 
 Download completion is not build acceptance, and build completion is not
