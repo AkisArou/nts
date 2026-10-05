@@ -1103,6 +1103,8 @@ pub fn compiles(program: &hir::Program, dir: &Utf8Path) -> Result<(), NotC> {
         nts_codegen_c::RUNTIME_HEADER,
     )
     .map_err(|error| NotC::Rejected(error.to_string()))?;
+    std::fs::write(dir.join(nts_codegen_c::STRING_VIEW_HEADER_NAME), nts_codegen_c::STRING_VIEW_HEADER)
+        .map_err(|error| NotC::Rejected(error.to_string()))?;
     let build = std::process::Command::new("clang")
         .args(["-std=c11", "-fsyntax-only", "-w"])
         .arg("-I")

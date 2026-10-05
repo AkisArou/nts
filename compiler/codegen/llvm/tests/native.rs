@@ -3852,6 +3852,73 @@ export function nothing(): number { return is_null(null); }
     }
 }
 
+
+/// A `StringView` crosses as the string itself, on both backends: C reads the
+/// units where the string stores them, through `nts_string_view`.
+///
+/// Each property is observed where C receives it:
+/// - U+0000 is a unit like any other: `units` sums past it and `count` sees
+///   three, where a NUL-terminated crossing would have stopped at one.
+/// - One-byte text stays one byte: U+00E9 arrives as the byte 0xE9 with no
+///   wide flag, where UTF-8 would have made it two bytes.
+/// - A lone surrogate arrives as the unit it is (0xD800) with the wide flag.
+///   Built at run time, as in the `Utf16String` test above.
+/// - A literal carries the immortal flag, and a string built at run time
+///   does not.
+/// - `same` is given one string twice: nothing is copied, so it is one
+///   pointer.
+/// - `null` arrives as the empty view.
+///
+/// The strings `nul` and `lone` pass are built for the call, so under
+/// reference counting their release must come after it: a string freed
+/// before C reads it reads back as allocator metadata. Fifty more rounds must
+/// leave nothing live. And no conversion helper appears in the program --
+/// that a view makes nothing is the point.
+#[test]
+fn a_string_view_crosses_as_the_string_itself_on_both_backends() {
+    let source = r#"
+import type { StringView, c_int } from "c:types";
+declare function units(s: StringView): c_int;
+declare function count(s: StringView): c_int;
+declare function flags(s: StringView): c_int;
+declare function same(a: StringView, b: StringView): c_int;
+declare function is_null(s: StringView | null): c_int;
+export function nul(): number { return units("a" + String.fromCharCode(0) + "b") * 10 + count("a" + String.fromCharCode(0) + "b"); }
+export function latin1(): number { const s = String.fromCharCode(0xe9); return units(s) * 10 + flags(s); }
+export function lone(): number { return units(String.fromCharCode(0xd800)) * 10 + flags(String.fromCharCode(0xd800)); }
+export function literal(): number { return flags("abc") * 10 + flags("αβ"); }
+export function lent(): number { const s = "x" + String.fromCharCode(0x3b1); return same(s, s); }
+export function nothing(): number { return is_null(null); }
+"#;
+    let library = "#include <stdint.h>\n#include <stddef.h>\n#include \"nts_string_view.h\"\n\
+        static int unit(NtsStringView v, uint32_t i) {\n\
+          return (v.flags & NTS_STRING_VIEW_WIDE) ? ((const uint16_t *)v.units)[i] : ((const uint8_t *)v.units)[i];\n\
+        }\n\
+        int units(const NtsBorrowedString *s) { NtsStringView v = nts_string_view(s); int total = 0;\n\
+          for (uint32_t i = 0; i < v.length; i++) total += unit(v, i); return total; }\n\
+        int count(const NtsBorrowedString *s) { return (int)nts_string_view(s).length; }\n\
+        int flags(const NtsBorrowedString *s) { return (int)nts_string_view(s).flags; }\n\
+        int same(const NtsBorrowedString *a, const NtsBorrowedString *b) { return nts_string_view(a).units == nts_string_view(b).units; }\n\
+        int is_null(const NtsBorrowedString *s) { NtsStringView v = nts_string_view(s); return v.units == NULL && v.length == 0 && v.flags == 0; }\n";
+    let caller = counted_caller(
+        r#"printf("%.0f %.0f %.0f %.0f %.0f %.0f", nul(), latin1(), lone(), literal(), lent(), nothing());"#,
+        "nul(); latin1(); lone(); lent();",
+    );
+    // 97+0+98 = 195 over 3 units; 0xE9 = 233, narrow and fresh; 0xD800 =
+    // 55296, wide and fresh; "abc" immortal (2), "αβ" immortal and wide (3).
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let Some((text, outputs)) = run_on_both_backends("string-view", source, provider, library, &caller) else { return; };
+        assert!(
+            !["nts_string_to_cstring(", "nts_string_to_utf16(", "nts_cstring_release(", "nts_utf16_release("]
+                .iter()
+                .any(|helper| text.contains(helper)),
+            "a view converted the string: {text}"
+        );
+        for output in outputs {
+            assert_eq!(output, expect("1953 2330 552961 23 1 1", provider), "{provider:?}");
+        }
+    }
+}
 /// Only `string` beside the optional `__c_utf16` marker is a `Utf16String`.
 /// `string & { real: number }` has a property a program can read, so it is a
 /// value with a layout: taken for a plain string, a read of `.real` would be

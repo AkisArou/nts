@@ -57292,11 +57292,7 @@ impl<'a> FuncBuilder<'a> {
             Role::Block { bridge, signature } => self
                 .lend_block(id, Some(value), (bridge.clone(), signature.clone()), slot.representation(), lent, &origin)?
                 .ok_or_else(|| self.unsupported(id, "a block label with no function"))?,
-            Role::String(encoding) => {
-                let pointer = self.runtime_call(encoding.to_c(), vec![value], slot.representation(), origin);
-                lent.push(Lent::String { string: value, pointer, encoding: *encoding });
-                pointer
-            }
+            Role::String(encoding) => self.lend_string(value, *encoding, slot.representation(), lent, origin),
             _ => self.coerce(value, &slot.representation(), id)?,
         })
     }
@@ -57412,12 +57408,39 @@ impl<'a> FuncBuilder<'a> {
     /// but an argument expression that raises after an earlier one was lent
     /// would leak it. A leak, not a crash; whoever fixes it for one kind fixes
     /// it for the other.
+    /// A `string` as the C argument its encoding makes of it, lent for the call.
+    ///
+    /// A conversion -- UTF-8, UTF-16, an `HSTRING` -- is a runtime call whose
+    /// result is given back after the call (`give_back`). A view is the string
+    /// itself, reinterpreted as the opaque `const NtsBorrowedString *` C reads
+    /// with `nts_string_view`: no call and nothing to give back. The pointer
+    /// holds no count of its own, so it leans on the string, and the string's
+    /// release is placed after the call that reads it.
+    fn lend_string(
+        &mut self,
+        string: ValueId,
+        encoding: super::native::Encoding,
+        representation: HirType,
+        lent: &mut Vec<Lent>,
+        origin: Origin,
+    ) -> ValueId {
+        let Some(to_c) = encoding.to_c() else {
+            return self.push(OpKind::Convert(string), representation, origin);
+        };
+        let pointer = self.runtime_call(to_c, vec![string], representation, origin);
+        lent.push(Lent::String { string, pointer, encoding });
+        pointer
+    }
+
     fn give_back(&mut self, id: NodeId, lent: Vec<Lent>) -> Result<(), Diagnostic> {
         let origin = self.origin(id);
         for lent in lent {
             match lent {
                 Lent::String { string, pointer, encoding } => {
-                    self.runtime_call(encoding.release(), vec![string, pointer], HirType::Void, origin.clone());
+                    // Only a conversion is lent this way; a view made nothing.
+                    if let Some(release) = encoding.release() {
+                        self.runtime_call(release, vec![string, pointer], HirType::Void, origin.clone());
+                    }
                 }
                 Lent::Closure { context } => {
                     self.runtime_call("nts_closure_unlend", vec![context], HirType::Void, origin.clone());
@@ -58085,13 +58108,8 @@ impl<'a> FuncBuilder<'a> {
                 ),
                 Role::String(encoding) => {
                     let Some(string) = argument else { continue };
-                    let pointer = self.runtime_call(
-                        encoding.to_c(),
-                        vec![string],
-                        target.parameters[at].representation(),
-                        origin.clone(),
-                    );
-                    lent.push(Lent::String { string, pointer, encoding });
+                    let pointer =
+                        self.lend_string(string, encoding, target.parameters[at].representation(), &mut lent, origin.clone());
                     c_args.push(pointer);
                 }
                 Role::Closure { lifetime, bridge, bridging } => {

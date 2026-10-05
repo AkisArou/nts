@@ -307,38 +307,57 @@ pub enum Encoding {
     /// `HString`: the Windows Runtime's `HSTRING`, made for the call and
     /// deleted after it (`nts_string_to_hstring`). An opaque pointer in C.
     HString,
+    /// `StringView`: the string itself, lent for the call as an opaque
+    /// `const NtsBorrowedString *` that C reads with `nts_string_view`. The
+    /// one encoding with no conversion and nothing to give back -- a
+    /// reinterpretation of the pointer -- and the one that crosses exactly:
+    /// U+0000 and lone surrogates are data, and one-byte text stays one byte.
+    View,
 }
 
 impl Encoding {
-    /// The runtime helper that makes the C string.
+    /// The runtime helper that makes the C string, or `None` for a view,
+    /// which is the string itself.
     #[must_use]
-    pub const fn to_c(self) -> &'static str {
+    pub const fn to_c(self) -> Option<&'static str> {
         match self {
-            Self::Utf8 => "nts_string_to_cstring",
-            Self::Utf16 => "nts_string_to_utf16",
-            Self::HString => "nts_string_to_hstring",
+            Self::Utf8 => Some("nts_string_to_cstring"),
+            Self::Utf16 => Some("nts_string_to_utf16"),
+            Self::HString => Some("nts_string_to_hstring"),
+            Self::View => None,
         }
     }
 
-    /// The runtime helper that gives it back, given the string it came from.
+    /// The runtime helper that gives it back, given the string it came from,
+    /// or `None` for a view, which made nothing.
     #[must_use]
-    pub const fn release(self) -> &'static str {
+    pub const fn release(self) -> Option<&'static str> {
         match self {
-            Self::Utf8 => "nts_cstring_release",
-            Self::Utf16 => "nts_utf16_release",
-            Self::HString => "nts_hstring_release",
+            Self::Utf8 => Some("nts_cstring_release"),
+            Self::Utf16 => Some("nts_utf16_release"),
+            Self::HString => Some("nts_hstring_release"),
+            Self::View => None,
         }
     }
 
-    /// The C parameter type: a pointer to const code units.
+    /// The C parameter type: a pointer to const code units, or for a view a
+    /// pointer to the opaque string.
     #[must_use]
     pub fn c_type(self) -> Type {
         if self == Self::HString {
             return Type::Pointer(Pointee::Void);
         }
+        if self == Self::View {
+            return Type::Pointer(Pointee::Const(Box::new(Pointee::Opaque(Handle {
+                tag: "NtsBorrowedString".to_owned(),
+                ancestors: Vec::new(),
+                family: Family::C,
+                interface: false,
+            }))));
+        }
         let unit = match self {
             Self::Utf8 => Scalar::Char,
-            Self::Utf16 | Self::HString => Scalar::UInt16,
+            Self::Utf16 | Self::HString | Self::View => Scalar::UInt16,
         };
         Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(unit))))
     }
@@ -3824,6 +3843,9 @@ fn string_encoding(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Encoding> 
                 }
                 [property] if property.name == "___c_hstring" && property.optional && property.readonly => {
                     Some(Encoding::HString)
+                }
+                [property] if property.name == "___c_view" && property.optional && property.readonly => {
+                    Some(Encoding::View)
                 }
                 // `CString`: UTF-8 said out loud, where a plain `string` would
                 // be an `NSString` -- in an Objective-C message.

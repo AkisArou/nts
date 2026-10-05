@@ -81,6 +81,7 @@ fn from_clang(root: &std::path::Path, flags: &[String]) -> Option<Vec<Reported>>
     let dir = std::env::temp_dir().join(format!("nts-runtime-sigs-{}-{}", std::process::id(), flags.len()));
     std::fs::create_dir_all(&dir).ok()?;
     std::fs::copy(&header, dir.join("nts_runtime.h")).ok()?;
+    std::fs::copy(root.join("runtime/c/nts_string_view.h"), dir.join("nts_string_view.h")).ok()?;
     std::fs::write(dir.join("probe.c"), "#include \"nts_runtime.h\"\n").ok()?;
 
     let output = std::process::Command::new("clang")

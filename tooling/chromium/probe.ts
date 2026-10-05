@@ -70,7 +70,7 @@ for (const file of ["BUILD.gn", "probe.gni", "probe.c", "probe.h", "probe_main.c
 stage(resolve(fixture, "native/ffi/dom_abi.h"), "dom_abi.h");
 for (const variant of ["c", "llvm"] as const) {
   const generated = resolve(output, "native-bootstrap", variant === "c" ? "probe" : "probe-llvm", "linux-gnu-x86_64");
-  for (const file of ["program.h", "nts_runtime.h"]) stage(resolve(generated, file), `generated/${variant}/${file}`);
+  for (const file of ["program.h", "nts_runtime.h", "nts_string_view.h"]) stage(resolve(generated, file), `generated/${variant}/${file}`);
   stage(resolve(output, "native-bootstrap", `chromium-${variant}-probe.a`), `generated/${variant}/program.a`);
 }
 mkdirSync(blinkStaging, { recursive: true });

@@ -236,6 +236,7 @@ fn from_clang(root: &std::path::Path, flags: &[String]) -> Option<Vec<Declared>>
     std::fs::create_dir_all(&dir).ok()?;
     std::fs::copy(&header, dir.join("nts_runtime.h")).ok()?;
     std::fs::copy(&unicode, dir.join("nts_unicode.h")).ok()?;
+    std::fs::copy(root.join("runtime/c/nts_string_view.h"), dir.join("nts_string_view.h")).ok()?;
     let names = declared_names(&dir, flags)?;
     if names.is_empty() {
         return None;

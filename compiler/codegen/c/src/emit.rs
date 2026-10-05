@@ -40,6 +40,10 @@ pub const RUNTIME_HEADER: &str = include_str!("../../../../runtime/c/nts_runtime
 /// of them is not this session's to change.
 pub const GRISU_HEADER_NAME: &str = "nts_grisu.h";
 pub const GRISU_HEADER: &str = include_str!("../../../../runtime/c/nts_grisu.h");
+/// `StringView`'s C half, included by the runtime header and shipped beside it
+/// so a foreign C or C++ file can read a lent string without that header.
+pub const STRING_VIEW_HEADER_NAME: &str = "nts_string_view.h";
+pub const STRING_VIEW_HEADER: &str = include_str!("../../../../runtime/c/nts_string_view.h");
 pub const RUNTIME_SOURCE_NAME: &str = "nts_runtime.c";
 /// Where this program's claims about foreign declarations are written, for a
 /// consumer to `#include` after the headers that really declare them.
@@ -307,6 +311,8 @@ pub fn support_files(needs_unicode: bool) -> Vec<Support<'static>> {
         one(DTOA_HEADER_NAME, DTOA_HEADER, false),
         one(DTOA_SOURCE_NAME, DTOA_SOURCE, false),
         one(GRISU_HEADER_NAME, GRISU_HEADER, false),
+        // `nts_runtime.h` includes it, so it travels with every program.
+        one(STRING_VIEW_HEADER_NAME, STRING_VIEW_HEADER, false),
         one(RUNTIME_SOURCE_NAME, RUNTIME_SOURCE, true),
     ];
     if needs_unicode {
@@ -1426,7 +1432,7 @@ fn runtime_declares(name: &str) -> bool {
     // emitted a second nts_str_to_lower_case declaration without const, which
     // disagreed as soon as the Unicode header was included. Native prototypes
     // now come from authored ABI types, never specialized argument types.
-    [RUNTIME_HEADER, UNICODE_HEADER, GRISU_HEADER]
+    [RUNTIME_HEADER, UNICODE_HEADER, GRISU_HEADER, STRING_VIEW_HEADER]
         .iter()
         .any(|header| declares_the_name(header, name))
 }
@@ -6033,6 +6039,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("nts-erasures-{}", std::process::id()));
         if std::fs::create_dir_all(&dir).is_err()
             || std::fs::copy(&header, dir.join("nts_runtime.h")).is_err()
+            || std::fs::copy(root.join("runtime/c/nts_string_view.h"), dir.join("nts_string_view.h")).is_err()
             || std::fs::write(dir.join("probe.c"), "#include \"nts_runtime.h\"\n").is_err()
         {
             eprintln!("SKIP: the runtime header is unavailable");

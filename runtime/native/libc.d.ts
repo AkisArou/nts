@@ -86,6 +86,15 @@ declare module "c:types" {
   // surrogate crosses unchanged (Windows' strings are WTF-16), where the UTF-8
   // crossing replaces it; U+0000 inside the string ends the process.
   export type Utf16String = string & { readonly __c_utf16?: true };
+  // A `string` lent to C as itself, for the call: `const NtsBorrowedString *`,
+  // which C reads with `nts_string_view` (`nts_string_view.h`) -- the string's
+  // own units at their own width, one byte or two, with a length and whether
+  // it is a literal. Nothing is scanned, converted, copied or allocated, and
+  // nothing is given back after. U+0000 and lone surrogates are data, so the
+  // text crosses exactly, which neither the UTF-8 crossing nor `Utf16String`
+  // can promise. Like `CBytes`, only for C that does not keep it past the
+  // call: C that wants the text afterwards copies it.
+  export type StringView = string & { readonly __c_view?: true };
   // A `Uint8Array` as C's pointer to its bytes -- `const guint8 *data` --
   // borrowed in place for the call: no copy in or out, so bytes C writes are
   // the ones the array holds when the call returns. `Q` is the header's

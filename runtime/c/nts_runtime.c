@@ -5297,6 +5297,25 @@ void nts_utf16_release(const NtsString *s, const uint16_t *units) {
   free((void *)units);
 }
 
+/* A `StringView` parameter: the string the compiled program lent, read where
+ * it is stored. No copy and no scan, so it is exact by construction -- the
+ * units are the string's, whatever they hold. */
+NtsStringView nts_string_view(const NtsBorrowedString *string) {
+  const NtsString *s = (const NtsString *)string;
+  if (s == NULL) {
+    return (NtsStringView){NULL, 0, 0};
+  }
+  uint32_t flags = 0;
+  if (s->flags & NTS_TWO_BYTE) {
+    flags |= NTS_STRING_VIEW_WIDE;
+  }
+  if (s->reserved == NTS_IMMORTAL) {
+    flags |= NTS_STRING_VIEW_IMMORTAL;
+  }
+  return (NtsStringView){NTS_ELEMENTS(s, const unsigned char), s->length,
+                         flags};
+}
+
 NtsString *nts_string_from_cstring(const char *c) {
   if (c == NULL) {
     return NULL;

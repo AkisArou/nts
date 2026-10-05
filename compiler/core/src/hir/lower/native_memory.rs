@@ -520,8 +520,7 @@ impl FuncBuilder<'_> {
         };
         let origin = self.origin(id);
         let string = self.coerce(value, &HirType::Managed(ManagedType::String), id)?;
-        let handle = self.runtime_call(Encoding::HString.to_c(), vec![string], Encoding::HString.c_type().representation(), origin.clone());
-        lent.push(Lent::String { string, pointer: handle, encoding: Encoding::HString });
+        let handle = self.lend_string(string, Encoding::HString, Encoding::HString.c_type().representation(), lent, origin.clone());
         let element = self.native_element_type(id, field)?;
         let stored = self.push(OpKind::Convert(handle), element, origin.clone());
         self.push(OpKind::NativeStore { pointer: field, index, value: stored }, HirType::Void, origin);

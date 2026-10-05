@@ -27,6 +27,8 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "nts_string_view.h"
+
 /* RFC 8.1: every managed object references an immutable descriptor, which
  * describes the shape rather than the contents -- so there is one per element
  * type, not one per object. */
