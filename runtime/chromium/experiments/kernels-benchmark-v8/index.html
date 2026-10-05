@@ -33,11 +33,26 @@ function createDetachedCounterTrees(count) {
   return checksum;
 }
 
+function runSynchronousEventRoundTrips(count) {
+  const button = document.body;
+  let checksum = 0;
+  const listener = () => {
+    checksum += 1;
+  };
+  button.addEventListener("click", listener);
+  for (let index = 0; index < count; index += 1) {
+    button.click();
+  }
+  button.removeEventListener("click", listener);
+  return checksum;
+}
+
 // The same table as kernels_benchmark.cc: 20,000 iterations per sample,
 // three discarded, twenty kept, one posted task per sample. `per-call` calls
 // the kernel with 1 from a loop, as native-typescript's v8.js does.
 const iterations = 20000, warm = 3, measured = 20;
-const kernels = [['create-element', createElements], ['detached-counter-tree', createDetachedCounterTrees]];
+const kernels = [['create-element', createElements], ['detached-counter-tree', createDetachedCounterTrees],
+  ['event-round-trip', runSynchronousEventRoundTrips]];
 function nextTask() {
   return new Promise(resolve => {
     const channel = new MessageChannel();

@@ -16,6 +16,13 @@ extern "C" {
 typedef struct NtsDomContext NtsDomContext;
 typedef struct NtsDomNode NtsDomNode;
 void nts_blink_dom_destroy(NtsDomContext* context);
+// How a listener reaches the program: the host enters its environment and
+// runs `call(state)`, which calls the compiled closure. Installed once per
+// context by the code that owns the program; without one, listening fails.
+typedef void (*NtsDomInvoke)(void* host, void (*call)(void*), void* state);
+void nts_blink_dom_set_invoker(NtsDomContext* context,
+                               NtsDomInvoke invoke,
+                               void* host);
 // Entered calls. One entry per native callback supplies what
 // V8ScriptRunner::CallFunction supplies a JS callback -- the agent's
 // microtask scope, so nested script cannot checkpoint mid-callback and the

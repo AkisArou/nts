@@ -73,6 +73,7 @@ class ProbeObserver final : public content::RenderFrameObserver {
         blink::WebString::FromAscii("native-rows-run"));
     if (!rows.IsNull()) {
       dom_.reset(CreateDomContext(document));
+      nts_chromium_probe_attach(probe_.get(), dom_.get());
       // Idle-time collection is the architecture under test;
       // --nts-collection=checkpoint keeps the runtime default for an A/B.
       if (command.GetSwitchValueASCII("nts-collection") != "checkpoint")
@@ -92,6 +93,7 @@ class ProbeObserver final : public content::RenderFrameObserver {
         blink::WebString::FromAscii("native-kernels-run"));
     if (!kernels.IsNull()) {
       dom_.reset(CreateDomContext(document));
+      nts_chromium_probe_attach(probe_.get(), dom_.get());
       if (command.GetSwitchValueASCII("nts-collection") != "checkpoint")
         nts_chromium_probe_install_host(probe_.get(), dom_.get());
       counter_output_ = document.GetElementById(
@@ -109,6 +111,7 @@ class ProbeObserver final : public content::RenderFrameObserver {
         blink::WebString::FromAscii("native-benchmark-run"));
     if (!benchmark.IsNull()) {
       dom_.reset(CreateDomContext(document));
+      nts_chromium_probe_attach(probe_.get(), dom_.get());
       counter_output_ = document.GetElementById(
           blink::WebString::FromAscii("benchmark-result"));
       CHECK(!counter_output_.IsNull());
@@ -124,6 +127,7 @@ class ProbeObserver final : public content::RenderFrameObserver {
              .GetElementById(blink::WebString::FromAscii("native-dom-start"))
              .IsNull()) {
       dom_.reset(CreateDomContext(document));
+      nts_chromium_probe_attach(probe_.get(), dom_.get());
       const double dom_result =
           nts_chromium_probe_dom_run(probe_.get(), dom_.get());
       CHECK_EQ(dom_result, 0.0)

@@ -16,6 +16,23 @@ export function ntsKernelCreateElements(c: DomContext, iterations: number): numb
   return checksum;
 }
 
+// native-typescript's synchronous-event-round-trip: listen on the body, click
+// it `iterations` times, each dispatching to a compiled closure, and remove
+// the listener.
+export function ntsKernelEventRoundTrips(c: DomContext, iterations: number): number {
+  const document = dom.nts_dom_document(c);
+  const body = document === null ? null : dom.nts_dom_query(c, document, "body");
+  if (body === null) return 0;
+  const state = { checksum: 0 };
+  const listener = dom.nts_dom_listen(c, body, "click", (): void => {
+    state.checksum += 1;
+  });
+  if (listener === null) return 0;
+  for (let i = 0; i < iterations; i += 1) dom.nts_dom_click(c, body);
+  dom.nts_dom_unlisten(c, listener);
+  return state.checksum;
+}
+
 export function ntsKernelCounterTrees(c: DomContext, iterations: number): number {
   let checksum = 0;
   for (let i = 0; i < iterations; i += 1) {

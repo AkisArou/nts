@@ -53,6 +53,25 @@ export function ntsChromiumDomProgram(c: DomContext): number {
   if (dom.nts_dom_text_content(c, label) !== exact) return 11;
   dom.nts_dom_append_child(c, container, label);
   if (dom.nts_dom_query(c, document, "#native-dom-count") !== label) return 12;
+
+  // Events: a compiled closure on a button, fired synchronously by click(),
+  // then removed, after which a click changes nothing. The closure captures
+  // the button and the label, which are rooted while the listener holds it
+  // and unrooted when removing it gives the closure back.
+  const button = dom.nts_dom_create_element(c, "button");
+  if (button === null) return 13;
+  const clicks = { count: 0 };
+  const listener = dom.nts_dom_listen(c, button, "click", (target: Node): void => {
+    if (target === button) clicks.count += 1;
+    dom.nts_dom_set_text_content(c, label, "Clicked " + clicks.count);
+  });
+  if (listener === null) return 13;
+  dom.nts_dom_click(c, button);
+  dom.nts_dom_click(c, button);
+  if (clicks.count !== 2 || dom.nts_dom_text_content(c, label) !== "Clicked 2") return 14;
+  if (dom.nts_dom_unlisten(c, listener) !== 0) return 15;
+  dom.nts_dom_click(c, button);
+  if (clicks.count !== 2) return 16;
   dom.nts_dom_set_text_content(c, label, "Count: 0");
   return 0;
 }

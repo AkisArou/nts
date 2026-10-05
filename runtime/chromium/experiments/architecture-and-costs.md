@@ -433,6 +433,23 @@ browser; roots 2 + 2 x rows while the app lives and 0 after destroy, in
 both harnesses. Evidence: `target/chromium/perf/{kernels,rows,binding}-c-v3/`,
 `v3-native-dom-c-smoke`, `v3-control-dom-smoke`.
 
+## Events: native listeners (2026-10-06)
+
+Compiled closures listen on Blink targets (design in architecture.md section
+5). The DOM witness clicks a button twice through a compiled listener that
+writes the label, removes it, clicks again with no effect, and ends with no
+root held -- giving the closure back released the nodes it captured. The
+kernels gain native-typescript's synchronous-event-round-trip, `--cpu 4`:
+
+| Shape | C++ native listener | Compiled | V8 | /V8 | ScriptC /V8 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| loop (one listener, 20,000 clicks) | 557 | 536 | 795 | 0.67 | 1.07 |
+| per-call (listen, click, remove) | 624 | 873 | 1080 | 0.81 | 0.64 |
+
+Per-call allocates the closure and its state per listen and pays an entry;
+ScriptC's per-call did neither. Evidence: `target/chromium/perf/
+kernels-c-events/`, `events-dom-c-smoke`.
+
 ## RC defects found by this lane and fixed in the compiler
 
 Measured with `tooling/memory`'s harness on the unmodified compiler (main

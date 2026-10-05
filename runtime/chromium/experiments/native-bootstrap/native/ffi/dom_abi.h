@@ -28,6 +28,14 @@
  * which the compiler copies (`StringView` as a result). Text written over and
  * over that is not a literal may be interned for an id instead.
  *
+ * Events. A listener is Blink's own: a native event listener the target
+ * holds, calling a compiled closure with the event's target node inside its
+ * own entry, the program's environment entered by the host's invoker
+ * (nts_blink_dom_set_invoker). The closure crosses as C's
+ * (callback, context, destroy) triple and is given back -- destroy -- when
+ * the listener is removed, or when the document goes. A listener handle is
+ * rooted like a node where the program keeps it.
+ *
  * Errors. A status-returning function returns its DOM exception code (0 on
  * success). A node-returning function returns NULL on null or failure and
  * records its code for nts_dom_last_error, which the next call overwrites. */
@@ -44,6 +52,7 @@ typedef struct NtsDomNode NtsDomNode;
 typedef struct NtsDomElement NtsDomElement;
 typedef struct NtsDomText NtsDomText;
 typedef struct NtsDomDocument NtsDomDocument;
+typedef struct NtsDomListener NtsDomListener;
 
 /* Root and unroot a node the program keeps off the stack. Called by the
  * compiler, never by the program; main thread only. */
@@ -101,6 +110,24 @@ const NtsStringView* nts_dom_text_content(NtsDomContext* context,
 const NtsStringView* nts_dom_get_attribute(NtsDomContext* context,
                                            NtsDomElement* element,
                                            const NtsBorrowedString* name);
+
+/* `target.addEventListener(type, listener)` for a compiled closure, which
+ * the listener keeps until nts_dom_unlisten or the document's end. NULL on
+ * failure, the closure given back already. */
+NtsDomListener* nts_dom_listen(NtsDomContext* context,
+                               NtsDomNode* target,
+                               const NtsBorrowedString* type,
+                               void (*callback)(NtsDomNode* target,
+                                                void* closure),
+                               void* closure,
+                               void (*destroy)(void* closure));
+/* Removes the listener and gives its closure back; a second call does
+ * nothing. */
+int32_t nts_dom_unlisten(NtsDomContext* context, NtsDomListener* listener);
+void* nts_dom_listener_retain(void* listener);
+void nts_dom_listener_release(void* listener);
+/* `element.click()`: dispatches a synthetic click, synchronously. */
+int32_t nts_dom_click(NtsDomContext* context, NtsDomElement* element);
 
 /* Text written repeatedly that is not a literal: interned once for an id,
  * then written as a reference to the shared StringImpl, with no copy. 0 is

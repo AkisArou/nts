@@ -16,7 +16,9 @@
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
+#include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/dom/text.h"
+#include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 
@@ -30,7 +32,7 @@ constexpr uint32_t kIterations = 20000;
 constexpr uint32_t kWarm = 3;
 constexpr uint32_t kMeasured = 20;
 
-enum Kernel : uint32_t { kCreateElements = 0, kCounterTrees = 1 };
+enum Kernel : uint32_t { kCreateElements = 0, kCounterTrees = 1, kEventRoundTrips = 2 };
 enum class Shape { kLoop, kPerCall };
 enum class Lane { kIntrinsic, kCompiled };
 struct Case {
@@ -39,7 +41,7 @@ struct Case {
   Shape shape;
   Lane lane;
 };
-constexpr std::array<Case, 8> kCases{{
+constexpr std::array<Case, 12> kCases{{
     {"create-element", kCreateElements, Shape::kLoop, Lane::kIntrinsic},
     {"create-element", kCreateElements, Shape::kLoop, Lane::kCompiled},
     {"create-element", kCreateElements, Shape::kPerCall, Lane::kIntrinsic},
@@ -50,6 +52,11 @@ constexpr std::array<Case, 8> kCases{{
      Lane::kIntrinsic},
     {"detached-counter-tree", kCounterTrees, Shape::kPerCall,
      Lane::kCompiled},
+    {"event-round-trip", kEventRoundTrips, Shape::kLoop, Lane::kIntrinsic},
+    {"event-round-trip", kEventRoundTrips, Shape::kLoop, Lane::kCompiled},
+    {"event-round-trip", kEventRoundTrips, Shape::kPerCall,
+     Lane::kIntrinsic},
+    {"event-round-trip", kEventRoundTrips, Shape::kPerCall, Lane::kCompiled},
 }};
 
 // The C++ floor, as native-typescript's nts_blink_benchmark_host.cc writes
@@ -76,9 +83,36 @@ NOINLINE uint32_t CreateCounterTreeOnce(blink::Document& document) {
   label->setData("Count: 1");
   return 1;
 }
+// A listener counting its calls, as native-typescript's
+// RunSynchronousEventRoundTripsCpp registers one.
+class CountingListener final : public blink::NativeEventListener {
+ public:
+  void Invoke(blink::ExecutionContext*, blink::Event*) override { ++count; }
+  uint32_t count = 0;
+};
+// Listen on the body, click it `clicks` times, remove the listener.
+NOINLINE uint32_t EventRoundTrips(blink::Document& document, uint32_t clicks) {
+  blink::HTMLElement* body = document.body();
+  if (!body)
+    return 0;
+  auto* listener = blink::MakeGarbageCollected<CountingListener>();
+  const blink::AtomicString type("click");
+  if (!body->addEventListener(type, listener, false))
+    return 0;
+  for (uint32_t i = 0; i < clicks; ++i)
+    body->click();
+  body->removeEventListener(type, listener, false);
+  return listener->count;
+}
 uint32_t IntrinsicOnce(Kernel kernel, blink::Document& document) {
-  return kernel == kCreateElements ? CreateElementOnce(document)
-                                   : CreateCounterTreeOnce(document);
+  switch (kernel) {
+    case kCreateElements:
+      return CreateElementOnce(document);
+    case kCounterTrees:
+      return CreateCounterTreeOnce(document);
+    case kEventRoundTrips:
+      return EventRoundTrips(document, 1);
+  }
 }
 
 class KernelsRun {
@@ -119,7 +153,10 @@ class KernelsRun {
     size_t allocations = 0;
     const auto start = base::TimeTicks::Now();
     if (c.lane == Lane::kIntrinsic) {
-      if (c.shape == Shape::kLoop) {
+      if (c.shape == Shape::kLoop && c.kernel == kEventRoundTrips) {
+        // One listener for the whole loop, as the compiled loop has.
+        checksum = EventRoundTrips(document, kIterations);
+      } else if (c.shape == Shape::kLoop) {
         for (uint32_t i = 0; i < kIterations; ++i)
           checksum += IntrinsicOnce(c.kernel, document);
       } else {

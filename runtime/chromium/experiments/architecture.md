@@ -134,25 +134,46 @@ written as a reference to the shared `StringImpl` (`nts_dom_intern`,
 `nts_dom_set_text_interned`) -- what V8's externalized strings give page
 script.
 
-## 5. Events and cross-heap cycles (designed, next to build)
+## 5. Events and cross-heap cycles
 
-A listener is a `NativeEventListener` subclass (`core/dom/events/
-native_event_listener.h`; the pattern of `modules/xr/
-xr_canvas_input_provider.cc:21-52`) whose `Invoke` opens an entry and calls an
-NTS closure with the event's target as a node. The target holds the listener
-(`RegisteredEventListener::callback_` is a traced `Member`), so registration
-and removal are Blink's (`EventTarget::addEventListener` /
-`removeEventListener`, matched by identity).
+**Built: listeners with explicit lifetime.** `nts_dom_listen(c, target, type,
+closure)` registers a native listener (an `NtsListener : NativeEventListener`
+the target holds); the closure crosses as C's `(callback, context, destroy)`
+triple (`Closure<F>` in `c:types`). A dispatch opens its own entry and calls
+the program through the host's *invoker* (`nts_blink_dom_set_invoker`), which
+enters the program's environment -- the adapter knows no NTS environment.
+`nts_dom_unlisten` removes it and gives the closure back; the context gives
+back every closure still held when the document goes, before the program's
+environment is destroyed. A listener handle the program keeps is rooted like
+a node (`nts_dom_listener_retain` / `_release`). Measured: an event round trip
+-- `click()` dispatching to a compiled closure -- costs 536 ns against Blink
+C++'s own native listener at 557 and page script's 795 (0.67x V8; ScriptC
+measured 1.07x for the same reused-listener shape).
 
-The cycle to design for: node → listener → NTS closure → a root on the node.
+**Designed: collecting what nobody removes.** The rest of this section is the
+design for listeners a program drops without removing.
+
+The listener follows the pattern of `modules/xr/
+xr_canvas_input_provider.cc:21-52`; the target holds it
+(`RegisteredEventListener::callback_` is a traced `Member`). The cycle to
+design for: node → listener → NTS closure → a root on the node.
 Neither collector sees the whole ring. The runtime already has the protocol
 for exactly this shape -- `NtsHolders` (`nts_runtime.h:315-360`), built for
 GObject signal handlers: a family whose objects hold closures registers how to
 enumerate the closures an object holds and how to sever them, and trial
 deletion walks through the foreign object. The Blink family becomes
-`holds_closures`, and its holders enumerate a node's native listeners. The
-alternative -- tracing NTS closures from Oilpan -- would make the program's
-heap a cppgc embedder heap, which is a far larger change for the same answer.
+`holds_closures`, and its holders enumerate a node's native listeners.
+
+One difference from GObject decides how far that carries: a GObject's count
+includes its container's reference, so an attached widget is never garbage,
+while an attached DOM node is kept by Oilpan's tree and has no count to show
+it. The holders' count for a node therefore has to include "reachable from
+Blink's roots", which only Oilpan knows -- so the collection is a joint one:
+Oilpan marks first, and a listener whose target Oilpan found unreachable is
+the candidate the NTS collector may sever. Until then, explicit removal is the
+contract, and navigation releases everything. The alternative -- tracing NTS
+closures from Oilpan -- would make the program's heap a cppgc embedder heap,
+a far larger change for the same answer.
 
 ## 6. Scheduling
 

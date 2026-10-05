@@ -42,6 +42,9 @@ NtsChromiumCounterResult nts_chromium_probe_counter_increment(
 void nts_chromium_probe_destroy(NtsChromiumProbe* probe);
 void nts_chromium_probe_install_microtasks(NtsChromiumProbe* probe,
                                            NtsDomContext* context);
+/* Lets the context's listeners call the program, in its environment. */
+void nts_chromium_probe_attach(NtsChromiumProbe* probe,
+                               NtsDomContext* context);
 /* Blink-owned checkpoints and idle-time cycle collection; see probe.c. */
 void nts_chromium_probe_install_host(NtsChromiumProbe* probe,
                                      NtsDomContext* context);
@@ -92,7 +95,7 @@ NtsChromiumRowsResult nts_chromium_rows_operate(NtsChromiumRows* rows,
 void nts_chromium_rows_destroy(NtsChromiumRows* rows);
 
 /* The binding kernels (src/kernels.ts): kernel 0 creates detached divs,
-   kernel 1 detached counter trees. One call is one native callback that runs
+   kernel 1 detached counter trees, kernel 2 event round trips on the body. One call is one native callback that runs
    `iterations` of the kernel; returns the checksum, aborts on a raised
    error. `allocations` receives the NTS allocations the call made. */
 double nts_chromium_kernel_run(NtsChromiumProbe* probe,

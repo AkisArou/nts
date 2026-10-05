@@ -3,12 +3,13 @@
 // Nodes are the Blink nodes themselves: one the program keeps is rooted by
 // the compiler (`HostClass`), and one it only passes along costs nothing.
 declare module "nts:chromium-dom" {
-  import type { HostClass, Opaque, StringView, c_int32, c_uint32 } from "c:types";
+  import type { Closure, HostClass, Opaque, StringView, c_int32, c_uint32 } from "c:types";
   export type DomContext = Opaque<"NtsDomContext">;
   export type Node = HostClass<"NtsDomNode", null, "nts_dom_retain", "nts_dom_release">;
   export type Element = HostClass<"NtsDomElement", Node>;
   export type Text = HostClass<"NtsDomText", Node>;
   export type Document = HostClass<"NtsDomDocument", Node>;
+  export type Listener = HostClass<"NtsDomListener", null, "nts_dom_listener_retain", "nts_dom_listener_release">;
   export function nts_dom_last_error(context: DomContext): c_int32;
   export function nts_dom_document(context: DomContext): Document | null;
   export function nts_dom_query(context: DomContext, root: Node, selectors: StringView): Element | null;
@@ -28,6 +29,9 @@ declare module "nts:chromium-dom" {
   export function nts_dom_set_attribute(context: DomContext, element: Element, name: StringView, value: StringView): c_int32;
   export function nts_dom_text_content(context: DomContext, node: Node): StringView | null;
   export function nts_dom_get_attribute(context: DomContext, element: Element, name: StringView): StringView | null;
+  export function nts_dom_listen(context: DomContext, target: Node, type: StringView, listener: Closure<(target: Node) => void>): Listener | null;
+  export function nts_dom_unlisten(context: DomContext, listener: Listener): c_int32;
+  export function nts_dom_click(context: DomContext, element: Element): c_int32;
   export function nts_dom_intern(context: DomContext, text: StringView): c_uint32;
   export function nts_dom_set_text_interned(context: DomContext, node: Node, atom: c_uint32): c_int32;
 }

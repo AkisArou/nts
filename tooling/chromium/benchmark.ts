@@ -233,11 +233,13 @@ async function measure(run: number, mode: Mode): Promise<LaunchResult> {
     assert.equal(result.status, 0);
     if (workload === "kernels") {
       const kernels = result as unknown as KernelsMeasurements;
-      // Two kernels x two shapes x twenty samples, per lane: two lanes native.
-      assert.equal(kernels.samples.length, mode === "native" ? 160 : 80);
+      // Three kernels x two shapes x twenty samples, per lane: two lanes native.
+      assert.equal(kernels.samples.length, mode === "native" ? 240 : 120);
       if (mode === "native") {
         assert.equal(kernels.liveRoots, 0, "a kernel must root nothing");
-        for (const sample of kernels.samples.filter(sample => sample.lane === "compiled"))
+        // The DOM kernels allocate nothing of the program's; an event round
+        // trip makes its listener's closure and state once per listen.
+        for (const sample of kernels.samples.filter(sample => sample.lane === "compiled" && sample.kernel !== "event-round-trip"))
           assert.equal(sample.ntsAllocations, 0, `${sample.kernel} ${sample.shape} allocated NTS objects`);
       }
       console.log(`Run ${run+1}/${runs}, ${mode}: ${kernels.samples.length} kernel samples; normal JIT, sandbox active`);
@@ -328,7 +330,7 @@ if (workload === "kernels") {
     return {samples:values.length,medianNs:percentile(values,.5),q1Ns:percentile(values,.25),q3Ns:percentile(values,.75)};
   };
   const summaries = [];
-  for (const kernel of ["create-element", "detached-counter-tree"]) {
+  for (const kernel of ["create-element", "detached-counter-tree", "event-round-trip"]) {
     for (const shape of ["loop", "per-call"]) {
       const intrinsic = median(kernel, shape, "blink-intrinsic"), compiled = median(kernel, shape, "compiled"), v8 = median(kernel, shape, "v8");
       summaries.push({kernel,shape,intrinsic,compiled,v8,compiledOverIntrinsic:compiled.medianNs/intrinsic.medianNs,compiledOverV8:compiled.medianNs/v8.medianNs});

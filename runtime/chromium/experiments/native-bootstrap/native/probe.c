@@ -540,9 +540,10 @@ typedef struct KernelRun {
 } KernelRun;
 static void run_kernel(void* state) {
   KernelRun* run = state;
-  run->result = run->kernel == 0
-                    ? ntsKernelCreateElements(run->context, run->iterations)
-                    : ntsKernelCounterTrees(run->context, run->iterations);
+  run->result =
+      run->kernel == 0   ? ntsKernelCreateElements(run->context, run->iterations)
+      : run->kernel == 1 ? ntsKernelCounterTrees(run->context, run->iterations)
+                         : ntsKernelEventRoundTrips(run->context, run->iterations);
 }
 double nts_chromium_kernel_run(NtsChromiumProbe* probe,
                                NtsDomContext* context,
@@ -558,6 +559,21 @@ double nts_chromium_kernel_run(NtsChromiumProbe* probe,
   *allocations = nts_counted_allocations();
   leave(&scope);
   return run.result;
+}
+
+/* A listener's call into the program: the probe's environment entered, as
+   every native callback enters it. A throw cannot cross the C frames of an
+   event dispatch; the closure bridge stops one, so none arrives here. */
+static void invoke_listener(void* host, void (*call)(void*), void* state) {
+  ProbeScope scope = enter(host);
+  call(state);
+  if (nts_raising())
+    abort();
+  leave(&scope);
+}
+void nts_chromium_probe_attach(NtsChromiumProbe* probe,
+                               NtsDomContext* context) {
+  nts_blink_dom_set_invoker(context, invoke_listener, probe);
 }
 
 /* The general renderer host: Blink owns microtasks and checkpoints, and
