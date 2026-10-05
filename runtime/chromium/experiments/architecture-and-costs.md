@@ -390,6 +390,49 @@ Where this ABI differs from ScriptC's, by the numbers:
 
 Evidence: `target/chromium/perf/kernels-c/`.
 
+## Nodes as pointers: DOM ABI v3 (2026-10-06)
+
+The lease table is gone (design in [architecture.md](architecture.md),
+section 3). A node is its `blink::Node *`; the program's nodes are typed
+`HostClass` handles, rooted by the compiler only where they leave the stack,
+through one `HeapHashCountedSet` per thread. Names are literal `StringView`s
+cached as `AtomicString`s by address; text comes back as a `StringView`
+result. The legacy bridge (per-call scopes, context-wide status, UTF-16
+copies) is retired; the binding benchmark keeps its entered rows and the
+prepared-buffer controls. Compiler work it took, all on main: 1bd750e5e
+(`HostClass`), f03831fd4 (`StringView` results), 6c08170ef (stack returns,
+null at a branch), 6d2fd2542 (`program.h` says what an export takes over --
+the gap the strict mini-DOM found when a C caller lent a node an export
+kept).
+
+Kernels, `--cpu 4`, median ns per operation, leases -> pointers:
+
+| Kernel | Shape | C++ | Compiled | V8 | /V8 | ScriptC /V8 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| create-element | loop | 54.6 | 81.9 -> 54.0 | 100 | 0.71 -> 0.54 | 0.635 |
+| create-element | per-call | 47.9 | 133.1 -> 74.5 | 100 | 0.95 -> 0.75 | 0.560 |
+| detached-counter-tree | loop | 241.4 | 262.4 -> 199.3 | 285 | 0.86 -> 0.70 | 0.868 |
+| detached-counter-tree | per-call | 260.9 | 356.8 -> 319.2 | 290 | 1.19 -> 1.10 | 0.920 |
+
+The loop shapes are at the C++ floor or under it (literal names and text are
+made once per document; the C++ lane builds them per call). What per-call
+still pays is the native entry per call -- environment, microtask and handle
+scopes -- which ScriptC's per-call never did; an event handler pays it once.
+
+Rows (one task per round, a frame between setup and measurement) stay at
+parity: create1k 1.02, replace1k 0.98, create10k 0.89, clear10k 1.05,
+create1k+layout 1.01, update10th+layout 1.03. The text paths of the binding
+benchmark are unchanged against their controls (a `string` costs what a
+prepared buffer does; interned text 58 ns against Blink's own 50).
+
+Correctness: the DOM witness (identity by address, every exception code,
+exact text both ways, and a detached node surviving a forced conservative
+collection with only the stack referring to it -- its precise-GC control
+arm crashes); C, LLVM and V8 build the same rows standalone and in the
+browser; roots 2 + 2 x rows while the app lives and 0 after destroy, in
+both harnesses. Evidence: `target/chromium/perf/{kernels,rows,binding}-c-v3/`,
+`v3-native-dom-c-smoke`, `v3-control-dom-smoke`.
+
 ## RC defects found by this lane and fixed in the compiler
 
 Measured with `tooling/memory`'s harness on the unmodified compiler (main

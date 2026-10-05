@@ -255,7 +255,7 @@ try {
     assert.deepEqual(exactUnits, [65, 0, 233, 937, 55296, 90, 56320, 55357, 56832]);
     const html = await evaluate<string>("document.querySelector('#native-dom').outerHTML");
     if (domOracle) assert.equal(await evaluate<number>("window.domWitness"), 0);
-    else await until(() => log.includes(`NTS_DOM backend=${probeBackend} result=0 roots=4`), "native DOM identity/error/string witnesses");
+    else await until(() => log.includes(`NTS_DOM backend=${probeBackend} result=0 roots=0`), "native DOM identity/error/string witnesses");
     dom = { html, exactUnits, result: 0, exceptionCodes: { SyntaxError: 12, HierarchyRequestError: 3, NotFoundError: 8, InvalidCharacterError: 5 }, execution: domOracle ? "v8" : probeBackend };
   }
   const capture = await cdp<{ data: string }>("Page.captureScreenshot", { format: "png" });

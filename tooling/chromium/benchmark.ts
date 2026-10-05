@@ -17,8 +17,8 @@ interface RowsSample { case: string; round: number; batch: number; elapsedNs: nu
 // The kernels workload (--workload kernels): native-typescript's binding
 // kernels, one sample per task, in blink-intrinsic, compiled and v8 lanes.
 interface KernelsSample { kernel: string; shape: string; lane: string; round: number; iterations: number; nsPerOperation: number; ntsAllocations?: number }
-interface KernelsMeasurements { samples: KernelsSample[]; status: number; liveLeases?: number; timing: string }
-interface RowsMeasurements { samples: RowsSample[]; status: number; finalRows: number; liveLeases?: number; leasesAfterDestroy?: number; dom?: string; structure?: string; timing: string }
+interface KernelsMeasurements { samples: KernelsSample[]; status: number; liveRoots?: number; timing: string }
+interface RowsMeasurements { samples: RowsSample[]; status: number; finalRows: number; liveRoots?: number; rootsAfterDestroy?: number; dom?: string; structure?: string; timing: string }
 type Mode = "native" | "v8";
 interface LaunchResult { result: Measurements; executable: string; fixture: string; args: string[]; rendererPid: number; rendererStatus: string; loadBefore: string; loadAfter: string }
 const root = resolve(import.meta.dirname, "../..");
@@ -236,7 +236,7 @@ async function measure(run: number, mode: Mode): Promise<LaunchResult> {
       // Two kernels x two shapes x twenty samples, per lane: two lanes native.
       assert.equal(kernels.samples.length, mode === "native" ? 160 : 80);
       if (mode === "native") {
-        assert.equal(kernels.liveLeases, 0, "every kernel lease must be released");
+        assert.equal(kernels.liveRoots, 0, "a kernel must root nothing");
         for (const sample of kernels.samples.filter(sample => sample.lane === "compiled"))
           assert.equal(sample.ntsAllocations, 0, `${sample.kernel} ${sample.shape} allocated NTS objects`);
       }
@@ -248,9 +248,9 @@ async function measure(run: number, mode: Mode): Promise<LaunchResult> {
       // Twelve cases of 15 measured rounds and two of six, on both engines.
       assert.equal(rows.samples.length, 192);
       assert.equal(rows.finalRows, 999);
-      // tbody + template + (tr, label text) per row: every other lease released.
-      if (mode === "native") assert.equal(rows.liveLeases, 2 + 2 * rows.finalRows, "native handles leaked");
-      if (mode === "native") assert.equal(rows.leasesAfterDestroy, 0, "destroying the app and releasing the query must leave no lease");
+      // tbody + template + (tr, label text) per row: the nodes the app keeps.
+      if (mode === "native") assert.equal(rows.liveRoots, 2 + 2 * rows.finalRows, "native handles leaked");
+      if (mode === "native") assert.equal(rows.rootsAfterDestroy, 0, "destroying the app must leave no root");
       rows.dom = await evaluate<string>("[...document.querySelector('#tbody').rows].map(r => r.className + '|' + r.textContent).join('\\n')");
       // The whole subtree, not only what the rows say: markup, and every node
       // by type, empty text nodes included -- what layout actually walks.
@@ -262,10 +262,10 @@ async function measure(run: number, mode: Mode): Promise<LaunchResult> {
     }
     const finalLength = [16,256,4096][(run % 3 + 2) % 3];
     assert.equal(result.finalLength, finalLength);
-    // Two payload families x three lengths x rows x seven rounds; the entry
-    // matrix is four operation counts (even, so each ends on B) x three entry kinds x seven rounds.
-    assert.equal(result.samples.length, mode === "native" ? 294 : 84);
-    if (mode === "native") assert.equal(result.entrySamples?.length, 84);
+    // Three lengths x seven rounds x (six Latin-1 rows + five wide); the entry
+    // matrix is four operation counts (even, so each ends on B) x seven rounds.
+    assert.equal(result.samples.length, mode === "native" ? 231 : 84);
+    if (mode === "native") assert.equal(result.entrySamples?.length, 28);
     for (const sample of result.entrySamples ?? []) assert.equal(sample.ntsAllocations, 0);
     for (const sample of result.samples.filter(sample => sample.path.startsWith("compiled-"))) {
       if (sample.path.includes("prepared")) assert.equal(sample.ntsAllocations, 0, "prepared input must allocate no NTS objects per loop");
@@ -338,7 +338,7 @@ if (workload === "kernels") {
     methodology:{launchOrder:"Balanced native-first/V8-first",cases:"kernels_benchmark.cc and kernels-benchmark-v8 share one case table; kernels from native-typescript benchmarks/chromium",
       v8:"HTML-loaded vanilla JS in unmodified content_shell, normal JIT; no measured Runtime.evaluate application",
       timers:"Native TimeTicks and page performance.now around 20,000-iteration samples, one posted task per sample",
-      limits:"compiled per-call pays one environment and DOM entry per call; native-typescript's per-call called the compiled function directly. Handles are leases released by hand"},
+      limits:"compiled per-call pays one environment and DOM entry per call; native-typescript's per-call called the compiled function directly. Nodes are Blink pointers; only those the program keeps are rooted"},
     measurements,summaries},null,2)}\n`);
   console.table(summaries.map(({kernel,shape,intrinsic,compiled,v8,compiledOverIntrinsic,compiledOverV8}) => ({kernel,shape,
     cppNs:+intrinsic.medianNs.toFixed(1),compiledNs:+compiled.medianNs.toFixed(1),v8Ns:+v8.medianNs.toFixed(1),
@@ -364,7 +364,7 @@ if (workload === "kernels") {
     methodology:{launchOrder:"Balanced native-first/V8-first",cases:"rows_benchmark.cc and rows-benchmark-v8 share one case table",
       v8:"HTML-loaded vanilla JS in unmodified content_shell, normal JIT; no measured Runtime.evaluate application",
       timers:"Native TimeTicks and page performance.now (coarsened in a file: page) around batches sized for multi-millisecond samples",
-      limits:"Script time, plus forced style and layout in +layout cases; no paint; native pays one environment and DOM entry per operation, V8 one function call; native releases handles by hand"},
+      limits:"Script time, plus forced style and layout in +layout cases; no paint; native pays one environment and DOM entry per operation, V8 one function call; nodes the app keeps are rooted by the compiler"},
     measurements,summaries},null,2)}\n`);
   console.table(summaries.map(({case:name,native,v8,nativeOverV8}) => ({case:name,nativeUs:+(native.medianNs/1e3).toFixed(2),
     v8Us:+(v8.medianNs/1e3).toFixed(2),nativeOverV8:+nativeOverV8.toFixed(3),
@@ -386,7 +386,7 @@ if (workload === "kernels") {
   }
   const allEntries = measurements.flatMap(run => run.native.entrySamples ?? []);
   const entrySummaries = [];
-  for (const operationsPerEntry of [0,2,8,32]) for (const entry of ["legacy-per-call","legacy-scope","entered"]) {
+  for (const operationsPerEntry of [0,2,8,32]) for (const entry of ["entered"]) {
     const samples = allEntries.filter(sample => sample.operationsPerEntry === operationsPerEntry && sample.entry === entry);
     const values = samples.map(sample => sample.nsPerEntry).sort((a,b) => a-b);
     entrySummaries.push({operationsPerEntry,entry,samples:values.length,medianNsPerEntry:percentile(values,.5),q1Ns:percentile(values,.25),q3Ns:percentile(values,.75),minSampleMs:Math.min(...samples.map(sample=>sample.elapsedNs))/1e6});

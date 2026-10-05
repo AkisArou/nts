@@ -5,6 +5,7 @@
 #include <stdlib.h>
 
 #include "dom_bridge.h"
+#include "dom_abi.h"
 #include "program.h"
 
 struct NtsChromiumProbe {
@@ -119,8 +120,8 @@ double nts_chromium_probe_dom_run(NtsChromiumProbe* probe,
   ProbeScope scope = enter(probe);
   const size_t before = nts_live_count();
   DomInvocation call = {.context = context, .result = -1};
-  nts_blink_dom_native_scope(context, run_dom_program, &call);
-  if (nts_raising() || nts_live_count() != before)
+  if (nts_blink_dom_entry(context, run_dom_program, &call) || nts_raising() ||
+      nts_live_count() != before)
     abort();
   leave(&scope);
   return call.result;
@@ -132,8 +133,8 @@ void nts_chromium_probe_dom_counter(NtsChromiumProbe* probe,
   ProbeScope scope = enter(probe);
   const size_t before = nts_live_count();
   DomInvocation call = {.context = context, .count = count};
-  nts_blink_dom_native_scope(context, run_dom_counter, &call);
-  if (nts_raising() || nts_live_count() != before)
+  if (nts_blink_dom_entry(context, run_dom_counter, &call) || nts_raising() ||
+      nts_live_count() != before)
     abort();
   leave(&scope);
 }
@@ -273,7 +274,8 @@ static void finish_counter(void* state) {
   if (count != expected)
     abort();
   DomInvocation call = {.context = probe->dom, .count = count};
-  nts_blink_dom_native_scope(probe->dom, run_dom_counter, &call);
+  if (nts_blink_dom_entry(probe->dom, run_dom_counter, &call))
+    abort();
   nts_release((NtsHeader*)probe->pending);
   probe->pending = NULL;
   nts_release((NtsHeader*)completion);
@@ -347,7 +349,7 @@ void nts_chromium_probe_teardown_witness(NtsChromiumProbe* probe) {
 struct NtsChromiumBenchmark {
   NtsChromiumProbe* probe;
   NtsDomContext* context;
-  uint32_t node;
+  NtsDomNode* node;
   ntsChromiumPrepareBenchmark_return_t* state;
   NtsString* first;
   NtsString* second;
@@ -358,7 +360,7 @@ struct NtsChromiumBenchmark {
 };
 NtsChromiumBenchmark* nts_chromium_benchmark_create(NtsChromiumProbe* probe,
                                                     NtsDomContext* context,
-                                                    uint32_t node,
+                                                    NtsDomNode* node,
                                                     const char* a,
                                                     const char* b,
                                                     size_t bytes) {
@@ -387,27 +389,21 @@ static void run_benchmark(void* state) {
       benchmark->second, (double)benchmark->iterations,
       (double)benchmark->mode);
 }
-static void run_entered(NtsChromiumBenchmark* benchmark,
-                        NtsChromiumEntry entry) {
-  if (entry == kNtsChromiumNoEntry)
-    run_benchmark(benchmark);
-  else if (entry == kNtsChromiumLegacyScope)
-    nts_blink_dom_native_scope(benchmark->context, run_benchmark, benchmark);
-  else if (nts_blink_dom_entry(benchmark->context, run_benchmark, benchmark))
+static void run_entered(NtsChromiumBenchmark* benchmark) {
+  if (nts_blink_dom_entry(benchmark->context, run_benchmark, benchmark))
     abort();
 }
 NtsChromiumBenchmarkStats nts_chromium_benchmark_run(
     NtsChromiumBenchmark* benchmark,
     uint32_t iterations,
-    uint32_t mode,
-    NtsChromiumEntry entry) {
+    uint32_t mode) {
   ProbeScope scope = enter(benchmark->probe);
   const size_t before = nts_live_count();
   benchmark->iterations = iterations;
   benchmark->mode = mode;
   benchmark->result = -1;
   nts_counting_reset();
-  run_entered(benchmark, entry);
+  run_entered(benchmark);
   if (nts_raising() || benchmark->result != 0 || nts_live_count() != before)
     abort();
   NtsChromiumBenchmarkStats stats = {nts_counted_allocations(),
@@ -420,8 +416,7 @@ NtsChromiumBenchmarkStats nts_chromium_benchmark_entries(
     NtsChromiumBenchmark* benchmark,
     uint32_t operations_per_entry,
     uint32_t entries,
-    uint32_t mode,
-    NtsChromiumEntry entry) {
+    uint32_t mode) {
   /* Selecting the environment for counters does not open a managed callback.
      Every measured callback below enters/leaves normally, including its empty
      runtime checkpoint; instrumentation is outside those repeated entries. */
@@ -434,7 +429,7 @@ NtsChromiumBenchmarkStats nts_chromium_benchmark_entries(
   for (uint32_t i = 0; i < entries; ++i) {
     ProbeScope scope = enter(benchmark->probe);
     benchmark->result = -1;
-    run_entered(benchmark, entry);
+    run_entered(benchmark);
     if (nts_raising() || benchmark->result != 0)
       abort();
     leave(&scope);
@@ -470,16 +465,19 @@ struct NtsChromiumRows {
 };
 typedef struct RowsSetup {
   NtsChromiumRows* rows;
-  uint32_t tbody;
+  NtsDomNode* tbody;
 } RowsSetup;
 static void create_rows(void* state) {
   RowsSetup* setup = state;
-  setup->rows->app =
-      ntsRowsCreate(setup->rows->context, (double)setup->tbody);
+  /* The app keeps the table, and program.h says ntsRowsCreate takes over
+     the caller's reference to it: hand it a root of its own. */
+  setup->rows->app = ntsRowsCreate(
+      setup->rows->context,
+      (struct NtsDomElement*)nts_dom_retain(setup->tbody));
 }
 NtsChromiumRows* nts_chromium_rows_create(NtsChromiumProbe* probe,
                                           NtsDomContext* context,
-                                          uint32_t tbody) {
+                                          NtsDomNode* tbody) {
   NtsChromiumRows* rows = calloc(1, sizeof(*rows));
   if (!rows)
     abort();

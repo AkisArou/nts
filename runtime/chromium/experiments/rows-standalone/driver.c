@@ -1,6 +1,6 @@
 /* Runs the rows workload (native-bootstrap/src/rows.ts) over mini_dom with
  * the case table of rows_benchmark.cc, and prints JSON: per-sample times,
- * NTS allocation counts, the final serialized rows and the live leases. */
+ * NTS allocation counts, the final serialized rows and the rooted nodes. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,7 +39,6 @@ static NtsDomContext* dom;
 static ntsRowsCreate_return_t* app;
 /* Live NTS objects before the app existed; destroying it must return here. */
 static size_t live_before_app;
-static uint32_t tbody;
 
 /* The collection policy under test. "checkpoint" is the runtime default: every
    outermost nts_leave drains and runs nts_collect_cycles if any candidate
@@ -94,11 +93,11 @@ int main(int argc, char** argv) {
     nts_callback_enter();
     nts_enter();
     mini_dom_enter(dom);
-    const uint32_t document = nts_dom_document(dom);
-    tbody = nts_dom_query_atom(dom, document, mini_dom_intern(dom, "#tbody"));
-    nts_dom_release(dom, document);
     live_before_app = nts_live_count();
-    app = ntsRowsCreate(dom, tbody);
+    /* ntsRowsCreate takes over the caller's reference to the table it keeps
+       (program.h): hand it a root of its own. */
+    app = ntsRowsCreate(
+        dom, (struct NtsDomElement*)nts_dom_retain(mini_dom_find(dom, "tbody")));
     mini_dom_leave(dom);
     if (nts_raising() || !app)
       abort();
@@ -147,31 +146,29 @@ int main(int argc, char** argv) {
   operate(environment, kSwap, 0);
   const double final_rows = operate(environment, kRemove, 4);
   char* rows = mini_dom_serialize_rows(dom);
-  const uint32_t leases = mini_dom_live_leases(dom);
+  const uint32_t roots = mini_dom_roots();
   /* The renderer harness destroys the app and checks this; so does this. */
   size_t live_after_destroy;
-  uint32_t leases_after_destroy;
+  uint32_t roots_after_destroy;
   {
     NtsEnvironmentScope scope = nts_environment_enter(environment);
     nts_callback_enter();
     nts_enter();
     mini_dom_enter(dom);
     ntsRowsDestroy(app);
-    /* The app borrowed the table's handle; the lease is the query's. */
-    nts_dom_release(dom, tbody);
     mini_dom_leave(dom);
     nts_release((NtsHeader*)app);
     nts_leave();
     nts_callback_leave();
     nts_collect_cycles();
     live_after_destroy = nts_live_count();
-    leases_after_destroy = mini_dom_live_leases(dom);
+    roots_after_destroy = mini_dom_roots();
     nts_environment_leave(&scope);
   }
   struct rusage usage;
   getrusage(RUSAGE_SELF, &usage);
-  printf("],\"finalRows\":%.0f,\"liveLeases\":%u,\"leasesAfterDestroy\":%u,\"maxRssKb\":%ld,\"liveBeforeApp\":%zu,\"liveAfterDestroy\":%zu,\"dom\":\"",
-         final_rows, leases, leases_after_destroy, usage.ru_maxrss,
+  printf("],\"finalRows\":%.0f,\"liveRoots\":%u,\"rootsAfterDestroy\":%u,\"maxRssKb\":%ld,\"liveBeforeApp\":%zu,\"liveAfterDestroy\":%zu,\"dom\":\"",
+         final_rows, roots, roots_after_destroy, usage.ru_maxrss,
          live_before_app, live_after_destroy);
   for (const char* p = rows; *p; ++p) {
     if (*p == '\n')

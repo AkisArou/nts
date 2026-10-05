@@ -130,7 +130,7 @@ class ProbeObserver final : public content::RenderFrameObserver {
           << "NTS DOM program failed at witness " << dom_result;
       LOG(INFO) << "NTS_DOM backend=" << NTS_CHROMIUM_PROBE_BACKEND
                 << " result=" << dom_result
-                << " roots=" << nts_blink_dom_roots(dom_.get());
+                << " roots=" << nts_blink_dom_roots();
     }
     auto input = document.GetElementById(
         blink::WebString::FromAscii("native-increment"));

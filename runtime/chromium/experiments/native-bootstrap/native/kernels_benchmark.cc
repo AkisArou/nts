@@ -167,8 +167,8 @@ class KernelsRun {
   std::string Finish() {
     base::DictValue result;
     result.Set("samples", std::move(samples_));
-    result.Set("liveLeases",
-               static_cast<double>(nts_blink_dom_roots(context_)));
+    result.Set("liveRoots",
+               static_cast<double>(nts_blink_dom_roots()));
     result.Set("status", 0);
     result.Set("timing",
                "Renderer TimeTicks around each sample; one posted task per "

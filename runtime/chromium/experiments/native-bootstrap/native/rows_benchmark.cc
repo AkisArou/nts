@@ -97,16 +97,12 @@ class RowsRun {
  public:
   RowsRun(blink::Document* document,
           blink::HTMLElement* table_body,
-          NtsDomContext* context,
           NtsChromiumProbe* probe,
-          uint32_t tbody,
           NtsChromiumRows* rows,
           base::OnceCallback<void(std::string)> done)
       : document_(document),
         table_body_(table_body),
-        context_(context),
         probe_(probe),
-        tbody_(tbody),
         rows_(rows),
         done_(std::move(done)) {}
 
@@ -210,17 +206,16 @@ class RowsRun {
     // table that still reports its rows. Count the real ones.
     CHECK_EQ(static_cast<double>(table_body_->CountChildren()),
              final_rows.rows);
-    // Leases while the app holds its table, then what destroying it leaves.
-    const double live_leases = nts_blink_dom_roots(context_);
+    // Nodes the app keeps rooted while it holds its table, then what
+    // destroying it leaves: none.
+    const double live_roots = nts_blink_dom_roots();
     nts_chromium_rows_destroy(rows_.ExtractAsDangling());
-    // The app borrowed the table's handle; the lease is the query's, here.
-    nts_dom_release(context_, tbody_);
     base::DictValue result;
     result.Set("samples", std::move(samples_));
     result.Set("finalRows", final_rows.rows);
-    result.Set("liveLeases", live_leases);
-    result.Set("leasesAfterDestroy",
-               static_cast<double>(nts_blink_dom_roots(context_)));
+    result.Set("liveRoots", live_roots);
+    result.Set("rootsAfterDestroy",
+               static_cast<double>(nts_blink_dom_roots()));
     result.Set("status", 0);
     result.Set("timing",
                "Renderer TimeTicks around batches; each operation is one "
@@ -231,9 +226,7 @@ class RowsRun {
 
   blink::WeakPersistent<blink::Document> document_;
   blink::Persistent<blink::HTMLElement> table_body_;
-  raw_ptr<NtsDomContext> context_;
   raw_ptr<NtsChromiumProbe> probe_;
-  const uint32_t tbody_;
   raw_ptr<NtsChromiumRows> rows_;
   base::OnceCallback<void(std::string)> done_;
   base::ListValue samples_;
@@ -252,26 +245,12 @@ void StartRowsBenchmark(const blink::WebDocument& web_document,
   auto* table_body = blink::To<blink::HTMLElement>(
       document->getElementById(blink::AtomicString("tbody")));
   CHECK(table_body);
-  uint32_t tbody = 0;
-  struct Query {
-    raw_ptr<NtsDomContext> context;
-    raw_ptr<uint32_t> tbody;
-  } query{context, &tbody};
-  CHECK_EQ(nts_blink_dom_entry(
-               context,
-               [](void* state) {
-                 auto& q = *static_cast<Query*>(state);
-                 const uint32_t root = nts_dom_document(q.context);
-                 *q.tbody = nts_dom_query_atom(
-                     q.context, root,
-                     nts_blink_dom_intern(q.context, {"#tbody", 6, 0}));
-                 nts_dom_release(q.context, root);
-               },
-               &query),
-           0);
-  CHECK(tbody);
+  // The table as the DOM ABI passes a node: its address. The app keeps it,
+  // so the compiler roots it; nothing here does.
+  auto *tbody = reinterpret_cast<NtsDomNode *>(
+      static_cast<blink::Node *>(table_body));
   RowsRun::Post(std::make_unique<RowsRun>(
-      document, table_body, context, probe, tbody,
+      document, table_body, probe,
       nts_chromium_rows_create(probe, context, tbody), std::move(done)));
 }
 }  // namespace nts_chromium

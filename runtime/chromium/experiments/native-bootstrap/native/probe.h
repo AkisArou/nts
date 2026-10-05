@@ -12,6 +12,8 @@ extern "C" {
 /* Only this header crosses into C++; runtime/generated headers stay in C. */
 typedef struct NtsChromiumProbe NtsChromiumProbe;
 typedef struct NtsDomContext NtsDomContext;
+/* A Blink node as the DOM ABI passes one: its address (ffi/dom_abi.h). */
+typedef struct NtsDomNode NtsDomNode;
 typedef struct NtsChromiumBenchmark NtsChromiumBenchmark;
 typedef struct NtsChromiumBenchmarkStats {
   size_t allocations;
@@ -54,31 +56,23 @@ void nts_chromium_probe_dom_counter(NtsChromiumProbe* probe,
                                     double count);
 NtsChromiumBenchmark* nts_chromium_benchmark_create(NtsChromiumProbe* probe,
                                                     NtsDomContext* context,
-                                                    uint32_t node,
+                                                    NtsDomNode* node,
                                                     const char* a,
                                                     const char* b,
                                                     size_t bytes);
-/* How a measured callback reaches Blink: no DOM entry (the original bridge
-   sets up each operation), the original lexical scope, or a native entry. */
-typedef enum NtsChromiumEntry {
-  kNtsChromiumNoEntry,
-  kNtsChromiumLegacyScope,
-  kNtsChromiumEntered,
-} NtsChromiumEntry;
-/* `mode` selects the compiled loop; see ntsChromiumBenchmarkLoop. */
+/* `mode` selects the compiled loop; see ntsChromiumBenchmarkLoop. One native
+   entry around the whole loop. */
 NtsChromiumBenchmarkStats nts_chromium_benchmark_run(
     NtsChromiumBenchmark* benchmark,
     uint32_t iterations,
-    uint32_t mode,
-    NtsChromiumEntry entry);
+    uint32_t mode);
 void nts_chromium_benchmark_destroy(NtsChromiumBenchmark* benchmark);
 /* Prepared-input calls with a fresh native entry for each short callback. */
 NtsChromiumBenchmarkStats nts_chromium_benchmark_entries(
     NtsChromiumBenchmark* benchmark,
     uint32_t operations_per_entry,
     uint32_t entries,
-    uint32_t mode,
-    NtsChromiumEntry entry);
+    uint32_t mode);
 
 /* The rows workload (src/rows.ts). Each operation is one native callback:
    an NTS environment entry and a DOM entry, as an event handler would be.
@@ -91,7 +85,7 @@ typedef struct NtsChromiumRowsResult {
 } NtsChromiumRowsResult;
 NtsChromiumRows* nts_chromium_rows_create(NtsChromiumProbe* probe,
                                           NtsDomContext* context,
-                                          uint32_t tbody);
+                                          NtsDomNode* tbody);
 NtsChromiumRowsResult nts_chromium_rows_operate(NtsChromiumRows* rows,
                                                 uint32_t operation,
                                                 uint32_t count);

@@ -1,0 +1,222 @@
+# The native renderer: architecture
+
+The current design of the electron-like lane's renderer side: compiled
+TypeScript driving Blink directly, in Chromium's renderer process, with V8 left
+as it is for any page script. Each decision below says what it is, why it is
+that, and what it was measured or read against. Chromium file references are at
+the pinned checkout (`third_party/chromium/src`, Chromium 154);
+`architecture-and-costs.md` keeps the measurement log this summarizes, and
+`docs/electron-like.md` was the starting research, not a specification.
+
+The bar is the user's: the best performance the platform allows, clean code,
+no hacks. Concretely that has meant: never weaken V8 or Blink to make a number
+look better, put every cost on the table against a control, and fix what is
+missing in the compiler or runtime as a general feature rather than around it
+in the lane.
+
+## 1. Where the program runs
+
+The compiled program (C or LLVM backend, reference-counting provider) is linked
+into the renderer and runs on the renderer's main thread, inside Blink's event
+loop. There is no second loop: no libuv, no separate thread, no IPC per DOM
+call. Browser-side services stay behind Chromium's ordinary Mojo IPC. Three
+heaps coexist and none collects the others: the program's (RC with trial-
+deletion cycle collection), Oilpan's (Blink's nodes), and V8's (page script and
+wrappers, when there is any).
+
+Workers, if they come, are another instance of the same arrangement on the
+worker's thread; nothing here assumes a single thread except the node root set
+(section 3), which is per thread by construction.
+
+## 2. Entry: one per native callback
+
+Every native callback -- an event, a task, a microtask, an idle period -- is
+one *entry* (`nts_blink_dom_entry`): it holds a `v8::HandleScope` and a
+`v8::MicrotasksScope(kRunMicrotasks)` on the document agent's own queue (the
+agent's `EventLoop::microtask_queue()`, not the isolate's default:
+`core/execution_context/window_agent.cc:15-26`), and nothing per operation.
+Operations inside it enter no V8 context and create no `TryCatch`: a DOM
+exception is recorded with `DummyExceptionStateForTesting` and returned as the
+operation's own status code.
+
+That is what `V8ScriptRunner::CallFunction` supplies a JavaScript callback, and
+for the same reason: nested script (a custom element's reaction, say) cannot
+run a microtask checkpoint in the middle of the program's callback, and the
+outermost entry checkpoints when it returns (`v8/src/api/api.cc:11277-11291`;
+`microtask-queue.cc:167-171`). Measured: an entry costs ~32 ns, and an
+operation inside one ~9 ns more than Blink's own call.
+
+`[CEReactions]` scopes are per operation, exactly where the IDL says
+(`core/dom/node.idl`, `element.idl`, `child_node.idl`): `textContent`'s setter,
+`cloneNode`, `appendChild`, `insertBefore`, `removeChild`, `remove()`,
+`setAttribute`; not `createElement`, `createTextNode`, `querySelector`. A
+reaction scope's destructor runs reactions synchronously -- arbitrary script
+(`ce_reactions_scope.cc:30-38`) -- so after such an operation the program's
+assumptions about the tree may be stale, though every node it holds is still
+valid (section 3). Open: whether to adopt `V8RunMicrotasksScope`'s behaviour of
+not running microtasks while the event loop is paused (BFCache;
+`v8_microtasks_scope.cc:23-28`), which matters once pages are frozen.
+
+## 3. Nodes: frame-bounded, rooted only when kept
+
+**A node is its own address.** The DOM ABI passes `blink::Node *` -- typed in
+TypeScript as `HostClass` handles: `Node`, `Element`, `Text`, `Document` -- and
+identity is pointer equality.
+
+**A node the program only passes along costs nothing.** Oilpan scans the
+native stack conservatively at every collection that can run while a native
+callback is on it: V8's embedder stack state defaults to
+`kMayContainHeapPointers` (`v8/src/heap/heap.h:2316`); the atomic pause scans
+from the current stack pointer, registers pushed, up to the renderer's stack
+start (`cppgc-internal/marker.cc:506-511`, `content/renderer/renderer_main.cc:
+208`); the only precise (`kNoHeapPointers`) collections are non-nestable tasks
+(`gin/v8_foreground_task_runner.cc:63`), which by the task runner's own
+guarantee cannot run inside ours. Full pointers are found under pointer
+compression (`cppgc-internal/visitor.cc:31-36`), and nodes are never moved
+(`platform/heap/custom_spaces.h:22-34`; compaction is refused while the stack
+may hold pointers, `compactor.cc:462-468`). Blink's own rule is the same:
+on-stack references *must* be raw pointers (`BlinkGCAPIReference.md:274`).
+
+**A node the program keeps is rooted.** Where a handle leaves the stack -- a
+field, an array, a closure's capture, a module global, an `await` (a suspended
+frame is heap memory no stack scan reaches), a return to C -- the compiler
+calls the binding's `nts_dom_retain`, and `nts_dom_release` where that
+reference dies. The roots are one `HeapHashCountedSet<Member<Node>>` per
+thread, held by one `Persistent`: a hash only where the program keeps a node.
+The program never calls either; the generic compiler feature is `HostClass`
+(compiler commits 1bd750e5e and the stack-return follow-up): a binding-
+declared family whose `+0` results are borrowed while on the stack. Nothing in
+the compiler knows Blink.
+
+What this replaced: a per-document lease table -- a slot, a generation, an
+identity map, and a manual release in the program for every node returned --
+about 26 ns per node and an error-prone API. What it costs now: nothing a
+C++ caller of Blink does not pay. `document.createElement` in a compiled loop
+is 54.0 ns against Blink's own C++ 54.6 and V8's 100 (0.54x V8; ScriptC
+measured 0.635x), a detached counter tree 199 ns against 241 and 285. In the
+rows app, `buildTemplate` and the DOM witness program take no root at all,
+and a created row takes exactly the two it stores.
+
+Verified two ways. The DOM witness detaches a node, forces a full
+conservative collection while only the native stack refers to it, and reads
+it back. The control arm -- the same collection made precise -- collects it,
+and the next read crashes. So the stack scan is what keeps it, and the
+witness can tell.
+
+Rules that make it hold:
+
+- The compiler refuses `HostClass` without the reference-counting provider: a
+  never-free program cannot root what it keeps.
+- A `HostClass` handle cannot be erased (`any`) or settle a `Promise` yet;
+  both are refused by name, not miscompiled.
+- A release with no root to give back stops the renderer (`CHECK`): that would
+  be a counting error in the compiler.
+- Retained roots end with the program's state: destroying an app releases
+  them; destroying the environment at navigation releases the rest.
+
+## 4. Strings
+
+**In.** Text and names cross as `StringView`: the program's own units at their
+own width (Latin-1 or UTF-16), exact -- NUL and lone surrogates included -- and
+Blink copies them once into a string of the same width. A literal
+(`NTS_STRING_VIEW_IMMORTAL`) is copied once per document and shared after,
+found by its address; a literal used as a name (a tag, an attribute, a
+selector) becomes its `AtomicString` once. So a program writes
+`create_element(c, "div")` and `set_attribute(c, el, "class", "danger")` with
+no ids to keep.
+
+**Out.** Blink's text comes back as `const NtsStringView *` of Blink's own
+string, valid until the next call, which the compiler copies once into a string
+the program owns (`StringView` results, compiler commit f03831fd4).
+
+**Repeated dynamic text** that is not a literal can be interned for an id and
+written as a reference to the shared `StringImpl` (`nts_dom_intern`,
+`nts_dom_set_text_interned`) -- what V8's externalized strings give page
+script.
+
+## 5. Events and cross-heap cycles (designed, next to build)
+
+A listener is a `NativeEventListener` subclass (`core/dom/events/
+native_event_listener.h`; the pattern of `modules/xr/
+xr_canvas_input_provider.cc:21-52`) whose `Invoke` opens an entry and calls an
+NTS closure with the event's target as a node. The target holds the listener
+(`RegisteredEventListener::callback_` is a traced `Member`), so registration
+and removal are Blink's (`EventTarget::addEventListener` /
+`removeEventListener`, matched by identity).
+
+The cycle to design for: node → listener → NTS closure → a root on the node.
+Neither collector sees the whole ring. The runtime already has the protocol
+for exactly this shape -- `NtsHolders` (`nts_runtime.h:315-360`), built for
+GObject signal handlers: a family whose objects hold closures registers how to
+enumerate the closures an object holds and how to sever them, and trial
+deletion walks through the foreign object. The Blink family becomes
+`holds_closures`, and its holders enumerate a node's native listeners. The
+alternative -- tracing NTS closures from Oilpan -- would make the program's
+heap a cppgc embedder heap, which is a far larger change for the same answer.
+
+## 6. Scheduling
+
+- Microtasks: native jobs join the agent's queue (`EventLoop::EnqueueMicrotask`),
+  so promise jobs, Blink's internal microtasks and the program's drain together
+  at the outermost entry's checkpoint.
+- Cycle collection runs in idle periods (`ThreadScheduler::PostIdleTask`),
+  never at every checkpoint: a checkpoint collection walks everything the
+  candidates reach, which for a rows app is the whole table.
+- **GC pacing.** V8 paces incremental marking by JavaScript-heap allocation;
+  the compiled program allocates in its own heap, which V8 does not see. In one
+  long task a marking cycle the program's DOM work started advances only by
+  Oilpan's small allocation steps (459 per cycle against page script's 22), so
+  layout ran with marking barriers on: 1.30x V8 on `create1k+layout`, 1.00x
+  with incremental marking off in both. The architecture answer is the one
+  real applications already follow -- an interaction is its own task, and a
+  frame renders between them -- with which the engines run the same number of
+  cycles and layout is at parity. The residue (smaller steps) is an embedder
+  question for Blink/V8, not something the program should work around.
+
+## 7. Errors
+
+Each operation returns its DOM exception code, or a node and
+`nts_dom_last_error`. That is complete but untyped; the path to typed
+exceptions is a binding-level convention the compiler can lower -- a status
+result mapped to a thrown `DOMException` by the binding's declaration -- once
+the bindings are generated (section 8).
+
+## 8. Bindings
+
+The ABI is hand-written today and is the template for generation from Blink's
+resolved IDL facts: operations named by IDL member, `[CEReactions]` from the
+IDL, nullability from the IDL, node results typed by interface. WebIDL
+generation is deliberately not started yet: the representation it will
+generate -- pointer nodes, views, entries, statuses -- had to be proven first.
+
+## 9. No Web Host IR
+
+Everything the renderer needed from the compiler was general native interop:
+a binding-declared counted family with stack-borrowed results (`HostClass`),
+string views in and out. A dedicated `web.*` instruction family would
+duplicate the native-call lowering the backends already do. Web-specific
+facts that would let an optimizer do more -- "this call cannot run script",
+"this reads layout", "this result is frame-bounded" -- belong first as
+metadata on the foreign declaration. A Web Host IR earns its place only when
+several such optimizations need the same cross-call analysis: coalescing
+writes before a layout read, batching a framework's commit into one entry,
+hoisting interning to module initialization.
+
+## 10. Measuring
+
+- One posted task per sample and a rendered frame between an interaction's
+  setup and its measurement, in every lane; a single long task measures GC
+  pacing, not the engine.
+- Both engines must build the same DOM: whole-subtree markup and node counts
+  are compared, not only what the workload reads back.
+- Every comparison has a control: Blink C++ with no binding at all, prepared
+  buffers for strings, and the unmodified page script on normal V8.
+- `benchmark.ts --trace` records a Chromium trace per launch;
+  `--diagnostic-js-flags` tests a mechanism and is recorded as a diagnosis,
+  never a result.
+
+## 11. Later
+
+V8 interop (a program calling into page script and back), packaged origins
+and the app shell, BFCache freezing, workers, LTO across the program and
+Blink, and generated bindings.

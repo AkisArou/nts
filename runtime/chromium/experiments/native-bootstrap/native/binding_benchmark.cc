@@ -5,9 +5,9 @@
 #include <cmath>
 #include <memory>
 #include <string>
-#include <string_view>
 
 #include "base/check.h"
+#include "base/containers/span.h"
 #include "base/json/json_writer.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
@@ -29,35 +29,30 @@ constexpr uint32_t kIntrinsic = 100;
 struct Row {
   const char* name;
   uint32_t mode;
-  NtsChromiumEntry entry;
 };
 // One-byte payloads: what most UI text is, and what Blink stores 8-bit.
-constexpr std::array<Row, 7> kLatin1Rows{{
-    {"blink-intrinsic", kIntrinsic, kNtsChromiumEntered},
-    {"compiled-legacy-prepared-utf16", 1, kNtsChromiumLegacyScope},
-    {"compiled-entered-prepared-utf16", 2, kNtsChromiumEntered},
-    {"compiled-entered-prepared-latin1", 3, kNtsChromiumEntered},
-    {"compiled-entered-string", 4, kNtsChromiumEntered},
-    {"compiled-entered-fresh-string", 5, kNtsChromiumEntered},
-    {"compiled-entered-atom", 6, kNtsChromiumEntered},
+constexpr std::array<Row, 6> kLatin1Rows{{
+    {"blink-intrinsic", kIntrinsic},
+    {"compiled-entered-prepared-utf16", 0},
+    {"compiled-entered-prepared-latin1", 1},
+    {"compiled-entered-string", 2},
+    {"compiled-entered-fresh-string", 3},
+    {"compiled-entered-atom", 4},
 }};
 // Two-byte payloads: the string crosses as a view at its own width, so these
 // rows match the Latin-1 ones except that the copy is twice the bytes.
-constexpr std::array<Row, 7> kWideRows{{
-    {"blink-intrinsic", kIntrinsic, kNtsChromiumEntered},
-    {"compiled-legacy-string", 0, kNtsChromiumLegacyScope},
-    {"compiled-legacy-prepared-utf16", 1, kNtsChromiumLegacyScope},
-    {"compiled-entered-prepared-utf16", 2, kNtsChromiumEntered},
-    {"compiled-entered-string", 4, kNtsChromiumEntered},
-    {"compiled-entered-fresh-string", 5, kNtsChromiumEntered},
-    {"compiled-entered-atom", 6, kNtsChromiumEntered},
+constexpr std::array<Row, 5> kWideRows{{
+    {"blink-intrinsic", kIntrinsic},
+    {"compiled-entered-prepared-utf16", 0},
+    {"compiled-entered-string", 2},
+    {"compiled-entered-fresh-string", 3},
+    {"compiled-entered-atom", 4},
 }};
-// Interned text (mode 6) is the native counterpart of V8's repeated strings.
-// The entry matrix: the same prepared UTF-16 write reached three ways.
-constexpr std::array<Row, 3> kEntryRows{{
-    {"legacy-per-call", 1, kNtsChromiumNoEntry},
-    {"legacy-scope", 1, kNtsChromiumLegacyScope},
-    {"entered", 2, kNtsChromiumEntered},
+// Interned text (mode 4) is the native counterpart of V8's repeated strings.
+// The entry matrix: the prepared UTF-16 write, a fresh native entry around
+// every few operations.
+constexpr std::array<Row, 1> kEntryRows{{
+    {"entered", 0},
 }};
 
 struct Intrinsic {
@@ -88,19 +83,19 @@ std::string RunBindingBenchmark(const blink::WebDocument& web_document,
   auto* output =
       document->getElementById(blink::AtomicString("benchmark-text"));
   CHECK(output);
-  // The same attached Text node is used by every path; setup is untimed.
-  constexpr std::string_view selector = "#benchmark-text";
-  const uint32_t parent = nts_blink_dom_query(
-      context, {selector.data(), static_cast<uint32_t>(selector.size()), 0});
-  const uint32_t node = nts_blink_dom_text(context, {"", 0, 0});
-  CHECK_EQ(nts_blink_dom_append(context, parent, node), node);
-  auto* text = blink::To<blink::Text>(output->firstChild());
+  // The same attached Text node is used by every path; setup is untimed. The
+  // DOM keeps it; the compiled loop is handed its address, as the DOM ABI
+  // passes a node.
+  auto* text = document->createTextNode("");
+  output->appendChild(text);
+  auto* node = reinterpret_cast<NtsDomNode*>(static_cast<blink::Node*>(text));
   base::ListValue samples;
   base::ListValue entry_samples;
   constexpr std::array<uint32_t, 3> lengths{16, 256, 4096};
   // Latin-1 first, so both fixtures finish on the same wide payload.
   for (const bool wide : {false, true}) {
-    const auto& rows = wide ? kWideRows : kLatin1Rows;
+    const base::span<const Row> rows =
+        wide ? base::span<const Row>(kWideRows) : base::span<const Row>(kLatin1Rows);
     const char* payload = wide ? "wide" : "latin1";
     for (uint32_t position = 0; position < lengths.size(); ++position) {
       const uint32_t length = lengths[(position + order) % lengths.size()];
@@ -133,12 +128,11 @@ std::string RunBindingBenchmark(const blink::WebDocument& web_document,
             CHECK_EQ(nts_blink_dom_entry(context, RunIntrinsic, &loop), 0);
           } else {
             stats = nts_chromium_benchmark_run(compiled.get(), iterations,
-                                               row.mode, row.entry);
+                                               row.mode);
           }
           const double elapsed_ns =
               (base::TimeTicks::Now() - start).InMicrosecondsF() * 1000;
           CHECK_EQ(text->data(), b) << row.name;
-          CHECK_EQ(nts_blink_dom_status(context), 0);
           if (!round) {
             counts[index] = Calibrated(iterations, elapsed_ns);
             continue;
@@ -166,7 +160,8 @@ std::string RunBindingBenchmark(const blink::WebDocument& web_document,
         continue;
       for (const uint32_t operations : {0u, 2u, 8u, 32u}) {
         const uint32_t warm = std::max(32u, 16384u / std::max(operations, 1u));
-        std::array<uint32_t, 3> entry_counts{warm, warm, warm};
+        std::array<uint32_t, kEntryRows.size()> entry_counts;
+        entry_counts.fill(warm);
         for (uint32_t round = 0; round < 8; ++round) {
           for (uint32_t offset = 0; offset < kEntryRows.size(); ++offset) {
             const uint32_t index = (offset + round) % kEntryRows.size();
@@ -175,11 +170,10 @@ std::string RunBindingBenchmark(const blink::WebDocument& web_document,
             const blink::String previous = text->data();
             const auto start = base::TimeTicks::Now();
             const auto stats = nts_chromium_benchmark_entries(
-                compiled.get(), operations, entries, row.mode, row.entry);
+                compiled.get(), operations, entries, row.mode);
             const double elapsed_ns =
                 (base::TimeTicks::Now() - start).InMicrosecondsF() * 1000;
             CHECK_EQ(text->data(), operations ? b : previous);
-            CHECK_EQ(nts_blink_dom_status(context), 0);
             CHECK_EQ(stats.allocations, 0u);
             if (!round) {
               entry_counts[index] = static_cast<uint32_t>(std::clamp(
@@ -212,7 +206,7 @@ std::string RunBindingBenchmark(const blink::WebDocument& web_document,
       "timing",
       "Renderer TimeTicks around loops; no CDP or logging inside timed loops");
   result.Set("finalLength", static_cast<int>(text->length()));
-  result.Set("status", nts_blink_dom_status(context));
+  result.Set("status", 0);
   result.Set("order", static_cast<int>(order));
   return base::WriteJson(result).value();
 }

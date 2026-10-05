@@ -1,11 +1,14 @@
 /* A minimal DOM behind the entered DOM ABI (native-bootstrap/native/ffi/
  * dom_abi.h), for running compiled applications without Chromium. It keeps
- * the adapter's lease semantics exactly -- generational handles, one lease
- * per returned handle, identity while leased -- and is stricter: a stale or
- * unknown handle, or a call outside an entry, ends the process. It is not a
- * DOM implementation: only what the rows workload uses, no events, no CSS.
- * Nodes are never freed, so a detached subtree costs memory and not time.
- * Text is kept as UTF-8, converted from each view the program lends. */
+ * the adapter's contract exactly -- a node is its own address, identity is
+ * the address, and a node the program keeps is rooted with nts_dom_retain and
+ * unrooted with nts_dom_release, which the compiler calls -- and is stricter:
+ * a release with no root to give back, or a call outside an entry, ends the
+ * process. It is not a DOM implementation: only what the rows workload uses,
+ * no events, no CSS. Nodes are never freed, so a detached subtree costs memory
+ * and not time, and a node nothing roots is still valid -- which is what
+ * Oilpan's stack scan makes true in the browser. Text is kept as UTF-8,
+ * converted from each view the program lends. */
 #include "mini_dom.h"
 
 #include <stdio.h>
@@ -24,34 +27,26 @@ struct MiniNode {
   MiniNode* last;
   MiniNode* previous;
   MiniNode* next;
-  uint32_t handle; /* the live handle, or 0: identity in O(1) */
+  uint32_t roots; /* counts the program holds off the stack */
 };
 
 struct NtsDomContext {
   MiniNode* document;
-  MiniNode** slots;
-  uint32_t* leases;
-  uint8_t* generations;
-  uint32_t slot_count;
-  uint32_t slot_capacity;
-  uint32_t* free_slots;
-  uint32_t free_count;
   char** atoms;
   uint32_t atom_count;
   uint32_t entries;
-  uint32_t live_leases;
   int32_t last_error;
+  char* lent; /* the text a read last lent, until the next read */
+  NtsStringView lent_view;
 };
+
+/* Nodes with at least one root, across contexts: the root set is the
+ * thread's, as the adapter's is. */
+static uint32_t rooted_nodes;
 
 static void fail(const char* what, uint32_t value) {
   fprintf(stderr, "mini_dom: %s (%u)\n", what, value);
   abort();
-}
-static void* resize(void* items, uint32_t count, size_t size) {
-  void* result = realloc(items, count * size);
-  if (!result)
-    fail("out of memory", count);
-  return result;
 }
 static MiniNode* node_new(uint32_t tag, const char* text) {
   MiniNode* node = calloc(1, sizeof(*node));
@@ -66,40 +61,10 @@ static void require_entry(NtsDomContext* c) {
   if (!c->entries)
     fail("DOM call outside an entry", 0);
 }
-static MiniNode* lookup(NtsDomContext* c, uint32_t handle) {
-  const uint32_t slot = (handle & 0xffffffu) - 1;
-  if (!(handle & 0xffffffu) || slot >= c->slot_count || !c->slots[slot] ||
-      c->generations[slot] != handle >> 24)
-    fail("stale or unknown handle", handle);
-  return c->slots[slot];
-}
-static uint32_t bind(NtsDomContext* c, MiniNode* node) {
-  if (!node)
-    return 0;
-  ++c->live_leases;
-  if (node->handle) {
-    ++c->leases[(node->handle & 0xffffffu) - 1];
-    return node->handle;
-  }
-  uint32_t slot;
-  if (c->free_count) {
-    slot = c->free_slots[--c->free_count];
-  } else {
-    if (c->slot_count == c->slot_capacity) {
-      const uint32_t n = c->slot_capacity ? c->slot_capacity * 2 : 64;
-      c->slots = resize(c->slots, n, sizeof(*c->slots));
-      c->leases = resize(c->leases, n, sizeof(*c->leases));
-      c->generations = resize(c->generations, n, sizeof(*c->generations));
-      c->free_slots = resize(c->free_slots, n, sizeof(*c->free_slots));
-      c->slot_capacity = n;
-    }
-    slot = c->slot_count++;
-    c->generations[slot] = 0;
-  }
-  c->slots[slot] = node;
-  c->leases[slot] = 1;
-  node->handle = ((uint32_t)c->generations[slot] << 24) | (slot + 1);
-  return node->handle;
+static MiniNode* node_of(const void* handle) {
+  if (!handle)
+    fail("a null node", 0);
+  return (MiniNode*)handle;
 }
 
 static void detach(MiniNode* node) {
@@ -181,8 +146,11 @@ void mini_dom_enter(NtsDomContext* c) {
 void mini_dom_leave(NtsDomContext* c) {
   --c->entries;
 }
-uint32_t mini_dom_live_leases(NtsDomContext* c) {
-  return c->live_leases;
+uint32_t mini_dom_roots(void) {
+  return rooted_nodes;
+}
+NtsDomNode* mini_dom_find(NtsDomContext* c, const char* id) {
+  return (NtsDomNode*)find_id(c, c->document, id);
 }
 static void text_content(MiniNode* node, char** out, size_t* length,
                          size_t* capacity) {
@@ -291,82 +259,126 @@ uint32_t mini_dom_intern(NtsDomContext* c, const char* text) {
   c->atoms[c->atom_count++] = strdup(text);
   return c->atom_count;
 }
-void nts_dom_release(NtsDomContext* c, uint32_t handle) {
-  MiniNode* node = lookup(c, handle);
-  const uint32_t slot = (handle & 0xffffffu) - 1;
-  --c->live_leases;
-  if (--c->leases[slot])
-    return;
-  node->handle = 0;
-  c->slots[slot] = NULL;
-  ++c->generations[slot];
-  c->free_slots[c->free_count++] = slot;
+void* nts_dom_retain(void* node) {
+  if (node_of(node)->roots++ == 0)
+    ++rooted_nodes;
+  return node;
+}
+void nts_dom_release(void* node) {
+  MiniNode* target = node_of(node);
+  if (!target->roots)
+    fail("a release with no root to give back", 0);
+  if (--target->roots == 0)
+    --rooted_nodes;
 }
 int32_t nts_dom_last_error(NtsDomContext* c) {
   return c->last_error;
 }
-uint32_t nts_dom_document(NtsDomContext* c) {
-  require_entry(c);
-  return bind(c, c->document);
-}
-uint32_t nts_dom_query_atom(NtsDomContext* c, uint32_t root,
-                            uint32_t selector) {
-  require_entry(c);
-  const char* text = c->atoms[selector - 1];
-  if (text[0] != '#')
-    fail("only #id selectors", selector);
-  return bind(c, find_id(c, lookup(c, root), text + 1));
-}
-uint32_t nts_dom_create_element(NtsDomContext* c, uint32_t tag) {
-  require_entry(c);
-  return bind(c, node_new(tag, NULL));
-}
-uint32_t nts_dom_intern(NtsDomContext* c, const NtsBorrowedString* text) {
-  char* utf8 = utf8_of(text);
+/* A name as an atom: the program's view as UTF-8, interned. */
+static uint32_t name_of(NtsDomContext* c, const NtsBorrowedString* name) {
+  char* utf8 = utf8_of(name);
   const uint32_t atom = mini_dom_intern(c, utf8);
   free(utf8);
   return atom;
 }
-uint32_t nts_dom_create_text(NtsDomContext* c, const NtsBorrowedString* text) {
+/* Text lent back as a view, valid until the next read. The workload reads
+ * back only ASCII, which is the same bytes as Latin-1. */
+static const NtsStringView* lend(NtsDomContext* c, const char* text) {
+  for (const char* p = text; *p; ++p)
+    if ((unsigned char)*p > 0x7f)
+      fail("non-ASCII text read back", 0);
+  free(c->lent);
+  c->lent = strdup(text);
+  c->lent_view = (NtsStringView){c->lent, (uint32_t)strlen(c->lent), 0};
+  return &c->lent_view;
+}
+NtsDomDocument* nts_dom_document(NtsDomContext* c) {
+  require_entry(c);
+  return (NtsDomDocument*)c->document;
+}
+NtsDomElement* nts_dom_query(NtsDomContext* c,
+                             NtsDomNode* root,
+                             const NtsBorrowedString* selectors) {
+  require_entry(c);
+  char* text = utf8_of(selectors);
+  if (text[0] != '#')
+    fail("only #id selectors", 0);
+  MiniNode* found = find_id(c, node_of(root), text + 1);
+  free(text);
+  return (NtsDomElement*)found;
+}
+NtsDomElement* nts_dom_create_element(NtsDomContext* c,
+                                      const NtsBorrowedString* tag) {
+  require_entry(c);
+  return (NtsDomElement*)node_new(name_of(c, tag), NULL);
+}
+NtsDomText* nts_dom_create_text(NtsDomContext* c,
+                                const NtsBorrowedString* text) {
   require_entry(c);
   char* utf8 = utf8_of(text);
-  const uint32_t node = bind(c, node_new(0, utf8));
+  MiniNode* node = node_new(0, utf8);
   free(utf8);
-  return node;
+  return (NtsDomText*)node;
 }
-uint32_t nts_dom_clone(NtsDomContext* c, uint32_t node, int32_t deep) {
+NtsDomNode* nts_dom_clone(NtsDomContext* c, NtsDomNode* node, int32_t deep) {
   require_entry(c);
-  return bind(c, clone(lookup(c, node), deep));
+  return (NtsDomNode*)clone(node_of(node), deep);
 }
-uint32_t nts_dom_first_child(NtsDomContext* c, uint32_t node) {
-  require_entry(c);
-  return bind(c, lookup(c, node)->first);
+NtsDomElement* nts_dom_clone_element(NtsDomContext* c,
+                                     NtsDomElement* element,
+                                     int32_t deep) {
+  return (NtsDomElement*)nts_dom_clone(c, (NtsDomNode*)element, deep);
 }
-uint32_t nts_dom_next_sibling(NtsDomContext* c, uint32_t node) {
+NtsDomNode* nts_dom_first_child(NtsDomContext* c, NtsDomNode* node) {
   require_entry(c);
-  return bind(c, lookup(c, node)->next);
+  return (NtsDomNode*)node_of(node)->first;
 }
-int32_t nts_dom_append_child(NtsDomContext* c, uint32_t parent,
-                             uint32_t child) {
+NtsDomNode* nts_dom_next_sibling(NtsDomContext* c, NtsDomNode* node) {
   require_entry(c);
-  insert(lookup(c, parent), lookup(c, child), NULL);
+  return (NtsDomNode*)node_of(node)->next;
+}
+NtsDomElement* nts_dom_as_element(NtsDomContext* c, NtsDomNode* node) {
+  require_entry(c);
+  MiniNode* target = node_of(node);
+  return target->tag && target != c->document ? (NtsDomElement*)target : NULL;
+}
+NtsDomText* nts_dom_as_text(NtsDomContext* c, NtsDomNode* node) {
+  require_entry(c);
+  return node_of(node)->tag ? NULL : (NtsDomText*)node;
+}
+int32_t nts_dom_append_child(NtsDomContext* c,
+                             NtsDomNode* parent,
+                             NtsDomNode* child) {
+  require_entry(c);
+  insert(node_of(parent), node_of(child), NULL);
   return 0;
 }
-int32_t nts_dom_insert_before(NtsDomContext* c, uint32_t parent,
-                              uint32_t child, uint32_t reference) {
+int32_t nts_dom_insert_before(NtsDomContext* c,
+                              NtsDomNode* parent,
+                              NtsDomNode* child,
+                              NtsDomNode* reference) {
   require_entry(c);
-  insert(lookup(c, parent), lookup(c, child),
-         reference ? lookup(c, reference) : NULL);
+  insert(node_of(parent), node_of(child),
+         reference ? node_of(reference) : NULL);
   return 0;
 }
-int32_t nts_dom_remove_node(NtsDomContext* c, uint32_t node) {
+int32_t nts_dom_remove_child(NtsDomContext* c,
+                             NtsDomNode* parent,
+                             NtsDomNode* child) {
   require_entry(c);
-  detach(lookup(c, node));
+  if (node_of(child)->parent != node_of(parent))
+    return 8; /* NotFoundError */
+  detach(node_of(child));
   return 0;
 }
-static int32_t set_text(NtsDomContext* c, uint32_t node, const char* text) {
+int32_t nts_dom_remove(NtsDomContext* c, NtsDomNode* node) {
   require_entry(c);
-  MiniNode* target = lookup(c, node);
+  detach(node_of(node));
+  return 0;
+}
+static int32_t set_text(NtsDomContext* c, NtsDomNode* node, const char* text) {
+  require_entry(c);
+  MiniNode* target = node_of(node);
   if (!target->tag) {
     free(target->text);
     target->text = strdup(text); /* Blink's one copy */
@@ -378,30 +390,59 @@ static int32_t set_text(NtsDomContext* c, uint32_t node, const char* text) {
     insert(target, node_new(0, text), NULL);
   return 0;
 }
-int32_t nts_dom_set_text_value(NtsDomContext* c, uint32_t node,
-                               const NtsBorrowedString* text) {
+int32_t nts_dom_set_text_content(NtsDomContext* c,
+                                 NtsDomNode* node,
+                                 const NtsBorrowedString* text) {
   char* utf8 = utf8_of(text);
   const int32_t status = set_text(c, node, utf8);
   free(utf8);
   return status;
 }
-int32_t nts_dom_set_text_interned(NtsDomContext* c, uint32_t node,
-                                  uint32_t atom) {
-  return set_text(c, node, c->atoms[atom - 1]);
-}
-int32_t nts_dom_set_attribute_interned(NtsDomContext* c, uint32_t element,
-                                       uint32_t name, uint32_t value) {
+int32_t nts_dom_set_attribute(NtsDomContext* c,
+                              NtsDomElement* element,
+                              const NtsBorrowedString* name,
+                              const NtsBorrowedString* value) {
   require_entry(c);
-  MiniNode* target = lookup(c, element);
+  MiniNode* target = node_of(element);
+  const uint32_t key = name_of(c, name);
+  const uint32_t data = name_of(c, value);
   for (uint32_t i = 0; i < target->attributes; ++i) {
-    if (target->attribute_names[i] == name) {
-      target->attribute_values[i] = value;
+    if (target->attribute_names[i] == key) {
+      target->attribute_values[i] = data;
       return 0;
     }
   }
   if (target->attributes == 4)
-    fail("too many attributes", element);
-  target->attribute_names[target->attributes] = name;
-  target->attribute_values[target->attributes++] = value;
+    fail("too many attributes", key);
+  target->attribute_names[target->attributes] = key;
+  target->attribute_values[target->attributes++] = data;
   return 0;
+}
+const NtsStringView* nts_dom_text_content(NtsDomContext* c, NtsDomNode* node) {
+  require_entry(c);
+  char* out = calloc(1, 1);
+  size_t length = 0, capacity = 1;
+  text_content(node_of(node), &out, &length, &capacity);
+  const NtsStringView* view = lend(c, out);
+  free(out);
+  return view;
+}
+const NtsStringView* nts_dom_get_attribute(NtsDomContext* c,
+                                           NtsDomElement* element,
+                                           const NtsBorrowedString* name) {
+  require_entry(c);
+  MiniNode* target = node_of(element);
+  const uint32_t key = name_of(c, name);
+  for (uint32_t i = 0; i < target->attributes; ++i)
+    if (target->attribute_names[i] == key)
+      return lend(c, c->atoms[target->attribute_values[i] - 1]);
+  return NULL;
+}
+uint32_t nts_dom_intern(NtsDomContext* c, const NtsBorrowedString* text) {
+  return name_of(c, text);
+}
+int32_t nts_dom_set_text_interned(NtsDomContext* c,
+                                  NtsDomNode* node,
+                                  uint32_t atom) {
+  return set_text(c, node, c->atoms[atom - 1]);
 }

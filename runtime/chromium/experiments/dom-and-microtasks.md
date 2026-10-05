@@ -75,12 +75,12 @@ class/name/message or arbitrary WebIDL conversion/overload surface.
 
 The DOM program verifies canonical repeated queries, missing match versus
 invalid selector, `SyntaxError` 12, `HierarchyRequestError` 3, `NotFoundError`
-8, and `InvalidCharacterError` 5. It detaches a node, forces Blink GC, reads it
-through its retained identity, reattaches it, and preserves that identity.
-The registry uses a traced indexed node table and a traced hash map, avoiding
-a linear identity lookup. Every bound node stays rooted until context
-disposal; individual wrapper reclamation and cross-runtime cycle collection
-are deliberately unresolved. Handles are scoped to their explicit context.
+8, and `InvalidCharacterError` 5. It detaches a node, forces a conservative Blink GC
+while only the native stack refers to it, reads it back, reattaches it, and
+preserves its identity -- a node is its own address (DOM ABI v3,
+[architecture.md](architecture.md) section 3: rooted only where the program
+keeps it; the earlier indexed lease table is gone). Cross-runtime cycle
+collection is designed there (section 5), not yet built.
 
 Strings copy on each boundary. NUL, Latin-1, non-Latin-1, paired and lone
 surrogates round-trip through text and attributes. Inspection compares actual

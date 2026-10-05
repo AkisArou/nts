@@ -1,80 +1,66 @@
-// Explicit experiment API. Every operation calls Blink immediately; this is
-// not a DOM effect tape or a declaration pretending to implement lib.dom.
+// The DOM ABI's own witness, and the binding benchmark's loop. Every
+// operation calls Blink immediately; this is not a DOM effect tape or a
+// declaration pretending to implement lib.dom.
 import * as host from "nts:chromium-dom-experiment";
 import * as dom from "nts:chromium-dom";
-import type { DomContext } from "nts:chromium-dom-experiment";
+import type { DomContext, Element, Node } from "nts:chromium-dom";
 import type { c_uint32 } from "c:types";
 
-function getBody(c: DomContext): c_uint32 { return host.nts_dom_body(c); }
-function query(c: DomContext, s: string): c_uint32 { return host.nts_dom_query(c, s); }
-function element(c: DomContext, s: string): c_uint32 { return host.nts_dom_element(c, s); }
-function textNode(c: DomContext, s: string): c_uint32 { return host.nts_dom_text(c, s); }
-function append(c: DomContext, p: c_uint32, n: c_uint32): number { return host.nts_dom_append(c, p, n); }
-function remove(c: DomContext, p: c_uint32, n: c_uint32): number { return host.nts_dom_remove(c, p, n); }
-function setText(c: DomContext, n: c_uint32, s: string): number { return host.nts_dom_set_text(c, n, s); }
-function setAttribute(c: DomContext, n: c_uint32, name: string, value: string): number {
-  return host.nts_dom_set_attribute(c, n, name, value);
-}
-function status(c: DomContext): number { return host.nts_dom_status(c); }
-function readText(c: DomContext, n: c_uint32): string {
-  const length = host.nts_dom_text_length(c, n);
-  const buffer = new Uint16Array(length);
-  host.nts_dom_copy_text(c, n, buffer, length);
-  let result = "";
-  for (let i = 0; i < buffer.length; ++i) result += String.fromCharCode(buffer[i]);
-  return result;
+function element(c: DomContext, tag: string, id: string): Element | null {
+  const node = dom.nts_dom_create_element(c, tag);
+  if (node !== null) dom.nts_dom_set_attribute(c, node, "id", id);
+  return node;
 }
 
-export function ntsChromiumDomProgram(context: DomContext): number {
-  const body = getBody(context);
-  const container = element(context, "section");
-  setAttribute(context, container, "id", "native-dom");
-  const label = element(context, "output");
-  setAttribute(context, label, "id", "native-dom-count");
-  const text = textNode(context, "Count: 0");
-  append(context, label, text);
-  append(context, container, label);
-  append(context, body, container);
-  if (query(context, "#native-dom-count") !== label) return 1;
-  if (query(context, "#native-dom-count") !== label) return 2;
-  if (query(context, "#missing") !== 0 || status(context) !== 0) return 3;
-  query(context, "[");
-  if (status(context) !== 12) return 4; // SyntaxError
-  append(context, container, container);
-  if (status(context) !== 3) return 5; // HierarchyRequestError
-  remove(context, body, label);
-  if (status(context) !== 8) return 6; // NotFoundError
-  element(context, "bad name");
-  if (status(context) !== 5) return 7; // InvalidCharacterError
+// The DOM ABI end to end in one callback, numbered so a failure names its
+// step: node identity is the address, every DOM exception arrives as its code,
+// text crosses exactly both ways, and a node only the native stack refers to
+// survives a collection.
+export function ntsChromiumDomProgram(c: DomContext): number {
+  const document = dom.nts_dom_document(c);
+  if (document === null) return 1;
+  const body = dom.nts_dom_query(c, document, "body");
+  const container = element(c, "section", "native-dom");
+  const label = element(c, "output", "native-dom-count");
+  const text = dom.nts_dom_create_text(c, "Count: 0");
+  if (body === null || container === null || label === null || text === null) return 1;
+  dom.nts_dom_append_child(c, label, text);
+  dom.nts_dom_append_child(c, container, label);
+  dom.nts_dom_append_child(c, body, container);
+  if (dom.nts_dom_query(c, document, "#native-dom-count") !== label) return 2;
+  if (dom.nts_dom_query(c, document, "#missing") !== null || dom.nts_dom_last_error(c) !== 0) return 3;
+  if (dom.nts_dom_query(c, document, "[") !== null || dom.nts_dom_last_error(c) !== 12) return 4; // SyntaxError
+  if (dom.nts_dom_append_child(c, container, container) !== 3) return 5; // HierarchyRequestError
+  if (dom.nts_dom_remove_child(c, body, label) !== 8) return 6; // NotFoundError
+  if (dom.nts_dom_create_element(c, "bad name") !== null || dom.nts_dom_last_error(c) !== 5) return 7; // InvalidCharacterError
 
-  // A string view must preserve NUL, paired and lone surrogates, Latin-1 and
-  // non-Latin-1 code units into Blink, and the copy back must return them.
-  const exact = "A\0\u00e9\u03a9" + String.fromCharCode(0xd800) + "Z"
+  // A string view must carry NUL, paired and lone surrogates, Latin-1 and
+  // non-Latin-1 units into Blink, and the view Blink lends back must return
+  // them, as text and as an attribute.
+  const exact = "A\0éΩ" + String.fromCharCode(0xd800) + "Z"
     + String.fromCharCode(0xdc00) + String.fromCharCode(0xd83d) + String.fromCharCode(0xde00);
-  setText(context, label, exact);
-  if (readText(context, label) !== exact) return 8;
-  setAttribute(context, label, "data-exact", exact);
-  remove(context, container, label);
-  if (query(context, "#native-dom-count") !== 0) return 9;
-  host.nts_dom_collect_for_testing(context);
-  if (readText(context, label) !== exact) return 10;
-  append(context, container, label);
-  if (query(context, "#native-dom-count") !== label) return 11;
-  setText(context, label, "Count: 0");
-  let caught = false;
-  try {
-    query(context, "[");
-    if (status(context) === 12) throw new Error("SyntaxError");
-  } catch (error) {
-    caught = true;
-  }
-  if (!caught) return 12;
+  dom.nts_dom_set_text_content(c, label, exact);
+  if (dom.nts_dom_text_content(c, label) !== exact) return 8;
+  dom.nts_dom_set_attribute(c, label, "data-exact", exact);
+  if (dom.nts_dom_get_attribute(c, label, "data-exact") !== exact) return 9;
+
+  // Detached, the label is referenced by nothing but this frame: no root, no
+  // parent. A collection now is a conservative one, as an allocation would
+  // trigger, and must find it on the stack.
+  dom.nts_dom_remove(c, label);
+  if (dom.nts_dom_query(c, document, "#native-dom-count") !== null) return 10;
+  host.nts_dom_collect_for_testing(c);
+  if (dom.nts_dom_text_content(c, label) !== exact) return 11;
+  dom.nts_dom_append_child(c, container, label);
+  if (dom.nts_dom_query(c, document, "#native-dom-count") !== label) return 12;
+  dom.nts_dom_set_text_content(c, label, "Count: 0");
   return 0;
 }
 
-export function ntsChromiumDomCounter(context: DomContext, count: number): void {
-  const label = query(context, "#native-dom-count");
-  setText(context, label, "Count: " + count);
+export function ntsChromiumDomCounter(c: DomContext, count: number): void {
+  const document = dom.nts_dom_document(c);
+  const label = document === null ? null : dom.nts_dom_query(c, document, "#native-dom-count");
+  if (label !== null) dom.nts_dom_set_text_content(c, label, "Count: " + count);
 }
 
 export interface ChromiumBenchmarkState {
@@ -104,39 +90,32 @@ export function ntsChromiumPrepareBenchmark(context: DomContext, a: string, b: s
   return {aUnits: utf16(a), bUnits: utf16(b), aBytes: latin1(a), bBytes: latin1(b),
     prefix: a.substring(0, a.length - 1), aAtom: dom.nts_dom_intern(context, a), bAtom: dom.nts_dom_intern(context, b)};
 }
-// Modes match binding_benchmark.cc. 0-1 are the original bridge, which reads
-// a context-wide status; 2-6 are entered calls returning their own status.
-// 0 and 4 pass the string itself as a view (the legacy and the entered
-// bridge), 1-3 prepared buffers, 5 a fresh string per mutation, as UI code
-// builds one, and 6 interned text by id.
-export function ntsChromiumBenchmarkLoop(context: DomContext, node: c_uint32,
+// Modes match binding_benchmark.cc, all entered calls returning their own
+// status: 0-1 prepared buffers (UTF-16, Latin-1), 2 the string itself as a
+// view, 3 a fresh string per mutation, as UI code builds one, and 4 text
+// interned for an id.
+export function ntsChromiumBenchmarkLoop(context: DomContext, node: Node,
   state: ChromiumBenchmarkState, a: string, b: string, iterations: number, mode: number): number {
   const length = a.length as c_uint32;
   let failed = 0;
   if (mode === 0) {
-    for (let i = 0; i < iterations; ++i) setText(context, node, i % 2 === 0 ? a : b);
-  } else if (mode === 1) {
-    for (let i = 0; i < iterations; ++i) {
-      host.nts_dom_set_text_units(context, node, i % 2 === 0 ? state.aUnits : state.bUnits, length);
-    }
-  } else if (mode === 2) {
     for (let i = 0; i < iterations; ++i) {
       failed |= host.nts_dom_set_text16(context, node, i % 2 === 0 ? state.aUnits : state.bUnits, length);
     }
-  } else if (mode === 3) {
+  } else if (mode === 1) {
     for (let i = 0; i < iterations; ++i) {
       failed |= host.nts_dom_set_text8(context, node, i % 2 === 0 ? state.aBytes : state.bBytes, length);
     }
+  } else if (mode === 2) {
+    for (let i = 0; i < iterations; ++i) failed |= dom.nts_dom_set_text_content(context, node, i % 2 === 0 ? a : b);
   } else if (mode === 4) {
-    for (let i = 0; i < iterations; ++i) failed |= dom.nts_dom_set_text_value(context, node, i % 2 === 0 ? a : b);
-  } else if (mode === 6) {
     for (let i = 0; i < iterations; ++i) {
       failed |= dom.nts_dom_set_text_interned(context, node, i % 2 === 0 ? state.aAtom : state.bAtom);
     }
   } else {
     for (let i = 0; i < iterations; ++i) {
-      failed |= dom.nts_dom_set_text_value(context, node, state.prefix + (i % 2 === 0 ? "A" : "B"));
+      failed |= dom.nts_dom_set_text_content(context, node, state.prefix + (i % 2 === 0 ? "A" : "B"));
     }
   }
-  return mode < 2 ? status(context) : failed;
+  return failed;
 }

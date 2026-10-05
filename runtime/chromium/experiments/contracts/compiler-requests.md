@@ -58,6 +58,16 @@ backends, with zero NTS allocations per mutation and no
 
 ## 2. A generic foreign reference-counted handle
 
+**Delivered**, in a better shape than proposed, on main as 1bd750e5e and
+6c08170ef: `HostClass<Tag, Parent, Retain, Release>` in `c:types`, a family
+whose binding names its root/unroot pair and whose host finds handles on the
+native stack. A handle the program only passes along -- a foreign `+0`
+result, an internal helper's return, a sibling cursor, a node or null merged
+at a branch -- is never counted; one it keeps is rooted where it leaves the
+stack. The DOM ABI's nodes are now Blink's own pointers, rows has no manual
+release, and the roots return to zero when the app is destroyed. The
+proposal as written follows.
+
 **Observed.** A Blink node handed to TypeScript is a lease on a root in the
 document's traced registry. GObject (`g_object_ref_sink`/`g_object_unref`),
 COM and Objective-C each have compiler-managed retain/release, but there is no
@@ -99,6 +109,12 @@ libm, including `seed % max` in a Park-Miller generator whose operands are
 both proved integers below 2^31, where V8 speculates int32 arithmetic.
 
 ## 4. A string result built by the callee
+
+**Delivered** on main as f03831fd4: a foreign function may return
+`StringView` -- `const NtsStringView *` of the callee's own storage, valid
+until it is called again -- and the call copies it once, exactly
+(`nts_string_from_view`). `nts_dom_text_content` and `nts_dom_get_attribute`
+use it. The proposal as written follows.
 
 **Observed.** Reading DOM text (`textContent`, `getAttribute`) needs a fresh
 NTS string with exact units. Today it takes two calls (length, then copy into
@@ -159,6 +175,11 @@ already need the checkpoint-end maintenance entry point listed in
 **Accept.** Removing one row costs the same with 1,000 and 10,000 rows held.
 
 ## 6. Later: interning literals at module initialization
+
+**Superseded** for names: a literal passed as a `StringView` is immortal, and
+the adapter makes its `AtomicString` once per document, found after by the
+literal's address -- no ids, no module initialization. Dynamic text written
+over and over keeps `nts_dom_intern`. The original request follows.
 
 When a literal reaches a parameter declared as an interned name (tag,
 attribute, event type, selector), the program could intern it once through a

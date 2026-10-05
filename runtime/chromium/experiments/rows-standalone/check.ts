@@ -31,7 +31,7 @@ const profile = process.argv.includes("--perf");
 mkdirSync(output, { recursive: true });
 
 interface Sample { case: string; round: number; batch: number; nsPerOperation: number; ntsAllocations?: number; idleCollectNs?: number }
-interface Result { samples: Sample[]; finalRows: number; liveLeases?: number; leasesAfterDestroy?: number; maxRssKb?: number; liveBeforeApp?: number; liveAfterDestroy?: number; dom: string }
+interface Result { samples: Sample[]; finalRows: number; liveRoots?: number; rootsAfterDestroy?: number; maxRssKb?: number; liveBeforeApp?: number; liveAfterDestroy?: number; dom: string }
 
 // Native: the archive the renderer links (program, runtime, shims; pinned
 // clang -O2), with mini_dom.c standing in for the Blink adapter.
@@ -137,8 +137,8 @@ const results = { c: native("c", "checkpoint"), cIdle: native("c", "idle"), llvm
 for (const [name, result] of Object.entries(results)) {
   assert.equal(result.finalRows, 999, name);
   assert.equal(result.dom, results.v8.dom, `${name} must build the rows the page script builds`);
-  if (name !== "v8") assert.equal(result.liveLeases, 2 + 2 * result.finalRows, `${name} leaked leases`);
-  if (name !== "v8") assert.equal(result.leasesAfterDestroy, 0, `${name}: destroying the app and releasing the query left a lease`);
+  if (name !== "v8") assert.equal(result.liveRoots, 2 + 2 * result.finalRows, `${name} rooted the wrong nodes`);
+  if (name !== "v8") assert.equal(result.rootsAfterDestroy, 0, `${name}: destroying the app left a root`);
   if (name !== "v8") assert.equal(result.liveAfterDestroy, result.liveBeforeApp, `${name}: destroying the app left NTS objects alive`);
 }
 const median = (samples: Sample[]): number => {
@@ -160,4 +160,4 @@ writeFileSync(resolve(output, "result.json"), `${JSON.stringify({observedAt: new
   table, results: Object.fromEntries(Object.entries(results).map(([name, result]) => [name, {...result, dom: undefined}]))}, null, 2)}\n`);
 console.table(table);
 console.log(`Peak RSS: C checkpoint ${results.c.maxRssKb} KiB, C idle ${results.cIdle.maxRssKb} KiB (mini-DOM nodes are never freed in either)`);
-console.log(`PASS: C and LLVM under both collection policies and the page script build the same ${results.v8.finalRows} rows; no leaked leases. Evidence: ${output}/result.json`);
+console.log(`PASS: C and LLVM under both collection policies and the page script build the same ${results.v8.finalRows} rows; no root left behind. Evidence: ${output}/result.json`);

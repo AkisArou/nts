@@ -1,5 +1,10 @@
 # Chromium experiment handoff
 
+> **Superseded for the current design by [architecture.md](architecture.md)**
+> (2026-10-06): nodes are Blink's own pointers rooted only where the program
+> keeps them, text crosses as views both ways, and the legacy bridge is gone.
+> What follows is the record of how the lane got there.
+
 Prepared 2026-10-05 at the user's request to stop after completing the current
 benchmarks. Continue only when assigned by the user. This is an investigation
 of the initial [electron-like RFC](../../../docs/electron-like.md), not a final
