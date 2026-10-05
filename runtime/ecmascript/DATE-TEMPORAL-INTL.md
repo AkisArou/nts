@@ -1052,8 +1052,28 @@ verification before accepting a change.
 
 Validate Linux, Windows, macOS/iOS, JVM and Android; Android API 29, 30, 33 and
 current, plus desktop Java 11 and current LTS. Existing Android evidence covers
-API-29 dex/resource packaging, not device execution. The APK packager preserves
-dependency resources, dex files and licenses and rejects conflicting resources.
+actual x86_64 ART adapter execution on API 29, 30, 33 and the official repository's
+API 37.2 revision-5 image (Android 17, with 16 KB pages). The same API-29-minimum
+dex/resource artifact produces the existing Date-fields fixture's exact 324
+output bytes on all four devices. This covers prepared fields, replacements at
+one timestamp, UTF-16 spans, interval data and calendar symbols. The standalone
+artifact is 13,234,314 bytes with bundled ICU4J data; it is not a final APK or
+application reachability, startup, heap or size result. Public standard-binding
+conformance remains open. The APK packager preserves dependency resources, dex
+files and licenses and rejects conflicting resources.
+
+The ICU tool's `--android-device SERIAL` compiles and packages the selected
+witness, executes it on that explicit device, checks the original fixture and
+removes its unique temporary device artifact. `--android` remains packaging
+only. Packaging includes the selected driver's support classes from fresh JVM
+output; it no longer assumes the general driver. Timeouts retain diagnostics.
+The five-backend Date-fields gate passes with native ASan/UBSan, RC leak checks,
+JVM verification and binding drift checks. Device fingerprints, raw command
+exits, source/artifact/data hashes, setup failures and the interrupted API-33
+attempt are retained under `target/ecmascript/audit/android-art`, with
+`summary.json` recording the adapter scope. Task emulators use read-only AVDs
+and no snapshots; the existing API-29 configuration and shared emulator retain
+their original hashes.
 
 The desktop provider checkpoint uses actual Temurin 11.0.32.1+1 and
 25.0.4.1+1 runtimes on Linux x64, from SHA-256-verified official archives.
@@ -1237,6 +1257,7 @@ NTS_BACKEND=c NTS_RC=1 NTS_TSGO=target/tsgo target/debug/nts check tooling/confo
 node runtime/ecmascript/tools/icu.ts --pinned-native --all-backends --sanitize
 node runtime/ecmascript/tools/icu.ts --pinned-native --bench
 node runtime/ecmascript/tools/icu.ts --pinned-native --android
+node runtime/ecmascript/tools/icu.ts --pinned-native --date-fields --android-device emulator-5560
 NTS_BIN=target/debug/nts NTS_TSGO=target/tsgo node runtime/ecmascript/tools/icu.ts --pinned-native --duration --all-backends --sanitize
 NTS_BIN=target/debug/nts NTS_TSGO=target/tsgo node runtime/ecmascript/tools/icu.ts --pinned-native --calendar --all-backends --sanitize
 ```

@@ -1,6 +1,7 @@
 // Reproducible provider/ABI validation, independent of the Java-8 core runtime.
 // node runtime/ecmascript/tools/icu.ts [--regenerate-bindings] [--all-backends] [--sanitize] [--duration|--calendar|--date-fields|--string-case]
-import { createHash } from "node:crypto";
+// --android packages dex/resources; --android-device SERIAL also runs the selected witness on ART.
+import { createHash, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
@@ -27,7 +28,17 @@ const env: NodeJS.ProcessEnv = {
   ...process.env,
   NTS_TSGO: process.env.NTS_TSGO ?? resolve(root, "target/tsgo"),
 };
-for (const option of process.argv.slice(2)) {
+let androidDevice: string | undefined;
+for (let index = 2; index < process.argv.length; index++) {
+  const option = process.argv[index]!;
+  if (option === "--android-device") {
+    if (androidDevice !== undefined) throw new Error("Specify one Android device");
+    index++;
+    androidDevice = process.argv[index];
+    if (!androidDevice || androidDevice.startsWith("--"))
+      throw new Error("--android-device requires an adb serial");
+    continue;
+  }
   if (
     ![
       "--pinned-native",
@@ -84,10 +95,8 @@ const duration = witnessScope === "duration";
 const calendar = witnessScope === "calendar";
 const dateFields = witnessScope === "date-fields";
 const stringCase = witnessScope === "string-case";
-if (witnessScope !== "" && (process.argv.includes("--bench") || process.argv.includes("--android")))
-  throw new Error(
-    "This ICU witness uses its own driver; run benchmarks/Android on the general fixture",
-  );
+if (witnessScope !== "" && process.argv.includes("--bench"))
+  throw new Error("This ICU witness uses its own driver; run benchmarks on the general fixture");
 if (process.argv.includes("--pinned-native")) {
   env.PKG_CONFIG_LIBDIR = resolve(root, "target/ecmascript/icu-native-pin/install/lib/pkgconfig");
 }
@@ -99,16 +108,21 @@ function run(
   cwd = root,
   executionEnv: NodeJS.ProcessEnv = env,
   receipt?: string,
+  timeoutMs?: number,
 ): string {
   const result = spawnSync(binary, args, {
     cwd,
     env: executionEnv,
     encoding: "utf8",
     maxBuffer: 32 * 1024 * 1024,
+    timeout: timeoutMs,
   });
-  if (result.error) throw result.error;
-  const diagnostics = result.stdout + result.stderr;
+  const diagnostics = (result.stdout ?? "") + (result.stderr ?? "");
   if (receipt !== undefined) writeFileSync(receipt, diagnostics);
+  if (result.error) {
+    if (receipt !== undefined) writeFileSync(receipt, diagnostics + "\n" + result.error.message);
+    throw result.error;
+  }
   if (
     result.status !== 0 ||
     /\bNTS\d{4}\b|runtime error:|ERROR: (AddressSanitizer|LeakSanitizer)/.test(diagnostics)
@@ -178,6 +192,7 @@ for (const name of ["nts.intl.d.ts", "nts.intl.bind"]) {
 }
 
 const jvm = resolve(out, witnessScope ? "jvm-" + witnessScope : "jvm");
+rmSync(jvm, { force: true, recursive: true });
 run(nts, ["emit-jvm", resolve(fixture, configuration + "jvm.json"), "--out", jvm]);
 if (calendar) {
   writeFileSync(
@@ -659,7 +674,7 @@ if (process.argv.includes("--bench")) {
     );
   }
 }
-if (process.argv.includes("--android")) {
+if (process.argv.includes("--android") || androidDevice !== undefined) {
   const sdk = env.ANDROID_HOME ?? env.ANDROID_SDK_ROOT;
   if (!sdk) throw new Error("--android requires ANDROID_HOME or ANDROID_SDK_ROOT");
   const androidJar = resolve(sdk, "platforms/android-29/android.jar");
@@ -672,7 +687,10 @@ if (process.argv.includes("--android")) {
   const adapterJar = resolve(out, "adapter.jar");
   const programJar = resolve(out, "program.jar");
   run("jar", ["--create", "--file", adapterJar, "-C", java, "."]);
-  run("jar", ["--create", "--file", programJar, "-C", jvm, "nts", "-C", jvm, "Drive.class"]);
+  const driverClasses = readdirSync(jvm)
+    .filter((name) => name.endsWith(".class"))
+    .flatMap((name) => ["-C", jvm, name]);
+  run("jar", ["--create", "--file", programJar, "-C", jvm, "nts", ...driverClasses]);
   const dex = resolve(out, "dex");
   rmSync(dex, { force: true, recursive: true });
   mkdirSync(dex, { recursive: true });
@@ -717,13 +735,48 @@ if (process.argv.includes("--android")) {
     entries.some((name) => name.endsWith(".class"))
   )
     throw new Error("Android probe is missing dex/data or still contains JVM bytecode");
+  let deviceApi: number | undefined;
+  if (androidDevice !== undefined) {
+    const adb = ["-s", androidDevice];
+    deviceApi = Number(run("adb", [...adb, "shell", "getprop", "ro.build.version.sdk"]));
+    if (!Number.isInteger(deviceApi) || deviceApi < 29)
+      throw new Error("The ICU Android provider requires API 29 or newer");
+    const deviceArtifact = "/data/local/tmp/nts-icu-" + randomUUID() + ".jar";
+    try {
+      run("adb", [...adb, "push", artifact, deviceArtifact]);
+      const deviceResult = run(
+        "adb",
+        [
+          ...adb,
+          "shell",
+          "-T",
+          "env",
+          "CLASSPATH=" + deviceArtifact,
+          "app_process",
+          "/data/local/tmp",
+          javaDriver,
+        ],
+        root,
+        env,
+        resolve(out, "android-result.log"),
+        60_000,
+      );
+      if (deviceResult !== expected)
+        throw new Error("ICU compiled ABI mismatch on Android:\n" + deviceResult);
+    } finally {
+      run("adb", [...adb, "shell", "rm", "-f", deviceArtifact], root, env, undefined, 10_000);
+    }
+  }
   console.log(
     JSON.stringify({
       mode: "ICU-Android-dex-and-resources",
       minApi: 29,
       bytes: statSync(artifact).size,
       artifact,
-      deviceExecution: false,
+      deviceExecution: androidDevice !== undefined,
+      device: androidDevice,
+      deviceApi,
+      driver: javaDriver,
     }),
   );
 }
