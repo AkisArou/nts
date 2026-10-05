@@ -8,13 +8,13 @@ declare module "nts:dom" {
   /** The document the running code is part of. */
   /** @ntsSymbol nts_dom_document */
   export function document(): Document;
-  export interface NodeOwnMethods {
+  export interface EventTargetOwnMethods {
     /**
      * `addEventListener(type, listener)` for a compiled closure, called with
-     * the event's target. The returned listener removes it.
+     * the event. The returned listener removes it.
      * @ntsSymbol nts_dom_listen
      */
-    listen(this: Node, type: StringView, listener: Closure<(target: Node) => void>): Listener;
+    listen(this: EventTarget, type: StringView, listener: Closure<(event: Event) => void>): Listener;
   }
   export interface ListenerMethods {
     /**

@@ -3,7 +3,7 @@
 // declaration pretending to implement lib.dom.
 import * as host from "nts:chromium-dom-experiment";
 import { asHTMLElement, document } from "nts:dom";
-import type { Document, Element, Node } from "nts:dom";
+import type { Document, Element, Event, Node } from "nts:dom";
 import { idlTranscript } from "./idl-vectors.ts";
 import type { VectorHost } from "./idl-vectors.ts";
 import type { c_uint32 } from "c:types";
@@ -76,8 +76,8 @@ export function ntsChromiumDomProgram(): number {
   const button = asHTMLElement(d.createElement("button"));
   if (button === null) return 13;
   const clicks = { count: 0 };
-  const listener = button.listen("click", (target: Node): void => {
-    if (target === button) clicks.count += 1;
+  const listener = button.listen("click", (event: Event): void => {
+    if (event.target === button && event.type === "click") clicks.count += 1;
     label.textContent = "Clicked " + clicks.count;
   });
   button.click();

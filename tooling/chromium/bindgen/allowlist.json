@@ -1,7 +1,7 @@
 {
   "chromiumRevision": "b510e9d7cd3a2fbd78d0ddc42234103206c5f78d",
-  "root": "Node",
   "interfaces": [
+    "EventTarget",
     "Node",
     "Element",
     "CharacterData",
@@ -9,6 +9,14 @@
     "Document",
     "DocumentFragment",
     "HTMLElement",
-    "HTMLInputElement"
+    "HTMLInputElement",
+    "HTMLButtonElement",
+    "HTMLAnchorElement",
+    "Event",
+    "UIEvent",
+    "MouseEvent",
+    "KeyboardEvent",
+    "DOMTokenList",
+    "CSSStyleDeclaration"
   ]
 }

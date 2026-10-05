@@ -5,6 +5,16 @@ declare module "nts:dom" {
   import type { CNumber, HostClass, Opaque, Ptr, StringView } from "c:types";
   /** A DOM exception a member reported, thrown as an `Error` "Name: message". */
   export type DOMException = Opaque<"NtsDomException">;
+  export interface EventTargetOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_EventTarget_dispatchEvent
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    dispatchEvent(this: EventTarget, event: Event, error?: Ptr<DOMException | null>): boolean;
+  }
+  export type EventTargetMethods = EventTargetOwnMethods;
+  export type EventTarget = HostClass<"NtsDomEventTarget", null, "nts_dom_retain", "nts_dom_release"> & EventTargetMethods;
   export interface NodeOwnMethods {
     /**
      * @ntsSymbol nts_dom_Node_get_nodeType
@@ -197,8 +207,10 @@ declare module "nts:dom" {
      */
     replaceChild(this: Node, node: Node, child: Node, error?: Ptr<DOMException | null>): Node;
   }
-  export type NodeMethods = NodeOwnMethods;
-  export type Node = HostClass<"NtsDomNode", null, "nts_dom_retain", "nts_dom_release"> & NodeMethods;
+  export type NodeMethods = NodeOwnMethods & EventTargetMethods;
+  export type Node = HostClass<"NtsDomNode", EventTarget> & NodeMethods;
+  /** @ntsSymbol nts_dom_as_Node */
+  export function asNode(eventTarget: EventTarget): Node | null;
   export interface ElementOwnMethods {
     /**
      * @ntsSymbol nts_dom_Element_get_namespaceURI
@@ -259,6 +271,14 @@ declare module "nts:dom" {
      */
     className: StringView;
     /**
+     * @ntsSymbol nts_dom_Element_get_classList
+     */
+    _get_classList(this: Element): DOMTokenList;
+    /**
+     * @ntsGet _get_classList
+     */
+    readonly classList: DOMTokenList;
+    /**
      * @ntsSymbol nts_dom_Element_get_slot
      */
     _get_slot(this: Element): StringView;
@@ -271,6 +291,14 @@ declare module "nts:dom" {
      * @ntsSet _set_slot
      */
     slot: StringView;
+    /**
+     * @ntsSymbol nts_dom_Element_get_part
+     */
+    _get_part(this: Element): DOMTokenList;
+    /**
+     * @ntsGet _get_part
+     */
+    readonly part: DOMTokenList;
     /**
      * @ntsSymbol nts_dom_Element_get_innerHTML
      */
@@ -1803,6 +1831,42 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_webkitExitFullscreen
      */
     webkitExitFullscreen(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_write_3
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    write(this: Document, text1: StringView, text2: StringView, text3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_write_2
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    write(this: Document, text1: StringView, text2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_write_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    write(this: Document, text1: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_writeln_3
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    writeln(this: Document, text1: StringView, text2: StringView, text3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_writeln_2
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    writeln(this: Document, text1: StringView, text2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_writeln_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    writeln(this: Document, text1: StringView, error?: Ptr<DOMException | null>): void;
   }
   export type DocumentMethods = DocumentOwnMethods & NodeMethods;
   export type Document = HostClass<"NtsDomDocument", Node> & DocumentMethods;
@@ -2190,6 +2254,14 @@ declare module "nts:dom" {
      * @ntsSet _set_tabIndex
      */
     tabIndex: CNumber<"int32">;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_style
+     */
+    _get_style(this: HTMLElement): CSSStyleDeclaration;
+    /**
+     * @ntsGet _get_style
+     */
+    readonly style: CSSStyleDeclaration;
     /**
      * @ntsSymbol nts_dom_HTMLElement_blur
      */
@@ -2844,4 +2916,1198 @@ declare module "nts:dom" {
   export type HTMLInputElement = HostClass<"NtsDomHTMLInputElement", HTMLElement> & HTMLInputElementMethods;
   /** @ntsSymbol nts_dom_as_HTMLInputElement */
   export function asHTMLInputElement(node: Node): HTMLInputElement | null;
+  export interface HTMLButtonElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_get_disabled
+     */
+    _get_disabled(this: HTMLButtonElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_set_disabled
+     */
+    _set_disabled(this: HTMLButtonElement, value: boolean): void;
+    /**
+     * @ntsGet _get_disabled
+     * @ntsSet _set_disabled
+     */
+    disabled: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_get_form
+     */
+    _get_form(this: HTMLButtonElement): HTMLElement | null;
+    /**
+     * @ntsGet _get_form
+     */
+    readonly form: HTMLElement | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_get_formAction
+     */
+    _get_formAction(this: HTMLButtonElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_set_formAction
+     */
+    _set_formAction(this: HTMLButtonElement, value: StringView): void;
+    /**
+     * @ntsGet _get_formAction
+     * @ntsSet _set_formAction
+     */
+    formAction: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_get_formEnctype
+     */
+    _get_formEnctype(this: HTMLButtonElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_set_formEnctype
+     */
+    _set_formEnctype(this: HTMLButtonElement, value: StringView): void;
+    /**
+     * @ntsGet _get_formEnctype
+     * @ntsSet _set_formEnctype
+     */
+    formEnctype: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_get_formMethod
+     */
+    _get_formMethod(this: HTMLButtonElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_set_formMethod
+     */
+    _set_formMethod(this: HTMLButtonElement, value: StringView): void;
+    /**
+     * @ntsGet _get_formMethod
+     * @ntsSet _set_formMethod
+     */
+    formMethod: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_get_formNoValidate
+     */
+    _get_formNoValidate(this: HTMLButtonElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_set_formNoValidate
+     */
+    _set_formNoValidate(this: HTMLButtonElement, value: boolean): void;
+    /**
+     * @ntsGet _get_formNoValidate
+     * @ntsSet _set_formNoValidate
+     */
+    formNoValidate: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_get_formTarget
+     */
+    _get_formTarget(this: HTMLButtonElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_set_formTarget
+     */
+    _set_formTarget(this: HTMLButtonElement, value: StringView): void;
+    /**
+     * @ntsGet _get_formTarget
+     * @ntsSet _set_formTarget
+     */
+    formTarget: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_get_name
+     */
+    _get_name(this: HTMLButtonElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_set_name
+     */
+    _set_name(this: HTMLButtonElement, value: StringView): void;
+    /**
+     * @ntsGet _get_name
+     * @ntsSet _set_name
+     */
+    name: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_get_type
+     */
+    _get_type(this: HTMLButtonElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_set_type
+     */
+    _set_type(this: HTMLButtonElement, value: StringView): void;
+    /**
+     * @ntsGet _get_type
+     * @ntsSet _set_type
+     */
+    type: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_get_value
+     */
+    _get_value(this: HTMLButtonElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_set_value
+     */
+    _set_value(this: HTMLButtonElement, value: StringView): void;
+    /**
+     * @ntsGet _get_value
+     * @ntsSet _set_value
+     */
+    value: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_get_willValidate
+     */
+    _get_willValidate(this: HTMLButtonElement): boolean;
+    /**
+     * @ntsGet _get_willValidate
+     */
+    readonly willValidate: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_get_validationMessage
+     */
+    _get_validationMessage(this: HTMLButtonElement): StringView;
+    /**
+     * @ntsGet _get_validationMessage
+     */
+    readonly validationMessage: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_get_popoverTargetElement
+     */
+    _get_popoverTargetElement(this: HTMLButtonElement): Element | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_set_popoverTargetElement
+     */
+    _set_popoverTargetElement(this: HTMLButtonElement, value: Element | null): void;
+    /**
+     * @ntsGet _get_popoverTargetElement
+     * @ntsSet _set_popoverTargetElement
+     */
+    popoverTargetElement: Element | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_get_popoverTargetAction
+     */
+    _get_popoverTargetAction(this: HTMLButtonElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_set_popoverTargetAction
+     */
+    _set_popoverTargetAction(this: HTMLButtonElement, value: StringView): void;
+    /**
+     * @ntsGet _get_popoverTargetAction
+     * @ntsSet _set_popoverTargetAction
+     */
+    popoverTargetAction: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_get_commandForElement
+     */
+    _get_commandForElement(this: HTMLButtonElement): Element | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_set_commandForElement
+     */
+    _set_commandForElement(this: HTMLButtonElement, value: Element | null): void;
+    /**
+     * @ntsGet _get_commandForElement
+     * @ntsSet _set_commandForElement
+     */
+    commandForElement: Element | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_get_command
+     */
+    _get_command(this: HTMLButtonElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_set_command
+     */
+    _set_command(this: HTMLButtonElement, value: StringView): void;
+    /**
+     * @ntsGet _get_command
+     * @ntsSet _set_command
+     */
+    command: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_get_interestForElement
+     */
+    _get_interestForElement(this: HTMLButtonElement): Element | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_set_interestForElement
+     */
+    _set_interestForElement(this: HTMLButtonElement, value: Element | null): void;
+    /**
+     * @ntsGet _get_interestForElement
+     * @ntsSet _set_interestForElement
+     */
+    interestForElement: Element | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_checkValidity
+     */
+    checkValidity(this: HTMLButtonElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_reportValidity
+     */
+    reportValidity(this: HTMLButtonElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_setCustomValidity
+     */
+    setCustomValidity(this: HTMLButtonElement, error_: StringView): void;
+  }
+  export type HTMLButtonElementMethods = HTMLButtonElementOwnMethods & HTMLElementMethods;
+  export type HTMLButtonElement = HostClass<"NtsDomHTMLButtonElement", HTMLElement> & HTMLButtonElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLButtonElement */
+  export function asHTMLButtonElement(node: Node): HTMLButtonElement | null;
+  export interface HTMLAnchorElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_download
+     */
+    _get_download(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_download
+     */
+    _set_download(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_download
+     * @ntsSet _set_download
+     */
+    download: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_ping
+     */
+    _get_ping(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_ping
+     */
+    _set_ping(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_ping
+     * @ntsSet _set_ping
+     */
+    ping: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_rel
+     */
+    _get_rel(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_rel
+     */
+    _set_rel(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_rel
+     * @ntsSet _set_rel
+     */
+    rel: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_relList
+     */
+    _get_relList(this: HTMLAnchorElement): DOMTokenList;
+    /**
+     * @ntsGet _get_relList
+     */
+    readonly relList: DOMTokenList;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_referrerPolicy
+     */
+    _get_referrerPolicy(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_referrerPolicy
+     */
+    _set_referrerPolicy(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_referrerPolicy
+     * @ntsSet _set_referrerPolicy
+     */
+    referrerPolicy: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_text
+     */
+    _get_text(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_text
+     */
+    _set_text(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_text
+     * @ntsSet _set_text
+     */
+    text: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_coords
+     */
+    _get_coords(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_coords
+     */
+    _set_coords(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_coords
+     * @ntsSet _set_coords
+     */
+    coords: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_charset
+     */
+    _get_charset(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_charset
+     */
+    _set_charset(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_charset
+     * @ntsSet _set_charset
+     */
+    charset: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_name
+     */
+    _get_name(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_name
+     */
+    _set_name(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_name
+     * @ntsSet _set_name
+     */
+    name: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_rev
+     */
+    _get_rev(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_rev
+     */
+    _set_rev(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_rev
+     * @ntsSet _set_rev
+     */
+    rev: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_shape
+     */
+    _get_shape(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_shape
+     */
+    _set_shape(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_shape
+     * @ntsSet _set_shape
+     */
+    shape: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_attributionSrc
+     */
+    _get_attributionSrc(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_attributionSrc
+     */
+    _set_attributionSrc(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_attributionSrc
+     * @ntsSet _set_attributionSrc
+     */
+    attributionSrc: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_target
+     */
+    _get_target(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_target
+     */
+    _set_target(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_target
+     * @ntsSet _set_target
+     */
+    target: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_href
+     */
+    _get_href(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_href
+     */
+    _set_href(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_href
+     * @ntsSet _set_href
+     */
+    href: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_origin
+     */
+    _get_origin(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsGet _get_origin
+     */
+    readonly origin: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_protocol
+     */
+    _get_protocol(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_protocol
+     */
+    _set_protocol(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_protocol
+     * @ntsSet _set_protocol
+     */
+    protocol: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_username
+     */
+    _get_username(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_username
+     */
+    _set_username(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_username
+     * @ntsSet _set_username
+     */
+    username: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_password
+     */
+    _get_password(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_password
+     */
+    _set_password(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_password
+     * @ntsSet _set_password
+     */
+    password: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_host
+     */
+    _get_host(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_host
+     */
+    _set_host(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_host
+     * @ntsSet _set_host
+     */
+    host: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_hostname
+     */
+    _get_hostname(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_hostname
+     */
+    _set_hostname(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_hostname
+     * @ntsSet _set_hostname
+     */
+    hostname: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_port
+     */
+    _get_port(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_port
+     */
+    _set_port(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_port
+     * @ntsSet _set_port
+     */
+    port: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_pathname
+     */
+    _get_pathname(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_pathname
+     */
+    _set_pathname(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_pathname
+     * @ntsSet _set_pathname
+     */
+    pathname: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_search
+     */
+    _get_search(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_search
+     */
+    _set_search(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_search
+     * @ntsSet _set_search
+     */
+    search: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_hash
+     */
+    _get_hash(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_hash
+     */
+    _set_hash(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_hash
+     * @ntsSet _set_hash
+     */
+    hash: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_hreflang
+     */
+    _get_hreflang(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_hreflang
+     */
+    _set_hreflang(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_hreflang
+     * @ntsSet _set_hreflang
+     */
+    hreflang: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_type
+     */
+    _get_type(this: HTMLAnchorElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_type
+     */
+    _set_type(this: HTMLAnchorElement, value: StringView): void;
+    /**
+     * @ntsGet _get_type
+     * @ntsSet _set_type
+     */
+    type: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_get_interestForElement
+     */
+    _get_interestForElement(this: HTMLAnchorElement): Element | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLAnchorElement_set_interestForElement
+     */
+    _set_interestForElement(this: HTMLAnchorElement, value: Element | null): void;
+    /**
+     * @ntsGet _get_interestForElement
+     * @ntsSet _set_interestForElement
+     */
+    interestForElement: Element | null;
+  }
+  export type HTMLAnchorElementMethods = HTMLAnchorElementOwnMethods & HTMLElementMethods;
+  export type HTMLAnchorElement = HostClass<"NtsDomHTMLAnchorElement", HTMLElement> & HTMLAnchorElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLAnchorElement */
+  export function asHTMLAnchorElement(node: Node): HTMLAnchorElement | null;
+  export interface EventOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_Event_get_type
+     */
+    _get_type(this: Event): StringView;
+    /**
+     * @ntsGet _get_type
+     */
+    readonly type: StringView;
+    /**
+     * @ntsSymbol nts_dom_Event_get_target
+     */
+    _get_target(this: Event): EventTarget | null;
+    /**
+     * @ntsGet _get_target
+     */
+    readonly target: EventTarget | null;
+    /**
+     * @ntsSymbol nts_dom_Event_get_currentTarget
+     */
+    _get_currentTarget(this: Event): EventTarget | null;
+    /**
+     * @ntsGet _get_currentTarget
+     */
+    readonly currentTarget: EventTarget | null;
+    /**
+     * @ntsSymbol nts_dom_Event_get_eventPhase
+     */
+    _get_eventPhase(this: Event): CNumber<"uint16">;
+    /**
+     * @ntsGet _get_eventPhase
+     */
+    readonly eventPhase: CNumber<"uint16">;
+    /**
+     * @ntsSymbol nts_dom_Event_get_bubbles
+     */
+    _get_bubbles(this: Event): boolean;
+    /**
+     * @ntsGet _get_bubbles
+     */
+    readonly bubbles: boolean;
+    /**
+     * @ntsSymbol nts_dom_Event_get_cancelable
+     */
+    _get_cancelable(this: Event): boolean;
+    /**
+     * @ntsGet _get_cancelable
+     */
+    readonly cancelable: boolean;
+    /**
+     * @ntsSymbol nts_dom_Event_get_defaultPrevented
+     */
+    _get_defaultPrevented(this: Event): boolean;
+    /**
+     * @ntsGet _get_defaultPrevented
+     */
+    readonly defaultPrevented: boolean;
+    /**
+     * @ntsSymbol nts_dom_Event_get_composed
+     */
+    _get_composed(this: Event): boolean;
+    /**
+     * @ntsGet _get_composed
+     */
+    readonly composed: boolean;
+    /**
+     * @ntsSymbol nts_dom_Event_get_isTrusted
+     */
+    _get_isTrusted(this: Event): boolean;
+    /**
+     * @ntsGet _get_isTrusted
+     */
+    readonly isTrusted: boolean;
+    /**
+     * @ntsSymbol nts_dom_Event_get_srcElement
+     */
+    _get_srcElement(this: Event): EventTarget | null;
+    /**
+     * @ntsGet _get_srcElement
+     */
+    readonly srcElement: EventTarget | null;
+    /**
+     * @ntsSymbol nts_dom_Event_initEvent_3
+     */
+    initEvent(this: Event, type: StringView, bubbles: boolean, cancelable: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_Event_initEvent_2
+     */
+    initEvent(this: Event, type: StringView, bubbles: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_Event_initEvent_1
+     */
+    initEvent(this: Event, type: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_Event_preventDefault
+     */
+    preventDefault(this: Event): void;
+    /**
+     * @ntsSymbol nts_dom_Event_stopImmediatePropagation
+     */
+    stopImmediatePropagation(this: Event): void;
+    /**
+     * @ntsSymbol nts_dom_Event_stopPropagation
+     */
+    stopPropagation(this: Event): void;
+  }
+  export type EventMethods = EventOwnMethods;
+  export type Event = HostClass<"NtsDomEvent", null, "nts_dom_retain", "nts_dom_release"> & EventMethods;
+  export interface UIEventOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_UIEvent_get_detail
+     */
+    _get_detail(this: UIEvent): CNumber<"int32">;
+    /**
+     * @ntsGet _get_detail
+     */
+    readonly detail: CNumber<"int32">;
+    /**
+     * @ntsSymbol nts_dom_UIEvent_get_which
+     */
+    _get_which(this: UIEvent): CNumber<"uint32">;
+    /**
+     * @ntsGet _get_which
+     */
+    readonly which: CNumber<"uint32">;
+    /**
+     * @ntsSymbol nts_dom_UIEvent_get_isTrusted
+     */
+    _get_isTrusted(this: UIEvent): boolean;
+    /**
+     * @ntsGet _get_isTrusted
+     */
+    readonly isTrusted: boolean;
+    /**
+     * @ntsSymbol nts_dom_UIEvent_initUIEvent_3
+     */
+    initUIEvent(this: UIEvent, type: StringView, bubbles: boolean, cancelable: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_UIEvent_initUIEvent_2
+     */
+    initUIEvent(this: UIEvent, type: StringView, bubbles: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_UIEvent_initUIEvent_1
+     */
+    initUIEvent(this: UIEvent, type: StringView): void;
+  }
+  export type UIEventMethods = UIEventOwnMethods & EventMethods;
+  export type UIEvent = HostClass<"NtsDomUIEvent", Event> & UIEventMethods;
+  /** @ntsSymbol nts_dom_as_UIEvent */
+  export function asUIEvent(event: Event): UIEvent | null;
+  export interface MouseEventOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_screenX
+     */
+    _get_screenX(this: MouseEvent): number;
+    /**
+     * @ntsGet _get_screenX
+     */
+    readonly screenX: number;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_screenY
+     */
+    _get_screenY(this: MouseEvent): number;
+    /**
+     * @ntsGet _get_screenY
+     */
+    readonly screenY: number;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_clientX
+     */
+    _get_clientX(this: MouseEvent): number;
+    /**
+     * @ntsGet _get_clientX
+     */
+    readonly clientX: number;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_clientY
+     */
+    _get_clientY(this: MouseEvent): number;
+    /**
+     * @ntsGet _get_clientY
+     */
+    readonly clientY: number;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_ctrlKey
+     */
+    _get_ctrlKey(this: MouseEvent): boolean;
+    /**
+     * @ntsGet _get_ctrlKey
+     */
+    readonly ctrlKey: boolean;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_shiftKey
+     */
+    _get_shiftKey(this: MouseEvent): boolean;
+    /**
+     * @ntsGet _get_shiftKey
+     */
+    readonly shiftKey: boolean;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_altKey
+     */
+    _get_altKey(this: MouseEvent): boolean;
+    /**
+     * @ntsGet _get_altKey
+     */
+    readonly altKey: boolean;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_metaKey
+     */
+    _get_metaKey(this: MouseEvent): boolean;
+    /**
+     * @ntsGet _get_metaKey
+     */
+    readonly metaKey: boolean;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_button
+     */
+    _get_button(this: MouseEvent): CNumber<"int16">;
+    /**
+     * @ntsGet _get_button
+     */
+    readonly button: CNumber<"int16">;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_buttons
+     */
+    _get_buttons(this: MouseEvent): CNumber<"uint16">;
+    /**
+     * @ntsGet _get_buttons
+     */
+    readonly buttons: CNumber<"uint16">;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_relatedTarget
+     */
+    _get_relatedTarget(this: MouseEvent): EventTarget | null;
+    /**
+     * @ntsGet _get_relatedTarget
+     */
+    readonly relatedTarget: EventTarget | null;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_pageX
+     */
+    _get_pageX(this: MouseEvent): number;
+    /**
+     * @ntsGet _get_pageX
+     */
+    readonly pageX: number;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_pageY
+     */
+    _get_pageY(this: MouseEvent): number;
+    /**
+     * @ntsGet _get_pageY
+     */
+    readonly pageY: number;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_x
+     */
+    _get_x(this: MouseEvent): number;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: number;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_y
+     */
+    _get_y(this: MouseEvent): number;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: number;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_offsetX
+     */
+    _get_offsetX(this: MouseEvent): number;
+    /**
+     * @ntsGet _get_offsetX
+     */
+    readonly offsetX: number;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_offsetY
+     */
+    _get_offsetY(this: MouseEvent): number;
+    /**
+     * @ntsGet _get_offsetY
+     */
+    readonly offsetY: number;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_movementX
+     */
+    _get_movementX(this: MouseEvent): CNumber<"int32">;
+    /**
+     * @ntsGet _get_movementX
+     */
+    readonly movementX: CNumber<"int32">;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_movementY
+     */
+    _get_movementY(this: MouseEvent): CNumber<"int32">;
+    /**
+     * @ntsGet _get_movementY
+     */
+    readonly movementY: CNumber<"int32">;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_fromElement
+     */
+    _get_fromElement(this: MouseEvent): Node;
+    /**
+     * @ntsGet _get_fromElement
+     */
+    readonly fromElement: Node;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_toElement
+     */
+    _get_toElement(this: MouseEvent): Node;
+    /**
+     * @ntsGet _get_toElement
+     */
+    readonly toElement: Node;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_layerX
+     */
+    _get_layerX(this: MouseEvent): CNumber<"int32">;
+    /**
+     * @ntsGet _get_layerX
+     */
+    readonly layerX: CNumber<"int32">;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_layerY
+     */
+    _get_layerY(this: MouseEvent): CNumber<"int32">;
+    /**
+     * @ntsGet _get_layerY
+     */
+    readonly layerY: CNumber<"int32">;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_get_isTrusted
+     */
+    _get_isTrusted(this: MouseEvent): boolean;
+    /**
+     * @ntsGet _get_isTrusted
+     */
+    readonly isTrusted: boolean;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_getModifierState
+     */
+    getModifierState(this: MouseEvent, keyArg: StringView): boolean;
+  }
+  export type MouseEventMethods = MouseEventOwnMethods & UIEventMethods;
+  export type MouseEvent = HostClass<"NtsDomMouseEvent", UIEvent> & MouseEventMethods;
+  /** @ntsSymbol nts_dom_as_MouseEvent */
+  export function asMouseEvent(event: Event): MouseEvent | null;
+  export interface KeyboardEventOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_get_key
+     */
+    _get_key(this: KeyboardEvent): StringView;
+    /**
+     * @ntsGet _get_key
+     */
+    readonly key: StringView;
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_get_code
+     */
+    _get_code(this: KeyboardEvent): StringView;
+    /**
+     * @ntsGet _get_code
+     */
+    readonly code: StringView;
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_get_location
+     */
+    _get_location(this: KeyboardEvent): CNumber<"uint32">;
+    /**
+     * @ntsGet _get_location
+     */
+    readonly location: CNumber<"uint32">;
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_get_ctrlKey
+     */
+    _get_ctrlKey(this: KeyboardEvent): boolean;
+    /**
+     * @ntsGet _get_ctrlKey
+     */
+    readonly ctrlKey: boolean;
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_get_shiftKey
+     */
+    _get_shiftKey(this: KeyboardEvent): boolean;
+    /**
+     * @ntsGet _get_shiftKey
+     */
+    readonly shiftKey: boolean;
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_get_altKey
+     */
+    _get_altKey(this: KeyboardEvent): boolean;
+    /**
+     * @ntsGet _get_altKey
+     */
+    readonly altKey: boolean;
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_get_metaKey
+     */
+    _get_metaKey(this: KeyboardEvent): boolean;
+    /**
+     * @ntsGet _get_metaKey
+     */
+    readonly metaKey: boolean;
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_get_repeat
+     */
+    _get_repeat(this: KeyboardEvent): boolean;
+    /**
+     * @ntsGet _get_repeat
+     */
+    readonly repeat: boolean;
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_get_isComposing
+     */
+    _get_isComposing(this: KeyboardEvent): boolean;
+    /**
+     * @ntsGet _get_isComposing
+     */
+    readonly isComposing: boolean;
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_get_charCode
+     */
+    _get_charCode(this: KeyboardEvent): CNumber<"int32">;
+    /**
+     * @ntsGet _get_charCode
+     */
+    readonly charCode: CNumber<"int32">;
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_get_keyCode
+     */
+    _get_keyCode(this: KeyboardEvent): CNumber<"int32">;
+    /**
+     * @ntsGet _get_keyCode
+     */
+    readonly keyCode: CNumber<"int32">;
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_get_isTrusted
+     */
+    _get_isTrusted(this: KeyboardEvent): boolean;
+    /**
+     * @ntsGet _get_isTrusted
+     */
+    readonly isTrusted: boolean;
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_getModifierState
+     */
+    getModifierState(this: KeyboardEvent, keyArg: StringView): boolean;
+  }
+  export type KeyboardEventMethods = KeyboardEventOwnMethods & UIEventMethods;
+  export type KeyboardEvent = HostClass<"NtsDomKeyboardEvent", UIEvent> & KeyboardEventMethods;
+  /** @ntsSymbol nts_dom_as_KeyboardEvent */
+  export function asKeyboardEvent(event: Event): KeyboardEvent | null;
+  export interface DOMTokenListOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_DOMTokenList_get_length
+     */
+    _get_length(this: DOMTokenList): CNumber<"uint32">;
+    /**
+     * @ntsGet _get_length
+     */
+    readonly length: CNumber<"uint32">;
+    /**
+     * @ntsSymbol nts_dom_DOMTokenList_get_value
+     */
+    _get_value(this: DOMTokenList): StringView;
+    /**
+     * @ntsSymbol nts_dom_DOMTokenList_set_value
+     */
+    _set_value(this: DOMTokenList, value: StringView): void;
+    /**
+     * @ntsGet _get_value
+     * @ntsSet _set_value
+     */
+    value: StringView;
+    /**
+     * @ntsSymbol nts_dom_DOMTokenList_add_3
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    add(this: DOMTokenList, tokens1: StringView, tokens2: StringView, tokens3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DOMTokenList_add_2
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    add(this: DOMTokenList, tokens1: StringView, tokens2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DOMTokenList_add_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    add(this: DOMTokenList, tokens1: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DOMTokenList_contains
+     */
+    contains(this: DOMTokenList, token: StringView): boolean;
+    /**
+     * @ntsSymbol nts_dom_DOMTokenList_item
+     */
+    item(this: DOMTokenList, index: CNumber<"uint32">): StringView | null;
+    /**
+     * @ntsSymbol nts_dom_DOMTokenList_remove_3
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    remove(this: DOMTokenList, tokens1: StringView, tokens2: StringView, tokens3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DOMTokenList_remove_2
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    remove(this: DOMTokenList, tokens1: StringView, tokens2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DOMTokenList_remove_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    remove(this: DOMTokenList, tokens1: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DOMTokenList_replace
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replace(this: DOMTokenList, token: StringView, newToken: StringView, error?: Ptr<DOMException | null>): boolean;
+    /**
+     * @ntsSymbol nts_dom_DOMTokenList_supports
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    supports(this: DOMTokenList, token: StringView, error?: Ptr<DOMException | null>): boolean;
+    /**
+     * @ntsSymbol nts_dom_DOMTokenList_toggle_2
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    toggle(this: DOMTokenList, token: StringView, force: boolean, error?: Ptr<DOMException | null>): boolean;
+    /**
+     * @ntsSymbol nts_dom_DOMTokenList_toggle_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    toggle(this: DOMTokenList, token: StringView, error?: Ptr<DOMException | null>): boolean;
+  }
+  export type DOMTokenListMethods = DOMTokenListOwnMethods;
+  export type DOMTokenList = HostClass<"NtsDomDOMTokenList", null, "nts_dom_retain", "nts_dom_release"> & DOMTokenListMethods;
+  export interface CSSStyleDeclarationOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_cssText
+     */
+    _get_cssText(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_cssText
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_cssText(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_cssText
+     * @ntsSet _set_cssText
+     */
+    cssText: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_length
+     */
+    _get_length(this: CSSStyleDeclaration): CNumber<"uint32">;
+    /**
+     * @ntsGet _get_length
+     */
+    readonly length: CNumber<"uint32">;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_cssFloat
+     */
+    _get_cssFloat(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_cssFloat
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_cssFloat(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_cssFloat
+     * @ntsSet _set_cssFloat
+     */
+    cssFloat: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_getPropertyPriority
+     */
+    getPropertyPriority(this: CSSStyleDeclaration, property: StringView): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_getPropertyValue
+     */
+    getPropertyValue(this: CSSStyleDeclaration, property: StringView): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_item
+     */
+    item(this: CSSStyleDeclaration, index: CNumber<"uint32">): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_removeProperty
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    removeProperty(this: CSSStyleDeclaration, property: StringView, error?: Ptr<DOMException | null>): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_setProperty_3
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setProperty(this: CSSStyleDeclaration, property: StringView, value: StringView, priority: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_setProperty_2
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setProperty(this: CSSStyleDeclaration, property: StringView, value: StringView, error?: Ptr<DOMException | null>): void;
+  }
+  export type CSSStyleDeclarationMethods = CSSStyleDeclarationOwnMethods;
+  export type CSSStyleDeclaration = HostClass<"NtsDomCSSStyleDeclaration", null, "nts_dom_retain", "nts_dom_release"> & CSSStyleDeclarationMethods;
 }

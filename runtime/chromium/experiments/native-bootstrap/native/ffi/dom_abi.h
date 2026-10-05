@@ -13,8 +13,8 @@
  * which every call finds as this thread's entered context. A call outside one
  * stops the renderer: program code runs only inside one.
  *
- * Nodes. A node is the blink::Node itself: NtsDomNode * is its address, and
- * each interface's pointer is the same address seen as that class. Oilpan
+ * Objects. A node, an event, a token list is the Blink object itself: each
+ * handle is its address as a ScriptWrappable, typed by its interface. Oilpan
  * scans the native stack at every collection that can run under a native
  * call, so a node on the stack is alive with nothing done for it. A node the
  * program keeps -- in a field, an array, a closure, a global, across an
@@ -35,8 +35,7 @@
  * throws nts_dom_exception_take_message's text. No other member has one.
  *
  * Events. A listener is Blink's own: a native event listener the target
- * holds, calling a compiled closure with the event's target node inside its
- * own entry, the program's environment entered by the host's invoker
+ * holds, calling a compiled closure with the event inside its own entry, the program's environment entered by the host's invoker
  * (nts_blink_dom_set_invoker). The closure crosses as C's
  * (callback, context, destroy) triple and is given back -- destroy -- when
  * the listener is removed, or when the document goes. A listener handle is
@@ -63,11 +62,12 @@ NtsDomDocument* nts_dom_document(void);
  * for the caller to free. Frees the exception. */
 char* nts_dom_exception_take_message(NtsDomException* exception);
 
-/* `target.addEventListener(type, listener)` for a compiled closure, which
- * the listener keeps until nts_dom_unlisten or the document's end. */
-NtsDomListener* nts_dom_listen(NtsDomNode* target,
+/* `target.addEventListener(type, listener)` for a compiled closure, called
+ * with the event, which the listener keeps until nts_dom_unlisten or the
+ * document's end. */
+NtsDomListener* nts_dom_listen(NtsDomEventTarget* target,
                                const NtsBorrowedString* type,
-                               void (*callback)(NtsDomNode* target,
+                               void (*callback)(NtsDomEvent* event,
                                                 void* closure),
                                void* closure,
                                void (*destroy)(void* closure));

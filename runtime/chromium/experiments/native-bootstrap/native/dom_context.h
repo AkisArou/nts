@@ -59,17 +59,30 @@ inline constinit thread_local NtsDomContext *entered = nullptr;
 
 class ListenerSet;
 class NativeJob;
-using NtsDomCallback = void (*)(NtsDomNode *, void *);
+using NtsDomCallback = void (*)(NtsDomEvent *, void *);
 using NtsDomDestroy = void (*)(void *);
 
-// A handle is the node's address, whatever it is typed as: NtsDomElement *
-// and NtsDomNode * name one object, as Element * and Node * do, because
-// Node is every DOM class's first base.
-inline blink::Node *NodeOf(const void *handle) {
-  return static_cast<blink::Node *>(const_cast<void *>(handle));
+// A handle is the object's address as a ScriptWrappable, whatever interface
+// it is typed as: NtsDomElement * and NtsDomNode * name one object, as
+// Element * and Node * do, and an event, a token list or a style declaration
+// is the same kind of thing -- an object Oilpan owns and finds on the native
+// stack. Every conversion goes through ScriptWrappable, so no base's offset
+// is assumed: the handle's type says which class it is.
+inline blink::ScriptWrappable *WrappableOf(const void *handle) {
+  return static_cast<blink::ScriptWrappable *>(const_cast<void *>(handle));
 }
-template <class Handle> Handle *HandleOf(blink::Node *node) {
-  return reinterpret_cast<Handle *>(node);
+template <class T> T *ObjectOf(const void *handle) {
+  return static_cast<T *>(WrappableOf(handle));
+}
+inline blink::Node *NodeOf(const void *handle) {
+  return ObjectOf<blink::Node>(handle);
+}
+template <class Handle> Handle *HandleOf(blink::ScriptWrappable *object) {
+  return reinterpret_cast<Handle *>(object);
+}
+// A member answering a reference (`classList()` is a DOMTokenList&).
+template <class Handle> Handle *HandleOf(blink::ScriptWrappable &object) {
+  return HandleOf<Handle>(&object);
 }
 
 inline blink::String CopyUtf16(const uint16_t *data, size_t length) {
@@ -118,6 +131,8 @@ using nts_dom::HandleOf;
 using nts_dom::ListenerSet;
 using nts_dom::NativeJob;
 using nts_dom::NodeOf;
+using nts_dom::ObjectOf;
+using nts_dom::WrappableOf;
 using nts_dom::NtsDomCallback;
 using nts_dom::NtsDomDestroy;
 
@@ -127,7 +142,7 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
 
   // A compiled listener's call: its own entry, as any native callback, and
   // the program's environment entered by the host that owns the program.
-  void Dispatch(NtsDomCallback callback, blink::Node *target, void *closure);
+  void Dispatch(NtsDomCallback callback, blink::Event *event, void *closure);
   // Gives a closure back where the program's environment is entered.
   void GiveBack(NtsDomDestroy destroy, void *closure);
   // A job queued by native code, run as a microtask or at the end of the
@@ -233,23 +248,34 @@ inline void AssertEntered() { DCHECK(entered); }
 // A program's string as a Blink member takes one: `String` for text,
 // `AtomicString` for a name, whichever its parameter is -- each a single
 // conversion, so overload resolution has one answer. A literal comes from
-// the context's caches either way, and NULL is the null string.
+// the context's caches either way, and NULL is the null string. A USVString
+// has its lone surrogates replaced by U+FFFD, as V8's conversion does.
 class NtsText {
   STACK_ALLOCATED();
 
 public:
-  NtsText(NtsDomContext &context, const NtsBorrowedString *string)
-      : context_(&context), string_(string) {}
+  NtsText(NtsDomContext &context, const NtsBorrowedString *string,
+          bool scalar_values = false)
+      : context_(&context), string_(string), scalar_values_(scalar_values) {}
   operator blink::String() const {
-    return string_ ? context_->Text(nts_string_view(string_)) : blink::String();
+    if (!string_)
+      return blink::String();
+    blink::String text = context_->Text(nts_string_view(string_));
+    return scalar_values_ ? blink::ReplaceUnmatchedSurrogates(std::move(text))
+                          : text;
   }
   operator blink::AtomicString() const {
-    return string_ ? context_->Name(nts_string_view(string_)) : blink::g_null_atom;
+    if (!string_)
+      return blink::g_null_atom;
+    if (scalar_values_)
+      return blink::AtomicString(static_cast<blink::String>(*this));
+    return context_->Name(nts_string_view(string_));
   }
 
 private:
   raw_ptr<NtsDomContext> context_;
   raw_ptr<const NtsBorrowedString> string_;
+  bool scalar_values_;
 };
 
 // A text result as Blink's implementation answers it. A union the IDL

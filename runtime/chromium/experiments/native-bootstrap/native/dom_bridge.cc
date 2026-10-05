@@ -9,21 +9,22 @@
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 
 namespace nts_dom {
-// The nodes the program keeps off the stack, one count per root it holds
-// (nts_dom_retain / nts_dom_release, which the compiler calls). A node the
-// program only passes along is never here: Oilpan finds it on the native
-// stack, where it is a raw pointer like any other in Blink's own frames.
-// One set per thread, held by one Persistent, so a root is one traced
-// member and costs a hash only when the program keeps a node.
-class NodeRoots final : public blink::GarbageCollected<NodeRoots> {
+// The objects the program keeps off the stack -- nodes, events, token lists
+// -- one count per root it holds (nts_dom_retain / nts_dom_release, which the
+// compiler calls). An object the program only passes along is never here:
+// Oilpan finds it on the native stack, where it is a raw pointer like any
+// other in Blink's own frames. One set per thread, held by one Persistent,
+// so a root is one traced member and costs a hash only when the program
+// keeps an object.
+class Roots final : public blink::GarbageCollected<Roots> {
 public:
   void Trace(blink::Visitor *visitor) const { visitor->Trace(counts); }
-  blink::HeapHashCountedSet<blink::Member<blink::Node>> counts;
+  blink::HeapHashCountedSet<blink::Member<blink::ScriptWrappable>> counts;
 };
 
-NodeRoots &Roots() {
-  DEFINE_STATIC_LOCAL(blink::Persistent<NodeRoots>, roots,
-                      (blink::MakeGarbageCollected<NodeRoots>()));
+Roots &HeldObjects() {
+  DEFINE_STATIC_LOCAL(blink::Persistent<Roots>, roots,
+                      (blink::MakeGarbageCollected<Roots>()));
   return *roots;
 }
 
@@ -33,7 +34,7 @@ NodeRoots &Roots() {
 // back once -- never from a destructor, which Oilpan runs while sweeping.
 class NtsListener final : public blink::NativeEventListener {
 public:
-  NtsListener(NtsDomContext *context, blink::Node *target,
+  NtsListener(NtsDomContext *context, blink::EventTarget *target,
               const blink::AtomicString &type, NtsDomCallback callback,
               void *closure, NtsDomDestroy destroy)
       : context_(context), target_(target), type_(type), callback_(callback),
@@ -61,7 +62,7 @@ public:
 
 private:
   raw_ptr<NtsDomContext> context_;
-  blink::Member<blink::Node> target_;
+  blink::Member<blink::EventTarget> target_;
   blink::AtomicString type_;
   NtsDomCallback callback_;
   raw_ptr<void> closure_;
@@ -76,7 +77,7 @@ public:
   blink::HeapHashSet<blink::Member<NtsListener>> set;
 };
 
-// Listener handles the program keeps off the stack, as NodeRoots for nodes.
+// Listener handles the program keeps off the stack, as Roots for objects.
 class ListenerRoots final : public blink::GarbageCollected<ListenerRoots> {
 public:
   void Trace(blink::Visitor *visitor) const { visitor->Trace(counts); }
@@ -157,15 +158,13 @@ using nts_dom::HeldListeners;
 using nts_dom::ListenerSet;
 using nts_dom::NativeJob;
 using nts_dom::NtsListener;
-using nts_dom::Roots;
+using nts_dom::HeldObjects;
 
 namespace nts_dom {
 void NtsListener::Invoke(blink::ExecutionContext *, blink::Event *event) {
   if (!callback_)
     return;
-  blink::EventTarget *target = event->target();
-  context_->Dispatch(callback_, target ? target->ToNode() : nullptr,
-                     closure_.get());
+  context_->Dispatch(callback_, event, closure_.get());
 }
 } // namespace nts_dom
 
@@ -178,25 +177,26 @@ NtsDomContext::~NtsDomContext() = default;
 
 // A compiled listener's call: its own entry, as any native callback, and
 // the program's environment entered by the host that owns the program.
-void NtsDomContext::Dispatch(NtsDomCallback callback, blink::Node *target, void *closure) {
+void NtsDomContext::Dispatch(NtsDomCallback callback, blink::Event *event,
+                             void *closure) {
   if (closed || !invoke)
     return;
   Entry entry(this);
   v8::HandleScope handles(v8_isolate);
   v8::MicrotasksScope microtasks(v8_isolate, event_loop->microtask_queue(),
                                  v8::MicrotasksScope::kRunMicrotasks);
-  // On this stack for the call: the target is found here by Oilpan's
-  // stack scan, as the program's own frames find it.
+  // On this stack for the call, as the program's own frames are: the event
+  // is found here by Oilpan's stack scan, and is alive for the dispatch.
   struct Call {
     NtsDomCallback callback;
-    raw_ptr<NtsDomNode> target;
+    raw_ptr<NtsDomEvent> event;
     raw_ptr<void> closure;
-  } call{callback, HandleOf<NtsDomNode>(target), closure};
+  } call{callback, HandleOf<NtsDomEvent>(event), closure};
   invoke(
       invoke_host.get(),
       [](void *state) {
         auto *call = static_cast<Call *>(state);
-        call->callback(call->target.get(), call->closure.get());
+        call->callback(call->event.get(), call->closure.get());
       },
       &call);
 }
@@ -425,7 +425,7 @@ NtsDomNode *nts_blink_dom_element_by_id(NtsDomContext *context,
   return HandleOf<NtsDomNode>(
       context->document->getElementById(blink::AtomicString(id)));
 }
-size_t nts_blink_dom_roots(void) { return Roots().counts.size(); }
+size_t nts_blink_dom_roots(void) { return HeldObjects().counts.size(); }
 void nts_blink_dom_collect_for_testing(void) {
   nts_dom::AssertEntered();
   blink::ThreadState::Current()->CollectAllGarbageForTesting(
@@ -477,15 +477,15 @@ void nts_blink_dom_end_checkpoint(NtsDomContext *context,
 // generated (dom_idl.cc). Each runs inside an entry, whose context it finds
 // itself, as the generated ones do.
 void *nts_dom_retain(void *node) {
-  Roots().counts.insert(NodeOf(node));
+  HeldObjects().counts.insert(WrappableOf(node));
   return node;
 }
 void nts_dom_release(void *node) {
   // A release with no root to give back is a counting error in the
   // compiler, not anything a program can do: stop where it happened rather
   // than let a later release unroot a node someone still holds.
-  auto &counts = Roots().counts;
-  const auto found = counts.find(NodeOf(node));
+  auto &counts = HeldObjects().counts;
+  const auto found = counts.find(WrappableOf(node));
   CHECK(found != counts.end());
   counts.erase(found);
 }
@@ -505,7 +505,7 @@ char *nts_dom_exception_take_message(NtsDomException *exception) {
   return message;
 }
 
-NtsDomListener *nts_dom_listen(NtsDomNode *target,
+NtsDomListener *nts_dom_listen(NtsDomEventTarget *target,
                                const NtsBorrowedString *type,
                                NtsDomCallback callback, void *closure,
                                NtsDomDestroy destroy) {
@@ -515,8 +515,9 @@ NtsDomListener *nts_dom_listen(NtsDomNode *target,
   CHECK(context.invoke);
   const auto name = context.Name(nts_string_view(type));
   auto *listener = blink::MakeGarbageCollected<NtsListener>(
-      &context, NodeOf(target), name, callback, closure, destroy);
-  NodeOf(target)->addEventListener(name, listener);
+      &context, ObjectOf<blink::EventTarget>(target), name, callback, closure,
+      destroy);
+  ObjectOf<blink::EventTarget>(target)->addEventListener(name, listener);
   context.listeners->set.insert(listener);
   return reinterpret_cast<NtsDomListener *>(listener);
 }

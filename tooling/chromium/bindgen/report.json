@@ -1,6 +1,31 @@
 {
-  "bound": 433,
+  "bound": 621,
   "skipped": [
+    {
+      "interface": "EventTarget",
+      "member": "addEventListener/3",
+      "why": "parameter type EventListener?"
+    },
+    {
+      "interface": "EventTarget",
+      "member": "addEventListener/2",
+      "why": "parameter type EventListener?"
+    },
+    {
+      "interface": "EventTarget",
+      "member": "removeEventListener/3",
+      "why": "parameter type EventListener?"
+    },
+    {
+      "interface": "EventTarget",
+      "member": "removeEventListener/2",
+      "why": "parameter type EventListener?"
+    },
+    {
+      "interface": "EventTarget",
+      "member": "when/2",
+      "why": "interface Observable is not bound"
+    },
     {
       "interface": "Node",
       "member": "get childNodes",
@@ -18,11 +43,6 @@
     },
     {
       "interface": "Element",
-      "member": "get classList",
-      "why": "interface DOMTokenList is not bound"
-    },
-    {
-      "interface": "Element",
       "member": "get attributes",
       "why": "interface NamedNodeMap is not bound"
     },
@@ -30,11 +50,6 @@
       "interface": "Element",
       "member": "get shadowRoot",
       "why": "interface ShadowRoot is not bound"
-    },
-    {
-      "interface": "Element",
-      "member": "get part",
-      "why": "interface DOMTokenList is not bound"
     },
     {
       "interface": "Element",
@@ -294,7 +309,7 @@
     {
       "interface": "Element",
       "member": "after/1",
-      "why": "variadic"
+      "why": "variadic (Node or DOMString or TrustedScript)..."
     },
     {
       "interface": "Element",
@@ -314,7 +329,7 @@
     {
       "interface": "Element",
       "member": "append/1",
-      "why": "variadic"
+      "why": "variadic (Node or DOMString or TrustedScript)..."
     },
     {
       "interface": "Element",
@@ -339,7 +354,7 @@
     {
       "interface": "Element",
       "member": "before/1",
-      "why": "variadic"
+      "why": "variadic (Node or DOMString or TrustedScript)..."
     },
     {
       "interface": "Element",
@@ -449,7 +464,7 @@
     {
       "interface": "Element",
       "member": "prepend/1",
-      "why": "variadic"
+      "why": "variadic (Node or DOMString or TrustedScript)..."
     },
     {
       "interface": "Element",
@@ -479,12 +494,12 @@
     {
       "interface": "Element",
       "member": "replaceChildren/1",
-      "why": "variadic"
+      "why": "variadic (Node or DOMString or TrustedScript)..."
     },
     {
       "interface": "Element",
       "member": "replaceWith/1",
-      "why": "variadic"
+      "why": "variadic (Node or DOMString or TrustedScript)..."
     },
     {
       "interface": "Element",
@@ -674,7 +689,7 @@
     {
       "interface": "CharacterData",
       "member": "after/1",
-      "why": "variadic"
+      "why": "variadic (Node or DOMString or TrustedScript)..."
     },
     {
       "interface": "CharacterData",
@@ -689,7 +704,7 @@
     {
       "interface": "CharacterData",
       "member": "before/1",
-      "why": "variadic"
+      "why": "variadic (Node or DOMString or TrustedScript)..."
     },
     {
       "interface": "CharacterData",
@@ -704,7 +719,7 @@
     {
       "interface": "CharacterData",
       "member": "replaceWith/1",
-      "why": "variadic"
+      "why": "variadic (Node or DOMString or TrustedScript)..."
     },
     {
       "interface": "CharacterData",
@@ -2214,7 +2229,7 @@
     {
       "interface": "Document",
       "member": "append/1",
-      "why": "variadic"
+      "why": "variadic (Node or DOMString or TrustedScript)..."
     },
     {
       "interface": "Document",
@@ -2399,7 +2414,7 @@
     {
       "interface": "Document",
       "member": "prepend/1",
-      "why": "variadic"
+      "why": "variadic (Node or DOMString or TrustedScript)..."
     },
     {
       "interface": "Document",
@@ -2409,7 +2424,7 @@
     {
       "interface": "Document",
       "member": "replaceChildren/1",
-      "why": "variadic"
+      "why": "variadic (Node or DOMString or TrustedScript)..."
     },
     {
       "interface": "Document",
@@ -2449,22 +2464,12 @@
     {
       "interface": "Document",
       "member": "write/1",
-      "why": "variadic"
-    },
-    {
-      "interface": "Document",
-      "member": "write/1",
       "why": "interface TrustedHTML is not bound"
     },
     {
       "interface": "Document",
       "member": "write/2",
       "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "Document",
-      "member": "writeln/1",
-      "why": "variadic"
     },
     {
       "interface": "Document",
@@ -2504,12 +2509,12 @@
     {
       "interface": "DocumentFragment",
       "member": "append/1",
-      "why": "variadic"
+      "why": "variadic (Node or DOMString or TrustedScript)..."
     },
     {
       "interface": "DocumentFragment",
       "member": "prepend/1",
-      "why": "variadic"
+      "why": "variadic (Node or DOMString or TrustedScript)..."
     },
     {
       "interface": "DocumentFragment",
@@ -2519,7 +2524,7 @@
     {
       "interface": "DocumentFragment",
       "member": "replaceChildren/1",
-      "why": "variadic"
+      "why": "variadic (Node or DOMString or TrustedScript)..."
     },
     {
       "interface": "HTMLElement",
@@ -3713,11 +3718,6 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get style",
-      "why": "interface CSSStyleDeclaration is not bound"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get attributeStyleMap",
       "why": "interface StylePropertyMap is not bound"
     },
@@ -3870,6 +3870,96 @@
       "interface": "HTMLInputElement",
       "member": "setRangeText/3",
       "why": "default `\"preserve\"` of argument selectionMode"
+    },
+    {
+      "interface": "HTMLButtonElement",
+      "member": "get validity",
+      "why": "interface ValidityState is not bound"
+    },
+    {
+      "interface": "HTMLButtonElement",
+      "member": "get labels",
+      "why": "interface NodeList is not bound"
+    },
+    {
+      "interface": "HTMLAnchorElement",
+      "member": "get hrefTranslate",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLAnchorElement",
+      "member": "set hrefTranslate",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Event",
+      "member": "get timeStamp",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Event",
+      "member": "get returnValue",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Event",
+      "member": "set returnValue",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Event",
+      "member": "get cancelBubble",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Event",
+      "member": "set cancelBubble",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "Event",
+      "member": "composedPath/0",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "UIEvent",
+      "member": "get view",
+      "why": "interface Window is not bound"
+    },
+    {
+      "interface": "UIEvent",
+      "member": "get sourceCapabilities",
+      "why": "interface InputDeviceCapabilities is not bound"
+    },
+    {
+      "interface": "UIEvent",
+      "member": "get pseudoTarget",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "UIEvent",
+      "member": "initUIEvent/5",
+      "why": "interface Window is not bound"
+    },
+    {
+      "interface": "UIEvent",
+      "member": "initUIEvent/4",
+      "why": "interface Window is not bound"
+    },
+    {
+      "interface": "MouseEvent",
+      "member": "initMouseEvent/15",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "KeyboardEvent",
+      "member": "initKeyboardEvent/10",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "CSSStyleDeclaration",
+      "member": "get parentRule",
+      "why": "interface CSSRule is not bound"
     }
   ]
 }

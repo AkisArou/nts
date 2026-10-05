@@ -139,7 +139,6 @@ class Generator:
         self.allowlist = allowlist
         self.interfaces = [database.find(name) for name in allowlist["interfaces"]]
         self.bound = {interface.identifier for interface in self.interfaces}
-        self.root = allowlist["root"]
         self.skipped = []
         self.functions = []
         self.members = {}  # interface identifier -> TypeScript member lines
@@ -158,11 +157,27 @@ class Generator:
         return definition
 
     def node(self, interface, name):
-        """The Blink object behind a handle. The handle's type already says
-        which; `To<>` checks it again in debug builds."""
-        if interface.identifier == self.root:
-            return f"NodeOf({name})"
-        return f"&To<blink::{blink_class_name(interface)}>(*NodeOf({name}))"
+        """The Blink object behind a handle, which the handle's type names:
+        a handle is the object as a ScriptWrappable (dom_context.h), so the
+        conversion is a static_cast from there, NULL to NULL."""
+        return f"ObjectOf<blink::{blink_class_name(interface)}>({name})"
+
+    def ancestors(self, interface):
+        chain = []
+        inherited = interface.inherited
+        while inherited is not None:
+            chain.append(inherited.identifier)
+            inherited = inherited.inherited
+        return chain
+
+    def hierarchy_root(self, interface):
+        """The bound interface a handle family starts from: an interface with
+        no bound ancestor is one."""
+        root = interface
+        for identifier in self.ancestors(interface):
+            if identifier in self.bound:
+                root = self.database.find(identifier)
+        return root
 
     @staticmethod
     def safe(name):
@@ -176,8 +191,6 @@ class Generator:
         if unwrapped.is_interface:
             interface = self.bound_interface(idl_type)
             expr = self.node(interface, name)
-            if nullable and interface.identifier != self.root:
-                expr = f"({name} ? {expr} : nullptr)"
             return Param(name, f"{self.handle_tag(interface.identifier)}* {name}",
                          f"{name}: {interface.identifier}{or_null}", expr, False)
         if unwrapped.is_union:
@@ -203,7 +216,7 @@ class Generator:
     @staticmethod
     def text(idl_type, name):
         if idl_type.unwrap().keyword_typename == "USVString":
-            return f"blink::ReplaceUnmatchedSurrogates(blink::String(NtsText(context, {name})))"
+            return f"NtsText(context, {name}, /*scalar_values=*/true)"
         return f"NtsText(context, {name})"
 
     def result(self, idl_type):
@@ -289,10 +302,14 @@ class Generator:
         if "ScriptState" in ext.values_of("CallWith") or "ThisValue" in ext.values_of("CallWith"):
             raise Skip("[CallWith=ScriptState] needs a script context")
 
-    def bind(self, interface, member, symbol, params, result, context, num_of_args=None, filled=()):
+    def bind(self, interface, member, symbol, params, result, context, num_of_args=None, filled=(), tail=None):
         placeholders = {}
         for index, param in enumerate(params):
-            placeholders[name_style.arg_f("arg{}_{}", index + 1, param.idl_name)] = param.expr
+            if param.idl_name is not None:
+                placeholders[name_style.arg_f("arg{}_{}", index + 1, param.idl_name)] = param.expr
+        if tail is not None:
+            identifier, index, vector = tail
+            placeholders[name_style.arg_f("arg{}_{}", index + 1, identifier)] = vector
         for index, (idl_name, value) in enumerate(filled, start=len(params)):
             placeholders[name_style.arg_f("arg{}_{}", index + 1, idl_name)] = value
         expression = self.call(context, placeholders, num_of_args)
@@ -369,11 +386,13 @@ class Generator:
         for operation in group:
             try:
                 self.check_member(operation)
-                if any(argument.is_variadic for argument in operation.arguments):
-                    raise Skip("variadic")
                 result = self.result(operation.return_type)
+                variadic = self.variadic(operation)
             except Skip as why:
                 self.skip(interface, f"{name}/{len(operation.arguments)}", str(why))
+                continue
+            if variadic is not None:
+                variants.extend(variadic(result))
                 continue
             arguments = operation.arguments
             required = sum(1 for argument in arguments if not argument.is_optional)
@@ -388,13 +407,13 @@ class Generator:
                                      if arguments[index].default_value is None), None)
                     filled = [(argument.identifier, self.default_value(argument))
                               for argument in arguments[count:truncate]]
-                    variants.append((operation, params, result, truncate, filled))
+                    variants.append((operation, params, result, truncate, filled, None))
                 except Skip as why:
                     self.skip(interface, f"{name}/{count}", str(why))
         base = CodeGenContext(interface=interface, class_name="V8" + interface.identifier)
         lines = self.members.setdefault(interface.identifier, [])
         used = set()
-        for operation, params, result, truncate, filled in variants:
+        for operation, params, result, truncate, filled, tail in variants:
             symbol = f"nts_dom_{interface.identifier}_{name}"
             if len(variants) > 1:
                 symbol += f"_{len(params)}"
@@ -403,24 +422,74 @@ class Generator:
             used.add(symbol)
             try:
                 context = base.make_copy(operation_group=group, operation=operation)
-                function = self.bind(interface, operation, symbol, params, result, context, truncate, filled)
+                function = self.bind(interface, operation, symbol, params, result, context, truncate, filled, tail)
             except Skip as why:
                 self.skip(interface, f"{name}/{len(params)}", str(why))
                 continue
             lines.append(self.method_line(interface, name, function))
 
+    VARIADIC_ARITIES = (1, 2, 3)
+
+    def variadic(self, operation):
+        """A variadic string tail (`classList.add(...tokens)`), bound at one,
+        two and three arguments: Blink takes the tail as one Vector<String>,
+        which the adapter builds from the given strings. None when the last
+        argument is not variadic; Skip when its element type is not text."""
+        arguments = operation.arguments
+        if not arguments or not arguments[-1].is_variadic:
+            return None
+        tail = arguments[-1]
+        element = tail.idl_type.unwrap()
+        if element.keyword_typename not in STRINGS:
+            raise Skip(f"variadic {tail.idl_type.syntactic_form}")
+        fixed = []
+        for argument in arguments[:-1]:
+            if argument.is_optional:
+                raise Skip("variadic after an optional argument")
+            param = self.parameter(argument.idl_type, argument.identifier)
+            param.idl_name = argument.identifier
+            fixed.append(param)
+
+        def variants(result):
+            out = []
+            for count in reversed(self.VARIADIC_ARITIES):
+                params = list(fixed)
+                values = []
+                for index in range(count):
+                    param = self.parameter(element, f"{tail.identifier}{index + 1}")
+                    param.idl_name = None
+                    params.append(param)
+                    values.append(f"blink::String({param.expr})")
+                vector = f"blink::Vector<blink::String>({{{', '.join(values)}}})"
+                out.append((operation, params, result, None, [], (tail.identifier, len(fixed), vector)))
+            return out
+        return variants
+
     def downcast(self, interface):
-        """`asElement(node)`: the node as an Element, or null -- Blink's
+        """`asElement(node)`: the object as an Element, or null -- Blink's
         `DynamicTo`, the checked narrowing a program needs where the IDL
-        answers a wider type (`firstChild` is a Node)."""
-        if interface.identifier == self.root:
+        answers a wider type (`firstChild` is a Node, `event.target` an
+        EventTarget). It starts from the class Blink's casts know: a Node
+        for what derives from one, `ToNode()` for a Node from an
+        EventTarget, the hierarchy's root for the rest."""
+        identifier = interface.identifier
+        root = self.hierarchy_root(interface)
+        if root is interface:
             return
-        tag = self.handle_tag(interface.identifier)
-        params = [Param("node", f"{self.handle_tag(self.root)}* node", f"node: {self.root}", "", False)]
-        function = Function(interface, f"nts_dom_as_{interface.identifier}", params,
-                            Result(f"{tag}*", f"{interface.identifier} | null", "node"),
-                            f"blink::DynamicTo<blink::{blink_class_name(interface)}>(NodeOf(node))", False, False)
+        cls = blink_class_name(interface)
+        if identifier == "Node":
+            source = root.identifier
+            expr = f"ObjectOf<blink::{blink_class_name(root)}>(eventTarget)->ToNode()"
+        else:
+            source = "Node" if "Node" in self.ancestors(interface) and "Node" in self.bound else root.identifier
+            expr = f"blink::DynamicTo<blink::{cls}>(ObjectOf<blink::{source}>({source[0].lower() + source[1:]}))"
+        tag = self.handle_tag(identifier)
+        name = source[0].lower() + source[1:]
+        params = [Param(name, f"{self.handle_tag(source)}* {name}", f"{name}: {source}", "", False)]
+        function = Function(interface, f"nts_dom_as_{identifier}", params,
+                            Result(f"{tag}*", f"{identifier} | null", "node"), expr, False, False)
         function.downcast = True
+        function.source = source
         self.functions.append(function)
 
     def skip(self, interface, name, why):
@@ -468,7 +537,9 @@ class Generator:
             nullable = "true" if function.result.nullable else "false"
             lines.append(f"  return context.Lend(nts_dom::AsString({expression}), {nullable});")
         else:
-            lines.append(f"  return {expression};")
+            # An enum-typed answer (`eventPhase()` is a PhaseType) is its
+            # IDL number.
+            lines.append(f"  return static_cast<{function.result.c}>({expression});")
         lines.append("}")
         return "\n".join(lines)
 
@@ -554,6 +625,8 @@ extern "C" {{
             types.extend(self.members.get(identifier, []))
             types.append("  }")
             if parent is None:
+                # A hierarchy's root: every root shares the one counted pair,
+                # which roots any ScriptWrappable.
                 types.append(f"  export type {identifier}Methods = {identifier}OwnMethods;")
                 types.append(f'  export type {identifier} = HostClass<"{self.handle_tag(identifier)}", null, '
                              f'"nts_dom_retain", "nts_dom_release"> & {identifier}Methods;')
@@ -561,9 +634,10 @@ extern "C" {{
                 types.append(f"  export type {identifier}Methods = {identifier}OwnMethods & {parent.identifier}Methods;")
                 types.append(f'  export type {identifier} = HostClass<"{self.handle_tag(identifier)}", '
                              f"{parent.identifier}> & {identifier}Methods;")
-            if identifier != self.root:
+            downcast = next((f for f in self.functions if getattr(f, "downcast", False) and f.interface is interface), None)
+            if downcast is not None:
                 types.append(f"  /** @ntsSymbol nts_dom_as_{identifier} */")
-                types.append(f"  export function as{identifier}(node: {self.root}): {identifier} | null;")
+                types.append(f"  export function as{identifier}({downcast.params[0].ts}): {identifier} | null;")
         declarations = f"""// {banner.replace(chr(10), chr(10) + '// ')}
 /** @ntsHeader "dom_idl.h" */
 declare module "nts:dom" {{
