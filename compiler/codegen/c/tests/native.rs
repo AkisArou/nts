@@ -56,6 +56,15 @@ fn prepare_with_types(
     source: &str,
     include_types: bool,
 ) -> Option<(Utf8PathBuf, hir::Prepared)> {
+    let (dir, snapshot) = snapshot_with_types(name, source, include_types)?;
+    Some((dir, hir::prepare(&snapshot).unwrap()))
+}
+
+fn snapshot_with_types(
+    name: &str,
+    source: &str,
+    include_types: bool,
+) -> Option<(Utf8PathBuf, nts_semantic_schema::SemanticSnapshot)> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
@@ -89,7 +98,7 @@ fn prepare_with_types(
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    Some((dir, hir::prepare(&snapshot).unwrap()))
+    Some((dir, snapshot))
 }
 
 #[path = "../../common/test-support/native_cases.rs"]
@@ -979,4 +988,51 @@ export function run(x: number): number {{
         assert!(emitted.diagnostics.is_empty(), "{name}: {:?}", emitted.diagnostics);
         assert!(emitted.writer.text().contains("addOne"), "{name}: the bridge calls `addOne`");
     }
+}
+
+/// `===` between two handles of related host classes is their identity, and C
+/// can only state it through a common pointer type: `struct HostNode *` against
+/// `struct HostElement *` is a constraint violation (C11 6.5.9p2) that clang
+/// merely warns about. Reported by the Chromium lane (`target === button`).
+#[test]
+fn identity_between_related_host_handles_is_valid_c() {
+    let source = r#"
+import type { HostClass, c_int } from "c:types";
+type Node = HostClass<"HostNode", null, "host_retain", "host_release">;
+type Element = HostClass<"HostElement", Node>;
+declare function node_at(i: c_int): Element;
+declare function node_first(n: Node): Node | null;
+export function related(): boolean { const e = node_at(0 as c_int); return node_first(e) === e; }
+export function unrelatedOrder(): boolean { const e = node_at(0 as c_int); return e !== node_first(e); }
+// Control: one class on both sides, which was already valid C.
+export function sameType(): boolean { const e = node_at(0 as c_int); return node_first(e) === node_first(e); }
+"#;
+    let Some((dir, snapshot)) = snapshot_with_types("host-identity", source, false) else {
+        return;
+    };
+    // A host handle needs the counting provider; a never-free program refuses it.
+    let options = hir::Options { provider: hir::Provider::ReferenceCounting, ..hir::Options::default() };
+    let prepared = hir::prepare_with(&snapshot, &options).unwrap();
+    for name in ["related", "unrelatedOrder", "sameType"] {
+        assert!(prepared.program.funcs.iter().any(|func| func.name == name),
+            "{name} must reach the C it is compiled to: {:?}", prepared.diagnostics);
+    }
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    std::fs::write(dir.join("program.c"), emitted.writer.text()).unwrap();
+    for file in emitted.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
+    let compiled = Command::new("clang")
+        .args(["-std=c11", "-fsyntax-only", "-Werror=compare-distinct-pointer-types", "-I"])
+        .arg(dir.as_std_path())
+        .arg(dir.join("program.c").as_std_path())
+        .output()
+        .expect("clang is required for the C backend's tests");
+    assert!(
+        compiled.status.success(),
+        "{}\n--- program.c ---\n{}",
+        String::from_utf8_lossy(&compiled.stderr),
+        emitted.writer.text()
+    );
 }

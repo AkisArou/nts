@@ -2084,17 +2084,27 @@ fn reference_comparison(
 ) -> Option<String> {
     let left = &func.values[lhs.0 as usize].ty;
     let right = &func.values[rhs.0 as usize].ty;
-    if !matches!(bin, BinOp::Eq | BinOp::Ne) || !left.is_managed() || !right.is_managed() {
+    if !matches!(bin, BinOp::Eq | BinOp::Ne) {
         return None;
     }
-    // Same class on both sides is already valid C, and saying so plainly reads
+    // Same type on both sides is already valid C, and saying so plainly reads
     // better than two casts that change nothing.
     if left == right {
         return None;
     }
+    // A host's handles are native pointers to its own structs: a `Node` and an
+    // `Element` are `struct NtsDomNode *` and `struct NtsDomElement *`, and `==`
+    // between distinct struct pointer types is a constraint violation (C11
+    // 6.5.9p2) that clang only warns about. The addresses are the identity, as
+    // LLVM's `ptr` comparison already says.
+    let common = match (left, right) {
+        _ if left.is_managed() && right.is_managed() => "const NtsHeader *",
+        (HirType::NativePointer(_), HirType::NativePointer(_)) => "const void *",
+        _ => return None,
+    };
     let operator = if matches!(bin, BinOp::Ne) { "!=" } else { "==" };
     Some(format!(
-        "{name} = (const NtsHeader *){} {operator} (const NtsHeader *){};",
+        "{name} = ({common}){} {operator} ({common}){};",
         value_name(lhs),
         value_name(rhs)
     ))
