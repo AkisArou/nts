@@ -88,6 +88,10 @@ pub struct Summaries {
     harmless: rustc_hash::FxHashSet<String>,
     /// Functions whose result is one of their own parameters.
     hands_back: rustc_hash::FxHashSet<String>,
+    /// Functions returning a handle the stack keeps alive
+    /// (`native::Family::stack_rooted`) to compiled callers only. See
+    /// [`returning_from_the_stack`].
+    stack_returns: rustc_hash::FxHashSet<String>,
     /// Parameter slots each function takes ownership of, by function name.
     consumes: rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<u32>>,
     /// Parameter fields every caller has already zeroed, by function name. See
@@ -116,6 +120,52 @@ impl Summaries {
     pub fn consumes(&self, name: &str) -> Option<&rustc_hash::FxHashSet<u32>> {
         self.consumes.get(name)
     }
+
+    /// Whether a function returns a stack-rooted handle with no count: its
+    /// result is on its caller's stack the moment it returns, and only
+    /// compiled code calls it. See [`returning_from_the_stack`].
+    #[must_use]
+    pub fn returns_from_the_stack(&self, name: &str) -> bool {
+        self.stack_returns.contains(name)
+    }
+}
+
+/// Functions that hand back a stack-rooted handle (`native::Family::
+/// stack_rooted`) and owe their caller no count for it.
+///
+/// A count on a returned value is what lets a caller keep it, and for a
+/// handle the host finds on the stack the caller's own frame does that: the
+/// value goes from the callee's return register into the caller's, and the
+/// caller counts it only where it leaves the stack, as it would a foreign
+/// +0 result. So `element(c, "tr")` returning the node it made costs no
+/// root, and neither does the caller's every exit releasing one.
+///
+/// Only where every caller is compiled code calling it by name: an export
+/// returns to C, which may keep the handle anywhere; a method or closure body
+/// is reached through a table whose caller cannot see which body ran, and a
+/// suspension's resume is called by the runtime. Those keep the owned
+/// convention -- `lent`, the set `hands_back` and `consumes` already exclude.
+fn returning_from_the_stack(program: &Program, lent: &rustc_hash::FxHashSet<&str>) -> rustc_hash::FxHashSet<String> {
+    let resumed: rustc_hash::FxHashSet<&str> = program
+        .funcs
+        .iter()
+        .flat_map(|func| func.values.iter())
+        .filter_map(|op| match &op.kind {
+            OpKind::Suspend { resume, .. } => Some(resume.as_str()),
+            _ => None,
+        })
+        .collect();
+    program
+        .funcs
+        .iter()
+        .filter(|func| {
+            !func.exported
+                && !lent.contains(func.name.as_str())
+                && !resumed.contains(func.name.as_str())
+                && func.return_type.counted_family().is_some_and(super::native::Family::stack_rooted)
+        })
+        .map(|func| func.name.clone())
+        .collect()
 }
 
 /// Read every function once, before any of them is counted.
@@ -185,6 +235,7 @@ pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
             .into_iter()
             .filter(|name| !lent.contains(name.as_str()))
             .collect(),
+        stack_returns: returning_from_the_stack(program, &lent),
         consumes: {
             // A function takes over a parameter it stores only if every way
             // into it hands one over, and only a `Direct` call does
@@ -460,7 +511,13 @@ fn classify(
                 // would be wrong and is a use-after-free: the callee stops
                 // retaining *unconditionally*, so there is no reference here to
                 // have been produced.
-                if !summaries.hands_back.contains(name) {
+                //
+                // And one that returns a stack-rooted handle with no count
+                // (`Summaries::returns_from_the_stack`) hands back something
+                // this frame now holds on the stack.
+                if summaries.stack_returns.contains(name) {
+                    Ownership::Borrowed
+                } else if !summaries.hands_back.contains(name) {
                     Ownership::Produced
                 } else if safely() {
                     Ownership::Borrowed
@@ -553,15 +610,7 @@ pub fn analyze(
         &summaries.harmless,
         &summaries.starts_zero,
     );
-    let crossing = crossing_borrows(
-        func,
-        layouts,
-        &summaries.mutates,
-        &held,
-        &initializing,
-        &summaries.harmless,
-        &owns,
-    );
+    let crossing = crossing_borrows(func, layouts, summaries, &held, &initializing, &owns);
     for anchor in anchors(func, &crossing, &held) {
         live.hold_to_every_exit(func, anchor);
     }
@@ -1647,6 +1696,25 @@ fn anchors(
 /// it. A load survives only while its container is anchored and the slot goes
 /// on holding what it holds, which is a claim about stores and calls and is not
 /// circular at all.
+/// Call results that are stack-rooted handles handed back with no count: a
+/// foreign call's +0 result, and a compiled function's that returns from the
+/// stack (`Summaries::returns_from_the_stack`). Borrowed for their whole life
+/// by the stack itself, so that a cursor walking siblings -- `n = next(n)`
+/// round a loop -- is carried by its edges without a count, as a loaded
+/// cursor is. Not one declared `Owned`, which arrives with a reference that
+/// must be given back.
+fn stack_borrowed_results<'a>(func: &'a Func, summaries: &'a Summaries) -> impl Iterator<Item = ValueId> + 'a {
+    func.values.iter().enumerate().filter_map(move |(index, op)| {
+        let value = ValueId(u32::try_from(index).ok()?);
+        let handed_back = match &op.kind {
+            OpKind::Call { callee: super::Callee::Native(target), .. } => !target.returns_owned,
+            OpKind::Call { callee: super::Callee::Direct(name), .. } => summaries.stack_returns.contains(name),
+            _ => false,
+        };
+        (handed_back && stack_rooted(func, value)).then_some(value)
+    })
+}
+
 /// Whether `value` is a handle its host keeps alive on the native stack
 /// (`native::Family::stack_rooted`): one that needs no count while it is in
 /// the frame, whatever lets go of it elsewhere.
@@ -1657,12 +1725,12 @@ fn stack_rooted(func: &Func, value: ValueId) -> bool {
 fn crossing_borrows(
     func: &Func,
     layouts: &[Layout],
-    mutates: &rustc_hash::FxHashSet<String>,
+    summaries: &Summaries,
     owned: &rustc_hash::FxHashSet<ValueId>,
     initializing: &rustc_hash::FxHashSet<ValueId>,
-    harmless: &rustc_hash::FxHashSet<String>,
     owns: &rustc_hash::FxHashSet<ValueId>,
 ) -> rustc_hash::FxHashSet<ValueId> {
+    let (mutates, harmless) = (&summaries.mutates, &summaries.harmless);
     // Operations in a block that control never leaves. A `throw` lowers to a
     // call and an `Unreachable`, and nothing after it runs -- so whatever it
     // did, nothing observes. Guard clauses are everywhere in real code, and
@@ -1703,19 +1771,7 @@ fn crossing_borrows(
             }
         }
     }
-    // And a handle its host keeps alive on the stack, as a foreign call hands
-    // it back (+0): borrowed for its whole life by the stack itself, so that
-    // a cursor walking siblings -- `n = next(n)` round a loop -- is carried
-    // by its edges without a count, as a loaded cursor is. Not one declared
-    // `Owned`, which arrives with a reference that must be given back.
-    for (index, op) in func.values.iter().enumerate() {
-        let value = ValueId(u32::try_from(index).unwrap_or(u32::MAX));
-        if stack_rooted(func, value)
-            && matches!(&op.kind, OpKind::Call { callee: super::Callee::Native(target), .. } if !target.returns_owned)
-        {
-            crossing.insert(value);
-        }
-    }
+    crossing.extend(stack_borrowed_results(func, summaries));
     // Loads and block parameters in **one** fixpoint, not two, and running
     // down rather than up. In a loop they depend on each other circularly:
     // `at` is a block parameter carrying `head` and `at.next`, the load is good
@@ -1785,6 +1841,11 @@ fn crossing_borrows(
                         args.get(slot).is_some_and(|arg| {
                             crossing.contains(arg)
                                 || owned.contains(arg)
+                                // A null carries no count, so it is no reason
+                                // for a stack-rooted parameter to keep one:
+                                // `d === null ? null : query(d)`.
+                                || (stack_rooted(func, *param)
+                                    && matches!(func.values[arg.0 as usize].kind, OpKind::ConstNull))
                                 || housed_safely(
                                     func, layouts, mutates, &standing, &unobserved, *arg,
                                 )

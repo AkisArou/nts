@@ -170,7 +170,7 @@ fn count_only_returns(func: &mut Func, layouts: &[Layout], summaries: &own::Summ
     let mut report = Report::default();
     // Unless what it hands back is a parameter, which the caller is holding
     // already. See `own::Summaries::hands_back`.
-    if summaries.hands_back(&func.name) {
+    if summaries.hands_back(&func.name) || summaries.returns_from_the_stack(&func.name) {
         return report;
     }
     let returned: Vec<(usize, ValueId)> = func
@@ -259,10 +259,17 @@ fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summari
                     // Nothing to give back. See `own::Map::null_in`.
                     && !here.is_some_and(|proven| proven.contains(value))
             });
-            let transfers: Vec<ValueId> = super::operands_of_terminator(&block.terminator)
-                .into_iter()
-                .filter(|value| own::counted(func, layouts, *value))
-                .collect();
+            // Nothing is handed over where the caller holds the result on its
+            // stack (`own::Summaries::returns_from_the_stack`): a count this
+            // frame owns on it is simply given up here.
+            let transfers: Vec<ValueId> = if summaries.returns_from_the_stack(&func.name) {
+                Vec::new()
+            } else {
+                super::operands_of_terminator(&block.terminator)
+                    .into_iter()
+                    .filter(|value| own::counted(func, layouts, *value))
+                    .collect()
+            };
             for value in settle(&transfers, &mut dying) {
                 retain(func, &mut ops, value, &mut report);
             }

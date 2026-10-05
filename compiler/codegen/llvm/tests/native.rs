@@ -2833,8 +2833,8 @@ int errors_seen(void) { return errors; }
 ///
 /// The host's collector finds a handle on the native stack (Oilpan scans it),
 /// so one the program only uses in the frame -- a result read and passed on,
-/// an upcast, a loop walking siblings -- is borrowed and costs no call at
-/// all. One it keeps is rooted with the binding's pair: a module global (one
+/// an upcast, a loop walking siblings, a node an internal helper returns, a
+/// node or null merged at a branch -- is borrowed and costs no call at all. One it keeps is rooted with the binding's pair: a module global (one
 /// root while held, none after), an array, a closure's capture, a handle held
 /// across an `await` (one root while the suspended frame -- heap memory, which
 /// no stack scan reaches -- holds it), and a handle returned to C, which the
@@ -2854,6 +2854,11 @@ declare function retains_seen(): c_int;
 declare function errors_seen(): c_int;
 let kept: Node | null = null;
 export function local(): number { const e = node_at(0 as c_int); return node_value(e) + node_value(node_at(1 as c_int)); }
+function made(i: number): Element { return node_at(i as c_int); }
+interface Holder { node: Element }
+function unwrapped(): Element { const holder: Holder = { node: node_at(2 as c_int) }; return holder.node; }
+export function helper(): number { const e = made(0); return node_value(e) + node_value(made(1)) + node_value(unwrapped()); }
+export function maybe(flag: boolean): number { const n: Node | null = flag ? node_at(1 as c_int) : null; return n === null ? 0 : node_value(n); }
 export function walk(): number {
     let n: Node | null = node_at(0 as c_int);
     let sum = 0;
@@ -2888,14 +2893,16 @@ export function errors(): number { return errors_seen(); }
     let caller = counted_caller(
         r#"void host_release(void *);
   double r0 = retains(); double l = local(); double r1 = retains(); double w = walk(); double r2 = retains();
-  printf("local=%.0f/%.0f walk=%.0f/%.0f", l, r1 - r0, w, r2 - r1);
+  double h = helper(); double r3 = retains();
+  double m = maybe(true) + maybe(false); double r4 = retains();
+  printf("local=%.0f/%.0f walk=%.0f/%.0f helper=%.0f/%.0f maybe=%.0f/%.0f", l, r1 - r0, w, r2 - r1, h, r3 - r2, m, r4 - r3);
   printf(" keep=%.0f drop=%.0f", keep(), drop());
   printf(" listed=%.0f captured=%.0f", listed(), captured());
   void *given = give(); printf(" given=%.0f", roots()); host_release(given);
   startAcross(); nts_checkpoint(); printf(" across=%.0f", settledAcross());
   for (int i = 0; i < 50; i++) { local(); walk(); keep(); drop(); listed(); captured(); host_release(give()); startAcross(); nts_checkpoint(); }
   printf(" roots=%.0f errors=%.0f", roots(), errors());"#,
-        "local(); walk(); listed(); captured();",
+        "local(); walk(); helper(); listed(); captured();",
     );
     let Some((text, outputs)) =
         run_on_both_backends("host-handle", source, hir::Provider::ReferenceCounting, HOST_LIBRARY, &caller)
@@ -2904,7 +2911,7 @@ export function errors(): number { return errors_seen(); }
     };
     assert!(text.contains("host_retain"), "nothing was ever rooted: the escapes went uncounted");
     for output in outputs {
-        assert_eq!(output, "local=30/0 walk=100/0 keep=1 drop=0 listed=30 captured=20 given=1 across=301 roots=0 errors=0 leak=0");
+        assert_eq!(output, "local=30/0 walk=100/0 helper=60/1 maybe=20/0 keep=1 drop=0 listed=30 captured=20 given=1 across=301 roots=0 errors=0 leak=0");
     }
 }
 
