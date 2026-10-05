@@ -431,7 +431,47 @@ public final class RuntimeRegression {
     private static NtsResumable record(final StringBuilder out, final String text) {
         return new NtsResumable() { public void resume() { out.append(text); } };
     }
+    private static NtsPromise handledPromise() {
+        NtsPromise promise = NtsPromise.newPromise();
+        NtsPromise.subscribe(promise, new NtsResumable() { public void resume() {} });
+        return promise;
+    }
+    private static void testRejectedValues() {
+        NtsValue[] reasons = {
+            NtsValue.ofNumber(42.5), NtsValue.ofNumber(-0.0), NtsValue.ofNumber(Double.NaN),
+            NtsValue.ofNumber(Double.POSITIVE_INFINITY), NtsValue.ofBoolean(true), NtsValue.ofBoolean(false),
+            NtsValue.NULL_VALUE, NtsValue.UNDEFINED_VALUE, NtsValue.ofString(new String("reason")),
+            NtsValue.ofReference(new Object()), NtsValue.ofTagged(NtsValue.FUNCTION, new Object()),
+            NtsValue.ofReference(NtsSymbol.newSymbol(null)), NtsValue.ofBigInt(NtsBigInt.fromLong(9007199254740993L))
+        };
+        for (NtsValue reason : reasons) {
+            NtsPromise source = handledPromise(), copy = handledPromise(), adopted = handledPromise();
+            NtsPromise race = NtsPromise.race(new NtsPromise[] { source });
+            NtsPromise all = NtsPromise.all(new NtsPromise[] { source }, new Object[1]);
+            NtsPromise.subscribe(race, new NtsResumable() { public void resume() {} });
+            NtsPromise.subscribe(all, new NtsResumable() { public void resume() {} });
+            NtsPromise.adopt(adopted, source);
+            NtsPromise.rejectValue(source, reason);
+            NtsPromise.rejectWith(copy, source);
+            NtsPromise.fulfillNumber(source, 999);
+            NtsPromise.rejectValue(source, NtsValue.UNDEFINED_VALUE);
+            NtsEnv.drain(NtsEnv.current());
+            for (NtsPromise owner : new NtsPromise[] { source, copy, adopted, race, all }) {
+                check(NtsPromise.isRejected(owner), "forwarded rejection state");
+                check(NtsPromise.reason(owner) == reason, "forwarded rejection retains exact tag, value and identity");
+            }
+        }
+        NtsPromise missing = handledPromise();
+        NtsPromise.reject(missing, null);
+        check(NtsPromise.reason(missing) == NtsValue.UNDEFINED_VALUE, "bare null rejection retains undefined meaning");
+        NtsPromise fulfilled = NtsPromise.newPromise();
+        NtsPromise.fulfillNumber(fulfilled, 17);
+        NtsPromise.rejectValue(fulfilled, NtsValue.ofBoolean(false));
+        number(NtsPromise.number(fulfilled), 17, "rejection cannot overwrite fulfillment");
+        NtsEnv.drain(NtsEnv.current());
+    }
     private static void testPromises() {
+        testRejectedValues();
         final StringBuilder out = new StringBuilder();
         NtsPromise p = NtsPromise.newPromise();
         for (int i = 0; i < 100; ++i) { NtsPromise.subscribe(p, record(out, i + ",")); }

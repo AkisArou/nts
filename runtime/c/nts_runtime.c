@@ -8806,9 +8806,7 @@ static void nts_report_unhandled_rejections(void) {
       /* The list is not cleared first: `nts_uncaught` does not return, and an
          embedder that survives it will see the same promise again only if it
          rejects again. */
-      nts_uncaught(nts_value_of_reference(
-                       promise->reason, nts_tag_of_reference(promise->reason)),
-                   0);
+      nts_uncaught(nts_promise_reason(promise), 0);
     }
     nts_release((NtsHeader *)promise);
   }
@@ -9035,7 +9033,7 @@ static const NtsDescriptor nts_desc_reaction = {NTS_KIND_OBJECT,
                                                 0u,
                                                 NULL};
 
-/* The fulfilled payload is *not* here: it is an erased slot, listed below, and
+/* The settlement payload is *not* here: it is an erased slot, listed below, and
  * listing it in both tables would make `nts_each_reference` visit it twice --
  * doubling every retain and release, with the second release freeing something
  * still in use. */
@@ -9044,13 +9042,12 @@ static const uint32_t nts_promise_erased[] = {
 };
 
 static const uint32_t nts_promise_offsets[] = {
-    (uint32_t)offsetof(NtsPromise, reason),
     (uint32_t)offsetof(NtsPromise, reactions),
 };
 
 static const NtsDescriptor nts_desc_promise = {NTS_KIND_OBJECT,
                                                (uint32_t)sizeof(NtsPromise),
-                                               2u,
+                                               1u,
                                                1u,
                                                nts_promise_offsets,
                                                0,
@@ -9189,17 +9186,36 @@ void nts_promise_fulfill_reference(NtsPromise *promise, NtsHeader *object) {
   nts_promise_fulfill_tagged(promise, object, nts_tag_of_reference(object));
 }
 
-void nts_promise_fulfill_value(NtsPromise *promise, NtsValue value) {
-  nts_promise_require_owner("nts_promise_fulfill_value");
-  if (promise->state != NTS_PROMISE_PENDING) {
-    return;
-  }
+static void nts_promise_validate_value(NtsValue value) {
   uint32_t tag = nts_value_tag(value);
   if (tag > NTS_TAG_NULL && !NTS_TAG_IS_HANDLE(tag) && tag != NTS_TAG_BIGINT) {
     fprintf(stderr, "nts: settled a promise with an unknown value tag\n");
     abort();
   }
+}
+
+void nts_promise_fulfill_value(NtsPromise *promise, NtsValue value) {
+  nts_promise_require_owner("nts_promise_fulfill_value");
+  if (promise->state != NTS_PROMISE_PENDING) {
+    return;
+  }
+  nts_promise_validate_value(value);
   nts_promise_fulfill(promise, value);
+}
+
+/* Both rejection entry points arrive here after owner/state checks. Store the
+ * exact tagged value once; reference ownership uses the existing erased slot. */
+static void nts_promise_reject_store(NtsPromise *promise, NtsValue reason) {
+  /* Asked **before** settling, because settling consumes the list: it reverses
+     the reactions into subscription order and queues them, leaving `reactions`
+     null whether or not there were any. */
+  bool listened = promise->reactions != 0 || promise->handled;
+  nts_value_retain(reason);
+  promise->value = reason;
+  nts_promise_settle(promise, NTS_PROMISE_REJECTED);
+  if (!listened) {
+    nts_rejection_candidate(promise);
+  }
 }
 
 void nts_promise_reject(NtsPromise *promise, NtsHeader *reason) {
@@ -9207,16 +9223,9 @@ void nts_promise_reject(NtsPromise *promise, NtsHeader *reason) {
   if (promise->state != NTS_PROMISE_PENDING) {
     return;
   }
-  /* Asked **before** settling, because settling consumes the list: it reverses
-     the reactions into subscription order and queues them, leaving `reactions`
-     null whether or not there were any. */
-  bool listened = promise->reactions != 0 || promise->handled;
-  nts_retain(reason);
-  promise->reason = reason;
-  nts_promise_settle(promise, NTS_PROMISE_REJECTED);
-  if (!listened) {
-    nts_rejection_candidate(promise);
-  }
+  nts_promise_reject_store(promise, reason
+      ? nts_value_of_reference(reason, nts_tag_of_reference(reason))
+      : nts_value_of_undefined());
 }
 
 void nts_promise_subscribe(NtsPromise *promise, NtsTask reaction) {
@@ -9311,27 +9320,22 @@ bool nts_promise_is_rejected(const NtsPromise *promise) {
   return promise->state == NTS_PROMISE_REJECTED;
 }
 
-/* Reject `result` with whatever `source` was rejected with.
- *
- * One call rather than a reason accessor and a reject, so the reason never
- * becomes a value in the compiler's world. It has no type there: the runtime
- * stores every rejection in one reference slot, and the machinery for saying
- * "a managed reference of unknown class" would be a type-system change bought
- * for one argument that is immediately passed back. */
+/* Keep the complete tagged reason, including non-reference values. */
 void nts_promise_reject_value(NtsPromise *promise, NtsValue reason) {
-  if (!NTS_TAG_IS_MANAGED(nts_value_tag(reason))) {
-    nts_promise_reject(promise, 0);
+  nts_promise_require_owner("nts_promise_reject_value");
+  if (promise->state != NTS_PROMISE_PENDING) {
     return;
   }
-  nts_promise_reject(promise, nts_value_reference(reason));
+  nts_promise_validate_value(reason);
+  nts_promise_reject_store(promise, reason);
 }
 
 NtsValue nts_promise_reason(const NtsPromise *promise) {
-  NtsHeader *reason = promise->reason;
-  if (!reason) {
-    return nts_value_of_undefined();
+  if (promise->state != NTS_PROMISE_REJECTED) {
+    fprintf(stderr, "nts: read a rejection reason from a promise that has none\n");
+    abort();
   }
-  return nts_value_of_reference(reason, nts_tag_of_reference(reason));
+  return promise->value;
 }
 
 void nts_promise_reject_with(NtsPromise *result, const NtsPromise *source) {
@@ -9340,7 +9344,7 @@ void nts_promise_reject_with(NtsPromise *result, const NtsPromise *source) {
             "nts: forwarded a rejection from a promise that has none\n");
     abort();
   }
-  nts_promise_reject(result, source->reason);
+  nts_promise_reject_value(result, source->value);
 }
 
 /* --- Combinators: `Promise.all` and `Promise.race` --------------------------
@@ -9426,7 +9430,7 @@ static const NtsDescriptor nts_desc_combinator_slot = {
  * this, and `all`'s rejection is the same thing for the rejected case. */
 static void nts_promise_forward(NtsPromise *to, const NtsPromise *from) {
   if (from->state == NTS_PROMISE_REJECTED) {
-    nts_promise_reject(to, from->reason);
+    nts_promise_reject_value(to, from->value);
     return;
   }
   /* One arm, because there is one payload. `undefined` needs no case of its
@@ -9450,7 +9454,7 @@ static void nts_combinator_settled(void *state) {
      * an already-settled promise, which ignores it. */
     nts_promise_forward(all->result, slot->source);
   } else if (slot->source->state == NTS_PROMISE_REJECTED) {
-    nts_promise_reject(all->result, slot->source->reason);
+    nts_promise_reject_value(all->result, slot->source->value);
   } else {
     /* An assertion: lowering refuses `Promise.all` over promises of C
      * handles (`combinator` in `hir/lower.rs` asks, rather than relying on

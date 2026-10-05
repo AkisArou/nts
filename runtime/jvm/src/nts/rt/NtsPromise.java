@@ -85,7 +85,9 @@ public final class NtsPromise {
         fulfillValue(promise, value);
     }
     public static void reject(NtsPromise promise, Object reason) {
-        if (promise.state == PENDING) { settle(promise, REJECTED, NtsValue.ofReference(reason)); }
+        if (promise.state == PENDING) {
+            settle(promise, REJECTED, reason == null ? NtsValue.UNDEFINED_VALUE : NtsValue.ofReference(reason));
+        }
     }
     /**
      * Reject with a reason that arrives already erased.
@@ -100,11 +102,8 @@ public final class NtsPromise {
      * NtsValue#ofObject}. The value is already correctly tagged -- it came out
      * of a rejection -- and `ofObject` tags every reference `OBJECT`, so a
      * round trip through it would turn a rejected string into a rejected
-     * object. `runtime/c` keeps the tag for the same reason by a different
-     * route: it stores the reference and recovers the tag from the header.
-     *
-     * <p>A reason that is not a reference cannot arise, for the reason the C
-     * header gives: it came from a rejection, and a rejection carries one.
+     * object. Primitive values and explicit null also keep their exact tags.
+     * The C runtime uses the same single tagged settlement slot.
      */
     public static void rejectValue(NtsPromise promise, NtsValue reason) {
         if (promise.state == PENDING) { settle(promise, REJECTED, reason); }
@@ -196,20 +195,12 @@ public final class NtsPromise {
     /**
      * The reason a rejected promise carries, as an erased value.
      *
-     * <p>`reject` stores it through {@link NtsValue#ofObject}, so it is already
-     * tagged by its class -- the JVM's answer to what `nts_tag_of_reference`
-     * recovers from the header on the C side. What that leaves is the null,
-     * which `ofObject` makes a `null` value and a `catch` of has to see as
-     * `undefined`; `runtime/c` says the same thing beside its own helper.
-     *
-     * <p>This did not exist until `catch (e)` did, and the C header says why:
-     * while a rejection could only be <em>forwarded</em>, nothing had to name
-     * it. `e` is `unknown`, so there is one representation and no question of
-     * which reader to call.
+     * <p>The tag distinguishes a primitive, explicit null and undefined from
+     * a reference; a null reference field alone cannot decide the value.
      */
     public static NtsValue reason(NtsPromise promise) {
-        NtsValue settled = promise.settled;
-        return settled.ref == null ? NtsValue.UNDEFINED_VALUE : settled;
+        if (promise.state != REJECTED) { throw new IllegalStateException("promise has no rejection reason"); }
+        return promise.settled;
     }
 
     public static void subscribe(NtsPromise promise, NtsResumable frame) {

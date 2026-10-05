@@ -1,19 +1,7 @@
-/* An erased value crossing a promise.
- *
- * A promise stores its payload in a closed two-slot union -- a double or a
- * pointer -- because the compiler always knew which one it had put there. An
- * erased value is exactly the case where it does not, and the interesting
- * question is not "can it hold one" but "does the tag survive". Five tags map
- * onto two slots, so `boolean` and `number` share a slot and `string` and
- * `object` share the other; if the tag were not recorded separately, `typeof`
- * on the far side of an `await` would answer for the slot rather than for the
- * value, and it would be wrong quietly.
- *
- * The other half is reference counting. `nts_promise_fulfill_value` retains
- * through the same slot `nts_promise_fulfill_reference` uses, which is what
- * lets the collector keep walking a descriptor of fixed offsets: `reference`
- * holds a reference or null, exactly as it always did, and no pass has to
- * learn that a slot is conditional.
+/* Tagged fulfillment and rejection payloads, including ownership through
+ * forwarding. State selects the reader of one erased settlement slot. A
+ * primitive rejection must not become undefined, and a callable's compiler
+ * supplied tag must not be reconstructed as OBJECT from its header.
  *
  * Build this with `-DNTS_PROVIDER_RC`. Under the non-counting provider nothing
  * is ever released, so every count below is trivially equal and the half of
@@ -69,6 +57,74 @@ static NtsValue undefined(void) { return nts_value_of_undefined(); }
 
 static NtsValue reference(NtsHeader *r, uint32_t tag) {
   return nts_value_of_reference(r, tag);
+}
+
+static void noop(void *state) { (void)state; }
+
+static NtsPromise *handled_promise(void) {
+  NtsPromise *p = nts_promise_new();
+  nts_promise_subscribe(p, (NtsTask){noop, NULL, NULL});
+  return p;
+}
+
+static bool same_value(NtsValue left, NtsValue right) {
+  uint32_t tag = nts_value_tag(left);
+  if (tag != nts_value_tag(right)) {
+    return false;
+  }
+  if (tag == NTS_TAG_NUMBER) {
+    double a = nts_value_number(left), b = nts_value_number(right);
+    return (isnan(a) && isnan(b)) ||
+           (a == b && signbit(a) == signbit(b));
+  }
+  if (tag == NTS_TAG_BOOLEAN) {
+    return nts_value_boolean(left) == nts_value_boolean(right);
+  }
+  return tag == NTS_TAG_NULL || tag == NTS_TAG_UNDEFINED ||
+         nts_value_reference(left) == nts_value_reference(right);
+}
+
+/* Each forwarded owner must keep the original payload alive exactly once.
+ * Readback borrows. Dropping the graph and collecting its combinator cycles
+ * must return every count, including FUNCTION and boxed bigint payloads. */
+static void rejection_roundtrip(NtsValue reason) {
+  bool managed = NTS_TAG_IS_MANAGED(nts_value_tag(reason));
+  uintptr_t before = managed ? rc(nts_value_reference(reason)) : 0;
+  NtsPromise *source = handled_promise();
+  NtsPromise *copy = handled_promise();
+  NtsPromise *adopted = handled_promise();
+  NtsArray *array = promise_array(&source, 1);
+  NtsArray *values = nts_array_new(&nts_desc_ref, 1);
+  NtsPromise *race = nts_promise_race(array);
+  NtsPromise *all = nts_promise_all(array, values);
+  nts_promise_subscribe(race, (NtsTask){noop, NULL, NULL});
+  nts_promise_subscribe(all, (NtsTask){noop, NULL, NULL});
+  nts_promise_adopt(adopted, source);
+  nts_promise_reject_value(source, reason);
+  nts_promise_reject_with(copy, source);
+  nts_promise_fulfill_number(source, 999);
+  nts_promise_reject_value(source, undefined());
+  nts_test_host_run(64);
+  NtsPromise *owners[] = {source, copy, adopted, race, all};
+  for (size_t i = 0; i < sizeof(owners) / sizeof(owners[0]); i++) {
+    check("rejection forwarding preserves state and complete value",
+          nts_promise_is_rejected(owners[i]) &&
+          same_value(nts_promise_reason(owners[i]), reason));
+  }
+  if (managed) {
+    check("each rejection owner retains once and readback borrows",
+          rc(nts_value_reference(reason)) == before + 5);
+  }
+  for (size_t i = 0; i < sizeof(owners) / sizeof(owners[0]); i++) {
+    nts_release((NtsHeader *)owners[i]);
+  }
+  nts_release((NtsHeader *)array);
+  nts_release((NtsHeader *)values);
+  nts_collect_cycles();
+  if (managed) {
+    check("dropping rejection graph returns every payload count",
+          rc(nts_value_reference(reason)) == before);
+  }
 }
 
 int main(void) {
@@ -234,6 +290,58 @@ int main(void) {
     nts_collect_cycles();
     check("releasing every promise gives it back", rc(s) == before);
     nts_release((NtsHeader *)s);
+  }
+
+  {
+    NtsValue reasons[] = {number(42.5), number(-0.0), number(NAN),
+                          number(INFINITY), boolean(true), boolean(false),
+                          undefined(), nts_value_of_null()};
+    for (size_t i = 0; i < sizeof(reasons) / sizeof(reasons[0]); i++) {
+      rejection_roundtrip(reasons[i]);
+    }
+    NtsString *text = nts_string_from_utf8("reason", 6);
+    NtsSymbol *symbol = nts_symbol_new(NULL);
+    NtsBigIntBox *wide = nts_bigint_box((__int128)9007199254740993ULL);
+    /* Closure layouts are OBJECTs; their FUNCTION tag comes from lowering. */
+    static const NtsDescriptor closure = {
+        NTS_KIND_OBJECT, sizeof(NtsHeader), 0, 1, NULL, NULL, "closure",
+        0, NULL, NTS_ARRAY_UNKNOWN, 0, NULL};
+    NtsHeader *function = nts_object_new(&closure);
+    NtsPromise *object = nts_promise_new();
+    rejection_roundtrip(reference((NtsHeader *)text, NTS_TAG_STRING));
+    rejection_roundtrip(reference((NtsHeader *)symbol, NTS_TAG_SYMBOL));
+    rejection_roundtrip(reference((NtsHeader *)wide, NTS_TAG_BIGINT));
+    rejection_roundtrip(reference(function, NTS_TAG_FUNCTION));
+    rejection_roundtrip(reference((NtsHeader *)object, NTS_TAG_OBJECT));
+    nts_release((NtsHeader *)text);
+    nts_release((NtsHeader *)symbol);
+    nts_release((NtsHeader *)wide);
+    nts_release(function);
+    nts_release((NtsHeader *)object);
+  }
+  {
+    NtsPromise *p = handled_promise();
+    nts_promise_reject(p, NULL);
+    check("null reference helper retains legacy undefined meaning",
+          nts_value_tag(nts_promise_reason(p)) == NTS_TAG_UNDEFINED);
+    nts_test_host_run(64);
+    nts_release((NtsHeader *)p);
+    p = nts_promise_new();
+    nts_promise_fulfill_number(p, 17);
+    nts_promise_reject_value(p, boolean(false));
+    check("a rejection cannot overwrite fulfillment",
+          nts_value_number(nts_promise_value(p)) == 17);
+    nts_release((NtsHeader *)p);
+  }
+  {
+    size_t before = nts_live_count();
+    NtsPromise *p = handled_promise();
+    nts_promise_reject_value(p, reference((NtsHeader *)p, NTS_TAG_OBJECT));
+    nts_test_host_run(64);
+    nts_release((NtsHeader *)p);
+    nts_collect_cycles();
+    check("a rejection cycle is traced and collected once",
+          nts_live_count() == before);
   }
 
   printf("%s\n", failures == 0 ? "all ok" : "failures");

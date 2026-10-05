@@ -3741,7 +3741,7 @@ typedef struct NtsPromise {
    *
    * In the padding after `handled`, so a promise is no larger for it. */
   uint32_t resolutions;
-  /* What it settled with, whatever that turned out to be.
+  /* What it settled with, for either fulfilment or rejection.
    *
    * One representation for every fulfilment path: a number, a reference and
    * an erased value are the same sixteen bytes with different tags, so there
@@ -3750,17 +3750,12 @@ typedef struct NtsPromise {
    * the collector follow it only when the tag says there is something to
    * follow.
    *
-   * Exactly one home. A fulfilled reference lives here and nowhere else --
+   * State selects the fulfilment or rejection reader. Exactly one home: a
+   * settled reference lives here and nowhere else --
    * if it also lived in a plain reference slot, `nts_each_reference` would
    * visit it through both tables, every retain and release would be doubled,
    * and the second release would free something still in use. */
   NtsValue value;
-  /* Why it rejected, which is always a reference.
-   *
-   * Separate from `value` because a rejection is not a fulfilment: the two
-   * are distinguished by `state`, and giving each its own slot means neither
-   * reader has to ask what the other would have meant. */
-  NtsHeader *reason;
   /* Newest first; reversed into subscription order when it settles, so the
    * chain holds exactly one strong reference to each reaction and there is
    * no aliasing tail pointer for the collector to double-count. */
@@ -3842,13 +3837,9 @@ void nts_promise_reject_with(NtsPromise *result, const NtsPromise *source);
  * The sentence above is the reason this did not exist: while a rejection could
  * only be *forwarded*, the reason never had to be named. `try { await p }
  * catch (e)` is exactly the case that names it, and `e` is `unknown` -- so the
- * answer is erased, with the tag read from the header rather than assumed,
- * the way `nts_promise_value` does it.
- *
- * A rejection's reason is always a reference (`nts_promise_reject` takes one),
- * so there is no number case. A rejection with no reason cannot arise here --
- * `state` says rejected only after the pointer is stored -- and a null answers
- * `undefined`, which is what a `catch` of one would see.
+ * answer is the stored tagged value, exactly as `nts_promise_value` reads a
+ * fulfilment. Primitive values, explicit null and undefined, and reference
+ * identity all survive. The promise must be rejected before this read.
  *
  * **Returns a borrow, and so do `nts_promise_value` and
  * `nts_promise_reference`.** The promise owns the count; the caller must
@@ -3905,18 +3896,11 @@ typedef enum NtsPromiseJoinResult {
  * nts_promise_reason. The current turn's full checkpoint finishes before
  * returning; unrelated repeating timers do not have to stop. */
 NtsPromiseJoinResult nts_promise_join(NtsPromise *promise);
-/* Reject with a reason that arrives erased.
- *
- * `nts_promise_reject` takes an `NtsHeader *` because a reason is always a
- * reference. A **rethrow** does not have one: it has whatever
- * `nts_promise_reason` handed back, which is erased because `catch (e)` is
- * `unknown` -- and a `finally` that spans an `await` has to reject with exactly
- * that value after running.
- *
- * So this takes the tagged form and reads the reference out of it. A value that
- * is not a reference cannot arise -- it came from a rejection, and a rejection
- * carries one -- and if one did, rejecting with nothing is what a rejection
- * with no reason already means. */
+/* Reject with any supported tagged value. Retains once into the same owned
+ * settlement slot as fulfilment; the descriptor visits a managed reason once.
+ * The reference-only helper above derives its tag, and a null reference there
+ * continues to mean undefined. This helper preserves an explicit null tag.
+ * A second settlement is ignored before inspecting the supplied value. */
 void nts_promise_reject_value(NtsPromise *promise, NtsValue reason);
 /* Settle `outer` with whatever `inner` settles to, two microtasks later.
  * `async function f() { return g(); }` -- see the definition for why two. */
