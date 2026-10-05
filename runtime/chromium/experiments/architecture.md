@@ -140,13 +140,15 @@ script.
 
 ## 5. Events and cross-heap cycles
 
-**Built: listeners with explicit lifetime.** `nts_dom_listen(c, target, type,
-closure)` registers a native listener (an `NtsListener : NativeEventListener`
-the target holds); the closure crosses as C's `(callback, context, destroy)`
-triple (`Closure<F>` in `c:types`). A dispatch opens its own entry and calls
+**Built: listeners with explicit lifetime.** `target.listen(type, (event) =>
+...)` on any `EventTarget` (`nts_dom_listen`) registers a native listener (an
+`NtsListener : NativeEventListener` the target holds) and answers a
+`Listener` whose `remove()` removes it; the closure is called with the event,
+as page script's is, and crosses as C's `(callback, context, destroy)` triple
+(`Closure<F>` in `c:types`). A dispatch opens its own entry and calls
 the program through the host's *invoker* (`nts_blink_dom_set_invoker`), which
 enters the program's environment -- the adapter knows no NTS environment.
-`nts_dom_unlisten` removes it and gives the closure back; the context gives
+Removing it gives the closure back; the context gives
 back every closure still held when the document goes, before the program's
 environment is destroyed. A listener handle the program keeps is rooted like
 a node (`nts_dom_listener_retain` / `_release`). Measured: an event round trip
@@ -224,8 +226,9 @@ An optional argument with a default is passed it, one without truncates the
 call (`num_of_args`), exactly as V8's binding does.
 
 It emits three files for an allowlist of interfaces
-(`bindgen/allowlist.json`: Node, Element, CharacterData, Text, Document,
-DocumentFragment, HTMLElement, HTMLInputElement today):
+(`bindgen/allowlist.json`: 22 today -- EventTarget and the node classes
+through HTMLInputElement, Event through KeyboardEvent, DOMTokenList,
+CSSStyleDeclaration, NodeList, HTMLCollection, DOMRect):
 
 - `native/ffi/dom_idl.h`, one C function per member and arity;
 - `native/dom_idl.cc`, each one's body: Blink's call, inside Blink's namespace;
@@ -240,10 +243,21 @@ written through two methods (`@ntsGet`/`@ntsSet`). A program writes
 page script would just use the node. Text is a `StringView` both ways,
 numbers are `CNumber`s (plain numbers converted at the call), a union with
 one string member takes the string, and `asX` narrows with Blink's
-`DynamicTo`. A member whose types do not map yet (sequences, dictionaries,
+`DynamicTo`. A variadic string tail (`classList.add(...tokens)`) binds at one to three
+arguments. A member whose types do not map yet (sequences, dictionaries,
 callbacks, enumerations, unbound interfaces, `[RuntimeEnabled]`, the modules
-component) is skipped and listed in `bindgen/report.json`, never guessed: 433
-functions bound, 774 members listed.
+component) is skipped and listed in `bindgen/report.json`, never guessed: 669
+functions bound, 769 members listed.
+
+Any object the IDL hands out is a handle, not only a node: an event, a token
+list, a style declaration is a `ScriptWrappable` Oilpan owns and finds on the
+stack exactly as it finds a node (section 3). A handle is the object's
+address *as a ScriptWrappable*, and every conversion goes through that base,
+so no base-class offset is assumed; one counted root set holds whatever the
+program keeps. Each hierarchy's root (EventTarget, Event, DOMTokenList, ...)
+carries the one retain/release pair, and `asX` narrows from the class
+Blink's `DowncastTraits` know -- emitted only for the node and event
+hierarchies, since there is no RTTI to check any other.
 
 The hand-written rest (`dom_abi.h`, `types/dom-abi.d.ts`) is what the IDL does
 not say: roots, the document, exception messages, listening with a compiled
