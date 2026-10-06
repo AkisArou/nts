@@ -2612,31 +2612,28 @@ fn emit_closure_call_slot(writer: &mut CodeWriter, origin: &Origin, program: &Pr
 
 /// Whether any function names this global.
 ///
-/// A global that nothing reads, nothing writes and nothing publishes needs no
-/// storage — and emitting one is not merely wasteful, it is a **build failure**:
-/// `benches` compiles with `-Werror`, and an unread `static` is
-/// `-Wunused-variable`.
+/// Whether anything can observe a global: a read in the program, or external
+/// linkage. One that nothing observes needs no storage, and emitting one is
+/// not merely wasteful, it is a **build failure**: `benches` compiles with
+/// `-Werror`, where an unread `static` is `-Wunused-variable` and, since clang
+/// 23, one that is only ever written is `-Wunused-but-set-global`.
 ///
-/// This exists because an exported `const` with a folding initializer is given
-/// a global so the export table has something to point at. In a *library* that
-/// is exactly right. In an **executable** the exports are not roots — nothing
-/// outside can call in — so `publish_surface` publishes nothing, and the global
-/// is left with no reader, no writer and no external linkage.
-///
-/// `json-scan`'s `QUOTE`, `COMMA`, `MINUS` and `OPEN_BRACKET` are that shape:
-/// module constants a benchmark folds at every use.
+/// Two shapes arrive here. An exported `const` with a folding initializer is
+/// given a global so the export table has something to point at; in a
+/// *library* that is right, and in an **executable** the exports are not roots,
+/// so the global is left with nothing reading it -- `json-scan`'s `QUOTE`,
+/// `COMMA`, `MINUS` and `OPEN_BRACKET`. And a global the program writes but
+/// whose reads the folding removed -- `symbol-keys`'s two symbol keys. Its
+/// stores discard their value ([`OpKind::GlobalSet`] in `op_text`).
 ///
 /// Asked of the IR rather than tracked alongside it, because the answer changes
 /// with reachability and a flag set during lowering would be stale by now.
-fn global_is_named(program: &Program, at: u32) -> bool {
-    program.funcs.iter().any(|func| {
-        func.values.iter().any(|op| {
-            matches!(
-                op.kind,
-                OpKind::GlobalGet(global) | OpKind::GlobalSet { global, .. } if global == at
-            )
-        })
-    })
+fn global_is_observed(program: &Program, at: u32) -> bool {
+    program.globals.get(at as usize).is_some_and(|global| global.exported)
+        || program
+            .funcs
+            .iter()
+            .any(|func| func.values.iter().any(|op| matches!(op.kind, OpKind::GlobalGet(global) if global == at)))
 }
 
 fn emit_globals(writer: &mut CodeWriter, program: &Program) -> Result<(), Diagnostic> {
@@ -2644,7 +2641,7 @@ fn emit_globals(writer: &mut CodeWriter, program: &Program) -> Result<(), Diagno
         // Not `continue`-ing on an exported one: external linkage *is* a
         // reader, and the whole point of publishing a constant is that
         // something outside this translation unit names it.
-        if !global.exported && !global_is_named(program, u32::try_from(at).unwrap_or(u32::MAX)) {
+        if !global_is_observed(program, u32::try_from(at).unwrap_or(u32::MAX)) {
             continue;
         }
         // `c_type_of` rather than `c_type`: an object type is named per
@@ -5315,6 +5312,11 @@ fn emit_op(
         //
         // Only an *up*cast is reachable: TypeScript checked assignability
         // before any of this ran.
+        // A store nothing can observe is not one: the global is not declared
+        // (`global_is_observed`), and the value is discarded.
+        OpKind::GlobalSet { global, value } if !global_is_observed(context.program, *global) => {
+            format!("(void){};", value_name(*value))
+        }
         OpKind::GlobalSet { global, value } => format!(
             "{} = {}{};",
             global_name(context.program, *global),
