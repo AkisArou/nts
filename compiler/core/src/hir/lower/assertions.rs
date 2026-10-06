@@ -308,6 +308,32 @@ fn actual_is_unerasable(builder: &FuncBuilder<'_>, value: ValueId) -> bool {
     ty != &HirType::Erased && !super::erasable(ty)
 }
 
+/// A getter read the checker narrowed by assignment, dereferenced where it
+/// stands: checked first, since that narrowing tested nothing.
+///
+/// After `div.nodeValue = "x"` the checker types `div.nodeValue` as `string`,
+/// but the getter answers what it answers -- an element's `nodeValue` is null
+/// whatever is assigned. JavaScript then throws a `TypeError` reading
+/// `div.nodeValue.length`; trusting the narrowing read through a null pointer.
+/// Only a dereference is checked: an absence question about the read (`+`,
+/// `=== null`, `??`) is answered from its declaration (`read_type`) instead,
+/// and gives JavaScript's answer rather than a throw.
+pub(super) fn dereferenced_getter_read(builder: &mut FuncBuilder<'_>, id: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
+    if !builder.dereferenced(id) || !builder.narrowed_past_absence(id) {
+        return Ok(value);
+    }
+    if let Some(absent) = builder.absence_of(id, value) {
+        reject_when(
+            builder,
+            id,
+            absent,
+            "TypeError",
+            "A getter the program had assigned to answered null or undefined, and its result was dereferenced",
+        )?;
+    }
+    Ok(value)
+}
+
 /// A native safety failure is a checked `TypeError` where the program can
 /// handle it. At an unhandled entry, decline the case by name rather than
 /// presenting an added native assertion failure as JavaScript's result.

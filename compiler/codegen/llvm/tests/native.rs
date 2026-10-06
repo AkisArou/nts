@@ -4937,6 +4937,15 @@ export function run(): number {
         + (node.value === null ? 10 : 0)
         + (node.value ?? "dd").length;
 }
+export function dereferenced(): number {
+    const node = node_new();
+    node.value = "x";
+    try {
+        return node.value.length;
+    } catch (error) {
+        return error instanceof TypeError ? -1 : -2;
+    }
+}
 "#;
     let library = r"
 #include <stddef.h>
@@ -4949,12 +4958,13 @@ const struct NtsStringView *node_get_value(struct _Node *self) { (void)self; ret
 void node_set_value(struct _Node *self, const struct NtsBorrowedString *value) { (void)self; (void)value; }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let caller = counted_caller(r#"printf("%.0f %.0f", run(), dereferenced());"#, "run(); dereferenced();");
         let Some((_, outputs)) = run_on_both_backends("getter-null", source, provider, library, &caller) else { return; };
         for output in outputs {
             // "null" through the class's getter (4) and the binding's (4), the
-            // comparison true, and the default taken: JavaScript's 4412.
-            assert_eq!(output, expect("4412", provider), "{provider:?}");
+            // comparison true, and the default taken: JavaScript's 4412. And
+            // `.length` of the null is JavaScript's `TypeError`.
+            assert_eq!(output, expect("4412 -1", provider), "{provider:?}");
         }
     }
 }

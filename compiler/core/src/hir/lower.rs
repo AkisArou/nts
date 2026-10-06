@@ -42168,7 +42168,10 @@ impl<'a> FuncBuilder<'a> {
             Some(syntax::ELEMENT_ACCESS_EXPRESSION) => self.lower_element_access(id),
             Some(syntax::AWAIT_EXPRESSION) => self.lower_await(id),
             Some(syntax::YIELD_EXPRESSION) => self.lower_yield(id),
-            Some(syntax::PROPERTY_ACCESS_EXPRESSION) => self.lower_property_access(id),
+            Some(syntax::PROPERTY_ACCESS_EXPRESSION) => {
+                let value = self.lower_property_access(id)?;
+                assertions::dereferenced_getter_read(self, id, value)
+            }
             // Assertions establish a native representation before reading its
             // payload; satisfies only checks the source without changing it.
             Some(
@@ -67139,6 +67142,36 @@ impl<'a> FuncBuilder<'a> {
             Some(super::native::schema::property(self.snapshot, self.class_behind(receiver), &name)?.ty)
         })();
         declared.or(narrowed)
+    }
+
+    /// Whether `node` is a getter read the checker narrowed past an absence
+    /// its declaration admits: [`Self::read_type`] says it can be absent and
+    /// the checker's type says it cannot. Nothing tested that narrowing.
+    fn narrowed_past_absence(&self, node: NodeId) -> bool {
+        let Some(narrowed) = self.snapshot.node_types.get(&node).copied() else {
+            return false;
+        };
+        self.read_type(node).is_some_and(|read| read != narrowed && self.admits_absence(read))
+            && !self.admits_absence(narrowed)
+    }
+
+    /// Whether the expression at `node` is dereferenced where it stands: the
+    /// object of a member or element access that is not an optional chain,
+    /// through any parentheses.
+    fn dereferenced(&self, node: NodeId) -> bool {
+        let mut at = node;
+        while let Some(parent) = self.node(at).parent {
+            match self.kind_of(parent) {
+                Some(syntax::PARENTHESIZED_EXPRESSION) => at = parent,
+                Some(syntax::PROPERTY_ACCESS_EXPRESSION | syntax::ELEMENT_ACCESS_EXPRESSION) => {
+                    let children = self.children(parent);
+                    return children.first() == Some(&at)
+                        && !children.iter().any(|child| self.kind_of(*child) == Some(syntax::QUESTION_DOT_TOKEN));
+                }
+                _ => return false,
+            }
+        }
+        false
     }
 
     /// `v === undefined` where `v` is erased, as the tag test it is.
