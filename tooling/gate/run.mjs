@@ -581,9 +581,9 @@ function slower() {
     if (!r || !b || r.verdict === "NOT RUN") continue;
     // CPU when both sides have it, wall otherwise. Twice the baseline and a
     // minute more is the warning; a step that took 3 s instead of 1 s is not.
-    const now = r.cpu ?? r.wall;
-    const was = r.cpu !== undefined && b.cpu > 0 ? b.cpu : b.wall;
     const kind = r.cpu !== undefined && b.cpu > 0 ? "cpu" : "wall";
+    const now = kind === "cpu" ? r.cpu : r.wall;
+    const was = kind === "cpu" ? b.cpu : b.wall;
     if (now >= 2 * was && now - was >= 60) out.push({ name, kind, now, was, ratio: now / was });
   }
   return out;
