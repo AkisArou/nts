@@ -103,6 +103,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { materialise, outcomeFixtures, OUTCOMES, runMode } from "./outcomes-project.ts";
 import { describe, provenanceOf, frontendFor } from "./pin.ts";
+import { longestFirst, recordCosts } from "../gate/costs.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -364,9 +365,21 @@ async function check(project, slot) {
 
 const started = Date.now();
 let next = 0;
-await Promise.all(Array.from({ length: Math.min(WORKERS, projects.length) }, async (_, slot) => {
-  while (next < projects.length) await check(projects[next++], slot);
+// Longest first, so the step does not end waiting on one large module drawn
+// last; each project's time is remembered for the next run's order
+// (tooling/gate/costs.mjs). Order only: every result below is sorted.
+const costKey = (process.argv.includes("--outcomes") ? "jvm-verifies-outcomes" : "jvm-verifies");
+const queue = longestFirst(costKey, projects);
+const timed = {};
+await Promise.all(Array.from({ length: Math.min(WORKERS, queue.length) }, async (_, slot) => {
+  while (next < queue.length) {
+    const project = queue[next++];
+    const began = Date.now();
+    await check(project, slot);
+    timed[project] = (Date.now() - began) / 1000;
+  }
 }));
+recordCosts(costKey, timed);
 
 const { fresh, held, expired, pinned } = judge(failed, known, projects, unmeasured);
 console.log(`  compiler ${SOURCE} -- ${describe(provenanceOf(SOURCE))}`);

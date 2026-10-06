@@ -42,6 +42,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { frontendFor } from "./pin.ts";
+import { longestFirst, recordCosts } from "../gate/costs.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -143,9 +144,21 @@ async function check(project, slot) {
 
 const started = Date.now();
 let next = 0;
-await Promise.all(Array.from({ length: Math.min(WORKERS, projects.length) }, async (_, slot) => {
-  while (next < projects.length) await check(projects[next++], slot);
+// Longest first, so the step does not end waiting on one large module drawn
+// last; each project's time is remembered for the next run's order
+// (tooling/gate/costs.mjs). Order only: every result below is sorted.
+const costKey = "assembles";
+const queue = longestFirst(costKey, projects);
+const timed = {};
+await Promise.all(Array.from({ length: Math.min(WORKERS, queue.length) }, async (_, slot) => {
+  while (next < queue.length) {
+    const project = queue[next++];
+    const began = Date.now();
+    await check(project, slot);
+    timed[project] = (Date.now() - began) / 1000;
+  }
 }));
+recordCosts(costKey, timed);
 
 const fresh = failed.filter((f) => !known.has(f.project));
 const held = failed.filter((f) => known.has(f.project));

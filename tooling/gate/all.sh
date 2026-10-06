@@ -254,10 +254,14 @@ format() {
 # `--no-fail-fast`: without it the first failing test *binary* ends the run and
 # every binary after it is not run and not counted -- a known environmental
 # failure once hid 995 of 1103 tests behind "108 passed, 1 failed".
+#
+# The binaries run several at once (tooling/gate/tests.mjs): cargo builds them
+# and runs the doctests, a recorder set as cargo's test runner writes down how
+# cargo would have run each binary, and they are replayed side by side with
+# cargo's exact argv, directory and environment. 315 s serially, of which one
+# binary is 120 s.
 tests() {
-  report=$(cargo test --workspace --no-fail-fast 2>&1) && return 0
-  echo "$report" | grep -E "^(error|warning: unused|test .* FAILED|failures:|---- )" -A 4 | head -60
-  return 1
+  node "$root/tooling/gate/tests.mjs"
 }
 
 # The cross-product of value kinds and the operations that read them, settled
@@ -2151,28 +2155,83 @@ interop() {
   #
   # Two derivations of "what failed" in one shell, and the one that wins is
   # whichever assigned last.
+  # **Lanes at once, each serial inside.** The macOS/iOS projects build and
+  # run on the `nts-mac` VM and the Windows ones on `nts-win`, so on this box
+  # they mostly wait on ssh; the rest build and run here. One project at a time
+  # across all three was 2,500-3,500 s once the Apple projects joined. Each lane
+  # keeps its own projects one after another, which is what the timer races
+  # below the step line are about; the local lane is what runs on this
+  # machine's CPUs, and run.mjs runs this step at a higher priority than the
+  # rest so the box's contention reaches it least.
+  #
+  # Every project runs and reports, then any failure fails the step: this loop
+  # returned at its first FAILED, so one red project hid whether every project
+  # after it still built.
+  #
+  # The local projects are split round-robin over NTS_INTEROP_LOCAL_LANES lanes
+  # (default 3): each is an `nts build` of a GTK or native program -- minutes of
+  # lowering each, forty of them -- then a few seconds of running it. A timer
+  # race lost to contention fails the step loudly; it cannot make it pass. If
+  # that starts happening, `NTS_INTEROP_LOCAL_LANES=1` is the old order.
+  lanes=$(mktemp -d)
+  local_lanes=${NTS_INTEROP_LOCAL_LANES:-3}
+  i=0
   for script in examples/interop/*/build.sh; do
     project=$(basename "$(dirname "$script")")
-    out="$PWD/target/interop-$project"
-    rm -rf "$out"
-    if output=$(NTS_BIN="${NTS_BIN:-$PWD/target/release/nts}" sh "$script" "$out" 2>&1); then
-      case $output in
-        *SKIP*) skipped=$((skipped + 1))
-                why=$(printf '%s' "$output" | grep -m1 SKIP)
-                printf '  %-16s skipped: %s\n' "$project" "$why"
-                printf '%s\n' "$why" >> "$reasons" ;;
-        *) ran=$((ran + 1)); printf '  %-16s ok\n' "$project" ;;
-      esac
-    else
-      printf '  %-16s FAILED\n' "$project"
-      printf '%s\n' "$output" | tail -20 | sed 's/^/      /'
-      # Cleaned on the way out too: /tmp on this box runs out of *inodes* before
-      # it runs out of bytes, and a step that leaks one file per red run is the
-      # kind of thing that is only noticed as something else failing.
-      rm -f "$reasons"
-      return 1
-    fi
+    case $project in
+      macos-*|ios-*) lane=apple ;;
+      windows-*|winui-*) lane=windows ;;
+      *) lane=local$((i % local_lanes)); i=$((i + 1)) ;;
+    esac
+    printf '%s\n' "$script" >> "$lanes/$lane.list"
   done
+  for list in "$lanes"/*.list; do
+    (
+      while read -r script; do
+        project=$(basename "$(dirname "$script")")
+        out="$PWD/target/interop-$project"
+        rm -rf "$out"
+        if output=$(NTS_BIN="${NTS_BIN:-$PWD/target/release/nts}" sh "$script" "$out" 2>&1); then
+          printf 'ok\n' > "$lanes/$project.status"
+        else
+          printf 'failed\n' > "$lanes/$project.status"
+        fi
+        printf '%s' "$output" > "$lanes/$project.out"
+      done < "$list"
+    ) &
+  done
+  wait
+  failed=0
+  for script in examples/interop/*/build.sh; do
+    project=$(basename "$(dirname "$script")")
+    output=$(cat "$lanes/$project.out" 2>/dev/null)
+    case $(cat "$lanes/$project.status" 2>/dev/null) in
+      ok)
+        case $output in
+          *SKIP*) skipped=$((skipped + 1))
+                  why=$(printf '%s' "$output" | grep -m1 SKIP)
+                  printf '  %-16s skipped: %s\n' "$project" "$why"
+                  printf '%s\n' "$why" >> "$reasons" ;;
+          *) ran=$((ran + 1)); printf '  %-16s ok\n' "$project" ;;
+        esac ;;
+      failed)
+        failed=$((failed + 1))
+        printf '  %-16s FAILED\n' "$project"
+        printf '%s\n' "$output" | tail -20 | sed 's/^/      /' ;;
+      *)
+        failed=$((failed + 1))
+        printf '  %-16s FAILED: its lane ended without a verdict for it\n' "$project" ;;
+    esac
+  done
+  rm -rf "$lanes"
+  if [ "$failed" -gt 0 ]; then
+    # Cleaned on the way out too: /tmp on this box runs out of *inodes* before
+    # it runs out of bytes, and a step that leaks one file per red run is the
+    # kind of thing that is only noticed as something else failing.
+    rm -f "$reasons"
+    printf '  %s interop project(s) FAILED\n' "$failed"
+    return 1
+  fi
   # **The reason is counted, not asserted.** This line said "skipped for a
   # missing toolchain" while the skips above it said what they meant: on
   # 2026-09-26 two macOS examples skipped for a missing *desktop session* and

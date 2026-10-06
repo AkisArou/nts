@@ -63,6 +63,105 @@ tools=$(ls -d "$sdk"/build-tools/* 2>/dev/null | sort -V | tail -1)
 nts=${NTS_BIN:-$root/target/release/nts}
 [ -x "$nts" ] || { echo "no nts at $nts -- set NTS_BIN" >&2; exit 1; }
 
+# **One target per process, several at once.** Each target is emitted, dexed and
+# listed in its own `$work/<name>`, and nothing reads another's: the loop was a
+# serial 250-330 s of the gate. `--one <target>` does one, writing what it
+# prints to `$work/<name>.out` and its counts to `$work/<name>.counts`; the
+# parent prints and sums them in target order, so the output and the totals
+# read exactly as the serial loop's did. A target that ends without writing its
+# counts -- a worker that died, or `set -e` taking it out -- is counted as
+# refused, so a lost worker cannot shrink the totals unnoticed.
+one() {
+  target=$1
+  dexed=0 refused=0 declined=0 methods=0
+  # Keyed by the whole path: thirteen bench cases share a basename with an
+  # example, which a serial loop could reuse one directory for and a parallel one
+  # cannot.
+  key=$(printf '%s' "$target" | tr '/' '_')
+  record() { printf '%s %s %s %s\n' "$dexed" "$refused" "$declined" "$methods" > "$work/$key.counts"; }
+  name=$(basename "$target")
+  out="$work/$key"
+  rm -rf "$out"; mkdir -p "$out/classes" "$out/dex"
+  # An example carries its own tsconfig; a bench case does not.
+  if [ -f "$root/$target/tsconfig.json" ]; then
+    config=$root/$target/tsconfig.json
+  else
+    config=$out/tsconfig.json
+    cat > "$config" <<JSON
+{ "extends": "$root/tsconfig.fixtures.json", "include": ["$root/$target"] }
+JSON
+  fi
+  # **No `--entry`, deliberately: the library reading is the widest surface.**
+  # Every export is a root, so this dexes everything the compiler can emit for
+  # the program rather than only what one entry reaches. For a ratchet that is
+  # the point -- more code dexed is more code d8 can refuse.
+  #
+  # It did not mean that until 2026-09-10. `emit_options` read
+  # `!entry.is_empty()`, and `named_entry()` returns `[MODULE_INIT]` when
+  # nothing is named, so the test was never false and every `emit-jvm` without
+  # `--main` compiled as an *executable* rooted at module evaluation. An
+  # exported function nothing calls internally was pruned before the backend
+  # saw it, and `nts.gen.Program` came out with the same four members for every
+  # case in the corpus:
+  #
+  #     case              as-shipped    under the bug
+  #     fib                        6                4
+  #     node-utf8                 11                4
+  #
+  # So this step reported `0 refused` over two hundred times while dexing a
+  # skeleton. It is the failure it exists to prevent, wearing its own uniform:
+  # an instrument that cannot fail reads exactly like one that keeps passing.
+  #
+  # MainClaude found and fixed the CLI. What survives unaffected is
+  # `agrees-on-device.sh`, which passes `--entry` explicitly -- so the
+  # `__@kCount@2` defect that motivated this ratchet was found on a real
+  # program, and it is this ratchet that was hollow rather than the finding.
+  if ! NTS_TSGO=${NTS_TSGO:-$root/target/tsgo} "$nts" emit-jvm "$config" \
+       --out "$out/classes" > "$out/emit.log" 2>&1; then
+    # A refusal is this backend working. It is counted, not failed: the corpus
+    # has programs every backend declines, and a lane that reported those as
+    # dex failures would be measuring the wrong thing.
+    # **The name, not just the count.** This printed `1 declined` on every run
+    # for weeks and nobody had ever expanded it into its member. A number an
+    # instrument prints every time, that nobody has turned into a list, is a
+    # domain nobody has enumerated -- and printing it is what makes it
+    # invisible, because a constant reads as furniture rather than as a
+    # question. `times-on-device.sh` beside this already names its declines;
+    # this one counted them.
+    printf "%-28s the backend declined it: %s\n" "$name" \
+      "$(grep -v '^$' "$out/emit.log" | head -1 | cut -c1-72)"
+    declined=1
+    record; return
+  fi
+  classes=$(find "$out/classes" -name '*.class' 2>/dev/null)
+  [ -n "$classes" ] || {
+    printf "%-28s emitted no class file\n" "$name"
+    declined=1; record; return; }
+  # The generated classes only. The runtime jar has its own ratchet and
+  # including it here would make every failure ambiguous about which half of
+  # the artefact d8 refused.
+  # shellcheck disable=SC2086
+  if "$tools/d8" --min-api 29 --lib "$out/classes/nts-runtime.jar" \
+       --output "$out/dex" $classes > "$out/d8.log" 2>&1; then
+    dexed=1
+    names=$(echo "$classes" | sed "s|$out/classes/||g;s|\.class||g;s|/|.|g")
+    # shellcheck disable=SC2086
+    n=$(javap -p -cp "$out/classes" $names 2>/dev/null | grep -cE "^  .*\(.*\);")
+    methods=$n
+  else
+    refused=1
+    printf "%-28s d8 refused it\n" "$name"
+    sed -n '1,3p' "$out/d8.log" | sed 's/^/    /'
+  fi
+  record
+}
+
+if [ "${1-}" = --one ]; then
+  work=${NTS_DEX_WORK:?--one needs NTS_DEX_WORK}
+  one "$2" > "$work/$(printf '%s' "$2" | tr '/' '_').out" 2>&1
+  exit 0
+fi
+
 mkdir -p "$work"
 trap 'rm -rf "$work"' EXIT INT TERM
 
@@ -130,80 +229,20 @@ fi
 # a real win look like this bug. A method disappears only when a function is
 # pruned, which is the defect itself.
 dexed=0 refused=0 declined=0 methods=0
+jobs=${NTS_DEX_JOBS:-${NTS_GATE_JOBS:-4}}
+NTS_DEX_WORK=$work
+export NTS_DEX_WORK
+printf '%s\n' $targets | xargs -P "$jobs" -I{} sh "$root/tooling/android/dexes.sh" --one {}
 for target in $targets; do
   name=$(basename "$target")
-  out="$work/$name"
-  rm -rf "$out"; mkdir -p "$out/classes" "$out/dex"
-  # An example carries its own tsconfig; a bench case does not.
-  if [ -f "$root/$target/tsconfig.json" ]; then
-    config=$root/$target/tsconfig.json
+  key=$(printf '%s' "$target" | tr '/' '_')
+  if [ -f "$work/$key.out" ]; then cat "$work/$key.out"; fi
+  if [ -f "$work/$key.counts" ]; then
+    read -r d r c m < "$work/$key.counts"
+    dexed=$((dexed + d)); refused=$((refused + r)); declined=$((declined + c)); methods=$((methods + m))
   else
-    config=$out/tsconfig.json
-    cat > "$config" <<JSON
-{ "extends": "$root/tsconfig.fixtures.json", "include": ["$root/$target"] }
-JSON
-  fi
-  # **No `--entry`, deliberately: the library reading is the widest surface.**
-  # Every export is a root, so this dexes everything the compiler can emit for
-  # the program rather than only what one entry reaches. For a ratchet that is
-  # the point -- more code dexed is more code d8 can refuse.
-  #
-  # It did not mean that until 2026-09-10. `emit_options` read
-  # `!entry.is_empty()`, and `named_entry()` returns `[MODULE_INIT]` when
-  # nothing is named, so the test was never false and every `emit-jvm` without
-  # `--main` compiled as an *executable* rooted at module evaluation. An
-  # exported function nothing calls internally was pruned before the backend
-  # saw it, and `nts.gen.Program` came out with the same four members for every
-  # case in the corpus:
-  #
-  #     case              as-shipped    under the bug
-  #     fib                        6                4
-  #     node-utf8                 11                4
-  #
-  # So this step reported `0 refused` over two hundred times while dexing a
-  # skeleton. It is the failure it exists to prevent, wearing its own uniform:
-  # an instrument that cannot fail reads exactly like one that keeps passing.
-  #
-  # MainClaude found and fixed the CLI. What survives unaffected is
-  # `agrees-on-device.sh`, which passes `--entry` explicitly -- so the
-  # `__@kCount@2` defect that motivated this ratchet was found on a real
-  # program, and it is this ratchet that was hollow rather than the finding.
-  if ! NTS_TSGO=${NTS_TSGO:-$root/target/tsgo} "$nts" emit-jvm "$config" \
-       --out "$out/classes" > "$out/emit.log" 2>&1; then
-    # A refusal is this backend working. It is counted, not failed: the corpus
-    # has programs every backend declines, and a lane that reported those as
-    # dex failures would be measuring the wrong thing.
-    # **The name, not just the count.** This printed `1 declined` on every run
-    # for weeks and nobody had ever expanded it into its member. A number an
-    # instrument prints every time, that nobody has turned into a list, is a
-    # domain nobody has enumerated -- and printing it is what makes it
-    # invisible, because a constant reads as furniture rather than as a
-    # question. `times-on-device.sh` beside this already names its declines;
-    # this one counted them.
-    printf "%-28s the backend declined it: %s\n" "$name" \
-      "$(grep -v '^$' "$out/emit.log" | head -1 | cut -c1-72)"
-    declined=$((declined + 1))
-    continue
-  fi
-  classes=$(find "$out/classes" -name '*.class' 2>/dev/null)
-  [ -n "$classes" ] || {
-    printf "%-28s emitted no class file\n" "$name"
-    declined=$((declined + 1)); continue; }
-  # The generated classes only. The runtime jar has its own ratchet and
-  # including it here would make every failure ambiguous about which half of
-  # the artefact d8 refused.
-  # shellcheck disable=SC2086
-  if "$tools/d8" --min-api 29 --lib "$out/classes/nts-runtime.jar" \
-       --output "$out/dex" $classes > "$out/d8.log" 2>&1; then
-    dexed=$((dexed + 1))
-    names=$(echo "$classes" | sed "s|$out/classes/||g;s|\.class||g;s|/|.|g")
-    # shellcheck disable=SC2086
-    n=$(javap -p -cp "$out/classes" $names 2>/dev/null | grep -cE "^  .*\(.*\);")
-    methods=$((methods + n))
-  else
+    printf "%-28s did not finish: no counts were written\n" "$name"
     refused=$((refused + 1))
-    printf "%-28s d8 refused it\n" "$name"
-    sed -n '1,3p' "$out/d8.log" | sed 's/^/    /'
   fi
 done
 

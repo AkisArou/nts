@@ -366,8 +366,15 @@ if [ -n "$unlisted" ]; then
   exit 2
 fi
 
-for module in $FLOOR; do
-  printf '  %-22s ' "$module"
+# **Each module is judged in its own process, several at once.** The modules
+# share nothing: each emits into its own `$out_dir/<module>.build`, links its
+# own `<module>.node`, and the judging below reads only those. Serially this was
+# the gate's longest step (573 s on 2026-10-02, 3,229 s once the compiler got
+# slower), all of it one lowering and one link after another on an idle box.
+# The largest modules start first, because the step ends when the last one
+# does; the lines are printed in FLOOR order afterwards, as they always were.
+judge() {
+  module=$1
   out=$(NTS_COMPILER="$compiler" NTS_BIN="$compiler" \
     timeout 1800 bash tooling/conformance/build.sh "$module" 2>&1)
   if printf '%s' "$out" | grep -q 'bytes$'; then
@@ -408,13 +415,13 @@ for module in $FLOOR; do
       if [ -n "$novel" ]; then
         echo "loads with UNPINNED undefined symbol(s) -- would abort on first call"
         printf '%s\n' "$novel" | sed 's/^/                         /'
-        failures=$((failures + 1))
+        judged=fail
       else
         shape_file="runtime/node/$module/shape.mjs"
         if [ ! -f "$shape_file" ]; then
           echo "INSTRUMENT FAILURE: no $shape_file to read its surface through"
-          failures=$((failures + 1))
-          continue
+          judged=fail
+          return
         fi
         names=$(shaped_names "$out_dir/$module.node" "$PWD/$shape_file")
         pinned=""
@@ -426,26 +433,26 @@ for module in $FLOOR; do
         if [ "${names:-0}" -eq 0 ] 2>/dev/null; then
           if [ "$known" = yes ]; then
             echo "builds and loads, publishes nothing [known]$pinned"
-            built=$((built + 1))
+            judged=built
           else
             echo "PUBLISHES NOTHING -- its shaped surface is empty, so no test reaches it"
-            failures=$((failures + 1))
+            judged=fail
           fi
         elif [ "$known" = yes ]; then
           printf 'builds and loads, %s name(s) -- NOW PUBLISHES, remove it from PUBLISHES_NOTHING%s\n' "$names" "$pinned"
-          built=$((built + 1))
+          judged=built
         else
           echo "builds and loads, $names name(s)$pinned"
-          built=$((built + 1))
+          judged=built
         fi
       fi
     else
       echo "BUILDS BUT DOES NOT LOAD"
       node -e 'require(process.argv[1])' "$out_dir/$module.node" 2>&1 |
         head -1 | sed 's/^/                         /'
-      failures=$((failures + 1))
+      judged=fail
     fi
-    continue
+    return
   fi
   # **"Could not run" is not "does not build".** A missing `target/tsgo` -- which
   # is every run from a worktree -- makes *every* module print `REGRESSED`, and
@@ -483,8 +490,47 @@ for module in $FLOOR; do
     # of a reason is stated as a fact about the output rather than left as blank.
     echo "                         (no error, Error:, TS or NTS line in the build output)"
   fi
-  failures=$((failures + 1))
+  judged=fail
+}
+
+jobs=${NTS_ADDON_JOBS:-${NTS_GATE_JOBS:-4}}
+verdicts=$(mktemp -d)
+# The sibling objects every module links, compiled once for this run (see
+# build.sh); fresh per run, so nothing carries over from another tree or day.
+NTS_ADDON_SIBLING_CACHE=$(mktemp -d)
+export NTS_ADDON_SIBLING_CACHE
+by_size=$(for module in $FLOOR; do
+  printf '%s %s\n' "$(find "runtime/node/$module" -name '*.ts' -type f -print0 2>/dev/null |
+    xargs -0 cat 2>/dev/null | wc -c)" "$module"
+done | sort -rn | awk '{ print $2 }')
+running=0
+for module in $by_size; do
+  (
+    judged=none
+    printf '  %-22s ' "$module"
+    judge "$module"
+    printf '%s\n' "$judged" > "$verdicts/$module.verdict"
+  ) > "$verdicts/$module.out" 2>&1 &
+  running=$((running + 1))
+  if [ "$running" -ge "$jobs" ]; then
+    wait -n
+    running=$((running - 1))
+  fi
 done
+wait
+for module in $FLOOR; do
+  cat "$verdicts/$module.out"
+  case $(cat "$verdicts/$module.verdict" 2>/dev/null) in
+    built) built=$((built + 1)) ;;
+    fail) failures=$((failures + 1)) ;;
+    *)
+      # A module whose judging printed no verdict was not judged: count it as
+      # a failure rather than let the floor shrink by one unnoticed.
+      echo "  ${module}: NOT JUDGED -- the build-and-load check ended without a verdict"
+      failures=$((failures + 1)) ;;
+  esac
+done
+rm -rf "$verdicts"
 
 joined=0
 # **A blocked module's build is a probe, and a probe leaves no product.**
@@ -502,7 +548,7 @@ joined=0
 # `BLOCKED` has no product by definition, and one lying in the addon directory is
 # an artifact nothing in the tree claims and everything downstream trusts.
 probe_out=$(mktemp -d)
-trap 'rm -rf "$probe_out"' EXIT
+trap 'rm -rf "$probe_out" "$NTS_ADDON_SIBLING_CACHE"' EXIT
 for module in $BLOCKED; do
   if [ -f "$out_dir/$module.node" ]; then
     rm -f "$out_dir/$module.node"

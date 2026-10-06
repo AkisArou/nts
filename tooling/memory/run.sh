@@ -60,102 +60,166 @@ export NTS_TSGO
 out=target/memory
 mkdir -p "$out"
 
+# **One case per process, several at once.** Each case writes only under its own
+# `target/memory/<case>.*` and the two measurements in a case are compiled from
+# scratch at -O2 -- seventy cases, 140 full runtime compiles -- so the loop was
+# the whole of this step's four to five minutes and the cases share nothing.
+# `--case <dir>` measures one and prints its row; the rows are printed in case
+# order afterwards, so the table reads as it did.
+if [ "${1-}" = --case ]; then
+  dir=$2
+  fail=0
+  one_case() {
+    name=$(basename "$dir")
+
+    measure() { # $1 = subdir, rest = arguments to `env`
+      local where="$out/$name.$1"
+      rm -rf "$where" && mkdir -p "$where"
+      # `-u` and not `NTS_RC_NAIVE=`: an empty assignment still *sets* the
+      # variable, and the compiler asks whether it is set. Setting it empty made
+      # both halves of this measurement naive and the ratio a flat 1.00, which
+      # reads exactly like an elision pass that does nothing.
+      if ! env "${@:2}" "${NTS_BIN:-./target/release/nts}" emit-c "$dir/tsconfig.json" --out "$where" --rc \
+           >/dev/null 2>&1; then
+        echo "  $name: emit failed" >&2
+        return 1
+      fi
+      # Every `.c` the emitter wrote, not a fixed pair: a case that converts case
+      # gets `nts_unicode.c` beside the runtime, and one that does not still gets
+      # exactly the two. Naming them here meant the first case to need a third
+      # file reported "did not compile" with nothing saying which file was
+      # missing.
+      # **The runtime is compiled once per run, not 140 times.** `emit-c` copies
+      # the same runtime C beside every program, and at -O2 it is 85% of each
+      # arm's compile. With NTS_MEMORY_OBJECTS (a directory the parent makes
+      # fresh for each run) every .c other than program.c is compiled to an
+      # object named by the bytes of everything it could include -- every file
+      # emit-c wrote except the program's own -- plus the compiler and the
+      # flags, and linked as before. A runtime that included the program's
+      # header would make that key wrong, so then nothing is reused.
+      sources="$where/program.c"
+      if [ -n "${NTS_MEMORY_OBJECTS:-}" ] && ! grep -qs '#include "program.h"' "$where"/nts_*; then
+        inputs=$( { clang --version; echo "-O2 -DNTS_PROVIDER_RC"; (cd "$where" && find . -type f ! -name program.c ! -name program.h ! -name run | LC_ALL=C sort | xargs sha256sum); } | sha256sum | cut -c1-32)
+        for c in "$where"/*.c; do
+          [ "$c" = "$where/program.c" ] && continue
+          obj="$NTS_MEMORY_OBJECTS/$inputs-$(basename "$c" .c).o"
+          if [ ! -f "$obj" ]; then
+            clang -O2 -I"$where" -DNTS_PROVIDER_RC -c "$c" -o "$obj.$$" 2>/dev/null && mv -f "$obj.$$" "$obj"
+          fi
+          sources="$sources $obj"
+        done
+      else
+        sources="$where/*.c"
+      fi
+      # $sources is a list of paths without spaces, split on purpose.
+      clang -O2 -I"$where" -o "$where/run" $sources \
+            tooling/memory/harness.c -DNTS_PROVIDER_RC -lm 2>/dev/null || {
+        echo "  $name: did not compile" >&2
+        return 1
+      }
+      # Not `"$where/run"` bare. A case whose program *crashes* used to fail this
+      # function without saying anything, and the loop below then skipped it
+      # entirely -- so `global-array` segfaulted on a null module global and the
+      # report simply had one fewer row than the suite had cases. A missing row
+      # is the quietest way a check can not happen.
+      out=$("$where/run") || {
+        echo "  $name: the program exited $? without reporting" >&2
+        return 1
+      }
+      echo "$out"
+    }
+
+    # Every case directory gets a row, whatever happened to it.
+    short() {
+      printf '%-20s %7s %7s %7s %6s %7s %6s   %s\n' \
+        "$name" "?" "?" "?" "--" "?" "?" "$1"
+      fail=1
+    }
+    elided=$(measure elided -u NTS_RC_NAIVE) || { short "DID NOT RUN"; return; }
+    naive=$(measure naive NTS_RC_NAIVE=1) || { short "DID NOT RUN under NTS_RC_NAIVE"; return; }
+
+    read_num() { echo "$1" | tr ' ' '\n' | grep "^$2=" | cut -d= -f2; }
+    a=$(( $(read_num "$elided" retains) + $(read_num "$elided" releases) ))
+    n=$(( $(read_num "$naive" retains) + $(read_num "$naive" releases) ))
+    leaked=$(read_num "$elided" leaked)
+    answer=$(read_num "$elided" answer)
+    naive_answer=$(read_num "$naive" answer)
+    alloc=$(read_num "$elided" allocated)
+    # The third counter, and the only one that is optional. A case says
+    # `candidates N` in `expected` when it is *about* the cycle collector; the
+    # rest say nothing and are not checked, because most of them would be
+    # asserting a zero they never come near.
+    cand=$(read_num "$elided" candidates)
+    want_cand=$(grep '^candidates ' "$dir/expected" | awk '{print $2}')
+    ideal=$(grep '^ideal ' "$dir/expected" | awk '{print $2}')
+    floor=$(grep '^allocated ' "$dir/expected" | awk '{print $2}')
+
+    note=""
+    # Elision that changes the answer is not elision.
+    [ "$answer" = "$naive_answer" ] || { note="ANSWER CHANGED: $naive_answer -> $answer"; fail=1; }
+    [ "$leaked" = "0" ] || { note="LEAKED $leaked"; fail=1; }
+    [ -n "$floor" ] || { note='no "allocated" line in expected'; fail=1; }
+    # The two floors are not independent. Nothing on the frame has a count to
+    # change, so an allocation floor of zero forces an operation floor of zero --
+    # and six `expected` files said otherwise, because they were written when
+    # every object in them was a heap object.
+    [ -z "$note" ] && [ "$floor" = "0" ] && [ "$ideal" != "0" ] &&
+      { note="expected contradicts itself: 0 allocations cannot need $ideal operations"; fail=1; }
+    # Below a floor means the argument beside it is wrong, not the measurement.
+    # Four ideals in this suite were too high before anyone noticed, and every one
+    # was caught here rather than by reading them again.
+    [ -z "$note" ] && [ "$a" -lt "$ideal" ] && { note="BELOW ideal -- the argument in expected is wrong"; fail=1; }
+    [ -z "$note" ] && [ -n "$floor" ] && [ "$alloc" -lt "$floor" ] && { note="BELOW allocation floor -- the argument in expected is wrong"; fail=1; }
+    if [ -z "$note" ]; then
+      over=""
+      [ "$a" -gt "$ideal" ] && over="$((a - ideal)) ops"
+      [ -n "$floor" ] && [ "$alloc" -gt "$floor" ] && over="${over:+$over, }$((alloc - floor)) allocations"
+      [ -n "$want_cand" ] && [ "$cand" -ne "$want_cand" ] &&
+        over="${over:+$over, }$cand candidates against $want_cand"
+      [ -n "$over" ] && { note="$over above"; fail=1; }
+    fi
+
+    ratio="--"
+    [ "$n" -gt 0 ] && ratio=$(awk -v a="$a" -v n="$n" 'BEGIN { printf "%d%%", (n - a) * 100 / n }')
+    printf '%-20s %7s %7s %7s %6s %7s %6s %6s   %s\n' \
+      "$name" "$n" "$a" "$ideal" "$ratio" "$alloc" "$floor" "${want_cand:+$cand}" "$note"
+  }
+  one_case
+  exit "$fail"
+fi
+
 fail=0
 printf '%-20s %7s %7s %7s %6s %7s %6s %6s   %s\n' \
   case naive actual ideal gone alloc floor cand ''
 
+jobs=${NTS_MEMORY_JOBS:-${NTS_GATE_JOBS:-$(n=$(nproc 2>/dev/null || echo 4); [ "$n" -gt 8 ] && echo 8 || echo "$n")}}
+rows=$(mktemp -d)
+NTS_MEMORY_OBJECTS=$(mktemp -d)
+export NTS_MEMORY_OBJECTS
+trap 'rm -rf "$rows" "$NTS_MEMORY_OBJECTS"' EXIT
+self="$PWD/tooling/memory/run.sh"
+printf '%s\0' tooling/memory/cases/*/ | xargs -0 -P "$jobs" -I{} bash -c '
+  dir=$1; rows=$2
+  name=$(basename "$dir")
+  if "$0" --case "$dir" > "$rows/$name.row" 2> "$rows/$name.err"; then :; else : > "$rows/$name.failed"; fi
+' "$self" {} "$rows"
+seen=0
 for dir in tooling/memory/cases/*/; do
   name=$(basename "$dir")
-
-  measure() { # $1 = subdir, rest = arguments to `env`
-    local where="$out/$name.$1"
-    rm -rf "$where" && mkdir -p "$where"
-    # `-u` and not `NTS_RC_NAIVE=`: an empty assignment still *sets* the
-    # variable, and the compiler asks whether it is set. Setting it empty made
-    # both halves of this measurement naive and the ratio a flat 1.00, which
-    # reads exactly like an elision pass that does nothing.
-    if ! env "${@:2}" "${NTS_BIN:-./target/release/nts}" emit-c "$dir/tsconfig.json" --out "$where" --rc \
-         >/dev/null 2>&1; then
-      echo "  $name: emit failed" >&2
-      return 1
-    fi
-    # Every `.c` the emitter wrote, not a fixed pair: a case that converts case
-    # gets `nts_unicode.c` beside the runtime, and one that does not still gets
-    # exactly the two. Naming them here meant the first case to need a third
-    # file reported "did not compile" with nothing saying which file was
-    # missing.
-    clang -O2 -I"$where" -o "$where/run" "$where"/*.c \
-          tooling/memory/harness.c -DNTS_PROVIDER_RC -lm 2>/dev/null || {
-      echo "  $name: did not compile" >&2
-      return 1
-    }
-    # Not `"$where/run"` bare. A case whose program *crashes* used to fail this
-    # function without saying anything, and the loop below then skipped it
-    # entirely -- so `global-array` segfaulted on a null module global and the
-    # report simply had one fewer row than the suite had cases. A missing row
-    # is the quietest way a check can not happen.
-    out=$("$where/run") || {
-      echo "  $name: the program exited $? without reporting" >&2
-      return 1
-    }
-    echo "$out"
-  }
-
-  # Every case directory gets a row, whatever happened to it.
-  short() {
-    printf '%-20s %7s %7s %7s %6s %7s %6s   %s\n' \
-      "$name" "?" "?" "?" "--" "?" "?" "$1"
-    fail=1
-  }
-  elided=$(measure elided -u NTS_RC_NAIVE) || { short "DID NOT RUN"; continue; }
-  naive=$(measure naive NTS_RC_NAIVE=1) || { short "DID NOT RUN under NTS_RC_NAIVE"; continue; }
-
-  read_num() { echo "$1" | tr ' ' '\n' | grep "^$2=" | cut -d= -f2; }
-  a=$(( $(read_num "$elided" retains) + $(read_num "$elided" releases) ))
-  n=$(( $(read_num "$naive" retains) + $(read_num "$naive" releases) ))
-  leaked=$(read_num "$elided" leaked)
-  answer=$(read_num "$elided" answer)
-  naive_answer=$(read_num "$naive" answer)
-  alloc=$(read_num "$elided" allocated)
-  # The third counter, and the only one that is optional. A case says
-  # `candidates N` in `expected` when it is *about* the cycle collector; the
-  # rest say nothing and are not checked, because most of them would be
-  # asserting a zero they never come near.
-  cand=$(read_num "$elided" candidates)
-  want_cand=$(grep '^candidates ' "$dir/expected" | awk '{print $2}')
-  ideal=$(grep '^ideal ' "$dir/expected" | awk '{print $2}')
-  floor=$(grep '^allocated ' "$dir/expected" | awk '{print $2}')
-
-  note=""
-  # Elision that changes the answer is not elision.
-  [ "$answer" = "$naive_answer" ] || { note="ANSWER CHANGED: $naive_answer -> $answer"; fail=1; }
-  [ "$leaked" = "0" ] || { note="LEAKED $leaked"; fail=1; }
-  [ -n "$floor" ] || { note='no "allocated" line in expected'; fail=1; }
-  # The two floors are not independent. Nothing on the frame has a count to
-  # change, so an allocation floor of zero forces an operation floor of zero --
-  # and six `expected` files said otherwise, because they were written when
-  # every object in them was a heap object.
-  [ -z "$note" ] && [ "$floor" = "0" ] && [ "$ideal" != "0" ] &&
-    { note="expected contradicts itself: 0 allocations cannot need $ideal operations"; fail=1; }
-  # Below a floor means the argument beside it is wrong, not the measurement.
-  # Four ideals in this suite were too high before anyone noticed, and every one
-  # was caught here rather than by reading them again.
-  [ -z "$note" ] && [ "$a" -lt "$ideal" ] && { note="BELOW ideal -- the argument in expected is wrong"; fail=1; }
-  [ -z "$note" ] && [ -n "$floor" ] && [ "$alloc" -lt "$floor" ] && { note="BELOW allocation floor -- the argument in expected is wrong"; fail=1; }
-  if [ -z "$note" ]; then
-    over=""
-    [ "$a" -gt "$ideal" ] && over="$((a - ideal)) ops"
-    [ -n "$floor" ] && [ "$alloc" -gt "$floor" ] && over="${over:+$over, }$((alloc - floor)) allocations"
-    [ -n "$want_cand" ] && [ "$cand" -ne "$want_cand" ] &&
-      over="${over:+$over, }$cand candidates against $want_cand"
-    [ -n "$over" ] && { note="$over above"; fail=1; }
-  fi
-
-  ratio="--"
-  [ "$n" -gt 0 ] && ratio=$(awk -v a="$a" -v n="$n" 'BEGIN { printf "%d%%", (n - a) * 100 / n }')
-  printf '%-20s %7s %7s %7s %6s %7s %6s %6s   %s\n' \
-    "$name" "$n" "$a" "$ideal" "$ratio" "$alloc" "$floor" "${want_cand:+$cand}" "$note"
+  [ -f "$rows/$name.row" ] || continue
+  seen=$((seen + 1))
+  cat "$rows/$name.err" >&2
+  cat "$rows/$name.row"
+  [ -f "$rows/$name.failed" ] && fail=1
 done
+# An empty loop is not a clean run: every case has a row, or this measured less
+# than it says.
+total=$(ls -d tooling/memory/cases/*/ 2>/dev/null | wc -l)
+if [ "$seen" -eq 0 ] || [ "$seen" -ne "$total" ]; then
+  echo "  measured $seen of $total case(s)" >&2
+  fail=1
+fi
+
 
 if [ "$fail" -ne 0 ]; then
   printf '\n\033[31mFAILED\033[0m: memory\n'

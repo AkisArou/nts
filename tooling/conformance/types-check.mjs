@@ -45,6 +45,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { frontendFor } from "./pin.ts";
+import { longestFirst } from "../gate/costs.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -266,9 +267,11 @@ const totals = { types: 0, signatures: 0, edges: 0, judged: 0, membersJudged: 0,
 let measured = 0;
 const started = Date.now();
 let next = 0;
-await Promise.all(Array.from({ length: Math.min(WORKERS, projects.length) }, async () => {
-  while (next < projects.length) {
-    const project = projects[next++];
+// Longest first (tooling/gate/costs.mjs); order only, every result is sorted.
+const queue = longestFirst(argv.includes("--examples") ? "types-examples" : "types", projects);
+await Promise.all(Array.from({ length: Math.min(WORKERS, queue.length) }, async () => {
+  while (next < queue.length) {
+    const project = queue[next++];
     const r = await run(["types", project]);
     if (r.error || r.signal || r.status !== 0) {
       unmeasured.push(`${project}: nts types ${r.signal ?? r.error?.message ?? `exit ${r.status}`} -- ${r.err.trim().split("\n").pop()?.slice(0, 100) ?? ""}`);
