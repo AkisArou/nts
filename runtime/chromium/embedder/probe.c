@@ -8,6 +8,17 @@
 #include "dom_abi.h"
 #include "program.h"
 
+/* Stops the renderer saying why. A raise the program left pending is
+   reported as the uncaught error it is, with its message; any other failed
+   check names the function and line it is in. */
+static _Noreturn void probe_fail(const char* function, int line) {
+  if (nts_raising())
+    nts_uncaught(nts_raise_take(), NULL);
+  fprintf(stderr, "nts probe: check failed in %s at line %d\n", function, line);
+  abort();
+}
+#define PROBE_FAIL() probe_fail(__func__, __LINE__)
+
 struct NtsChromiumProbe {
   NtsEnvironment* environment;
   ntsChromiumCreateCounter_return_t* counter;
@@ -61,7 +72,7 @@ static void leave(ProbeScope* scope) {
 NtsChromiumProbe* nts_chromium_probe_create(void) {
   NtsChromiumProbe* probe = calloc(1, sizeof(*probe));
   if (!probe)
-    abort();
+    PROBE_FAIL();
   probe->environment = nts_environment_create();
   return probe;
 }
@@ -74,7 +85,7 @@ NtsChromiumProbeResult nts_chromium_probe_run(NtsChromiumProbe* probe) {
   NtsString* input = nts_string_from_utf8("probe", 5);
   NtsString* text = ntsChromiumText(input);
   if (nts_raising())
-    abort();
+    PROBE_FAIL();
   static const char expected[] = "native:probe";
   result.text_matches = text && text->length == sizeof(expected) - 1;
   if (result.text_matches) {
@@ -93,11 +104,11 @@ NtsChromiumProbeResult nts_chromium_probe_run(NtsChromiumProbe* probe) {
 
 void nts_chromium_probe_counter_initialize(NtsChromiumProbe* probe) {
   if (probe->counter)
-    abort();
+    PROBE_FAIL();
   ProbeScope scope = enter(probe);
   probe->counter = ntsChromiumCreateCounter();
   if (nts_raising() || !probe->counter)
-    abort();
+    PROBE_FAIL();
   leave(&scope);
 }
 
@@ -120,9 +131,24 @@ double nts_chromium_probe_dom_run(NtsChromiumProbe* probe,
   ProbeScope scope = enter(probe);
   const size_t before = nts_live_count();
   DomInvocation call = {.context = context, .result = -1};
-  if (nts_blink_dom_entry(context, run_dom_program, &call) || nts_raising() ||
-      nts_live_count() != before)
-    abort();
+  if (nts_blink_dom_entry(context, run_dom_program, &call) || nts_raising())
+    PROBE_FAIL();
+  /* Nothing the program made outlives the call, except a closure the DOM
+     holds for later -- the frame callback the witness leaves pending, which
+     gives its closure back when it runs. */
+  const size_t uncollected = nts_live_count();
+  /* Cycles wait for the collector (at idle, under the host); collect them
+     now, so what is counted is what nothing will ever free. */
+  nts_collect_cycles();
+  const size_t after = nts_live_count();
+  const size_t held = nts_blink_dom_held_closures(context);
+  fprintf(stderr, "NTS_DOM_LIVE before=%zu uncollected=%zu after=%zu held=%zu\n",
+          before, uncollected, after, held);
+  if (after > before + held) {
+    fprintf(stderr, "nts probe: %zu objects outlived the DOM program, %zu held\n",
+            after - before, held);
+    PROBE_FAIL();
+  }
   leave(&scope);
   return call.result;
 }
@@ -135,20 +161,20 @@ void nts_chromium_probe_dom_counter(NtsChromiumProbe* probe,
   DomInvocation call = {.context = context, .count = count};
   if (nts_blink_dom_entry(context, run_dom_counter, &call) || nts_raising() ||
       nts_live_count() != before)
-    abort();
+    PROBE_FAIL();
   leave(&scope);
 }
 
 NtsChromiumCounterResult nts_chromium_probe_counter_increment(
     NtsChromiumProbe* probe) {
   if (!probe->counter)
-    abort();
+    PROBE_FAIL();
   ProbeScope scope = enter(probe);
   NtsChromiumCounterResult result = {0};
   result.live_objects_before = nts_live_count();
   result.count = ntsChromiumIncrementCounter(probe->counter);
   if (nts_raising())
-    abort();
+    PROBE_FAIL();
   result.live_objects_after = nts_live_count();
   leave(&scope);
   return result;
@@ -164,7 +190,7 @@ static void finalize_probe(NtsChromiumProbe* probe) {
   probe->counter = NULL;
   nts_collect_cycles();
   if (nts_live_count() != 0)
-    abort();
+    PROBE_FAIL();
   nts_leave();
   nts_callback_leave();
   nts_environment_leave(&scope);
@@ -192,7 +218,7 @@ static void run_native_task(void* state) {
   ProbeScope scope = enter(queued->probe);
   nts_task_run(queued->task);
   if (nts_raising())
-    abort();
+    PROBE_FAIL();
   leave(&scope);
   free(queued);
 }
@@ -211,7 +237,7 @@ static void end_checkpoint(void* state) {
   probe->collector_queued = false;
   nts_collect_cycles();
   if (probe->pending || nts_live_count() != 1)
-    abort();
+    PROBE_FAIL();
   fprintf(stderr, "NTS_CHECKPOINT live=%zu\n", nts_live_count());
   leave(&scope);
 }
@@ -223,7 +249,7 @@ static void enqueue_native(void* state, NtsTask task) {
   NtsChromiumProbe* probe = state;
   QueuedTask* queued = malloc(sizeof(*queued));
   if (!queued)
-    abort();
+    PROBE_FAIL();
   *queued = (QueuedTask){probe, task};
   nts_blink_dom_enqueue(probe->dom, run_native_task, drop_native_task, queued);
   if (!probe->collector_queued) {
@@ -268,14 +294,14 @@ static void finish_counter(void* state) {
   Completion* completion = state;
   NtsChromiumProbe* probe = completion->probe;
   if (nts_promise_state(probe->pending) != NTS_PROMISE_FULFILLED)
-    abort();
+    PROBE_FAIL();
   double expected = nts_value_number(nts_promise_value(probe->pending));
   double count = ntsChromiumIncrementCounter(probe->counter);
   if (count != expected)
-    abort();
+    PROBE_FAIL();
   DomInvocation call = {.context = probe->dom, .count = count};
   if (nts_blink_dom_entry(probe->dom, run_dom_counter, &call))
-    abort();
+    PROBE_FAIL();
   nts_release((NtsHeader*)probe->pending);
   probe->pending = NULL;
   nts_release((NtsHeader*)completion);
@@ -286,18 +312,18 @@ static void drop_finish(void* state) {
 }
 void nts_chromium_probe_await_counter(NtsChromiumProbe* probe) {
   if (probe->pending || !probe->counter || !probe->dom)
-    abort();
+    PROBE_FAIL();
   ProbeScope scope = enter(probe);
   probe->pending =
       ntsChromiumAwaitCounter(ntsChromiumCounterValue(probe->counter));
   if (nts_raising() || !probe->pending)
-    abort();
+    PROBE_FAIL();
   Completion* completion = (Completion*)nts_object_new(&completion_descriptor);
   completion->probe = probe;
   nts_promise_subscribe(probe->pending,
                         (NtsTask){finish_counter, drop_finish, completion});
   if (nts_promise_state(probe->pending) != NTS_PROMISE_PENDING)
-    abort();
+    PROBE_FAIL();
   leave(&scope);
 }
 
@@ -371,7 +397,7 @@ NtsChromiumBenchmark* nts_chromium_benchmark_create(NtsChromiumProbe* probe,
                                                     size_t bytes) {
   NtsChromiumBenchmark* benchmark = calloc(1, sizeof(*benchmark));
   if (!benchmark)
-    abort();
+    PROBE_FAIL();
   ProbeScope scope = enter(probe);
   benchmark->live_before_setup = nts_live_count();
   benchmark->first = nts_string_from_utf8(a, bytes);
@@ -379,7 +405,7 @@ NtsChromiumBenchmark* nts_chromium_benchmark_create(NtsChromiumProbe* probe,
   /* Interning the two texts is a DOM call, so preparing is an entry. */
   if (nts_blink_dom_entry(context, prepare_benchmark, benchmark) ||
       nts_raising() || !benchmark->state)
-    abort();
+    PROBE_FAIL();
   benchmark->probe = probe;
   benchmark->context = context;
   benchmark->node = node;
@@ -395,7 +421,7 @@ static void run_benchmark(void* state) {
 }
 static void run_entered(NtsChromiumBenchmark* benchmark) {
   if (nts_blink_dom_entry(benchmark->context, run_benchmark, benchmark))
-    abort();
+    PROBE_FAIL();
 }
 NtsChromiumBenchmarkStats nts_chromium_benchmark_run(
     NtsChromiumBenchmark* benchmark,
@@ -409,7 +435,7 @@ NtsChromiumBenchmarkStats nts_chromium_benchmark_run(
   nts_counting_reset();
   run_entered(benchmark);
   if (nts_raising() || benchmark->result != 0 || nts_live_count() != before)
-    abort();
+    PROBE_FAIL();
   NtsChromiumBenchmarkStats stats = {nts_counted_allocations(),
                                      nts_counted_retains(),
                                      nts_counted_releases(), nts_live_count()};
@@ -435,11 +461,11 @@ NtsChromiumBenchmarkStats nts_chromium_benchmark_entries(
     benchmark->result = -1;
     run_entered(benchmark);
     if (nts_raising() || benchmark->result != 0)
-      abort();
+      PROBE_FAIL();
     leave(&scope);
   }
   if (nts_live_count() != before)
-    abort();
+    PROBE_FAIL();
   NtsChromiumBenchmarkStats stats = {nts_counted_allocations(),
                                      nts_counted_retains(),
                                      nts_counted_releases(), nts_live_count()};
@@ -453,7 +479,7 @@ void nts_chromium_benchmark_destroy(NtsChromiumBenchmark* benchmark) {
   nts_release((NtsHeader*)benchmark->second);
   nts_collect_cycles();
   if (nts_live_count() != benchmark->live_before_setup)
-    abort();
+    PROBE_FAIL();
   leave(&scope);
   free(benchmark);
 }
@@ -483,7 +509,7 @@ NtsChromiumRows* nts_chromium_rows_create(NtsChromiumProbe* probe,
                                           NtsDomNode* tbody) {
   NtsChromiumRows* rows = calloc(1, sizeof(*rows));
   if (!rows)
-    abort();
+    PROBE_FAIL();
   rows->probe = probe;
   rows->context = context;
   ProbeScope scope = enter(probe);
@@ -493,7 +519,7 @@ NtsChromiumRows* nts_chromium_rows_create(NtsChromiumProbe* probe,
   RowsSetup setup = {rows, tbody};
   if (nts_blink_dom_entry(context, create_rows, &setup) || nts_raising() ||
       !rows->app)
-    abort();
+    PROBE_FAIL();
   leave(&scope);
   return rows;
 }
@@ -512,7 +538,7 @@ NtsChromiumRowsResult nts_chromium_rows_operate(NtsChromiumRows* rows,
   rows->result = -1;
   if (nts_blink_dom_entry(rows->context, run_rows, rows) || nts_raising() ||
       rows->result < 0)
-    abort();
+    PROBE_FAIL();
   NtsChromiumRowsResult result = {rows->result, nts_counted_allocations(),
                                   nts_live_count()};
   leave(&scope);
@@ -530,7 +556,7 @@ void nts_chromium_rows_destroy(NtsChromiumRows* rows) {
   nts_release((NtsHeader*)rows->app);
   nts_collect_cycles();
   if (nts_raising() || nts_live_count() != rows->live_before_setup)
-    abort();
+    PROBE_FAIL();
   leave(&scope);
   free(rows);
 }
@@ -558,7 +584,7 @@ double nts_chromium_kernel_run(NtsChromiumProbe* probe,
   KernelRun run = {context, kernel, iterations, -1};
   if (nts_blink_dom_entry(context, run_kernel, &run) || nts_raising() ||
       run.result < 0)
-    abort();
+    PROBE_FAIL();
   *allocations = nts_counted_allocations();
   leave(&scope);
   return run.result;
@@ -571,7 +597,7 @@ static void invoke_listener(void* host, void (*call)(void*), void* state) {
   ProbeScope scope = enter(host);
   call(state);
   if (nts_raising())
-    abort();
+    PROBE_FAIL();
   leave(&scope);
 }
 void nts_chromium_probe_attach(NtsChromiumProbe* probe,
@@ -588,7 +614,7 @@ static void enqueue_microtask(void* state, NtsTask task) {
   NtsChromiumProbe* probe = state;
   QueuedTask* queued = malloc(sizeof(*queued));
   if (!queued)
-    abort();
+    PROBE_FAIL();
   *queued = (QueuedTask){probe, task};
   nts_blink_dom_enqueue(probe->dom, run_native_task, drop_native_task, queued);
 }

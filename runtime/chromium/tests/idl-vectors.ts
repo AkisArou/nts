@@ -20,6 +20,14 @@ export interface VectorHost {
   failure(error: unknown): string;
 }
 
+// Text that may be null, as `"" + value` reads it. Through a parameter typed
+// `string | null`: a read narrowed by an earlier assignment
+// (`div.nodeValue = x; div.nodeValue`) keeps its null check this way
+// (contracts/compiler-requests.md section 9).
+function shown(value: string | null): string {
+  return value === null ? "null" : value;
+}
+
 function describe(node: Node | null): string {
   return node === null ? "null" : node.nodeName;
 }
@@ -48,13 +56,13 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   div.dir = "RTL";
   log("id", div.id);
   log("className", div.className);
-  log("classAttr", "" + div.getAttribute("class"));
+  log("classAttr", shown(div.getAttribute("class")));
   log("title", div.title);
   log("lang", div.lang);
   log("dir", div.dir);
   log("tagName", div.tagName);
   log("localName", div.localName);
-  log("missingAttr", "" + div.getAttribute("data-none"));
+  log("missingAttr", shown(div.getAttribute("data-none")));
   log("hasAttr", "" + div.hasAttribute("title"));
   div.removeAttribute("title");
   log("hasAttrAfter", "" + div.hasAttribute("title"));
@@ -63,9 +71,9 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   log("toggle3", "" + div.toggleAttribute("data-flag"));
 
   // Nullable text: an element's nodeValue is null; setting it does nothing.
-  log("elementNodeValue", "" + div.nodeValue);
+  log("elementNodeValue", shown(div.nodeValue));
   div.nodeValue = "ignored";
-  log("elementNodeValueAfter", "" + div.nodeValue);
+  log("elementNodeValueAfter", shown(div.nodeValue));
 
   // Tree shape through node results.
   const first = d.createElement("span");
@@ -116,8 +124,8 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   div.normalize();
   log("normalized", asText(div.lastChild!)!.data);
   div.textContent = "replaced";
-  log("textContent", "" + div.textContent);
-  log("docTextContent", "" + d.textContent);
+  log("textContent", shown(div.textContent));
+  log("docTextContent", shown(d.textContent));
 
   // An input: text both ways, booleans, numbers, and the arity overloads.
   const input = asHTMLInputElement(d.createElement("input"))!;
@@ -129,7 +137,7 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   input.size = 7;
   input.required = true;
   log("value", input.value);
-  log("valueAttr", "" + input.getAttribute("value"));
+  log("valueAttr", shown(input.getAttribute("value")));
   log("placeholder", input.placeholder);
   log("maxLength", "" + input.maxLength);
   log("size", "" + input.size);
@@ -166,7 +174,7 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   log("tokenContains", "" + tokens.contains("c"));
   log("tokenToggle", "" + tokens.toggle("c") + "," + tokens.toggle("c", true));
   tokens.remove("a", "b");
-  log("tokensAfter", list.className + "|" + tokens.item(0));
+  log("tokensAfter", list.className + "|" + shown(tokens.item(0)));
   thrown("emptyToken", () => { tokens.add(""); });
   thrown("spaceToken", () => { tokens.add("a b"); });
 

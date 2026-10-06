@@ -2,6 +2,8 @@
 // Do not edit; regenerate.
 #include "nts/dom_idl.h"
 
+#include <array>
+
 #include "nts/dom_context.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_abort_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_abort_signal.h"
@@ -671,7 +673,7 @@ class Throws {
 // Blink's own (`html_names::kClassAttr`). The symbols are C's either way.
 // What `instanceof` checks against, by NtsDomInterface id: each interface's
 // wrapper type, which knows its parent's.
-constexpr const blink::WrapperTypeInfo* kInterfaces[] = {
+constexpr std::array<const blink::WrapperTypeInfo*, 603> kInterfaces = {
     blink::V8AbortController::GetWrapperTypeInfo(),
     blink::V8AbortSignal::GetWrapperTypeInfo(),
     blink::V8AbstractRange::GetWrapperTypeInfo(),
@@ -1282,7 +1284,7 @@ constexpr const blink::WrapperTypeInfo* kInterfaces[] = {
 namespace blink {
 extern "C" {
 bool nts_dom_is(const void* object, uint32_t interface_id) {
-  CHECK_LT(interface_id, std::size(kInterfaces));
+  CHECK_LT(interface_id, kInterfaces.size());
   // As ScriptWrappable::TypeDispatcher::DowncastTo checks: by the IDL.
   return object && ToWrapperTypeInfo(WrappableOf(object))->IsSubclass(kInterfaces[interface_id]);
 }

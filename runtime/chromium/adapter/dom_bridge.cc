@@ -1,7 +1,6 @@
 #include "nts/dom_context.h"
 
 #include <cstdlib>
-#include <cstring>
 #include <string>
 
 #include "base/check.h"
@@ -552,6 +551,9 @@ NtsDomNode *nts_blink_dom_element_by_id(NtsDomContext *context,
   return HandleOf<NtsDomNode>(
       context->document->getElementById(blink::AtomicString(id)));
 }
+size_t nts_blink_dom_held_closures(NtsDomContext *context) {
+  return context->listeners->set.size() + context->listeners->frames.size();
+}
 size_t nts_blink_dom_roots(void) { return HeldObjects().counts.size(); }
 // The benchmark's controls (dom/abi/dom_testing.h), each inside an entry: a
 // conservative collection now, as an allocation would trigger, and text from
@@ -631,7 +633,10 @@ char *nts_dom_exception_take_message(NtsDomException *exception) {
   // The compiler frees the message with free(), once thrown.
   char *message = static_cast<char *>(std::malloc(text.size() + 1));
   CHECK(message);
-  std::memcpy(message, text.c_str(), text.size() + 1);
+  // The allocation is exactly the text and its terminator.
+  auto out = UNSAFE_BUFFERS(base::span(message, text.size() + 1));
+  out.first(text.size()).copy_from(base::span(text));
+  out[text.size()] = '\0';
   return message;
 }
 

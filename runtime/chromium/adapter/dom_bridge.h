@@ -34,6 +34,9 @@ void nts_blink_dom_set_invoker(NtsDomContext* context,
 int32_t nts_blink_dom_entry(NtsDomContext* context,
                             void (*run)(void*),
                             void* state);
+// The closures the context holds for the program -- listeners not yet
+// removed, frames not yet run -- each given back when it is done with.
+size_t nts_blink_dom_held_closures(NtsDomContext* context);
 // The document's element with this id, or NULL: how native code outside
 // Blink's boundary hands the program a node to start from.
 NtsDomNode* nts_blink_dom_element_by_id(NtsDomContext* context,

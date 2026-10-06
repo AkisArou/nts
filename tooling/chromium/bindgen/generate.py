@@ -664,6 +664,8 @@ bool nts_dom_is(const void* object, uint32_t interface_id);
         adapter = f"""// {banner.replace(chr(10), chr(10) + '// ')}
 #include "nts/dom_idl.h"
 
+#include <array>
+
 #include "nts/dom_context.h"
 {includes}
 
@@ -694,7 +696,7 @@ class Throws {{
 // Blink's own (`html_names::kClassAttr`). The symbols are C's either way.
 // What `instanceof` checks against, by NtsDomInterface id: each interface's
 // wrapper type, which knows its parent's.
-constexpr const blink::WrapperTypeInfo* kInterfaces[] = {{
+constexpr std::array<const blink::WrapperTypeInfo*, {len(self.checkable)}> kInterfaces = {{
 {chr(10).join(f"    blink::{v8_bridge_class_name(i)}::GetWrapperTypeInfo()," for i in self.checkable)}
 }};
 
@@ -703,7 +705,7 @@ constexpr const blink::WrapperTypeInfo* kInterfaces[] = {{
 namespace blink {{
 extern "C" {{
 bool nts_dom_is(const void* object, uint32_t interface_id) {{
-  CHECK_LT(interface_id, std::size(kInterfaces));
+  CHECK_LT(interface_id, kInterfaces.size());
   // As ScriptWrappable::TypeDispatcher::DowncastTo checks: by the IDL.
   return object && ToWrapperTypeInfo(WrappableOf(object))->IsSubclass(kInterfaces[interface_id]);
 }}
