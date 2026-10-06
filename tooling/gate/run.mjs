@@ -83,6 +83,7 @@ process.chdir(ROOT);
 //   needs  steps that must PASS first (only when they are requested too)
 //   after  steps that must finish first, whatever their verdict
 //   lock   an exclusive resource (cargo's build-directory lock)
+//   host   what the machine must have, named when the step SKIPs
 //   doc    what it proves, for the summary's reader
 // ---------------------------------------------------------------------------
 const STEPS = [
@@ -115,8 +116,8 @@ const STEPS = [
   { name: "llvm", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "every example agrees with node on LLVM" },
   { name: "llvm-rc", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "every example agrees with node on LLVM under RC" },
   { name: "jvm", slots: 4, min: 2, mem: 4, nts: true, fe: true, doc: "every example agrees with node on the JVM" },
-  { name: "dex", slots: 1, mem: 2, nts: true, fe: true, doc: "d8 accepts emitted classes" },
-  { name: "on-device", slots: 1, mem: 1, nts: true, fe: true, doc: "bench cases agree on java and dalvikvm" },
+  { name: "dex", slots: 1, mem: 2, nts: true, fe: true, host: "an Android SDK with build-tools", doc: "d8 accepts emitted classes" },
+  { name: "on-device", slots: 1, mem: 1, nts: true, fe: true, host: "an Android device on adb", doc: "bench cases agree on java and dalvikvm" },
   { name: "bench-agree", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "bench cases agree with node" },
   { name: "examples", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "every example agrees with node on C" },
   { name: "rc", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "every example agrees under RC, no leak" },
@@ -543,7 +544,9 @@ function done() {
     const tag = { PASS: color(32, "PASS    "), FAIL: color(31, "FAIL    "), SKIPPED: color(33, "SKIPPED "), "NOT RUN": color(33, "NOT RUN ") }[r.verdict];
     const t = r.wall !== undefined ? `${String(Math.round(r.wall)).padStart(6)}s` : "       ";
     const c = r.cpu !== undefined ? ` cpu ${String(Math.round(r.cpu)).padStart(6)}s` : "";
-    const why = r.verdict === "PASS" ? "" : `  ${r.reason}${r.accepted ? "  [accepted: NTS_GATE_ACCEPT_SKIP]" : ""}`;
+    const host = r.verdict === "SKIPPED" && BY_NAME.get(name).host ? ` (needs ${BY_NAME.get(name).host})` : "";
+    const how = r.verdict === "SKIPPED" ? (r.accepted ? "  [accepted: NTS_GATE_ACCEPT_SKIP]" : `  [red; NTS_GATE_ACCEPT_SKIP=${name} accepts it]`) : "";
+    const why = r.verdict === "PASS" ? "" : `  ${r.reason}${host}${how}`;
     lines.push(`  ${tag} ${name.padEnd(24)}${t}${c}${why}`);
   }
   for (const s of slow) {

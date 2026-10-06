@@ -162,7 +162,21 @@ step() {
   exit $?
 }
 
-lint() { cargo clippy --workspace --all-targets 2>&1 | grep -E '^(warning|error)' && return 1; return 0; }
+# **Clippy's own status counts, not only what it printed.** This was
+# `cargo clippy ... | grep '^(warning|error)' && return 1; return 0`, which
+# passed for a clippy that died without printing a diagnostic -- killed by a
+# memory cap (SIGKILL prints nothing), or a cargo that could not take its lock.
+lint() {
+  out=$(cargo clippy --workspace --all-targets 2>&1)
+  status=$?
+  if printf '%s\n' "$out" | grep -E '^(warning|error)'; then return 1; fi
+  if [ "$status" -ne 0 ]; then
+    printf '%s\n' "$out" | tail -20 | sed 's/^/  /'
+    echo "  ^ cargo clippy exited $status and printed no warning or error line"
+    return 1
+  fi
+  return 0
+}
 # The C half of the same question. A whole-file reformat once arrived mixed
 # into an unrelated change, which is what an editor formatting on save does to
 # a tree that has never said which format it wants. `.clang-format` says, and
@@ -220,7 +234,7 @@ reformatted() {
 }
 
 format() {
-  command -v clang-format >/dev/null || { echo "  clang-format absent, skipped"; return 0; }
+  command -v clang-format >/dev/null || { echo "  SKIP: clang-format absent"; return 77; }
   bad=$(for f in runtime/c/*.c runtime/c/*.h runtime/c/tests/*.c; do
           clang-format --style=file "$f" | cmp -s - "$f" || echo "$f"
         done)
@@ -237,8 +251,11 @@ format() {
 # something had once been wrong. A check that cannot say what it found is the
 # same defect as one that cannot fail: `>/dev/null 2>&1` on the step that runs
 # every unit test in the tree.
+# `--no-fail-fast`: without it the first failing test *binary* ends the run and
+# every binary after it is not run and not counted -- a known environmental
+# failure once hid 995 of 1103 tests behind "108 passed, 1 failed".
 tests() {
-  report=$(cargo test --workspace 2>&1) && return 0
+  report=$(cargo test --workspace --no-fail-fast 2>&1) && return 0
   echo "$report" | grep -E "^(error|warning: unused|test .* FAILED|failures:|---- )" -A 4 | head -60
   return 1
 }
@@ -800,7 +817,14 @@ profile() {
   # different order is a different string.
   invalid=$(ls -d "$root"/runtime/node/*/tsconfig.json | xargs -P "$jobs" -n 1 sh -c '
       m=$1
-      if "'"${NTS_BIN:-$root/target/release/nts}"'" hir "$m" 2>&1 | grep -q "does NOT verify"; then
+      # A crash is not valid HIR. `grep -q "does NOT verify"` alone read a
+      # panicking `nts hir` -- which prints no verdict at all -- as a module
+      # whose HIR verifies. 101 is a Rust panic; above 128 is a signal.
+      out=$("'"${NTS_BIN:-$root/target/release/nts}"'" hir "$m" 2>&1)
+      st=$?
+      if [ "$st" -ge 101 ] || printf "%s" "$out" | grep -q "panicked at"; then
+        echo "CRASHED:$(basename "$(dirname "$m")")"
+      elif printf "%s" "$out" | grep -q "does NOT verify"; then
         basename "$(dirname "$m")"
       fi
       exit 0
@@ -895,13 +919,27 @@ example_refusals() {
     d=$1
     n=$(basename "$(dirname "$d")")
     case "$n" in invalid|unsupported) exit 0 ;; esac
-    count=$(NTS_TSGO="${NTS_TSGO:-$PWD/target/tsgo}" "${NTS_BIN:-./target/release/nts}" hir "$d" 2>&1               | grep -c "NTS100[0-9]")
+    out=$(NTS_TSGO="${NTS_TSGO:-$PWD/target/tsgo}" "${NTS_BIN:-./target/release/nts}" hir "$d" 2>&1)
+    st=$?
+    # A crash prints no refusal, so it counted 0 and read as "refuses nothing
+    # now" -- a note, and a pass. 101 is a Rust panic; above 128 a signal.
+    if [ "$st" -ge 101 ] || printf "%s" "$out" | grep -q "panicked at"; then
+      printf "%s CRASHED\n" "$n"
+      exit 0
+    fi
+    count=$(printf "%s\n" "$out" | grep -c "NTS100[0-9]")
     [ "$count" -gt 0 ] && printf "%s %s
 " "$n" "$count"
     exit 0
   ' _ > "$results"
   bad=""
   note=""
+  crashed=$(awk '$2 == "CRASHED" { printf " %s", $1 }' "$results")
+  if [ -n "$crashed" ]; then
+    bad="$bad
+    nts hir crashed on:$crashed"
+    awk '$2 != "CRASHED"' "$results" > "$results.ok" && mv -f "$results.ok" "$results"
+  fi
   while read -r name count; do
     [ -z "$name" ] && continue
     want=$(awk -v n="$name" '$1 == n { print $2 }' "$table")
@@ -1301,11 +1339,26 @@ llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
 # renders) and reddening a peer's gate for one of those, on a step they cannot
 # run without an emulator, would be a false red they cannot act on.
 on_device() {
-  sh "$root/tooling/android/agrees-on-device.sh"
+  android_step "$root/tooling/android/agrees-on-device.sh"
 }
 
 dex() {
-  sh "$root/tooling/android/dexes.sh"
+  android_step "$root/tooling/android/dexes.sh"
+}
+
+# Both scripts skip by printing `SKIP: <why>` and exiting 0 *before doing any
+# work*, which the gate counted as a pass: a box with no Android SDK reported
+# `dex` green having dexed nothing. Exit 77 instead, so the summary says
+# SKIPPED and why. Only a SKIP that is the script's last line counts: those are
+# its up-front exits, and a run that did work ends in its own summary line.
+android_step() {
+  out=$(sh "$1" 2>&1)
+  status=$?
+  printf '%s\n' "$out"
+  [ "$status" -eq 0 ] || return "$status"
+  last=$(printf '%s\n' "$out" | awk 'NF { line = $0 } END { print line }')
+  case $last in "SKIP: "*) return 77 ;; esac
+  return 0
 }
 
 jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
@@ -1683,8 +1736,8 @@ records() {
 # people stop running.
 test262() {
   if [ ! -d third_party/test262/.git ]; then
-    echo "  no test262 checkout, so this says nothing; tooling/bootstrap/bootstrap.sh clones it"
-    return 0
+    echo "  SKIP: no test262 checkout, so this says nothing; tooling/bootstrap/bootstrap.sh clones it"
+    return 77
   fi
   pin=$(awk -F'"' '/^pub const TEST262_PIN/ { print $2 }' \
     tooling/suite/src/test262_runner/mod.rs)
@@ -1802,8 +1855,8 @@ test262_recorded() {
   ceiling=$5
   ceiling_name=$6
   if [ ! -d third_party/test262/.git ]; then
-    echo "  no test262 checkout, so this says nothing; tooling/bootstrap/bootstrap.sh clones it"
-    return 0
+    echo "  SKIP: no test262 checkout, so this says nothing; tooling/bootstrap/bootstrap.sh clones it"
+    return 77
   fi
   # Eight at most whatever `jobs` says: memory, not cores, is what a test262
   # run exhausts -- one unicode-identifier case takes the frontend to the
@@ -1888,10 +1941,10 @@ TEST262_HARNESS_NEGATIVES_ACCEPTED_CEILING=0
 test262_rest_cases() {
   test262_recorded test/annexB tooling/census/test262-annexb.outcomes.tsv \
     "$TEST262_ANNEXB_PASS_FLOOR" TEST262_ANNEXB_PASS_FLOOR \
-    "$TEST262_ANNEXB_NEGATIVES_ACCEPTED_CEILING" TEST262_ANNEXB_NEGATIVES_ACCEPTED_CEILING || return 1
+    "$TEST262_ANNEXB_NEGATIVES_ACCEPTED_CEILING" TEST262_ANNEXB_NEGATIVES_ACCEPTED_CEILING || return $?
   test262_recorded test/staging tooling/census/test262-staging.outcomes.tsv \
     "$TEST262_STAGING_PASS_FLOOR" TEST262_STAGING_PASS_FLOOR \
-    "$TEST262_STAGING_NEGATIVES_ACCEPTED_CEILING" TEST262_STAGING_NEGATIVES_ACCEPTED_CEILING || return 1
+    "$TEST262_STAGING_NEGATIVES_ACCEPTED_CEILING" TEST262_STAGING_NEGATIVES_ACCEPTED_CEILING || return $?
   test262_recorded test/harness tooling/census/test262-harness.outcomes.tsv \
     "$TEST262_HARNESS_PASS_FLOOR" TEST262_HARNESS_PASS_FLOOR \
     "$TEST262_HARNESS_NEGATIVES_ACCEPTED_CEILING" TEST262_HARNESS_NEGATIVES_ACCEPTED_CEILING
@@ -2294,6 +2347,16 @@ step "react-sources" react_sources
 # are a hundred and fifty-two claims nobody is checking.
 blockers() {
   out=$(node tooling/conformance/blockers-check.mjs 2>&1)
+  # Its status counts. It exits 2 when it finds no compiler or no Node-API
+  # headers -- having judged no fixture -- and 1 when an uncommitted fixture
+  # owes integrity entries, and both were read as a pass, because only the
+  # FIXED / NO OUTPUT / CHANGED lines below were looked at.
+  checked=$?
+  if [ "$checked" -ne 0 ]; then
+    printf '%s\n' "$out" | tail -25
+    echo "  ^ blockers-check.mjs exited $checked"
+    return 1
+  fi
   printf '%s\n' "$out" | tail -1
   fixed=$(printf '%s\n' "$out" | grep -c '^  FIXED ' || true)
   [ "$fixed" -gt 0 ] && {
