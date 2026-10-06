@@ -232,6 +232,13 @@ try {
       for (const arm of ["void", "boolean"])
         HTMLElement.prototype["_set_onclick_" + arm] = function (handler) { this.onclick = handler; };
       HTMLElement.prototype._set_onclick_null = function () { this.onclick = null; };
+      // nts:dom spells addEventListener's options as trailing arguments
+      // (capture, once, signal); page script, as a dictionary.
+      const addEventListener = EventTarget.prototype.addEventListener;
+      EventTarget.prototype.addEventListener = function (type, listener, capture, once, signal) {
+        return addEventListener.call(this, type, listener, typeof capture === "object" ? capture
+          : { capture: !!capture, once: !!once, ...(signal ? { signal } : {}) });
+      };
       ${vectors}
       // V8's message carries the binding's context ("Failed to execute 'x'
       // on 'Y': "), which the generated binding's does not.
@@ -241,6 +248,7 @@ try {
       const section = document.createElement('section');
       container.appendChild(section);
       const transcript = idlTranscript(document, section, { failure });
+      EventTarget.prototype.addEventListener = addEventListener;
       const pre = document.createElement('pre');
       pre.id = 'native-idl';
       pre.textContent = transcript;

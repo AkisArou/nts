@@ -11,6 +11,7 @@
 #include "base/logging.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/scheduler/web_scheduler_tracked_feature.h"
+#include "third_party/blink/renderer/core/dom/abort_signal.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
@@ -71,6 +72,15 @@ public:
   }
   blink::EventTarget *target() const { return target_.Get(); }
 
+  // `{once: true}`: removed before its first call, as the DOM says. Blink
+  // would remove it without telling this listener, which would keep its
+  // closure, and its place in the context's index, until the document ends.
+  void SetOnce() { once_ = true; }
+  // `{signal}`: aborting the signal removes the listener. The algorithm is
+  // this adapter's, for the same reason as `once`; removing the listener
+  // otherwise withdraws it.
+  void Watch(blink::AbortSignal *signal);
+
   void Invoke(blink::ExecutionContext *, blink::Event *event) override;
   bool IsEventHandler() const override { return handler_; }
   // The program's handlers are their own world (nts_dom::writing_handler).
@@ -91,6 +101,9 @@ public:
       return nullptr;
     if (!handler_)
       target_->removeEventListener(type_, this, capture_);
+    if (signal_)
+      signal_->RemoveAlgorithm(std::exchange(abort_, nullptr));
+    signal_ = nullptr;
     callback_ = nullptr;
     cancel_ = nullptr;
     if (running_) {
@@ -104,6 +117,8 @@ public:
 
   void Trace(blink::Visitor *visitor) const override {
     visitor->Trace(target_);
+    visitor->Trace(signal_);
+    visitor->Trace(abort_);
     blink::NativeEventListener::Trace(visitor);
   }
 
@@ -119,6 +134,9 @@ private:
   // was detached from inside one.
   int running_ = 0;
   bool detached_while_running_ = false;
+  bool once_ = false;
+  blink::Member<blink::AbortSignal> signal_;
+  blink::Member<blink::AbortSignal::AlgorithmHandle> abort_;
   raw_ptr<void> closure_;
   NtsDomDestroy destroy_;
 };
@@ -376,8 +394,17 @@ void NtsListener::Invoke(blink::ExecutionContext *, blink::Event *event) {
     return;
   // The context outlives this run even if the run ends the document.
   scoped_refptr<NtsDomContext> context(context_.get());
+  const NtsDomCallback callback = callback_;
+  const NtsDomCancelCallback cancel = cancel_;
   ++running_;
-  context->Dispatch(callback_, cancel_, event, closure_.get());
+  if (once_) {
+    // Removed before it is called; its closure goes back once the call
+    // returns, below.
+    context->listeners->Forget(this);
+    void *ignored = nullptr;
+    Detach(ignored);
+  }
+  context->Dispatch(callback, cancel, event, closure_.get());
   if (--running_ || !detached_while_running_)
     return;
   detached_while_running_ = false;
@@ -406,6 +433,24 @@ void NtsTimer::Fired() {
     context->listeners->timers.erase(id_);
   }
   context->RunTimer(this);
+}
+
+void NtsListener::Watch(blink::AbortSignal *signal) {
+  signal_ = signal;
+  abort_ = signal->AddAlgorithm(blink::BindOnce(
+      [](NtsListener *listener) {
+        if (!listener || !listener->context_)
+          return;
+        // This algorithm is the one running: nothing to withdraw.
+        listener->signal_ = nullptr;
+        listener->abort_ = nullptr;
+        scoped_refptr<NtsDomContext> context(listener->context_.get());
+        context->listeners->Forget(listener);
+        void *closure = nullptr;
+        if (auto destroy = listener->Detach(closure))
+          context->GiveBack(destroy, closure);
+      },
+      blink::WrapWeakPersistent(this)));
 }
 
 void NtsFrame::Invoke(double time) {
@@ -966,20 +1011,30 @@ NtsDomListener *nts_dom_listen(NtsDomEventTarget *target,
 void nts_dom_add_event_listener(NtsDomEventTarget *handle,
                                 const NtsBorrowedString *type,
                                 NtsDomCallback callback, void *closure,
-                                NtsDomDestroy destroy, bool capture) {
+                                NtsDomDestroy destroy, bool capture, bool once,
+                                NtsDomAbortSignal *signal_handle) {
   NtsDomContext &context = nts_dom::Current();
   CHECK(context.invoke);
   auto *target = ObjectOf<blink::EventTarget>(handle);
   const auto name = context.Name(nts_string_view(type));
-  if (context.listeners->Find(target, name, capture, closure)) {
-    // Inside the program's call: its environment is entered already.
+  auto *signal = signal_handle ? ObjectOf<blink::AbortSignal>(signal_handle)
+                               : nullptr;
+  // An aborted signal adds nothing, and an equal listener is already there:
+  // either way the closure reference the call brought goes straight back.
+  // Inside the program's call: its environment is entered already.
+  if ((signal && signal->aborted()) ||
+      context.listeners->Find(target, name, capture, closure)) {
     if (destroy)
       destroy(closure);
     return;
   }
   auto *listener = blink::MakeGarbageCollected<NtsListener>(
       &context, target, name, capture, callback, closure, destroy);
+  if (once)
+    listener->SetOnce();
   target->addEventListener(name, listener, capture);
+  if (signal)
+    listener->Watch(signal);
   context.listeners->set.insert(listener);
   auto &bucket = context.listeners->by_target.insert(target, nullptr).stored_value->value;
   if (!bucket)

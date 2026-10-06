@@ -405,6 +405,29 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   const key = newKeyboardEvent("keydown");
   log("eventDefaults", plain.type + "|" + (plain.cancelable ? "cancelable" : "fixed") + "|" + mouse.button + "|" + mouse.clientX + "|" + key.key + "|" + (key.repeat ? "repeat" : "once"));
 
+  // Listener options: `once` runs once, and the same closure added again
+  // runs again (nothing of the first is left behind); a signal's abort
+  // removes its listener, and an aborted signal adds nothing.
+  const optioned = asHTMLElement(d.createElement("button"))!;
+  root.appendChild(optioned);
+  const counts = { once: 0, signalled: 0 };
+  const onceListener = (event: Event): void => { counts.once += 1; };
+  const signalListener = (event: Event): void => { counts.signalled += 1; };
+  optioned.addEventListener("click", onceListener, false, true);
+  optioned.click();
+  optioned.click();
+  const afterOnce = counts.once;
+  optioned.addEventListener("click", onceListener, false, true);
+  optioned.click();
+  const stopper = newAbortController();
+  optioned.addEventListener("click", signalListener, false, false, stopper.signal);
+  optioned.click();
+  stopper.abort();
+  optioned.click();
+  optioned.addEventListener("click", signalListener, false, false, stopper.signal);
+  optioned.click();
+  log("listenerOptions", afterOnce + "|" + counts.once + "|" + counts.signalled);
+
   // AbortController: a signal that aborts once.
   const controller = newAbortController();
   const signal = controller.signal;

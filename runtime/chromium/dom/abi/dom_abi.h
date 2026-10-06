@@ -74,17 +74,22 @@ NtsDomListener* nts_dom_listen(NtsDomEventTarget* target,
                                                 void* closure),
                                void* closure,
                                void (*destroy)(void* closure));
-/* `target.addEventListener(type, listener, capture)`, as the DOM defines it:
- * adding a listener equal to one the target has -- same type, capture and
- * closure, the closure known by its context -- does nothing, and the
- * reference the call brought is given back at once. */
+/* `target.addEventListener(type, listener, {capture, once, signal})`, as the
+ * DOM defines it: adding a listener equal to one the target has -- same type,
+ * capture and closure, the closure known by its context -- does nothing, and
+ * the reference the call brought is given back at once; so does adding with
+ * a signal already aborted. A `once` listener is removed before its first
+ * call, and aborting `signal` (NULL for none) removes it; either way its
+ * closure goes back once any call of it under way returns. */
 void nts_dom_add_event_listener(NtsDomEventTarget* target,
                                 const NtsBorrowedString* type,
                                 void (*callback)(NtsDomEvent* event,
                                                  void* closure),
                                 void* closure,
                                 void (*destroy)(void* closure),
-                                bool capture);
+                                bool capture,
+                                bool once,
+                                NtsDomAbortSignal* signal);
 /* `target.removeEventListener(type, listener, capture)`: the listener added
  * with the same closure comes off and its closure goes back; none, nothing. */
 void nts_dom_remove_event_listener(NtsDomEventTarget* target,
