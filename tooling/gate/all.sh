@@ -1311,7 +1311,11 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
   # so the ratchet's remaining slack could only absorb the next wrong answer.
   # Exact at 346 alone would go red the day the leak is fixed, so the leak is
   # named instead, and nothing else is allowed.
-  backend_examples 392 "through the LLVM backend, counting" exact 10 "this-in-a-field-initializer" ); }
+  #
+  # 392 -> 393, no allowance, on 2026-10-07: `this-in-a-field-initializer`
+  # agrees under counting since a kept parameter is released where it dies
+  # (a2), so the counting floor equals its sibling's again.
+  backend_examples 393 "through the LLVM backend, counting" exact 10 ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,

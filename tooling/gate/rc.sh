@@ -114,7 +114,10 @@ cd "$(cd "$(dirname "$0")/../.." && pwd)"
 # Listed rather than left failing, and listed with the cause rather than the
 # symptom: a name here with no explanation is how `module-state` sat as a
 # "baseline artifact" for two months while being a dropped initializer.
-known_failing="this-in-a-field-initializer"
+# Empty since 2026-10-07: `this-in-a-field-initializer` passes once a kept
+# parameter is released where it dies (a2), and `promise-reactions` once a
+# collection runs to a fixpoint. The history above stays as the record.
+known_failing=""
 
 crowded=8
 cores=$( { command -v nproc >/dev/null && nproc; } || echo 4 )
