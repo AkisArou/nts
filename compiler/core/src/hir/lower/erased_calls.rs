@@ -522,6 +522,15 @@ pub(super) fn produced(
         return produced(probe, *probe.children(argument).first()?, copied, depth + 1);
     }
     let represented = probe.type_of(argument)?;
+    // **A producer that can be absent proves nothing.** `Point | null` and
+    // `string | null` are one pointer each, the same representation as the
+    // present type, so a copy taking `Point` would read a field through the
+    // null its caller passed -- where node throws a TypeError reading `x` of
+    // `null`. Asked of what the argument can produce, which for a getter read
+    // is its declaration ([`FuncBuilder::read_type`]).
+    if probe.absences_of(argument).is_some_and(|absent| !absent.is_empty()) {
+        return None;
+    }
     if kind == syntax::IDENTIFIER {
         let symbol = probe.node(argument).symbol?;
         if let Some(ty) = copied.get(&symbol.0) {

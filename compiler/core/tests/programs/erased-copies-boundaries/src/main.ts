@@ -32,6 +32,16 @@ function readOfStrings(value: any): number { return value[0] - 1; }
 export function elementReads(n: number): number {
   return readCompared([n, 2]) + readConcatenated([n]).length + readOfStrings(["1"]);
 }
+class Point { x = 1; }
+function findPoint(n: number): Point | null { return n > 0 ? new Point() : null; }
+function nullableObject(value: any): number { return value.x; }
+function nullableResult(value: any): number { return value.x; }
+function nullableString(value: any): number { return value.length; }
+function nullableAlias(value: any): number { return value.x; }
+export function nullables(n: number, maybe: Point | null, text: string | null): number {
+  const found = findPoint(n);
+  return nullableObject(maybe) + nullableResult(findPoint(n)) + nullableString(text) + nullableAlias(found);
+}
 
 export function boundaries(n: number): void {
   returned(n); stored(n); forwardedToStorage(n); mutable(n); mutableAlias(n);
