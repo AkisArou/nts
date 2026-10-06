@@ -1,0 +1,185 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>V8 rows benchmark</title>
+<style>
+body { font: 14px system-ui; padding: 16px; }
+#benchmark-result::after { content: attr(data-state); }
+.danger { background: #fdd; }
+</style>
+<h1>Rows: ordinary page JavaScript</h1>
+<p>The same algorithm as program/src/rows.ts, in idiomatic vanilla JS with normal V8 JIT.</p>
+<label><input type="checkbox" id="v8-rows-run"> Run cases</label>
+<output id="benchmark-result" data-state="initializing"></output>
+<table><tbody id="tbody"></tbody></table>
+<script>
+// Ordinary application source, loaded by the HTML parser. CDP only supplies
+// input and reads results; it does not evaluate the measured application.
+const adjectives = ["pretty", "large", "big", "small", "tall", "short", "long", "handsome", "plain", "quaint",
+  "clean", "elegant", "easy", "angry", "crazy", "helpful", "mushy", "odd", "unsightly", "adorable",
+  "important", "inexpensive", "cheap", "expensive", "fancy"];
+const colours = ["red", "yellow", "blue", "green", "pink", "brown", "purple", "brown", "white", "black", "orange"];
+const nouns = ["table", "chair", "house", "bbq", "desk", "car", "pony", "cookie", "sandwich", "burger", "pizza",
+  "mouse", "keyboard"];
+const tbody = document.querySelector('#tbody');
+const output = document.querySelector('#benchmark-result');
+
+function element(tag, className) {
+  const node = document.createElement(tag);
+  if (className) node.setAttribute('class', className);
+  return node;
+}
+function buildTemplate() {
+  const tr = element('tr');
+  const id = element('td', 'col-md-1');
+  id.appendChild(document.createTextNode(' '));
+  tr.appendChild(id);
+  const labelCell = element('td', 'col-md-4');
+  const label = element('a', 'lbl');
+  label.appendChild(document.createTextNode(' '));
+  labelCell.appendChild(label);
+  tr.appendChild(labelCell);
+  const removeCell = element('td', 'col-md-1');
+  const remove = element('a', 'remove');
+  const icon = element('span', 'remove glyphicon glyphicon-remove');
+  icon.setAttribute('aria-hidden', 'true');
+  remove.appendChild(icon);
+  removeCell.appendChild(remove);
+  tr.appendChild(removeCell);
+  tr.appendChild(element('td', 'col-md-6'));
+  return tr;
+}
+const app = {template: buildTemplate(), rows: [], nextId: 1, seed: 1, selected: null};
+
+// Park-Miller, exact in doubles: the same sequence as the compiled app.
+function random(max) {
+  app.seed = app.seed * 16807 % 2147483647;
+  return app.seed % max;
+}
+function appendRows(count) {
+  for (let i = 0; i < count; ++i) {
+    const id = app.nextId++;
+    const label = adjectives[random(adjectives.length)] + ' ' +
+      colours[random(colours.length)] + ' ' + nouns[random(nouns.length)];
+    const tr = app.template.cloneNode(true);
+    const idCell = tr.firstChild;
+    idCell.firstChild.nodeValue = '' + id;
+    const text = idCell.nextSibling.firstChild.firstChild;
+    text.nodeValue = label;
+    tbody.appendChild(tr);
+    app.rows.push({id, label, tr, text});
+  }
+}
+function clearRows() {
+  tbody.textContent = '';
+  app.rows = [];
+  app.selected = null;
+}
+// The operations of ntsRowsOperate, numbered the same way.
+function operate(operation, count) {
+  if (operation === 0) {
+    clearRows();
+    appendRows(count);
+  } else if (operation === 1) {
+    appendRows(count);
+  } else if (operation === 2) {
+    for (let i = 0; i < app.rows.length; i += 10) {
+      const row = app.rows[i];
+      row.label = row.label + ' !!!';
+      row.text.nodeValue = row.label;
+    }
+  } else if (operation === 3) {
+    if (app.selected) app.selected.setAttribute('class', '');
+    app.selected = app.rows[count].tr;
+    app.selected.setAttribute('class', 'danger');
+  } else if (operation === 4) {
+    if (app.rows.length > 998) {
+      const a = app.rows[1], b = app.rows[998];
+      const after = b.tr.nextSibling;
+      tbody.insertBefore(b.tr, a.tr);
+      tbody.insertBefore(a.tr, after);
+      app.rows[1] = b;
+      app.rows[998] = a;
+    }
+  } else if (operation === 5) {
+    const row = app.rows[count];
+    if (row.tr === app.selected) app.selected = null;
+    row.tr.remove();
+    app.rows.splice(count, 1);
+  } else {
+    clearRows();
+  }
+  return app.rows.length;
+}
+
+// The same table as rows_benchmark.cc; keep them identical.
+const NONE = 7;
+const cases = [
+  ['create1k', 6, 0, false, 0, 1000, 1, 3, 15],
+  ['replace1k', 0, 1000, false, 0, 1000, 1, 3, 15],
+  ['update10th', 0, 1000, false, 2, 0, 10, 3, 15],
+  ['select', 0, 1000, true, 3, 0, 1000, 3, 15],
+  ['swap', 0, 1000, true, 4, 0, 1000, 3, 15],
+  ['remove', 0, 1000, false, 5, 4, 200, 3, 15],
+  ['append1k', 0, 1000, false, 1, 1000, 1, 3, 15],
+  ['clear1k', 0, 1000, false, 6, 0, 1, 3, 15],
+  ['create10k', 6, 0, false, 0, 10000, 1, 1, 6],
+  ['clear10k', 0, 10000, false, 6, 0, 1, 1, 6],
+  ['create1k+layout', 6, 0, false, 0, 1000, 1, 3, 15, true],
+  ['update10th+layout', 0, 1000, false, 2, 0, 10, 3, 15, true],
+  ['select+layout', 0, 1000, true, 3, 0, 100, 3, 15, true],
+  ['swap+layout', 0, 1000, true, 4, 0, 100, 3, 15, true],
+];
+// A round is two interactions: the setup, a rendered frame, then the timed
+// batch -- each a posted message, as rows_benchmark.cc posts its own -- so
+// the measured operation always meets laid-out, painted rows. Between tasks
+// the event loop runs what Blink scheduled, GC steps included.
+function nextTask() {
+  return new Promise(resolve => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      channel.port1.close();
+      resolve();
+    };
+    channel.port2.postMessage(null);
+  });
+}
+document.querySelector('#v8-rows-run').addEventListener('input', async () => {
+  const samples = [];
+  let selection = 0;
+  for (const [name, setup, setupCount, once, operation, count, batch, warm, measured, layout] of cases) {
+    for (let round = 0; round < warm + measured; ++round) {
+      await nextTask();
+      if (setup !== NONE && (!once || round === 0)) operate(setup, setupCount);
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await nextTask();
+      let rows = 0;
+      let layoutMs = 0;
+      const start = performance.now();
+      for (let i = 0; i < batch; ++i) {
+        rows = operate(operation, operation === 3 ? selection++ % 1000 : count);
+        // Force style and layout, as the next frame would; timed on its own
+        // as well, as rows_benchmark.cc does.
+        if (layout) {
+          const layoutStart = performance.now();
+          if (tbody.offsetHeight < 0) throw Error('layout');
+          layoutMs += performance.now() - layoutStart;
+        }
+      }
+      const elapsedNs = (performance.now() - start) * 1e6;
+      if (round < warm) continue;
+      samples.push({case: name, round: round - warm, batch, elapsedNs, nsPerOperation: elapsedNs / batch, rows,
+        ...(layout ? {layoutNs: layoutMs * 1e6} : {})});
+    }
+  }
+  await nextTask();
+  operate(0, 1000);
+  operate(2, 0);
+  operate(3, 5);
+  operate(4, 0);
+  const finalRows = operate(5, 4);
+  output.setAttribute('data-result', JSON.stringify({samples, finalRows, status: 0,
+    timing: 'Ordinary page script; performance.now around batches; setup and batch are separate posted tasks'}));
+  output.setAttribute('data-state', 'done');
+});
+output.setAttribute('data-state', 'ready');
+</script>

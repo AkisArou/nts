@@ -10,7 +10,8 @@ const root = resolve(import.meta.dirname, "../..");
 const source = resolve(root, "third_party/chromium/src");
 const depot = resolve(root, "third_party/chromium/depot_tools");
 const output = resolve(root, "target/chromium");
-const fixture = resolve(root, "runtime/chromium/experiments/native-bootstrap");
+const lane = resolve(root, "runtime/chromium");
+const fixture = resolve(lane, "program");
 const staged = resolve(source, "nts");
 const backend = process.argv[2];
 if (backend !== "c" && backend !== "llvm") throw new Error("Usage: node tooling/chromium/probe.ts <c|llvm> [--profile baseline|perf]");
@@ -64,12 +65,18 @@ function stage(input: string, path: string): void {
   copyFileSync(input, destination);
   files[`nts/${path}`] = hash(destination);
 }
-for (const file of ["BUILD.gn", "probe.gni", "probe.c", "probe.h", "probe_main.cc", "probe_observer.cc", "probe_observer.h", "dom_bridge.cc", "dom_bridge.h", "dom_bridge_bindings.h", "dom_context.h", "dom_idl.cc", "binding_benchmark.cc", "binding_benchmark.h", "rows_benchmark.cc", "rows_benchmark.h", "kernels_benchmark.cc", "kernels_benchmark.h"]) {
-  stage(resolve(fixture, "native", file), file);
+// Staged flat into //nts, whatever directory each lives in here: the content
+// embedder, the Blink adapter, the benchmark harnesses, the C ABI.
+const sources: Record<string, string[]> = {
+  embedder: ["BUILD.gn", "probe.gni", "probe.c", "probe.h", "probe_main.cc", "probe_observer.cc", "probe_observer.h"],
+  adapter: ["dom_bridge.cc", "dom_bridge.h", "dom_bridge_bindings.h", "dom_context.h", "dom_idl.cc"],
+  "benchmarks/harness": ["binding_benchmark.cc", "binding_benchmark.h", "rows_benchmark.cc", "rows_benchmark.h", "kernels_benchmark.cc", "kernels_benchmark.h"],
+  // dom_idl.h is generated from Blink's IDL (tooling/chromium/bindgen).
+  "program/abi": ["dom_abi.h", "dom_idl.h"],
+};
+for (const [directory, names] of Object.entries(sources)) {
+  for (const name of names) stage(resolve(lane, directory, name), name);
 }
-stage(resolve(fixture, "native/ffi/dom_abi.h"), "dom_abi.h");
-// Generated from Blink's IDL (tooling/chromium/bindgen); dom_abi.h includes it.
-stage(resolve(fixture, "native/ffi/dom_idl.h"), "dom_idl.h");
 // Beside dom_abi.h and dom_bridge.h, which include it: the one C++ half of
 // StringView, the same for both backends.
 stage(resolve(root, "runtime/c/nts_string_view.h"), "nts_string_view.h");
@@ -79,7 +86,7 @@ for (const variant of ["c", "llvm"] as const) {
   stage(resolve(output, "native-bootstrap", `chromium-${variant}-probe.a`), `generated/${variant}/program.a`);
 }
 mkdirSync(blinkStaging, { recursive: true });
-copyFileSync(resolve(fixture, "native/blink.BUILD.gn"), resolve(blinkStaging, "BUILD.gn"));
+copyFileSync(resolve(lane, "adapter/blink.BUILD.gn"), resolve(blinkStaging, "BUILD.gn"));
 files["third_party/blink/renderer/nts/BUILD.gn"] = hash(resolve(blinkStaging, "BUILD.gn"));
 writeFileSync(manifestFile, `${JSON.stringify({ chromiumRevision: lock.chromium.revision, integration: "owned-shell-client-factories-and-blink-target", filesRelativeTo: "chromium", files }, null, 2)}\n`);
 const exclude = execFileSync("git", ["-C", source, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude"], { encoding: "utf8" }).trim();

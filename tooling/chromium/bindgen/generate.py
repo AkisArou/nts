@@ -11,9 +11,11 @@ is what page script calls, decided by the same code.
 
 Emits, for the allowlisted interfaces:
 
-  native/ffi/dom_idl.h    the C ABI: one function per member and arity
-  native/dom_idl.cc       the adapter: each function, Blink's call
-  types/dom-idl.d.ts      module "nts:dom", as a program writes it
+  program/abi/dom_idl.h        the C ABI: one function per member and arity
+  adapter/dom_idl.cc           the adapter: each function, Blink's call
+  program/types/dom-idl.d.ts   module "nts:dom", as a program writes it
+
+(under runtime/chromium)
 
 and `bindgen/report.json`: every member skipped, with why. A member whose
 types this generator does not map is skipped and listed, never guessed.
@@ -48,7 +50,7 @@ import sys
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 SRC = os.path.join(ROOT, "third_party", "chromium", "src")
 SCRIPTS = os.path.join(SRC, "third_party", "blink", "renderer", "bindings", "scripts")
-LANE = os.path.join(ROOT, "runtime", "chromium", "experiments", "native-bootstrap")
+LANE = os.path.join(ROOT, "runtime", "chromium")
 DATABASE = os.path.join(SRC, "out", "NtsPerf", "gen", "third_party", "blink", "renderer", "bindings",
                         "web_idl_database.pickle")
 ALLOWLIST = os.path.join(os.path.dirname(__file__), "allowlist.json")
@@ -654,9 +656,9 @@ declare module "nts:dom" {{
 """
         report = {"bound": len(self.functions), "skipped": self.skipped}
         return {
-            os.path.join(LANE, "native", "ffi", "dom_idl.h"): header,
-            os.path.join(LANE, "native", "dom_idl.cc"): adapter,
-            os.path.join(LANE, "types", "dom-idl.d.ts"): declarations,
+            os.path.join(LANE, "program", "abi", "dom_idl.h"): header,
+            os.path.join(LANE, "adapter", "dom_idl.cc"): adapter,
+            os.path.join(LANE, "program", "types", "dom-idl.d.ts"): declarations,
             os.path.join(os.path.dirname(__file__), "report.json"): json.dumps(report, indent=2) + "\n",
         }
 
