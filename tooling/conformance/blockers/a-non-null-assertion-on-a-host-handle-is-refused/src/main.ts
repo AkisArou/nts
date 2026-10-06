@@ -1,4 +1,10 @@
-// expect: nothing refused -- FIXED, kept as a guard
+// expect: emit-c --rc -> emits-c nts_dom_Element_get_childElementCount(
+//
+// The guard reads the property access after the assertion: `go` reaches it
+// only when it lowers. Under `emit-c --rc`, because a DOM handle is refused
+// for another reason under the default provider ("a handle its host keeps
+// alive", NTS2006), and `nothing refused` -- a `hir` phrase -- is not what
+// `emit-c` prints.
 //
 // **FIXED the same day (2026-10-06), and kept as a guard.** The refusal is
 // now asked only of a check that reads the value's tag (a primitive or class
