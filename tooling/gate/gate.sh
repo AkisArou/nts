@@ -100,4 +100,11 @@ if [ "$bare" -gt 0 ]; then
   echo "  $bare compared nothing (no exported function with scalar arguments and a\
  scalar result):$(grep '^bare' "$results" | awk '{printf " %s", $2}')"
 fi
+# An empty population agrees vacuously: `0 of 0 agree with node` was a pass. A
+# glob that found nothing -- run from the wrong directory, or every example
+# compared nothing -- checked nothing.
+if [ "$((total - bare))" -eq 0 ]; then
+  echo "  no example was compared, which is not agreement"
+  exit 1
+fi
 [ "$agreed" = "$((total - bare))" ]
