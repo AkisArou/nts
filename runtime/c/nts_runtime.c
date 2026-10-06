@@ -1514,10 +1514,9 @@ static void nts_gather_white(NtsHeader *root) {
   }
 }
 
-void nts_collect_cycles(void) {
-  if (nts_env->collecting) {
-    return;
-  }
+/* One collection pass: mark, scan, gather, free, then reclaim the candidates
+ * that reached zero while buffered. Answers whether it freed anything. */
+static bool nts_collect_pass(void) {
   nts_env->collecting = true;
 
   /* Mark. A candidate that is no longer purple was retained since it was
@@ -1586,6 +1585,7 @@ void nts_collect_cycles(void) {
                     "still being walked\n");
     abort();
   }
+  bool freed = nts_env->dead_len > 0 || nts_env->zeroed_len > 0;
   for (size_t index = 0; index < nts_env->dead_len; index++) {
     if (!nts_is_holder(nts_env->dead[index])) {
       nts_env->dead[index]->flags |= NTS_DYING;
@@ -1623,8 +1623,29 @@ void nts_collect_cycles(void) {
     nts_destroy(nts_env->zeroed[index]);
   }
   nts_env->zeroed_len = 0;
-  nts_env->epoch++;
   nts_env->collecting = false;
+  return freed;
+}
+
+/* **A collection leaves nothing it could collect.** The reclaim at the end of
+ * a pass destroys what reached zero while buffered, and that cascade releases
+ * children: one taken to zero while it is itself buffered -- a cycle candidate
+ * the program let go of earlier -- is left for the next collection, by the
+ * design the reclaim pass explains. So one pass could return with garbage
+ * still in the buffer, and every caller that asks this question means "now":
+ * the leak check after a run (a rejection reason with an `unknown` field,
+ * passed through `.finally` then `.catch`, was counted held: it was the
+ * reason, freed by the next collection), and a host's end-of-document check.
+ *
+ * Passes repeat while one freed something and left candidates behind. Each
+ * repeat follows a pass that freed at least one object, so it ends. */
+void nts_collect_cycles(void) {
+  if (nts_env->collecting) {
+    return;
+  }
+  while (nts_collect_pass() && nts_env->roots_len > 0) {
+  }
+  nts_env->epoch++;
 }
 
 size_t nts_cycle_candidates(void) { return nts_env->candidates; }
