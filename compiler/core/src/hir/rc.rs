@@ -467,17 +467,18 @@ fn release_at_last_use(
             moved_into.entry(*value).or_default().push(*container);
         }
     }
-    // The inverse edge, for frame containers only. Built from the same ops as
-    // `moved_into` and without its `block.moved` condition: an uncounted store
-    // is exactly the case that needs it. See `Leaning::holds`.
+    // The inverse edge, wherever a store transfers no count: into a frame
+    // container, or of a frame object into any container. Built from the same
+    // ops as `moved_into` and without its `block.moved` condition: an
+    // uncounted store is exactly the case that needs it. See `Leaning::holds`.
     let mut holds: rustc_hash::FxHashMap<ValueId, Vec<ValueId>> = rustc_hash::FxHashMap::default();
+    let frame = |value: &ValueId| {
+        matches!(func.values[value.0 as usize].kind, OpKind::ObjectNew { frame: true })
+    };
     for op in ops.iter() {
         if let OpKind::FieldSet { object: container, value, .. }
         | OpKind::ArraySet { array: container, value, .. } = &func.values[op.0 as usize].kind
-            && matches!(
-                func.values[container.0 as usize].kind,
-                OpKind::ObjectNew { frame: true }
-            )
+            && (frame(container) || frame(value))
         {
             holds.entry(*container).or_default().push(*value);
         }
@@ -581,11 +582,21 @@ struct Leaning<'a, 'f> {
     /// `root.names` before either closure ran. The React lane reduced it: node
     /// prints `a2 b21 c2` and the compiled program printed `a2 b11 c1`.
     ///
-    /// **A frame container only**, because that is where the hole is: a store
-    /// into a heap object took a count, so the content cannot reach zero while
-    /// the container holds it. A frame object has no count to take -- that is
-    /// what `release_value`'s own doc says it exists for -- so the store
-    /// transfers nothing and the liveness has to say what the count would have.
+    /// **Only where the store transfers no count**, because that is where the
+    /// hole is: a store of a heap value into a heap container took a count, so
+    /// the content cannot reach zero while the container holds it. A frame
+    /// container has no count to give, and a frame object has none to take --
+    /// that is what `release_value`'s own doc says it exists for -- so the
+    /// store transfers nothing and the liveness has to say what the count would
+    /// have.
+    ///
+    /// The second half arrived with acyclic arrays (a2fe27266): an array whose
+    /// elements cannot form a cycle is never buffered, so escape analysis lets
+    /// a tuple stored in a non-escaping array stay in the frame. The array is
+    /// on the heap and its store is a retain of an immortal header, so the
+    /// tuple's fields were given up at the tuple's last use while the array
+    /// still reached it: `for (const [a, [b, c]] of rows)` read a freed inner
+    /// array (examples/a-for-of-head-that-destructures under RC).
     holds: rustc_hash::FxHashMap<ValueId, Vec<ValueId>>,
     memo: rustc_hash::FxHashMap<ValueId, std::rc::Rc<[ValueId]>>,
 }
