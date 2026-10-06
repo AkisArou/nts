@@ -62650,6 +62650,10 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(id);
         let mut length = None;
         for argument in arguments {
+            if self.kind_of(*argument) == Some(syntax::SPREAD_ELEMENT) {
+                length = Some(self.push_each(id, helper, receiver, *argument, element)?);
+                continue;
+            }
             // Coerced, not only lowered expecting: a value with a type of its
             // own -- a class instance pushed onto an interface-typed array --
             // was handed to the helper at the element's representation with
@@ -62675,6 +62679,69 @@ impl<'a> FuncBuilder<'a> {
             },
             Ok,
         )
+    }
+
+    /// `xs.push(...ys)`: every element of `ys`, appended in order through the
+    /// same helper one argument takes, each coerced to what `xs` holds.
+    ///
+    /// **`ys`'s length is read once, before the first append**, because the
+    /// spread is evaluated before the call: `xs.push(...xs)` appends the
+    /// elements `xs` had, and a loop re-reading the length would chase its
+    /// own appends forever. An `unshift(...ys)` would have to keep `ys`'s order
+    /// at the front, which one-at-a-time unshifts reverse, so it stays refused.
+    fn push_each(
+        &mut self,
+        id: NodeId,
+        helper: &str,
+        receiver: ValueId,
+        spread: NodeId,
+        element: &HirType,
+    ) -> Result<ValueId, Diagnostic> {
+        if !helper.starts_with("nts_array_push") {
+            return Err(self.unsupported(spread, "a spread into `unshift`, which keeps the spread's order at the front"));
+        }
+        let source_node = *self
+            .children(spread)
+            .first()
+            .ok_or_else(|| self.unsupported(spread, "a spread of nothing"))?;
+        let source = self.lower_expression(source_node)?;
+        let HirType::Managed(ManagedType::Array(slot)) = self.values[source.0 as usize].ty.clone() else {
+            return Err(self.unsupported(source_node, "a spread of something that is not an array"));
+        };
+        let origin = self.origin(id);
+        let count = self.push(OpKind::Length(source), HirType::NUMBER, origin.clone());
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let (header, body, done) = (self.new_block(), self.new_block(), self.new_block());
+        let at = self.push_block_param(header, HirType::NUMBER, origin.clone());
+        self.terminate(Terminator::Jump { target: header, args: vec![zero] });
+        self.switch_to(header);
+        let more = self.push(OpKind::Binary { op: BinOp::Lt, lhs: at, rhs: count }, HirType::Bool, origin.clone());
+        self.terminate(Terminator::Branch {
+            cond: more,
+            then_target: body,
+            then_args: Vec::new(),
+            else_target: done,
+            else_args: Vec::new(),
+        });
+        self.switch_to(body);
+        // In range by the loop's bound, which was the length when it began
+        // and only grows if `xs` is `ys`.
+        let read = self.push(OpKind::ArrayGet { array: source, index: at, checked: false }, *slot, origin.clone());
+        let value = self.coerce(read, element, source_node)?;
+        self.push(
+            OpKind::Call {
+                callee: Callee::External(helper.to_owned()),
+                args: vec![receiver, value],
+                frame: None,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
+        let next = self.push(OpKind::Binary { op: BinOp::Add, lhs: at, rhs: one }, HirType::NUMBER, origin.clone());
+        self.terminate(Terminator::Jump { target: header, args: vec![next] });
+        self.switch_to(done);
+        Ok(self.push(OpKind::Length(receiver), HirType::NUMBER, origin))
     }
 
     /// The callback a compiled array method takes, and its seed where it has
