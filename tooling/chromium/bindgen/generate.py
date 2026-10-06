@@ -62,7 +62,7 @@ import web_idl  # noqa: E402
 import bind_gen  # noqa: E402
 from bind_gen import interface as bind_interface  # noqa: E402
 from bind_gen import name_style  # noqa: E402
-from bind_gen.blink_v8_bridge import blink_class_name, blink_type_info  # noqa: E402
+from bind_gen.blink_v8_bridge import blink_class_name, blink_type_info, native_value_tag  # noqa: E402
 from bind_gen.code_node import SymbolScopeNode  # noqa: E402
 from bind_gen.codegen_context import CodeGenContext  # noqa: E402
 from bind_gen.path_manager import PathManager  # noqa: E402
@@ -72,9 +72,17 @@ class Skip(Exception):
     """A member this generator does not bind yet, and why."""
 
 
-# What crosses as a number or a boolean: the IDL type, the C type, the
-# TypeScript type. A number is a plain `number` the compiler converts at the
-# call (`CNumber`), as a GTK binding's `gint` is: `input.maxLength = 5`.
+# The IDL's numeric types. Every number crosses as the program's own double
+# (`CNumber<"double">`, written as a plain number), and the adapter converts
+# it as page script's binding converts it: Blink's own NativeValueTraits on the
+# same value, so ToInt32's wrap, [EnforceRange]'s TypeError, [Clamp]'s rounding
+# and a restricted double's refusal of NaN are Blink's, message and all. A
+# number back is its exact double.
+NUMERIC = {"byte", "octet", "short", "unsigned short", "long", "unsigned long", "long long",
+           "unsigned long long", "float", "unrestricted float", "double", "unrestricted double"}
+# What a conversion can refuse, so the member takes an error slot for it.
+THROWING_CONVERSIONS = ("IDLDouble", "IDLFloat", "EnforceRange")
+# What crosses as itself: the IDL type, the C type, the TypeScript type.
 SCALARS = {
     "boolean": ("bool", "boolean"),
     "byte": ("int8_t", 'CNumber<"int8">'),
@@ -112,10 +120,13 @@ ERROR_C = "NtsDomException** error"
 
 
 class Param:
-    def __init__(self, name, c, ts, expr, context, include=None):
+    def __init__(self, name, c, ts, expr, context, include=None, prelude=None, may_throw=False):
         self.name, self.c, self.ts, self.expr = name, c, ts, expr
         self.context = context  # whether converting it needs the context
         self.include = include
+        # A statement converting it before the call, `{exceptions}` naming the
+        # ExceptionState it reports to; and whether that can fail.
+        self.prelude, self.may_throw = prelude, may_throw
 
 
 class Result:
@@ -210,6 +221,15 @@ class Generator:
         if keyword in STRINGS:
             return Param(name, f"const NtsBorrowedString* {name}", f"{name}: StringView{or_null}",
                          self.text(unwrapped, name), True)
+        if keyword in NUMERIC and not nullable:
+            ts = f'{name}: CNumber<"double">'
+            if keyword == "unrestricted double":
+                return Param(name, f"double {name}", ts, name, False)
+            tag = native_value_tag(idl_type)
+            prelude = (f"const auto {name}_converted = blink::NativeValueTraits<blink::{tag}>::NativeValue("
+                       f"context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), {name}), {{exceptions}});")
+            return Param(name, f"double {name}", ts, f"{name}_converted", True, prelude=prelude,
+                         may_throw=any(mark in tag for mark in THROWING_CONVERSIONS))
         if keyword in SCALARS and not nullable:
             c, ts = SCALARS[keyword]
             return Param(name, f"{c} {name}", f"{name}: {ts}", name, False)
@@ -239,6 +259,8 @@ class Generator:
         if unwrapped.is_union and sum(1 for t in unwrapped.flattened_member_types
                                       if t.unwrap().keyword_typename in STRINGS) == 1:
             return Result("const NtsStringView*", "StringView" + or_null, "string", nullable)
+        if keyword in NUMERIC and not nullable:
+            return Result("double", 'CNumber<"double">', "scalar")
         if keyword in SCALARS and not nullable:
             c, ts = SCALARS[keyword]
             return Result(c, ts, "scalar")
@@ -315,7 +337,7 @@ class Generator:
         for index, (idl_name, value) in enumerate(filled, start=len(params)):
             placeholders[name_style.arg_f("arg{}_{}", index + 1, idl_name)] = value
         expression = self.call(context, placeholders, num_of_args)
-        throws = "exception_state" in expression
+        throws = "exception_state" in expression or any(param.may_throw for param in params)
         # Setters and operations only, as bind_gen's make_steps_of_ce_reactions.
         reactions = "CEReactions" in member.extended_attributes and not context.attribute_get
         self.include(member)
@@ -534,6 +556,18 @@ class Generator:
             lines.append("  blink::CEReactionsScope reactions(context.v8_isolate);")
         if not downcast:
             lines.append(f"  auto* receiver = {self.node(function.interface, 'self')};")
+        preludes = [p.prelude for p in function.params if p.prelude]
+        if preludes:
+            # Converted before the call, as the binding converts arguments: a
+            # conversion that fails is the exception, and Blink is not called.
+            exceptions = "exception_state" if function.throws else "conversion"
+            if not function.throws:
+                lines.append("  blink::DummyExceptionStateForTesting conversion;")
+            for prelude in preludes:
+                lines.append("  " + prelude.replace("{exceptions}", exceptions))
+            if function.throws:
+                failed = "static_cast<blink::ExceptionState&>(exception_state).HadException()"
+                lines.append(f"  if ({failed}) return{'' if function.result.kind == 'void' else ' {}'};")
         expression = function.expression
         kind = function.result.kind
         if kind == "void":
