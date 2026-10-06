@@ -38,6 +38,7 @@ fn check(probe: &FuncBuilder<'_>, id: NodeId) -> Option<Check> {
     let target = probe.type_of(id)?;
     let tag = match &target {
         HirType::Bool => tags::BOOLEAN,
+        HirType::BigInt => tags::BIGINT,
         HirType::Float { bits: 64 } => tags::NUMBER,
         HirType::Managed(ManagedType::String) => tags::STRING,
         HirType::Managed(ManagedType::Symbol) => tags::SYMBOL,
