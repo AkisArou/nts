@@ -3,12 +3,615 @@
 #include "nts/dom_idl.h"
 
 #include "nts/dom_context.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_abort_controller.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_abort_signal.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_abstract_range.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_animation.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_animation_effect.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_animation_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_animation_playback_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_animation_timeline.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_animation_trigger.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_attr.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_audio_track.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_audio_track_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_autofill_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_back_forward_cache_restoration.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_bar_prop.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_before_unload_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_blob.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_byte_length_queuing_strategy.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_callback_function_test.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_canvas_paint_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_caret_position.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_cdata_section.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_character_bounds_update_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_character_data.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_clipboard_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_close_watcher.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_color_page_popup_controller.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_command_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_comment.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_composition_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_connection_allowlist_violation_report_body.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_container_query_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_content_visibility_auto_state_change_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_coop_access_violation_report_body.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_count_queuing_strategy.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_crash_report_context.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_csp_violation_report_body.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_animation.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_apply_mixin_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_color_value.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_condition_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_container_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_contents_mixin_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_counter_style_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_custom_media_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_font_face_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_font_feature_values_map.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_font_feature_values_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_font_palette_values_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_function_declarations.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_function_descriptors.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_function_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_grouping_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_hsl.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_hwb.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_image_value.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_import_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_keyframe_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_keyframes_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_keyword_value.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_layer_block_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_layer_statement_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_location_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_margin_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_math_clamp.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_math_invert.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_math_max.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_math_min.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_math_negate.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_math_product.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_math_random.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_math_sum.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_math_value.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_matrix_component.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_media_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_mixin_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_namespace_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_navigation_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_nested_declarations.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_numeric_array.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_numeric_value.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_page_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_perspective.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_position_try_descriptors.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_position_try_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_position_value.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_private_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_property_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_pseudo_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_result_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_rgb.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_rotate.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_rule_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_scale.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_scope_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_skew.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_skew_x.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_skew_y.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_starting_style_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_style_declaration.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_style_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_style_sheet.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_style_value.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_supports_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_transform_component.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_transform_value.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_transition.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_translate.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_unit_value.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_unparsed_value.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_variable_reference_value.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_view_transition_rule.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_custom_element_registry.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_custom_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_custom_state_set.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_data_transfer.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_data_transfer_item.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_data_transfer_item_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dedicated_worker_global_scope.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_deprecation_report_body.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dev_tools_host.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dictionary_test.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_directive.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_document.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_document_fragment.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_document_policy_violation_report_body.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_document_timeline.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_document_type.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dom_exception.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dom_implementation.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dom_matrix.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dom_matrix_read_only.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dom_parser.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dom_point.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dom_point_read_only.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dom_quad.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dom_rect.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dom_rect_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dom_rect_read_only.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dom_string_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dom_string_map.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dom_token_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_drag_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_edit_context.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_element_behavior.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_element_image.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_element_internals.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_error_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_event_counts.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_event_target.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_event_trigger.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_external.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_fence.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_fenced_frame_config.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_fetch_later_result.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_file.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_file_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_file_reader.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_file_reader_sync.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_focus_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_font_face.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_font_face_set.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_font_face_set_load_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_form_data.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_form_data_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_fragment_directive.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_garbage_collected_script_wrappable.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_gc_observation.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_geolocation.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_geolocation_coordinates.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_geolocation_position.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_geolocation_position_error.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_hash_change_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_headers.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_highlight.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_highlight_registry.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_history.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_hit_test_layer_rect.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_hit_test_layer_rect_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_all_collection.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_anchor_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_area_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_audio_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_base_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_body_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_br_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_button_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_camera_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_canvas_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_collection.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_credential_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_data_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_data_list_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_details_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_dialog_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_directory_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_div_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_dlist_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_document.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_embed_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_fenced_frame_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_field_set_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_font_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_form_controls_collection.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_form_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_frame_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_frame_set_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_geolocation_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_head_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_heading_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_hr_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_html_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_iframe_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_image_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_input_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_install_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_label_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_legend_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_li_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_link_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_login_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_map_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_marquee_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_media_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_menu_bar_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_menu_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_menu_item_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_menu_list_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_meta_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_meter_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_microphone_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_mod_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_object_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_olist_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_opt_group_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_option_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_options_collection.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_output_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_paragraph_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_param_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_picture_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_pre_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_progress_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_quote_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_script_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_select_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_selected_content_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_slot_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_source_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_span_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_style_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_sub_menu_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_submit_button_behavior.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_table_caption_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_table_cell_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_table_col_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_table_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_table_row_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_table_section_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_template_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_text_area_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_time_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_title_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_track_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_ulist_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_unknown_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_user_media_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_video_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_idle_deadline.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_image_bitmap.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_image_data.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_input_device_capabilities.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_input_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_inspector_overlay_host.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_install_result_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_integrity_violation_report_body.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_interaction_contentful_paint.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_interest_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_internal_runtime_flags.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_internal_settings.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_internal_settings_generated.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_internals.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_internals_ukm_recorder.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_intersection_observer.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_intersection_observer_entry.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_intervention_report_body.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_intrinsic_sizes.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_keyboard_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_keyframe_effect.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_largest_contentful_paint.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_layout_child.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_layout_constraints.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_layout_edges.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_layout_fragment.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_layout_shift.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_layout_shift_attribution.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_layout_worklet_global_scope.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_location.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mathml_anchor_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mathml_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_media_error.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_media_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_media_query_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_media_query_list_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_memory_info.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_message_channel.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_message_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_message_port.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_model_context.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mojo.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mojo_handle.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mojo_interface_interceptor.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mojo_interface_request_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mojo_watcher.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mouse_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mutation_observer.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mutation_record.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_nadc_attribute_test.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_named_node_map.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_navigate_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_navigation.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_navigation_activation.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_navigation_current_entry_change_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_navigation_defer_page_swap_controller.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_navigation_destination.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_navigation_history_entry.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_navigation_precommit_controller.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_navigation_transition.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_navigator.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_navigator_ua_data.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_node.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_node_iterator.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_node_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_node_range.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_not_restored_reason_details.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_not_restored_reasons.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_observable.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_offscreen_canvas.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_opaque_range.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_origin.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_origin_trials_test.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_overscroll_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_page_popup_controller.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_page_reveal_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_page_swap_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_page_transition_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_container_timing.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_element_timing.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_entry.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_event_timing.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_long_animation_frame_timing.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_long_task_timing.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_mark.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_mark_conditional.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_measure.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_measure_conditional.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_navigation.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_navigation_timing.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_observer.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_observer_entry_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_paint_timing.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_resource_timing.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_script_timing.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_scroll_timing.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_server_timing.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_soft_navigation.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_timing.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_timing_confidence.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_permissions_policy.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_permissions_policy_violation_report_body.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_pointer_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_pop_state_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_preconnect_data.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_preference_manager.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_preference_object.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_preload_data.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_processing_instruction.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_profiler.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_progress_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_promise_rejection_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_quota_exceeded_error.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_radio_node_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_range.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_readable_byte_stream_controller.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_readable_stream.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_readable_stream_byob_reader.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_readable_stream_byob_request.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_readable_stream_default_controller.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_readable_stream_default_reader.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_record_test.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_report.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_report_body.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_reporting_observer.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_request.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_resize_observer.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_resize_observer_entry.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_resize_observer_size.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_resource_progress_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_response.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_sanitizer.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_scheduler.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_scheduling.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_screen.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_scroll_timeline.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_security_policy_violation_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_selection.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_selector_directive.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_sequence_test.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_shadow_realm_global_scope.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_shadow_root.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_shared_worker.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_shared_worker_global_scope.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_snap_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_speculation_data.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_speculation_navigation_data.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_static_range.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_static_selection.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_style_media.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_style_property_map.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_style_property_map_read_only.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_style_sheet.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_style_sheet_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_submit_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_subscriber.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_a_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_angle.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_animate_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_animate_motion_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_animate_transform_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_animated_angle.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_animated_boolean.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_animated_enumeration.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_animated_integer.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_animated_length.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_animated_length_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_animated_number.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_animated_number_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_animated_preserve_aspect_ratio.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_animated_rect.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_animated_string.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_animated_transform_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_animation_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_circle_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_clip_path_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_component_transfer_function_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_defs_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_desc_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_ellipse_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_blend_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_color_matrix_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_component_transfer_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_composite_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_convolve_matrix_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_diffuse_lighting_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_displacement_map_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_distant_light_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_drop_shadow_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_flood_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_func_a_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_func_b_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_func_g_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_func_r_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_gaussian_blur_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_image_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_merge_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_merge_node_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_morphology_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_offset_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_point_light_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_specular_lighting_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_spot_light_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_tile_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_fe_turbulence_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_filter_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_foreign_object_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_g_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_geometry_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_gradient_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_graphics_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_image_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_length.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_length_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_line_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_linear_gradient_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_marker_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_mask_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_matrix.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_metadata_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_mpath_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_number.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_number_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_path_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_pattern_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_point.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_point_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_polygon_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_polyline_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_preserve_aspect_ratio.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_radial_gradient_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_rect.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_rect_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_script_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_set_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_stop_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_string_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_style_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_svg_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_switch_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_symbol_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_text_content_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_text_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_text_path_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_text_positioning_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_title_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_transform.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_transform_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_tspan_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_unit_types.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_use_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_svg_view_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_task_attribution_timing.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_task_controller.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_task_priority_change_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_task_signal.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_test_report_body.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_text.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_text_cluster.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_text_directive.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_text_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_text_format.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_text_format_update_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_text_metrics.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_text_track.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_text_track_cue.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_text_track_cue_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_text_track_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_text_update_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_time_ranges.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_timeline_trigger.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_timeline_trigger_range.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_timeline_trigger_range_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_toggle_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_touch.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_touch_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_touch_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_track_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_transform_stream.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_transform_stream_default_controller.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_transition_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_tree_walker.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_trusted_html.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_trusted_parser_options.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_trusted_script.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_trusted_script_url.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_trusted_type_policy.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_trusted_type_policy_factory.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_type_conversions.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_ui_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_boolean_string_unrestricteddouble.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_elementcreationoptions_string.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_string_trustedhtml.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_string_trustedscript.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_stringlegacynulltoemptystring_trustedhtml.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_stringlegacynulltoemptystring_trustedscript.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_types_test.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_url.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_url_pattern.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_url_search_params.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_user_activation.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_validity_state.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_video_track.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_video_track_list.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_view_timeline.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_view_transition.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_view_transition_type_set.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_viewport.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_visibility_state_entry.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_visual_viewport.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_vtt_cue.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_vtt_region.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_web_mcp_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_wheel_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_window.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_window_properties.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_worker.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_worker_global_scope.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_worker_internals.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_worker_location.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_worker_navigator.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_worklet.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_worklet_global_scope.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_writable_stream.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_writable_stream_default_controller.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_writable_stream_default_writer.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_xml_document.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_xml_http_request.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_xml_http_request_event_target.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_xml_http_request_upload.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_xml_serializer.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_xpath_evaluator.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_xpath_expression.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_xpath_result.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_xslt_processor.h"
 #include "third_party/blink/renderer/core/animation/document_animation.h"
 #include "third_party/blink/renderer/core/css/css_style_declaration.h"
 #include "third_party/blink/renderer/core/css/cssom/element_computed_style_map.h"
@@ -66,8 +669,624 @@ class Throws {
 
 // In Blink's namespace, as the bindings are: bind_gen's expressions name
 // Blink's own (`html_names::kClassAttr`). The symbols are C's either way.
+// What `instanceof` checks against, by NtsDomInterface id: each interface's
+// wrapper type, which knows its parent's.
+constexpr const blink::WrapperTypeInfo* kInterfaces[] = {
+    blink::V8AbortController::GetWrapperTypeInfo(),
+    blink::V8AbortSignal::GetWrapperTypeInfo(),
+    blink::V8AbstractRange::GetWrapperTypeInfo(),
+    blink::V8Animation::GetWrapperTypeInfo(),
+    blink::V8AnimationEffect::GetWrapperTypeInfo(),
+    blink::V8AnimationEvent::GetWrapperTypeInfo(),
+    blink::V8AnimationPlaybackEvent::GetWrapperTypeInfo(),
+    blink::V8AnimationTimeline::GetWrapperTypeInfo(),
+    blink::V8AnimationTrigger::GetWrapperTypeInfo(),
+    blink::V8Attr::GetWrapperTypeInfo(),
+    blink::V8AudioTrack::GetWrapperTypeInfo(),
+    blink::V8AudioTrackList::GetWrapperTypeInfo(),
+    blink::V8AutofillEvent::GetWrapperTypeInfo(),
+    blink::V8BackForwardCacheRestoration::GetWrapperTypeInfo(),
+    blink::V8BarProp::GetWrapperTypeInfo(),
+    blink::V8BeforeUnloadEvent::GetWrapperTypeInfo(),
+    blink::V8Blob::GetWrapperTypeInfo(),
+    blink::V8ByteLengthQueuingStrategy::GetWrapperTypeInfo(),
+    blink::V8CDATASection::GetWrapperTypeInfo(),
+    blink::V8CSPViolationReportBody::GetWrapperTypeInfo(),
+    blink::V8CSSAnimation::GetWrapperTypeInfo(),
+    blink::V8CSSApplyMixinRule::GetWrapperTypeInfo(),
+    blink::V8CSSColorValue::GetWrapperTypeInfo(),
+    blink::V8CSSConditionRule::GetWrapperTypeInfo(),
+    blink::V8CSSContainerRule::GetWrapperTypeInfo(),
+    blink::V8CSSContentsMixinRule::GetWrapperTypeInfo(),
+    blink::V8CSSCounterStyleRule::GetWrapperTypeInfo(),
+    blink::V8CSSCustomMediaRule::GetWrapperTypeInfo(),
+    blink::V8CSSFontFaceRule::GetWrapperTypeInfo(),
+    blink::V8CSSFontFeatureValuesMap::GetWrapperTypeInfo(),
+    blink::V8CSSFontFeatureValuesRule::GetWrapperTypeInfo(),
+    blink::V8CSSFontPaletteValuesRule::GetWrapperTypeInfo(),
+    blink::V8CSSFunctionDeclarations::GetWrapperTypeInfo(),
+    blink::V8CSSFunctionDescriptors::GetWrapperTypeInfo(),
+    blink::V8CSSFunctionRule::GetWrapperTypeInfo(),
+    blink::V8CSSGroupingRule::GetWrapperTypeInfo(),
+    blink::V8CSSHSL::GetWrapperTypeInfo(),
+    blink::V8CSSHWB::GetWrapperTypeInfo(),
+    blink::V8CSSImageValue::GetWrapperTypeInfo(),
+    blink::V8CSSImportRule::GetWrapperTypeInfo(),
+    blink::V8CSSKeyframeRule::GetWrapperTypeInfo(),
+    blink::V8CSSKeyframesRule::GetWrapperTypeInfo(),
+    blink::V8CSSKeywordValue::GetWrapperTypeInfo(),
+    blink::V8CSSLayerBlockRule::GetWrapperTypeInfo(),
+    blink::V8CSSLayerStatementRule::GetWrapperTypeInfo(),
+    blink::V8CSSLocationRule::GetWrapperTypeInfo(),
+    blink::V8CSSMarginRule::GetWrapperTypeInfo(),
+    blink::V8CSSMathClamp::GetWrapperTypeInfo(),
+    blink::V8CSSMathInvert::GetWrapperTypeInfo(),
+    blink::V8CSSMathMax::GetWrapperTypeInfo(),
+    blink::V8CSSMathMin::GetWrapperTypeInfo(),
+    blink::V8CSSMathNegate::GetWrapperTypeInfo(),
+    blink::V8CSSMathProduct::GetWrapperTypeInfo(),
+    blink::V8CSSMathRandom::GetWrapperTypeInfo(),
+    blink::V8CSSMathSum::GetWrapperTypeInfo(),
+    blink::V8CSSMathValue::GetWrapperTypeInfo(),
+    blink::V8CSSMatrixComponent::GetWrapperTypeInfo(),
+    blink::V8CSSMediaRule::GetWrapperTypeInfo(),
+    blink::V8CSSMixinRule::GetWrapperTypeInfo(),
+    blink::V8CSSNamespaceRule::GetWrapperTypeInfo(),
+    blink::V8CSSNavigationRule::GetWrapperTypeInfo(),
+    blink::V8CSSNestedDeclarations::GetWrapperTypeInfo(),
+    blink::V8CSSNumericArray::GetWrapperTypeInfo(),
+    blink::V8CSSNumericValue::GetWrapperTypeInfo(),
+    blink::V8CSSPageRule::GetWrapperTypeInfo(),
+    blink::V8CSSPerspective::GetWrapperTypeInfo(),
+    blink::V8CSSPositionTryDescriptors::GetWrapperTypeInfo(),
+    blink::V8CSSPositionTryRule::GetWrapperTypeInfo(),
+    blink::V8CSSPositionValue::GetWrapperTypeInfo(),
+    blink::V8CSSPrivateRule::GetWrapperTypeInfo(),
+    blink::V8CSSPropertyRule::GetWrapperTypeInfo(),
+    blink::V8CSSPseudoElement::GetWrapperTypeInfo(),
+    blink::V8CSSRGB::GetWrapperTypeInfo(),
+    blink::V8CSSResultRule::GetWrapperTypeInfo(),
+    blink::V8CSSRotate::GetWrapperTypeInfo(),
+    blink::V8CSSRule::GetWrapperTypeInfo(),
+    blink::V8CSSRuleList::GetWrapperTypeInfo(),
+    blink::V8CSSScale::GetWrapperTypeInfo(),
+    blink::V8CSSScopeRule::GetWrapperTypeInfo(),
+    blink::V8CSSSkew::GetWrapperTypeInfo(),
+    blink::V8CSSSkewX::GetWrapperTypeInfo(),
+    blink::V8CSSSkewY::GetWrapperTypeInfo(),
+    blink::V8CSSStartingStyleRule::GetWrapperTypeInfo(),
+    blink::V8CSSStyleDeclaration::GetWrapperTypeInfo(),
+    blink::V8CSSStyleRule::GetWrapperTypeInfo(),
+    blink::V8CSSStyleSheet::GetWrapperTypeInfo(),
+    blink::V8CSSStyleValue::GetWrapperTypeInfo(),
+    blink::V8CSSSupportsRule::GetWrapperTypeInfo(),
+    blink::V8CSSTransformComponent::GetWrapperTypeInfo(),
+    blink::V8CSSTransformValue::GetWrapperTypeInfo(),
+    blink::V8CSSTransition::GetWrapperTypeInfo(),
+    blink::V8CSSTranslate::GetWrapperTypeInfo(),
+    blink::V8CSSUnitValue::GetWrapperTypeInfo(),
+    blink::V8CSSUnparsedValue::GetWrapperTypeInfo(),
+    blink::V8CSSVariableReferenceValue::GetWrapperTypeInfo(),
+    blink::V8CSSViewTransitionRule::GetWrapperTypeInfo(),
+    blink::V8CallbackFunctionTest::GetWrapperTypeInfo(),
+    blink::V8CanvasPaintEvent::GetWrapperTypeInfo(),
+    blink::V8CaretPosition::GetWrapperTypeInfo(),
+    blink::V8CharacterBoundsUpdateEvent::GetWrapperTypeInfo(),
+    blink::V8CharacterData::GetWrapperTypeInfo(),
+    blink::V8ClipboardEvent::GetWrapperTypeInfo(),
+    blink::V8CloseWatcher::GetWrapperTypeInfo(),
+    blink::V8ColorPagePopupController::GetWrapperTypeInfo(),
+    blink::V8CommandEvent::GetWrapperTypeInfo(),
+    blink::V8Comment::GetWrapperTypeInfo(),
+    blink::V8CompositionEvent::GetWrapperTypeInfo(),
+    blink::V8ConnectionAllowlistViolationReportBody::GetWrapperTypeInfo(),
+    blink::V8ContainerQueryList::GetWrapperTypeInfo(),
+    blink::V8ContentVisibilityAutoStateChangeEvent::GetWrapperTypeInfo(),
+    blink::V8CoopAccessViolationReportBody::GetWrapperTypeInfo(),
+    blink::V8CountQueuingStrategy::GetWrapperTypeInfo(),
+    blink::V8CrashReportContext::GetWrapperTypeInfo(),
+    blink::V8CustomElementRegistry::GetWrapperTypeInfo(),
+    blink::V8CustomEvent::GetWrapperTypeInfo(),
+    blink::V8CustomStateSet::GetWrapperTypeInfo(),
+    blink::V8DOMException::GetWrapperTypeInfo(),
+    blink::V8DOMImplementation::GetWrapperTypeInfo(),
+    blink::V8DOMMatrix::GetWrapperTypeInfo(),
+    blink::V8DOMMatrixReadOnly::GetWrapperTypeInfo(),
+    blink::V8DOMParser::GetWrapperTypeInfo(),
+    blink::V8DOMPoint::GetWrapperTypeInfo(),
+    blink::V8DOMPointReadOnly::GetWrapperTypeInfo(),
+    blink::V8DOMQuad::GetWrapperTypeInfo(),
+    blink::V8DOMRect::GetWrapperTypeInfo(),
+    blink::V8DOMRectList::GetWrapperTypeInfo(),
+    blink::V8DOMRectReadOnly::GetWrapperTypeInfo(),
+    blink::V8DOMStringList::GetWrapperTypeInfo(),
+    blink::V8DOMStringMap::GetWrapperTypeInfo(),
+    blink::V8DOMTokenList::GetWrapperTypeInfo(),
+    blink::V8DataTransfer::GetWrapperTypeInfo(),
+    blink::V8DataTransferItem::GetWrapperTypeInfo(),
+    blink::V8DataTransferItemList::GetWrapperTypeInfo(),
+    blink::V8DedicatedWorkerGlobalScope::GetWrapperTypeInfo(),
+    blink::V8DeprecationReportBody::GetWrapperTypeInfo(),
+    blink::V8DevToolsHost::GetWrapperTypeInfo(),
+    blink::V8DictionaryTest::GetWrapperTypeInfo(),
+    blink::V8Directive::GetWrapperTypeInfo(),
+    blink::V8Document::GetWrapperTypeInfo(),
+    blink::V8DocumentFragment::GetWrapperTypeInfo(),
+    blink::V8DocumentPolicyViolationReportBody::GetWrapperTypeInfo(),
+    blink::V8DocumentTimeline::GetWrapperTypeInfo(),
+    blink::V8DocumentType::GetWrapperTypeInfo(),
+    blink::V8DragEvent::GetWrapperTypeInfo(),
+    blink::V8EditContext::GetWrapperTypeInfo(),
+    blink::V8Element::GetWrapperTypeInfo(),
+    blink::V8ElementBehavior::GetWrapperTypeInfo(),
+    blink::V8ElementImage::GetWrapperTypeInfo(),
+    blink::V8ElementInternals::GetWrapperTypeInfo(),
+    blink::V8ErrorEvent::GetWrapperTypeInfo(),
+    blink::V8Event::GetWrapperTypeInfo(),
+    blink::V8EventCounts::GetWrapperTypeInfo(),
+    blink::V8EventTarget::GetWrapperTypeInfo(),
+    blink::V8EventTrigger::GetWrapperTypeInfo(),
+    blink::V8External::GetWrapperTypeInfo(),
+    blink::V8Fence::GetWrapperTypeInfo(),
+    blink::V8FencedFrameConfig::GetWrapperTypeInfo(),
+    blink::V8FetchLaterResult::GetWrapperTypeInfo(),
+    blink::V8File::GetWrapperTypeInfo(),
+    blink::V8FileList::GetWrapperTypeInfo(),
+    blink::V8FileReader::GetWrapperTypeInfo(),
+    blink::V8FileReaderSync::GetWrapperTypeInfo(),
+    blink::V8FocusEvent::GetWrapperTypeInfo(),
+    blink::V8FontFace::GetWrapperTypeInfo(),
+    blink::V8FontFaceSet::GetWrapperTypeInfo(),
+    blink::V8FontFaceSetLoadEvent::GetWrapperTypeInfo(),
+    blink::V8FormData::GetWrapperTypeInfo(),
+    blink::V8FormDataEvent::GetWrapperTypeInfo(),
+    blink::V8FragmentDirective::GetWrapperTypeInfo(),
+    blink::V8GCObservation::GetWrapperTypeInfo(),
+    blink::V8GarbageCollectedScriptWrappable::GetWrapperTypeInfo(),
+    blink::V8Geolocation::GetWrapperTypeInfo(),
+    blink::V8GeolocationCoordinates::GetWrapperTypeInfo(),
+    blink::V8GeolocationPosition::GetWrapperTypeInfo(),
+    blink::V8GeolocationPositionError::GetWrapperTypeInfo(),
+    blink::V8HTMLAllCollection::GetWrapperTypeInfo(),
+    blink::V8HTMLAnchorElement::GetWrapperTypeInfo(),
+    blink::V8HTMLAreaElement::GetWrapperTypeInfo(),
+    blink::V8HTMLAudioElement::GetWrapperTypeInfo(),
+    blink::V8HTMLBRElement::GetWrapperTypeInfo(),
+    blink::V8HTMLBaseElement::GetWrapperTypeInfo(),
+    blink::V8HTMLBodyElement::GetWrapperTypeInfo(),
+    blink::V8HTMLButtonElement::GetWrapperTypeInfo(),
+    blink::V8HTMLCameraElement::GetWrapperTypeInfo(),
+    blink::V8HTMLCanvasElement::GetWrapperTypeInfo(),
+    blink::V8HTMLCollection::GetWrapperTypeInfo(),
+    blink::V8HTMLCredentialElement::GetWrapperTypeInfo(),
+    blink::V8HTMLDListElement::GetWrapperTypeInfo(),
+    blink::V8HTMLDataElement::GetWrapperTypeInfo(),
+    blink::V8HTMLDataListElement::GetWrapperTypeInfo(),
+    blink::V8HTMLDetailsElement::GetWrapperTypeInfo(),
+    blink::V8HTMLDialogElement::GetWrapperTypeInfo(),
+    blink::V8HTMLDirectoryElement::GetWrapperTypeInfo(),
+    blink::V8HTMLDivElement::GetWrapperTypeInfo(),
+    blink::V8HTMLDocument::GetWrapperTypeInfo(),
+    blink::V8HTMLElement::GetWrapperTypeInfo(),
+    blink::V8HTMLEmbedElement::GetWrapperTypeInfo(),
+    blink::V8HTMLFencedFrameElement::GetWrapperTypeInfo(),
+    blink::V8HTMLFieldSetElement::GetWrapperTypeInfo(),
+    blink::V8HTMLFontElement::GetWrapperTypeInfo(),
+    blink::V8HTMLFormControlsCollection::GetWrapperTypeInfo(),
+    blink::V8HTMLFormElement::GetWrapperTypeInfo(),
+    blink::V8HTMLFrameElement::GetWrapperTypeInfo(),
+    blink::V8HTMLFrameSetElement::GetWrapperTypeInfo(),
+    blink::V8HTMLGeolocationElement::GetWrapperTypeInfo(),
+    blink::V8HTMLHRElement::GetWrapperTypeInfo(),
+    blink::V8HTMLHeadElement::GetWrapperTypeInfo(),
+    blink::V8HTMLHeadingElement::GetWrapperTypeInfo(),
+    blink::V8HTMLHtmlElement::GetWrapperTypeInfo(),
+    blink::V8HTMLIFrameElement::GetWrapperTypeInfo(),
+    blink::V8HTMLImageElement::GetWrapperTypeInfo(),
+    blink::V8HTMLInputElement::GetWrapperTypeInfo(),
+    blink::V8HTMLInstallElement::GetWrapperTypeInfo(),
+    blink::V8HTMLLIElement::GetWrapperTypeInfo(),
+    blink::V8HTMLLabelElement::GetWrapperTypeInfo(),
+    blink::V8HTMLLegendElement::GetWrapperTypeInfo(),
+    blink::V8HTMLLinkElement::GetWrapperTypeInfo(),
+    blink::V8HTMLLoginElement::GetWrapperTypeInfo(),
+    blink::V8HTMLMapElement::GetWrapperTypeInfo(),
+    blink::V8HTMLMarqueeElement::GetWrapperTypeInfo(),
+    blink::V8HTMLMediaElement::GetWrapperTypeInfo(),
+    blink::V8HTMLMenuBarElement::GetWrapperTypeInfo(),
+    blink::V8HTMLMenuElement::GetWrapperTypeInfo(),
+    blink::V8HTMLMenuItemElement::GetWrapperTypeInfo(),
+    blink::V8HTMLMenuListElement::GetWrapperTypeInfo(),
+    blink::V8HTMLMetaElement::GetWrapperTypeInfo(),
+    blink::V8HTMLMeterElement::GetWrapperTypeInfo(),
+    blink::V8HTMLMicrophoneElement::GetWrapperTypeInfo(),
+    blink::V8HTMLModElement::GetWrapperTypeInfo(),
+    blink::V8HTMLOListElement::GetWrapperTypeInfo(),
+    blink::V8HTMLObjectElement::GetWrapperTypeInfo(),
+    blink::V8HTMLOptGroupElement::GetWrapperTypeInfo(),
+    blink::V8HTMLOptionElement::GetWrapperTypeInfo(),
+    blink::V8HTMLOptionsCollection::GetWrapperTypeInfo(),
+    blink::V8HTMLOutputElement::GetWrapperTypeInfo(),
+    blink::V8HTMLParagraphElement::GetWrapperTypeInfo(),
+    blink::V8HTMLParamElement::GetWrapperTypeInfo(),
+    blink::V8HTMLPictureElement::GetWrapperTypeInfo(),
+    blink::V8HTMLPreElement::GetWrapperTypeInfo(),
+    blink::V8HTMLProgressElement::GetWrapperTypeInfo(),
+    blink::V8HTMLQuoteElement::GetWrapperTypeInfo(),
+    blink::V8HTMLScriptElement::GetWrapperTypeInfo(),
+    blink::V8HTMLSelectElement::GetWrapperTypeInfo(),
+    blink::V8HTMLSelectedContentElement::GetWrapperTypeInfo(),
+    blink::V8HTMLSlotElement::GetWrapperTypeInfo(),
+    blink::V8HTMLSourceElement::GetWrapperTypeInfo(),
+    blink::V8HTMLSpanElement::GetWrapperTypeInfo(),
+    blink::V8HTMLStyleElement::GetWrapperTypeInfo(),
+    blink::V8HTMLSubMenuElement::GetWrapperTypeInfo(),
+    blink::V8HTMLSubmitButtonBehavior::GetWrapperTypeInfo(),
+    blink::V8HTMLTableCaptionElement::GetWrapperTypeInfo(),
+    blink::V8HTMLTableCellElement::GetWrapperTypeInfo(),
+    blink::V8HTMLTableColElement::GetWrapperTypeInfo(),
+    blink::V8HTMLTableElement::GetWrapperTypeInfo(),
+    blink::V8HTMLTableRowElement::GetWrapperTypeInfo(),
+    blink::V8HTMLTableSectionElement::GetWrapperTypeInfo(),
+    blink::V8HTMLTemplateElement::GetWrapperTypeInfo(),
+    blink::V8HTMLTextAreaElement::GetWrapperTypeInfo(),
+    blink::V8HTMLTimeElement::GetWrapperTypeInfo(),
+    blink::V8HTMLTitleElement::GetWrapperTypeInfo(),
+    blink::V8HTMLTrackElement::GetWrapperTypeInfo(),
+    blink::V8HTMLUListElement::GetWrapperTypeInfo(),
+    blink::V8HTMLUnknownElement::GetWrapperTypeInfo(),
+    blink::V8HTMLUserMediaElement::GetWrapperTypeInfo(),
+    blink::V8HTMLVideoElement::GetWrapperTypeInfo(),
+    blink::V8HashChangeEvent::GetWrapperTypeInfo(),
+    blink::V8Headers::GetWrapperTypeInfo(),
+    blink::V8Highlight::GetWrapperTypeInfo(),
+    blink::V8HighlightRegistry::GetWrapperTypeInfo(),
+    blink::V8History::GetWrapperTypeInfo(),
+    blink::V8HitTestLayerRect::GetWrapperTypeInfo(),
+    blink::V8HitTestLayerRectList::GetWrapperTypeInfo(),
+    blink::V8IdleDeadline::GetWrapperTypeInfo(),
+    blink::V8ImageBitmap::GetWrapperTypeInfo(),
+    blink::V8ImageData::GetWrapperTypeInfo(),
+    blink::V8InputDeviceCapabilities::GetWrapperTypeInfo(),
+    blink::V8InputEvent::GetWrapperTypeInfo(),
+    blink::V8InspectorOverlayHost::GetWrapperTypeInfo(),
+    blink::V8InstallResultEvent::GetWrapperTypeInfo(),
+    blink::V8IntegrityViolationReportBody::GetWrapperTypeInfo(),
+    blink::V8InteractionContentfulPaint::GetWrapperTypeInfo(),
+    blink::V8InterestEvent::GetWrapperTypeInfo(),
+    blink::V8InternalRuntimeFlags::GetWrapperTypeInfo(),
+    blink::V8InternalSettings::GetWrapperTypeInfo(),
+    blink::V8InternalSettingsGenerated::GetWrapperTypeInfo(),
+    blink::V8Internals::GetWrapperTypeInfo(),
+    blink::V8InternalsUkmRecorder::GetWrapperTypeInfo(),
+    blink::V8IntersectionObserver::GetWrapperTypeInfo(),
+    blink::V8IntersectionObserverEntry::GetWrapperTypeInfo(),
+    blink::V8InterventionReportBody::GetWrapperTypeInfo(),
+    blink::V8IntrinsicSizes::GetWrapperTypeInfo(),
+    blink::V8KeyboardEvent::GetWrapperTypeInfo(),
+    blink::V8KeyframeEffect::GetWrapperTypeInfo(),
+    blink::V8LargestContentfulPaint::GetWrapperTypeInfo(),
+    blink::V8LayoutChild::GetWrapperTypeInfo(),
+    blink::V8LayoutConstraints::GetWrapperTypeInfo(),
+    blink::V8LayoutEdges::GetWrapperTypeInfo(),
+    blink::V8LayoutFragment::GetWrapperTypeInfo(),
+    blink::V8LayoutShift::GetWrapperTypeInfo(),
+    blink::V8LayoutShiftAttribution::GetWrapperTypeInfo(),
+    blink::V8LayoutWorkletGlobalScope::GetWrapperTypeInfo(),
+    blink::V8Location::GetWrapperTypeInfo(),
+    blink::V8MathMLAnchorElement::GetWrapperTypeInfo(),
+    blink::V8MathMLElement::GetWrapperTypeInfo(),
+    blink::V8MediaError::GetWrapperTypeInfo(),
+    blink::V8MediaList::GetWrapperTypeInfo(),
+    blink::V8MediaQueryList::GetWrapperTypeInfo(),
+    blink::V8MediaQueryListEvent::GetWrapperTypeInfo(),
+    blink::V8MemoryInfo::GetWrapperTypeInfo(),
+    blink::V8MessageChannel::GetWrapperTypeInfo(),
+    blink::V8MessageEvent::GetWrapperTypeInfo(),
+    blink::V8MessagePort::GetWrapperTypeInfo(),
+    blink::V8ModelContext::GetWrapperTypeInfo(),
+    blink::V8Mojo::GetWrapperTypeInfo(),
+    blink::V8MojoHandle::GetWrapperTypeInfo(),
+    blink::V8MojoInterfaceInterceptor::GetWrapperTypeInfo(),
+    blink::V8MojoInterfaceRequestEvent::GetWrapperTypeInfo(),
+    blink::V8MojoWatcher::GetWrapperTypeInfo(),
+    blink::V8MouseEvent::GetWrapperTypeInfo(),
+    blink::V8MutationObserver::GetWrapperTypeInfo(),
+    blink::V8MutationRecord::GetWrapperTypeInfo(),
+    blink::V8NADCAttributeTest::GetWrapperTypeInfo(),
+    blink::V8NamedNodeMap::GetWrapperTypeInfo(),
+    blink::V8NavigateEvent::GetWrapperTypeInfo(),
+    blink::V8Navigation::GetWrapperTypeInfo(),
+    blink::V8NavigationActivation::GetWrapperTypeInfo(),
+    blink::V8NavigationCurrentEntryChangeEvent::GetWrapperTypeInfo(),
+    blink::V8NavigationDeferPageSwapController::GetWrapperTypeInfo(),
+    blink::V8NavigationDestination::GetWrapperTypeInfo(),
+    blink::V8NavigationHistoryEntry::GetWrapperTypeInfo(),
+    blink::V8NavigationPrecommitController::GetWrapperTypeInfo(),
+    blink::V8NavigationTransition::GetWrapperTypeInfo(),
+    blink::V8Navigator::GetWrapperTypeInfo(),
+    blink::V8NavigatorUAData::GetWrapperTypeInfo(),
+    blink::V8Node::GetWrapperTypeInfo(),
+    blink::V8NodeIterator::GetWrapperTypeInfo(),
+    blink::V8NodeList::GetWrapperTypeInfo(),
+    blink::V8NodeRange::GetWrapperTypeInfo(),
+    blink::V8NotRestoredReasonDetails::GetWrapperTypeInfo(),
+    blink::V8NotRestoredReasons::GetWrapperTypeInfo(),
+    blink::V8Observable::GetWrapperTypeInfo(),
+    blink::V8OffscreenCanvas::GetWrapperTypeInfo(),
+    blink::V8OpaqueRange::GetWrapperTypeInfo(),
+    blink::V8Origin::GetWrapperTypeInfo(),
+    blink::V8OriginTrialsTest::GetWrapperTypeInfo(),
+    blink::V8OverscrollEvent::GetWrapperTypeInfo(),
+    blink::V8PagePopupController::GetWrapperTypeInfo(),
+    blink::V8PageRevealEvent::GetWrapperTypeInfo(),
+    blink::V8PageSwapEvent::GetWrapperTypeInfo(),
+    blink::V8PageTransitionEvent::GetWrapperTypeInfo(),
+    blink::V8Performance::GetWrapperTypeInfo(),
+    blink::V8PerformanceContainerTiming::GetWrapperTypeInfo(),
+    blink::V8PerformanceElementTiming::GetWrapperTypeInfo(),
+    blink::V8PerformanceEntry::GetWrapperTypeInfo(),
+    blink::V8PerformanceEventTiming::GetWrapperTypeInfo(),
+    blink::V8PerformanceLongAnimationFrameTiming::GetWrapperTypeInfo(),
+    blink::V8PerformanceLongTaskTiming::GetWrapperTypeInfo(),
+    blink::V8PerformanceMark::GetWrapperTypeInfo(),
+    blink::V8PerformanceMarkConditional::GetWrapperTypeInfo(),
+    blink::V8PerformanceMeasure::GetWrapperTypeInfo(),
+    blink::V8PerformanceMeasureConditional::GetWrapperTypeInfo(),
+    blink::V8PerformanceNavigation::GetWrapperTypeInfo(),
+    blink::V8PerformanceNavigationTiming::GetWrapperTypeInfo(),
+    blink::V8PerformanceObserver::GetWrapperTypeInfo(),
+    blink::V8PerformanceObserverEntryList::GetWrapperTypeInfo(),
+    blink::V8PerformancePaintTiming::GetWrapperTypeInfo(),
+    blink::V8PerformanceResourceTiming::GetWrapperTypeInfo(),
+    blink::V8PerformanceScriptTiming::GetWrapperTypeInfo(),
+    blink::V8PerformanceScrollTiming::GetWrapperTypeInfo(),
+    blink::V8PerformanceServerTiming::GetWrapperTypeInfo(),
+    blink::V8PerformanceSoftNavigation::GetWrapperTypeInfo(),
+    blink::V8PerformanceTiming::GetWrapperTypeInfo(),
+    blink::V8PerformanceTimingConfidence::GetWrapperTypeInfo(),
+    blink::V8PermissionsPolicy::GetWrapperTypeInfo(),
+    blink::V8PermissionsPolicyViolationReportBody::GetWrapperTypeInfo(),
+    blink::V8PointerEvent::GetWrapperTypeInfo(),
+    blink::V8PopStateEvent::GetWrapperTypeInfo(),
+    blink::V8PreconnectData::GetWrapperTypeInfo(),
+    blink::V8PreferenceManager::GetWrapperTypeInfo(),
+    blink::V8PreferenceObject::GetWrapperTypeInfo(),
+    blink::V8PreloadData::GetWrapperTypeInfo(),
+    blink::V8ProcessingInstruction::GetWrapperTypeInfo(),
+    blink::V8Profiler::GetWrapperTypeInfo(),
+    blink::V8ProgressEvent::GetWrapperTypeInfo(),
+    blink::V8PromiseRejectionEvent::GetWrapperTypeInfo(),
+    blink::V8QuotaExceededError::GetWrapperTypeInfo(),
+    blink::V8RadioNodeList::GetWrapperTypeInfo(),
+    blink::V8Range::GetWrapperTypeInfo(),
+    blink::V8ReadableByteStreamController::GetWrapperTypeInfo(),
+    blink::V8ReadableStream::GetWrapperTypeInfo(),
+    blink::V8ReadableStreamBYOBReader::GetWrapperTypeInfo(),
+    blink::V8ReadableStreamBYOBRequest::GetWrapperTypeInfo(),
+    blink::V8ReadableStreamDefaultController::GetWrapperTypeInfo(),
+    blink::V8ReadableStreamDefaultReader::GetWrapperTypeInfo(),
+    blink::V8RecordTest::GetWrapperTypeInfo(),
+    blink::V8Report::GetWrapperTypeInfo(),
+    blink::V8ReportBody::GetWrapperTypeInfo(),
+    blink::V8ReportingObserver::GetWrapperTypeInfo(),
+    blink::V8Request::GetWrapperTypeInfo(),
+    blink::V8ResizeObserver::GetWrapperTypeInfo(),
+    blink::V8ResizeObserverEntry::GetWrapperTypeInfo(),
+    blink::V8ResizeObserverSize::GetWrapperTypeInfo(),
+    blink::V8ResourceProgressEvent::GetWrapperTypeInfo(),
+    blink::V8Response::GetWrapperTypeInfo(),
+    blink::V8SVGAElement::GetWrapperTypeInfo(),
+    blink::V8SVGAngle::GetWrapperTypeInfo(),
+    blink::V8SVGAnimateElement::GetWrapperTypeInfo(),
+    blink::V8SVGAnimateMotionElement::GetWrapperTypeInfo(),
+    blink::V8SVGAnimateTransformElement::GetWrapperTypeInfo(),
+    blink::V8SVGAnimatedAngle::GetWrapperTypeInfo(),
+    blink::V8SVGAnimatedBoolean::GetWrapperTypeInfo(),
+    blink::V8SVGAnimatedEnumeration::GetWrapperTypeInfo(),
+    blink::V8SVGAnimatedInteger::GetWrapperTypeInfo(),
+    blink::V8SVGAnimatedLength::GetWrapperTypeInfo(),
+    blink::V8SVGAnimatedLengthList::GetWrapperTypeInfo(),
+    blink::V8SVGAnimatedNumber::GetWrapperTypeInfo(),
+    blink::V8SVGAnimatedNumberList::GetWrapperTypeInfo(),
+    blink::V8SVGAnimatedPreserveAspectRatio::GetWrapperTypeInfo(),
+    blink::V8SVGAnimatedRect::GetWrapperTypeInfo(),
+    blink::V8SVGAnimatedString::GetWrapperTypeInfo(),
+    blink::V8SVGAnimatedTransformList::GetWrapperTypeInfo(),
+    blink::V8SVGAnimationElement::GetWrapperTypeInfo(),
+    blink::V8SVGCircleElement::GetWrapperTypeInfo(),
+    blink::V8SVGClipPathElement::GetWrapperTypeInfo(),
+    blink::V8SVGComponentTransferFunctionElement::GetWrapperTypeInfo(),
+    blink::V8SVGDefsElement::GetWrapperTypeInfo(),
+    blink::V8SVGDescElement::GetWrapperTypeInfo(),
+    blink::V8SVGElement::GetWrapperTypeInfo(),
+    blink::V8SVGEllipseElement::GetWrapperTypeInfo(),
+    blink::V8SVGFEBlendElement::GetWrapperTypeInfo(),
+    blink::V8SVGFEColorMatrixElement::GetWrapperTypeInfo(),
+    blink::V8SVGFEComponentTransferElement::GetWrapperTypeInfo(),
+    blink::V8SVGFECompositeElement::GetWrapperTypeInfo(),
+    blink::V8SVGFEConvolveMatrixElement::GetWrapperTypeInfo(),
+    blink::V8SVGFEDiffuseLightingElement::GetWrapperTypeInfo(),
+    blink::V8SVGFEDisplacementMapElement::GetWrapperTypeInfo(),
+    blink::V8SVGFEDistantLightElement::GetWrapperTypeInfo(),
+    blink::V8SVGFEDropShadowElement::GetWrapperTypeInfo(),
+    blink::V8SVGFEFloodElement::GetWrapperTypeInfo(),
+    blink::V8SVGFEFuncAElement::GetWrapperTypeInfo(),
+    blink::V8SVGFEFuncBElement::GetWrapperTypeInfo(),
+    blink::V8SVGFEFuncGElement::GetWrapperTypeInfo(),
+    blink::V8SVGFEFuncRElement::GetWrapperTypeInfo(),
+    blink::V8SVGFEGaussianBlurElement::GetWrapperTypeInfo(),
+    blink::V8SVGFEImageElement::GetWrapperTypeInfo(),
+    blink::V8SVGFEMergeElement::GetWrapperTypeInfo(),
+    blink::V8SVGFEMergeNodeElement::GetWrapperTypeInfo(),
+    blink::V8SVGFEMorphologyElement::GetWrapperTypeInfo(),
+    blink::V8SVGFEOffsetElement::GetWrapperTypeInfo(),
+    blink::V8SVGFEPointLightElement::GetWrapperTypeInfo(),
+    blink::V8SVGFESpecularLightingElement::GetWrapperTypeInfo(),
+    blink::V8SVGFESpotLightElement::GetWrapperTypeInfo(),
+    blink::V8SVGFETileElement::GetWrapperTypeInfo(),
+    blink::V8SVGFETurbulenceElement::GetWrapperTypeInfo(),
+    blink::V8SVGFilterElement::GetWrapperTypeInfo(),
+    blink::V8SVGForeignObjectElement::GetWrapperTypeInfo(),
+    blink::V8SVGGElement::GetWrapperTypeInfo(),
+    blink::V8SVGGeometryElement::GetWrapperTypeInfo(),
+    blink::V8SVGGradientElement::GetWrapperTypeInfo(),
+    blink::V8SVGGraphicsElement::GetWrapperTypeInfo(),
+    blink::V8SVGImageElement::GetWrapperTypeInfo(),
+    blink::V8SVGLength::GetWrapperTypeInfo(),
+    blink::V8SVGLengthList::GetWrapperTypeInfo(),
+    blink::V8SVGLineElement::GetWrapperTypeInfo(),
+    blink::V8SVGLinearGradientElement::GetWrapperTypeInfo(),
+    blink::V8SVGMPathElement::GetWrapperTypeInfo(),
+    blink::V8SVGMarkerElement::GetWrapperTypeInfo(),
+    blink::V8SVGMaskElement::GetWrapperTypeInfo(),
+    blink::V8SVGMatrix::GetWrapperTypeInfo(),
+    blink::V8SVGMetadataElement::GetWrapperTypeInfo(),
+    blink::V8SVGNumber::GetWrapperTypeInfo(),
+    blink::V8SVGNumberList::GetWrapperTypeInfo(),
+    blink::V8SVGPathElement::GetWrapperTypeInfo(),
+    blink::V8SVGPatternElement::GetWrapperTypeInfo(),
+    blink::V8SVGPoint::GetWrapperTypeInfo(),
+    blink::V8SVGPointList::GetWrapperTypeInfo(),
+    blink::V8SVGPolygonElement::GetWrapperTypeInfo(),
+    blink::V8SVGPolylineElement::GetWrapperTypeInfo(),
+    blink::V8SVGPreserveAspectRatio::GetWrapperTypeInfo(),
+    blink::V8SVGRadialGradientElement::GetWrapperTypeInfo(),
+    blink::V8SVGRect::GetWrapperTypeInfo(),
+    blink::V8SVGRectElement::GetWrapperTypeInfo(),
+    blink::V8SVGSVGElement::GetWrapperTypeInfo(),
+    blink::V8SVGScriptElement::GetWrapperTypeInfo(),
+    blink::V8SVGSetElement::GetWrapperTypeInfo(),
+    blink::V8SVGStopElement::GetWrapperTypeInfo(),
+    blink::V8SVGStringList::GetWrapperTypeInfo(),
+    blink::V8SVGStyleElement::GetWrapperTypeInfo(),
+    blink::V8SVGSwitchElement::GetWrapperTypeInfo(),
+    blink::V8SVGSymbolElement::GetWrapperTypeInfo(),
+    blink::V8SVGTSpanElement::GetWrapperTypeInfo(),
+    blink::V8SVGTextContentElement::GetWrapperTypeInfo(),
+    blink::V8SVGTextElement::GetWrapperTypeInfo(),
+    blink::V8SVGTextPathElement::GetWrapperTypeInfo(),
+    blink::V8SVGTextPositioningElement::GetWrapperTypeInfo(),
+    blink::V8SVGTitleElement::GetWrapperTypeInfo(),
+    blink::V8SVGTransform::GetWrapperTypeInfo(),
+    blink::V8SVGTransformList::GetWrapperTypeInfo(),
+    blink::V8SVGUnitTypes::GetWrapperTypeInfo(),
+    blink::V8SVGUseElement::GetWrapperTypeInfo(),
+    blink::V8SVGViewElement::GetWrapperTypeInfo(),
+    blink::V8Sanitizer::GetWrapperTypeInfo(),
+    blink::V8Scheduler::GetWrapperTypeInfo(),
+    blink::V8Scheduling::GetWrapperTypeInfo(),
+    blink::V8Screen::GetWrapperTypeInfo(),
+    blink::V8ScrollTimeline::GetWrapperTypeInfo(),
+    blink::V8SecurityPolicyViolationEvent::GetWrapperTypeInfo(),
+    blink::V8Selection::GetWrapperTypeInfo(),
+    blink::V8SelectorDirective::GetWrapperTypeInfo(),
+    blink::V8SequenceTest::GetWrapperTypeInfo(),
+    blink::V8ShadowRealmGlobalScope::GetWrapperTypeInfo(),
+    blink::V8ShadowRoot::GetWrapperTypeInfo(),
+    blink::V8SharedWorker::GetWrapperTypeInfo(),
+    blink::V8SharedWorkerGlobalScope::GetWrapperTypeInfo(),
+    blink::V8SnapEvent::GetWrapperTypeInfo(),
+    blink::V8SpeculationData::GetWrapperTypeInfo(),
+    blink::V8SpeculationNavigationData::GetWrapperTypeInfo(),
+    blink::V8StaticRange::GetWrapperTypeInfo(),
+    blink::V8StaticSelection::GetWrapperTypeInfo(),
+    blink::V8StyleMedia::GetWrapperTypeInfo(),
+    blink::V8StylePropertyMap::GetWrapperTypeInfo(),
+    blink::V8StylePropertyMapReadOnly::GetWrapperTypeInfo(),
+    blink::V8StyleSheet::GetWrapperTypeInfo(),
+    blink::V8StyleSheetList::GetWrapperTypeInfo(),
+    blink::V8SubmitEvent::GetWrapperTypeInfo(),
+    blink::V8Subscriber::GetWrapperTypeInfo(),
+    blink::V8TaskAttributionTiming::GetWrapperTypeInfo(),
+    blink::V8TaskController::GetWrapperTypeInfo(),
+    blink::V8TaskPriorityChangeEvent::GetWrapperTypeInfo(),
+    blink::V8TaskSignal::GetWrapperTypeInfo(),
+    blink::V8TestReportBody::GetWrapperTypeInfo(),
+    blink::V8Text::GetWrapperTypeInfo(),
+    blink::V8TextCluster::GetWrapperTypeInfo(),
+    blink::V8TextDirective::GetWrapperTypeInfo(),
+    blink::V8TextEvent::GetWrapperTypeInfo(),
+    blink::V8TextFormat::GetWrapperTypeInfo(),
+    blink::V8TextFormatUpdateEvent::GetWrapperTypeInfo(),
+    blink::V8TextMetrics::GetWrapperTypeInfo(),
+    blink::V8TextTrack::GetWrapperTypeInfo(),
+    blink::V8TextTrackCue::GetWrapperTypeInfo(),
+    blink::V8TextTrackCueList::GetWrapperTypeInfo(),
+    blink::V8TextTrackList::GetWrapperTypeInfo(),
+    blink::V8TextUpdateEvent::GetWrapperTypeInfo(),
+    blink::V8TimeRanges::GetWrapperTypeInfo(),
+    blink::V8TimelineTrigger::GetWrapperTypeInfo(),
+    blink::V8TimelineTriggerRange::GetWrapperTypeInfo(),
+    blink::V8TimelineTriggerRangeList::GetWrapperTypeInfo(),
+    blink::V8ToggleEvent::GetWrapperTypeInfo(),
+    blink::V8Touch::GetWrapperTypeInfo(),
+    blink::V8TouchEvent::GetWrapperTypeInfo(),
+    blink::V8TouchList::GetWrapperTypeInfo(),
+    blink::V8TrackEvent::GetWrapperTypeInfo(),
+    blink::V8TransformStream::GetWrapperTypeInfo(),
+    blink::V8TransformStreamDefaultController::GetWrapperTypeInfo(),
+    blink::V8TransitionEvent::GetWrapperTypeInfo(),
+    blink::V8TreeWalker::GetWrapperTypeInfo(),
+    blink::V8TrustedHTML::GetWrapperTypeInfo(),
+    blink::V8TrustedParserOptions::GetWrapperTypeInfo(),
+    blink::V8TrustedScript::GetWrapperTypeInfo(),
+    blink::V8TrustedScriptURL::GetWrapperTypeInfo(),
+    blink::V8TrustedTypePolicy::GetWrapperTypeInfo(),
+    blink::V8TrustedTypePolicyFactory::GetWrapperTypeInfo(),
+    blink::V8TypeConversions::GetWrapperTypeInfo(),
+    blink::V8UIEvent::GetWrapperTypeInfo(),
+    blink::V8URL::GetWrapperTypeInfo(),
+    blink::V8URLPattern::GetWrapperTypeInfo(),
+    blink::V8URLSearchParams::GetWrapperTypeInfo(),
+    blink::V8UnionTypesTest::GetWrapperTypeInfo(),
+    blink::V8UserActivation::GetWrapperTypeInfo(),
+    blink::V8VTTCue::GetWrapperTypeInfo(),
+    blink::V8VTTRegion::GetWrapperTypeInfo(),
+    blink::V8ValidityState::GetWrapperTypeInfo(),
+    blink::V8VideoTrack::GetWrapperTypeInfo(),
+    blink::V8VideoTrackList::GetWrapperTypeInfo(),
+    blink::V8ViewTimeline::GetWrapperTypeInfo(),
+    blink::V8ViewTransition::GetWrapperTypeInfo(),
+    blink::V8ViewTransitionTypeSet::GetWrapperTypeInfo(),
+    blink::V8Viewport::GetWrapperTypeInfo(),
+    blink::V8VisibilityStateEntry::GetWrapperTypeInfo(),
+    blink::V8VisualViewport::GetWrapperTypeInfo(),
+    blink::V8WebMCPEvent::GetWrapperTypeInfo(),
+    blink::V8WheelEvent::GetWrapperTypeInfo(),
+    blink::V8Window::GetWrapperTypeInfo(),
+    blink::V8WindowProperties::GetWrapperTypeInfo(),
+    blink::V8Worker::GetWrapperTypeInfo(),
+    blink::V8WorkerGlobalScope::GetWrapperTypeInfo(),
+    blink::V8WorkerInternals::GetWrapperTypeInfo(),
+    blink::V8WorkerLocation::GetWrapperTypeInfo(),
+    blink::V8WorkerNavigator::GetWrapperTypeInfo(),
+    blink::V8Worklet::GetWrapperTypeInfo(),
+    blink::V8WorkletGlobalScope::GetWrapperTypeInfo(),
+    blink::V8WritableStream::GetWrapperTypeInfo(),
+    blink::V8WritableStreamDefaultController::GetWrapperTypeInfo(),
+    blink::V8WritableStreamDefaultWriter::GetWrapperTypeInfo(),
+    blink::V8XMLDocument::GetWrapperTypeInfo(),
+    blink::V8XMLHttpRequest::GetWrapperTypeInfo(),
+    blink::V8XMLHttpRequestEventTarget::GetWrapperTypeInfo(),
+    blink::V8XMLHttpRequestUpload::GetWrapperTypeInfo(),
+    blink::V8XMLSerializer::GetWrapperTypeInfo(),
+    blink::V8XPathEvaluator::GetWrapperTypeInfo(),
+    blink::V8XPathExpression::GetWrapperTypeInfo(),
+    blink::V8XPathResult::GetWrapperTypeInfo(),
+    blink::V8XSLTProcessor::GetWrapperTypeInfo(),
+};
+
+// In Blink's namespace, as the bindings are: bind_gen's expressions name
+// Blink's own (`html_names::kClassAttr`). The symbols are C's either way.
 namespace blink {
 extern "C" {
+bool nts_dom_is(const void* object, uint32_t interface_id) {
+  CHECK_LT(interface_id, std::size(kInterfaces));
+  // As ScriptWrappable::TypeDispatcher::DowncastTo checks: by the IDL.
+  return object && ToWrapperTypeInfo(WrappableOf(object))->IsSubclass(kInterfaces[interface_id]);
+}
+
 bool nts_dom_EventTarget_dispatchEvent(NtsDomEventTarget* self, NtsDomEvent* event, NtsDomException** error) {
   nts_dom::AssertEntered();
   Throws exception_state(error);
@@ -75,9 +1294,9 @@ bool nts_dom_EventTarget_dispatchEvent(NtsDomEventTarget* self, NtsDomEvent* eve
   return static_cast<bool>(receiver->dispatchEventForBindings(ObjectOf<blink::Event>(event), exception_state));
 }
 
-NtsDomNode* nts_dom_as_Node(NtsDomEventTarget* eventTarget) {
+NtsDomNode* nts_dom_as_Node(NtsDomEventTarget* target) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomNode>(ObjectOf<blink::EventTarget>(eventTarget)->ToNode());
+  return HandleOf<NtsDomNode>(nts_dom_is(target, NTS_DOM_Node) ? WrappableOf(target) : nullptr);
 }
 
 double nts_dom_Node_get_nodeType(NtsDomNode* self) {
@@ -285,7 +1504,7 @@ NtsDomNode* nts_dom_Node_replaceChild(NtsDomNode* self, NtsDomNode* node, NtsDom
 
 NtsDomElement* nts_dom_as_Element(NtsDomNode* node) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomElement>(blink::DynamicTo<blink::Element>(ObjectOf<blink::Node>(node)));
+  return HandleOf<NtsDomElement>(nts_dom_is(node, NTS_DOM_Element) ? WrappableOf(node) : nullptr);
 }
 
 const NtsStringView* nts_dom_Element_get_namespaceURI(NtsDomElement* self) {
@@ -1281,7 +2500,7 @@ bool nts_dom_Element_webkitMatchesSelector(NtsDomElement* self, const NtsBorrowe
 
 NtsDomCharacterData* nts_dom_as_CharacterData(NtsDomNode* node) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomCharacterData>(blink::DynamicTo<blink::CharacterData>(ObjectOf<blink::Node>(node)));
+  return HandleOf<NtsDomCharacterData>(nts_dom_is(node, NTS_DOM_CharacterData) ? WrappableOf(node) : nullptr);
 }
 
 const NtsStringView* nts_dom_CharacterData_get_data(NtsDomCharacterData* self) {
@@ -1369,7 +2588,7 @@ const NtsStringView* nts_dom_CharacterData_substringData(NtsDomCharacterData* se
 
 NtsDomText* nts_dom_as_Text(NtsDomNode* node) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomText>(blink::DynamicTo<blink::Text>(ObjectOf<blink::Node>(node)));
+  return HandleOf<NtsDomText>(nts_dom_is(node, NTS_DOM_Text) ? WrappableOf(node) : nullptr);
 }
 
 const NtsStringView* nts_dom_Text_get_wholeText(NtsDomText* self) {
@@ -1389,7 +2608,7 @@ NtsDomText* nts_dom_Text_splitText(NtsDomText* self, double offset, NtsDomExcept
 
 NtsDomDocument* nts_dom_as_Document(NtsDomNode* node) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomDocument>(blink::DynamicTo<blink::Document>(ObjectOf<blink::Node>(node)));
+  return HandleOf<NtsDomDocument>(nts_dom_is(node, NTS_DOM_Document) ? WrappableOf(node) : nullptr);
 }
 
 const NtsStringView* nts_dom_Document_get_URL(NtsDomDocument* self) {
@@ -2094,7 +3313,7 @@ void nts_dom_Document_writeln_1(NtsDomDocument* self, const NtsBorrowedString* t
 
 NtsDomDocumentFragment* nts_dom_as_DocumentFragment(NtsDomNode* node) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomDocumentFragment>(blink::DynamicTo<blink::DocumentFragment>(ObjectOf<blink::Node>(node)));
+  return HandleOf<NtsDomDocumentFragment>(nts_dom_is(node, NTS_DOM_DocumentFragment) ? WrappableOf(node) : nullptr);
 }
 
 NtsDomHTMLCollection* nts_dom_DocumentFragment_get_children(NtsDomDocumentFragment* self) {
@@ -2151,7 +3370,7 @@ NtsDomNodeList* nts_dom_DocumentFragment_querySelectorAll(NtsDomDocumentFragment
 
 NtsDomHTMLElement* nts_dom_as_HTMLElement(NtsDomNode* node) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomHTMLElement>(blink::DynamicTo<blink::HTMLElement>(ObjectOf<blink::Node>(node)));
+  return HandleOf<NtsDomHTMLElement>(nts_dom_is(node, NTS_DOM_HTMLElement) ? WrappableOf(node) : nullptr);
 }
 
 const NtsStringView* nts_dom_HTMLElement_get_title(NtsDomHTMLElement* self) {
@@ -2515,7 +3734,7 @@ bool nts_dom_HTMLElement_togglePopover(NtsDomHTMLElement* self, NtsDomException*
 
 NtsDomHTMLInputElement* nts_dom_as_HTMLInputElement(NtsDomNode* node) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomHTMLInputElement>(blink::DynamicTo<blink::HTMLInputElement>(ObjectOf<blink::Node>(node)));
+  return HandleOf<NtsDomHTMLInputElement>(nts_dom_is(node, NTS_DOM_HTMLInputElement) ? WrappableOf(node) : nullptr);
 }
 
 const NtsStringView* nts_dom_HTMLInputElement_get_accept(NtsDomHTMLInputElement* self) {
@@ -3158,7 +4377,7 @@ void nts_dom_HTMLInputElement_stepUp_0(NtsDomHTMLInputElement* self, NtsDomExcep
 
 NtsDomHTMLButtonElement* nts_dom_as_HTMLButtonElement(NtsDomNode* node) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomHTMLButtonElement>(blink::DynamicTo<blink::HTMLButtonElement>(ObjectOf<blink::Node>(node)));
+  return HandleOf<NtsDomHTMLButtonElement>(nts_dom_is(node, NTS_DOM_HTMLButtonElement) ? WrappableOf(node) : nullptr);
 }
 
 bool nts_dom_HTMLButtonElement_get_disabled(NtsDomHTMLButtonElement* self) {
@@ -3387,7 +4606,7 @@ void nts_dom_HTMLButtonElement_setCustomValidity(NtsDomHTMLButtonElement* self, 
 
 NtsDomHTMLAnchorElement* nts_dom_as_HTMLAnchorElement(NtsDomNode* node) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomHTMLAnchorElement>(blink::DynamicTo<blink::HTMLAnchorElement>(ObjectOf<blink::Node>(node)));
+  return HandleOf<NtsDomHTMLAnchorElement>(nts_dom_is(node, NTS_DOM_HTMLAnchorElement) ? WrappableOf(node) : nullptr);
 }
 
 const NtsStringView* nts_dom_HTMLAnchorElement_get_download(NtsDomHTMLAnchorElement* self) {
@@ -3825,7 +5044,7 @@ void nts_dom_Event_stopPropagation(NtsDomEvent* self) {
 
 NtsDomUIEvent* nts_dom_as_UIEvent(NtsDomEvent* event) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomUIEvent>(blink::DynamicTo<blink::UIEvent>(ObjectOf<blink::Event>(event)));
+  return HandleOf<NtsDomUIEvent>(nts_dom_is(event, NTS_DOM_UIEvent) ? WrappableOf(event) : nullptr);
 }
 
 double nts_dom_UIEvent_get_detail(NtsDomUIEvent* self) {
@@ -3866,7 +5085,7 @@ void nts_dom_UIEvent_initUIEvent_1(NtsDomUIEvent* self, const NtsBorrowedString*
 
 NtsDomMouseEvent* nts_dom_as_MouseEvent(NtsDomEvent* event) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomMouseEvent>(blink::DynamicTo<blink::MouseEvent>(ObjectOf<blink::Event>(event)));
+  return HandleOf<NtsDomMouseEvent>(nts_dom_is(event, NTS_DOM_MouseEvent) ? WrappableOf(event) : nullptr);
 }
 
 double nts_dom_MouseEvent_get_screenX(NtsDomMouseEvent* self) {
@@ -4021,7 +5240,7 @@ bool nts_dom_MouseEvent_getModifierState(NtsDomMouseEvent* self, const NtsBorrow
 
 NtsDomKeyboardEvent* nts_dom_as_KeyboardEvent(NtsDomEvent* event) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomKeyboardEvent>(blink::DynamicTo<blink::KeyboardEvent>(ObjectOf<blink::Event>(event)));
+  return HandleOf<NtsDomKeyboardEvent>(nts_dom_is(event, NTS_DOM_KeyboardEvent) ? WrappableOf(event) : nullptr);
 }
 
 const NtsStringView* nts_dom_KeyboardEvent_get_key(NtsDomKeyboardEvent* self) {
@@ -4294,7 +5513,7 @@ void nts_dom_CSSStyleDeclaration_setProperty_2(NtsDomCSSStyleDeclaration* self, 
 
 NtsDomComment* nts_dom_as_Comment(NtsDomNode* node) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomComment>(blink::DynamicTo<blink::Comment>(ObjectOf<blink::Node>(node)));
+  return HandleOf<NtsDomComment>(nts_dom_is(node, NTS_DOM_Comment) ? WrappableOf(node) : nullptr);
 }
 
 double nts_dom_NodeList_get_length(NtsDomNodeList* self) {
@@ -4377,6 +5596,11 @@ double nts_dom_DOMRectReadOnly_get_left(NtsDomDOMRectReadOnly* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::DOMRectReadOnly>(self);
   return static_cast<double>(receiver->left());
+}
+
+NtsDomDOMRect* nts_dom_as_DOMRect(NtsDomDOMRectReadOnly* object) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomDOMRect>(nts_dom_is(object, NTS_DOM_DOMRect) ? WrappableOf(object) : nullptr);
 }
 
 double nts_dom_DOMRect_get_x(NtsDomDOMRect* self) {

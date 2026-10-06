@@ -62,7 +62,7 @@ import web_idl  # noqa: E402
 import bind_gen  # noqa: E402
 from bind_gen import interface as bind_interface  # noqa: E402
 from bind_gen import name_style  # noqa: E402
-from bind_gen.blink_v8_bridge import blink_class_name, blink_type_info, native_value_tag  # noqa: E402
+from bind_gen.blink_v8_bridge import blink_class_name, blink_type_info, native_value_tag, v8_bridge_class_name  # noqa: E402
 from bind_gen.code_node import SymbolScopeNode  # noqa: E402
 from bind_gen.codegen_context import CodeGenContext  # noqa: E402
 from bind_gen.path_manager import PathManager  # noqa: E402
@@ -156,6 +156,12 @@ class Generator:
         self.functions = []
         self.members = {}  # interface identifier -> TypeScript member lines
         self.headers = set()
+        # Every interface Blink's core component defines, in a fixed order:
+        # what `instanceof` can be asked of (nts_dom_is), bound or not.
+        self.checkable = sorted((i for i in database.interfaces
+                                 if web_idl.Component("core") in i.components and not i.is_mixin),
+                                key=lambda i: i.identifier)
+        self.interface_id = {i.identifier: index for index, i in enumerate(self.checkable)}
 
     # -- types -----------------------------------------------------------
 
@@ -490,31 +496,19 @@ class Generator:
         return variants
 
     def downcast(self, interface):
-        """`asElement(node)`: the object as an Element, or null -- Blink's
-        `DynamicTo`, the checked narrowing a program needs where the IDL
-        answers a wider type (`firstChild` is a Node, `event.target` an
-        EventTarget). It starts from the class Blink's casts know: a Node
-        for what derives from one, `ToNode()` for a Node from an
-        EventTarget, the hierarchy's root for the rest."""
+        """`asElement(node)`: the object as an Element, or null -- through
+        nts_dom_is, the check V8's binding makes for `instanceof`, so it
+        holds for every interface. It starts from the hierarchy's root
+        (from a Node for what derives from one, which every node has)."""
         identifier = interface.identifier
         root = self.hierarchy_root(interface)
         if root is interface:
             return
-        # DynamicTo needs Blink's DowncastTraits, which the node and event
-        # classes have and others (DOMRect from DOMRectReadOnly) need not;
-        # without RTTI there is no other checked cast to offer.
-        if root.identifier not in ("EventTarget", "Event"):
-            return
-        cls = blink_class_name(interface)
-        if identifier == "Node":
-            source = root.identifier
-            expr = f"ObjectOf<blink::{blink_class_name(root)}>(eventTarget)->ToNode()"
-        else:
-            source = "Node" if "Node" in self.ancestors(interface) and "Node" in self.bound else root.identifier
-            expr = f"blink::DynamicTo<blink::{cls}>(ObjectOf<blink::{source}>({source[0].lower() + source[1:]}))"
+        source = "Node" if "Node" in self.ancestors(interface) and "Node" in self.bound else root.identifier
+        name = {"Node": "node", "EventTarget": "target", "Event": "event"}.get(source, "object")
         tag = self.handle_tag(identifier)
-        name = source[0].lower() + source[1:]
         params = [Param(name, f"{self.handle_tag(source)}* {name}", f"{name}: {source}", "", False)]
+        expr = f"nts_dom_is({name}, NTS_DOM_{identifier}) ? WrappableOf({name}) : nullptr"
         function = Function(interface, f"nts_dom_as_{identifier}", params,
                             Result(f"{tag}*", f"{identifier} | null", "node"), expr, False, False)
         function.downcast = True
@@ -613,6 +607,16 @@ extern "C" {{
 typedef struct NtsDomException NtsDomException;
 {typedefs}
 
+/* Every interface Blink's core component defines, for nts_dom_is: bound or
+ * not, since `instanceof` may name any of them. Stable for one Chromium pin
+ * and allowlist. */
+enum NtsDomInterface {{
+{chr(10).join(f"  NTS_DOM_{i.identifier} = {n}," for n, i in enumerate(self.checkable))}
+}};
+/* `object instanceof <interface>`, as V8's binding answers it: whether the
+ * object's wrapper type is the interface's or derives from it. NULL is no. */
+bool nts_dom_is(const void* object, uint32_t interface_id);
+
 {chr(10).join(prototypes)}
 
 #ifdef __cplusplus
@@ -620,7 +624,8 @@ typedef struct NtsDomException NtsDomException;
 #endif
 #endif
 """
-        includes = "\n".join(f'#include "{path}"' for path in sorted(self.headers))
+        headers = set(self.headers) | {PathManager(i).api_path(ext="h") for i in self.checkable}
+        includes = "\n".join(f'#include "{path}"' for path in sorted(headers))
         adapter = f"""// {banner.replace(chr(10), chr(10) + '// ')}
 #include "nts/dom_idl.h"
 
@@ -652,8 +657,22 @@ class Throws {{
 
 // In Blink's namespace, as the bindings are: bind_gen's expressions name
 // Blink's own (`html_names::kClassAttr`). The symbols are C's either way.
+// What `instanceof` checks against, by NtsDomInterface id: each interface's
+// wrapper type, which knows its parent's.
+constexpr const blink::WrapperTypeInfo* kInterfaces[] = {{
+{chr(10).join(f"    blink::{v8_bridge_class_name(i)}::GetWrapperTypeInfo()," for i in self.checkable)}
+}};
+
+// In Blink's namespace, as the bindings are: bind_gen's expressions name
+// Blink's own (`html_names::kClassAttr`). The symbols are C's either way.
 namespace blink {{
 extern "C" {{
+bool nts_dom_is(const void* object, uint32_t interface_id) {{
+  CHECK_LT(interface_id, std::size(kInterfaces));
+  // As ScriptWrappable::TypeDispatcher::DowncastTo checks: by the IDL.
+  return object && ToWrapperTypeInfo(WrappableOf(object))->IsSubclass(kInterfaces[interface_id]);
+}}
+
 {(chr(10) * 2).join(self.adapter_function(function) for function in self.functions)}
 }}  // extern "C"
 }}  // namespace blink

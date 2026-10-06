@@ -218,7 +218,7 @@ declare module "nts:dom" {
   export type NodeMethods = NodeOwnMethods & EventTargetMethods;
   export type Node = HostClass<"NtsDomNode", EventTarget> & NodeMethods;
   /** @ntsSymbol nts_dom_as_Node */
-  export function asNode(eventTarget: EventTarget): Node | null;
+  export function asNode(target: EventTarget): Node | null;
   export interface ElementOwnMethods {
     /**
      * @ntsSymbol nts_dom_Element_get_namespaceURI
@@ -4444,4 +4444,6 @@ declare module "nts:dom" {
   }
   export type DOMRectMethods = DOMRectOwnMethods & DOMRectReadOnlyMethods;
   export type DOMRect = HostClass<"NtsDomDOMRect", DOMRectReadOnly> & DOMRectMethods;
+  /** @ntsSymbol nts_dom_as_DOMRect */
+  export function asDOMRect(object: DOMRectReadOnly): DOMRect | null;
 }
