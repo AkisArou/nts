@@ -13,7 +13,7 @@
 // oracle defines them (`instanceof`) where the import stood. What a caught
 // error reads as is passed in.
 import { asElement, asHTMLElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
-import type { Document, Element, Event, Node } from "nts:dom";
+import type { Document, Element, Event, Node, Text } from "nts:dom";
 
 export interface VectorHost {
   // "Name: message", the binding's own context prefix left out.
@@ -339,7 +339,52 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   fuzz(d, root, 20261006, log, thrown);
   fuzz(d, root, 7, log, thrown);
   fuzz(d, root, 99991, log, thrown);
+  textFuzz(d, root, 4242, log, thrown);
   return lines.join("\n");
+}
+
+// A seeded walk over CharacterData's offsets, which are `unsigned long`: each
+// crosses as a double and is converted as page script's binding converts it
+// (ToUint32 -- -1 wraps, 2.7 truncates, NaN and the infinities are 0,
+// 2^32 + 1 is 1), then checked against the length (IndexSizeError). Text
+// with a surrogate pair, so an offset can split one.
+function textFuzz(d: Document, root: Element, start: number, log: (label: string, value: string) => void,
+                  thrown: (label: string, run: () => void) => void): void {
+  let seed = start;
+  const next = (n: number): number => {
+    seed = (seed * 48271) % 2147483647;
+    return seed % n;
+  };
+  const offsets = [0, 1, 3, -1, 2.7, 1e10, 0 / 0, 1 / 0, -1 / 0, 4294967297, 4294967295];
+  const words = ["", "x", "é", "😀", "ab"];
+  const holder = d.createElement("p");
+  root.appendChild(holder);
+  const texts: Text[] = [d.createTextNode("héllo wörld"), d.createTextNode(""), d.createTextNode("a😀b")];
+  for (const text of texts) holder.appendChild(text);
+  for (let step = 0; step < 300; step += 1) {
+    const op = next(6);
+    const text = texts[next(texts.length)];
+    const offset = offsets[next(offsets.length)];
+    const count = offsets[next(offsets.length)];
+    const word = words[next(words.length)];
+    const label = "t" + step + "." + op + "@" + offset + "," + count;
+    let answer = "";
+    if (op === 0) {
+      text.appendData(word);
+    } else if (op === 1) {
+      thrown(label, () => { text.deleteData(offset, count); });
+    } else if (op === 2) {
+      thrown(label, () => { text.insertData(offset, word); });
+    } else if (op === 3) {
+      thrown(label, () => { text.replaceData(offset, count, word); });
+    } else if (op === 4) {
+      thrown(label, () => { answer = text.substringData(offset, count); });
+    } else {
+      thrown(label, () => { texts.push(text.splitText(offset)); });
+    }
+    log(label, answer + "|" + text.data + "|" + text.length);
+  }
+  log("textEnd", holder.innerHTML + "|" + texts.length);
 }
 
 // A seeded walk over the tree-editing surface: each step one operation on
