@@ -1739,10 +1739,16 @@ NtsString *nts_encode_uri(const NtsString *s, double component);
  *
  * A reference answers NaN, which is right for a plain object and not the whole
  * rule -- ToNumber of an object is ToPrimitive, and `Number([5])` is 5. The
- * lowering emits this only where the checker's type admits no object. */
-NTS_READS_ONLY double nts_value_to_number(NtsValue value);
-/* The explicit Number() conversion additionally permits bigint. Implicit
- * ToNumber must reject it; lowering supplies its catchable TypeError. */
+ * lowering emits this only where the checker's type admits no object.
+ *
+ * A bigint ends the program by name: implicit ToNumber of one is a TypeError,
+ * which nothing here can throw, and no lowering checks for it first yet. So
+ * this is **not** `NTS_READS_ONLY`: `pure` lets a compiler delete a call
+ * whose result is unused and treats it as one that returns (clang spells it
+ * `willreturn`), and either would drop or misplace the abort. */
+double nts_value_to_number(NtsValue value);
+/* The explicit Number() conversion additionally permits bigint, so it never
+ * reaches the abort above and keeps `NTS_READS_ONLY`. */
 NTS_READS_ONLY double nts_value_to_number_explicit(NtsValue value);
 
 NtsString *nts_str_trim(const NtsString *s);
@@ -3864,7 +3870,9 @@ void nts_promise_reject_with(NtsPromise *result, const NtsPromise *source);
  * caller, and these three are named in `own::RUNTIME_LENDS_A_SLOT`. Retaining
  * here instead would have been the same bug pointing the other way, which is
  * what `nts_array_same` says about its own history. */
-NTS_READS_ONLY NtsValue nts_promise_reason(const NtsPromise *promise);
+/* Not `NTS_READS_ONLY`: it ends the program by name on a promise that is not
+ * rejected, and a `pure` call may be deleted or assumed to return. */
+NtsValue nts_promise_reason(const NtsPromise *promise);
 /* Which of `NTS_PROMISE_PENDING`, `_FULFILLED` and `_REJECTED` a promise is in.
  *
  * A promise's state is not reachable from JavaScript: node reads it through
