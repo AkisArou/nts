@@ -5041,3 +5041,42 @@ double seen_u16(uint16_t v) { return v; }
         }
     }
 }
+
+/// A closure answering a host handle, called through a signature returning
+/// `void`: its erased entry drops the handle, and the drop roots nothing it
+/// does not give back. The codegen-c test checks that no refusal stub is
+/// emitted; this runs it, on both backends, and asks the host: after fifty
+/// more rounds no node is rooted and no release was unbalanced.
+#[test]
+fn a_dropped_host_handle_result_keeps_no_root_on_both_backends() {
+    let source = r#"
+import type { HostClass, c_int } from "c:types";
+type Node = HostClass<"HostNode", null, "host_retain", "host_release">;
+declare function node_at(i: c_int): Node;
+declare function roots_held(): c_int;
+declare function errors_seen(): c_int;
+let calls = 0;
+function invoke(f: () => void): void { f(); calls += 1; }
+export function dropped(): number {
+    invoke(() => node_at(1 as c_int));
+    invoke(() => node_at(2 as c_int));
+    return calls;
+}
+export function roots(): number { return roots_held() as number; }
+export function errors(): number { return errors_seen() as number; }
+"#;
+    let caller = counted_caller(
+        r#"printf("%.0f", dropped());
+  for (int i = 0; i < 50; i++) { dropped(); }
+  printf(" roots=%.0f errors=%.0f", roots(), errors());"#,
+        "",
+    );
+    let Some((_, outputs)) =
+        run_on_both_backends("dropped-host", source, hir::Provider::ReferenceCounting, HOST_LIBRARY, &caller)
+    else {
+        return;
+    };
+    for output in outputs {
+        assert_eq!(output, "2 roots=0 errors=0 leak=0");
+    }
+}
