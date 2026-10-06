@@ -79,13 +79,20 @@ Each fact below was measured on the compiler at 6c08170ef.
   a name lib.dom lacks (`ntsSetAttribute`) binds.
 - **Globals do not.** A tagged `declare var document` is read as a C global
   variable (`v0 = document;`); `@ntsGet` on a global variable is ignored.
-- **Coverage, by `tooling/chromium/bindgen/libdom.py`:**
-  - lib.dom.d.ts declares 1329 members on the 22 interfaces bound today.
-  - 440 are bound and 321 are in Blink's IDL but skipped, with
-    `report.json` saying why.
-  - The rest are not IDL attributes or operations of that interface in
-    Blink: 532 CSS properties (Blink's named-property interceptor), 26
-    constants, 8 iterable members, 2 stringifiers.
+- **Coverage, by `tooling/chromium/bindgen/libdom.py`** (2026-10-06, 45
+  interfaces, 2083 functions):
+  - lib.dom.d.ts declares 1548 members on the bound interfaces.
+  - 1169 are bound, the 532 CSS properties among them. Blink serves those
+    through a named-property interceptor rather than its IDL, so they are
+    generated from lib.dom's own list (`css_properties` in generate.py).
+  - 340 are in Blink's IDL but skipped, and `report.json` says why. The
+    largest groups: 221 result types (dictionaries, sequences, promises,
+    enums), 23 that need a ScriptState, and 16 runtime-enabled members.
+  - The rest are not attributes or operations of that interface in Blink's
+    IDL: 29 constants, 8 iterable members and 2 stringifiers. lib.dom
+    types the constants as literals, so a read could lower to the literal.
+  - Not bound on purpose: the event-handler attributes (`onclick`), whose
+    return value can cancel the event. That needs its own design.
 - **Names line up.** lib.dom.d.ts and Blink's IDL are both WebIDL, so the
   members match name for name.
 
