@@ -27,7 +27,7 @@ const compilerMtime = statSync(nts).mtime.toISOString();
 execFileSync(nts, ["build", resolve(fixture, "tsconfig.json"), "--out", output, "--rc"], {
   cwd: root, stdio: "inherit", env: { ...process.env, NTS_NO_ACQUIRE: "1" },
 });
-const common = [`--sysroot=${sysroot}`, "-std=c11", "-O2", "-fPIC", "-ffunction-sections", "-fdata-sections", "-DNTS_PROVIDER_RC", "-D_GNU_SOURCE", "-I", resolve(lane, "dom/abi"), "-I", resolve(lane, "adapter")];
+const common = [`--sysroot=${sysroot}`, "-std=c11", "-O2", "-fPIC", "-ffunction-sections", "-fdata-sections", "-DNTS_PROVIDER_RC", "-D_GNU_SOURCE", "-I", resolve(lane, "dom/abi"), "-I", resolve(lane, "adapter"), "-I", resolve(lane, "host")];
 const checks = [];
 for (const backend of ["c", "llvm"] as const) {
   const generated = resolve(output, backend === "c" ? "probe" : "probe-llvm", "linux-gnu-x86_64");
@@ -45,14 +45,16 @@ for (const backend of ["c", "llvm"] as const) {
   execFileSync(clang, [...common, "-I", generated, "-c", resolve(generated, "nts_runtime.c"), "-o", runtime], { cwd: root, stdio: "inherit" });
   const shim = resolve(output, `chromium-${backend}-shim.o`);
   execFileSync(clang, [...common, "-I", generated, "-c", resolve(root, "runtime/chromium/embedder/probe.c"), "-o", shim], { cwd: root, stdio: "inherit" });
+  const host = resolve(output, `chromium-${backend}-host.o`);
+  execFileSync(clang, [...common, "-I", generated, "-c", resolve(lane, "host/host.c"), "-o", host], { cwd: root, stdio: "inherit" });
   const archive = resolve(output, `chromium-${backend}-probe.a`);
-  execFileSync(archiver, ["rcs", archive, program, runtime, shim], { cwd: root, stdio: "inherit" });
+  execFileSync(archiver, ["rcs", archive, program, runtime, shim, host], { cwd: root, stdio: "inherit" });
   const executable = resolve(output, `chromium-${backend}-probe`);
   execFileSync(clang, [...common, "-fuse-ld=lld", "-I", generated, resolve(root, "runtime/chromium/embedder/caller.c"),
     archive, "-Wl,--gc-sections", "-lm", "-o", executable], { cwd: root, stdio: "inherit" });
   const observed = execFileSync(executable, [], { encoding: "utf8" }).trim();
   console.log(`${backend}: ${observed}`);
-  checks.push({ backend, observed, archive, archiveSha256: hash(archive), shimSha256: hash(resolve(root, "runtime/chromium/embedder/probe.c")), programSha256: hash(resolve(generated, backend === "c" ? "program.c" : "program.ll")), runtimeSha256: hash(resolve(generated, "nts_runtime.c")) });
+  checks.push({ backend, observed, archive, archiveSha256: hash(archive), shimSha256: hash(resolve(root, "runtime/chromium/embedder/probe.c")), hostSha256: hash(resolve(lane, "host/host.c")), programSha256: hash(resolve(generated, backend === "c" ? "program.c" : "program.ll")), runtimeSha256: hash(resolve(generated, "nts_runtime.c")) });
 }
 if (hash(nts) !== compilerSha256) throw new Error("The NTS compiler binary changed during this check; rerun with a fixed binary");
 writeFileSync(resolve(output, "check-result.json"), `${JSON.stringify({

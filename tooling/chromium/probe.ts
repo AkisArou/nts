@@ -73,6 +73,7 @@ const sources: Record<string, string[]> = {
   "benchmarks/harness": ["binding_benchmark.cc", "binding_benchmark.h", "rows_benchmark.cc", "rows_benchmark.h", "kernels_benchmark.cc", "kernels_benchmark.h"],
   // dom_idl.h is generated from Blink's IDL (tooling/chromium/bindgen).
   "dom/abi": ["dom_abi.h", "dom_idl.h"],
+  host: ["host.c", "host.h"],
 };
 for (const [directory, names] of Object.entries(sources)) {
   for (const name of names) stage(resolve(lane, directory, name), name);

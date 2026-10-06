@@ -4,76 +4,35 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "dom_bridge.h"
 #include "dom_abi.h"
+#include "dom_bridge.h"
+#include "host.h"
 #include "program.h"
 
-/* Stops the renderer saying why. A raise the program left pending is
-   reported as the uncaught error it is, with its message; any other failed
-   check names the function and line it is in. */
-static _Noreturn void probe_fail(const char* function, int line) {
-  if (nts_raising())
-    nts_uncaught(nts_raise_take(), NULL);
-  fprintf(stderr, "nts probe: check failed in %s at line %d\n", function, line);
-  abort();
-}
-#define PROBE_FAIL() probe_fail(__func__, __LINE__)
+#define PROBE_FAIL() NTS_CHROMIUM_HOST_FAIL()
 
+/* The test fixtures' client of the host (host/host.h): what the witnesses,
+   counters and benchmarks hold of the program, beside its environment. */
 struct NtsChromiumProbe {
-  NtsEnvironment* environment;
+  NtsChromiumHost* host;
   ntsChromiumCreateCounter_return_t* counter;
   NtsDomContext* dom;
   NtsPromise* pending;
   pthread_t owner;
   bool collector_queued;
-  size_t entries;
-  bool closing;
-  /* Idle-time cycle collection (nts_chromium_probe_install_host). */
-  bool idle_policy;
-  bool idle_queued;
-  bool idle_running;
 };
 
-typedef struct ProbeScope {
-  NtsEnvironmentScope environment;
-  NtsChromiumProbe* probe;
-} ProbeScope;
-static void finalize_probe(NtsChromiumProbe* probe);
+typedef NtsChromiumHostScope ProbeScope;
 static ProbeScope enter(NtsChromiumProbe* probe) {
-  ++probe->entries;
-  NtsEnvironmentScope scope = nts_environment_enter(probe->environment);
-  /* This entry barrier prevents a legacy landing past the C++ caller. DOM
-     errors return from Blink before the compiled program raises/catches. */
-  nts_callback_enter();
-  nts_enter();
-  return (ProbeScope){scope, probe};
+  return nts_chromium_host_enter(probe->host);
 }
-
-static void idle_collect(void* state);
-static void idle_drop(void* state);
-static void leave(ProbeScope* scope) {
-  NtsChromiumProbe* probe = scope->probe;
-  nts_leave();
-  nts_callback_leave();
-  nts_environment_leave(&scope->environment);
-  if (--probe->entries)
-    return;
-  if (probe->closing) {
-    finalize_probe(probe);
-    return;
-  }
-  /* One idle collection per busy period, never from the collection itself. */
-  if (probe->idle_policy && !probe->idle_queued && !probe->idle_running) {
-    probe->idle_queued = true;
-    nts_blink_dom_post_idle(probe->dom, idle_collect, idle_drop, probe);
-  }
-}
+static void leave(ProbeScope* scope) { nts_chromium_host_leave(scope); }
 
 NtsChromiumProbe* nts_chromium_probe_create(void) {
   NtsChromiumProbe* probe = calloc(1, sizeof(*probe));
   if (!probe)
     PROBE_FAIL();
-  probe->environment = nts_environment_create();
+  probe->host = nts_chromium_host_create();
   return probe;
 }
 
@@ -180,31 +139,18 @@ NtsChromiumCounterResult nts_chromium_probe_counter_increment(
   return result;
 }
 
-static void finalize_probe(NtsChromiumProbe* probe) {
-  NtsEnvironmentScope scope = nts_environment_enter(probe->environment);
-  nts_callback_enter();
-  nts_enter();
+/* What the probe still holds goes back in the environment, before the host
+   checks that nothing of the program remains. */
+static void release_probe(void* state) {
+  NtsChromiumProbe* probe = state;
   nts_release((NtsHeader*)probe->pending);
-  probe->pending = NULL;
   nts_release((NtsHeader*)probe->counter);
-  probe->counter = NULL;
-  nts_collect_cycles();
-  if (nts_live_count() != 0)
-    PROBE_FAIL();
-  nts_leave();
-  nts_callback_leave();
-  nts_environment_leave(&scope);
-  nts_environment_destroy(probe->environment);
   free(probe);
 }
 void nts_chromium_probe_destroy(NtsChromiumProbe* probe) {
   if (!probe)
     return;
-  probe->closing = true;
-  // A synchronous custom-element reaction can dispose the observer while a
-  // compiled call is active. Its outermost entry releases the environment.
-  if (probe->entries == 0)
-    finalize_probe(probe);
+  nts_chromium_host_destroy(probe->host, release_probe, probe);
 }
 
 /* The native task layout stays in C. Blink owns only these opaque envelopes. */
@@ -451,7 +397,7 @@ NtsChromiumBenchmarkStats nts_chromium_benchmark_entries(
      Every measured callback below enters/leaves normally, including its empty
      runtime checkpoint; instrumentation is outside those repeated entries. */
   NtsEnvironmentScope environment =
-      nts_environment_enter(benchmark->probe->environment);
+      nts_chromium_host_select(benchmark->probe->host);
   const size_t before = nts_live_count();
   benchmark->iterations = operations_per_entry;
   benchmark->mode = mode;
@@ -633,58 +579,16 @@ double nts_chromium_kernel_run(NtsChromiumProbe* probe,
   return run.result;
 }
 
-/* A listener's call into the program: the probe's environment entered, as
-   every native callback enters it. A throw cannot cross the C frames of an
-   event dispatch; the closure bridge stops one, so none arrives here. */
-static void invoke_listener(void* host, void (*call)(void*), void* state) {
-  ProbeScope scope = enter(host);
-  call(state);
-  if (nts_raising())
-    PROBE_FAIL();
-  leave(&scope);
-}
 void nts_chromium_probe_attach(NtsChromiumProbe* probe,
                                NtsDomContext* context) {
-  nts_blink_dom_set_invoker(context, invoke_listener, probe);
-}
-
-/* The general renderer host: Blink owns microtasks and checkpoints, and
-   cycle collection runs in idle time instead of at every checkpoint, which
-   costs a walk of everything reachable from the candidates -- the whole
-   application state -- per callback (contracts/compiler-requests.md, 5).
-   The runtime's candidate threshold remains the backstop. */
-static void enqueue_microtask(void* state, NtsTask task) {
-  NtsChromiumProbe* probe = state;
-  QueuedTask* queued = malloc(sizeof(*queued));
-  if (!queued)
-    PROBE_FAIL();
-  *queued = (QueuedTask){probe, task};
-  nts_blink_dom_enqueue(probe->dom, run_native_task, drop_native_task, queued);
+  probe->dom = context;
+  nts_chromium_host_attach(probe->host, context);
 }
 void nts_chromium_probe_install_host(NtsChromiumProbe* probe,
                                      NtsDomContext* context) {
-  ProbeScope scope = enter(probe);
   probe->dom = context;
-  probe->owner = pthread_self();
-  const NtsHost host = {.enqueue_microtask = enqueue_microtask,
-                        .is_owner_thread = on_owner_thread,
-                        .state = probe};
-  nts_host_install(&host);
-  probe->idle_policy = true;
-  leave(&scope);
+  nts_chromium_host_install(probe->host, context);
 }
 void nts_chromium_probe_collect_idle(NtsChromiumProbe* probe) {
-  probe->idle_running = true;
-  ProbeScope scope = enter(probe);
-  nts_collect_cycles();
-  leave(&scope);
-  probe->idle_running = false;
-}
-static void idle_collect(void* state) {
-  NtsChromiumProbe* probe = state;
-  probe->idle_queued = false;
-  nts_chromium_probe_collect_idle(probe);
-}
-static void idle_drop(void* state) {
-  ((NtsChromiumProbe*)state)->idle_queued = false;
+  nts_chromium_host_collect_idle(probe->host);
 }
