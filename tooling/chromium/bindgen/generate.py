@@ -215,9 +215,15 @@ class Generator:
             return Param(name, f"{self.handle_tag(interface.identifier)}* {name}",
                          f"{name}: {interface.identifier}{or_null}", expr, False)
         if unwrapped.is_union:
-            strings = [t for t in unwrapped.flattened_member_types
-                       if t.unwrap().keyword_typename in STRINGS]
-            if len(strings) != 1:
+            members = unwrapped.flattened_member_types
+            strings = [t for t in members if t.unwrap().keyword_typename in STRINGS]
+            # The string is taken only where it is the one primitive member and
+            # the others are interfaces (TrustedScript, TrustedHTML): a union
+            # with several primitive arms (`hidden`'s boolean, double and
+            # string) needs one function per arm, chosen by the value's type,
+            # which an accessor write cannot do yet.
+            primitives = [t for t in members if not t.unwrap().is_interface]
+            if len(strings) != 1 or len(primitives) != 1:
                 raise Skip(f"parameter type {idl_type.syntactic_form}")
             union = blink_type_info(unwrapped).typename
             expr = f"blink::MakeGarbageCollected<blink::{union}>({self.text(strings[0], name)}.Text())"

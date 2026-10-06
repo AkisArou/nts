@@ -569,8 +569,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_trusted_type_policy_factory.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_type_conversions.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_ui_event.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_union_boolean_string_unrestricteddouble.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_union_elementcreationoptions_string.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_string_trustedhtml.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_string_trustedscript.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_stringlegacynulltoemptystring_trustedhtml.h"
@@ -7340,32 +7338,18 @@ NtsDomDocumentFragment* nts_dom_Document_createDocumentFragment(NtsDomDocument* 
   return HandleOf<NtsDomDocumentFragment>(receiver->createDocumentFragment());
 }
 
-NtsDomElement* nts_dom_Document_createElement_1(NtsDomDocument* self, const NtsBorrowedString* localName, NtsDomException** error) {
+NtsDomElement* nts_dom_Document_createElement(NtsDomDocument* self, const NtsBorrowedString* localName, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::Document>(self);
   return HandleOf<NtsDomElement>(receiver->CreateElementForBinding(NtsText(context, localName), exception_state));
 }
 
-NtsDomElement* nts_dom_Document_createElement_2(NtsDomDocument* self, const NtsBorrowedString* localName, const NtsBorrowedString* options, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  auto* receiver = ObjectOf<blink::Document>(self);
-  return HandleOf<NtsDomElement>(receiver->CreateElementForBinding(NtsText(context, localName), blink::MakeGarbageCollected<blink::V8UnionElementCreationOptionsOrString>(NtsText(context, options).Text()), exception_state));
-}
-
-NtsDomElement* nts_dom_Document_createElementNS_2(NtsDomDocument* self, const NtsBorrowedString* namespaceURI, const NtsBorrowedString* qualifiedName, NtsDomException** error) {
+NtsDomElement* nts_dom_Document_createElementNS(NtsDomDocument* self, const NtsBorrowedString* namespaceURI, const NtsBorrowedString* qualifiedName, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::Document>(self);
   return HandleOf<NtsDomElement>(receiver->createElementNS(NtsText(context, namespaceURI), NtsText(context, qualifiedName), exception_state));
-}
-
-NtsDomElement* nts_dom_Document_createElementNS_3(NtsDomDocument* self, const NtsBorrowedString* namespaceURI, const NtsBorrowedString* qualifiedName, const NtsBorrowedString* options, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  auto* receiver = ObjectOf<blink::Document>(self);
-  return HandleOf<NtsDomElement>(receiver->createElementNS(NtsText(context, namespaceURI), NtsText(context, qualifiedName), blink::MakeGarbageCollected<blink::V8UnionElementCreationOptionsOrString>(NtsText(context, options).Text()), exception_state));
 }
 
 NtsDomNode* nts_dom_Document_createNSResolver(NtsDomDocument* self, NtsDomNode* nodeResolver) {
@@ -7707,13 +7691,6 @@ void nts_dom_HTMLElement_set_dir(NtsDomHTMLElement* self, const NtsBorrowedStrin
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::HTMLElement>(self);
   receiver->setDir(NtsText(context, value));
-}
-
-void nts_dom_HTMLElement_set_hidden(NtsDomHTMLElement* self, const NtsBorrowedString* value) {
-  NtsDomContext& context = nts_dom::Current();
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::HTMLElement>(self);
-  receiver->setHidden((value ? blink::MakeGarbageCollected<blink::V8UnionBooleanOrStringOrUnrestrictedDouble>(NtsText(context, value).Text()) : nullptr));
 }
 
 bool nts_dom_HTMLElement_get_inert(NtsDomHTMLElement* self) {

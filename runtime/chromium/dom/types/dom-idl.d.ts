@@ -1814,29 +1814,17 @@ declare module "nts:dom" {
      */
     createDocumentFragment(this: Document): DocumentFragment;
     /**
-     * @ntsSymbol nts_dom_Document_createElement_1
+     * @ntsSymbol nts_dom_Document_createElement
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     createElement(this: Document, localName: StringView, error?: Ptr<DOMException | null>): Element;
     /**
-     * @ntsSymbol nts_dom_Document_createElement_2
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    createElement(this: Document, localName: StringView, options: StringView, error?: Ptr<DOMException | null>): Element;
-    /**
-     * @ntsSymbol nts_dom_Document_createElementNS_2
+     * @ntsSymbol nts_dom_Document_createElementNS
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     createElementNS(this: Document, namespaceURI: StringView | null, qualifiedName: StringView, error?: Ptr<DOMException | null>): Element;
-    /**
-     * @ntsSymbol nts_dom_Document_createElementNS_3
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    createElementNS(this: Document, namespaceURI: StringView | null, qualifiedName: StringView, options: StringView, error?: Ptr<DOMException | null>): Element;
     /**
      * @ntsSymbol nts_dom_Document_createNSResolver
      */
@@ -2123,14 +2111,6 @@ declare module "nts:dom" {
      * @ntsSet _set_dir
      */
     dir: StringView;
-    /**
-     * @ntsSymbol nts_dom_HTMLElement_set_hidden
-     */
-    _set_hidden(this: HTMLElement, value: StringView | null): void;
-    /**
-     * @ntsSet _set_hidden
-     */
-    set hidden(value: StringView | null);
     /**
      * @ntsSymbol nts_dom_HTMLElement_get_inert
      */

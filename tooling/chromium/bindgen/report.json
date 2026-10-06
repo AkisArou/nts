@@ -1,5 +1,5 @@
 {
-  "bound": 2086,
+  "bound": 2083,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -2203,6 +2203,16 @@
     },
     {
       "interface": "Document",
+      "member": "createElement/2",
+      "why": "parameter type (DOMString or ElementCreationOptions)"
+    },
+    {
+      "interface": "Document",
+      "member": "createElementNS/3",
+      "why": "parameter type (DOMString or ElementCreationOptions)"
+    },
+    {
+      "interface": "Document",
       "member": "createEvent/1",
       "why": "[CallWith=ScriptState] needs a script context"
     },
@@ -2410,6 +2420,11 @@
       "interface": "HTMLElement",
       "member": "get hidden",
       "why": "needs ${script_state}"
+    },
+    {
+      "interface": "HTMLElement",
+      "member": "set hidden",
+      "why": "parameter type (boolean or unrestricted double or DOMString)?"
     },
     {
       "interface": "HTMLElement",
