@@ -9214,7 +9214,7 @@ void nts_promise_fulfill_value(NtsPromise *promise, NtsValue value) {
 }
 
 /* Both rejection entry points arrive here after owner/state checks. Store the
- * exact tagged value once; reference ownership uses the existing erased slot. */
+ * exact tagged value once; a reference is owned through the erased slot. */
 static void nts_promise_reject_store(NtsPromise *promise, NtsValue reason) {
   /* Asked **before** settling, because settling consumes the list: it reverses
      the reactions into subscription order and queues them, leaving `reactions`
@@ -9233,9 +9233,10 @@ void nts_promise_reject(NtsPromise *promise, NtsHeader *reason) {
   if (promise->state != NTS_PROMISE_PENDING) {
     return;
   }
-  nts_promise_reject_store(promise, reason
-      ? nts_value_of_reference(reason, nts_tag_of_reference(reason))
-      : nts_value_of_undefined());
+  nts_promise_reject_store(
+      promise,
+      reason ? nts_value_of_reference(reason, nts_tag_of_reference(reason))
+             : nts_value_of_undefined());
 }
 
 void nts_promise_subscribe(NtsPromise *promise, NtsTask reaction) {
@@ -9342,7 +9343,8 @@ void nts_promise_reject_value(NtsPromise *promise, NtsValue reason) {
 
 NtsValue nts_promise_reason(const NtsPromise *promise) {
   if (promise->state != NTS_PROMISE_REJECTED) {
-    fprintf(stderr, "nts: read a rejection reason from a promise that has none\n");
+    fprintf(stderr,
+            "nts: read a rejection reason from a promise that has none\n");
     abort();
   }
   return promise->value;

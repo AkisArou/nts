@@ -74,8 +74,7 @@ static bool same_value(NtsValue left, NtsValue right) {
   }
   if (tag == NTS_TAG_NUMBER) {
     double a = nts_value_number(left), b = nts_value_number(right);
-    return (isnan(a) && isnan(b)) ||
-           (a == b && signbit(a) == signbit(b));
+    return (isnan(a) && isnan(b)) || (a == b && signbit(a) == signbit(b));
   }
   if (tag == NTS_TAG_BOOLEAN) {
     return nts_value_boolean(left) == nts_value_boolean(right);
@@ -109,7 +108,7 @@ static void rejection_roundtrip(NtsValue reason) {
   for (size_t i = 0; i < sizeof(owners) / sizeof(owners[0]); i++) {
     check("rejection forwarding preserves state and complete value",
           nts_promise_is_rejected(owners[i]) &&
-          same_value(nts_promise_reason(owners[i]), reason));
+              same_value(nts_promise_reason(owners[i]), reason));
   }
   if (managed) {
     check("each rejection owner retains once and readback borrows",
@@ -293,9 +292,9 @@ int main(void) {
   }
 
   {
-    NtsValue reasons[] = {number(42.5), number(-0.0), number(NAN),
-                          number(INFINITY), boolean(true), boolean(false),
-                          undefined(), nts_value_of_null()};
+    NtsValue reasons[] = {number(42.5),     number(-0.0),       number(NAN),
+                          number(INFINITY), boolean(true),      boolean(false),
+                          undefined(),      nts_value_of_null()};
     for (size_t i = 0; i < sizeof(reasons) / sizeof(reasons[0]); i++) {
       rejection_roundtrip(reasons[i]);
     }
@@ -303,9 +302,18 @@ int main(void) {
     NtsSymbol *symbol = nts_symbol_new(NULL);
     NtsBigIntBox *wide = nts_bigint_box((__int128)9007199254740993ULL);
     /* Closure layouts are OBJECTs; their FUNCTION tag comes from lowering. */
-    static const NtsDescriptor closure = {
-        NTS_KIND_OBJECT, sizeof(NtsHeader), 0, 1, NULL, NULL, "closure",
-        0, NULL, NTS_ARRAY_UNKNOWN, 0, NULL};
+    static const NtsDescriptor closure = {NTS_KIND_OBJECT,
+                                          sizeof(NtsHeader),
+                                          0,
+                                          1,
+                                          NULL,
+                                          NULL,
+                                          "closure",
+                                          0,
+                                          NULL,
+                                          NTS_ARRAY_UNKNOWN,
+                                          0,
+                                          NULL};
     NtsHeader *function = nts_object_new(&closure);
     NtsPromise *object = nts_promise_new();
     rejection_roundtrip(reference((NtsHeader *)text, NTS_TAG_STRING));
