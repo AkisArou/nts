@@ -127,7 +127,13 @@ pub(super) fn lower(
         }
         return builder.coerce(value, &HirType::Erased, source);
     }
-    if check(builder, id).is_some() && actual_is_unerasable(builder, value) {
+    // Only a check that reads the value's tag needs it erased. A non-null
+    // assertion tests the value's own absence -- for a host handle, a pointer
+    // compared with NULL -- and a handle has no erased form to refuse over
+    // (blockers/a-non-null-assertion-on-a-host-handle-is-refused).
+    if matches!(check(builder, id), Some(Check::Primitive { .. } | Check::Class(_)))
+        && actual_is_unerasable(builder, value)
+    {
         return Err(builder.unsupported(
             id,
             "a checked assertion from a value with no erased representation",

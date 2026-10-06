@@ -1,4 +1,12 @@
-// expect: emit-c --rc -> a checked assertion from a value with no erased representation
+// expect: nothing refused -- FIXED, kept as a guard
+//
+// **FIXED the same day (2026-10-06), and kept as a guard.** The refusal is
+// now asked only of a check that reads the value's tag (a primitive or class
+// assertion); a non-null assertion compares the handle with NULL and raises
+// the TypeError, as the record below says it should.
+//
+// The record of the defect follows unchanged.
+//
 //
 // `asElement(node)!` -- a non-null assertion on a nullable host handle -- is
 // refused since landing-1 (20eaa7d74): the assertion plans a null check and
