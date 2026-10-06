@@ -745,9 +745,10 @@ pub(super) fn analyze(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Analy
         }
     }
     // Source assertions synthesize throws without a THROW_STATEMENT, and so
-    // does `+` of a bigint. Keep their effect at each enclosing expression so
-    // all existing folding and synchronous-call decisions use the same
-    // licence as lowering.
+    // do `+` of a bigint and a dereferenced getter read the checker narrowed
+    // past an absence. Keep their effect at each enclosing expression so all
+    // existing folding and synchronous-call decisions use the same licence as
+    // lowering.
     for (index, node) in snapshot.nodes.iter().enumerate() {
         let nts_semantic_schema::NodeKind::Syntax(kind) = node.kind else {
             continue;
@@ -759,6 +760,7 @@ pub(super) fn analyze(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Analy
         let throws = match kind {
             syntax::AS_EXPRESSION | syntax::NON_NULL_EXPRESSION => super::assertions::can_throw(probe, at),
             syntax::PREFIX_UNARY_EXPRESSION => probe.plus_of_a_bigint(at),
+            syntax::PROPERTY_ACCESS_EXPRESSION => super::assertions::getter_read_can_throw(probe, at),
             _ => false,
         };
         if throws {

@@ -84,10 +84,13 @@ pub(super) fn can_throw(probe: &FuncBuilder<'_>, id: NodeId) -> bool {
             probe.type_of(inner) != Some(HirType::Managed(ManagedType::Object(class)))
                 || removes_absence(probe, inner, id)
         }
+        // Asked of what the operand can produce (`read_type`), not of how the
+        // checker narrowed it: `node.value!` after `node.value = "x"` reads a
+        // getter that can still answer null.
         Some(Check::Present) => {
             probe.type_of(inner).is_some_and(|ty| ty == HirType::Erased)
-                || probe.snapshot.node_types.get(&inner).is_some_and(|ty| {
-                    super::holds_only_absences(probe.snapshot, *ty)
+                || probe.read_type(inner).is_some_and(|ty| {
+                    super::holds_only_absences(probe.snapshot, ty)
                         || probe.snapshot.types.get(ty.0 as usize).is_some_and(|record| {
                             matches!(&record.kind, super::TypeKind::Union(members)
                                 if members.iter().any(|member| super::absence_of_member(probe.snapshot, *member).is_some()))
@@ -319,7 +322,7 @@ fn actual_is_unerasable(builder: &FuncBuilder<'_>, value: ValueId) -> bool {
 /// `=== null`, `??`) is answered from its declaration (`read_type`) instead,
 /// and gives JavaScript's answer rather than a throw.
 pub(super) fn dereferenced_getter_read(builder: &mut FuncBuilder<'_>, id: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
-    if !builder.dereferenced(id) || !builder.narrowed_past_absence(id) {
+    if !getter_read_can_throw(builder, id) {
         return Ok(value);
     }
     if let Some(absent) = builder.absence_of(id, value) {
@@ -332,6 +335,12 @@ pub(super) fn dereferenced_getter_read(builder: &mut FuncBuilder<'_>, id: NodeId
         )?;
     }
     Ok(value)
+}
+
+/// Whether [`dereferenced_getter_read`] checks the read at `id`: one fact for
+/// lowering and for the effect analysis that decides who can catch it.
+pub(super) fn getter_read_can_throw(probe: &FuncBuilder<'_>, id: NodeId) -> bool {
+    probe.kind_of(id) == Some(syntax::PROPERTY_ACCESS_EXPRESSION) && probe.dereferenced(id) && probe.narrowed_past_absence(id)
 }
 
 /// A native safety failure is a checked `TypeError` where the program can
