@@ -35843,7 +35843,6 @@ impl<'a> FuncBuilder<'a> {
             .first()
             .ok_or_else(|| self.unsupported(id, "a `throw` with nothing to throw"))?;
 
-        let origin = self.origin(id);
         // The whole value, not a message taken out of it.
         //
         // What stood here reduced `new Error(m)` to `m`, on the reasoning that
@@ -35857,10 +35856,14 @@ impl<'a> FuncBuilder<'a> {
         // answer to what a handler receives, and taking it means `throw "text"`
         // and `throw new Error(m)` are one operation at one representation
         // rather than two shapes to keep in agreement.
+        //
+        // Through `coerce`, which reads the operand's absences: `throw error`
+        // with `error: Error | null` holding null throws `null`, not an object
+        // tag over a null pointer that is neither `null` nor an `Error`.
         let value = self.lower_expression(thrown)?;
         let thrown_ty = self.values[value.0 as usize].ty.clone();
 
-        let erased = self.erased(value, &origin);
+        let erased = self.coerce(value, &HirType::Erased, thrown)?;
         self.throw_erased(id, value, erased, &thrown_ty)
     }
 
@@ -35959,36 +35962,15 @@ impl<'a> FuncBuilder<'a> {
         // Without this it ended the program: node rejects, and every caller
         // awaiting it sees a rejection rather than a dead process.
         //
-        // The reference and not the erased value, because the runtime holds a
-        // reason as an `NtsHeader *`. A thrown number has none to hold, and
-        // writing one into that slot would be a pointer the collector follows.
+        // The erased value, whatever was thrown: a reason is a tagged slot
+        // (`nts_promise_reject_value`), so `throw 1` rejects with 1 and a
+        // thrown `null` stays `null`. The reference-only `nts_promise_reject`
+        // this once called refused a number outright and read a null
+        // reference as `undefined`.
         if let Some(result) = self.async_result.clone() {
-            if !matches!(thrown_ty, HirType::Managed(_)) {
-                // Except an **erased** one, which is what a rethrow has: a
-                // `finally` that spans an `await` runs and then rejects with
-                // whatever `nts_promise_reason` handed back, and that is
-                // `unknown` because `catch (e)` is. The runtime reads the
-                // reference out of the tag rather than this guessing a type
-                // for it -- a reason is always a reference, and the one place
-                // that knows which is the header.
-                if *thrown_ty != HirType::Erased {
-                    return Err(self.unsupported(
-                        id,
-                        "an `async` function throwing something that is not a reference",
-                    ));
-                }
-                self.runtime_call(
-                    "nts_promise_reject_value",
-                    vec![result.promise, erased],
-                    HirType::Void,
-                    origin,
-                );
-                self.terminate(Terminator::Return(Some(result.promise)));
-                return Ok(());
-            }
             self.runtime_call(
-                "nts_promise_reject",
-                vec![result.promise, value],
+                "nts_promise_reject_value",
+                vec![result.promise, erased],
                 HirType::Void,
                 origin,
             );

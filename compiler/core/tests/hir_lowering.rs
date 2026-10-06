@@ -789,9 +789,10 @@ fn an_async_throw_rejects_its_own_promise() {
     // A `throw` in an `async` function rejects the promise it already owns and
     // hands it back, which is what its `return` does through `settle`. It used
     // to end the program: node rejects, and a caller awaiting it sees a
-    // rejection rather than a dead process.
+    // rejection rather than a dead process. With the tagged value it threw:
+    // a reason is a tagged slot, so a thrown number or `null` stays itself.
     let failing = func(&lowered, "failing");
-    assert!(calls(failing, "nts_promise_reject"));
+    assert!(calls(failing, "nts_promise_reject_value"));
     assert!(
         !calls(failing, "nts_uncaught"),
         "an `async` function has somewhere to put a throw"
