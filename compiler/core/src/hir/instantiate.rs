@@ -670,7 +670,9 @@ impl From<&TypeKind> for CompositeBucket {
 }
 
 /// Immutable snapshot indices. Duplicate records retain the first match, just
-/// as the former table scan did; nominal symbols remain part of every key.
+/// as the former table scan did -- except a function type, which prefers the
+/// record whose signature is the canonical one; nominal symbols remain part of
+/// every key.
 #[derive(Debug, Default)]
 struct LookupIndex {
     signatures: FxHashMap<SignatureBucket, Vec<SignatureId>>,
@@ -694,9 +696,26 @@ impl LookupIndex {
         for (at, record) in snapshot.types.iter().enumerate() {
             let id = TypeId(u32::try_from(at).unwrap_or(u32::MAX));
             match &record.kind {
+                // **The type carrying the canonical signature itself wins over
+                // a duplicate that only matches it.** Anonymous `() => number`
+                // is recorded under several ids -- a parameter's, a callback's,
+                // a copy's return -- and the first in table order is whichever
+                // the program happened to mention first. The checker types a
+                // call's result with the one whose signature is the canonical
+                // id, so a copy of `captured<T>(): () => T` resolving its return
+                // to an earlier duplicate gave the closure a layout under one
+                // id while its call was typed with another (NTS2006, "an object
+                // type with no layout": a-specialized-function-carrying-a-throw).
+                // A duplicate still answers where no exact one carries the
+                // symbol the form needs, which is what matching by shape is for.
                 TypeKind::Function(signature) => {
                     if let Some(first) = canonical.get(signature.0 as usize) {
-                        index.functions.entry((record.symbol, *first)).or_insert(id);
+                        let slot = index.functions.entry((record.symbol, *first)).or_insert(id);
+                        if signature == first && !matches!(snapshot.types.get(slot.0 as usize)
+                            .map(|found| &found.kind), Some(TypeKind::Function(found)) if found == first)
+                        {
+                            *slot = id;
+                        }
                     }
                 }
                 TypeKind::Union(members) => {
