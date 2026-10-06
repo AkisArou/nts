@@ -744,21 +744,25 @@ pub(super) fn analyze(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Analy
             }
         }
     }
-    // Source assertions synthesize throws without a THROW_STATEMENT. Keep
-    // their effect at each enclosing expression so all existing folding and
-    // synchronous-call decisions use the same licence as lowering.
+    // Source assertions synthesize throws without a THROW_STATEMENT, and so
+    // does `+` of a bigint. Keep their effect at each enclosing expression so
+    // all existing folding and synchronous-call decisions use the same
+    // licence as lowering.
     for (index, node) in snapshot.nodes.iter().enumerate() {
-        if matches!(
-            node.kind,
-            nts_semantic_schema::NodeKind::Syntax(
-                syntax::AS_EXPRESSION | syntax::NON_NULL_EXPRESSION
-            )
-        ) && let Ok(index) = u32::try_from(index)
-        {
-            let at = NodeId(index);
-            if super::assertions::can_throw(probe, at) {
-                analysis.preserve_effect(probe, at);
-            }
+        let nts_semantic_schema::NodeKind::Syntax(kind) = node.kind else {
+            continue;
+        };
+        let Ok(index) = u32::try_from(index) else {
+            continue;
+        };
+        let at = NodeId(index);
+        let throws = match kind {
+            syntax::AS_EXPRESSION | syntax::NON_NULL_EXPRESSION => super::assertions::can_throw(probe, at),
+            syntax::PREFIX_UNARY_EXPRESSION => probe.plus_of_a_bigint(at),
+            _ => false,
+        };
+        if throws {
+            analysis.preserve_effect(probe, at);
         }
     }
     analysis

@@ -51097,6 +51097,30 @@ impl<'a> FuncBuilder<'a> {
         )
     }
 
+    /// `+x` with `x` a bigint, which is a `TypeError` whatever the value:
+    /// implicit `ToNumber` of a `BigInt` throws. One fact for the lowering
+    /// ([`Self::throw_to_number_of_a_bigint`]) and for the effect analysis
+    /// that decides which handler can catch it.
+    fn plus_of_a_bigint(&self, id: NodeId) -> bool {
+        self.kind_of(id) == Some(syntax::PREFIX_UNARY_EXPRESSION)
+            && matches!(self.node(id).data, nts_semantic_schema::NodeData::Children { small, .. }
+                if small & syntax::prefix_operator::MASK == syntax::prefix_operator::PLUS)
+            && self.children(id).last().and_then(|operand| self.type_of(*operand)) == Some(HirType::BigInt)
+    }
+
+    /// The `TypeError` `+1n` is. What follows the throw is unreachable, and
+    /// answers NaN only so the expression has a value to be.
+    fn throw_to_number_of_a_bigint(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        self.throw_provided_error(id, "TypeError", "Cannot convert a BigInt value to a number")?;
+        let unreachable = self.new_block();
+        if !self.is_terminated() {
+            self.terminate(Terminator::Jump { target: unreachable, args: Vec::new() });
+        }
+        self.switch_to(unreachable);
+        let origin = self.origin(id);
+        Ok(self.push(OpKind::ConstFloat(f64::NAN), HirType::NUMBER, origin))
+    }
+
     /// `ToNumber(v)`, which `Number(x)` and unary `+` are both spellings of.
     ///
     /// One function because they are one operation. Unary `+` used to be
@@ -52214,6 +52238,9 @@ impl<'a> FuncBuilder<'a> {
         // returning the operand for *every* type answered a string with the
         // string, and the backend then emitted `(double)v1` on a pointer.
         let Some(op) = op else {
+            if self.plus_of_a_bigint(id) {
+                return self.throw_to_number_of_a_bigint(id);
+            }
             return self.coerce_to_number(id, *operand, value);
         };
         // `!x` is `ToBoolean(x)` negated, and `ToBoolean` is a *rule* rather
