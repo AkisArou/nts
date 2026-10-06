@@ -461,6 +461,12 @@ pub(super) fn add_value_fallbacks(
 /// Offer one concrete receiving signature without changing the source object.
 /// Kernel identity includes the actual representation and its source bindings:
 /// equal-width literal/nullable/tuple/nominal contexts must not collide.
+/// Typed contexts a generic function used as a value gets, per declaration,
+/// before its further receiving signatures share the erased root. Its own
+/// budget: independent of the erased-parameter copies (`COPY_CAP` in
+/// `lower/erased_calls.rs`) and of the declaration's direct-call copies.
+pub const VALUE_CONTEXT_CAP: usize = 8;
+
 pub(super) fn add_value_context(
     snapshot: &SemanticSnapshot, templates: &Templates, found: &mut GenericFunctions,
     declaration: NodeId, receiving: TypeId,
@@ -483,7 +489,7 @@ pub(super) fn add_value_context(
         return;
     }
     // Independent of existing direct-call copies and the always-open fallback.
-    if contexts.len() >= 8 { return; }
+    if contexts.len() >= VALUE_CONTEXT_CAP { return; }
     let identity: Vec<_> = generic.type_parameters.iter().map(|parameter| {
         format!("{}@{}", spell(substitution.get(parameter).expect("pinned parameter")),
             sources[parameter].0)
