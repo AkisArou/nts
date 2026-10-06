@@ -192,6 +192,8 @@ generated, and checked against page script by the differential vectors.
 | `el.onclick = f` | `_set_onclick_void(f)`; `_set_onclick_boolean(f)`, whose false cancels | the closure's static result type |
 | `el.onclick = null` | `_set_onclick_null()` | a null write |
 | `style.backgroundColor` | the property `backgroundColor`, on CSSStyleDeclaration | a read or write |
+| `for (const n of nodeList)` | no binding: a loop over `item(i)` while `i < length`, re-reading `length` each step, as `%Array.prototype.values%` does | lowering of a bound indexed collection |
+| `nodeList.forEach(f)` (and `classList.forEach`) | no binding: `length` read once, then `f(item(i), i, list)` for each `i` whose item is still there, as `%Array.prototype.forEach%` does; the closure is called inline and never crosses C | lowering of a value-iterable's `forEach` |
 
 Not bound, by reason:
 
@@ -222,7 +224,8 @@ never replaces page script's.
     lookup, but would have to replicate what setProperty checks.
   - Constants: lib.dom types them as literals, so a read can lower to the
     literal in the compiler.
-  - Iterables (`forEach`, `for...of` over a NodeList).
+  - Iterables: lowered by the compiler over `length` and `item` (the table
+    above), so they need no binding.
   - Stringifiers.
 
 ## The minimal alternative the measurements show (B')
