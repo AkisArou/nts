@@ -3289,7 +3289,23 @@ impl Emitter<'_> {
         {
             code.check_cast(origin, pool, &want);
         }
+        Self::hole_reads_undefined(code, pool, ty, origin);
         Ok(Placed::OnStack)
+    }
+
+    /// An erased element just loaded, with a hole made `undefined`.
+    ///
+    /// A slot nothing stored into is the null reference on this lane, and the
+    /// next tag read of it threw `NullPointerException`; in C the same slot is
+    /// zeroed memory, which *is* `undefined`. Every way an array of erased
+    /// values gets a hole -- `new Array(n)`, a longer `length`, a growable
+    /// array's spare capacity -- reaches one of the three loads that call
+    /// this, so the answer is given at the read rather than at each.
+    /// (`examples/an-erased-array-read-keeps-missing-elements`, `hole`.)
+    fn hole_reads_undefined(code: &mut Code, pool: &mut Pool, ty: &HirType, origin: &nts_semantic_schema::Origin) {
+        if *ty == HirType::Erased {
+            code.invoke_static(origin, pool, types::VALUE, "orUndefined", "(Lnts/rt/NtsValue;)Lnts/rt/NtsValue;");
+        }
     }
 
     /// A growable-array store the middle end proved in range, as the store it
@@ -3510,6 +3526,7 @@ impl Emitter<'_> {
                 {
                     code.check_cast(origin, pool, &want);
                 }
+                Self::hole_reads_undefined(code, pool, ty, origin);
                 Ok(Placed::OnStack)
             }
             OpKind::ArraySet { array, index, value, checked } if self.shape.grows => {
@@ -3547,6 +3564,7 @@ impl Emitter<'_> {
                 self.load(code, pool, *array)?;
                 self.checked_subscript(code, pool, *index, *checked, origin)?;
                 code.array_load(origin, &element);
+                Self::hole_reads_undefined(code, pool, ty, origin);
                 Ok(Placed::OnStack)
             }
             OpKind::ArraySet { array, index, value, checked } => {

@@ -98,6 +98,15 @@ public final class NtsValue {
     public static NtsValue ofStringOrUndefined(String value) {
         return value == null ? UNDEFINED_VALUE : new NtsValue(STRING, 0.0, value);
     }
+    /**
+     * An element read from an array of erased values. A slot nothing stored
+     * into is the null reference here, where C's zeroed memory is already
+     * {@code undefined}: {@code new Array(2)} read at 1 is a hole, and a hole
+     * reads {@code undefined}.
+     */
+    public static NtsValue orUndefined(NtsValue value) {
+        return value == null ? UNDEFINED_VALUE : value;
+    }
     public static boolean asBoolean(NtsValue value) { return value.num != 0.0; }
     /**
      * `Array.isArray`, which is a question about the *value* rather than about
