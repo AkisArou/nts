@@ -1431,8 +1431,12 @@ static void nts_napi_raise(napi_env env, const NtsLanding *landing) {
     case NTS_TAG_STRING:
     case NTS_TAG_BIGINT: {
         napi_value value = NULL;
-        if (nts_to_napi_value(env, thrown, &value) == napi_ok) {
-            napi_throw(env, value);
+        /* A primitive that cannot be made a JavaScript value still throws:
+         * returning with nothing pending would hand the caller `undefined`
+         * as though the call had completed. */
+        if (nts_to_napi_value(env, thrown, &value) != napi_ok
+            || napi_throw(env, value) != napi_ok) {
+            napi_throw_error(env, NULL, "compiled code threw a value that could not cross to JavaScript");
         }
         return;
     }
