@@ -174,6 +174,37 @@ JSON-described SDK could be bound the same way.
    the same closure context each time it is passed, so the adapter can find
    the listener by identity, as the DOM does.
 
+## How nts:dom spells what lib.dom writes as syntax
+
+Some of what a program writes against lib.dom is syntax, not a call: an
+index signature, a rest parameter, a property whose type is a union, a
+handler assignment. nts:dom binds each as named C functions, and the
+compiler half picks one by the use's static types. Every row below is
+generated, and checked against page script by the differential vectors.
+
+| lib.dom.d.ts | nts:dom | chosen by |
+|---|---|---|
+| `el.dataset.userId` (index signature) | `_named_get(name): StringView \| null`; null is `undefined` | a read |
+| `el.dataset.userId = v` | `_named_set(name, value)` | a write |
+| `delete el.dataset.userId` | `_named_delete(name)`: always true, as in page script | `delete` |
+| `el.append(...nodes: (Node \| string)[])` | `append_<arms>`, 0 to 3 arguments, each arm `n` (node) or `s` (string): `append_ns`, and `append_0` for none | the arguments' static types |
+| `el.hidden = v` (`boolean \| "until-found"`) | `_set_hidden_boolean`, `_set_hidden_string`, `_set_hidden_number` | the value's static type |
+| `el.onclick = f` | `_set_onclick_void(f)`; `_set_onclick_boolean(f)`, whose false cancels | the closure's static result type |
+| `el.onclick = null` | `_set_onclick_null()` | a null write |
+| `style.backgroundColor` | the property `backgroundColor`, on CSSStyleDeclaration | a read or write |
+
+Not bound, by reason:
+
+- The getters of `onclick` and `hidden`. One would answer the program's own
+  closure, and the other's Blink side builds a V8 value directly.
+- More than three variadic arguments.
+- Members that need a ScriptState, or a runtime-enabled feature
+  (`report.json`).
+
+The handler slot is the program's own, as an isolated world's is. Page
+script's `el.onclick` neither sees nor replaces it, and the program's write
+never replaces page script's.
+
 ## What the Chromium lane does either way
 
 - Bind numbers as WebIDL does. A `number` crosses as a `double`, and the
@@ -186,11 +217,13 @@ JSON-described SDK could be bound the same way.
   `listen`.
 - Measure lib.dom coverage on every generation (`libdom.py`), and bind the
   categories it shows:
-  - CSS properties, one function per `CSSPropertyID`, which skips the name
-    lookup page script's interceptor does;
-  - constants;
-  - iterables;
-  - stringifiers.
+  - CSS properties: done, as CSSOM's setProperty with the dashed name,
+    which is exact. A `CSSPropertyID` per property would skip one name
+    lookup, but would have to replicate what setProperty checks.
+  - Constants: lib.dom types them as literals, so a read can lower to the
+    literal in the compiler.
+  - Iterables (`forEach`, `for...of` over a NodeList).
+  - Stringifiers.
 
 ## The minimal alternative the measurements show (B')
 
