@@ -12,7 +12,7 @@
 
 use super::facts::Facts;
 use super::flow::Analysis;
-use super::{Func, OpKind, ValueId};
+use super::{Func, HirType, OpKind, ValueId};
 
 /// Replace pure operations of known result with constants, and report how many.
 pub fn fold(func: &mut Func, analysis: &Analysis) -> usize {
@@ -41,7 +41,17 @@ pub fn fold(func: &mut Func, analysis: &Analysis) -> usize {
         if !exactly_one_value(facts) {
             continue;
         }
-        func.values[index].kind = OpKind::ConstFloat(facts.lo);
+        // The constant takes the value's own type. An integer -- a C integer's
+        // argument after `ToInt32` and its `Convert` -- is an integer constant;
+        // a float constant typed `i32` is something C converts silently and
+        // LLVM rejects (`'%v12' defined with type 'double' but expected 'i32'`).
+        // Anything that is not a number keeps its operation.
+        func.values[index].kind = match func.values[index].ty {
+            HirType::Float { .. } => OpKind::ConstFloat(facts.lo),
+            #[allow(clippy::cast_possible_truncation)]
+            HirType::Int { .. } if facts.lo.fract() == 0.0 => OpKind::ConstInt(facts.lo as i128),
+            _ => continue,
+        };
         folded += 1;
     }
     folded
