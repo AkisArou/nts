@@ -12,7 +12,7 @@
 // Page script has no `asText`/`asHTMLElement`/`asHTMLInputElement`; the
 // oracle defines them (`instanceof`) where the import stood. What a caught
 // error reads as is passed in.
-import { asHTMLElement, asHTMLInputElement, asText } from "nts:dom";
+import { asHTMLElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
 import type { Document, Element, Node } from "nts:dom";
 
 export interface VectorHost {
@@ -202,6 +202,33 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   log("camelRemoved", box.style.borderTopWidth + "|" + box.style.cssText);
   box.style.webkitLineClamp = "2";
   log("webkitCased", box.style.webkitLineClamp + "|" + box.style.getPropertyValue("-webkit-line-clamp"));
+
+  // Form controls and a table: a textarea's value, a select's options and
+  // selection, rows and cells inserted at the end and at an index.
+  const area = asHTMLTextAreaElement(d.createElement("textarea"))!;
+  root.appendChild(area);
+  area.value = "two\nlines";
+  log("textarea", area.value.length + "|" + area.textLength + "|" + area.rows);
+  const select = asHTMLSelectElement(d.createElement("select"))!;
+  root.appendChild(select);
+  for (let i = 0; i < 3; i += 1) {
+    const option = asHTMLOptionElement(d.createElement("option"))!;
+    option.value = "v" + i;
+    option.textContent = "Option " + i;
+    select.appendChild(option);
+  }
+  select.selectedIndex = 2;
+  log("select", select.value + "|" + select.selectedIndex + "|" + select.length);
+  select.value = "v1";
+  log("selectByValue", "" + select.selectedIndex);
+  const table = asHTMLTableElement(d.createElement("table"))!;
+  root.appendChild(table);
+  const last = table.insertRow();
+  last.insertCell().textContent = "end";
+  const head = table.insertRow(0);
+  head.insertCell().textContent = "start";
+  log("table", table.rows.length + "|" + describe(table.rows.item(0)) + "|" + shown(table.textContent));
+  thrown("insertRowRange", () => { table.insertRow(9); });
 
   // What the members raise: each exception's name and Blink's message.
   thrown("syntax", () => { d.querySelector("["); });

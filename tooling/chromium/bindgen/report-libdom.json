@@ -1,25 +1,26 @@
 {
   "libDom": "third_party/typescript-go/internal/bundled/libs/lib.dom.d.ts",
   "totals": {
-    "bound": 972,
-    "skipped": 321,
-    "absent: constant": 26,
+    "bound": 1170,
+    "skipped": 339,
+    "absent: constant": 29,
     "absent: stringifier": 2,
     "absent: iterable": 8
   },
   "skippedBy": {
-    "result type": 218,
-    "[CallWith=ScriptState] needs": 20,
+    "result type": 221,
+    "[CallWith=ScriptState] needs": 23,
     "[RuntimeEnabled]": 16,
     "variadic (Node": 15,
+    "defined in": 8,
     "interface Attr": 7,
-    "defined in": 5,
-    "parameter type": 4,
+    "parameter type": 6,
+    "interface ValidityState": 4,
     "interface HTMLSlotElement": 2,
     "interface ShadowRoot": 2,
     "interface Range": 2,
     "interface Window": 2,
-    "interface ValidityState": 2,
+    "interface HTMLTableCaptionElement": 2,
     "interface NamedNodeMap": 1,
     "interface StylePropertyMapReadOnly": 1,
     "interface DOMRectList": 1,
@@ -45,7 +46,10 @@
     "interface StylePropertyMap": 1,
     "interface DOMStringMap": 1,
     "interface FileList": 1,
-    "interface CSSRule": 1
+    "interface CSSRule": 1,
+    "interface HTMLFormControlsCollection": 1,
+    "interface HTMLOptionsCollection": 1,
+    "interface DataTransfer": 1
   },
   "interfaces": {
     "EventTarget": {
@@ -1541,6 +1545,373 @@
         "y"
       ],
       "skipped": {},
+      "absent": {}
+    },
+    "HTMLDivElement": {
+      "bound": [
+        "align"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLSpanElement": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLParagraphElement": {
+      "bound": [
+        "align"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLLabelElement": {
+      "bound": [
+        "control",
+        "form",
+        "htmlFor"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLUListElement": {
+      "bound": [
+        "compact",
+        "type"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLOListElement": {
+      "bound": [
+        "compact",
+        "reversed",
+        "start",
+        "type"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLLIElement": {
+      "bound": [
+        "type",
+        "value"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLFormElement": {
+      "bound": [
+        "acceptCharset",
+        "action",
+        "autocomplete",
+        "checkValidity",
+        "encoding",
+        "enctype",
+        "length",
+        "method",
+        "name",
+        "noValidate",
+        "rel",
+        "relList",
+        "reportValidity",
+        "requestSubmit",
+        "reset",
+        "submit",
+        "target"
+      ],
+      "skipped": {
+        "elements": "interface HTMLFormControlsCollection is not bound"
+      },
+      "absent": {}
+    },
+    "HTMLSelectElement": {
+      "bound": [
+        "autocomplete",
+        "checkValidity",
+        "disabled",
+        "form",
+        "item",
+        "labels",
+        "length",
+        "multiple",
+        "name",
+        "namedItem",
+        "remove",
+        "reportValidity",
+        "required",
+        "selectedIndex",
+        "selectedOptions",
+        "setCustomValidity",
+        "showPicker",
+        "size",
+        "type",
+        "validationMessage",
+        "value",
+        "willValidate"
+      ],
+      "skipped": {
+        "add": "parameter type (HTMLOptionElement or HTMLOptGroupElement)",
+        "options": "interface HTMLOptionsCollection is not bound",
+        "validity": "interface ValidityState is not bound"
+      },
+      "absent": {}
+    },
+    "HTMLOptionElement": {
+      "bound": [
+        "defaultSelected",
+        "disabled",
+        "form",
+        "index",
+        "label",
+        "selected",
+        "text",
+        "value"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLTextAreaElement": {
+      "bound": [
+        "autocomplete",
+        "checkValidity",
+        "cols",
+        "defaultValue",
+        "dirName",
+        "disabled",
+        "form",
+        "labels",
+        "maxLength",
+        "minLength",
+        "name",
+        "placeholder",
+        "readOnly",
+        "reportValidity",
+        "required",
+        "rows",
+        "select",
+        "selectionDirection",
+        "selectionEnd",
+        "selectionStart",
+        "setCustomValidity",
+        "setRangeText",
+        "setSelectionRange",
+        "textLength",
+        "type",
+        "validationMessage",
+        "value",
+        "willValidate",
+        "wrap"
+      ],
+      "skipped": {
+        "validity": "interface ValidityState is not bound"
+      },
+      "absent": {}
+    },
+    "HTMLImageElement": {
+      "bound": [
+        "align",
+        "alt",
+        "border",
+        "complete",
+        "crossOrigin",
+        "currentSrc",
+        "decoding",
+        "fetchPriority",
+        "height",
+        "hspace",
+        "isMap",
+        "loading",
+        "longDesc",
+        "lowsrc",
+        "name",
+        "naturalHeight",
+        "naturalWidth",
+        "referrerPolicy",
+        "sizes",
+        "src",
+        "srcset",
+        "useMap",
+        "vspace",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {
+        "decode": "[CallWith=ScriptState] needs a script context"
+      },
+      "absent": {}
+    },
+    "HTMLCanvasElement": {
+      "bound": [
+        "height",
+        "toDataURL",
+        "width"
+      ],
+      "skipped": {
+        "captureStream": "defined in Blink's modules component; the adapter links core",
+        "getContext": "defined in Blink's modules component; the adapter links core",
+        "toBlob": "parameter type BlobCallback",
+        "transferControlToOffscreen": "defined in Blink's modules component; the adapter links core"
+      },
+      "absent": {}
+    },
+    "HTMLTableElement": {
+      "bound": [
+        "align",
+        "bgColor",
+        "border",
+        "cellPadding",
+        "cellSpacing",
+        "createTBody",
+        "createTFoot",
+        "createTHead",
+        "deleteCaption",
+        "deleteRow",
+        "deleteTFoot",
+        "deleteTHead",
+        "frame",
+        "insertRow",
+        "rows",
+        "rules",
+        "summary",
+        "tBodies",
+        "tFoot",
+        "tHead",
+        "width"
+      ],
+      "skipped": {
+        "caption": "interface HTMLTableCaptionElement is not bound",
+        "createCaption": "interface HTMLTableCaptionElement is not bound"
+      },
+      "absent": {}
+    },
+    "HTMLTableSectionElement": {
+      "bound": [
+        "align",
+        "ch",
+        "chOff",
+        "deleteRow",
+        "insertRow",
+        "rows",
+        "vAlign"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLTableRowElement": {
+      "bound": [
+        "align",
+        "bgColor",
+        "cells",
+        "ch",
+        "chOff",
+        "deleteCell",
+        "insertCell",
+        "rowIndex",
+        "sectionRowIndex",
+        "vAlign"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLTableCellElement": {
+      "bound": [
+        "abbr",
+        "align",
+        "axis",
+        "bgColor",
+        "cellIndex",
+        "ch",
+        "chOff",
+        "colSpan",
+        "headers",
+        "height",
+        "noWrap",
+        "rowSpan",
+        "scope",
+        "vAlign",
+        "width"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLTemplateElement": {
+      "bound": [
+        "content",
+        "shadowRootClonable",
+        "shadowRootCustomElementRegistry",
+        "shadowRootDelegatesFocus",
+        "shadowRootMode",
+        "shadowRootSerializable"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "FocusEvent": {
+      "bound": [
+        "relatedTarget"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "InputEvent": {
+      "bound": [
+        "data",
+        "inputType",
+        "isComposing"
+      ],
+      "skipped": {
+        "dataTransfer": "interface DataTransfer is not bound",
+        "getTargetRanges": "result type sequence<StaticRange>"
+      },
+      "absent": {}
+    },
+    "PointerEvent": {
+      "bound": [
+        "altitudeAngle",
+        "azimuthAngle",
+        "height",
+        "isPrimary",
+        "persistentDeviceId",
+        "pointerId",
+        "pointerType",
+        "pressure",
+        "tangentialPressure",
+        "tiltX",
+        "tiltY",
+        "twist",
+        "width"
+      ],
+      "skipped": {
+        "getCoalescedEvents": "result type sequence<PointerEvent>",
+        "getPredictedEvents": "result type sequence<PointerEvent>"
+      },
+      "absent": {}
+    },
+    "WheelEvent": {
+      "bound": [
+        "deltaMode",
+        "deltaX",
+        "deltaY",
+        "deltaZ"
+      ],
+      "skipped": {},
+      "absent": {
+        "constant": [
+          "DOM_DELTA_LINE",
+          "DOM_DELTA_PAGE",
+          "DOM_DELTA_PIXEL"
+        ]
+      }
+    },
+    "CustomEvent": {
+      "bound": [],
+      "skipped": {
+        "detail": "[CallWith=ScriptState] needs a script context",
+        "initCustomEvent": "[CallWith=ScriptState] needs a script context"
+      },
       "absent": {}
     }
   }

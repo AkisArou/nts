@@ -339,7 +339,7 @@ interface CountQueuingStrategy {}
  */
 interface CustomElementRegistry {}
 /**
- * @ntsBoundBy "nts:dom" Event
+ * @ntsBoundBy "nts:dom" CustomEvent
  * @ntsIs nts_dom_is 114
  */
 interface CustomEvent {}
@@ -488,7 +488,7 @@ interface FileList {}
  */
 interface FileReader {}
 /**
- * @ntsBoundBy "nts:dom" UIEvent
+ * @ntsBoundBy "nts:dom" FocusEvent
  * @ntsIs nts_dom_is 162
  */
 interface FocusEvent {}
@@ -575,7 +575,7 @@ interface HTMLBodyElement {}
  */
 interface HTMLButtonElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLCanvasElement
  * @ntsIs nts_dom_is 184
  */
 interface HTMLCanvasElement {}
@@ -615,7 +615,7 @@ interface HTMLDialogElement {}
  */
 interface HTMLDirectoryElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLDivElement
  * @ntsIs nts_dom_is 193
  */
 interface HTMLDivElement {}
@@ -650,7 +650,7 @@ interface HTMLFontElement {}
  */
 interface HTMLFormControlsCollection {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLFormElement
  * @ntsIs nts_dom_is 201
  */
 interface HTMLFormElement {}
@@ -690,7 +690,7 @@ interface HTMLHtmlElement {}
  */
 interface HTMLIFrameElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLImageElement
  * @ntsIs nts_dom_is 210
  */
 interface HTMLImageElement {}
@@ -700,12 +700,12 @@ interface HTMLImageElement {}
  */
 interface HTMLInputElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLLIElement
  * @ntsIs nts_dom_is 213
  */
 interface HTMLLIElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLLabelElement
  * @ntsIs nts_dom_is 214
  */
 interface HTMLLabelElement {}
@@ -755,7 +755,7 @@ interface HTMLMeterElement {}
  */
 interface HTMLModElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLOListElement
  * @ntsIs nts_dom_is 229
  */
 interface HTMLOListElement {}
@@ -770,7 +770,7 @@ interface HTMLObjectElement {}
  */
 interface HTMLOptGroupElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLOptionElement
  * @ntsIs nts_dom_is 232
  */
 interface HTMLOptionElement {}
@@ -785,7 +785,7 @@ interface HTMLOptionsCollection {}
  */
 interface HTMLOutputElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLParagraphElement
  * @ntsIs nts_dom_is 235
  */
 interface HTMLParagraphElement {}
@@ -820,7 +820,7 @@ interface HTMLQuoteElement {}
  */
 interface HTMLScriptElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLSelectElement
  * @ntsIs nts_dom_is 242
  */
 interface HTMLSelectElement {}
@@ -835,7 +835,7 @@ interface HTMLSlotElement {}
  */
 interface HTMLSourceElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLSpanElement
  * @ntsIs nts_dom_is 246
  */
 interface HTMLSpanElement {}
@@ -850,7 +850,7 @@ interface HTMLStyleElement {}
  */
 interface HTMLTableCaptionElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLTableCellElement
  * @ntsIs nts_dom_is 251
  */
 interface HTMLTableCellElement {}
@@ -860,27 +860,27 @@ interface HTMLTableCellElement {}
  */
 interface HTMLTableColElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLTableElement
  * @ntsIs nts_dom_is 253
  */
 interface HTMLTableElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLTableRowElement
  * @ntsIs nts_dom_is 254
  */
 interface HTMLTableRowElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLTableSectionElement
  * @ntsIs nts_dom_is 255
  */
 interface HTMLTableSectionElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLTemplateElement
  * @ntsIs nts_dom_is 256
  */
 interface HTMLTemplateElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLTextAreaElement
  * @ntsIs nts_dom_is 257
  */
 interface HTMLTextAreaElement {}
@@ -900,7 +900,7 @@ interface HTMLTitleElement {}
  */
 interface HTMLTrackElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLUListElement
  * @ntsIs nts_dom_is 261
  */
 interface HTMLUListElement {}
@@ -948,7 +948,7 @@ interface ImageBitmap {}
  */
 interface ImageData {}
 /**
- * @ntsBoundBy "nts:dom" UIEvent
+ * @ntsBoundBy "nts:dom" InputEvent
  * @ntsIs nts_dom_is 276
  */
 interface InputEvent {}
@@ -1159,7 +1159,7 @@ interface PerformanceServerTiming {}
  */
 interface PerformanceTiming {}
 /**
- * @ntsBoundBy "nts:dom" MouseEvent
+ * @ntsBoundBy "nts:dom" PointerEvent
  * @ntsIs nts_dom_is 375
  */
 interface PointerEvent {}
@@ -1899,7 +1899,7 @@ interface ViewTransitionTypeSet {}
  */
 interface VisualViewport {}
 /**
- * @ntsBoundBy "nts:dom" MouseEvent
+ * @ntsBoundBy "nts:dom" WheelEvent
  * @ntsIs nts_dom_is 581
  */
 interface WheelEvent {}

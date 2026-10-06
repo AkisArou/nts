@@ -12426,4 +12426,2323 @@ declare module "nts:dom" {
   export type DOMRect = HostClass<"NtsDomDOMRect", DOMRectReadOnly> & DOMRectMethods;
   /** @ntsSymbol nts_dom_as_DOMRect */
   export function asDOMRect(object: DOMRectReadOnly): DOMRect | null;
+  export interface HTMLDivElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLDivElement_get_align
+     */
+    _get_align(this: HTMLDivElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLDivElement_set_align
+     */
+    _set_align(this: HTMLDivElement, value: StringView): void;
+    /**
+     * @ntsGet _get_align
+     * @ntsSet _set_align
+     */
+    align: StringView;
+  }
+  export type HTMLDivElementMethods = HTMLDivElementOwnMethods & HTMLElementMethods;
+  export type HTMLDivElement = HostClass<"NtsDomHTMLDivElement", HTMLElement> & HTMLDivElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLDivElement */
+  export function asHTMLDivElement(node: Node): HTMLDivElement | null;
+  export interface HTMLSpanElementOwnMethods {
+  }
+  export type HTMLSpanElementMethods = HTMLSpanElementOwnMethods & HTMLElementMethods;
+  export type HTMLSpanElement = HostClass<"NtsDomHTMLSpanElement", HTMLElement> & HTMLSpanElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLSpanElement */
+  export function asHTMLSpanElement(node: Node): HTMLSpanElement | null;
+  export interface HTMLParagraphElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLParagraphElement_get_align
+     */
+    _get_align(this: HTMLParagraphElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLParagraphElement_set_align
+     */
+    _set_align(this: HTMLParagraphElement, value: StringView): void;
+    /**
+     * @ntsGet _get_align
+     * @ntsSet _set_align
+     */
+    align: StringView;
+  }
+  export type HTMLParagraphElementMethods = HTMLParagraphElementOwnMethods & HTMLElementMethods;
+  export type HTMLParagraphElement = HostClass<"NtsDomHTMLParagraphElement", HTMLElement> & HTMLParagraphElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLParagraphElement */
+  export function asHTMLParagraphElement(node: Node): HTMLParagraphElement | null;
+  export interface HTMLLabelElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLLabelElement_get_form
+     */
+    _get_form(this: HTMLLabelElement): HTMLElement | null;
+    /**
+     * @ntsGet _get_form
+     */
+    readonly form: HTMLElement | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLLabelElement_get_htmlFor
+     */
+    _get_htmlFor(this: HTMLLabelElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLabelElement_set_htmlFor
+     */
+    _set_htmlFor(this: HTMLLabelElement, value: StringView): void;
+    /**
+     * @ntsGet _get_htmlFor
+     * @ntsSet _set_htmlFor
+     */
+    htmlFor: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLabelElement_get_control
+     */
+    _get_control(this: HTMLLabelElement): HTMLElement | null;
+    /**
+     * @ntsGet _get_control
+     */
+    readonly control: HTMLElement | null;
+  }
+  export type HTMLLabelElementMethods = HTMLLabelElementOwnMethods & HTMLElementMethods;
+  export type HTMLLabelElement = HostClass<"NtsDomHTMLLabelElement", HTMLElement> & HTMLLabelElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLLabelElement */
+  export function asHTMLLabelElement(node: Node): HTMLLabelElement | null;
+  export interface HTMLUListElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLUListElement_get_compact
+     */
+    _get_compact(this: HTMLUListElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLUListElement_set_compact
+     */
+    _set_compact(this: HTMLUListElement, value: boolean): void;
+    /**
+     * @ntsGet _get_compact
+     * @ntsSet _set_compact
+     */
+    compact: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLUListElement_get_type
+     */
+    _get_type(this: HTMLUListElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLUListElement_set_type
+     */
+    _set_type(this: HTMLUListElement, value: StringView): void;
+    /**
+     * @ntsGet _get_type
+     * @ntsSet _set_type
+     */
+    type: StringView;
+  }
+  export type HTMLUListElementMethods = HTMLUListElementOwnMethods & HTMLElementMethods;
+  export type HTMLUListElement = HostClass<"NtsDomHTMLUListElement", HTMLElement> & HTMLUListElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLUListElement */
+  export function asHTMLUListElement(node: Node): HTMLUListElement | null;
+  export interface HTMLOListElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLOListElement_get_reversed
+     */
+    _get_reversed(this: HTMLOListElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLOListElement_set_reversed
+     */
+    _set_reversed(this: HTMLOListElement, value: boolean): void;
+    /**
+     * @ntsGet _get_reversed
+     * @ntsSet _set_reversed
+     */
+    reversed: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLOListElement_get_start
+     */
+    _get_start(this: HTMLOListElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLOListElement_set_start
+     */
+    _set_start(this: HTMLOListElement, value: CNumber<"double">): void;
+    /**
+     * @ntsGet _get_start
+     * @ntsSet _set_start
+     */
+    start: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLOListElement_get_type
+     */
+    _get_type(this: HTMLOListElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLOListElement_set_type
+     */
+    _set_type(this: HTMLOListElement, value: StringView): void;
+    /**
+     * @ntsGet _get_type
+     * @ntsSet _set_type
+     */
+    type: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLOListElement_get_compact
+     */
+    _get_compact(this: HTMLOListElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLOListElement_set_compact
+     */
+    _set_compact(this: HTMLOListElement, value: boolean): void;
+    /**
+     * @ntsGet _get_compact
+     * @ntsSet _set_compact
+     */
+    compact: boolean;
+  }
+  export type HTMLOListElementMethods = HTMLOListElementOwnMethods & HTMLElementMethods;
+  export type HTMLOListElement = HostClass<"NtsDomHTMLOListElement", HTMLElement> & HTMLOListElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLOListElement */
+  export function asHTMLOListElement(node: Node): HTMLOListElement | null;
+  export interface HTMLLIElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLLIElement_get_value
+     */
+    _get_value(this: HTMLLIElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLLIElement_set_value
+     */
+    _set_value(this: HTMLLIElement, value: CNumber<"double">): void;
+    /**
+     * @ntsGet _get_value
+     * @ntsSet _set_value
+     */
+    value: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLLIElement_get_type
+     */
+    _get_type(this: HTMLLIElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLIElement_set_type
+     */
+    _set_type(this: HTMLLIElement, value: StringView): void;
+    /**
+     * @ntsGet _get_type
+     * @ntsSet _set_type
+     */
+    type: StringView;
+  }
+  export type HTMLLIElementMethods = HTMLLIElementOwnMethods & HTMLElementMethods;
+  export type HTMLLIElement = HostClass<"NtsDomHTMLLIElement", HTMLElement> & HTMLLIElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLLIElement */
+  export function asHTMLLIElement(node: Node): HTMLLIElement | null;
+  export interface HTMLFormElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_get_acceptCharset
+     */
+    _get_acceptCharset(this: HTMLFormElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_set_acceptCharset
+     */
+    _set_acceptCharset(this: HTMLFormElement, value: StringView): void;
+    /**
+     * @ntsGet _get_acceptCharset
+     * @ntsSet _set_acceptCharset
+     */
+    acceptCharset: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_get_action
+     */
+    _get_action(this: HTMLFormElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_set_action
+     */
+    _set_action(this: HTMLFormElement, value: StringView): void;
+    /**
+     * @ntsGet _get_action
+     * @ntsSet _set_action
+     */
+    action: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_get_autocomplete
+     */
+    _get_autocomplete(this: HTMLFormElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_set_autocomplete
+     */
+    _set_autocomplete(this: HTMLFormElement, value: StringView): void;
+    /**
+     * @ntsGet _get_autocomplete
+     * @ntsSet _set_autocomplete
+     */
+    autocomplete: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_get_enctype
+     */
+    _get_enctype(this: HTMLFormElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_set_enctype
+     */
+    _set_enctype(this: HTMLFormElement, value: StringView): void;
+    /**
+     * @ntsGet _get_enctype
+     * @ntsSet _set_enctype
+     */
+    enctype: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_get_encoding
+     */
+    _get_encoding(this: HTMLFormElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_set_encoding
+     */
+    _set_encoding(this: HTMLFormElement, value: StringView): void;
+    /**
+     * @ntsGet _get_encoding
+     * @ntsSet _set_encoding
+     */
+    encoding: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_get_method
+     */
+    _get_method(this: HTMLFormElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_set_method
+     */
+    _set_method(this: HTMLFormElement, value: StringView): void;
+    /**
+     * @ntsGet _get_method
+     * @ntsSet _set_method
+     */
+    method: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_get_name
+     */
+    _get_name(this: HTMLFormElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_set_name
+     */
+    _set_name(this: HTMLFormElement, value: StringView): void;
+    /**
+     * @ntsGet _get_name
+     * @ntsSet _set_name
+     */
+    name: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_get_noValidate
+     */
+    _get_noValidate(this: HTMLFormElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_set_noValidate
+     */
+    _set_noValidate(this: HTMLFormElement, value: boolean): void;
+    /**
+     * @ntsGet _get_noValidate
+     * @ntsSet _set_noValidate
+     */
+    noValidate: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_get_target
+     */
+    _get_target(this: HTMLFormElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_set_target
+     */
+    _set_target(this: HTMLFormElement, value: StringView): void;
+    /**
+     * @ntsGet _get_target
+     * @ntsSet _set_target
+     */
+    target: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_get_rel
+     */
+    _get_rel(this: HTMLFormElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_set_rel
+     */
+    _set_rel(this: HTMLFormElement, value: StringView): void;
+    /**
+     * @ntsGet _get_rel
+     * @ntsSet _set_rel
+     */
+    rel: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_get_relList
+     */
+    _get_relList(this: HTMLFormElement): DOMTokenList;
+    /**
+     * @ntsGet _get_relList
+     */
+    readonly relList: DOMTokenList;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_get_length
+     */
+    _get_length(this: HTMLFormElement): CNumber<"double">;
+    /**
+     * @ntsGet _get_length
+     */
+    readonly length: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_checkValidity
+     */
+    checkValidity(this: HTMLFormElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_reportValidity
+     */
+    reportValidity(this: HTMLFormElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_requestSubmit_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    requestSubmit(this: HTMLFormElement, submitter: HTMLElement | null, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_requestSubmit_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    requestSubmit(this: HTMLFormElement, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_reset
+     */
+    reset(this: HTMLFormElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLFormElement_submit
+     */
+    submit(this: HTMLFormElement): void;
+  }
+  export type HTMLFormElementMethods = HTMLFormElementOwnMethods & HTMLElementMethods;
+  export type HTMLFormElement = HostClass<"NtsDomHTMLFormElement", HTMLElement> & HTMLFormElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLFormElement */
+  export function asHTMLFormElement(node: Node): HTMLFormElement | null;
+  export interface HTMLSelectElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_get_autocomplete
+     */
+    _get_autocomplete(this: HTMLSelectElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_set_autocomplete
+     */
+    _set_autocomplete(this: HTMLSelectElement, value: StringView): void;
+    /**
+     * @ntsGet _get_autocomplete
+     * @ntsSet _set_autocomplete
+     */
+    autocomplete: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_get_disabled
+     */
+    _get_disabled(this: HTMLSelectElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_set_disabled
+     */
+    _set_disabled(this: HTMLSelectElement, value: boolean): void;
+    /**
+     * @ntsGet _get_disabled
+     * @ntsSet _set_disabled
+     */
+    disabled: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_get_form
+     */
+    _get_form(this: HTMLSelectElement): HTMLElement | null;
+    /**
+     * @ntsGet _get_form
+     */
+    readonly form: HTMLElement | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_get_multiple
+     */
+    _get_multiple(this: HTMLSelectElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_set_multiple
+     */
+    _set_multiple(this: HTMLSelectElement, value: boolean): void;
+    /**
+     * @ntsGet _get_multiple
+     * @ntsSet _set_multiple
+     */
+    multiple: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_get_name
+     */
+    _get_name(this: HTMLSelectElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_set_name
+     */
+    _set_name(this: HTMLSelectElement, value: StringView): void;
+    /**
+     * @ntsGet _get_name
+     * @ntsSet _set_name
+     */
+    name: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_get_required
+     */
+    _get_required(this: HTMLSelectElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_set_required
+     */
+    _set_required(this: HTMLSelectElement, value: boolean): void;
+    /**
+     * @ntsGet _get_required
+     * @ntsSet _set_required
+     */
+    required: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_get_size
+     */
+    _get_size(this: HTMLSelectElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_set_size
+     */
+    _set_size(this: HTMLSelectElement, value: CNumber<"double">): void;
+    /**
+     * @ntsGet _get_size
+     * @ntsSet _set_size
+     */
+    size: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_get_type
+     */
+    _get_type(this: HTMLSelectElement): StringView;
+    /**
+     * @ntsGet _get_type
+     */
+    readonly type: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_get_length
+     */
+    _get_length(this: HTMLSelectElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_set_length
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_length(this: HTMLSelectElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_length
+     * @ntsSet _set_length
+     */
+    length: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_get_selectedOptions
+     */
+    _get_selectedOptions(this: HTMLSelectElement): HTMLCollection;
+    /**
+     * @ntsGet _get_selectedOptions
+     */
+    readonly selectedOptions: HTMLCollection;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_get_selectedIndex
+     */
+    _get_selectedIndex(this: HTMLSelectElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_set_selectedIndex
+     */
+    _set_selectedIndex(this: HTMLSelectElement, value: CNumber<"double">): void;
+    /**
+     * @ntsGet _get_selectedIndex
+     * @ntsSet _set_selectedIndex
+     */
+    selectedIndex: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_get_value
+     */
+    _get_value(this: HTMLSelectElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_set_value
+     */
+    _set_value(this: HTMLSelectElement, value: StringView): void;
+    /**
+     * @ntsGet _get_value
+     * @ntsSet _set_value
+     */
+    value: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_get_willValidate
+     */
+    _get_willValidate(this: HTMLSelectElement): boolean;
+    /**
+     * @ntsGet _get_willValidate
+     */
+    readonly willValidate: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_get_validationMessage
+     */
+    _get_validationMessage(this: HTMLSelectElement): StringView;
+    /**
+     * @ntsGet _get_validationMessage
+     */
+    readonly validationMessage: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_get_labels
+     */
+    _get_labels(this: HTMLSelectElement): NodeList;
+    /**
+     * @ntsGet _get_labels
+     */
+    readonly labels: NodeList;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_checkValidity
+     */
+    checkValidity(this: HTMLSelectElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_item
+     */
+    item(this: HTMLSelectElement, index: CNumber<"double">): Element | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_namedItem
+     */
+    namedItem(this: HTMLSelectElement, name: StringView): HTMLOptionElement | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_remove_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    remove(this: HTMLSelectElement, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_remove_1
+     */
+    remove(this: HTMLSelectElement, index: CNumber<"double">): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_reportValidity
+     */
+    reportValidity(this: HTMLSelectElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_setCustomValidity
+     */
+    setCustomValidity(this: HTMLSelectElement, error_: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_showPicker
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    showPicker(this: HTMLSelectElement, error?: Ptr<DOMException | null>): void;
+  }
+  export type HTMLSelectElementMethods = HTMLSelectElementOwnMethods & HTMLElementMethods;
+  export type HTMLSelectElement = HostClass<"NtsDomHTMLSelectElement", HTMLElement> & HTMLSelectElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLSelectElement */
+  export function asHTMLSelectElement(node: Node): HTMLSelectElement | null;
+  export interface HTMLOptionElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLOptionElement_get_disabled
+     */
+    _get_disabled(this: HTMLOptionElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLOptionElement_set_disabled
+     */
+    _set_disabled(this: HTMLOptionElement, value: boolean): void;
+    /**
+     * @ntsGet _get_disabled
+     * @ntsSet _set_disabled
+     */
+    disabled: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLOptionElement_get_form
+     */
+    _get_form(this: HTMLOptionElement): HTMLElement | null;
+    /**
+     * @ntsGet _get_form
+     */
+    readonly form: HTMLElement | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLOptionElement_get_label
+     */
+    _get_label(this: HTMLOptionElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLOptionElement_set_label
+     */
+    _set_label(this: HTMLOptionElement, value: StringView): void;
+    /**
+     * @ntsGet _get_label
+     * @ntsSet _set_label
+     */
+    label: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLOptionElement_get_defaultSelected
+     */
+    _get_defaultSelected(this: HTMLOptionElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLOptionElement_set_defaultSelected
+     */
+    _set_defaultSelected(this: HTMLOptionElement, value: boolean): void;
+    /**
+     * @ntsGet _get_defaultSelected
+     * @ntsSet _set_defaultSelected
+     */
+    defaultSelected: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLOptionElement_get_selected
+     */
+    _get_selected(this: HTMLOptionElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLOptionElement_set_selected
+     */
+    _set_selected(this: HTMLOptionElement, value: boolean): void;
+    /**
+     * @ntsGet _get_selected
+     * @ntsSet _set_selected
+     */
+    selected: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLOptionElement_get_value
+     */
+    _get_value(this: HTMLOptionElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLOptionElement_set_value
+     */
+    _set_value(this: HTMLOptionElement, value: StringView): void;
+    /**
+     * @ntsGet _get_value
+     * @ntsSet _set_value
+     */
+    value: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLOptionElement_get_text
+     */
+    _get_text(this: HTMLOptionElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLOptionElement_set_text
+     */
+    _set_text(this: HTMLOptionElement, value: StringView): void;
+    /**
+     * @ntsGet _get_text
+     * @ntsSet _set_text
+     */
+    text: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLOptionElement_get_index
+     */
+    _get_index(this: HTMLOptionElement): CNumber<"double">;
+    /**
+     * @ntsGet _get_index
+     */
+    readonly index: CNumber<"double">;
+  }
+  export type HTMLOptionElementMethods = HTMLOptionElementOwnMethods & HTMLElementMethods;
+  export type HTMLOptionElement = HostClass<"NtsDomHTMLOptionElement", HTMLElement> & HTMLOptionElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLOptionElement */
+  export function asHTMLOptionElement(node: Node): HTMLOptionElement | null;
+  export interface HTMLTextAreaElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_autocomplete
+     */
+    _get_autocomplete(this: HTMLTextAreaElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_set_autocomplete
+     */
+    _set_autocomplete(this: HTMLTextAreaElement, value: StringView): void;
+    /**
+     * @ntsGet _get_autocomplete
+     * @ntsSet _set_autocomplete
+     */
+    autocomplete: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_cols
+     */
+    _get_cols(this: HTMLTextAreaElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_set_cols
+     */
+    _set_cols(this: HTMLTextAreaElement, value: CNumber<"double">): void;
+    /**
+     * @ntsGet _get_cols
+     * @ntsSet _set_cols
+     */
+    cols: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_dirName
+     */
+    _get_dirName(this: HTMLTextAreaElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_set_dirName
+     */
+    _set_dirName(this: HTMLTextAreaElement, value: StringView): void;
+    /**
+     * @ntsGet _get_dirName
+     * @ntsSet _set_dirName
+     */
+    dirName: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_disabled
+     */
+    _get_disabled(this: HTMLTextAreaElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_set_disabled
+     */
+    _set_disabled(this: HTMLTextAreaElement, value: boolean): void;
+    /**
+     * @ntsGet _get_disabled
+     * @ntsSet _set_disabled
+     */
+    disabled: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_form
+     */
+    _get_form(this: HTMLTextAreaElement): HTMLElement | null;
+    /**
+     * @ntsGet _get_form
+     */
+    readonly form: HTMLElement | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_maxLength
+     */
+    _get_maxLength(this: HTMLTextAreaElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_set_maxLength
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_maxLength(this: HTMLTextAreaElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_maxLength
+     * @ntsSet _set_maxLength
+     */
+    maxLength: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_minLength
+     */
+    _get_minLength(this: HTMLTextAreaElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_set_minLength
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_minLength(this: HTMLTextAreaElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_minLength
+     * @ntsSet _set_minLength
+     */
+    minLength: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_name
+     */
+    _get_name(this: HTMLTextAreaElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_set_name
+     */
+    _set_name(this: HTMLTextAreaElement, value: StringView): void;
+    /**
+     * @ntsGet _get_name
+     * @ntsSet _set_name
+     */
+    name: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_placeholder
+     */
+    _get_placeholder(this: HTMLTextAreaElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_set_placeholder
+     */
+    _set_placeholder(this: HTMLTextAreaElement, value: StringView): void;
+    /**
+     * @ntsGet _get_placeholder
+     * @ntsSet _set_placeholder
+     */
+    placeholder: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_readOnly
+     */
+    _get_readOnly(this: HTMLTextAreaElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_set_readOnly
+     */
+    _set_readOnly(this: HTMLTextAreaElement, value: boolean): void;
+    /**
+     * @ntsGet _get_readOnly
+     * @ntsSet _set_readOnly
+     */
+    readOnly: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_required
+     */
+    _get_required(this: HTMLTextAreaElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_set_required
+     */
+    _set_required(this: HTMLTextAreaElement, value: boolean): void;
+    /**
+     * @ntsGet _get_required
+     * @ntsSet _set_required
+     */
+    required: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_rows
+     */
+    _get_rows(this: HTMLTextAreaElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_set_rows
+     */
+    _set_rows(this: HTMLTextAreaElement, value: CNumber<"double">): void;
+    /**
+     * @ntsGet _get_rows
+     * @ntsSet _set_rows
+     */
+    rows: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_wrap
+     */
+    _get_wrap(this: HTMLTextAreaElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_set_wrap
+     */
+    _set_wrap(this: HTMLTextAreaElement, value: StringView): void;
+    /**
+     * @ntsGet _get_wrap
+     * @ntsSet _set_wrap
+     */
+    wrap: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_type
+     */
+    _get_type(this: HTMLTextAreaElement): StringView;
+    /**
+     * @ntsGet _get_type
+     */
+    readonly type: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_defaultValue
+     */
+    _get_defaultValue(this: HTMLTextAreaElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_set_defaultValue
+     */
+    _set_defaultValue(this: HTMLTextAreaElement, value: StringView): void;
+    /**
+     * @ntsGet _get_defaultValue
+     * @ntsSet _set_defaultValue
+     */
+    defaultValue: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_value
+     */
+    _get_value(this: HTMLTextAreaElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_set_value
+     */
+    _set_value(this: HTMLTextAreaElement, value: StringView): void;
+    /**
+     * @ntsGet _get_value
+     * @ntsSet _set_value
+     */
+    value: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_textLength
+     */
+    _get_textLength(this: HTMLTextAreaElement): CNumber<"double">;
+    /**
+     * @ntsGet _get_textLength
+     */
+    readonly textLength: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_willValidate
+     */
+    _get_willValidate(this: HTMLTextAreaElement): boolean;
+    /**
+     * @ntsGet _get_willValidate
+     */
+    readonly willValidate: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_validationMessage
+     */
+    _get_validationMessage(this: HTMLTextAreaElement): StringView;
+    /**
+     * @ntsGet _get_validationMessage
+     */
+    readonly validationMessage: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_labels
+     */
+    _get_labels(this: HTMLTextAreaElement): NodeList;
+    /**
+     * @ntsGet _get_labels
+     */
+    readonly labels: NodeList;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_selectionStart
+     */
+    _get_selectionStart(this: HTMLTextAreaElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_set_selectionStart
+     */
+    _set_selectionStart(this: HTMLTextAreaElement, value: CNumber<"double">): void;
+    /**
+     * @ntsGet _get_selectionStart
+     * @ntsSet _set_selectionStart
+     */
+    selectionStart: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_selectionEnd
+     */
+    _get_selectionEnd(this: HTMLTextAreaElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_set_selectionEnd
+     */
+    _set_selectionEnd(this: HTMLTextAreaElement, value: CNumber<"double">): void;
+    /**
+     * @ntsGet _get_selectionEnd
+     * @ntsSet _set_selectionEnd
+     */
+    selectionEnd: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_selectionDirection
+     */
+    _get_selectionDirection(this: HTMLTextAreaElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_set_selectionDirection
+     */
+    _set_selectionDirection(this: HTMLTextAreaElement, value: StringView): void;
+    /**
+     * @ntsGet _get_selectionDirection
+     * @ntsSet _set_selectionDirection
+     */
+    selectionDirection: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_checkValidity
+     */
+    checkValidity(this: HTMLTextAreaElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_reportValidity
+     */
+    reportValidity(this: HTMLTextAreaElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_select
+     */
+    select(this: HTMLTextAreaElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_setCustomValidity
+     */
+    setCustomValidity(this: HTMLTextAreaElement, error_: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_setRangeText
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setRangeText(this: HTMLTextAreaElement, replacement: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_setSelectionRange_3
+     */
+    setSelectionRange(this: HTMLTextAreaElement, start: CNumber<"double">, end: CNumber<"double">, direction: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_setSelectionRange_2
+     */
+    setSelectionRange(this: HTMLTextAreaElement, start: CNumber<"double">, end: CNumber<"double">): void;
+  }
+  export type HTMLTextAreaElementMethods = HTMLTextAreaElementOwnMethods & HTMLElementMethods;
+  export type HTMLTextAreaElement = HostClass<"NtsDomHTMLTextAreaElement", HTMLElement> & HTMLTextAreaElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLTextAreaElement */
+  export function asHTMLTextAreaElement(node: Node): HTMLTextAreaElement | null;
+  export interface HTMLImageElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_alt
+     */
+    _get_alt(this: HTMLImageElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_set_alt
+     */
+    _set_alt(this: HTMLImageElement, value: StringView): void;
+    /**
+     * @ntsGet _get_alt
+     * @ntsSet _set_alt
+     */
+    alt: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_src
+     */
+    _get_src(this: HTMLImageElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_set_src
+     */
+    _set_src(this: HTMLImageElement, value: StringView): void;
+    /**
+     * @ntsGet _get_src
+     * @ntsSet _set_src
+     */
+    src: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_srcset
+     */
+    _get_srcset(this: HTMLImageElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_set_srcset
+     */
+    _set_srcset(this: HTMLImageElement, value: StringView): void;
+    /**
+     * @ntsGet _get_srcset
+     * @ntsSet _set_srcset
+     */
+    srcset: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_sizes
+     */
+    _get_sizes(this: HTMLImageElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_set_sizes
+     */
+    _set_sizes(this: HTMLImageElement, value: StringView): void;
+    /**
+     * @ntsGet _get_sizes
+     * @ntsSet _set_sizes
+     */
+    sizes: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_crossOrigin
+     */
+    _get_crossOrigin(this: HTMLImageElement): StringView | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_set_crossOrigin
+     */
+    _set_crossOrigin(this: HTMLImageElement, value: StringView | null): void;
+    /**
+     * @ntsGet _get_crossOrigin
+     * @ntsSet _set_crossOrigin
+     */
+    crossOrigin: StringView | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_useMap
+     */
+    _get_useMap(this: HTMLImageElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_set_useMap
+     */
+    _set_useMap(this: HTMLImageElement, value: StringView): void;
+    /**
+     * @ntsGet _get_useMap
+     * @ntsSet _set_useMap
+     */
+    useMap: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_isMap
+     */
+    _get_isMap(this: HTMLImageElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_set_isMap
+     */
+    _set_isMap(this: HTMLImageElement, value: boolean): void;
+    /**
+     * @ntsGet _get_isMap
+     * @ntsSet _set_isMap
+     */
+    isMap: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_width
+     */
+    _get_width(this: HTMLImageElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_set_width
+     */
+    _set_width(this: HTMLImageElement, value: CNumber<"double">): void;
+    /**
+     * @ntsGet _get_width
+     * @ntsSet _set_width
+     */
+    width: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_height
+     */
+    _get_height(this: HTMLImageElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_set_height
+     */
+    _set_height(this: HTMLImageElement, value: CNumber<"double">): void;
+    /**
+     * @ntsGet _get_height
+     * @ntsSet _set_height
+     */
+    height: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_naturalWidth
+     */
+    _get_naturalWidth(this: HTMLImageElement): CNumber<"double">;
+    /**
+     * @ntsGet _get_naturalWidth
+     */
+    readonly naturalWidth: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_naturalHeight
+     */
+    _get_naturalHeight(this: HTMLImageElement): CNumber<"double">;
+    /**
+     * @ntsGet _get_naturalHeight
+     */
+    readonly naturalHeight: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_complete
+     */
+    _get_complete(this: HTMLImageElement): boolean;
+    /**
+     * @ntsGet _get_complete
+     */
+    readonly complete: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_currentSrc
+     */
+    _get_currentSrc(this: HTMLImageElement): StringView;
+    /**
+     * @ntsGet _get_currentSrc
+     */
+    readonly currentSrc: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_referrerPolicy
+     */
+    _get_referrerPolicy(this: HTMLImageElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_set_referrerPolicy
+     */
+    _set_referrerPolicy(this: HTMLImageElement, value: StringView): void;
+    /**
+     * @ntsGet _get_referrerPolicy
+     * @ntsSet _set_referrerPolicy
+     */
+    referrerPolicy: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_decoding
+     */
+    _get_decoding(this: HTMLImageElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_set_decoding
+     */
+    _set_decoding(this: HTMLImageElement, value: StringView): void;
+    /**
+     * @ntsGet _get_decoding
+     * @ntsSet _set_decoding
+     */
+    decoding: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_fetchPriority
+     */
+    _get_fetchPriority(this: HTMLImageElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_set_fetchPriority
+     */
+    _set_fetchPriority(this: HTMLImageElement, value: StringView): void;
+    /**
+     * @ntsGet _get_fetchPriority
+     * @ntsSet _set_fetchPriority
+     */
+    fetchPriority: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_loading
+     */
+    _get_loading(this: HTMLImageElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_set_loading
+     */
+    _set_loading(this: HTMLImageElement, value: StringView): void;
+    /**
+     * @ntsGet _get_loading
+     * @ntsSet _set_loading
+     */
+    loading: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_name
+     */
+    _get_name(this: HTMLImageElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_set_name
+     */
+    _set_name(this: HTMLImageElement, value: StringView): void;
+    /**
+     * @ntsGet _get_name
+     * @ntsSet _set_name
+     */
+    name: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_lowsrc
+     */
+    _get_lowsrc(this: HTMLImageElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_set_lowsrc
+     */
+    _set_lowsrc(this: HTMLImageElement, value: StringView): void;
+    /**
+     * @ntsGet _get_lowsrc
+     * @ntsSet _set_lowsrc
+     */
+    lowsrc: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_align
+     */
+    _get_align(this: HTMLImageElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_set_align
+     */
+    _set_align(this: HTMLImageElement, value: StringView): void;
+    /**
+     * @ntsGet _get_align
+     * @ntsSet _set_align
+     */
+    align: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_hspace
+     */
+    _get_hspace(this: HTMLImageElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_set_hspace
+     */
+    _set_hspace(this: HTMLImageElement, value: CNumber<"double">): void;
+    /**
+     * @ntsGet _get_hspace
+     * @ntsSet _set_hspace
+     */
+    hspace: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_vspace
+     */
+    _get_vspace(this: HTMLImageElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_set_vspace
+     */
+    _set_vspace(this: HTMLImageElement, value: CNumber<"double">): void;
+    /**
+     * @ntsGet _get_vspace
+     * @ntsSet _set_vspace
+     */
+    vspace: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_longDesc
+     */
+    _get_longDesc(this: HTMLImageElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_set_longDesc
+     */
+    _set_longDesc(this: HTMLImageElement, value: StringView): void;
+    /**
+     * @ntsGet _get_longDesc
+     * @ntsSet _set_longDesc
+     */
+    longDesc: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_border
+     */
+    _get_border(this: HTMLImageElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_set_border
+     */
+    _set_border(this: HTMLImageElement, value: StringView): void;
+    /**
+     * @ntsGet _get_border
+     * @ntsSet _set_border
+     */
+    border: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_x
+     */
+    _get_x(this: HTMLImageElement): CNumber<"double">;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_y
+     */
+    _get_y(this: HTMLImageElement): CNumber<"double">;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_get_attributionSrc
+     */
+    _get_attributionSrc(this: HTMLImageElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_set_attributionSrc
+     */
+    _set_attributionSrc(this: HTMLImageElement, value: StringView): void;
+    /**
+     * @ntsGet _get_attributionSrc
+     * @ntsSet _set_attributionSrc
+     */
+    attributionSrc: StringView;
+  }
+  export type HTMLImageElementMethods = HTMLImageElementOwnMethods & HTMLElementMethods;
+  export type HTMLImageElement = HostClass<"NtsDomHTMLImageElement", HTMLElement> & HTMLImageElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLImageElement */
+  export function asHTMLImageElement(node: Node): HTMLImageElement | null;
+  export interface HTMLCanvasElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLCanvasElement_get_width
+     */
+    _get_width(this: HTMLCanvasElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLCanvasElement_set_width
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_width(this: HTMLCanvasElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_width
+     * @ntsSet _set_width
+     */
+    width: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLCanvasElement_get_height
+     */
+    _get_height(this: HTMLCanvasElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLCanvasElement_set_height
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_height(this: HTMLCanvasElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_height
+     * @ntsSet _set_height
+     */
+    height: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLCanvasElement_toDataURL_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    toDataURL(this: HTMLCanvasElement, type: StringView, error?: Ptr<DOMException | null>): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLCanvasElement_toDataURL_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    toDataURL(this: HTMLCanvasElement, error?: Ptr<DOMException | null>): StringView;
+  }
+  export type HTMLCanvasElementMethods = HTMLCanvasElementOwnMethods & HTMLElementMethods;
+  export type HTMLCanvasElement = HostClass<"NtsDomHTMLCanvasElement", HTMLElement> & HTMLCanvasElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLCanvasElement */
+  export function asHTMLCanvasElement(node: Node): HTMLCanvasElement | null;
+  export interface HTMLTableElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_get_tHead
+     */
+    _get_tHead(this: HTMLTableElement): HTMLTableSectionElement | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_set_tHead
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_tHead(this: HTMLTableElement, value: HTMLTableSectionElement | null, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_tHead
+     * @ntsSet _set_tHead
+     */
+    tHead: HTMLTableSectionElement | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_get_tFoot
+     */
+    _get_tFoot(this: HTMLTableElement): HTMLTableSectionElement | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_set_tFoot
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_tFoot(this: HTMLTableElement, value: HTMLTableSectionElement | null, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_tFoot
+     * @ntsSet _set_tFoot
+     */
+    tFoot: HTMLTableSectionElement | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_get_tBodies
+     */
+    _get_tBodies(this: HTMLTableElement): HTMLCollection;
+    /**
+     * @ntsGet _get_tBodies
+     */
+    readonly tBodies: HTMLCollection;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_get_rows
+     */
+    _get_rows(this: HTMLTableElement): HTMLCollection;
+    /**
+     * @ntsGet _get_rows
+     */
+    readonly rows: HTMLCollection;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_get_align
+     */
+    _get_align(this: HTMLTableElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_set_align
+     */
+    _set_align(this: HTMLTableElement, value: StringView): void;
+    /**
+     * @ntsGet _get_align
+     * @ntsSet _set_align
+     */
+    align: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_get_border
+     */
+    _get_border(this: HTMLTableElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_set_border
+     */
+    _set_border(this: HTMLTableElement, value: StringView): void;
+    /**
+     * @ntsGet _get_border
+     * @ntsSet _set_border
+     */
+    border: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_get_frame
+     */
+    _get_frame(this: HTMLTableElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_set_frame
+     */
+    _set_frame(this: HTMLTableElement, value: StringView): void;
+    /**
+     * @ntsGet _get_frame
+     * @ntsSet _set_frame
+     */
+    frame: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_get_rules
+     */
+    _get_rules(this: HTMLTableElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_set_rules
+     */
+    _set_rules(this: HTMLTableElement, value: StringView): void;
+    /**
+     * @ntsGet _get_rules
+     * @ntsSet _set_rules
+     */
+    rules: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_get_summary
+     */
+    _get_summary(this: HTMLTableElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_set_summary
+     */
+    _set_summary(this: HTMLTableElement, value: StringView): void;
+    /**
+     * @ntsGet _get_summary
+     * @ntsSet _set_summary
+     */
+    summary: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_get_width
+     */
+    _get_width(this: HTMLTableElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_set_width
+     */
+    _set_width(this: HTMLTableElement, value: StringView): void;
+    /**
+     * @ntsGet _get_width
+     * @ntsSet _set_width
+     */
+    width: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_get_bgColor
+     */
+    _get_bgColor(this: HTMLTableElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_set_bgColor
+     */
+    _set_bgColor(this: HTMLTableElement, value: StringView): void;
+    /**
+     * @ntsGet _get_bgColor
+     * @ntsSet _set_bgColor
+     */
+    bgColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_get_cellPadding
+     */
+    _get_cellPadding(this: HTMLTableElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_set_cellPadding
+     */
+    _set_cellPadding(this: HTMLTableElement, value: StringView): void;
+    /**
+     * @ntsGet _get_cellPadding
+     * @ntsSet _set_cellPadding
+     */
+    cellPadding: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_get_cellSpacing
+     */
+    _get_cellSpacing(this: HTMLTableElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_set_cellSpacing
+     */
+    _set_cellSpacing(this: HTMLTableElement, value: StringView): void;
+    /**
+     * @ntsGet _get_cellSpacing
+     * @ntsSet _set_cellSpacing
+     */
+    cellSpacing: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_createTBody
+     */
+    createTBody(this: HTMLTableElement): HTMLTableSectionElement;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_createTFoot
+     */
+    createTFoot(this: HTMLTableElement): HTMLTableSectionElement;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_createTHead
+     */
+    createTHead(this: HTMLTableElement): HTMLTableSectionElement;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_deleteCaption
+     */
+    deleteCaption(this: HTMLTableElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_deleteRow
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    deleteRow(this: HTMLTableElement, index: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_deleteTFoot
+     */
+    deleteTFoot(this: HTMLTableElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_deleteTHead
+     */
+    deleteTHead(this: HTMLTableElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_insertRow_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    insertRow(this: HTMLTableElement, index: CNumber<"double">, error?: Ptr<DOMException | null>): HTMLTableRowElement;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_insertRow_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    insertRow(this: HTMLTableElement, error?: Ptr<DOMException | null>): HTMLTableRowElement;
+  }
+  export type HTMLTableElementMethods = HTMLTableElementOwnMethods & HTMLElementMethods;
+  export type HTMLTableElement = HostClass<"NtsDomHTMLTableElement", HTMLElement> & HTMLTableElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLTableElement */
+  export function asHTMLTableElement(node: Node): HTMLTableElement | null;
+  export interface HTMLTableSectionElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLTableSectionElement_get_rows
+     */
+    _get_rows(this: HTMLTableSectionElement): HTMLCollection;
+    /**
+     * @ntsGet _get_rows
+     */
+    readonly rows: HTMLCollection;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableSectionElement_get_align
+     */
+    _get_align(this: HTMLTableSectionElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableSectionElement_set_align
+     */
+    _set_align(this: HTMLTableSectionElement, value: StringView): void;
+    /**
+     * @ntsGet _get_align
+     * @ntsSet _set_align
+     */
+    align: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableSectionElement_get_ch
+     */
+    _get_ch(this: HTMLTableSectionElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableSectionElement_set_ch
+     */
+    _set_ch(this: HTMLTableSectionElement, value: StringView): void;
+    /**
+     * @ntsGet _get_ch
+     * @ntsSet _set_ch
+     */
+    ch: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableSectionElement_get_chOff
+     */
+    _get_chOff(this: HTMLTableSectionElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableSectionElement_set_chOff
+     */
+    _set_chOff(this: HTMLTableSectionElement, value: StringView): void;
+    /**
+     * @ntsGet _get_chOff
+     * @ntsSet _set_chOff
+     */
+    chOff: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableSectionElement_get_vAlign
+     */
+    _get_vAlign(this: HTMLTableSectionElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableSectionElement_set_vAlign
+     */
+    _set_vAlign(this: HTMLTableSectionElement, value: StringView): void;
+    /**
+     * @ntsGet _get_vAlign
+     * @ntsSet _set_vAlign
+     */
+    vAlign: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableSectionElement_deleteRow
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    deleteRow(this: HTMLTableSectionElement, index: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableSectionElement_insertRow_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    insertRow(this: HTMLTableSectionElement, index: CNumber<"double">, error?: Ptr<DOMException | null>): HTMLElement;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableSectionElement_insertRow_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    insertRow(this: HTMLTableSectionElement, error?: Ptr<DOMException | null>): HTMLElement;
+  }
+  export type HTMLTableSectionElementMethods = HTMLTableSectionElementOwnMethods & HTMLElementMethods;
+  export type HTMLTableSectionElement = HostClass<"NtsDomHTMLTableSectionElement", HTMLElement> & HTMLTableSectionElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLTableSectionElement */
+  export function asHTMLTableSectionElement(node: Node): HTMLTableSectionElement | null;
+  export interface HTMLTableRowElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLTableRowElement_get_rowIndex
+     */
+    _get_rowIndex(this: HTMLTableRowElement): CNumber<"double">;
+    /**
+     * @ntsGet _get_rowIndex
+     */
+    readonly rowIndex: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableRowElement_get_sectionRowIndex
+     */
+    _get_sectionRowIndex(this: HTMLTableRowElement): CNumber<"double">;
+    /**
+     * @ntsGet _get_sectionRowIndex
+     */
+    readonly sectionRowIndex: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableRowElement_get_cells
+     */
+    _get_cells(this: HTMLTableRowElement): HTMLCollection;
+    /**
+     * @ntsGet _get_cells
+     */
+    readonly cells: HTMLCollection;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableRowElement_get_align
+     */
+    _get_align(this: HTMLTableRowElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableRowElement_set_align
+     */
+    _set_align(this: HTMLTableRowElement, value: StringView): void;
+    /**
+     * @ntsGet _get_align
+     * @ntsSet _set_align
+     */
+    align: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableRowElement_get_ch
+     */
+    _get_ch(this: HTMLTableRowElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableRowElement_set_ch
+     */
+    _set_ch(this: HTMLTableRowElement, value: StringView): void;
+    /**
+     * @ntsGet _get_ch
+     * @ntsSet _set_ch
+     */
+    ch: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableRowElement_get_chOff
+     */
+    _get_chOff(this: HTMLTableRowElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableRowElement_set_chOff
+     */
+    _set_chOff(this: HTMLTableRowElement, value: StringView): void;
+    /**
+     * @ntsGet _get_chOff
+     * @ntsSet _set_chOff
+     */
+    chOff: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableRowElement_get_vAlign
+     */
+    _get_vAlign(this: HTMLTableRowElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableRowElement_set_vAlign
+     */
+    _set_vAlign(this: HTMLTableRowElement, value: StringView): void;
+    /**
+     * @ntsGet _get_vAlign
+     * @ntsSet _set_vAlign
+     */
+    vAlign: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableRowElement_get_bgColor
+     */
+    _get_bgColor(this: HTMLTableRowElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableRowElement_set_bgColor
+     */
+    _set_bgColor(this: HTMLTableRowElement, value: StringView): void;
+    /**
+     * @ntsGet _get_bgColor
+     * @ntsSet _set_bgColor
+     */
+    bgColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableRowElement_deleteCell
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    deleteCell(this: HTMLTableRowElement, index: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableRowElement_insertCell_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    insertCell(this: HTMLTableRowElement, index: CNumber<"double">, error?: Ptr<DOMException | null>): HTMLElement;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableRowElement_insertCell_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    insertCell(this: HTMLTableRowElement, error?: Ptr<DOMException | null>): HTMLElement;
+  }
+  export type HTMLTableRowElementMethods = HTMLTableRowElementOwnMethods & HTMLElementMethods;
+  export type HTMLTableRowElement = HostClass<"NtsDomHTMLTableRowElement", HTMLElement> & HTMLTableRowElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLTableRowElement */
+  export function asHTMLTableRowElement(node: Node): HTMLTableRowElement | null;
+  export interface HTMLTableCellElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_get_colSpan
+     */
+    _get_colSpan(this: HTMLTableCellElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_set_colSpan
+     */
+    _set_colSpan(this: HTMLTableCellElement, value: CNumber<"double">): void;
+    /**
+     * @ntsGet _get_colSpan
+     * @ntsSet _set_colSpan
+     */
+    colSpan: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_get_rowSpan
+     */
+    _get_rowSpan(this: HTMLTableCellElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_set_rowSpan
+     */
+    _set_rowSpan(this: HTMLTableCellElement, value: CNumber<"double">): void;
+    /**
+     * @ntsGet _get_rowSpan
+     * @ntsSet _set_rowSpan
+     */
+    rowSpan: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_get_headers
+     */
+    _get_headers(this: HTMLTableCellElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_set_headers
+     */
+    _set_headers(this: HTMLTableCellElement, value: StringView): void;
+    /**
+     * @ntsGet _get_headers
+     * @ntsSet _set_headers
+     */
+    headers: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_get_cellIndex
+     */
+    _get_cellIndex(this: HTMLTableCellElement): CNumber<"double">;
+    /**
+     * @ntsGet _get_cellIndex
+     */
+    readonly cellIndex: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_get_align
+     */
+    _get_align(this: HTMLTableCellElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_set_align
+     */
+    _set_align(this: HTMLTableCellElement, value: StringView): void;
+    /**
+     * @ntsGet _get_align
+     * @ntsSet _set_align
+     */
+    align: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_get_axis
+     */
+    _get_axis(this: HTMLTableCellElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_set_axis
+     */
+    _set_axis(this: HTMLTableCellElement, value: StringView): void;
+    /**
+     * @ntsGet _get_axis
+     * @ntsSet _set_axis
+     */
+    axis: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_get_height
+     */
+    _get_height(this: HTMLTableCellElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_set_height
+     */
+    _set_height(this: HTMLTableCellElement, value: StringView): void;
+    /**
+     * @ntsGet _get_height
+     * @ntsSet _set_height
+     */
+    height: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_get_width
+     */
+    _get_width(this: HTMLTableCellElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_set_width
+     */
+    _set_width(this: HTMLTableCellElement, value: StringView): void;
+    /**
+     * @ntsGet _get_width
+     * @ntsSet _set_width
+     */
+    width: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_get_ch
+     */
+    _get_ch(this: HTMLTableCellElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_set_ch
+     */
+    _set_ch(this: HTMLTableCellElement, value: StringView): void;
+    /**
+     * @ntsGet _get_ch
+     * @ntsSet _set_ch
+     */
+    ch: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_get_chOff
+     */
+    _get_chOff(this: HTMLTableCellElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_set_chOff
+     */
+    _set_chOff(this: HTMLTableCellElement, value: StringView): void;
+    /**
+     * @ntsGet _get_chOff
+     * @ntsSet _set_chOff
+     */
+    chOff: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_get_noWrap
+     */
+    _get_noWrap(this: HTMLTableCellElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_set_noWrap
+     */
+    _set_noWrap(this: HTMLTableCellElement, value: boolean): void;
+    /**
+     * @ntsGet _get_noWrap
+     * @ntsSet _set_noWrap
+     */
+    noWrap: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_get_vAlign
+     */
+    _get_vAlign(this: HTMLTableCellElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_set_vAlign
+     */
+    _set_vAlign(this: HTMLTableCellElement, value: StringView): void;
+    /**
+     * @ntsGet _get_vAlign
+     * @ntsSet _set_vAlign
+     */
+    vAlign: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_get_bgColor
+     */
+    _get_bgColor(this: HTMLTableCellElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_set_bgColor
+     */
+    _set_bgColor(this: HTMLTableCellElement, value: StringView): void;
+    /**
+     * @ntsGet _get_bgColor
+     * @ntsSet _set_bgColor
+     */
+    bgColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_get_abbr
+     */
+    _get_abbr(this: HTMLTableCellElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_set_abbr
+     */
+    _set_abbr(this: HTMLTableCellElement, value: StringView): void;
+    /**
+     * @ntsGet _get_abbr
+     * @ntsSet _set_abbr
+     */
+    abbr: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_get_scope
+     */
+    _get_scope(this: HTMLTableCellElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCellElement_set_scope
+     */
+    _set_scope(this: HTMLTableCellElement, value: StringView): void;
+    /**
+     * @ntsGet _get_scope
+     * @ntsSet _set_scope
+     */
+    scope: StringView;
+  }
+  export type HTMLTableCellElementMethods = HTMLTableCellElementOwnMethods & HTMLElementMethods;
+  export type HTMLTableCellElement = HostClass<"NtsDomHTMLTableCellElement", HTMLElement> & HTMLTableCellElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLTableCellElement */
+  export function asHTMLTableCellElement(node: Node): HTMLTableCellElement | null;
+  export interface HTMLTemplateElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLTemplateElement_get_content
+     */
+    _get_content(this: HTMLTemplateElement): DocumentFragment;
+    /**
+     * @ntsGet _get_content
+     */
+    readonly content: DocumentFragment;
+    /**
+     * @ntsSymbol nts_dom_HTMLTemplateElement_get_shadowRootMode
+     */
+    _get_shadowRootMode(this: HTMLTemplateElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTemplateElement_set_shadowRootMode
+     */
+    _set_shadowRootMode(this: HTMLTemplateElement, value: StringView): void;
+    /**
+     * @ntsGet _get_shadowRootMode
+     * @ntsSet _set_shadowRootMode
+     */
+    shadowRootMode: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTemplateElement_get_shadowRootDelegatesFocus
+     */
+    _get_shadowRootDelegatesFocus(this: HTMLTemplateElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLTemplateElement_set_shadowRootDelegatesFocus
+     */
+    _set_shadowRootDelegatesFocus(this: HTMLTemplateElement, value: boolean): void;
+    /**
+     * @ntsGet _get_shadowRootDelegatesFocus
+     * @ntsSet _set_shadowRootDelegatesFocus
+     */
+    shadowRootDelegatesFocus: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLTemplateElement_get_shadowRootClonable
+     */
+    _get_shadowRootClonable(this: HTMLTemplateElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLTemplateElement_set_shadowRootClonable
+     */
+    _set_shadowRootClonable(this: HTMLTemplateElement, value: boolean): void;
+    /**
+     * @ntsGet _get_shadowRootClonable
+     * @ntsSet _set_shadowRootClonable
+     */
+    shadowRootClonable: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLTemplateElement_get_shadowRootSerializable
+     */
+    _get_shadowRootSerializable(this: HTMLTemplateElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLTemplateElement_set_shadowRootSerializable
+     */
+    _set_shadowRootSerializable(this: HTMLTemplateElement, value: boolean): void;
+    /**
+     * @ntsGet _get_shadowRootSerializable
+     * @ntsSet _set_shadowRootSerializable
+     */
+    shadowRootSerializable: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLTemplateElement_get_shadowRootCustomElementRegistry
+     */
+    _get_shadowRootCustomElementRegistry(this: HTMLTemplateElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTemplateElement_set_shadowRootCustomElementRegistry
+     */
+    _set_shadowRootCustomElementRegistry(this: HTMLTemplateElement, value: StringView): void;
+    /**
+     * @ntsGet _get_shadowRootCustomElementRegistry
+     * @ntsSet _set_shadowRootCustomElementRegistry
+     */
+    shadowRootCustomElementRegistry: StringView;
+  }
+  export type HTMLTemplateElementMethods = HTMLTemplateElementOwnMethods & HTMLElementMethods;
+  export type HTMLTemplateElement = HostClass<"NtsDomHTMLTemplateElement", HTMLElement> & HTMLTemplateElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLTemplateElement */
+  export function asHTMLTemplateElement(node: Node): HTMLTemplateElement | null;
+  export interface FocusEventOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_FocusEvent_get_relatedTarget
+     */
+    _get_relatedTarget(this: FocusEvent): EventTarget | null;
+    /**
+     * @ntsGet _get_relatedTarget
+     */
+    readonly relatedTarget: EventTarget | null;
+    /**
+     * @ntsSymbol nts_dom_FocusEvent_get_isTrusted
+     */
+    _get_isTrusted(this: FocusEvent): boolean;
+    /**
+     * @ntsGet _get_isTrusted
+     */
+    readonly isTrusted: boolean;
+  }
+  export type FocusEventMethods = FocusEventOwnMethods & UIEventMethods;
+  export type FocusEvent = HostClass<"NtsDomFocusEvent", UIEvent> & FocusEventMethods;
+  /** @ntsSymbol nts_dom_as_FocusEvent */
+  export function asFocusEvent(event: Event): FocusEvent | null;
+  export interface InputEventOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_InputEvent_get_data
+     */
+    _get_data(this: InputEvent): StringView | null;
+    /**
+     * @ntsGet _get_data
+     */
+    readonly data: StringView | null;
+    /**
+     * @ntsSymbol nts_dom_InputEvent_get_isComposing
+     */
+    _get_isComposing(this: InputEvent): boolean;
+    /**
+     * @ntsGet _get_isComposing
+     */
+    readonly isComposing: boolean;
+    /**
+     * @ntsSymbol nts_dom_InputEvent_get_inputType
+     */
+    _get_inputType(this: InputEvent): StringView;
+    /**
+     * @ntsGet _get_inputType
+     */
+    readonly inputType: StringView;
+    /**
+     * @ntsSymbol nts_dom_InputEvent_get_isTrusted
+     */
+    _get_isTrusted(this: InputEvent): boolean;
+    /**
+     * @ntsGet _get_isTrusted
+     */
+    readonly isTrusted: boolean;
+  }
+  export type InputEventMethods = InputEventOwnMethods & UIEventMethods;
+  export type InputEvent = HostClass<"NtsDomInputEvent", UIEvent> & InputEventMethods;
+  /** @ntsSymbol nts_dom_as_InputEvent */
+  export function asInputEvent(event: Event): InputEvent | null;
+  export interface PointerEventOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_PointerEvent_get_pointerId
+     */
+    _get_pointerId(this: PointerEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_pointerId
+     */
+    readonly pointerId: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_PointerEvent_get_width
+     */
+    _get_width(this: PointerEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_PointerEvent_get_height
+     */
+    _get_height(this: PointerEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_PointerEvent_get_pressure
+     */
+    _get_pressure(this: PointerEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_pressure
+     */
+    readonly pressure: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_PointerEvent_get_tiltX
+     */
+    _get_tiltX(this: PointerEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_tiltX
+     */
+    readonly tiltX: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_PointerEvent_get_tiltY
+     */
+    _get_tiltY(this: PointerEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_tiltY
+     */
+    readonly tiltY: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_PointerEvent_get_azimuthAngle
+     */
+    _get_azimuthAngle(this: PointerEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_azimuthAngle
+     */
+    readonly azimuthAngle: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_PointerEvent_get_altitudeAngle
+     */
+    _get_altitudeAngle(this: PointerEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_altitudeAngle
+     */
+    readonly altitudeAngle: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_PointerEvent_get_tangentialPressure
+     */
+    _get_tangentialPressure(this: PointerEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_tangentialPressure
+     */
+    readonly tangentialPressure: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_PointerEvent_get_twist
+     */
+    _get_twist(this: PointerEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_twist
+     */
+    readonly twist: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_PointerEvent_get_pointerType
+     */
+    _get_pointerType(this: PointerEvent): StringView;
+    /**
+     * @ntsGet _get_pointerType
+     */
+    readonly pointerType: StringView;
+    /**
+     * @ntsSymbol nts_dom_PointerEvent_get_isPrimary
+     */
+    _get_isPrimary(this: PointerEvent): boolean;
+    /**
+     * @ntsGet _get_isPrimary
+     */
+    readonly isPrimary: boolean;
+    /**
+     * @ntsSymbol nts_dom_PointerEvent_get_persistentDeviceId
+     */
+    _get_persistentDeviceId(this: PointerEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_persistentDeviceId
+     */
+    readonly persistentDeviceId: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_PointerEvent_get_isTrusted
+     */
+    _get_isTrusted(this: PointerEvent): boolean;
+    /**
+     * @ntsGet _get_isTrusted
+     */
+    readonly isTrusted: boolean;
+  }
+  export type PointerEventMethods = PointerEventOwnMethods & MouseEventMethods;
+  export type PointerEvent = HostClass<"NtsDomPointerEvent", MouseEvent> & PointerEventMethods;
+  /** @ntsSymbol nts_dom_as_PointerEvent */
+  export function asPointerEvent(event: Event): PointerEvent | null;
+  export interface WheelEventOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_WheelEvent_get_deltaX
+     */
+    _get_deltaX(this: WheelEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_deltaX
+     */
+    readonly deltaX: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_WheelEvent_get_deltaY
+     */
+    _get_deltaY(this: WheelEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_deltaY
+     */
+    readonly deltaY: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_WheelEvent_get_deltaZ
+     */
+    _get_deltaZ(this: WheelEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_deltaZ
+     */
+    readonly deltaZ: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_WheelEvent_get_deltaMode
+     */
+    _get_deltaMode(this: WheelEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_deltaMode
+     */
+    readonly deltaMode: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_WheelEvent_get_wheelDeltaX
+     */
+    _get_wheelDeltaX(this: WheelEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_wheelDeltaX
+     */
+    readonly wheelDeltaX: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_WheelEvent_get_wheelDeltaY
+     */
+    _get_wheelDeltaY(this: WheelEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_wheelDeltaY
+     */
+    readonly wheelDeltaY: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_WheelEvent_get_wheelDelta
+     */
+    _get_wheelDelta(this: WheelEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_wheelDelta
+     */
+    readonly wheelDelta: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_WheelEvent_get_isTrusted
+     */
+    _get_isTrusted(this: WheelEvent): boolean;
+    /**
+     * @ntsGet _get_isTrusted
+     */
+    readonly isTrusted: boolean;
+  }
+  export type WheelEventMethods = WheelEventOwnMethods & MouseEventMethods;
+  export type WheelEvent = HostClass<"NtsDomWheelEvent", MouseEvent> & WheelEventMethods;
+  /** @ntsSymbol nts_dom_as_WheelEvent */
+  export function asWheelEvent(event: Event): WheelEvent | null;
+  export interface CustomEventOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_CustomEvent_get_isTrusted
+     */
+    _get_isTrusted(this: CustomEvent): boolean;
+    /**
+     * @ntsGet _get_isTrusted
+     */
+    readonly isTrusted: boolean;
+  }
+  export type CustomEventMethods = CustomEventOwnMethods & EventMethods;
+  export type CustomEvent = HostClass<"NtsDomCustomEvent", Event> & CustomEventMethods;
+  /** @ntsSymbol nts_dom_as_CustomEvent */
+  export function asCustomEvent(event: Event): CustomEvent | null;
 }

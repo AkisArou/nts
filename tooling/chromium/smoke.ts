@@ -206,12 +206,13 @@ try {
   // script spells `instanceof`.
   // Both oracles: the microtasks page runs the same DOM witness.
   if (domOracle) {
-    const vectors = stripTypeScriptTypes(await readFile(resolve(root, "runtime/chromium/tests/idl-vectors.ts"), "utf8"))
-      .replace(/^\s*import\s[^;]*;\s*$/gm, "").replace(/^export /gm, "");
+    const source = await readFile(resolve(root, "runtime/chromium/tests/idl-vectors.ts"), "utf8");
+    // Each `asX` the vectors import from nts:dom is `instanceof X` here.
+    const narrowings = [...(/import \{([^}]*)\} from "nts:dom"/.exec(source)?.[1] ?? "").matchAll(/\bas(\w+)/g)]
+      .map(([, name]) => `const as${name} = (node) => node instanceof ${name} ? node : null;`).join("\n");
+    const vectors = stripTypeScriptTypes(source).replace(/^\s*import\s[^;]*;\s*$/gm, "").replace(/^export /gm, "");
     await evaluate(`(() => {
-      const asHTMLElement = (node) => node instanceof HTMLElement ? node : null;
-      const asHTMLInputElement = (node) => node instanceof HTMLInputElement ? node : null;
-      const asText = (node) => node instanceof Text ? node : null;
+      ${narrowings}
       ${vectors}
       // V8's message carries the binding's context ("Failed to execute 'x'
       // on 'Y': "), which the generated binding's does not.

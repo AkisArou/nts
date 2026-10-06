@@ -1,5 +1,5 @@
 {
-  "bound": 1734,
+  "bound": 2086,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -3845,6 +3845,341 @@
       "interface": "DOMRect",
       "member": "fromRect/1",
       "why": "static"
+    },
+    {
+      "interface": "HTMLFormElement",
+      "member": "get elements",
+      "why": "interface HTMLFormControlsCollection is not bound"
+    },
+    {
+      "interface": "HTMLSelectElement",
+      "member": "get options",
+      "why": "interface HTMLOptionsCollection is not bound"
+    },
+    {
+      "interface": "HTMLSelectElement",
+      "member": "get validity",
+      "why": "interface ValidityState is not bound"
+    },
+    {
+      "interface": "HTMLSelectElement",
+      "member": "get selectedContentElement",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLSelectElement",
+      "member": "set selectedContentElement",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLSelectElement",
+      "member": "add/2",
+      "why": "parameter type (HTMLOptionElement or HTMLOptGroupElement)"
+    },
+    {
+      "interface": "HTMLSelectElement",
+      "member": "add/1",
+      "why": "parameter type (HTMLOptionElement or HTMLOptGroupElement)"
+    },
+    {
+      "interface": "HTMLTextAreaElement",
+      "member": "get validity",
+      "why": "interface ValidityState is not bound"
+    },
+    {
+      "interface": "HTMLTextAreaElement",
+      "member": "createValueRange/2",
+      "why": "interface OpaqueRange is not bound"
+    },
+    {
+      "interface": "HTMLTextAreaElement",
+      "member": "setRangeText/4",
+      "why": "parameter type optional SelectionMode"
+    },
+    {
+      "interface": "HTMLTextAreaElement",
+      "member": "setRangeText/3",
+      "why": "default `\"preserve\"` of argument selectionMode"
+    },
+    {
+      "interface": "HTMLImageElement",
+      "member": "get browsingTopics",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLImageElement",
+      "member": "set browsingTopics",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLImageElement",
+      "member": "get replacedByUserAgent",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLImageElement",
+      "member": "get onuareplacestart",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLImageElement",
+      "member": "set onuareplacestart",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLImageElement",
+      "member": "get onuareplaceend",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLImageElement",
+      "member": "set onuareplaceend",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLImageElement",
+      "member": "decode/0",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "HTMLCanvasElement",
+      "member": "get layoutSubtree",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLCanvasElement",
+      "member": "set layoutSubtree",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLCanvasElement",
+      "member": "get onpaint",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLCanvasElement",
+      "member": "set onpaint",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLCanvasElement",
+      "member": "captureElementImage/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLCanvasElement",
+      "member": "captureStream/1",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "HTMLCanvasElement",
+      "member": "clearElementGeometry/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLCanvasElement",
+      "member": "configureHighDynamicRange/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLCanvasElement",
+      "member": "getContext/2",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "HTMLCanvasElement",
+      "member": "getElementTransform/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLCanvasElement",
+      "member": "getElementTransform/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLCanvasElement",
+      "member": "requestPaint/0",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLCanvasElement",
+      "member": "toBlob/3",
+      "why": "parameter type BlobCallback"
+    },
+    {
+      "interface": "HTMLCanvasElement",
+      "member": "toBlob/2",
+      "why": "parameter type BlobCallback"
+    },
+    {
+      "interface": "HTMLCanvasElement",
+      "member": "toBlob/1",
+      "why": "parameter type BlobCallback"
+    },
+    {
+      "interface": "HTMLCanvasElement",
+      "member": "toDataURL/2",
+      "why": "parameter type optional any"
+    },
+    {
+      "interface": "HTMLCanvasElement",
+      "member": "transferControlToOffscreen/0",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "HTMLCanvasElement",
+      "member": "updateElementGeometry/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLTableElement",
+      "member": "get caption",
+      "why": "interface HTMLTableCaptionElement is not bound"
+    },
+    {
+      "interface": "HTMLTableElement",
+      "member": "set caption",
+      "why": "interface HTMLTableCaptionElement is not bound"
+    },
+    {
+      "interface": "HTMLTableElement",
+      "member": "createCaption/0",
+      "why": "interface HTMLTableCaptionElement is not bound"
+    },
+    {
+      "interface": "HTMLTemplateElement",
+      "member": "get shadowRootReferenceTarget",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLTemplateElement",
+      "member": "set shadowRootReferenceTarget",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLTemplateElement",
+      "member": "get shadowRootSlotAssignment",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLTemplateElement",
+      "member": "set shadowRootSlotAssignment",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLTemplateElement",
+      "member": "get shadowRootAdoptedStyleSheets",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLTemplateElement",
+      "member": "set shadowRootAdoptedStyleSheets",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLTemplateElement",
+      "member": "get buffer",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLTemplateElement",
+      "member": "set buffer",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLTemplateElement",
+      "member": "get sanitize",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLTemplateElement",
+      "member": "set sanitize",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLTemplateElement",
+      "member": "get htmlFor",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLTemplateElement",
+      "member": "set htmlFor",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLTemplateElement",
+      "member": "get src",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLTemplateElement",
+      "member": "set src",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLTemplateElement",
+      "member": "get crossOrigin",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLTemplateElement",
+      "member": "set crossOrigin",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLTemplateElement",
+      "member": "get referrerPolicy",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLTemplateElement",
+      "member": "set referrerPolicy",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLTemplateElement",
+      "member": "get integrity",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLTemplateElement",
+      "member": "set integrity",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "InputEvent",
+      "member": "get dataTransfer",
+      "why": "interface DataTransfer is not bound"
+    },
+    {
+      "interface": "InputEvent",
+      "member": "getTargetRanges/0",
+      "why": "result type sequence<StaticRange>"
+    },
+    {
+      "interface": "PointerEvent",
+      "member": "getCoalescedEvents/0",
+      "why": "result type sequence<PointerEvent>"
+    },
+    {
+      "interface": "PointerEvent",
+      "member": "getPredictedEvents/0",
+      "why": "result type sequence<PointerEvent>"
+    },
+    {
+      "interface": "WheelEvent",
+      "member": "get momentum",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CustomEvent",
+      "member": "get detail",
+      "why": "[CallWith=ScriptState] needs a script context"
+    },
+    {
+      "interface": "CustomEvent",
+      "member": "initCustomEvent/4",
+      "why": "[CallWith=ScriptState] needs a script context"
     }
   ]
 }
