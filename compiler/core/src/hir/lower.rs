@@ -26944,12 +26944,36 @@ impl<'a> FuncBuilder<'a> {
 
     /// A plain argument as C takes it: a boxed record's box where C takes the
     /// struct's pointer -- lent for the call, since a box whose pointer is
-    /// passed must live until C is done with it -- and anything else as it is.
+    /// passed must live until C is done with it -- a `number` where C takes an
+    /// integer through JavaScript's own conversion, and anything else as it is.
     fn unboxed_argument(&mut self, value: ValueId, parameter: &super::native::Type, origin: &Origin) -> ValueId {
+        let want = parameter.representation();
+        if let (HirType::Float { .. }, HirType::Int { bits: 1..=32, signed }) = (&self.values[value.0 as usize].ty, &want) {
+            return self.integer_argument(value, &want, *signed, origin);
+        }
         if self.values[value.0 as usize].ty != HirType::Managed(ManagedType::Object(TypeId(super::BOXED_RECORD))) {
             return value;
         }
-        self.unbox_record(value, &parameter.representation(), origin)
+        self.unbox_record(value, &want, origin)
+    }
+
+    /// A `number` handed to a C integer of 32 bits or fewer, through `ToInt32`
+    /// -- `ToUint32` for an unsigned 32-bit one -- as `WebIDL`'s `long` and
+    /// `GJS`'s `gint` take a number, and never C's own conversion: a `double` cast to
+    /// `int32_t` is undefined for NaN, an infinity or anything out of range,
+    /// and `(int32_t)v0` is what this emitted. The result of either is a whole
+    /// number in range, so converting it to the 32-bit integer is exact, and a
+    /// narrower one is an integer narrowing, which every backend defines.
+    fn integer_argument(&mut self, value: ValueId, want: &HirType, signed: bool, origin: &Origin) -> ValueId {
+        let HirType::Int { bits, .. } = *want else { return value };
+        let op = if bits == 32 && !signed { UnOp::ToUint32 } else { UnOp::ToInt32 };
+        let whole = self.push(OpKind::Unary { op, operand: value }, HirType::NUMBER, origin.clone());
+        let word = HirType::Int { bits: 32, signed: bits < 32 || signed };
+        let converted = self.push(OpKind::Convert(whole), word.clone(), origin.clone());
+        if word == *want {
+            return converted;
+        }
+        self.push(OpKind::Convert(converted), want.clone(), origin.clone())
     }
 
     /// The struct a boxed record's box holds, as the C pointer `want` a

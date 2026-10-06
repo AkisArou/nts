@@ -90,6 +90,16 @@ fn checker_messages(name: &str, source: &str) -> Option<Vec<String>> {
     Some(snapshot.diagnostics.iter().map(|d| d.message.clone()).collect())
 }
 
+/// The runtime a program links, written beside it and compiled: a number
+/// passed to a C integer goes through `nts_to_int32_fn`, as every shift does.
+fn compile_runtime(dir: &Utf8Path, program: &hir::Program) {
+    let c = nts_codegen_c::emit(program, nts_core::hir::native::NativeAbi::SysV);
+    for file in c.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
+    clang(dir, &["-std=c11", "-O2", "-c", "nts_runtime.c"]);
+}
+
 fn clang(dir: &Utf8Path, args: &[&str]) {
     let result = Command::new("clang")
         .current_dir(dir)
@@ -630,10 +640,11 @@ fn every_scalar_and_libm_cross_the_real_c_abi() {
             ],
         );
     }
+    compile_runtime(&dir, &prepared.program);
     clang(&dir, &["-O2", "-c", "program.ll", "-o", "program.o"]);
     clang(
         &dir,
-        &["program.o", "native.o", "caller.o", "-lm", "-o", "caller"],
+        &["program.o", "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", "caller"],
     );
     assert!(Command::new(dir.join("caller")).status().unwrap().success());
 
@@ -702,7 +713,7 @@ fn assert_unsigned_return_control(dir: &Utf8Path, ir: &str) {
     let bad = ir.replacen("uitofp i32", "sitofp i32", 1);
     std::fs::write(dir.join("bad.ll"), bad).unwrap();
     clang(dir, &["-O2", "-c", "bad.ll", "-o", "bad.o"]);
-    clang(dir, &["bad.o", "native.o", "caller.o", "-lm", "-o", "bad"]);
+    clang(dir, &["bad.o", "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", "bad"]);
     assert!(!Command::new(dir.join("bad")).status().unwrap().success());
 }
 
@@ -765,9 +776,10 @@ fn compatible_c_aliases_share_one_symbol_in_both_backends() {
     )
     .unwrap();
     clang(&dir, &["-O2", "-c", "native.c", "-o", "native.o"]);
+    clang(&dir, &["-std=c11", "-O2", "-c", "nts_runtime.c"]);
     for source in ["program.c", "program.ll"] {
         clang(&dir, &["-O2", "-c", source, "-o", "program.o"]);
-        clang(&dir, &["program.o", "native.o", "caller.c", "-o", "caller"]);
+        clang(&dir, &["program.o", "native.o", "nts_runtime.o", "caller.c", "-lm", "-o", "caller"]);
         assert!(Command::new(dir.join("caller")).status().unwrap().success());
     }
 }

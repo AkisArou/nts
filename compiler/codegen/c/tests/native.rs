@@ -245,7 +245,7 @@ fn scalar_abi_matches_an_independently_compiled_c_library() {
     }
     let result = Command::new("clang")
         .current_dir(&dir)
-        .args(["native.o", "program.o", "caller.o", "-o", "caller"])
+        .args(["native.o", "program.o", "caller.o", "-lm", "-o", "caller"])
         .output()
         .unwrap();
     assert!(
@@ -1035,4 +1035,78 @@ export function sameType(): boolean { const e = node_at(0 as c_int); return node
         String::from_utf8_lossy(&compiled.stderr),
         emitted.writer.text()
     );
+}
+
+/// A `number` passed to a C integer parameter goes through JavaScript's own
+/// conversion, as `WebIDL`'s `long` and `GJS`'s `gint` take one: `ToInt32`,
+/// `ToUint32` for an unsigned 32-bit parameter, and a narrowing of that for a
+/// smaller one.
+/// It was `(int32_t)v0`, which C leaves undefined for NaN, an infinity and
+/// anything out of range -- clang folds `(int32_t)NAN` to whatever it likes.
+/// Reported by the Chromium lane; GTK's `gint` parameters take the same path.
+#[test]
+fn a_number_reaches_a_c_integer_through_to_int32() {
+    let source = r#"
+import type { CNumber } from "c:types";
+declare function seen_i32(v: CNumber<"int32">): CNumber<"double">;
+declare function seen_u32(v: CNumber<"uint32">): CNumber<"double">;
+declare function seen_i8(v: CNumber<"int8">): CNumber<"double">;
+declare function seen_u16(v: CNumber<"uint16">): CNumber<"double">;
+export function i32(x: number): number { return seen_i32(x); }
+export function u32(x: number): number { return seen_u32(x); }
+export function i8(x: number): number { return seen_i8(x); }
+export function u16(x: number): number { return seen_u16(x); }
+"#;
+    let Some((dir, prepared)) = prepare_with_types("to-int32", source, false) else {
+        return;
+    };
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    std::fs::write(dir.join("program.c"), emitted.writer.text()).unwrap();
+    for file in emitted.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
+    std::fs::write(
+        dir.join("native.c"),
+        "#include <stdint.h>\n\
+         double seen_i32(int32_t v) { return v; }\n\
+         double seen_u32(uint32_t v) { return v; }\n\
+         double seen_i8(int8_t v) { return v; }\n\
+         double seen_u16(uint16_t v) { return v; }\n",
+    )
+    .unwrap();
+    // Each expected value is node's: `x | 0`, `x >>> 0`, `(x << 24) >> 24` and
+    // `x & 0xffff` are ToInt32, ToUint32, ToInt8 and ToUint16.
+    std::fs::write(
+        dir.join("caller.c"),
+        "#include <math.h>\n#include <stdio.h>\n#include \"program.h\"\n\
+         static int failed;\n\
+         static void check(const char *what, double got, double want) {\n\
+           if (got != want) { printf(\"FAIL %s: got %.17g want %.17g\\n\", what, got, want); failed = 1; }\n\
+         }\n\
+         int main(void) {\n\
+           check(\"i32 2^32+5\", i32(4294967301.0), 5);\n\
+           check(\"i32 2^31\", i32(2147483648.0), -2147483648.0);\n\
+           check(\"i32 -1.9\", i32(-1.9), -1);\n\
+           check(\"i32 NaN\", i32(NAN), 0);\n\
+           check(\"i32 Infinity\", i32(INFINITY), 0);\n\
+           check(\"u32 -1\", u32(-1), 4294967295.0);\n\
+           check(\"u32 2^32+7\", u32(4294967303.0), 7);\n\
+           check(\"i8 200\", i8(200), -56);\n\
+           check(\"i8 -129.5\", i8(-129.5), 127);\n\
+           check(\"u16 -1\", u16(-1), 65535);\n\
+           check(\"u16 NaN\", u16(NAN), 0);\n\
+           return failed;\n\
+         }\n",
+    )
+    .unwrap();
+    let result = Command::new("clang")
+        .current_dir(&dir)
+        .args(["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-I", ".", "native.c", "program.c", "caller.c", "-lm", "-o", "caller"])
+        .output()
+        .unwrap();
+    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    let ran = Command::new(dir.join("caller")).output().unwrap();
+    assert!(ran.status.success(), "{}", String::from_utf8_lossy(&ran.stdout));
 }
