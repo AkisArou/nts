@@ -51050,7 +51050,7 @@ impl<'a> FuncBuilder<'a> {
     /// | undefined` are both one pointer. The type has not, and it is what says
     /// whether `v === undefined` can ever be true.
     fn absences_of(&self, node: NodeId) -> Option<Vec<u32>> {
-        let ty = *self.snapshot.node_types.get(&node)?;
+        let ty = self.read_type(node)?;
         let record = self.snapshot.types.get(ty.0 as usize)?;
         let members: Vec<TypeId> = match &record.kind {
             TypeKind::Union(members) => members.clone(),
@@ -67103,10 +67103,42 @@ impl<'a> FuncBuilder<'a> {
     /// [`Self::absences_of`] being non-empty, which only says the type *admits*
     /// one beside something real.
     fn only_absences(&self, node: NodeId) -> bool {
-        self.snapshot
-            .node_types
-            .get(&node)
-            .is_some_and(|ty| self.holds_only_absences(*ty))
+        self.read_type(node).is_some_and(|ty| self.holds_only_absences(ty))
+    }
+
+    /// The type of what a read at `node` can produce, for the questions that
+    /// ask whether it is absent: the checker's type, except for a read
+    /// through a getter.
+    ///
+    /// **A getter answers what it answers, whatever was assigned.** The checker
+    /// narrows a property by assignment -- after `div.nodeValue = "x"`,
+    /// `div.nodeValue` is `string` -- which is sound for a field and not for a
+    /// getter: an element's `nodeValue` is null whatever is assigned. Asked of
+    /// the narrowed type, `"" + div.nodeValue` built no `null` arm and handed
+    /// the NULL the getter returned to `nts_concat` -- a SEGV in the browser,
+    /// the Chromium lane's compiler request 9. A read through a native
+    /// `@ntsGet` or a `get` accessor is the property's type as the receiver's
+    /// type declares it.
+    fn read_type(&self, node: NodeId) -> Option<TypeId> {
+        let narrowed = self.snapshot.node_types.get(&node).copied();
+        if self.kind_of(node) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            return narrowed;
+        }
+        let [object, member] = self.children(node)[..] else {
+            return narrowed;
+        };
+        let getter = self.is_accessor_property(member)
+            || self.accessor_nodes(member).iter().any(|decl| self.kind_of(*decl) == Some(syntax::GET_ACCESSOR));
+        if !getter {
+            return narrowed;
+        }
+        let declared = (|| {
+            let receiver = *self.snapshot.node_types.get(&object)?;
+            let receiver = self.present_part(receiver).unwrap_or(receiver);
+            let name = self.literal_name(member)?;
+            Some(super::native::schema::property(self.snapshot, self.class_behind(receiver), &name)?.ty)
+        })();
+        declared.or(narrowed)
     }
 
     /// `v === undefined` where `v` is erased, as the tag test it is.

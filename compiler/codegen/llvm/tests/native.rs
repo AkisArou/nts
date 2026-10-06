@@ -4898,3 +4898,63 @@ fn an_exported_generators_resumption_links_from_c_on_both_backends() {
         assert!(Command::new(dir.join(binary)).status().unwrap().success(), "{binary}");
     }
 }
+
+/// A read through a getter is what the getter answers, not what was last
+/// written: after `label.text = "x"` the checker narrows `label.text` to
+/// `string`, but a getter declared `StringView | null` may still answer NULL --
+/// an element's `nodeValue` does, whatever is assigned. The read is typed by
+/// the property's declaration, so NULL is `null` and `"" + label.text` is
+/// `"null"`. It was typed by the narrowing, and NULL reached `nts_concat`
+/// unchecked -- the Chromium lane's compiler request 9, a SEGV in the browser.
+#[test]
+fn a_getter_read_after_a_write_keeps_its_declared_null() {
+    let source = r#"
+import type { Class, StringView } from "c:types";
+interface NodeOwnMethods {
+    /** @ntsSymbol node_get_value */
+    get_value(this: Node): StringView | null;
+    /** @ntsSymbol node_set_value */
+    set_value(this: Node, value: StringView | null): void;
+    /**
+     * @ntsGet get_value
+     * @ntsSet set_value
+     */
+    value: string | null;
+}
+type Node = Class<"_Node"> & NodeOwnMethods;
+declare function node_new(): Node;
+class Box {
+    get value(): string | null { return null; }
+    set value(_: string | null) {}
+}
+export function run(): number {
+    const node = node_new();
+    node.value = "x";
+    const box = new Box();
+    box.value = "x";
+    return ("" + box.value).length * 1000
+        + ("" + node.value).length * 100
+        + (node.value === null ? 10 : 0)
+        + (node.value ?? "dd").length;
+}
+"#;
+    let library = r"
+#include <stddef.h>
+struct _Node { int unused; };
+static struct _Node the;
+struct _Node *node_new(void) { return &the; }
+struct NtsStringView;
+struct NtsBorrowedString;
+const struct NtsStringView *node_get_value(struct _Node *self) { (void)self; return NULL; }
+void node_set_value(struct _Node *self, const struct NtsBorrowedString *value) { (void)self; (void)value; }
+";
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let Some((_, outputs)) = run_on_both_backends("getter-null", source, provider, library, &caller) else { return; };
+        for output in outputs {
+            // "null" through the class's getter (4) and the binding's (4), the
+            // comparison true, and the default taken: JavaScript's 4412.
+            assert_eq!(output, expect("4412", provider), "{provider:?}");
+        }
+    }
+}
