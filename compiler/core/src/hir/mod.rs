@@ -6235,8 +6235,10 @@ fn collect_orphans(program: &mut Program) {
 }
 
 fn split_unions(program: &mut Program) -> usize {
-    let faces = &program.signature_faces;
-    program.funcs.iter_mut().map(|func| split::split_unions(func, faces)).sum()
+    // Only a scalar payload is split (`split::splittable`), and a scalar's tag
+    // is its representation's: the signature faces that decide a function
+    // value's tag never reach this pass.
+    program.funcs.iter_mut().map(split::split_unions).sum()
 }
 
 /// Objects whose reference reaches a block the object does not dominate.
