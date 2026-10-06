@@ -5080,3 +5080,53 @@ export function errors(): number { return errors_seen() as number; }
         assert_eq!(output, "2 roots=0 errors=0 leak=0");
     }
 }
+
+/// A host handle parameter the callee owns -- its closure captures it, so the
+/// caller hands a reference over -- is released after its last use however
+/// that use is reached: straight-line, or inside a loop, where the closure's
+/// store is no longer the last use and so retains rather than moves. The loop
+/// form never released the parameter's own count, and each call kept one root
+/// (the Chromium lane's `blockers/an-owned-handle-used-in-a-loop-is-never-released`,
+/// found as the document left rooted).
+#[test]
+fn an_owned_handle_parameter_is_released_after_a_loop_on_both_backends() {
+    let source = r#"
+import type { HostClass, c_int } from "c:types";
+type Node = HostClass<"HostNode", null, "host_retain", "host_release">;
+declare function node_at(i: c_int): Node;
+declare function node_value(n: Node): c_int;
+declare function roots_held(): c_int;
+declare function errors_seen(): c_int;
+function touch(n: Node, k: number): number { return k < 0 ? (node_value(n) as number) : k; }
+function looped(n: Node): number {
+    const keep = (): number => node_value(n) as number;
+    let total = 0;
+    for (const k of [1, 2]) total += touch(n, k);
+    return total;
+}
+function straight(n: Node): number {
+    const keep = (): number => node_value(n) as number;
+    return touch(n, 1);
+}
+export function run(): number {
+    const n = node_at(1 as c_int);
+    return looped(n) + looped(n) + straight(n);
+}
+export function roots(): number { return roots_held() as number; }
+export function errors(): number { return errors_seen() as number; }
+"#;
+    let caller = counted_caller(
+        r#"printf("%.0f", run());
+  for (int i = 0; i < 50; i++) { run(); }
+  printf(" roots=%.0f errors=%.0f", roots(), errors());"#,
+        "",
+    );
+    let Some((_, outputs)) =
+        run_on_both_backends("owned-handle-loop", source, hir::Provider::ReferenceCounting, HOST_LIBRARY, &caller)
+    else {
+        return;
+    };
+    for output in outputs {
+        assert_eq!(output, "7 roots=0 errors=0 leak=0");
+    }
+}

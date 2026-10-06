@@ -648,6 +648,18 @@ pub fn analyze(
         },
         &mut of,
     );
+    // **A parameter it keeps arrives holding a reference** -- its callers were
+    // told so (`Summaries::consumes`) and hand one over -- so it is owned like
+    // anything produced, and dies like it: moved where a store takes it, and
+    // released where it is last used otherwise. `classify` leaves every
+    // parameter `Unowned`, the borrowed convention, and a kept one whose store
+    // retained (a closure capturing it, read again in a loop below) was
+    // released nowhere.
+    for value in &owns {
+        if counted(func, layouts, *value) {
+            of[value.0 as usize] = Ownership::Produced;
+        }
+    }
 
     Map {
         of,

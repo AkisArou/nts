@@ -149,15 +149,25 @@ pub fn insert(program: &mut Program) -> Report {
 }
 
 /// A deterministic ordering, so one compiler on one input emits one program.
+/// The values this function holds a reference to, in a stable order: what it
+/// owns, and a parameter it *keeps* (`own::Map::owns`), which arrives owned.
+///
+/// **A kept parameter is not always handed on.** Its reference is meant for
+/// the slot it is stored into, and where that store is its last use the store
+/// takes it (a move). Where it is read again after -- a closure captures it
+/// and a loop below still reads it -- the store retains instead, and the
+/// parameter's own reference has to die where the parameter does. Leaving
+/// parameters out here released it nowhere: one root a call, kept forever.
 fn ordered(
     func: &Func,
     layouts: &[Layout],
+    map: &own::Map,
     values: &rustc_hash::FxHashSet<ValueId>,
 ) -> Vec<ValueId> {
     let mut counted_values: Vec<ValueId> = values
         .iter()
         .copied()
-        .filter(|value| own::owned(func, layouts, *value))
+        .filter(|value| own::owned(func, layouts, *value) || (map.owns(*value) && own::counted(func, layouts, *value)))
         .collect();
     counted_values.sort_unstable();
     counted_values
@@ -249,7 +259,7 @@ fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summari
         if edges.is_empty() {
             // Leaving the function. What is returned is handed to the caller and
             // everything else is dropped -- and a value that is both is moved.
-            let mut dying = ordered(func, layouts, live.available(at));
+            let mut dying = ordered(func, layouts, &map, live.available(at));
             let here = map.null_in(at);
             dying.retain(|value| {
                 !moved.contains(value)
@@ -281,7 +291,7 @@ fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summari
             // of this block; with more, each edge needs a block of its own.
             let single = edges.len() == 1;
             for (slot, (successor, args)) in edges.into_iter().enumerate() {
-                let mut dying: Vec<ValueId> = ordered(func, layouts, live.available(at))
+                let mut dying: Vec<ValueId> = ordered(func, layouts, &map, live.available(at))
                     .into_iter()
                     .filter(|value| {
                         !live.live_in(successor).contains(value)
@@ -435,7 +445,7 @@ fn release_at_last_use(
     let Settled { map, live } = settled;
     let at = block.at;
     let proven_null = map.null_in(at);
-    let mut pending: rustc_hash::FxHashSet<ValueId> = ordered(func, block.layouts, live.available(at))
+    let mut pending: rustc_hash::FxHashSet<ValueId> = ordered(func, block.layouts, map, live.available(at))
         .into_iter()
         .filter(|value| {
             live.dies_in(at, *value)
