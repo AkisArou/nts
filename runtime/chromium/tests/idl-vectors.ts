@@ -167,8 +167,8 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   log("tokenToggle", "" + tokens.toggle("c") + "," + tokens.toggle("c", true));
   tokens.remove("a", "b");
   log("tokensAfter", list.className + "|" + tokens.item(0));
-  thrown("emptyToken", () => tokens.add(""));
-  thrown("spaceToken", () => tokens.add("a b"));
+  thrown("emptyToken", () => { tokens.add(""); });
+  thrown("spaceToken", () => { tokens.add("a b"); });
 
   // An inline style, and the layout it makes, read back.
   const box = asHTMLElement(d.createElement("div"))!;
@@ -183,13 +183,13 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   log("removed", box.style.removeProperty("height") + "|" + box.style.cssText);
 
   // What the members raise: each exception's name and Blink's message.
-  thrown("syntax", () => d.querySelector("["));
-  thrown("hierarchy", () => div.appendChild(div));
-  thrown("notFound", () => root.removeChild(words));
-  thrown("badName", () => d.createElement("bad name"));
-  thrown("badAttr", () => div.setAttribute("1bad", "x"));
-  thrown("insertNotChild", () => div.insertBefore(d.createElement("i"), root));
-  thrown("indexSize", () => text.substringData(99, 1));
+  thrown("syntax", () => { d.querySelector("["); });
+  thrown("hierarchy", () => { div.appendChild(div); });
+  thrown("notFound", () => { root.removeChild(words); });
+  thrown("badName", () => { d.createElement("bad name"); });
+  thrown("badAttr", () => { div.setAttribute("1bad", "x"); });
+  thrown("insertNotChild", () => { div.insertBefore(d.createElement("i"), root); });
+  thrown("indexSize", () => { text.substringData(99, 1); });
   thrown("negativeMaxLength", () => {
     input.type = "text";
     input.maxLength = -1;
@@ -201,6 +201,6 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
     input.type = "checkbox";
     input.setSelectionRange(0, 1);
   });
-  thrown("fine", () => div.setAttribute("data-ok", "1"));
+  thrown("fine", () => { div.setAttribute("data-ok", "1"); });
   return lines.join("\n");
 }

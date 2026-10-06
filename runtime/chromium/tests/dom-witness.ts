@@ -40,10 +40,10 @@ export function ntsChromiumDomProgram(): number {
   body.appendChild(container);
   if (d.querySelector("#native-dom-count") !== label) return 2;
   if (d.querySelector("#missing") !== null) return 3;
-  if (!thrown(() => d.querySelector("[")).startsWith("SyntaxError: ")) return 4;
-  if (!thrown(() => container.appendChild(container)).startsWith("HierarchyRequestError: ")) return 5;
-  if (!thrown(() => body.removeChild(label)).startsWith("NotFoundError: ")) return 6;
-  if (!thrown(() => d.createElement("bad name")).startsWith("InvalidCharacterError: ")) return 7;
+  if (!thrown(() => { d.querySelector("["); }).startsWith("SyntaxError: ")) return 4;
+  if (!thrown(() => { container.appendChild(container); }).startsWith("HierarchyRequestError: ")) return 5;
+  if (!thrown(() => { body.removeChild(label); }).startsWith("NotFoundError: ")) return 6;
+  if (!thrown(() => { d.createElement("bad name"); }).startsWith("InvalidCharacterError: ")) return 7;
 
   // A string view must carry NUL, paired and lone surrogates, Latin-1 and
   // non-Latin-1 units into Blink, and the view Blink lends back must return
