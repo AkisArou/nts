@@ -86,6 +86,32 @@ TMPDIR=${TMPDIR:-$HOME/.cache/nts-tmp}
 export TMPDIR
 mkdir -p "$TMPDIR"
 
+# **This file defines the steps; `run.mjs` runs them.**
+#
+#   tooling/gate/all.sh                  the gate: hands over to run.mjs
+#   tooling/gate/all.sh --list           every step name, one per line
+#   tooling/gate/all.sh --call <step>    run one step here, exit with its status
+#
+# The runner calls back into `--call` once per step, each in its own process
+# with its own log, so a failing step can no longer stop the steps after it
+# (the log of a run that stopped at its first failure read as green for every
+# step it never reached), every requested step ends as PASS, FAIL, SKIPPED or
+# NOT RUN in a summary printed even on Ctrl-C, and independent steps run at
+# once under one CPU and memory budget. See the header of run.mjs.
+#
+# A step exits 77 when it cannot run at all (no checkout, no SDK, no tool), and
+# the runner reports that as SKIPPED with the step's last line as the reason --
+# never as a pass.
+gate_mode=run
+gate_call=""
+case "${1-}" in
+  --list) gate_mode=list ;;
+  --call) gate_mode=call; gate_call=${2:?usage: all.sh --call <step>} ;;
+esac
+if [ "$gate_mode" = run ]; then
+  exec node "$root/tooling/gate/run.mjs" "$@"
+fi
+
 # One knob for how hard this is allowed to run the machine.
 #
 #   NTS_JOBS=6 tooling/gate/all.sh
@@ -119,151 +145,21 @@ fi
 # the full run before committing. It is licence not to wait twenty minutes for a
 # four-minute question -- which is what made building underneath a running gate
 # look reasonable twice in one night, invalidating both.
-# **Every step name this run knows about, recorded as it is offered.**
+# **One step, by name.** Under `--list` every `step` line prints its name;
+# under `--call` the one that matches runs and the script exits with its status.
+# The command runs on the left of `&&`, as it did on the left of `||` before,
+# so `set -e` is inert inside it and only the step's own status counts.
 #
-# Derived from what `step` and `concurrently` actually consider rather than
-# from a second list beside them: two lists of the same names is two
-# derivations of one fact, and the day they disagree the gate is wrong in
-# whichever direction nobody is watching.
-#
-# The hazard it closes: `NTS_GATE_STEPS` is matched with a glob, so a name that
-# matches nothing selects nothing, **every step returns early, and the run
-# prints `green` having done no work**. The step is spelled `llvm-rc` and the
-# shell function behind it is `llvm_rc`, which is exactly the confusion to
-# expect -- `NTS_GATE_STEPS=llvm_rc` was run three times on 2026-09-20 to decide
-# whether a new example agreed under reference counting, and all three answered
-# `green` in two lines without compiling anything. The floor was then read as
-# "held at 272", which was a statement about a step that never ran.
-#
-# A silently permissive guard is the expensive direction: it looks like the best
-# result of the run.
-KNOWN_STEPS=$(mktemp)
-# Removed on every exit, including the `exit 1` a failing step takes. `/tmp` on
-# this machine is a tmpfs that has run **out of inodes** while `df -h` still
-# reported gigabytes free, so a per-run file nobody deletes is a real cost.
-trap 'rm -f "$KNOWN_STEPS"' EXIT INT TERM
-known_step() { printf '%s\n' "$1" >> "$KNOWN_STEPS"; }
-
-# Fails the run when a requested name is not one of them. Called after
-# everything has been offered, because that is when the set is complete.
-requested_steps_exist() {
-  [ -n "${NTS_GATE_STEPS-}" ] || return 0
-  unknown=""
-  for want in $NTS_GATE_STEPS; do
-    grep -qxF "$want" "$KNOWN_STEPS" || unknown="$unknown $want"
-  done
-  [ -z "$unknown" ] && return 0
-  printf '\n\033[31mFAILED\033[0m: NTS_GATE_STEPS names no such step:%s\n' "$unknown" >&2
-  printf '  nothing matching it ran, so a `green` here would mean no work was done.\n' >&2
-  printf '  the steps this run offers are:\n' >&2
-  sort -u "$KNOWN_STEPS" | sed 's/^/    /' >&2
-  exit 1
-}
-
+# The names are matched exactly, which closes the hazard the old glob match had:
+# `NTS_GATE_STEPS=llvm_rc` (the function, not the step `llvm-rc`) selected
+# nothing and printed `green` three times on 2026-09-20. run.mjs now rejects an
+# unknown name before anything runs.
 step() {
-  known_step "$1"
-  case " ${NTS_GATE_STEPS-} " in
-    "  ") ;;
-    *" $1 "*) ;;
-    *) return 0 ;;
-  esac
-  printf '\n\033[1m%s\033[0m\n' "$1"
-  name=$1
+  if [ "$gate_mode" = list ]; then printf '%s\n' "$1"; return 0; fi
+  [ "$1" = "$gate_call" ] || return 0
   shift
-  started=$(date +%s)
-  # `$name`, not `$1`: the shift above already ate the step name, so this line
-  # spent its life reporting the command it ran instead of the step that failed.
-  "$@" || { printf '\033[31mFAILED\033[0m: %s\n' "$name"; exit 1; }
-  printf '  %ss\n' "$(($(date +%s) - started))"
-}
-
-# Steps that share nothing but the binary, run at once.
-#
-# The gate was 53 minutes and its shape was a sum: `profile` then `sweep` then
-# five backend lanes then `memory`, each waiting for the last. They contend for
-# nothing -- each writes under its own `target/` path and reads `nts` read-only
-# -- so the sum was a choice rather than a constraint, and the wall time is the
-# longest of them rather than the total.
-#
-# Output is captured and replayed in order, not interleaved. A gate that is fast
-# and unreadable has traded one complaint for another, and the failure line has
-# to sit under the step that produced it.
-#
-# `jobs` is lowered for the group. Each step is already parallel inside, so
-# eight steps at eight jobs is sixty-four processes on thirty-two cores -- and
-# the cap exists to keep the *frontend* from dying in Go's collector, which is a
-# limit on total concurrency rather than per-step concurrency.
-concurrently() {
-  # The command each name runs. `step` takes it as arguments; here it has to be
-  # looked up, because the group is a list of names.
-  cmd_profile="profile";           cmd_sweep="sweep"
-  cmd_llvm="llvm";                 cmd_llvm_rc="llvm_rc"
-  cmd_jvm="jvm";                   cmd_memory="./tooling/memory/run.sh"
-  # `dex` was added to the `concurrently` line below without a command here, and
-  # the group looks its members up by name -- so `eval "run=\$cmd_dex"` was an
-  # unbound variable under `set -u` and took the whole run down after every step
-  # before it had already passed. This table and that line have to agree.
-  cmd_dex="dex"
-  # `dex` asks whether `d8` will accept what this backend emits; this asks
-  # whether the accepted thing then *answers the same*. Nothing else in this
-  # repository can: the `jvm` step runs on HotSpot and the differential's oracle
-  # is node, so a program that agrees with node on `java` and diverges under ART
-  # is invisible to both. It found `__@kCount@2`, and it found a driver that had
-  # been comparing the wrong program for two days.
-  #
-  # Skips with no `adb`, no device, no `ANDROID_HOME` and no build-tools, each
-  # by name and with exit 0, so a machine without an emulator is unaffected.
-  cmd_on_device="on_device"
-  cmd_examples="./tooling/gate/gate.sh"
-  cmd_rc="./tooling/gate/rc.sh"
-  cmd_bench_agree="./tooling/gate/bench-agree.sh"
-  cmd_addons="./tooling/gate/addons.sh"
-  cmd_blockers="blockers"
-  # The divergence checks in `tooling/conformance`, which until 2026-09-14 **nothing ran**.
-  # Nine instruments there compare this profile with node or audit the lists deciding what gets
-  # compared, and only `blockers-check.mjs` was reachable from here. The first run of the others
-  # found `isDeepStrictEqual` ignoring symbol keys -- `{ [s]: 1 }` and `{ [s]: 2 }` were equal --
-  # in a module that passes its entire upstream suite.
-  #
-  # Under a second for four of the five; `fuzz-timer-order` at 150 programs is the other 20. The
-  # script names what it excludes and why, so a check dropped for cost is not a check forgotten.
-  cmd_divergence="./tooling/conformance/divergence.sh"
-  running=""
-  chosen=""
-  for name in "$@"; do
-    known_step "$name"
-    case " ${NTS_GATE_STEPS-} " in
-      "  ") ;;
-      *" $name "*) ;;
-      *) continue ;;
-    esac
-    chosen="$chosen $name"
-    (
-      started=$(date +%s)
-      slot=$(printf '%s' "$name" | tr '-' '_')
-      eval "run=\$cmd_$slot"
-      if $run > "$root/target/gate-step-$name.out" 2>&1; then
-        rm -f "$root/target/gate-step-$name.failed"
-      else
-        : > "$root/target/gate-step-$name.failed"
-      fi
-      printf '%s' "$(($(date +%s) - started))" > "$root/target/gate-step-$name.time"
-    ) &
-    running="$running $!"
-  done
-  for pid in $running; do wait "$pid"; done
-  bad=0
-  for name in $chosen; do
-    printf '\n\033[1m%s\033[0m\n' "$name"
-    cat "$root/target/gate-step-$name.out"
-    printf '  %ss\n' "$(cat "$root/target/gate-step-$name.time" 2>/dev/null || echo '?')"
-    if [ -f "$root/target/gate-step-$name.failed" ]; then
-      printf '\033[31mFAILED\033[0m: %s\n' "$name"
-      rm -f "$root/target/gate-step-$name.failed"
-      bad=1
-    fi
-  done
-  [ "$bad" -eq 0 ] || exit 1
+  "$@" && exit 0
+  exit $?
 }
 
 lint() { cargo clippy --workspace --all-targets 2>&1 | grep -E '^(warning|error)' && return 1; return 0; }
@@ -1706,20 +1602,6 @@ corpus() {
   [ "${bad:-1}" = "0" ] || { echo "  ^ unverifiable class must be zero"; return 1; }
 }
 
-# The frontend is not cargo's, but it lives in cargo's directory -- so
-# `cargo clean` takes it, and every step afterwards reports a number that is
-# true and means something else. The corpus said `frontend failed 184`, which
-# reads as the compiler having lost the ability to parse anything and meant
-# that a 39MB Go binary was absent.
-#
-# Checked once, here, rather than left for each step to misreport in its own
-# way.
-if [ ! -x "$NTS_TSGO" ]; then
-  printf '\033[31mno frontend\033[0m at %s\n' "$NTS_TSGO"
-  printf 'run tooling/bootstrap/bootstrap.sh -- `cargo clean` removes it\n'
-  exit 1
-fi
-
 # Two records were committed as 0164 on 2026-09-06, by two sessions that each
 # believed they had claimed it. `claim-record.sh` is atomic and was guarding the
 # wrong noun -- it made the exclusive create on the *file name*, and two
@@ -2448,8 +2330,44 @@ blockers() {
 
 # Everything left, at once. `benches` is above because `bench-agree` runs the
 # cases it compiles; nothing else here depends on anything else here.
-jobs=$(( jobs > 4 ? 4 : jobs ))
-concurrently profile sweep llvm llvm-rc jvm dex on-device bench-agree examples rc memory addons blockers divergence
+# These were one `concurrently` group, which ran together after every step
+# above had passed. run.mjs now schedules every step against one CPU and memory
+# budget and lowers each step's parallelism (`NTS_GATE_JOBS`, so `$jobs`) to the
+# slots it was given, which is what the old `jobs` cap of 4 here did for the
+# group alone: eight steps at eight jobs is sixty-four processes on thirty-two
+# cores, and the frontend dies in Go's collector before the CPUs run out.
+step "profile" profile
+step "sweep" sweep
+step "llvm" llvm
+step "llvm-rc" llvm_rc
+step "jvm" jvm
+# `dex` asks whether `d8` will accept what this backend emits; `on-device` asks
+# whether the accepted thing then *answers the same*. Nothing else in this
+# repository can: the `jvm` step runs on HotSpot and the differential's oracle
+# is node, so a program that agrees with node on `java` and diverges under ART
+# is invisible to both. It found `__@kCount@2`, and it found a driver that had
+# been comparing the wrong program for two days.
+#
+# Both skip with no `adb`, no device, no `ANDROID_HOME` or no build-tools, and
+# `dex()`/`on_device()` turn that into exit 77, so the summary says SKIPPED.
+step "dex" dex
+step "on-device" on_device
+step "bench-agree" ./tooling/gate/bench-agree.sh
+step "examples" ./tooling/gate/gate.sh
+step "rc" ./tooling/gate/rc.sh
+step "memory" ./tooling/memory/run.sh
+step "addons" ./tooling/gate/addons.sh
+step "blockers" blockers
+# The divergence checks in `tooling/conformance`, which until 2026-09-14 **nothing ran**.
+# Nine instruments there compare this profile with node or audit the lists deciding what gets
+# compared, and only `blockers-check.mjs` was reachable from here. The first run of the others
+# found `isDeepStrictEqual` ignoring symbol keys -- `{ [s]: 1 }` and `{ [s]: 2 }` were equal --
+# in a module that passes its entire upstream suite.
+#
+# Under a second for four of the five; `fuzz-timer-order` at 150 programs is the other 20. The
+# script names what it excludes and why, so a check dropped for cost is not a check forgotten.
+# It reads `target/node/*.node`, which `addons` rewrites, so run.mjs orders it after `addons`.
+step "divergence" ./tooling/conformance/divergence.sh
 # **Last, and that position is the whole of what this comment is for.** `step` exits
 # the gate on a failure, which is right for the cheap early ones -- a run whose build
 # or clippy failed has nothing worth reading after it. `interop` is neither cheap nor
@@ -2503,9 +2421,9 @@ step "interop" interop
 # written down beside it. It caught a collector bug that leaked one link out of
 # every list built head first while every count balanced perfectly.
 
-requested_steps_exist
-
-printf '\n\033[32mgreen\033[0m\n'
-
-exit 0
+case $gate_mode in
+  list) exit 0 ;;
+esac
+printf 'all.sh: no step is named %s; all.sh --list names them\n' "$gate_call" >&2
+exit 2
 }

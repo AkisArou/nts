@@ -1,0 +1,644 @@
+#!/usr/bin/env node
+// The gate's runner: every requested step of tooling/gate/all.sh, at once where
+// they can be, under one CPU, memory and frontend budget, with a verdict per
+// step and a summary that is printed however the run ends.
+//
+//   tooling/gate/all.sh                       (hands over to this file)
+//   NTS_GATE_STEPS="clippy rc" tooling/gate/all.sh
+//
+// **Why it exists.** all.sh ran its steps through `step()`, which exited on the
+// first failure: every later step, the concurrent group and `interop` never ran,
+// and nothing said so. A log that ended at `FAILED: definitions` was read as
+// "only definitions failed" on 2026-10-06, and `rc`, `llvm-rc` and fourteen
+// other steps that had never run on that commit went red on main the next run.
+// A misspelt step name was reported only after every other step had passed. A
+// step that could not run (no checkout, no SDK) returned 0 and read as passed.
+// And the box sat mostly idle: the steps before the group ran one after another
+// although they share nothing but the binary.
+//
+// **What it guarantees.**
+//
+//   - Every requested name is checked against `all.sh --list` before anything
+//     runs, and a name this file has no row for (or a row all.sh has no step
+//     for) is an error, so the two lists cannot drift apart silently.
+//   - Every requested step ends as exactly one of
+//       PASS     it ran and exited 0
+//       FAIL     it ran and exited non-zero (other than 77)
+//       SKIPPED  it exited 77: it could not run here (its last line says why)
+//       NOT RUN  it never started: a step it needs failed, the run was
+//                interrupted, or NTS_GATE_FAIL_FAST stopped it
+//   - A failing step never stops an unrelated one. Only a step that *needs*
+//     another (every step that drives `nts` needs `build`, when `build` is
+//     requested) is NOT RUN when that one fails.
+//   - The summary is printed and `summary.json`/`summary.tsv` written on every
+//     exit: green, red, Ctrl-C, SIGTERM, or this file throwing.
+//   - `green` only when every requested step PASSed. SKIPPED is red unless the
+//     step is named in NTS_GATE_ACCEPT_SKIP, and the summary says it was
+//     accepted. A step that did nothing is never counted as one that passed.
+//
+// **Scheduling.** Each step has a row below: the slots (workers) it can use,
+// the memory it needs, whether it starts frontends, and what it needs or must
+// follow. Steps run concurrently while the slot, memory and frontend budgets
+// allow, cheap steps first (a failure in a two-minute step should be on screen
+// at minute two) and then the longest first (they set the wall time). Each
+// step's own parallelism follows the slots it was given: `NTS_GATE_JOBS` and the
+// per-tool knobs are set to it, so the frontend cap is a cap on the whole run.
+//
+// Environment:
+//   NTS_GATE_STEPS        steps to run, space separated (default: all)
+//   NTS_GATE_SLOTS        CPU slots for the run (default: NTS_JOBS, else 3/4 of
+//                         the cores)
+//   NTS_GATE_MEM_GB       memory budget in GB (default 20)
+//   NTS_GATE_FRONTENDS    concurrent frontend-using workers (default 16)
+//   NTS_GATE_FAIL_FAST=1  stop at the first FAIL (inner loop; never landing)
+//   NTS_GATE_ACCEPT_SKIP  step names whose SKIPPED does not make the run red
+//   NTS_GATE_RUN_DIR      where logs and the summary go
+//                         (default <target>/gate-runs/<time>-<pid>)
+//   NTS_GATE_TIME_STRICT=1  a step much slower than its baseline is a FAIL
+//   NTS_GATE_RECORD_TIMES=1 write this run's times to tooling/gate/times.tsv
+
+import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import {
+  closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync,
+  symlinkSync, writeFileSync,
+} from "node:fs";
+import { cpus, totalmem } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = resolve(HERE, "../..");
+process.chdir(ROOT);
+
+// ---------------------------------------------------------------------------
+// The step table. One row per `step` line in all.sh; `checkTable` fails the
+// run if the two disagree in either direction.
+//
+//   slots  workers the step can use; it gets NTS_GATE_JOBS = what it was given
+//   min    fewest slots it may start with (default: half of slots)
+//   mem    GB it may hold at peak
+//   fe     true when its workers start frontends (counted against FRONTENDS)
+//   nts    true when it drives the compiler: needs the binary and the frontend
+//   needs  steps that must PASS first (only when they are requested too)
+//   after  steps that must finish first, whatever their verdict
+//   lock   an exclusive resource (cargo's build-directory lock)
+//   doc    what it proves, for the summary's reader
+// ---------------------------------------------------------------------------
+const STEPS = [
+  { name: "build", slots: 8, min: 4, mem: 8, lock: "cargo", doc: "release binaries build" },
+  { name: "clippy", slots: 6, min: 4, mem: 6, lock: "cargo", after: ["build"], doc: "lint clean" },
+  { name: "format", slots: 1, mem: 0.2, doc: "runtime/c is clang-formatted" },
+  { name: "reformat", slots: 1, mem: 0.1, doc: "no whitespace-only diffs" },
+  { name: "records", slots: 1, mem: 0.1, doc: "record numbers unique" },
+  { name: "test262", slots: 1, mem: 2, lock: "cargo", after: ["build"], doc: "test262 pin, inventory, features audit" },
+  { name: "test262-cases", slots: 8, min: 4, mem: 8, nts: true, fe: true, doc: "test/language rows reproduce" },
+  { name: "test262-builtins-cases", slots: 4, min: 2, mem: 5, nts: true, fe: true, doc: "test/built-ins rows reproduce" },
+  { name: "test262-rest-cases", slots: 4, min: 2, mem: 5, nts: true, fe: true, doc: "annexB, staging, harness rows reproduce" },
+  { name: "outcomes", slots: 1, mem: 1, nts: true, fe: true, doc: "pinned defects still do what they did" },
+  { name: "integrity", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "listings self-consistent over examples, blockers, outcomes" },
+  { name: "definitions", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "no runtime module emits fewer functions" },
+  { name: "integrity-runtime", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "listing rules over the runtime corpus" },
+  { name: "snapshot-cache", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "a cached snapshot gives the same program" },
+  { name: "assembles", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "runtime LLVM IR assembles" },
+  { name: "types", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "snapshot type tables consistent" },
+  { name: "jvm-verifies", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "runtime and outcomes JVM output verifies" },
+  { name: "primitives", slots: 1, mem: 0.1, doc: "docs/primitives.md names exist" },
+  { name: "tests", slots: 8, min: 4, mem: 8, lock: "cargo", after: ["build"], doc: "cargo test --workspace" },
+  { name: "corpus", slots: 8, min: 4, mem: 6, nts: true, fe: true, doc: "invalid HIR 0, uncompilable C 0, unverifiable class 0" },
+  { name: "benches", slots: 1, mem: 1, nts: true, fe: true, doc: "bench cases emit and compile on C, LLVM, JVM" },
+  { name: "example-refusals", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "per-example refusal counts match the table" },
+  { name: "config", slots: 1, mem: 1, doc: "nts.config.ts files coherent" },
+  { name: "react-sources", slots: 1, mem: 0.3, doc: "vendored React sources match the manifest" },
+  { name: "profile", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "runtime/node emits without a panic, under the refusal ceiling" },
+  { name: "sweep", slots: 1, mem: 1, nts: true, fe: true, doc: "the value-kind cross-product agrees on C" },
+  { name: "llvm", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "every example agrees with node on LLVM" },
+  { name: "llvm-rc", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "every example agrees with node on LLVM under RC" },
+  { name: "jvm", slots: 4, min: 2, mem: 4, nts: true, fe: true, doc: "every example agrees with node on the JVM" },
+  { name: "dex", slots: 1, mem: 2, nts: true, fe: true, doc: "d8 accepts emitted classes" },
+  { name: "on-device", slots: 1, mem: 1, nts: true, fe: true, doc: "bench cases agree on java and dalvikvm" },
+  { name: "bench-agree", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "bench cases agree with node" },
+  { name: "examples", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "every example agrees with node on C" },
+  { name: "rc", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "every example agrees under RC, no leak" },
+  { name: "memory", slots: 1, mem: 1, nts: true, fe: true, doc: "RC: no leak, same answer, counts at floors" },
+  { name: "addons", slots: 1, mem: 2, nts: true, fe: true, doc: "node modules build, load and publish" },
+  { name: "blockers", slots: 1, mem: 1, nts: true, fe: true, doc: "blocker fixtures still refuse as they say" },
+  { name: "divergence", slots: 1, mem: 1, nts: true, fe: true, after: ["addons"], doc: "node divergence instruments" },
+  { name: "interop", slots: 1, mem: 3, nts: true, fe: true, doc: "interop projects build and run" },
+];
+const BY_NAME = new Map(STEPS.map((s) => [s.name, s]));
+
+// ---------------------------------------------------------------------------
+// Environment and budgets.
+// ---------------------------------------------------------------------------
+const env = process.env;
+const target = resolve(env.CARGO_TARGET_DIR ?? join(ROOT, "target"));
+// `NTS_BIN` defaults to the build this run makes, not to `./target/release/nts`:
+// with CARGO_TARGET_DIR elsewhere the old default gated whatever another session
+// last built into ./target (the-gate-drives-target-release-nts).
+const ntsBin = resolve(env.NTS_BIN ?? join(target, "release/nts"));
+const suiteBin = resolve(env.NTS_SUITE_BIN ?? join(dirname(ntsBin), "nts-suite"));
+const tsgo = resolve(env.NTS_TSGO ?? join(ROOT, "target/tsgo"));
+const cores = cpus().length;
+const intEnv = (name, fallback) => {
+  const v = env[name];
+  if (v === undefined || v === "") return fallback;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) usage(`${name}=${v} is not a positive number`);
+  return n;
+};
+const SLOTS = Math.floor(intEnv("NTS_GATE_SLOTS", intEnv("NTS_JOBS", Math.max(1, Math.floor((cores * 3) / 4)))));
+const MEM = intEnv("NTS_GATE_MEM_GB", Math.min(20, Math.floor(totalmem() / 2 ** 30 * 0.7)));
+const FRONTENDS = Math.floor(intEnv("NTS_GATE_FRONTENDS", 16));
+const FAIL_FAST = (env.NTS_GATE_FAIL_FAST ?? "") !== "" && env.NTS_GATE_FAIL_FAST !== "0";
+const ACCEPT_SKIP = new Set((env.NTS_GATE_ACCEPT_SKIP ?? "").split(/\s+/).filter(Boolean));
+const TIME_STRICT = (env.NTS_GATE_TIME_STRICT ?? "") === "1";
+const RECORD_TIMES = (env.NTS_GATE_RECORD_TIMES ?? "") === "1";
+const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "");
+const RUN_DIR = resolve(env.NTS_GATE_RUN_DIR ?? join(target, "gate-runs", `${stamp}-${process.pid}`));
+const TIMES_FILE = join(HERE, "times.tsv");
+const color = (code, text) => `\x1b[${code}m${text}\x1b[0m`;
+
+function usage(message) {
+  process.stderr.write(`${color(31, "FAILED")}: ${message}\n`);
+  process.exit(2);
+}
+
+// ---------------------------------------------------------------------------
+// The table against all.sh, and the request against the table, before any
+// work: a name that matches nothing used to select nothing and print `green`.
+// ---------------------------------------------------------------------------
+function checkTable() {
+  const listed = spawnSync("sh", [join(HERE, "all.sh"), "--list"], { encoding: "utf8" });
+  if (listed.status !== 0) usage(`all.sh --list exited ${listed.status}:\n${listed.stderr}`);
+  const names = listed.stdout.split("\n").filter(Boolean);
+  const inShell = new Set(names);
+  const missingRow = names.filter((n) => !BY_NAME.has(n));
+  const missingStep = STEPS.map((s) => s.name).filter((n) => !inShell.has(n));
+  if (missingRow.length || missingStep.length) {
+    usage(
+      "all.sh and run.mjs disagree about the steps:\n" +
+        (missingRow.length ? `  in all.sh, no row in run.mjs: ${missingRow.join(" ")}\n` : "") +
+        (missingStep.length ? `  in run.mjs, no step in all.sh: ${missingStep.join(" ")}\n` : "") +
+        "  add the row (or the step) so every step is scheduled and reported",
+    );
+  }
+  for (const s of STEPS) {
+    for (const d of [...(s.needs ?? []), ...(s.after ?? [])]) {
+      if (!BY_NAME.has(d)) usage(`run.mjs: ${s.name} depends on ${d}, which is not a step`);
+    }
+  }
+}
+
+function requested() {
+  const raw = env.NTS_GATE_STEPS;
+  if (raw === undefined || raw.trim() === "") return STEPS.map((s) => s.name);
+  const want = raw.split(/\s+/).filter(Boolean);
+  const unknown = want.filter((n) => !BY_NAME.has(n));
+  if (unknown.length) {
+    usage(
+      `NTS_GATE_STEPS names no such step: ${unknown.join(" ")}\n` +
+        "  nothing ran; the steps are:\n" + STEPS.map((s) => `    ${s.name}`).join("\n"),
+    );
+  }
+  const set = new Set(want);
+  return STEPS.map((s) => s.name).filter((n) => set.has(n));
+}
+
+// ---------------------------------------------------------------------------
+// Baseline times: what each step cost on a healthy run, in CPU seconds (which
+// does not move with the slots a step was given or the load around it, unlike
+// wall time). A compiler that got 7x slower made five steps 7x slower and
+// nothing noticed for two days; this is what notices.
+// ---------------------------------------------------------------------------
+function readTimes() {
+  const times = new Map();
+  if (!existsSync(TIMES_FILE)) return times;
+  for (const line of readFileSync(TIMES_FILE, "utf8").split("\n")) {
+    if (line === "" || line.startsWith("#")) continue;
+    const [name, wall, cpu, slots] = line.split("\t");
+    times.set(name, { wall: Number(wall), cpu: Number(cpu), slots: Number(slots) });
+  }
+  return times;
+}
+const BASE = readTimes();
+const estimate = (name) => BASE.get(name)?.wall ?? 60;
+
+// ---------------------------------------------------------------------------
+// Identities, so a summary says which binary and which tree it is about.
+// ---------------------------------------------------------------------------
+function sha256(path) {
+  try {
+    return createHash("sha256").update(readFileSync(path)).digest("hex");
+  } catch {
+    return null;
+  }
+}
+function git(...args) {
+  const r = spawnSync("git", args, { encoding: "utf8" });
+  return r.status === 0 ? r.stdout.trim() : null;
+}
+function memAvailableGB() {
+  try {
+    const m = /MemAvailable:\s+(\d+) kB/.exec(readFileSync("/proc/meminfo", "utf8"));
+    return m ? Number(m[1]) / 2 ** 20 : Infinity;
+  } catch {
+    return Infinity;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// State.
+// ---------------------------------------------------------------------------
+const startedAt = Date.now();
+const results = new Map(); // name -> { verdict, reason, ... }
+const running = new Map(); // name -> { child, slots, started }
+let interrupted = null;
+let stopping = false;
+let summaryWritten = false;
+const identities = {};
+let plan = [];
+
+function stepEnv(step, slots) {
+  const e = { ...env };
+  // NTS_JOBS sets the run's budget here; inside a step all.sh would read it as
+  // "every knob at once" and undo the slot split.
+  delete e.NTS_JOBS;
+  delete e.NTS_GATE_STEPS;
+  e.NTS_BIN = ntsBin;
+  e.NTS_SUITE_BIN = suiteBin;
+  e.NTS_TSGO = tsgo;
+  e.CARGO_TARGET_DIR = target;
+  e.NTS_GATE_RUN_DIR = RUN_DIR;
+  const s = String(slots);
+  e.NTS_GATE_JOBS = s;
+  e.CARGO_BUILD_JOBS = s;
+  e.NTS_SUITE_JOBS = s;
+  e.NTS_AGREE_JOBS = s;
+  for (const knob of [
+    "NTS_INTEGRITY_JOBS", "NTS_DEFINITIONS_JOBS", "NTS_SNAPSHOT_CACHE_JOBS",
+    "NTS_ASSEMBLES_JOBS", "NTS_TYPES_CHECK_JOBS", "NTS_JVM_VERIFIES_JOBS",
+  ]) e[knob] = s;
+  return e;
+}
+
+function finish(name, verdict, reason, extra = {}) {
+  results.set(name, { verdict, reason, ...extra });
+}
+
+function lastLine(text) {
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  return lines.length ? lines[lines.length - 1] : "";
+}
+
+function report(name) {
+  const r = results.get(name);
+  const log = r.log && existsSync(r.log) ? readFileSync(r.log, "utf8") : "";
+  let block = `\n${color(1, name)}\n`;
+  if (log) block += log.endsWith("\n") ? log : `${log}\n`;
+  if (r.wall !== undefined) block += `  ${Math.round(r.wall)}s${r.cpu !== undefined ? ` (cpu ${Math.round(r.cpu)}s, ${r.slots} slot${r.slots === 1 ? "" : "s"})` : ""}\n`;
+  if (r.verdict === "FAIL") block += `${color(31, "FAILED")}: ${name}\n`;
+  else if (r.verdict === "SKIPPED") block += `${color(33, "SKIPPED")}: ${name} -- ${r.reason}\n`;
+  process.stdout.write(block);
+}
+
+// ---------------------------------------------------------------------------
+// Scheduling.
+// ---------------------------------------------------------------------------
+function used() {
+  let slots = 0, mem = 0, fe = 0;
+  const locks = new Set();
+  for (const [name, r] of running) {
+    const s = BY_NAME.get(name);
+    slots += r.slots;
+    mem += s.mem;
+    if (s.fe) fe += r.slots;
+    if (s.lock) locks.add(s.lock);
+  }
+  return { slots, mem, fe, locks };
+}
+
+function blockedBy(step) {
+  // A dependency that is requested and failed makes this NOT RUN; one that is
+  // requested and unfinished makes it wait.
+  for (const d of step.needs ?? []) {
+    if (!plan.includes(d)) continue;
+    const r = results.get(d);
+    if (r === undefined) return { wait: true };
+    if (r.verdict !== "PASS") return { notRun: `needs ${d}, which is ${r.verdict}` };
+  }
+  for (const d of step.after ?? []) {
+    if (plan.includes(d) && !results.has(d)) return { wait: true };
+  }
+  if (step.nts && plan.includes("build")) {
+    const r = results.get("build");
+    if (r === undefined) return { wait: true };
+    if (r.verdict !== "PASS") return { notRun: `needs build, which is ${r.verdict}` };
+  }
+  return null;
+}
+
+function preflight(step) {
+  if (!step.nts) return null;
+  if (!existsSync(tsgo) || !(statSync(tsgo).mode & 0o111)) {
+    // The frontend is not cargo's, but it lives in cargo's directory -- so
+    // `cargo clean` takes it, and every step afterwards reports a number that
+    // is true and means something else. The corpus said `frontend failed 184`,
+    // which reads as the compiler having lost the ability to parse anything
+    // and meant that a 39MB Go binary was absent.
+    return `no frontend at ${tsgo}; run tooling/bootstrap/bootstrap.sh -- \`cargo clean\` removes it`;
+  }
+  if (!existsSync(ntsBin)) return `no compiler at ${ntsBin}`;
+  return null;
+}
+
+function order(names) {
+  // Cheap steps first, so a failure in one is on screen within minutes; then
+  // the longest first, because they decide when the run ends.
+  const cheap = (n) => estimate(n) <= 90;
+  return [...names].sort((a, b) => {
+    if (cheap(a) !== cheap(b)) return cheap(a) ? -1 : 1;
+    return cheap(a) ? estimate(a) - estimate(b) : estimate(b) - estimate(a);
+  });
+}
+
+function admit(step, u) {
+  const free = SLOTS - u.slots;
+  const want = Math.min(step.slots, SLOTS);
+  const least = Math.min(step.min ?? Math.max(1, Math.ceil(step.slots / 2)), want);
+  if (step.lock && u.locks.has(step.lock)) return 0;
+  if (running.size === 0) return want; // always make progress
+  if (free < least) return 0;
+  let slots = Math.min(want, free);
+  if (step.fe) {
+    const feFree = FRONTENDS - u.fe;
+    if (feFree < least) return 0;
+    slots = Math.min(slots, feFree);
+  }
+  if (u.mem + step.mem > MEM) return 0;
+  if (memAvailableGB() < step.mem + 1) return 0;
+  return slots;
+}
+
+let pending = [];
+let wake = null;
+
+function schedule() {
+  if (stopping) return;
+  let progressed = true;
+  while (progressed) {
+    progressed = false;
+    for (const name of pending) {
+      const step = BY_NAME.get(name);
+      const b = blockedBy(step);
+      if (b?.notRun) {
+        finish(name, "NOT RUN", b.notRun);
+        pending = pending.filter((n) => n !== name);
+        process.stdout.write(`\n${color(1, name)}\n  ${color(33, "NOT RUN")}: ${b.notRun}\n`);
+        progressed = true;
+        break;
+      }
+      if (b?.wait) continue;
+      const pre = preflight(step);
+      if (pre) {
+        finish(name, "NOT RUN", pre);
+        pending = pending.filter((n) => n !== name);
+        process.stdout.write(`\n${color(1, name)}\n  ${color(33, "NOT RUN")}: ${pre}\n`);
+        progressed = true;
+        break;
+      }
+      const slots = admit(step, used());
+      if (slots === 0) continue;
+      pending = pending.filter((n) => n !== name);
+      start(step, slots);
+      progressed = true;
+      break;
+    }
+  }
+  if (pending.length === 0 && running.size === 0) done();
+}
+
+function start(step, slots) {
+  const log = join(RUN_DIR, `${step.name}.log`);
+  const timeFile = join(RUN_DIR, `${step.name}.time`);
+  const fd = openSync(log, "w");
+  const argv = existsSync("/usr/bin/time")
+    ? ["/usr/bin/time", ["-f", "%e %U %S %M", "-o", timeFile, "sh", join(HERE, "all.sh"), "--call", step.name]]
+    : ["sh", [join(HERE, "all.sh"), "--call", step.name]];
+  const child = spawn(argv[0], argv[1], {
+    cwd: ROOT,
+    env: stepEnv(step, slots),
+    stdio: ["ignore", fd, fd],
+    detached: true, // its own process group, so it can be stopped whole
+  });
+  closeSync(fd);
+  const started = Date.now();
+  running.set(step.name, { child, slots, started });
+  process.stderr.write(`-- ${step.name} started (${slots} slot${slots === 1 ? "" : "s"}; ${running.size} running)\n`);
+  child.on("exit", (code, signal) => {
+    running.delete(step.name);
+    const wall = (Date.now() - started) / 1000;
+    let cpu, user, sys, maxrss;
+    try {
+      const t = readFileSync(timeFile, "utf8").trim().split("\n").pop().split(" ").map(Number);
+      if (t.length === 4 && t.every(Number.isFinite)) {
+        [, user, sys, maxrss] = t;
+        cpu = user + sys;
+      }
+    } catch {}
+    const text = existsSync(log) ? readFileSync(log, "utf8") : "";
+    const extra = { exit: code, signal, wall, cpu, user, sys, maxrss_kb: maxrss, slots, log, started_at: new Date(started).toISOString() };
+    if (stopping && (signal || code !== 0)) {
+      finish(step.name, "NOT RUN", interrupted ? `stopped: ${interrupted}` : "stopped by fail-fast", extra);
+    } else if (code === 0) {
+      finish(step.name, "PASS", "", extra);
+    } else if (code === 77) {
+      finish(step.name, "SKIPPED", lastLine(text) || "exited 77 without a reason", extra);
+    } else {
+      finish(step.name, "FAIL", signal ? `killed by ${signal}` : `exit ${code}`, extra);
+    }
+    report(step.name);
+    if (step.name === "build" && results.get("build").verdict === "PASS") identify();
+    if (results.get(step.name).verdict === "FAIL" && FAIL_FAST && !stopping) {
+      stop("NTS_GATE_FAIL_FAST: a step failed");
+    }
+    if (!stopping) schedule();
+    else if (running.size === 0) done();
+  });
+}
+
+function stop(why) {
+  if (stopping) return;
+  stopping = true;
+  interrupted = why;
+  for (const name of pending) finish(name, "NOT RUN", why);
+  pending = [];
+  for (const [, r] of running) {
+    try { process.kill(-r.child.pid, "SIGTERM"); } catch {}
+  }
+  setTimeout(() => {
+    for (const [, r] of running) {
+      try { process.kill(-r.child.pid, "SIGKILL"); } catch {}
+    }
+  }, 5000).unref();
+  if (running.size === 0) done();
+}
+
+function identify() {
+  identities.nts = { path: ntsBin, sha256: sha256(ntsBin) };
+  identities.nts_suite = { path: suiteBin, sha256: sha256(suiteBin) };
+}
+
+// ---------------------------------------------------------------------------
+// The summary: printed on every exit, and written as JSON and TSV.
+// ---------------------------------------------------------------------------
+function slower() {
+  const out = [];
+  for (const name of plan) {
+    const r = results.get(name);
+    const b = BASE.get(name);
+    if (!r || !b || r.verdict === "NOT RUN") continue;
+    // CPU when both sides have it, wall otherwise. Twice the baseline and a
+    // minute more is the warning; a step that took 3 s instead of 1 s is not.
+    const now = r.cpu ?? r.wall;
+    const was = r.cpu !== undefined && b.cpu > 0 ? b.cpu : b.wall;
+    const kind = r.cpu !== undefined && b.cpu > 0 ? "cpu" : "wall";
+    if (now >= 2 * was && now - was >= 60) out.push({ name, kind, now, was, ratio: now / was });
+  }
+  return out;
+}
+
+function done() {
+  if (summaryWritten) return;
+  summaryWritten = true;
+  if (!identities.nts) identify();
+  identities.tsgo = { path: tsgo, sha256: sha256(tsgo) };
+  identities.node = process.version;
+  for (const name of plan) if (!results.has(name)) finish(name, "NOT RUN", interrupted ?? "never scheduled");
+
+  const slow = slower();
+  if (TIME_STRICT) {
+    for (const s of slow) {
+      const r = results.get(s.name);
+      if (r.verdict === "PASS") { r.verdict = "FAIL"; r.reason = `${s.ratio.toFixed(1)}x its baseline ${s.kind} time`; }
+    }
+  }
+  const counts = { PASS: 0, FAIL: 0, SKIPPED: 0, "NOT RUN": 0 };
+  const red = [];
+  for (const name of plan) {
+    const r = results.get(name);
+    counts[r.verdict]++;
+    if (r.verdict === "PASS") continue;
+    if (r.verdict === "SKIPPED" && ACCEPT_SKIP.has(name)) { r.accepted = true; continue; }
+    red.push(name);
+  }
+  const green = red.length === 0;
+  const wall = (Date.now() - startedAt) / 1000;
+
+  const lines = [];
+  lines.push("");
+  lines.push(color(1, "gate summary") + `  ${identities.commit ?? "?"}${identities.dirty ? ` +${identities.dirty} uncommitted` : ""}  nts ${identities.nts?.sha256?.slice(0, 12) ?? "missing"}  tsgo ${identities.tsgo?.sha256?.slice(0, 12) ?? "missing"}`);
+  for (const name of plan) {
+    const r = results.get(name);
+    const tag = { PASS: color(32, "PASS    "), FAIL: color(31, "FAIL    "), SKIPPED: color(33, "SKIPPED "), "NOT RUN": color(33, "NOT RUN ") }[r.verdict];
+    const t = r.wall !== undefined ? `${String(Math.round(r.wall)).padStart(6)}s` : "       ";
+    const c = r.cpu !== undefined ? ` cpu ${String(Math.round(r.cpu)).padStart(6)}s` : "";
+    const why = r.verdict === "PASS" ? "" : `  ${r.reason}${r.accepted ? "  [accepted: NTS_GATE_ACCEPT_SKIP]" : ""}`;
+    lines.push(`  ${tag} ${name.padEnd(24)}${t}${c}${why}`);
+  }
+  for (const s of slow) {
+    lines.push(color(31, `  SLOWER   ${s.name.padEnd(24)} ${s.kind} ${Math.round(s.now)}s, ${s.ratio.toFixed(1)}x its baseline of ${Math.round(s.was)}s (tooling/gate/times.tsv)`));
+  }
+  lines.push(`  ${plan.length} requested: ${counts.PASS} PASS, ${counts.FAIL} FAIL, ${counts.SKIPPED} SKIPPED, ${counts["NOT RUN"]} NOT RUN in ${Math.round(wall)}s  (slots ${SLOTS}, mem ${MEM}G, frontends ${FRONTENDS})`);
+  if (FAIL_FAST) lines.push(color(33, "  NTS_GATE_FAIL_FAST: an inner-loop run, not landing evidence"));
+  lines.push(`  logs: ${RUN_DIR}`);
+  for (const name of red) {
+    const r = results.get(name);
+    if (r.verdict === "FAIL") lines.push(`${color(31, "FAILED")}: ${name}`);
+    else lines.push(`${color(31, r.verdict)}: ${name} -- ${r.reason}`);
+  }
+  lines.push(green ? `\n${color(32, "green")}` : `\n${color(31, "red")}`);
+  process.stdout.write(lines.join("\n") + "\n");
+
+  const summary = {
+    schema: 1,
+    verdict: green ? "green" : "red",
+    fail_fast: FAIL_FAST,
+    interrupted,
+    started: new Date(startedAt).toISOString(),
+    wall_s: wall,
+    root: ROOT,
+    identities,
+    budget: { slots: SLOTS, mem_gb: MEM, frontends: FRONTENDS },
+    requested: plan,
+    accept_skip: [...ACCEPT_SKIP],
+    steps: plan.map((name) => ({ name, ...results.get(name) })),
+    slower: slow,
+  };
+  try {
+    writeFileSync(join(RUN_DIR, "summary.json"), JSON.stringify(summary, null, 2) + "\n");
+    writeFileSync(
+      join(RUN_DIR, "summary.tsv"),
+      ["step\tverdict\twall_s\tcpu_s\tslots\treason"]
+        .concat(plan.map((n) => { const r = results.get(n); return [n, r.verdict, r.wall?.toFixed(1) ?? "", r.cpu?.toFixed(1) ?? "", r.slots ?? "", r.reason ?? ""].join("\t"); }))
+        .join("\n") + "\n",
+    );
+    const latest = join(dirname(RUN_DIR), "latest");
+    rmSync(latest, { force: true });
+    symlinkSync(RUN_DIR, latest);
+  } catch (e) {
+    process.stderr.write(`could not write the summary files: ${e.message}\n`);
+  }
+  if (RECORD_TIMES) recordTimes();
+  process.exitCode = interrupted && interrupted.startsWith("signal") ? 130 : green ? 0 : 1;
+}
+
+function recordTimes() {
+  const merged = new Map(BASE);
+  for (const name of plan) {
+    const r = results.get(name);
+    if (r.verdict !== "PASS" || r.wall === undefined) continue;
+    merged.set(name, { wall: r.wall, cpu: r.cpu ?? 0, slots: r.slots });
+  }
+  const head = [
+    "# Per-step cost on a healthy run: step, wall s, cpu s (user+sys of the step's",
+    "# process tree), slots it ran with. run.mjs orders steps by wall and warns when",
+    "# a step's cpu is 2x this and a minute more. Rewrite with NTS_GATE_RECORD_TIMES=1",
+    `# on a run you have checked is healthy. Last written at ${identities.commit ?? "?"}.`,
+  ];
+  const rows = STEPS.filter((s) => merged.has(s.name)).map((s) => {
+    const t = merged.get(s.name);
+    return [s.name, t.wall.toFixed(1), (t.cpu ?? 0).toFixed(1), t.slots ?? ""].join("\t");
+  });
+  writeFileSync(TIMES_FILE, head.concat(rows).join("\n") + "\n");
+  process.stdout.write(`  times written to ${TIMES_FILE}\n`);
+}
+
+// ---------------------------------------------------------------------------
+// Main.
+// ---------------------------------------------------------------------------
+for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+  process.on(sig, () => stop(`signal ${sig}`));
+}
+process.on("uncaughtException", (e) => {
+  process.stderr.write(`run.mjs: ${e.stack ?? e}\n`);
+  interrupted = `runner crashed: ${e.message}`;
+  stopping = true;
+  for (const [, r] of running) { try { process.kill(-r.child.pid, "SIGKILL"); } catch {} }
+  running.clear();
+  try { done(); } finally { process.exit(1); }
+});
+
+checkTable();
+plan = requested();
+mkdirSync(RUN_DIR, { recursive: true });
+identities.commit = git("rev-parse", "--short=12", "HEAD");
+const dirty = git("status", "--porcelain", "--untracked-files=no");
+identities.dirty = dirty === null ? null : dirty.split("\n").filter(Boolean).length;
+if (!plan.includes("build")) identify();
+process.stdout.write(
+  `gate: ${plan.length} step(s), ${SLOTS} slots, ${MEM}G, ${FRONTENDS} frontends; logs in ${RUN_DIR}\n` +
+    `  nts ${ntsBin}\n`,
+);
+pending = order(plan);
+schedule();
