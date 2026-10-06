@@ -89,6 +89,15 @@ public final class NtsValue {
     public static NtsValue ofObjectOrUndefined(Object value) {
         return value == null ? UNDEFINED_VALUE : new NtsValue(OBJECT, 0.0, value);
     }
+    /**
+     * A string whose absence is `undefined`: an element of a `(string |
+     * undefined)[]`, whose empty slot is the null reference. `ofString` reads
+     * that null as `null`, and {@link #ofObjectOrUndefined} would tag a present
+     * one `OBJECT`.
+     */
+    public static NtsValue ofStringOrUndefined(String value) {
+        return value == null ? UNDEFINED_VALUE : new NtsValue(STRING, 0.0, value);
+    }
     public static boolean asBoolean(NtsValue value) { return value.num != 0.0; }
     /**
      * `Array.isArray`, which is a question about the *value* rather than about

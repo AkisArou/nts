@@ -3181,6 +3181,11 @@ impl Emitter<'_> {
         self.load(code, pool, value)?;
         let (name, signature) = match &from {
             HirType::Bool => ("ofBoolean", "(Z)Lnts/rt/NtsValue;"),
+            // A string's absence is decided as any reference's is: the null
+            // reference of a `(string | undefined)[]` slot is `undefined`.
+            HirType::Managed(ManagedType::String) if absent == nts_core::hir::Absent::Undefined => {
+                ("ofStringOrUndefined", "(Ljava/lang/String;)Lnts/rt/NtsValue;")
+            }
             HirType::Managed(ManagedType::String) => {
                 ("ofString", "(Ljava/lang/String;)Lnts/rt/NtsValue;")
             }
