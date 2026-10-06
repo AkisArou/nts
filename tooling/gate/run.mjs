@@ -49,7 +49,7 @@
 //   NTS_GATE_SLOTS        CPU slots for the run (default: NTS_JOBS, else 3/4 of
 //                         the cores)
 //   NTS_GATE_MEM_GB       memory budget in GB (default 20)
-//   NTS_GATE_FRONTENDS    concurrent frontend-using workers (default 16)
+//   NTS_GATE_FRONTENDS    concurrent frontend-using workers (default 20)
 //   NTS_GATE_FAIL_FAST=1  stop at the first FAIL (inner loop; never landing)
 //   NTS_GATE_ACCEPT_SKIP  step names whose SKIPPED does not make the run red
 //   NTS_GATE_RUN_DIR      where logs and the summary go
@@ -60,8 +60,8 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync,
-  symlinkSync, writeFileSync,
+  chmodSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync,
+  readFileSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync,
 } from "node:fs";
 import { cpus, totalmem } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -84,23 +84,28 @@ process.chdir(ROOT);
 //   after  steps that must finish first, whatever their verdict
 //   lock   an exclusive resource (cargo's build-directory lock)
 //   host   what the machine must have, named when the step SKIPs
+//   favoured  runs at the runner's own priority; every other step at nice +5
 //   doc    what it proves, for the summary's reader
 // ---------------------------------------------------------------------------
 const STEPS = [
   { name: "build", slots: 8, min: 4, mem: 8, lock: "cargo", doc: "release binaries build" },
-  { name: "clippy", slots: 6, min: 4, mem: 6, lock: "cargo", after: ["build"], doc: "lint clean" },
+  // Its own target directory (see stepEnv), so it neither waits for nor blocks
+  // `build` and `tests` on cargo's build-directory lock.
+  { name: "clippy", slots: 6, min: 4, mem: 6, lock: "clippy", doc: "lint clean" },
   { name: "format", slots: 1, mem: 0.2, doc: "runtime/c is clang-formatted" },
   { name: "reformat", slots: 1, mem: 0.1, doc: "no whitespace-only diffs" },
   { name: "records", slots: 1, mem: 0.1, doc: "record numbers unique" },
-  { name: "test262", slots: 1, mem: 2, lock: "cargo", after: ["build"], doc: "test262 pin, inventory, features audit" },
+  { name: "test262", slots: 1, mem: 2, after: ["build"], doc: "test262 pin, inventory, features audit" },
   { name: "test262-cases", slots: 8, min: 4, mem: 8, nts: true, fe: true, doc: "test/language rows reproduce" },
   { name: "test262-builtins-cases", slots: 4, min: 2, mem: 5, nts: true, fe: true, doc: "test/built-ins rows reproduce" },
   { name: "test262-rest-cases", slots: 4, min: 2, mem: 5, nts: true, fe: true, doc: "annexB, staging, harness rows reproduce" },
   { name: "outcomes", slots: 1, mem: 1, nts: true, fe: true, doc: "pinned defects still do what they did" },
   { name: "integrity", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "listings self-consistent over examples, blockers, outcomes" },
-  { name: "definitions", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "no runtime module emits fewer functions" },
-  { name: "integrity-runtime", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "listing rules over the runtime corpus" },
-  { name: "snapshot-cache", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "a cached snapshot gives the same program" },
+  // Reads integrity-runtime's `hir --prepared` listings when both are in the
+  // run (NTS_DEFINITIONS_FROM), rather than lowering the corpus again.
+  { name: "definitions", slots: 4, min: 2, mem: 2, nts: true, fe: true, after: ["integrity-runtime"], doc: "no runtime module emits fewer functions" },
+  { name: "integrity-runtime", slots: 12, min: 4, mem: 4, nts: true, fe: true, doc: "listing rules over the runtime corpus" },
+  { name: "snapshot-cache", slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "a cached snapshot gives the same program" },
   { name: "assembles", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "runtime LLVM IR assembles" },
   { name: "types", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "snapshot type tables consistent" },
   { name: "jvm-verifies", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "runtime and outcomes JVM output verifies" },
@@ -111,21 +116,27 @@ const STEPS = [
   { name: "example-refusals", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "per-example refusal counts match the table" },
   { name: "config", slots: 1, mem: 1, doc: "nts.config.ts files coherent" },
   { name: "react-sources", slots: 1, mem: 0.3, doc: "vendored React sources match the manifest" },
-  { name: "profile", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "runtime/node emits without a panic, under the refusal ceiling" },
+  { name: "profile", slots: 8, min: 2, mem: 3, nts: true, fe: true, doc: "runtime/node emits without a panic, under the refusal ceiling" },
   { name: "sweep", slots: 1, mem: 1, nts: true, fe: true, doc: "the value-kind cross-product agrees on C" },
   { name: "llvm", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "every example agrees with node on LLVM" },
   { name: "llvm-rc", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "every example agrees with node on LLVM under RC" },
   { name: "jvm", slots: 4, min: 2, mem: 4, nts: true, fe: true, doc: "every example agrees with node on the JVM" },
-  { name: "dex", slots: 1, mem: 2, nts: true, fe: true, host: "an Android SDK with build-tools", doc: "d8 accepts emitted classes" },
+  { name: "dex", slots: 4, min: 2, mem: 3, nts: true, fe: true, host: "an Android SDK with build-tools", doc: "d8 accepts emitted classes" },
   { name: "on-device", slots: 1, mem: 1, nts: true, fe: true, host: "an Android device on adb", doc: "bench cases agree on java and dalvikvm" },
   { name: "bench-agree", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "bench cases agree with node" },
   { name: "examples", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "every example agrees with node on C" },
   { name: "rc", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "every example agrees under RC, no leak" },
-  { name: "memory", slots: 1, mem: 1, nts: true, fe: true, doc: "RC: no leak, same answer, counts at floors" },
-  { name: "addons", slots: 1, mem: 2, nts: true, fe: true, doc: "node modules build, load and publish" },
+  { name: "memory", slots: 6, min: 2, mem: 2, nts: true, fe: true, doc: "RC: no leak, same answer, counts at floors" },
+  // After `profile` when both run: build.sh reuses its `emit-c --napi` output
+  // (NTS_ADDON_EMITTED) when profile emitted the module cleanly with this binary.
+  { name: "addons", slots: 8, min: 2, mem: 4, nts: true, fe: true, after: ["profile"], doc: "node modules build, load and publish" },
   { name: "blockers", slots: 1, mem: 1, nts: true, fe: true, doc: "blocker fixtures still refuse as they say" },
   { name: "divergence", slots: 1, mem: 1, nts: true, fe: true, after: ["addons"], doc: "node divergence instruments" },
-  { name: "interop", slots: 1, mem: 3, nts: true, fe: true, doc: "interop projects build and run" },
+  // Favoured: every other step runs at `nice +5` beside it. Two of its projects
+  // race a timer against a callback, and contention is what makes that race
+  // lose (see the comment above its step line in all.sh); it ran alone, last,
+  // for that reason. Lanes inside it: apple VM, windows VM, three local.
+  { name: "interop", slots: 4, min: 2, mem: 3, nts: true, fe: true, favoured: true, doc: "interop projects build and run" },
 ];
 const BY_NAME = new Map(STEPS.map((s) => [s.name, s]));
 
@@ -150,7 +161,7 @@ const intEnv = (name, fallback) => {
 };
 const SLOTS = Math.floor(intEnv("NTS_GATE_SLOTS", intEnv("NTS_JOBS", Math.max(1, Math.floor((cores * 3) / 4)))));
 const MEM = intEnv("NTS_GATE_MEM_GB", Math.min(20, Math.floor(totalmem() / 2 ** 30 * 0.7)));
-const FRONTENDS = Math.floor(intEnv("NTS_GATE_FRONTENDS", 16));
+const FRONTENDS = Math.floor(intEnv("NTS_GATE_FRONTENDS", 20));
 const FAIL_FAST = (env.NTS_GATE_FAIL_FAST ?? "") !== "" && env.NTS_GATE_FAIL_FAST !== "0";
 const ACCEPT_SKIP = new Set((env.NTS_GATE_ACCEPT_SKIP ?? "").split(/\s+/).filter(Boolean));
 const TIME_STRICT = (env.NTS_GATE_TIME_STRICT ?? "") === "1";
@@ -266,16 +277,34 @@ function stepEnv(step, slots) {
   // "every knob at once" and undo the slot split.
   delete e.NTS_JOBS;
   delete e.NTS_GATE_STEPS;
-  e.NTS_BIN = ntsBin;
-  e.NTS_SUITE_BIN = suiteBin;
+  e.NTS_BIN = pinned.nts ?? ntsBin;
+  e.NTS_SUITE_BIN = pinned.suite ?? suiteBin;
   e.NTS_TSGO = tsgo;
   e.CARGO_TARGET_DIR = target;
+  // clippy checks the same tree in a profile nothing else builds, so its
+  // artefacts live apart and it runs beside the release build and `cargo test`
+  // instead of queueing on their lock. What it lints is unchanged.
+  if (step.name === "clippy") e.CARGO_TARGET_DIR = join(target, "clippy");
   e.NTS_GATE_RUN_DIR = RUN_DIR;
   const s = String(slots);
   e.NTS_GATE_JOBS = s;
   e.CARGO_BUILD_JOBS = s;
   e.NTS_SUITE_JOBS = s;
   e.NTS_AGREE_JOBS = s;
+  // One lowering of the runtime corpus for two steps: integrity-runtime keeps
+  // its `hir --prepared` listings in this run's directory and definitions
+  // reads them (both check the binary's sha256; see definitions.ts).
+  const shared = join(RUN_DIR, "share", "hir-prepared");
+  if (step.name === "integrity-runtime") e.NTS_INTEGRITY_KEEP = shared;
+  if (step.name === "definitions" && plan.includes("integrity-runtime")) e.NTS_DEFINITIONS_FROM = shared;
+  if (step.name === "addons" && plan.includes("profile")) e.NTS_ADDON_EMITTED = join(ROOT, "target", "gate-profile");
+  e.NTS_GATE_COSTS_DIR = join(target, "gate-costs");
+  // The release build's own test262 protocol binary, so the test262 steps do
+  // not `cargo run` a debug copy and queue on cargo's lock behind `tests`.
+  // Its `select` and `inventory` output is byte-identical to the debug
+  // no-default-features build's over all five directories (checked 2026-10-07).
+  const protocol = pinned.protocol ?? join(dirname(ntsBin), "nts-test262-protocol");
+  if (existsSync(protocol)) e.NTS_TEST262_PROTOCOL = protocol;
   for (const knob of [
     "NTS_INTEGRITY_JOBS", "NTS_DEFINITIONS_JOBS", "NTS_SNAPSHOT_CACHE_JOBS",
     "NTS_ASSEMBLES_JOBS", "NTS_TYPES_CHECK_JOBS", "NTS_JVM_VERIFIES_JOBS",
@@ -354,14 +383,14 @@ function preflight(step) {
 }
 
 function order(names) {
-  // Cheap steps first, so a failure in one is on screen within minutes; then
-  // the longest first, because they decide when the run ends.
-  const cheap = (n) => estimate(n) <= 90;
-  return [...names].sort((a, b) => {
-    if (cheap(a) !== cheap(b)) return cheap(a) ? -1 : 1;
-    return cheap(a) ? estimate(a) - estimate(b) : estimate(b) - estimate(a);
-  });
+  // The most work first (wall x slots from times.tsv): the long steps decide
+  // when the run ends, so they start while the most slots are free. Tiny steps
+  // (see `admit`) run beside them at once whatever the budget, so a cheap check
+  // still answers in its first minute.
+  const work = (n) => estimate(n) * Math.min(BY_NAME.get(n).slots, SLOTS);
+  return [...names].sort((a, b) => work(b) - work(a));
 }
+const tiny = (step) => step.slots === 1 && estimate(step.name) <= 30 && !step.lock;
 
 function admit(step, u) {
   const free = SLOTS - u.slots;
@@ -369,6 +398,7 @@ function admit(step, u) {
   const least = Math.min(step.min ?? Math.max(1, Math.ceil(step.slots / 2)), want);
   if (step.lock && u.locks.has(step.lock)) return 0;
   if (running.size === 0) return want; // always make progress
+  if (tiny(step) && u.slots < SLOTS + 4) return 1; // a free rider: seconds, one process
   if (free < least) return 0;
   let slots = Math.min(want, free);
   if (step.fe) {
@@ -381,8 +411,14 @@ function admit(step, u) {
   return slots;
 }
 
+// Only lower the others when a favoured step is in this run at all.
+const FAVOURED_PLANNED = () => plan.some((n) => BY_NAME.get(n).favoured);
+
 let pending = [];
-let wake = null;
+// Memory is also used by whatever else runs on this box, so a step held back
+// for it is reconsidered every few seconds, not only when one of ours ends.
+const recheck = setInterval(() => { if (!stopping && pending.length) schedule(); }, 5000);
+recheck.unref();
 
 function schedule() {
   if (stopping) return;
@@ -423,9 +459,10 @@ function start(step, slots) {
   const log = join(RUN_DIR, `${step.name}.log`);
   const timeFile = join(RUN_DIR, `${step.name}.time`);
   const fd = openSync(log, "w");
-  const argv = existsSync("/usr/bin/time")
-    ? ["/usr/bin/time", ["-f", "%e %U %S %M", "-o", timeFile, "sh", join(HERE, "all.sh"), "--call", step.name]]
-    : ["sh", [join(HERE, "all.sh"), "--call", step.name]];
+  let cmd = ["sh", join(HERE, "all.sh"), "--call", step.name];
+  if (existsSync("/usr/bin/time")) cmd = ["/usr/bin/time", "-f", "%e %U %S %M", "-o", timeFile, ...cmd];
+  if (!step.favoured && FAVOURED_PLANNED()) cmd = ["nice", "-n", "5", ...cmd];
+  const argv = [cmd[0], cmd.slice(1)];
   const child = spawn(argv[0], argv[1], {
     cwd: ROOT,
     env: stepEnv(step, slots),
@@ -485,9 +522,52 @@ function stop(why) {
   if (running.size === 0) done();
 }
 
+// **The binaries every step runs are a copy named by their content**, made once
+// the build has passed: `<cache>/nts-gate/bin/<sha256>/`. A session relinking
+// `target/release/nts` halfway through a run cannot change the compiler between
+// two steps (assembles, jvm-verifies, types and snapshot-cache each copied it
+// to a fresh directory to protect themselves; every other step did not), and a
+// stable path is what the frontend snapshot cache keys a compiler by
+// (path, length, mtime), so steps -- and later runs of the same binary -- hit
+// each other's snapshots instead of missing on a fresh copy every time.
+const pinned = {};
+const PIN_ROOT = join(env.XDG_CACHE_HOME ?? join(env.HOME ?? "/tmp", ".cache"), "nts-gate", "bin");
+function pinBinaries() {
+  const hash = identities.nts?.sha256;
+  if (!hash) return;
+  const dir = join(PIN_ROOT, hash);
+  try {
+    mkdirSync(dir, { recursive: true });
+    const put = (from, name) => {
+      if (!existsSync(from)) return undefined;
+      const to = join(dir, name);
+      if (!existsSync(to) || sha256(to) !== sha256(from)) {
+        const tmp = `${to}.${process.pid}`;
+        copyFileSync(from, tmp);
+        chmodSync(tmp, 0o555);
+        renameSync(tmp, to);
+      }
+      return to;
+    };
+    pinned.nts = put(ntsBin, "nts");
+    pinned.suite = put(suiteBin, "nts-suite");
+    pinned.protocol = put(join(dirname(ntsBin), "nts-test262-protocol"), "nts-test262-protocol");
+    identities.nts.pinned = pinned.nts;
+    // Keep the ten most recent pins; each is ~40 MB.
+    const all = readdirSync(PIN_ROOT).map((n) => ({ n, t: statSync(join(PIN_ROOT, n)).mtimeMs })).sort((a, b) => b.t - a.t);
+    utimesSync(dir, new Date(), new Date());
+    for (const old of all.slice(10)) if (old.n !== hash) rmSync(join(PIN_ROOT, old.n), { recursive: true, force: true });
+  } catch (e) {
+    // Unpinned is how every run before this one worked; say so and go on.
+    process.stderr.write(`run.mjs: could not pin the binaries (${e.message}); steps run ${ntsBin} in place\n`);
+    for (const k of Object.keys(pinned)) delete pinned[k];
+  }
+}
+
 function identify() {
   identities.nts = { path: ntsBin, sha256: sha256(ntsBin) };
   identities.nts_suite = { path: suiteBin, sha256: sha256(suiteBin) };
+  pinBinaries();
 }
 
 // ---------------------------------------------------------------------------
@@ -617,6 +697,34 @@ function recordTimes() {
   process.stdout.write(`  times written to ${TIMES_FILE}\n`);
 }
 
+// **One gate per tree.** Steps write fixed paths under the tree's `target/`
+// (`gate-profile`, `node`, `memory`, `sweep-jvm`, `suite-report.txt`, the
+// interop outputs), so two runs in one tree overwrite each other's evidence --
+// `addons` rebuilding `target/node/*.node` under another run's `divergence`.
+// The lock names the run holding it; a lock whose process is gone is stale and
+// taken over.
+const LOCK = join(ROOT, "target", ".gate-run.lock");
+function takeTreeLock() {
+  mkdirSync(dirname(LOCK), { recursive: true });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      writeFileSync(LOCK, `${process.pid} ${RUN_DIR}\n`, { flag: "wx" });
+      process.on("exit", () => {
+        try { if (readFileSync(LOCK, "utf8").startsWith(`${process.pid} `)) rmSync(LOCK, { force: true }); } catch {}
+      });
+      return;
+    } catch (e) {
+      if (e.code !== "EEXIST") throw e;
+      const [pid, dir] = readFileSync(LOCK, "utf8").trim().split(" ");
+      let alive = false;
+      try { process.kill(Number(pid), 0); alive = true; } catch (k) { alive = k.code === "EPERM"; }
+      if (alive) usage(`another gate (pid ${pid}, logs ${dir}) is running in this tree; its steps write the same target/ paths`);
+      rmSync(LOCK, { force: true });
+    }
+  }
+  usage(`could not take ${LOCK}`);
+}
+
 // ---------------------------------------------------------------------------
 // Main.
 // ---------------------------------------------------------------------------
@@ -634,14 +742,34 @@ process.on("uncaughtException", (e) => {
 
 checkTable();
 plan = requested();
+takeTreeLock();
 mkdirSync(RUN_DIR, { recursive: true });
 identities.commit = git("rev-parse", "--short=12", "HEAD");
 const dirty = git("status", "--porcelain", "--untracked-files=no");
 identities.dirty = dirty === null ? null : dirty.split("\n").filter(Boolean).length;
 if (!plan.includes("build")) identify();
+// **Every setting that changes how hard a step runs, at the top of the log.**
+// On 2026-10-06 a wrapper exported NTS_JOBS=1-2 and RUST_TEST_THREADS=1-2 and
+// the logs never said so: `tests` took 690 s instead of 450 and `test262-cases`
+// 776 s instead of 363, and the difference read as the compiler.
+function settings() {
+  const names = Object.keys(env).filter((k) =>
+    /^(NTS_|RUST_TEST_THREADS$|RUSTFLAGS$|CARGO_|TMPDIR$|XDG_CACHE_HOME$|JAVA_HOME$|ANDROID_HOME$)/.test(k)).sort();
+  const lines = names.map((k) => `    ${k}=${env[k]}`);
+  let cgroup = "";
+  try {
+    const path = readFileSync("/proc/self/cgroup", "utf8").trim().split("\n").pop().split("::").pop();
+    const read = (f) => { try { return readFileSync(join("/sys/fs/cgroup", path, f), "utf8").trim(); } catch { return "?"; } };
+    cgroup = `  cgroup ${path}: memory.max ${read("memory.max")}, memory.high ${read("memory.high")}, cpu.max ${read("cpu.max")}\n`;
+  } catch {}
+  const m = memAvailableGB();
+  return `  machine: ${cores} cores, ${(totalmem() / 2 ** 30).toFixed(1)}G total, ${m.toFixed(1)}G available, load ${readFileSync("/proc/loadavg", "utf8").split(" ").slice(0, 3).join(" ")}\n` +
+    cgroup + `  environment:\n${lines.join("\n")}\n`;
+}
 process.stdout.write(
   `gate: ${plan.length} step(s), ${SLOTS} slots, ${MEM}G, ${FRONTENDS} frontends; logs in ${RUN_DIR}\n` +
-    `  nts ${ntsBin}\n`,
+    `  nts ${ntsBin}${pinned.nts ? ` (run as ${pinned.nts})` : ""}\n  tsgo ${tsgo}\n` + settings() +
+    `  steps: ${plan.join(" ")}\n`,
 );
 pending = order(plan);
 schedule();

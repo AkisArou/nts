@@ -4,8 +4,8 @@
 #   tooling/gate/slices.sh [profile]        lowering (default) | conformance | backend | most
 #   NTS_BIN=<pin> tooling/gate/slices.sh    measure a pin rather than target/release/nts
 #
-# Prints one line per slice and exits non-zero if any failed. Each slice's full
-# log is named in its line.
+# Runs the profile's steps through all.sh (one run.mjs run over all of them) and
+# prints its per-step summary; exits non-zero unless every step PASSed.
 #
 # # Why
 #
@@ -75,33 +75,11 @@ case $profile in
     echo "usage: $0 [lowering|conformance|backend|most]" >&2; exit 2 ;;
 esac
 
-logs=$(mktemp -d)
-trap 'rm -rf "$logs"' EXIT INT TERM
-n=0
-printf '%s\n' "$slices" | while IFS= read -r slice; do
-  [ -n "$(printf '%s' "$slice" | tr -d ' ')" ] || continue
-  n=$((n + 1))
-  printf '%s\n' "$slice" > "$logs/$n.steps"
-done
-started=$(date +%s)
-for steps in "$logs"/*.steps; do
-  i=$(basename "$steps" .steps)
-  # Each slice gets its own log *outside* the temp dir, so it outlives this run
-  # and the line that names it is still useful after the trap fires.
-  out=${NTS_SLICE_LOGS:-${TMPDIR:-/tmp}}/gate-slice-$i.log
-  printf '%s\n' "$out" > "$logs/$i.log-path"
-  NTS_GATE_STEPS=$(cat "$steps") "$root/tooling/gate/all.sh" > "$out" 2>&1 &
-  printf '%s\n' "$!" > "$logs/$i.pid"
-done
-failed=0
-for steps in "$logs"/*.steps; do
-  i=$(basename "$steps" .steps)
-  out=$(cat "$logs/$i.log-path")
-  wait "$(cat "$logs/$i.pid")" || failed=$((failed + 1))
-  verdict=$(sed 's/\x1b\[[0-9;]*m//g' "$out" | grep -E '^(FAILED|green)' | head -1)
-  printf '  %-72s %s\n' "$(tr -s ' ' < "$steps" | tr '\n' ' ')" "${verdict:-no verdict}"
-  [ "${verdict:-}" = "green" ] || printf '    %s\n' "$out"
-done
-printf '  %s slice(s), %s failed, in %ss\n' \
-  "$(ls "$logs"/*.steps | wc -l | tr -d ' ')" "$failed" "$(($(date +%s) - started))"
-[ "$failed" -eq 0 ]
+# **One run of all.sh over the union, not one per slice.** all.sh hands every
+# requested step to run.mjs, which runs them at once under one CPU, memory and
+# frontend budget and reports each step PASS / FAIL / SKIPPED / NOT RUN. Several
+# all.sh processes side by side would each assume the whole machine, which is
+# the oversubscription the budget exists to prevent. The slices above are kept
+# as the named profiles they always were.
+steps=$(printf '%s\n' "$slices" | tr -s ' \n' '  ')
+NTS_GATE_STEPS=$steps exec "$root/tooling/gate/all.sh"
