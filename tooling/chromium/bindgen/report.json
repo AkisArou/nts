@@ -1,5 +1,5 @@
 {
-  "bound": 3566,
+  "bound": 3579,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -25,11 +25,6 @@
       "interface": "EventTarget",
       "member": "when/2",
       "why": "interface Observable is not bound"
-    },
-    {
-      "interface": "Node",
-      "member": "getRootNode/1",
-      "why": "parameter type optional GetRootNodeOptions"
     },
     {
       "interface": "Element",
@@ -338,11 +333,6 @@
     },
     {
       "interface": "Element",
-      "member": "checkVisibility/1",
-      "why": "parameter type optional CheckVisibilityOptions"
-    },
-    {
-      "interface": "Element",
       "member": "computedStyleMap/0",
       "why": "interface StylePropertyMapReadOnly is not bound"
     },
@@ -392,9 +382,9 @@
       "why": "interface DOMRectList is not bound"
     },
     {
-      "interface": "Element",
-      "member": "getHTML/1",
-      "why": "parameter type optional GetHTMLOptions"
+      "interface": "GetHTMLOptions",
+      "member": "shadowRoots",
+      "why": "dictionary member of type optional sequence<ShadowRoot>"
     },
     {
       "interface": "Element",
@@ -587,14 +577,24 @@
       "why": "[RuntimeEnabled]"
     },
     {
+      "interface": "FullscreenOptions",
+      "member": "navigationUI",
+      "why": "dictionary member of type optional FullscreenNavigationUI"
+    },
+    {
+      "interface": "FullscreenOptions",
+      "member": "screen",
+      "why": "dictionary member of type optional Screen"
+    },
+    {
       "interface": "Element",
       "member": "webkitRequestFullScreen/1",
-      "why": "parameter type optional FullscreenOptions"
+      "why": "dictionary FullscreenOptions has no member a C struct can carry"
     },
     {
       "interface": "Element",
       "member": "webkitRequestFullscreen/1",
-      "why": "parameter type optional FullscreenOptions"
+      "why": "dictionary FullscreenOptions has no member a C struct can carry"
     },
     {
       "interface": "CharacterData",
@@ -3623,11 +3623,6 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "focus/1",
-      "why": "parameter type optional FocusOptions"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "hideUnboundedElement/0",
       "why": "result type Promise<undefined>"
     },
@@ -3637,9 +3632,14 @@
       "why": "[RuntimeEnabled]"
     },
     {
+      "interface": "ShowPopoverOptions",
+      "member": "source",
+      "why": "dictionary member of type optional HTMLElement"
+    },
+    {
       "interface": "HTMLElement",
       "member": "showPopover/1",
-      "why": "parameter type optional ShowPopoverOptions"
+      "why": "dictionary ShowPopoverOptions has no member a C struct can carry"
     },
     {
       "interface": "HTMLElement",
@@ -3788,18 +3788,18 @@
     },
     {
       "interface": "Event",
-      "member": "constructor/2",
-      "why": "parameter type optional EventInit"
-    },
-    {
-      "interface": "Event",
       "member": "composedPath/0",
       "why": "result type sequence<EventTarget>"
     },
     {
-      "interface": "UIEvent",
-      "member": "constructor/2",
-      "why": "parameter type optional UIEventInit"
+      "interface": "UIEventInit",
+      "member": "sourceCapabilities",
+      "why": "dictionary member of type optional InputDeviceCapabilities?"
+    },
+    {
+      "interface": "UIEventInit",
+      "member": "view",
+      "why": "dictionary member of type optional Window?"
     },
     {
       "interface": "UIEvent",
@@ -3812,14 +3812,44 @@
       "why": "[RuntimeEnabled]"
     },
     {
-      "interface": "MouseEvent",
-      "member": "constructor/2",
-      "why": "parameter type optional MouseEventInit"
+      "interface": "MouseEventInit",
+      "member": "sourceCapabilities",
+      "why": "dictionary member of type optional InputDeviceCapabilities?"
     },
     {
-      "interface": "KeyboardEvent",
-      "member": "constructor/2",
-      "why": "parameter type optional KeyboardEventInit"
+      "interface": "MouseEventInit",
+      "member": "view",
+      "why": "dictionary member of type optional Window?"
+    },
+    {
+      "interface": "MouseEventInit",
+      "member": "region",
+      "why": "dictionary member of type optional DOMString?"
+    },
+    {
+      "interface": "MouseEventInit",
+      "member": "relatedTarget",
+      "why": "dictionary member of type optional EventTarget?"
+    },
+    {
+      "interface": "KeyboardEventInit",
+      "member": "sourceCapabilities",
+      "why": "dictionary member of type optional InputDeviceCapabilities?"
+    },
+    {
+      "interface": "KeyboardEventInit",
+      "member": "view",
+      "why": "dictionary member of type optional Window?"
+    },
+    {
+      "interface": "KeyboardEventInit",
+      "member": "code",
+      "why": "dictionary member of type optional DOMString"
+    },
+    {
+      "interface": "KeyboardEventInit",
+      "member": "key",
+      "why": "dictionary member of type optional DOMString"
     },
     {
       "interface": "CSSStyleDeclaration",
@@ -4252,14 +4282,49 @@
       "why": "[RuntimeEnabled]"
     },
     {
-      "interface": "FocusEvent",
-      "member": "constructor/2",
-      "why": "parameter type optional FocusEventInit"
+      "interface": "FocusEventInit",
+      "member": "sourceCapabilities",
+      "why": "dictionary member of type optional InputDeviceCapabilities?"
     },
     {
-      "interface": "InputEvent",
-      "member": "constructor/2",
-      "why": "parameter type optional InputEventInit"
+      "interface": "FocusEventInit",
+      "member": "view",
+      "why": "dictionary member of type optional Window?"
+    },
+    {
+      "interface": "FocusEventInit",
+      "member": "relatedTarget",
+      "why": "dictionary member of type optional EventTarget?"
+    },
+    {
+      "interface": "InputEventInit",
+      "member": "sourceCapabilities",
+      "why": "dictionary member of type optional InputDeviceCapabilities?"
+    },
+    {
+      "interface": "InputEventInit",
+      "member": "view",
+      "why": "dictionary member of type optional Window?"
+    },
+    {
+      "interface": "InputEventInit",
+      "member": "data",
+      "why": "dictionary member of type optional DOMString?"
+    },
+    {
+      "interface": "InputEventInit",
+      "member": "dataTransfer",
+      "why": "dictionary member of type optional DataTransfer?"
+    },
+    {
+      "interface": "InputEventInit",
+      "member": "inputType",
+      "why": "dictionary member of type optional DOMString"
+    },
+    {
+      "interface": "InputEventInit",
+      "member": "targetRanges",
+      "why": "dictionary member of type optional sequence<StaticRange>"
     },
     {
       "interface": "InputEvent",
@@ -4272,9 +4337,49 @@
       "why": "result type sequence<StaticRange>"
     },
     {
-      "interface": "PointerEvent",
-      "member": "constructor/2",
-      "why": "parameter type optional PointerEventInit"
+      "interface": "PointerEventInit",
+      "member": "sourceCapabilities",
+      "why": "dictionary member of type optional InputDeviceCapabilities?"
+    },
+    {
+      "interface": "PointerEventInit",
+      "member": "view",
+      "why": "dictionary member of type optional Window?"
+    },
+    {
+      "interface": "PointerEventInit",
+      "member": "region",
+      "why": "dictionary member of type optional DOMString?"
+    },
+    {
+      "interface": "PointerEventInit",
+      "member": "relatedTarget",
+      "why": "dictionary member of type optional EventTarget?"
+    },
+    {
+      "interface": "PointerEventInit",
+      "member": "coalescedEvents",
+      "why": "dictionary member of type optional sequence<PointerEvent>"
+    },
+    {
+      "interface": "PointerEventInit",
+      "member": "height",
+      "why": "dictionary member whose default 1 is not zero"
+    },
+    {
+      "interface": "PointerEventInit",
+      "member": "pointerType",
+      "why": "dictionary member of type optional DOMString"
+    },
+    {
+      "interface": "PointerEventInit",
+      "member": "predictedEvents",
+      "why": "dictionary member of type optional sequence<PointerEvent>"
+    },
+    {
+      "interface": "PointerEventInit",
+      "member": "width",
+      "why": "dictionary member whose default 1 is not zero"
     },
     {
       "interface": "PointerEvent",
@@ -4287,9 +4392,24 @@
       "why": "result type sequence<PointerEvent>"
     },
     {
-      "interface": "WheelEvent",
-      "member": "constructor/2",
-      "why": "parameter type optional WheelEventInit"
+      "interface": "WheelEventInit",
+      "member": "sourceCapabilities",
+      "why": "dictionary member of type optional InputDeviceCapabilities?"
+    },
+    {
+      "interface": "WheelEventInit",
+      "member": "view",
+      "why": "dictionary member of type optional Window?"
+    },
+    {
+      "interface": "WheelEventInit",
+      "member": "region",
+      "why": "dictionary member of type optional DOMString?"
+    },
+    {
+      "interface": "WheelEventInit",
+      "member": "relatedTarget",
+      "why": "dictionary member of type optional EventTarget?"
     },
     {
       "interface": "WheelEvent",
@@ -4297,9 +4417,9 @@
       "why": "[RuntimeEnabled]"
     },
     {
-      "interface": "CustomEvent",
-      "member": "constructor/2",
-      "why": "parameter type optional CustomEventInit"
+      "interface": "CustomEventInit",
+      "member": "detail",
+      "why": "dictionary member of type optional any"
     },
     {
       "interface": "CustomEvent",

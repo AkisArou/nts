@@ -39,5 +39,5 @@ shared tooling.
 | # | Debt | Where | Remove when | Owner |
 |---|---|---|---|---|
 | 15 | `smoke.ts` and `benchmark.ts` each carry their own launch-and-DevTools code; `tooling/chromium/browser.ts` is the shared one. | `tooling/chromium` | both move onto `browser.ts` | L |
-| 18 | Dictionary arguments are not bound, so `newEvent(type)` takes no `EventInit` (no `bubbles`/`cancelable`), and `getRootNode(options)` and the like take only their defaults. | `tooling/chromium/bindgen/generate.py` | dictionaries as C structs (`Struct` with `Fields`, possible today) in the generator | L |
+| 18 | Dictionaries bind as C structs written as object literals, so only members where zero means "left out" bind: booleans defaulting to false, numbers defaulting to 0. String, handle, sequence and enum members, and other defaults, are not bound (`report.json`); and an explicit `false` for a boolean with no default (`passive`) reads as left out, so `passive` is not offered. | `tooling/chromium/bindgen/generate.py` (`dictionary`) | a presence bit per member (or optional fields) in `Fields<T>`, and string/handle fields borrowed for the call | C |
 | 16 | The lane is on file URLs and the test-only `content_shell` targets; no packaged origin or release shell. | `host/app_main.cc`, `embedder/BUILD.gn` | packaging milestone | L |

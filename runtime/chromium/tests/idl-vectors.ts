@@ -427,6 +427,26 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   optioned.click();
   log("listenerOptions", afterOnce + "|" + counts.once + "|" + counts.signalled);
 
+  // Dictionaries, written as object literals: a bubbling, cancelable event
+  // a parent's listener cancels; a mouse event's coordinates, button and
+  // modifiers; a member left out keeps its default.
+  const outer = d.createElement("div");
+  const inner = d.createElement("span");
+  outer.appendChild(inner);
+  root.appendChild(outer);
+  const canceled = { phase: "" };
+  const cancel = (event: Event): void => {
+    canceled.phase = event.type + "@" + event.eventPhase;
+    event.preventDefault();
+  };
+  outer.addEventListener("bubbled", cancel);
+  const bubbled = newEvent("bubbled", { bubbles: true, cancelable: true });
+  const proceeded = inner.dispatchEvent(bubbled);
+  outer.removeEventListener("bubbled", cancel);
+  log("eventInit", canceled.phase + "|" + (proceeded ? "proceeded" : "canceled") + "|" + (bubbled.defaultPrevented ? "prevented" : "no") + "|" + (bubbled.composed ? "composed" : "closed"));
+  const pointed = newMouseEvent("click", { clientX: 12.5, clientY: -3, button: 2, ctrlKey: true, detail: 7 });
+  log("mouseInit", pointed.clientX + "|" + pointed.clientY + "|" + pointed.button + "|" + (pointed.ctrlKey ? "ctrl" : "-") + (pointed.shiftKey ? "shift" : "-") + "|" + pointed.detail);
+
   // AbortController: a signal that aborts once.
   const controller = newAbortController();
   const signal = controller.signal;

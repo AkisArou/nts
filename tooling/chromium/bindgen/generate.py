@@ -165,6 +165,7 @@ class Generator:
         self.headers = {"third_party/blink/renderer/bindings/core/v8/generated_code_helper.h",
                         "third_party/blink/renderer/core/frame/local_dom_window.h"}
         self.statics = []  # adapter-level definitions the functions use
+        self.dictionaries = {}  # identifier -> (fields, conversion function name)
         # Every interface Blink's core component defines, in a fixed order:
         # what `instanceof` can be asked of (nts_dom_is), bound or not.
         self.checkable = sorted((i for i in database.interfaces
@@ -211,11 +212,77 @@ class Generator:
     def safe(name):
         return name + "_" if name in RESERVED else name
 
+    def dictionary(self, dictionary):
+        """`{bubbles: true}` for an EventInit: the dictionary as a C struct the
+        program writes as an object literal (`Fields<T>`, a zeroed compound
+        literal in the caller's frame, nothing allocated), and the adapter's
+        conversion to Blink's dictionary, which sets only what the literal
+        wrote. So a member binds only where zero is what leaving it out means:
+        a boolean whose default is false or absent, a number whose default is
+        0 or absent. Strings, handles, sequences, enums and other defaults are
+        left out, each recorded. The fields and the conversion's name, or
+        Skip when nothing binds."""
+        identifier = dictionary.identifier
+        if identifier in self.dictionaries:
+            if self.dictionaries[identifier] is None:
+                raise Skip(f"dictionary {identifier} has no member a C struct can carry")
+            return self.dictionaries[identifier]
+        fields = []
+        for member in dictionary.members:
+            label = f"{identifier}.{member.identifier}"
+            if "RuntimeEnabled" in member.extended_attributes:
+                continue
+            idl_type = member.idl_type.unwrap(typedef=True)
+            nullable = member.idl_type.does_include_nullable_type
+            keyword = idl_type.keyword_typename
+            literal = member.default_value.literal if member.default_value is not None else None
+            if nullable or keyword not in ("boolean", *NUMERIC):
+                self.skipped.append({"interface": identifier, "member": member.identifier,
+                                     "why": f"dictionary member of type {member.idl_type.syntactic_form}"})
+                continue
+            zero = "false" if keyword == "boolean" else "0"
+            if literal not in (None, zero) and not (keyword != "boolean" and literal in ("0.0", "0")):
+                self.skipped.append({"interface": identifier, "member": member.identifier,
+                                     "why": f"dictionary member whose default {literal} is not zero"})
+                continue
+            fields.append((member.identifier, keyword, idl_type))
+        if not fields:
+            self.dictionaries[identifier] = None
+            raise Skip(f"dictionary {identifier} has no member a C struct can carry")
+        tag = f"NtsDom{identifier}"
+        convert = f"NtsDomTo{identifier}"
+        self.headers.add(PathManager(dictionary).api_path(ext="h"))
+        body = [f"blink::{identifier}* {convert}(v8::Isolate* isolate, const {tag}& from) {{",
+                f"  auto* to = blink::{identifier}::Create(isolate);"]
+        if any(keyword != "boolean" for _, keyword, _ in fields):
+            body.append("  blink::DummyExceptionStateForTesting conversion;")
+        for name, keyword, idl_type in fields:
+            setter = "set" + name[0].upper() + name[1:]
+            field = self.safe(name)
+            if keyword == "boolean":
+                body.append(f"  if (from.{field}) to->{setter}(true);")
+            elif keyword == "unrestricted double":
+                body.append(f"  if (from.{field} != 0) to->{setter}(from.{field});")
+            else:
+                tag_name = native_value_tag(idl_type)
+                body.append(f"  if (from.{field} != 0) to->{setter}(blink::NativeValueTraits<blink::{tag_name}>::NativeValue("
+                            f"isolate, v8::Number::New(isolate, from.{field}), conversion));")
+        body += ["  return to;", "}"]
+        self.statics.append("\n".join(body))
+        self.dictionaries[identifier] = (fields, convert)
+        return self.dictionaries[identifier]
+
     def parameter(self, idl_type, identifier):
         name = self.safe(identifier)
         nullable = idl_type.does_include_nullable_type
         unwrapped = idl_type.unwrap(nullable=True, typedef=True)
         or_null = " | null" if nullable else ""
+        if unwrapped.is_dictionary and not nullable:
+            dictionary = unwrapped.type_definition_object
+            fields, convert = self.dictionary(dictionary)
+            return Param(name, f"NtsDom{dictionary.identifier} {name}",
+                         f"{name}: ByValue<{dictionary.identifier}> | Fields<{dictionary.identifier}>",
+                         f"{convert}(context.v8_isolate.get(), {name})", True)
         if unwrapped.is_interface:
             interface = self.bound_interface(idl_type)
             expr = self.node(interface, name)
@@ -936,6 +1003,18 @@ class Generator:
         lines.append("}")
         return "\n".join(lines)
 
+    def dictionary_types(self):
+        """Each bound dictionary as a C struct type, written at a call site as
+        an object literal: `newEvent("go", {bubbles: true})`."""
+        lines = []
+        for identifier, entry in sorted(self.dictionaries.items()):
+            if entry is None:
+                continue
+            members = "; ".join(f"{name}: {'CBool<c_uint8>' if keyword == 'boolean' else 'c_double'}"
+                                for name, keyword, _ in entry[0])
+            lines.append(f'  export type {identifier} = Struct<{{ {members} }}, "NtsDom{identifier}">;')
+        return lines
+
     def overlay(self):
         """`lib-dom-bindings.d.ts`: which nts:dom declaration implements each
         lib.dom.d.ts declaration a program may use (docs/lib-dom.md). The
@@ -976,6 +1055,14 @@ class Generator:
                   "Do not edit; regenerate.")
         typedefs = "\n".join(f"typedef struct {self.handle_tag(i.identifier)} {self.handle_tag(i.identifier)};"
                              for i in self.interfaces)
+        # A dictionary as the program writes it: zero is what leaving a member
+        # out means (generate.py, dictionary).
+        for identifier, entry in sorted(self.dictionaries.items()):
+            if entry is None:
+                continue
+            members = "".join(f"  {'uint8_t' if keyword == 'boolean' else 'double'} {self.safe(name)};\n"
+                              for name, keyword, _ in entry[0])
+            typedefs += f"\ntypedef struct NtsDom{identifier} {{\n{members}}} NtsDom{identifier};"
         prototypes = []
         for function in self.functions:
             c_params = ([f"{self.handle_tag(function.interface.identifier)}* self"] if function.receiver else []) + \
@@ -1103,9 +1190,10 @@ bool nts_dom_is(const void* object, uint32_t interface_id) {{
         declarations = f"""// {banner.replace(chr(10), chr(10) + '// ')}
 /** @ntsHeader "dom_idl.h" */
 declare module "nts:dom" {{
-  import type {{ Closure, CNumber, HostClass, Opaque, Ptr, StringView }} from "c:types";
+  import type {{ ByValue, CBool, Closure, CNumber, Fields, HostClass, Opaque, Ptr, StringView, Struct, c_double, c_uint8 }} from "c:types";
   /** A DOM exception a member reported, thrown as an `Error` "Name: message". */
   export type DOMException = Opaque<"NtsDomException">;
+{chr(10).join(self.dictionary_types())}
 {chr(10).join(types)}
 }}
 """
