@@ -281,8 +281,10 @@ public:
   }
 
 private:
-  raw_ptr<NtsDomContext> context_;
-  raw_ptr<const NtsBorrowedString> string_;
+  // Plain pointers, as STACK_ALLOCATED allows: a raw_ptr here is a
+  // BackupRefPtr count taken and dropped on every DOM call.
+  NtsDomContext *context_;
+  const NtsBorrowedString *string_;
   bool scalar_values_;
 };
 

@@ -665,7 +665,7 @@ class Throws {
 
  private:
   blink::DummyExceptionStateForTesting state_;
-  raw_ptr<NtsDomException*> error_;
+  NtsDomException** error_;  // STACK_ALLOCATED: no BackupRefPtr per call
 };
 }  // namespace
 

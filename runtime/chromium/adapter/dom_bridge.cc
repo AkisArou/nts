@@ -210,7 +210,7 @@ public:
 
 private:
   scoped_refptr<NtsDomContext> keep_alive_;
-  raw_ptr<NtsDomContext> previous_;
+  NtsDomContext *previous_; // STACK_ALLOCATED: no BackupRefPtr per entry
 };
 Entry::Entry(NtsDomContext *context)
     : keep_alive_(context), previous_(entered) {
@@ -281,15 +281,18 @@ void NtsDomContext::Dispatch(NtsDomCallback callback, blink::Event *event,
   // On this stack for the call, as the program's own frames are: the event
   // is found here by Oilpan's stack scan, and is alive for the dispatch.
   struct Call {
+    STACK_ALLOCATED();
+
+  public:
     NtsDomCallback callback;
-    raw_ptr<NtsDomEvent> event;
-    raw_ptr<void> closure;
+    NtsDomEvent *event;
+    void *closure;
   } call{callback, HandleOf<NtsDomEvent>(event), closure};
   invoke(
       invoke_host.get(),
       [](void *state) {
         auto *call = static_cast<Call *>(state);
-        call->callback(call->event.get(), call->closure.get());
+        call->callback(call->event, call->closure);
       },
       &call);
 }

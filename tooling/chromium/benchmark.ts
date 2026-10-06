@@ -119,8 +119,10 @@ async function stopProfile(profile: Profile, report: string): Promise<void> {
   const exited = new Promise<void>((done) => profile.child.on("exit", () => done()));
   profile.child.kill("SIGINT");
   await exited;
-  const text = execFileSync("perf", ["report", "-i", profile.data, "--no-children", "--stdio", "--percent-limit", "0.5",
-    "--sort", "dso,symbol"], {encoding:"utf8", maxBuffer: 256 << 20});
+  // Flat, per symbol, the main thread only: what the measured work spends.
+  // A full call-graph report of a whole renderer took longer than the run.
+  const text = execFileSync("perf", ["report", "-i", profile.data, "--no-children", "--stdio", "--percent-limit", "0.3",
+    "--sort", "symbol", "-g", "none", "--comms", "nts_shell,content_shell"], {encoding:"utf8", maxBuffer: 256 << 20});
   await writeFile(report, text);
 }
 // EventDispatch per event type in one renderer's trace: complete events
