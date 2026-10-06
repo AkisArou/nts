@@ -14,7 +14,6 @@ shared tooling.
 
 | # | Workaround | Where | Cause | Remove when | Owner |
 |---|---|---|---|---|---|
-| 1 | The lane builds with the compiler from before landing-1 (`/tmp/claude-1000/nts-host`, built 2026-10-06 00:20), not main's. | every build and smoke | blocker `a-non-null-assertion-on-a-host-handle-is-refused`: `asX(...)!` is refused since 20eaa7d74 | the fix (c751af486) is on main; rebuild, re-run everything | C |
 | 2 | Nullable text read through a parameter (`shown(value: string \| null)`), not where it was narrowed. | `tests/idl-vectors.ts` (`shown`) | request 9: a narrowed accessor read loses its null check (SEGV) | MainClaude says §9 is fully fixed | C |
 | 3 | The C wrappers retain a handle before passing it to an export (`nts_dom_retain(setup->tbody)`). | `embedder/probe.c` (`create_rows`), `benchmarks/standalone/driver.c` | exports took over their arguments; landing a2 makes them borrow | a2 is on main | C |
 | 4 | The fuzz is three straight calls, not a loop over the seeds. | `tests/idl-vectors.ts` (`idlTranscript`) | blocker `an-owned-handle-used-in-a-loop-is-never-released` (fixed on a2) | a2 is on main; also set the fixture's `once-c` count to 2 | C |
