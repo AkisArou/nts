@@ -79,7 +79,13 @@ export function event(seed: number): number {
   }
   remove(t, draw(t, t.rows.length));
   add(t);
-  relabel(t, (draw(t, t.rows.length) + seed) % t.rows.length);
+  // `seed >>> 0`, not `seed`: the benchmark runs with `seed` (3, below), but
+  // `nts check` drives every export with a pool of arguments, and a NaN or
+  // negative seed made this index NaN or negative -- node threw where nts
+  // declined the case, and since a declined case restarts the program, the
+  // module state the two sides carried apart from there. The same index for
+  // 3, so the reference implementations and the checksum are unchanged.
+  relabel(t, (draw(t, t.rows.length) + (seed >>> 0)) % t.rows.length);
   return t.rows.length + t.rows[0].id + t.rows[t.rows.length - 1].label.length;
 }
 
