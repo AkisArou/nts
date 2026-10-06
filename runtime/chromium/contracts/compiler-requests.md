@@ -10,7 +10,7 @@ maintenance) and are not repeated here.
 
 Evidence comes from `target/release/nts` (October 3,
 `11ceacf8c8eeb73d38d31d5ae197b3fae0ece774dc6075a03a5c439b2940c816`) compiling
-`runtime/chromium/program/src/dom.ts`; generated output is
+`runtime/chromium/tests/dom-witness.ts`; generated output is
 under `target/chromium/native-bootstrap/`. Timings so far are from a debug
 Chromium and are only diagnostic; optimized-engine numbers will be added.
 

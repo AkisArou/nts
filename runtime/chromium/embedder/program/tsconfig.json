@@ -1,0 +1,11 @@
+{
+  "extends": "../../../../tsconfig.fixtures.json",
+  "files": [
+    "main.ts",
+    "../../tests/boundary.ts", "../../tests/dom-witness.ts", "../../tests/idl-vectors.ts",
+    "../../benchmarks/workloads/binding.ts", "../../benchmarks/workloads/rows.ts",
+    "../../benchmarks/workloads/kernels.ts",
+    "../../dom/types/dom-idl.d.ts", "../../dom/types/dom-abi.d.ts", "../../dom/types/dom-testing.d.ts",
+    "../../../native/libc.d.ts"
+  ]
+}

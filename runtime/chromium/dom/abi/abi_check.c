@@ -7,7 +7,7 @@
  * `sources()` directory holds; a directory of headers alone contributes none
  * (reported to the compiler lane). */
 #include "dom_abi.h"
-#include "dom_host.h"
+#include "dom_testing.h"
 #include "dom_idl.h"
 
 _Static_assert(sizeof(NtsStringView) == 16, "a string view is two words");

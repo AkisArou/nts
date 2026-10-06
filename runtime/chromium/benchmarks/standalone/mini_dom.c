@@ -1,4 +1,4 @@
-/* A minimal DOM behind the DOM ABI (program/abi/dom_abi.h
+/* A minimal DOM behind the DOM ABI (dom/abi/dom_abi.h
  * and the generated dom_idl.h), for running compiled applications without
  * Chromium. It keeps the adapter's contract exactly -- a call runs inside an
  * entry and finds its context there, a node is its own address, identity is

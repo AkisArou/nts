@@ -7,7 +7,7 @@
  *
  *   node runtime/chromium/benchmarks/standalone/check.ts [--perf]
  *
- * Run program/check.ts first: it compiles the program this links.
+ * Run embedder/program/check.ts first: it compiles the program this links.
  * --perf records the C-backend binary with perf and prints its hottest
  * symbols. Two runtimes and two mini-DOMs differ, so the comparison bounds
  * the application cost; it is not a browser result.
@@ -23,7 +23,7 @@ const here = import.meta.dirname;
 const source = resolve(root, "third_party/chromium/src");
 const clang = resolve(source, "third_party/llvm-build/Release+Asserts/bin/clang");
 const sysroot = resolve(source, "build/linux/debian_bullseye_amd64-sysroot");
-// Run program/check.ts with the same NTS_CHROMIUM_NATIVE_OUT to compare
+// Run embedder/program/check.ts with the same NTS_CHROMIUM_NATIVE_OUT to compare
 // an experimental compiler without touching what Chromium stages.
 const built = resolve(root, process.env.NTS_CHROMIUM_NATIVE_OUT ?? "target/chromium/native-bootstrap");
 const output = `${built}-rows-standalone`;
@@ -40,7 +40,7 @@ function native(backend: "c" | "llvm", policy: "checkpoint" | "idle"): Result {
   const executable = resolve(output, `rows-${backend}`);
   execFileSync(clang, [`--sysroot=${sysroot}`, "-std=c11", "-O2", "-g", "-ffunction-sections", "-fdata-sections",
     "-DNTS_PROVIDER_RC", "-D_GNU_SOURCE", "-fuse-ld=lld", "-I", generated,
-    "-I", resolve(root, "runtime/chromium/program/abi"), "-I", resolve(root, "runtime/chromium/adapter"),
+    "-I", resolve(root, "runtime/chromium/dom/abi"), "-I", resolve(root, "runtime/chromium/adapter"),
     resolve(here, "driver.c"), resolve(here, "mini_dom.c"), resolve(built, `chromium-${backend}-probe.a`),
     "-Wl,--gc-sections", "-lm", "-o", executable], { stdio: "inherit" });
   if (profile && backend === "c" && policy === "checkpoint") {

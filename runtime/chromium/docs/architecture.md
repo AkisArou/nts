@@ -230,7 +230,7 @@ It emits three files for an allowlist of interfaces
 through HTMLInputElement, Event through KeyboardEvent, DOMTokenList,
 CSSStyleDeclaration, NodeList, HTMLCollection, DOMRect):
 
-- `program/abi/dom_idl.h`, one C function per member and arity;
+- `dom/abi/dom_idl.h`, one C function per member and arity;
 - `native/dom_idl.cc`, each one's body: Blink's call, inside Blink's namespace;
 - `types/dom-idl.d.ts`, module `nts:dom` as a program writes it.
 
@@ -264,7 +264,7 @@ not say: roots, the document, exception messages, listening with a compiled
 closure. Generation changed no cost: the rows workload allocates exactly what
 it did, and keeps exactly two roots per row.
 
-Correctness is differential (`src/idl-vectors.ts`): one source, run compiled
+Correctness is differential (`tests/idl-vectors.ts`): one source, run compiled
 through these bindings and, types stripped, as page script through V8's on
 the oracle page; both transcripts -- values, node shapes, each exception's
 name and message -- land in the DOM the smoke compares.

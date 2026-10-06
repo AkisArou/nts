@@ -11,7 +11,7 @@ const source = resolve(root, "third_party/chromium/src");
 const depot = resolve(root, "third_party/chromium/depot_tools");
 const output = resolve(root, "target/chromium");
 const lane = resolve(root, "runtime/chromium");
-const fixture = resolve(lane, "program");
+const fixture = resolve(lane, "embedder/program");
 const staged = resolve(source, "nts");
 const backend = process.argv[2];
 if (backend !== "c" && backend !== "llvm") throw new Error("Usage: node tooling/chromium/probe.ts <c|llvm> [--profile baseline|perf]");
@@ -72,7 +72,7 @@ const sources: Record<string, string[]> = {
   adapter: ["dom_bridge.cc", "dom_bridge.h", "dom_bridge_bindings.h", "dom_context.h", "dom_idl.cc"],
   "benchmarks/harness": ["binding_benchmark.cc", "binding_benchmark.h", "rows_benchmark.cc", "rows_benchmark.h", "kernels_benchmark.cc", "kernels_benchmark.h"],
   // dom_idl.h is generated from Blink's IDL (tooling/chromium/bindgen).
-  "program/abi": ["dom_abi.h", "dom_idl.h"],
+  "dom/abi": ["dom_abi.h", "dom_idl.h"],
 };
 for (const [directory, names] of Object.entries(sources)) {
   for (const name of names) stage(resolve(lane, directory, name), name);

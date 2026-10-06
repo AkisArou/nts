@@ -123,7 +123,7 @@ string after the compiled code had already converted it with a
 `charCodeAt` loop. The second iteration removes each of those by design
 rather than by tuning:
 
-| Concern | First bridge | Entered ABI ([`dom_abi.h`](../program/abi/dom_abi.h)) |
+| Concern | First bridge | Entered ABI ([`dom_abi.h`](../dom/abi/dom_abi.h)) |
 | --- | --- | --- |
 | Entry | V8 context, microtask scope and `TryCatch` per operation | One `nts_blink_dom_entry` per native callback, holding the agent's microtask scope as `V8ScriptRunner::CallFunction` does for script; the outermost one checkpoints on return |
 | Exceptions | Thrown into V8, caught, unwrapped to a code; non-DOM errors became 1000 | `DummyExceptionStateForTesting` records code and message with no isolate; each result carries its own status |

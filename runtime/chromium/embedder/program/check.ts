@@ -5,8 +5,9 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const root = resolve(import.meta.dirname, "../../..");
+const root = resolve(import.meta.dirname, "../../../..");
 const fixture = import.meta.dirname;
+const lane = resolve(fixture, "../..");
 const source = resolve(root, "third_party/chromium/src");
 // NTS_CHROMIUM_NATIVE_OUT keeps an experimental compiler's archives away from
 // the ones probe.ts stages into Chromium.
@@ -26,7 +27,7 @@ const compilerMtime = statSync(nts).mtime.toISOString();
 execFileSync(nts, ["build", resolve(fixture, "tsconfig.json"), "--out", output, "--rc"], {
   cwd: root, stdio: "inherit", env: { ...process.env, NTS_NO_ACQUIRE: "1" },
 });
-const common = [`--sysroot=${sysroot}`, "-std=c11", "-O2", "-fPIC", "-ffunction-sections", "-fdata-sections", "-DNTS_PROVIDER_RC", "-D_GNU_SOURCE", "-I", resolve(fixture, "abi"), "-I", resolve(root, "runtime/chromium/adapter")];
+const common = [`--sysroot=${sysroot}`, "-std=c11", "-O2", "-fPIC", "-ffunction-sections", "-fdata-sections", "-DNTS_PROVIDER_RC", "-D_GNU_SOURCE", "-I", resolve(lane, "dom/abi"), "-I", resolve(lane, "adapter")];
 const checks = [];
 for (const backend of ["c", "llvm"] as const) {
   const generated = resolve(output, backend === "c" ? "probe" : "probe-llvm", "linux-gnu-x86_64");
@@ -57,7 +58,7 @@ if (hash(nts) !== compilerSha256) throw new Error("The NTS compiler binary chang
 writeFileSync(resolve(output, "check-result.json"), `${JSON.stringify({
   observedAt: new Date().toISOString(), repositoryHeadAtCheck: gitRevision(root),
   compiler: { path: nts, sha256: compilerSha256, mtime: compilerMtime },
-  inputs: Object.fromEntries(["src/main.ts", "src/dom.ts", "src/rows.ts", "src/kernels.ts", "types/dom-host.d.ts", "types/dom-abi.d.ts", "types/dom-idl.d.ts", "abi/dom_host.h", "abi/dom_abi.h", "abi/dom_idl.h", "tsconfig.json", "nts.config.ts"].map(path => [path, hash(resolve(fixture, path))])),
+  inputs: Object.fromEntries(["embedder/program/main.ts", "embedder/program/tsconfig.json", "embedder/program/nts.config.ts", "tests/boundary.ts", "tests/dom-witness.ts", "tests/idl-vectors.ts", "benchmarks/workloads/binding.ts", "benchmarks/workloads/rows.ts", "benchmarks/workloads/kernels.ts", "dom/types/dom-testing.d.ts", "dom/types/dom-abi.d.ts", "dom/types/dom-idl.d.ts", "dom/abi/dom_testing.h", "dom/abi/dom_abi.h", "dom/abi/dom_idl.h"].map(path => [path, hash(resolve(lane, path))])),
   chromiumRevision: gitRevision(source), clangVersion: execFileSync(clang, ["--version"], { encoding: "utf8" }).trim(),
   sysroot, checks, scope: "Standalone embedding; does not establish sandboxed renderer execution.",
 }, null, 2)}\n`);

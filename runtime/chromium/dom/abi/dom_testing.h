@@ -1,6 +1,7 @@
-#ifndef NTS_CHROMIUM_DOM_HOST_H_
-#define NTS_CHROMIUM_DOM_HOST_H_
-/* The benchmark's controls beside the DOM ABI, each inside an entry: text
+#ifndef NTS_CHROMIUM_DOM_TESTING_H_
+#define NTS_CHROMIUM_DOM_TESTING_H_
+/* What tests and benchmarks ask of the adapter beside the DOM, each inside an
+ * entry, and never what an application calls: text
  * written from a buffer prepared in advance, at each width, through the same
  * path a program's `StringView` takes -- what the string costs is the
  * difference; text interned once for an id, then written as a reference to

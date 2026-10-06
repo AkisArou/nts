@@ -11,9 +11,9 @@ is what page script calls, decided by the same code.
 
 Emits, for the allowlisted interfaces:
 
-  program/abi/dom_idl.h        the C ABI: one function per member and arity
-  adapter/dom_idl.cc           the adapter: each function, Blink's call
-  program/types/dom-idl.d.ts   module "nts:dom", as a program writes it
+  dom/abi/dom_idl.h        the C ABI: one function per member and arity
+  adapter/dom_idl.cc       the adapter: each function, Blink's call
+  dom/types/dom-idl.d.ts   module "nts:dom", as a program writes it
 
 (under runtime/chromium)
 
@@ -656,9 +656,9 @@ declare module "nts:dom" {{
 """
         report = {"bound": len(self.functions), "skipped": self.skipped}
         return {
-            os.path.join(LANE, "program", "abi", "dom_idl.h"): header,
+            os.path.join(LANE, "dom", "abi", "dom_idl.h"): header,
             os.path.join(LANE, "adapter", "dom_idl.cc"): adapter,
-            os.path.join(LANE, "program", "types", "dom-idl.d.ts"): declarations,
+            os.path.join(LANE, "dom", "types", "dom-idl.d.ts"): declarations,
             os.path.join(os.path.dirname(__file__), "report.json"): json.dumps(report, indent=2) + "\n",
         }
 

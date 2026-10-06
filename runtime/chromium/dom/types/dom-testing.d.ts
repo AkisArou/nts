@@ -1,6 +1,7 @@
-/** @ntsHeader "dom_host.h" */
-// The benchmark's controls beside the DOM ABI; see abi/dom_host.h.
-declare module "nts:chromium-dom-experiment" {
+/** @ntsHeader "dom_testing.h" */
+// What tests and benchmarks ask of the adapter beside the DOM itself; see
+// abi/dom_testing.h. Not for applications.
+declare module "nts:dom-testing" {
   import type { CBytes, CElements, StringView, c_int32, c_uint32 } from "c:types";
   import type { Node } from "nts:dom";
   type Units = CElements<Uint16Array, "const uint16_t">;

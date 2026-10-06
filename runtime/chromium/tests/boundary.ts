@@ -1,9 +1,7 @@
-// Scalar bootstrap witness. Chromium calls this export with values supplied
-// by its renderer integration; no module globals, host API, or private IR.
-export { ntsChromiumDomProgram, ntsChromiumDomCounter } from "./dom.ts";
-export { ntsChromiumPrepareBenchmark, ntsChromiumBenchmarkLoop } from "./dom.ts";
-export { ntsRowsCreate, ntsRowsOperate, ntsRowsDestroy } from "./rows.ts";
-export { ntsKernelCreateElements, ntsKernelCounterTrees, ntsKernelEventRoundTrips } from "./kernels.ts";
+// The C boundary itself, before any DOM: a scalar, a managed string in and
+// out, an explicitly created counter the C shim owns, and scalar suspension.
+// Chromium calls these with values its renderer integration supplies; no
+// module globals, host API, or private IR.
 export function ntsChromiumProbe(input: number): number {
   return input * input + 1;
 }

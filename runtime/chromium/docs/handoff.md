@@ -3,6 +3,7 @@
 > **Superseded for the current design by [architecture.md](architecture.md)**
 > (2026-10-06): nodes are Blink's own pointers rooted only where the program
 > keeps them, text crosses as views both ways, and the legacy bridge is gone.
+> Paths below predate the 2026-10-06 layout (see the [README](../README.md)).
 > What follows is the record of how the lane got there.
 
 Prepared 2026-10-05 at the user's request to stop after completing the current
@@ -127,7 +128,7 @@ All native paths below are relative to
 | File | Role |
 | --- | --- |
 | `native/dom_bridge.cc` | Main Blink adapter and current DOM optimizations: canonical traced node registry, exception/CE scopes, lexical `nts_blink_dom_native_scope`, direct UTF-16 allocation/copy, actual agent queue and disposal. |
-| `native/dom_bridge.h`, `program/abi/dom_host.h`, `program/abi/dom_host.c` | Opaque C boundary, UTF-16 spans and authored native host functions; no managed NTS layouts in Blink C++. |
+| `native/dom_bridge.h`, `dom/abi/dom_testing.h`, `dom/abi/dom_testing.c` | Opaque C boundary, UTF-16 spans and authored native host functions; no managed NTS layouts in Blink C++. |
 | `native/probe.c`, `native/probe.h` | Private C ownership/environment barrier, compiled callback entry, benchmark setup/teardown and allocation counters. |
 | `src/dom.ts`, `src/main.ts` | Actual C/LLVM-compiled TS DOM program, counter, scalar awaits and benchmark loops; prepared state owns fresh arrays only. |
 | `native/binding_benchmark.cc/.h` | Renderer-local timers, eight DOM paths, calibration, rotating samples and short-entry matrix. |

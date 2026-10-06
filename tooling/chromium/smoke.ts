@@ -31,7 +31,7 @@ if (process.argv[5] !== undefined && !nativeCounter) throw new Error("Fifth argu
 if (nativeCounter && !probeBackend && !domOracle) throw new Error("The native counter requires a probe backend");
 if (domOracle && !nativeDom) throw new Error("The v8 oracle requires fifth argument dom");
 const fixtureName = mixedMicrotasks ? (domOracle ? "native-microtasks-oracle" : "native-microtasks") : domOracle ? "native-dom-oracle" : nativeDom ? "native-dom" : nativeCounter ? "native-counter" : "baseline";
-const fixture = pathToFileURL(`${root}/runtime/chromium/fixtures/${fixtureName}/index.html`).href;
+const fixture = pathToFileURL(`${root}/runtime/chromium/tests/pages/${fixtureName}/index.html`).href;
 const inputSelector = nativeCounter ? "#native-increment" : "#increment";
 const outputSelector = nativeDom ? "#native-dom-count" : nativeCounter ? "#native-count" : "#count";
 const expectedCount = (count: number): string => nativeCounter && !nativeDom ? String(count) : `Count: ${count}`;
@@ -198,14 +198,14 @@ try {
   // can still be complete. Wait for the committed fixture and its control.
   await until(() => evaluate<boolean>(`location.href === ${JSON.stringify(fixture)} && document.readyState === 'complete' && document.querySelector('${inputSelector}') !== null && document.querySelector('${outputSelector}') !== null`), "loaded fixture document");
   const readyMs = performance.now() - started;
-  // The differential vectors (program/src/idl-vectors.ts): the
+  // The differential vectors (tests/idl-vectors.ts): the
   // program ran them through the generated bindings while the page loaded;
   // the oracle runs the same source, types stripped, through V8's, and
   // leaves its transcript in the same place, so the compared DOM holds both
   // answers. `asText` and the like are the program's narrowing, which page
   // script spells `instanceof`.
   if (domOracle && !mixedMicrotasks) {
-    const vectors = stripTypeScriptTypes(await readFile(resolve(root, "runtime/chromium/program/src/idl-vectors.ts"), "utf8"))
+    const vectors = stripTypeScriptTypes(await readFile(resolve(root, "runtime/chromium/tests/idl-vectors.ts"), "utf8"))
       .replace(/^\s*import\s[^;]*;\s*$/gm, "").replace(/^export /gm, "");
     await evaluate(`(() => {
       const asHTMLElement = (node) => node instanceof HTMLElement ? node : null;

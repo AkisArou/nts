@@ -1,4 +1,4 @@
-/* Runs the rows workload (program/src/rows.ts) over mini_dom with
+/* Runs the rows workload (benchmarks/workloads/rows.ts) over mini_dom with
  * the case table of rows_benchmark.cc, and prints JSON: per-sample times,
  * NTS allocation counts, the final serialized rows and the rooted nodes. */
 #include <stdio.h>

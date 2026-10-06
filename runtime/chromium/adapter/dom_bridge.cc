@@ -507,7 +507,7 @@ NtsDomNode *nts_blink_dom_element_by_id(NtsDomContext *context,
       context->document->getElementById(blink::AtomicString(id)));
 }
 size_t nts_blink_dom_roots(void) { return HeldObjects().counts.size(); }
-// The benchmark's controls (program/abi/dom_host.h), each inside an entry: a
+// The benchmark's controls (dom/abi/dom_testing.h), each inside an entry: a
 // conservative collection now, as an allocation would trigger, and text from
 // a prepared buffer at its width, the control for a program's own string.
 void nts_dom_collect_for_testing(void) {

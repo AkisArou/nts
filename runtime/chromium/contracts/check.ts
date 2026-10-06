@@ -50,7 +50,7 @@ function emit(project: string, directory: string, backend: "c" | "llvm", name: s
 const lifetime = [];
 for (const backend of ["c", "llvm"] as const) {
   const directory = resolve(runOutput, backend);
-  const emission = emit(resolve(fixture, "tsconfig.json"), directory, backend, "lifetime");
+  const emission = emit(resolve(fixture, "managed-await/tsconfig.json"), directory, backend, "lifetime");
   assert.equal(emission.exitCode, 0, emission.log);
   for (const symbol of ["createCounter", "managedAwait", "literalUnit"]) assert(emission.header.includes(`${symbol}(`), `${backend}: missing ${symbol}`);
   const program = resolve(directory, "program.o");
@@ -58,7 +58,7 @@ for (const backend of ["c", "llvm"] as const) {
     "-O2", "-c", emission.programPath, "-o", program], { stdio: "inherit" });
   const executable = resolve(directory, "caller");
   execFileSync(clang, [`--sysroot=${sysroot}`, "-std=c11", "-DNTS_PROVIDER_RC", "-D_GNU_SOURCE", "-O2", "-fuse-ld=lld", "-I", directory,
-    resolve(fixture, "native/caller.c"), program, resolve(directory, "nts_runtime.c"), "-lm", "-o", executable], { stdio: "inherit" });
+    resolve(fixture, "managed-await/caller.c"), program, resolve(directory, "nts_runtime.c"), "-lm", "-o", executable], { stdio: "inherit" });
   const observed = JSON.parse(execFileSync(executable, [], { encoding: "utf8" })) as { counterSurvived: boolean; liveAfterPromiseRelease: number; literalUnits: number[] };
   const expectedUnits = [65, 0, 233, 937, 55296, 90, 56320, 55357, 56832];
   const code = readFileSync(emission.programPath, "utf8");
@@ -85,7 +85,7 @@ const result = {
   observedAt: new Date().toISOString(), repositoryHeadAtCheck: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(),
   compiler: { path: nts, sha256: compilerSha256, mtime: statSync(nts).mtime.toISOString() },
   scope: "Compiler admission and standalone lifetime diagnostics; no Chromium acceptance.",
-  inputs: Object.fromEntries(["src/main.ts", "native/caller.c", "managed-opaque/main.ts", "managed-opaque/host.d.ts"].map(path => [path, hash(resolve(fixture, path))])),
+  inputs: Object.fromEntries(["managed-await/main.ts", "managed-await/caller.c", "managed-opaque/main.ts", "managed-opaque/host.d.ts"].map(path => [path, hash(resolve(fixture, path))])),
   lifetime, admissions,
 };
 writeFileSync(resolve(output, "result.json"), `${JSON.stringify(result, null, 2)}\n`);
