@@ -4,7 +4,7 @@
 // the document an entry runs in, and listening with a compiled closure.
 // Contract: abi/dom_abi.h.
 declare module "nts:dom" {
-  import type { CNumber, Closure, HostClass, StringView } from "c:types";
+  import type { CNumber, Closure, HostClass, ScopedClosure, StringView } from "c:types";
   /**
    * `requestAnimationFrame(callback)`: once, before the next frame, with its
    * time, in the queue page script's callbacks share.
@@ -23,6 +23,18 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_listen
      */
     listen(this: EventTarget, type: StringView, listener: Closure<(event: Event) => void>): Listener;
+    /**
+     * `addEventListener` as the DOM defines it: an equal listener -- same
+     * type, capture and function -- is added once.
+     * @ntsSymbol nts_dom_add_event_listener
+     * @ntsDefault capture=0
+     */
+    addEventListener(this: EventTarget, type: StringView, listener: Closure<(event: Event) => void>, capture?: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_remove_event_listener
+     * @ntsDefault capture=0
+     */
+    removeEventListener(this: EventTarget, type: StringView, listener: ScopedClosure<(event: Event) => void>, capture?: boolean): void;
   }
   export interface ListenerMethods {
     /**

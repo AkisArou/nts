@@ -86,6 +86,21 @@ export function ntsChromiumDomProgram(): number {
   listener.remove();
   button.click();
   if (clicks.count !== 2) return 16;
+
+  // addEventListener as the DOM defines it: an equal listener -- same type,
+  // capture and function -- is added once, and removeEventListener with the
+  // same function takes it off.
+  const added = { count: 0 };
+  const onClick = (event: Event): void => {
+    if (event.type === "click") added.count += 1;
+  };
+  button.addEventListener("click", onClick);
+  button.addEventListener("click", onClick);
+  button.click();
+  if (added.count !== 1) return 17;
+  button.removeEventListener("click", onClick);
+  button.click();
+  if (added.count !== 1) return 18;
   label.textContent = "Count: 0";
 
   // The differential vectors (idl-vectors.ts), whose transcript the oracle

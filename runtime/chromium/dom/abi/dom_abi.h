@@ -71,6 +71,25 @@ NtsDomListener* nts_dom_listen(NtsDomEventTarget* target,
                                                 void* closure),
                                void* closure,
                                void (*destroy)(void* closure));
+/* `target.addEventListener(type, listener, capture)`, as the DOM defines it:
+ * adding a listener equal to one the target has -- same type, capture and
+ * closure, the closure known by its context -- does nothing, and the
+ * reference the call brought is given back at once. */
+void nts_dom_add_event_listener(NtsDomEventTarget* target,
+                                const NtsBorrowedString* type,
+                                void (*callback)(NtsDomEvent* event,
+                                                 void* closure),
+                                void* closure,
+                                void (*destroy)(void* closure),
+                                bool capture);
+/* `target.removeEventListener(type, listener, capture)`: the listener added
+ * with the same closure comes off and its closure goes back; none, nothing. */
+void nts_dom_remove_event_listener(NtsDomEventTarget* target,
+                                   const NtsBorrowedString* type,
+                                   void (*callback)(NtsDomEvent* event,
+                                                    void* closure),
+                                   void* closure,
+                                   bool capture);
 /* Removes the listener and gives its closure back; a second call does
  * nothing. */
 void nts_dom_unlisten(NtsDomListener* listener);

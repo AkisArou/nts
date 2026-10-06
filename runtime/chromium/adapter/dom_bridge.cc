@@ -35,10 +35,20 @@ Roots &HeldObjects() {
 class NtsListener final : public blink::NativeEventListener {
 public:
   NtsListener(NtsDomContext *context, blink::EventTarget *target,
-              const blink::AtomicString &type, NtsDomCallback callback,
-              void *closure, NtsDomDestroy destroy)
-      : context_(context), target_(target), type_(type), callback_(callback),
-        closure_(closure), destroy_(destroy) {}
+              const blink::AtomicString &type, bool capture,
+              NtsDomCallback callback, void *closure, NtsDomDestroy destroy)
+      : context_(context), target_(target), type_(type), capture_(capture),
+        callback_(callback), closure_(closure), destroy_(destroy) {}
+
+  // Whether this is the listener addEventListener(type, closure, capture)
+  // on its target names: the DOM's own equality, with the closure's native
+  // context standing for the function -- one per closure object.
+  bool Is(const blink::AtomicString &type, bool capture,
+          const void *closure) const {
+    return callback_ && type_ == type && capture_ == capture &&
+           closure_.get() == closure;
+  }
+  blink::EventTarget *target() const { return target_.Get(); }
 
   void Invoke(blink::ExecutionContext *, blink::Event *event) override;
 
@@ -48,7 +58,7 @@ public:
   NtsDomDestroy Detach(void *&closure) {
     if (!callback_)
       return nullptr;
-    target_->removeEventListener(type_, this, /*use_capture=*/false);
+    target_->removeEventListener(type_, this, capture_);
     callback_ = nullptr;
     context_ = nullptr;
     closure = closure_.ExtractAsDangling();
@@ -64,13 +74,12 @@ private:
   raw_ptr<NtsDomContext> context_;
   blink::Member<blink::EventTarget> target_;
   blink::AtomicString type_;
+  bool capture_;
   NtsDomCallback callback_;
   raw_ptr<void> closure_;
   NtsDomDestroy destroy_;
 };
 
-// The listeners a context has registered, until each is removed: what gives
-// every closure back when the document goes.
 // A compiled closure to run before the next frame: Blink's own frame
 // callback, in the queue page script's requestAnimationFrame uses, so the two
 // run in the order they asked. It runs once and gives the closure back; a
@@ -104,14 +113,50 @@ private:
 // What a context's program has asked Blink to call -- listeners until each is
 // removed, frames until each runs -- and so what gives every closure back
 // when the document goes.
+// One target's addEventListener listeners, for the DOM's equality check:
+// a lookup costs what the target has, not what the document has.
+class TargetListeners final : public blink::GarbageCollected<TargetListeners> {
+public:
+  void Trace(blink::Visitor *visitor) const { visitor->Trace(listeners); }
+  blink::HeapVector<blink::Member<NtsListener>> listeners;
+};
+
 class ListenerSet final : public blink::GarbageCollected<ListenerSet> {
 public:
   void Trace(blink::Visitor *visitor) const {
     visitor->Trace(set);
     visitor->Trace(frames);
+    visitor->Trace(by_target);
+  }
+  // The listener added for (type, closure, capture) on `target`, or null.
+  NtsListener *Find(blink::EventTarget *target, const blink::AtomicString &type,
+                    bool capture, const void *closure) const {
+    const auto found = by_target.find(target);
+    if (found == by_target.end())
+      return nullptr;
+    for (const auto &listener : found->value->listeners) {
+      if (listener->Is(type, capture, closure))
+        return listener.Get();
+    }
+    return nullptr;
+  }
+  void Forget(NtsListener *listener) {
+    set.erase(listener);
+    const auto found = by_target.find(listener->target());
+    if (found == by_target.end())
+      return;
+    auto &listeners = found->value->listeners;
+    const auto at = listeners.Find(listener);
+    if (at != blink::kNotFound)
+      listeners.EraseAt(at);
+    if (listeners.empty())
+      by_target.erase(found);
   }
   blink::HeapHashSet<blink::Member<NtsListener>> set;
   blink::HeapHashSet<blink::Member<NtsFrame>> frames;
+  blink::HeapHashMap<blink::Member<blink::EventTarget>,
+                     blink::Member<TargetListeners>>
+      by_target;
 };
 
 // Listener handles the program keeps off the stack, as Roots for objects.
@@ -401,6 +446,7 @@ void NtsDomContext::Close() {
   // environment is still there to take it.
   blink::HeapVector<blink::Member<NtsListener>> remaining(listeners->set);
   listeners->set.clear();
+  listeners->by_target.clear();
   for (auto &listener : remaining) {
     void *closure = nullptr;
     if (auto destroy = listener->Detach(closure))
@@ -599,16 +645,59 @@ NtsDomListener *nts_dom_listen(NtsDomEventTarget *target,
   CHECK(context.invoke);
   const auto name = context.Name(nts_string_view(type));
   auto *listener = blink::MakeGarbageCollected<NtsListener>(
-      &context, ObjectOf<blink::EventTarget>(target), name, callback, closure,
-      destroy);
+      &context, ObjectOf<blink::EventTarget>(target), name, /*capture=*/false,
+      callback, closure, destroy);
   ObjectOf<blink::EventTarget>(target)->addEventListener(name, listener);
   context.listeners->set.insert(listener);
   return reinterpret_cast<NtsDomListener *>(listener);
 }
+// `target.addEventListener(type, f, capture)` as the DOM defines it: adding
+// the listener an equal one already is does nothing -- and the closure
+// reference the call brought goes straight back, since nothing keeps it.
+void nts_dom_add_event_listener(NtsDomEventTarget *handle,
+                                const NtsBorrowedString *type,
+                                NtsDomCallback callback, void *closure,
+                                NtsDomDestroy destroy, bool capture) {
+  NtsDomContext &context = nts_dom::Current();
+  CHECK(context.invoke);
+  auto *target = ObjectOf<blink::EventTarget>(handle);
+  const auto name = context.Name(nts_string_view(type));
+  if (context.listeners->Find(target, name, capture, closure)) {
+    // Inside the program's call: its environment is entered already.
+    if (destroy)
+      destroy(closure);
+    return;
+  }
+  auto *listener = blink::MakeGarbageCollected<NtsListener>(
+      &context, target, name, capture, callback, closure, destroy);
+  target->addEventListener(name, listener, capture);
+  context.listeners->set.insert(listener);
+  auto &bucket = context.listeners->by_target.insert(target, nullptr).stored_value->value;
+  if (!bucket)
+    bucket = blink::MakeGarbageCollected<nts_dom::TargetListeners>();
+  bucket->listeners.push_back(listener);
+}
+// `target.removeEventListener(type, f, capture)`: the listener added with
+// the same closure, if any, comes off and gives its closure back.
+void nts_dom_remove_event_listener(NtsDomEventTarget *handle,
+                                   const NtsBorrowedString *type,
+                                   NtsDomCallback, void *closure,
+                                   bool capture) {
+  NtsDomContext &context = nts_dom::Current();
+  auto *listener = context.listeners->Find(
+      ObjectOf<blink::EventTarget>(handle),
+      context.Name(nts_string_view(type)), capture, closure);
+  if (!listener)
+    return;
+  context.listeners->Forget(listener);
+  void *held = nullptr;
+  if (auto destroy = listener->Detach(held))
+    destroy(held);
+}
 void nts_dom_unlisten(NtsDomListener *handle) {
   NtsDomContext &context = nts_dom::Current();
   auto *listener = reinterpret_cast<NtsListener *>(handle);
-  context.listeners->set.erase(listener);
+  context.listeners->Forget(listener);
   void *closure = nullptr;
   // Inside the program's call: its environment is entered already.
   if (auto destroy = listener->Detach(closure))
