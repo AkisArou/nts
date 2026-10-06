@@ -34,6 +34,8 @@ window.domWitness = (() => {
   label.textContent = exact;
   if (label.textContent !== exact) return 8;
   label.setAttribute('data-exact', exact);
+  label.className = 'counter';
+  if (label.className !== 'counter') return 9;
   container.removeChild(label);
   gc();
   if (document.querySelector('#native-dom-count') !== null) return 9;
@@ -44,6 +46,8 @@ window.domWitness = (() => {
   return 0;
 })();
 let count = 0;
+requestAnimationFrame((time) => label.setAttribute('data-frame', time > 0 ? 'ran' : 'no time'));
+cancelAnimationFrame(requestAnimationFrame(() => label.setAttribute('data-cancelled', 'ran')));
 let jobSequence = 0;
 function nativeJob() {
   const node = document.querySelector('#native-jobs');

@@ -204,7 +204,8 @@ try {
   // leaves its transcript in the same place, so the compared DOM holds both
   // answers. `asText` and the like are the program's narrowing, which page
   // script spells `instanceof`.
-  if (domOracle && !mixedMicrotasks) {
+  // Both oracles: the microtasks page runs the same DOM witness.
+  if (domOracle) {
     const vectors = stripTypeScriptTypes(await readFile(resolve(root, "runtime/chromium/tests/idl-vectors.ts"), "utf8"))
       .replace(/^\s*import\s[^;]*;\s*$/gm, "").replace(/^export /gm, "");
     await evaluate(`(() => {
