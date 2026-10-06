@@ -1,5 +1,5 @@
 {
-  "bound": 2083,
+  "bound": 2312,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -298,11 +298,6 @@
     },
     {
       "interface": "Element",
-      "member": "after/1",
-      "why": "variadic (Node or DOMString or TrustedScript)..."
-    },
-    {
-      "interface": "Element",
       "member": "afterHTML/2",
       "why": "[RuntimeEnabled]"
     },
@@ -315,11 +310,6 @@
       "interface": "Element",
       "member": "animate/2",
       "why": "[CallWith=ScriptState] needs a script context"
-    },
-    {
-      "interface": "Element",
-      "member": "append/1",
-      "why": "variadic (Node or DOMString or TrustedScript)..."
     },
     {
       "interface": "Element",
@@ -340,11 +330,6 @@
       "interface": "Element",
       "member": "attachShadow/1",
       "why": "interface ShadowRoot is not bound"
-    },
-    {
-      "interface": "Element",
-      "member": "before/1",
-      "why": "variadic (Node or DOMString or TrustedScript)..."
     },
     {
       "interface": "Element",
@@ -433,11 +418,6 @@
     },
     {
       "interface": "Element",
-      "member": "prepend/1",
-      "why": "variadic (Node or DOMString or TrustedScript)..."
-    },
-    {
-      "interface": "Element",
       "member": "prependHTML/2",
       "why": "[RuntimeEnabled]"
     },
@@ -455,16 +435,6 @@
       "interface": "Element",
       "member": "removeAttributeNode/1",
       "why": "interface Attr is not bound"
-    },
-    {
-      "interface": "Element",
-      "member": "replaceChildren/1",
-      "why": "variadic (Node or DOMString or TrustedScript)..."
-    },
-    {
-      "interface": "Element",
-      "member": "replaceWith/1",
-      "why": "variadic (Node or DOMString or TrustedScript)..."
     },
     {
       "interface": "Element",
@@ -653,11 +623,6 @@
     },
     {
       "interface": "CharacterData",
-      "member": "after/1",
-      "why": "variadic (Node or DOMString or TrustedScript)..."
-    },
-    {
-      "interface": "CharacterData",
       "member": "afterHTML/2",
       "why": "[RuntimeEnabled]"
     },
@@ -668,11 +633,6 @@
     },
     {
       "interface": "CharacterData",
-      "member": "before/1",
-      "why": "variadic (Node or DOMString or TrustedScript)..."
-    },
-    {
-      "interface": "CharacterData",
       "member": "beforeHTML/2",
       "why": "[RuntimeEnabled]"
     },
@@ -680,11 +640,6 @@
       "interface": "CharacterData",
       "member": "beforeHTMLUnsafe/2",
       "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "CharacterData",
-      "member": "replaceWith/1",
-      "why": "variadic (Node or DOMString or TrustedScript)..."
     },
     {
       "interface": "CharacterData",
@@ -2148,11 +2103,6 @@
     },
     {
       "interface": "Document",
-      "member": "append/1",
-      "why": "variadic (Node or DOMString or TrustedScript)..."
-    },
-    {
-      "interface": "Document",
       "member": "ariaNotify/2",
       "why": "[RuntimeEnabled]"
     },
@@ -2318,16 +2268,6 @@
     },
     {
       "interface": "Document",
-      "member": "prepend/1",
-      "why": "variadic (Node or DOMString or TrustedScript)..."
-    },
-    {
-      "interface": "Document",
-      "member": "replaceChildren/1",
-      "why": "variadic (Node or DOMString or TrustedScript)..."
-    },
-    {
-      "interface": "Document",
       "member": "requestStorageAccess/0",
       "why": "defined in Blink's modules component; the adapter links core"
     },
@@ -2400,21 +2340,6 @@
       "interface": "Document",
       "member": "parseHTMLUnsafe/2",
       "why": "static"
-    },
-    {
-      "interface": "DocumentFragment",
-      "member": "append/1",
-      "why": "variadic (Node or DOMString or TrustedScript)..."
-    },
-    {
-      "interface": "DocumentFragment",
-      "member": "prepend/1",
-      "why": "variadic (Node or DOMString or TrustedScript)..."
-    },
-    {
-      "interface": "DocumentFragment",
-      "member": "replaceChildren/1",
-      "why": "variadic (Node or DOMString or TrustedScript)..."
     },
     {
       "interface": "HTMLElement",

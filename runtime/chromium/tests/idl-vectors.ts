@@ -230,6 +230,25 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   log("table", table.rows.length + "|" + describe(table.rows.item(0)) + "|" + shown(table.textContent));
   thrown("insertRowRange", () => { table.insertRow(9); });
 
+  // The variadic tree edits, at each arity and with nodes and text mixed;
+  // replaceChildren() with nothing clears.
+  const edits = d.createElement("p");
+  root.appendChild(edits);
+  const em = d.createElement("em");
+  em.textContent = "em";
+  edits.append(em, " tail");
+  edits.prepend("head ");
+  em.before("<", d.createElement("br"));
+  em.after(">");
+  log("variadic", shown(edits.textContent) + "|" + edits.childNodes.length + "|" + edits.innerHTML);
+  em.replaceWith(d.createElement("hr"), "x", "y");
+  log("replaceWith", edits.innerHTML);
+  edits.replaceChildren();
+  log("replaceChildrenNone", edits.childNodes.length + "|" + edits.innerHTML);
+  edits.replaceChildren("only");
+  log("replaceChildrenText", edits.innerHTML);
+  thrown("appendAncestor", () => { edits.append(root); });
+
   // What the members raise: each exception's name and Blink's message.
   thrown("syntax", () => { d.querySelector("["); });
   thrown("hierarchy", () => { div.appendChild(div); });

@@ -42,6 +42,7 @@ passed it.
 """
 
 import argparse
+import itertools
 import json
 import os
 import re
@@ -346,7 +347,7 @@ class Generator:
             if param.idl_name is not None:
                 placeholders[name_style.arg_f("arg{}_{}", index + 1, param.idl_name)] = param.expr
         if tail is not None:
-            identifier, index, vector = tail
+            identifier, index, vector, _ = tail
             placeholders[name_style.arg_f("arg{}_{}", index + 1, identifier)] = vector
         for index, (idl_name, value) in enumerate(filled, start=len(params)):
             placeholders[name_style.arg_f("arg{}_{}", index + 1, idl_name)] = value
@@ -453,7 +454,9 @@ class Generator:
         used = set()
         for operation, params, result, truncate, filled, tail in variants:
             symbol = f"nts_dom_{interface.identifier}_{name}"
-            if len(variants) > 1:
+            if tail is not None and tail[3] is not None:
+                symbol += f"_{tail[3]}"
+            elif len(variants) > 1:
                 symbol += f"_{len(params)}"
                 while symbol in used:
                     symbol += "x"
@@ -466,19 +469,38 @@ class Generator:
                 continue
             lines.append(self.method_line(interface, name, function))
 
-    VARIADIC_ARITIES = (1, 2, 3)
+    VARIADIC_ARITIES = (0, 1, 2, 3)
 
     def variadic(self, operation):
-        """A variadic string tail (`classList.add(...tokens)`), bound at one,
-        two and three arguments: Blink takes the tail as one Vector<String>,
-        which the adapter builds from the given strings. None when the last
-        argument is not variadic; Skip when its element type is not text."""
+        """A variadic tail, bound at zero to three arguments. Blink takes the
+        tail as one vector, which the adapter builds from the given values:
+        strings (`classList.add(...tokens)`) as a Vector<String>, and the
+        `(Node or DOMString or TrustedScript)` of `append(...nodes)` as the
+        HeapVector of unions V8's binding builds -- every mix of the arms a
+        program can give (a bound interface, the string) at each arity, each
+        function named by its arms (`_ns`: a node, then a string). None when
+        the last argument is not variadic; Skip when no element arm can be
+        given."""
         arguments = operation.arguments
         if not arguments or not arguments[-1].is_variadic:
             return None
         tail = arguments[-1]
         element = tail.idl_type.unwrap()
-        if element.keyword_typename not in STRINGS:
+        if element.keyword_typename in STRINGS:
+            arms, union = [(None, element)], None
+        elif element.is_union:
+            union = blink_type_info(element).typename
+            arms = []
+            for member in element.flattened_member_types:
+                unwrapped = member.unwrap()
+                if unwrapped.keyword_typename in STRINGS:
+                    arms.append(("s", unwrapped))
+                elif unwrapped.is_interface and unwrapped.identifier in self.bound:
+                    arms.append((unwrapped.identifier[0].lower(), unwrapped))
+            if not arms or len({letter for letter, _ in arms}) != len(arms):
+                raise Skip(f"variadic {tail.idl_type.syntactic_form}")
+            self.headers.add(PathManager(element.union_definition_object).api_path(ext="h"))
+        else:
             raise Skip(f"variadic {tail.idl_type.syntactic_form}")
         fixed = []
         for argument in arguments[:-1]:
@@ -491,15 +513,27 @@ class Generator:
         def variants(result):
             out = []
             for count in reversed(self.VARIADIC_ARITIES):
-                params = list(fixed)
-                values = []
-                for index in range(count):
-                    param = self.parameter(element, f"{tail.identifier}{index + 1}")
-                    param.idl_name = None
-                    params.append(param)
-                    values.append(f"{param.expr}.Text()")
-                vector = f"blink::Vector<blink::String>({{{', '.join(values)}}})"
-                out.append((operation, params, result, None, [], (tail.identifier, len(fixed), vector)))
+                for chosen in itertools.product(arms, repeat=count):
+                    params = list(fixed)
+                    values = []
+                    for index, (letter, arm) in enumerate(chosen):
+                        param = self.parameter(arm, f"{tail.identifier}{index + 1}")
+                        param.idl_name = None
+                        params.append(param)
+                        if union is None:
+                            values.append(f"{param.expr}.Text()")
+                        elif letter == "s":
+                            values.append(f"blink::MakeGarbageCollected<blink::{union}>({param.expr}.Text())")
+                        else:
+                            values.append(f"blink::MakeGarbageCollected<blink::{union}>({param.expr})")
+                    if union is None:
+                        vector = f"blink::Vector<blink::String>({{{', '.join(values)}}})"
+                        suffix = None
+                    else:
+                        vector = (f"blink::HeapVector<blink::Member<blink::{union}>>"
+                                  f"({{{', '.join(values)}}})")
+                        suffix = "".join(letter for letter, _ in chosen) or "0"
+                    out.append((operation, params, result, None, [], (tail.identifier, len(fixed), vector, suffix)))
             return out
         return variants
 
