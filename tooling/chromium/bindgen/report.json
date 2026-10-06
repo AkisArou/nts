@@ -1,5 +1,5 @@
 {
-  "bound": 2317,
+  "bound": 2320,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -2345,11 +2345,6 @@
       "interface": "HTMLElement",
       "member": "get hidden",
       "why": "needs ${script_state}"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "set hidden",
-      "why": "parameter type (boolean or unrestricted double or DOMString)?"
     },
     {
       "interface": "HTMLElement",

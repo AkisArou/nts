@@ -383,7 +383,10 @@ class Generator:
                                result, context)
         except Skip as why:
             self.skip(interface, "get " + identifier, str(why))
-        if not attribute.is_readonly:
+        arms = self.primitive_arms(attribute.idl_type) if not attribute.is_readonly else None
+        if arms:
+            self.arm_setters(interface, attribute, base, arms)
+        elif not attribute.is_readonly:
             try:
                 self.check_member(attribute)
                 param = self.parameter(attribute.idl_type, "value")
@@ -413,6 +416,46 @@ class Generator:
             lines.append(f"{doc}    {readonly}{identifier}: {getter.result.ts};")
         else:
             lines.append(f"{doc}    set {identifier}(value: {written});")
+
+    ARM_NAMES = {"boolean": "boolean", "DOMString": "string", "unrestricted double": "number", "double": "number"}
+
+    def primitive_arms(self, idl_type):
+        """The arms of a union with several primitive members (`hidden`'s
+        boolean, unrestricted double and DOMString), or None."""
+        unwrapped = idl_type.unwrap(nullable=True)
+        if not unwrapped.is_union:
+            return None
+        primitives = [t.unwrap() for t in unwrapped.flattened_member_types if not t.unwrap().is_interface]
+        if len(primitives) < 2 or any(t.keyword_typename not in self.ARM_NAMES for t in primitives):
+            return None
+        return unwrapped, primitives
+
+    def arm_setters(self, interface, attribute, base, arms):
+        """A setter whose value is a union of several primitives, bound once
+        per arm (`_set_hidden_boolean`, `_set_hidden_string`): the arm a write
+        means is the value's type, which a caller knows statically, and Blink
+        receives the union V8's binding builds for that value. Methods, not a
+        property: one property can name only one setter."""
+        union_type, primitives = arms
+        union = blink_type_info(union_type).typename
+        self.headers.add(PathManager(union_type.union_definition_object).api_path(ext="h"))
+        lines = self.members.setdefault(interface.identifier, [])
+        identifier = attribute.identifier
+        for arm in primitives:
+            name = self.ARM_NAMES[arm.keyword_typename]
+            try:
+                self.check_member(attribute)
+                param = self.parameter(arm, "value")
+                param.idl_name = "value"
+                value = f"{param.expr}.Text()" if param.context else param.expr
+                param.expr = f"blink::MakeGarbageCollected<blink::{union}>({value})"
+                context = base.make_copy(attribute=attribute, attribute_set=True)
+                setter = self.bind(interface, attribute, f"nts_dom_{interface.identifier}_set_{identifier}_{name}",
+                                   [param], Result("void", "void", "void"), context)
+            except Skip as why:
+                self.skip(interface, f"set {identifier} ({name})", str(why))
+                continue
+            lines.append(self.method_line(interface, f"_set_{identifier}_{name}", setter))
 
     def operation(self, interface, group):
         """Each overload, at each arity a caller can write: every optional

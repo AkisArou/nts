@@ -262,6 +262,21 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   card.dataset._named_delete("missing");
   log("datasetDeleted", shown(card.getAttribute("data-user-id")) + "|" + shown(card.dataset._named_get("userId")));
   thrown("datasetDash", () => { card.dataset._named_set("a-b", "1"); });
+  // hidden: a union of three primitives, set once per arm
+  // (`el.hidden = true` is `_set_hidden_boolean(true)`), read back as the
+  // attribute.
+  card._set_hidden_boolean(true);
+  const afterTrue = shown(card.getAttribute("hidden"));
+  card._set_hidden_string("UNTIL-FOUND");
+  const afterUntil = shown(card.getAttribute("hidden"));
+  card._set_hidden_number(0);
+  const afterZero = shown(card.getAttribute("hidden"));
+  card._set_hidden_number(2);
+  const afterTwo = shown(card.getAttribute("hidden"));
+  card._set_hidden_string("");
+  const afterEmpty = shown(card.getAttribute("hidden"));
+  card._set_hidden_boolean(false);
+  log("hidden", afterTrue + "|" + afterUntil + "|" + afterZero + "|" + afterTwo + "|" + afterEmpty + "|" + shown(card.getAttribute("hidden")));
   log("namedItem", describe(root.children.namedItem("native-idl-missing")));
 
   // What the members raise: each exception's name and Blink's message.

@@ -220,6 +220,9 @@ try {
         named.prototype._named_set = function (name, value) { this[name] = value; };
         named.prototype._named_delete = function (name) { delete this[name]; };
       }
+      // \`_set_hidden_boolean\` and its siblings: one union setter, per arm.
+      for (const arm of ["boolean", "string", "number"])
+        HTMLElement.prototype["_set_hidden_" + arm] = function (value) { this.hidden = value; };
       ${vectors}
       // V8's message carries the binding's context ("Failed to execute 'x'
       // on 'Y': "), which the generated binding's does not.

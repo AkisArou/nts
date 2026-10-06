@@ -569,6 +569,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_trusted_type_policy_factory.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_type_conversions.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_ui_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_boolean_string_unrestricteddouble.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_node_string_trustedscript.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_string_trustedhtml.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_string_trustedscript.h"
@@ -9509,6 +9510,27 @@ void nts_dom_HTMLElement_set_dir(NtsDomHTMLElement* self, const NtsBorrowedStrin
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::HTMLElement>(self);
   receiver->setDir(NtsText(context, value));
+}
+
+void nts_dom_HTMLElement_set_hidden_number(NtsDomHTMLElement* self, double value) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::HTMLElement>(self);
+  receiver->setHidden(blink::MakeGarbageCollected<blink::V8UnionBooleanOrStringOrUnrestrictedDouble>(value));
+}
+
+void nts_dom_HTMLElement_set_hidden_string(NtsDomHTMLElement* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::HTMLElement>(self);
+  receiver->setHidden(blink::MakeGarbageCollected<blink::V8UnionBooleanOrStringOrUnrestrictedDouble>(NtsText(context, value).Text()));
+}
+
+void nts_dom_HTMLElement_set_hidden_boolean(NtsDomHTMLElement* self, bool value) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::HTMLElement>(self);
+  receiver->setHidden(blink::MakeGarbageCollected<blink::V8UnionBooleanOrStringOrUnrestrictedDouble>(value));
 }
 
 bool nts_dom_HTMLElement_get_inert(NtsDomHTMLElement* self) {

@@ -3474,6 +3474,18 @@ declare module "nts:dom" {
      */
     dir: StringView;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_set_hidden_number
+     */
+    _set_hidden_number(this: HTMLElement, value: CNumber<"double">): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_hidden_string
+     */
+    _set_hidden_string(this: HTMLElement, value: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_hidden_boolean
+     */
+    _set_hidden_boolean(this: HTMLElement, value: boolean): void;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_get_inert
      */
     _get_inert(this: HTMLElement): boolean;
