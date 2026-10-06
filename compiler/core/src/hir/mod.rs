@@ -3124,12 +3124,21 @@ impl Program {
         // gets its fields released at the end of the scope, which breaks the
         // cycle without the collector, and that is why every fixture that had
         // this shape passed until one of them handed the object to a callee.
-        let mut subtypes: Vec<Vec<usize>> = vec![Vec::new(); self.layouts.len()];
+        let count = self.layouts.len();
+        // The first layout naming each type, as `position` over the layouts
+        // answered it -- asked once here instead of once per question.
+        let mut layout_of: rustc_hash::FxHashMap<TypeId, usize> = rustc_hash::FxHashMap::default();
+        for (at, layout) in self.layouts.iter().enumerate() {
+            for ty in &layout.types {
+                layout_of.entry(*ty).or_insert(at);
+            }
+        }
+        let mut subtypes: Vec<Vec<usize>> = vec![Vec::new(); count];
         for (at, layout) in self.layouts.iter().enumerate() {
             let Some(base) = layout.base else {
                 continue;
             };
-            if let Some(above) = self.layouts.iter().position(|l| l.types.contains(&base)) {
+            if let Some(&above) = layout_of.get(&base) {
                 subtypes[above].push(at);
             }
         }
@@ -3143,61 +3152,94 @@ impl Program {
         // the `push`; elide that pair and five nodes leaked. So a layout's slot
         // holds what the program actually casts into it, as well as what
         // derives from it.
+        let mut held: rustc_hash::FxHashSet<(usize, usize)> = subtypes
+            .iter()
+            .enumerate()
+            .flat_map(|(above, below)| below.iter().map(move |at| (above, *at)))
+            .collect();
         for (target, source) in self.cast_sources() {
-            if !subtypes[target].contains(&source) {
+            if held.insert((target, source)) {
                 subtypes[target].push(source);
             }
         }
 
         // Edges: which layouts a layout's reference fields can lead to, and
         // everything derived from those.
+        //
+        // Deduplicated through a set rather than `contains`: since an erased
+        // field reaches every layout (bdd57aa29), a list here can be as long as
+        // the program has layouts, and a linear test per insert made this
+        // cubic -- `runtime/node/http` spent 420 of its 700 seconds here.
+        let mut seen = vec![false; count];
         let edges: Vec<Vec<usize>> = self
             .layouts
             .iter()
             .map(|layout| {
-                let mut targets = Vec::new();
+                let mut reached = Vec::new();
                 for field in &layout.fields {
-                    self.reaches(&field.ty, &mut targets);
+                    self.reaches(&field.ty, &mut reached);
+                }
+                let mut targets = Vec::new();
+                for at in reached {
+                    if !std::mem::replace(&mut seen[at], true) {
+                        targets.push(at);
+                    }
                 }
                 // Transitively, because a base's subtype may itself be a base.
                 let mut at = 0;
                 while at < targets.len() {
                     let next = targets[at];
                     at += 1;
-                    for below in &subtypes[next] {
-                        if !targets.contains(below) {
-                            targets.push(*below);
+                    for &below in &subtypes[next] {
+                        if !std::mem::replace(&mut seen[below], true) {
+                            targets.push(below);
                         }
                     }
+                }
+                for &at in &targets {
+                    seen[at] = false;
                 }
                 targets
             })
             .collect();
 
-        // Reachability from each layout to itself. The layout count is small --
-        // one per distinct object shape in the program -- so a search per
-        // layout is the right shape of answer rather than a strongly-connected
-        // components pass that would need explaining.
-        let cyclic = (0..self.layouts.len())
-            .map(|start| {
-                let mut seen = vec![false; self.layouts.len()];
-                let mut stack = edges[start].clone();
-                while let Some(next) = stack.pop() {
-                    if next == start {
-                        return true;
-                    }
-                    if std::mem::replace(&mut seen[next], true) {
-                        continue;
-                    }
-                    stack.extend(edges[next].iter().copied());
-                }
-                false
-            })
+        // A layout is cyclic when a path of edges leads from it back to it:
+        // its strongly connected component has another member, or it has an
+        // edge to itself. This was a search per layout, on the ground that the
+        // layout count is small; with an erased field reaching every layout the
+        // edges are not, and the searches were cubic.
+        let component = strongly_connected(&edges);
+        let mut members = vec![0usize; count];
+        for &of in &component {
+            members[of] += 1;
+        }
+        let cyclic: Vec<bool> = (0..count)
+            .map(|at| members[component[at]] > 1 || edges[at].contains(&at))
             .collect();
+        // Whether an array whose elements are of each layout can be in a
+        // cycle: some layout its elements can lead to, through what a slot
+        // holds and where fields go, is cyclic. Every layout's answer at once,
+        // walking backwards from the cyclic ones, where [`Cycles::array`] used
+        // to walk forwards from its element on every call.
+        let mut leads_to: Vec<Vec<usize>> = vec![Vec::new(); count];
+        for at in 0..count {
+            for &next in subtypes[at].iter().chain(&edges[at]) {
+                leads_to[next].push(at);
+            }
+        }
+        let mut reaches_a_cycle = cyclic.clone();
+        let mut work: Vec<usize> = (0..count).filter(|&at| cyclic[at]).collect();
+        while let Some(at) = work.pop() {
+            for &from in &leads_to[at] {
+                if !std::mem::replace(&mut reaches_a_cycle[from], true) {
+                    work.push(from);
+                }
+            }
+        }
         Cycles {
             cyclic,
-            subtypes,
-            edges,
+            layout_of,
+            reaches_a_cycle,
         }
     }
 
@@ -3647,6 +3689,64 @@ fn keeps_field_borrows(name: &str) -> bool {
     KEEPS_FIELD_BORROWS.contains(&name)
 }
 
+/// The strongly connected component of each node, by Tarjan's algorithm with
+/// an explicit stack: a component id per node, equal ids meaning a path each
+/// way. Iterative because a program's layouts can chain deeper than the native
+/// stack allows a recursion to.
+fn strongly_connected(edges: &[Vec<usize>]) -> Vec<usize> {
+    const UNSEEN: usize = usize::MAX;
+    let count = edges.len();
+    let mut index = vec![UNSEEN; count];
+    let mut low = vec![0usize; count];
+    let mut on_stack = vec![false; count];
+    let mut component = vec![UNSEEN; count];
+    let mut stack: Vec<usize> = Vec::new();
+    let mut next_index = 0usize;
+    let mut next_component = 0usize;
+    // (node, how many of its edges have been followed)
+    let mut calls: Vec<(usize, usize)> = Vec::new();
+    for root in 0..count {
+        if index[root] != UNSEEN {
+            continue;
+        }
+        calls.push((root, 0));
+        while let Some(top) = calls.len().checked_sub(1) {
+            let (node, followed) = calls[top];
+            if followed == 0 && index[node] == UNSEEN {
+                index[node] = next_index;
+                low[node] = next_index;
+                next_index += 1;
+                stack.push(node);
+                on_stack[node] = true;
+            }
+            if let Some(&next) = edges[node].get(followed) {
+                calls[top].1 += 1;
+                if index[next] == UNSEEN {
+                    calls.push((next, 0));
+                } else if on_stack[next] {
+                    low[node] = low[node].min(index[next]);
+                }
+                continue;
+            }
+            calls.pop();
+            if let Some(&(parent, _)) = calls.last() {
+                low[parent] = low[parent].min(low[node]);
+            }
+            if low[node] == index[node] {
+                while let Some(member) = stack.pop() {
+                    on_stack[member] = false;
+                    component[member] = next_component;
+                    if member == node {
+                        break;
+                    }
+                }
+                next_component += 1;
+            }
+        }
+    }
+    component
+}
+
 /// What [`Program::cycles`] decided: which layouts can be in a reference cycle,
 /// and the graph it decided it on -- kept, so that an array is answered from
 /// the same edges rather than from a second derivation that could disagree.
@@ -3654,12 +3754,11 @@ fn keeps_field_borrows(name: &str) -> bool {
 pub struct Cycles {
     /// By layout index: whether an object of that layout can be in a cycle.
     pub cyclic: Vec<bool>,
-    /// What a slot of each layout can hold besides itself, directly: its
-    /// subclasses and what the program casts into it.
-    subtypes: Vec<Vec<usize>>,
-    /// Where each layout's reference fields lead, everything those can hold
-    /// included.
-    edges: Vec<Vec<usize>>,
+    /// The first layout naming each object type.
+    layout_of: rustc_hash::FxHashMap<TypeId, usize>,
+    /// By layout index: whether a cyclic layout can be reached from it, through
+    /// what a slot of it holds and where its fields lead -- itself included.
+    reaches_a_cycle: Vec<bool>,
 }
 
 impl Cycles {
@@ -3684,30 +3783,15 @@ impl Cycles {
     /// still walks through an acyclic array when a cycle reaches it from a
     /// candidate; this decides only whether the array is buffered on its own.
     #[must_use]
-    pub fn array(&self, program: &Program, element: &HirType) -> bool {
-        let start = match element {
-            HirType::Managed(ManagedType::String | ManagedType::Template) => return false,
-            HirType::Managed(ManagedType::Object(id)) => {
-                match program.layouts.iter().position(|layout| layout.types.contains(id)) {
-                    Some(at) => at,
-                    None => return true,
-                }
-            }
-            _ => return true,
-        };
-        let mut seen = vec![false; self.cyclic.len()];
-        let mut stack = vec![start];
-        while let Some(at) = stack.pop() {
-            if std::mem::replace(&mut seen[at], true) {
-                continue;
-            }
-            if self.cyclic[at] {
-                return true;
-            }
-            stack.extend(self.subtypes[at].iter().copied());
-            stack.extend(self.edges[at].iter().copied());
+    pub fn array(&self, element: &HirType) -> bool {
+        match element {
+            HirType::Managed(ManagedType::String | ManagedType::Template) => false,
+            HirType::Managed(ManagedType::Object(id)) => self
+                .layout_of
+                .get(id)
+                .is_none_or(|&at| self.reaches_a_cycle[at]),
+            _ => true,
         }
-        false
     }
 }
 

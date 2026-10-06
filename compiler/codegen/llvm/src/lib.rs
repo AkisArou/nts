@@ -3069,7 +3069,7 @@ fn allocation(
             };
             let descriptor = if element.is_managed() {
                 // The acyclic twin is never buffered. See `Cycles::array`.
-                if cycles.array(program, element) {
+                if cycles.array(element) {
                     "@nts_desc_ref".to_owned()
                 } else {
                     "@nts_desc_ref_acyclic".to_owned()

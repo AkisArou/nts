@@ -3811,7 +3811,7 @@ fn element_descriptor(array: &HirType, origin: &Origin, context: &Context<'_>) -
     };
     if element.is_managed() {
         // The acyclic twin is never buffered as a candidate. See `Cycles::array`.
-        return Ok(if context.cycles.array(context.program, element) {
+        return Ok(if context.cycles.array(element) {
             "nts_desc_ref"
         } else {
             "nts_desc_ref_acyclic"

@@ -350,7 +350,6 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
                 analyze(
                     func,
                     &Summaries {
-                        program,
                         cycles: &cycles,
                         by_name: &by_name,
                         in_slot: &in_slot,
@@ -470,7 +469,7 @@ fn buffers(ty: &HirType, of: &Summaries<'_>) -> bool {
     matches!(
         ty,
         HirType::Managed(ManagedType::Array(element))
-            if element.may_hold_a_reference() && of.cycles.array(of.program, element)
+            if element.may_hold_a_reference() && of.cycles.array(element)
     )
 }
 
@@ -484,9 +483,8 @@ fn buffers(ty: &HirType, of: &Summaries<'_>) -> bool {
 /// argument limit, and the limit was right -- a reader of the call site could
 /// not tell which slice meant what.
 struct Summaries<'a> {
-    /// The program, and which of its arrays can be in a cycle: [`buffers`] has
-    /// to give the answer the backend's descriptor gives.
-    program: &'a Program,
+    /// Which of the program's arrays can be in a cycle: [`buffers`] has to give
+    /// the answer the backend's descriptor gives.
     cycles: &'a super::Cycles,
     /// Which function each name is.
     by_name: &'a FxHashMap<&'a str, usize>,
