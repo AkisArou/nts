@@ -1,8 +1,40 @@
 # Programs written against lib.dom.d.ts
 
-**Status: proposal, under discussion with the compiler lane (2026-10-06).**
-Nothing here is built yet. Today a renderer program imports the generated
+**Status: agreed with the compiler lane (2026-10-06): delegation (C below).**
+MainClaude builds the compiler half; the Chromium lane's half is built:
+
+- `dom/types/lib-dom-bindings.d.ts`, generated, pairs every interface
+  lib.dom.d.ts and Blink's core both declare (433) with its nts:dom type and
+  its `instanceof` id, plus the `document`, `requestAnimationFrame` and
+  `cancelAnimationFrame` globals.
+- `nts_dom_is(handle, id)` answers `instanceof` for all 603 core interfaces.
+- `addEventListener`/`removeEventListener` follow the DOM's equality.
+- Numbers convert as page script's binding converts them.
+
+Until the compiler half lands, a renderer program imports the generated
 module `nts:dom`.
+
+**The compiler half, as MainClaude will build it:**
+
+1. One `Bindings` table per program, built from the snapshot, asked through
+   one function by the call, property and global-read paths. It maps each
+   lib.dom type to its bound handle type (no brand merging) and each
+   lib.dom member a program uses to its bound declaration.
+2. Signatures are checked, not coerced. A bound member must agree with
+   lib.dom's under an explicit table of equivalences: `string` and
+   `StringView`; `number` and `CNumber<"double">`; a lib.dom handle and
+   its bound handle along the chain. Drift is a named diagnostic at the use.
+3. The target injects the overlay (`target.chromium()`), so the program's
+   tsconfig is the browser's.
+4. `instanceof` lowers to `nts_dom_is` with the id from `@ntsIs`.
+5. A listener typed by lib.dom's event map (`(ev: MouseEvent)`) where the
+   binding passes an `Event` is a trusted downcast. It is named in the
+   code, with an is-check under a debug flag.
+6. Listener identity: one context per closure object. This already holds,
+   since lending answers the closure itself.
+
+Gated blocker fixtures in `tooling/conformance/blockers/lib-dom-*` go green
+as each piece lands.
 
 ## The goal
 
