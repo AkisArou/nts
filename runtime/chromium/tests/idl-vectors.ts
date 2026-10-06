@@ -12,7 +12,7 @@
 // Page script has no `asText`/`asHTMLElement`/`asHTMLInputElement`; the
 // oracle defines them (`instanceof`) where the import stood. What a caught
 // error reads as is passed in.
-import { asElement, asHTMLCanvasElement, asHTMLElement, asHTMLImageElement, asHTMLOListElement, asHTMLTableCellElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
+import { asElement, asHTMLAnchorElement, asHTMLCanvasElement, asHTMLElement, asHTMLImageElement, asHTMLOListElement, asHTMLTableCellElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
 import type { Document, Element, Event, Node, Text } from "nts:dom";
 
 export interface VectorHost {
@@ -312,6 +312,29 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   log("handlerCancel", (cancelled ? "checked" : "unchecked") + "|" + (checkbox.checked ? "checked" : "unchecked") + "|" + prevented);
   checkbox._set_onclick_null();
   checkbox.removeEventListener("click", seen);
+
+  // USVString: a lone surrogate becomes U+FFFD before Blink sees it (ping,
+  // href, hash), where a DOMString keeps it (title). Read back as UTF-16
+  // code units, so the comparison is exact. The surrogates are built with
+  // fromCharCode: a literal "\uD800" compiles to three U+FFFD today
+  // (tooling/conformance/blockers/a-lone-surrogate-in-a-string-literal).
+  const units = (text: string): string => {
+    let out = "";
+    for (let i = 0; i < text.length; i += 1)
+      out += (i === 0 ? "" : ".") + text.charCodeAt(i);
+    return out;
+  };
+  const high = String.fromCharCode(0xD800);
+  const low = String.fromCharCode(0xDC00);
+  const anchor = asHTMLAnchorElement(d.createElement("a"))!;
+  anchor.ping = "x" + high + "y" + low;
+  anchor.title = "x" + high + "y" + low;
+  log("usvPing", units(shown(anchor.getAttribute("ping"))));
+  log("domTitle", units(shown(anchor.getAttribute("title"))));
+  anchor.href = "http://example.com/a" + high + "b?q=" + low + "#h" + String.fromCharCode(0xD83D);
+  log("usvHref", anchor.href + "|" + anchor.pathname + "|" + anchor.search + "|" + anchor.hash);
+  anchor.hash = "#" + low + "x";
+  log("usvHash", anchor.hash + "|" + units(shown(anchor.getAttribute("href"))));
 
   // What the members raise: each exception's name and Blink's message.
   thrown("syntax", () => { d.querySelector("["); });
