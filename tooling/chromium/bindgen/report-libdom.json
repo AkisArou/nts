@@ -1,8 +1,8 @@
 {
   "libDom": "third_party/typescript-go/internal/bundled/libs/lib.dom.d.ts",
   "totals": {
-    "bound": 1170,
-    "skipped": 339,
+    "bound": 1169,
+    "skipped": 340,
     "absent: constant": 29,
     "absent: stringifier": 2,
     "absent: iterable": 8
@@ -45,6 +45,7 @@
     "interface ElementInternals": 1,
     "interface StylePropertyMap": 1,
     "interface DOMStringMap": 1,
+    "needs ${script_state}": 1,
     "interface FileList": 1,
     "interface CSSRule": 1,
     "interface HTMLFormControlsCollection": 1,
@@ -555,7 +556,6 @@
         "dir",
         "draggable",
         "enterKeyHint",
-        "hidden",
         "hidePopover",
         "inert",
         "innerText",
@@ -586,6 +586,7 @@
         "autocorrect": "[RuntimeEnabled]",
         "dataset": "interface DOMStringMap is not bound",
         "focus": "parameter type optional FocusOptions",
+        "hidden": "needs ${script_state}",
         "onabort": "result type EventHandler",
         "onanimationcancel": "result type EventHandler",
         "onanimationend": "result type EventHandler",

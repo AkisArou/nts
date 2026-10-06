@@ -213,11 +213,18 @@ try {
     const vectors = stripTypeScriptTypes(source).replace(/^\s*import\s[^;]*;\s*$/gm, "").replace(/^export /gm, "");
     await evaluate(`(() => {
       ${narrowings}
+      // \`_named_get\` and its siblings are the bindings' names for an
+      // interface's named properties: here, page script's property access.
+      for (const named of [DOMStringMap, HTMLCollection]) {
+        named.prototype._named_get = function (name) { const value = this[name]; return value === undefined ? null : value; };
+        named.prototype._named_set = function (name, value) { this[name] = value; };
+        named.prototype._named_delete = function (name) { delete this[name]; };
+      }
       ${vectors}
       // V8's message carries the binding's context ("Failed to execute 'x'
       // on 'Y': "), which the generated binding's does not.
       const failure = (error) => error.name + ": " + error.message
-        .replace(/^Failed to (?:execute '[^']*'|set the '[^']*' property|read the '[^']*' property) on '[^']*': /, "");
+        .replace(/^Failed to (?:execute '[^']*'|set the '[^']*' property|read the '[^']*' property|(?:set|delete) a named property '[^']*') on '[^']*': /, "");
       const container = document.querySelector('#native-dom');
       const section = document.createElement('section');
       container.appendChild(section);

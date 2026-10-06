@@ -249,6 +249,21 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   log("replaceChildrenText", edits.innerHTML);
   thrown("appendAncestor", () => { edits.append(root); });
 
+  // dataset: DOMStringMap's named properties, camel-cased to data-*
+  // attributes and back; an absent name; deletion; a name the setter
+  // rejects. Written as the bindings name them (`dataset.userId` is
+  // `_named_get("userId")`); the oracle runs each as page script's
+  // property access.
+  const card = asHTMLElement(d.createElement("div"))!;
+  card.dataset._named_set("userId", "42");
+  card.dataset._named_set("x", "é");
+  log("dataset", shown(card.getAttribute("data-user-id")) + "|" + shown(card.dataset._named_get("userId")) + "|" + shown(card.dataset._named_get("x")) + "|" + shown(card.dataset._named_get("missing")));
+  card.dataset._named_delete("userId");
+  card.dataset._named_delete("missing");
+  log("datasetDeleted", shown(card.getAttribute("data-user-id")) + "|" + shown(card.dataset._named_get("userId")));
+  thrown("datasetDash", () => { card.dataset._named_set("a-b", "1"); });
+  log("namedItem", describe(root.children.namedItem("native-idl-missing")));
+
   // What the members raise: each exception's name and Blink's message.
   thrown("syntax", () => { d.querySelector("["); });
   thrown("hierarchy", () => { div.appendChild(div); });

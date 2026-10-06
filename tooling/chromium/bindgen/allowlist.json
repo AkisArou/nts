@@ -45,6 +45,7 @@
     "InputEvent",
     "PointerEvent",
     "WheelEvent",
-    "CustomEvent"
+    "CustomEvent",
+    "DOMStringMap"
   ]
 }

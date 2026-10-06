@@ -59,6 +59,7 @@ typedef struct NtsDomInputEvent NtsDomInputEvent;
 typedef struct NtsDomPointerEvent NtsDomPointerEvent;
 typedef struct NtsDomWheelEvent NtsDomWheelEvent;
 typedef struct NtsDomCustomEvent NtsDomCustomEvent;
+typedef struct NtsDomDOMStringMap NtsDomDOMStringMap;
 
 /* Every interface Blink's core component defines, for nts_dom_is: bound or
  * not, since `instanceof` may name any of them. Stable for one Chromium pin
@@ -1257,6 +1258,7 @@ const NtsStringView* nts_dom_HTMLElement_get_outerText(NtsDomHTMLElement* self);
 void nts_dom_HTMLElement_set_outerText(NtsDomHTMLElement* self, const NtsBorrowedString* value, NtsDomException** error);
 const NtsStringView* nts_dom_HTMLElement_get_writingSuggestions(NtsDomHTMLElement* self);
 void nts_dom_HTMLElement_set_writingSuggestions(NtsDomHTMLElement* self, const NtsBorrowedString* value);
+NtsDomDOMStringMap* nts_dom_HTMLElement_get_dataset(NtsDomHTMLElement* self);
 const NtsStringView* nts_dom_HTMLElement_get_nonce(NtsDomHTMLElement* self);
 void nts_dom_HTMLElement_set_nonce(NtsDomHTMLElement* self, const NtsBorrowedString* value);
 bool nts_dom_HTMLElement_get_autofocus(NtsDomHTMLElement* self);
@@ -2615,6 +2617,7 @@ NtsDomNode* nts_dom_NodeList_item(NtsDomNodeList* self, double index);
 double nts_dom_HTMLCollection_get_length(NtsDomHTMLCollection* self);
 NtsDomElement* nts_dom_HTMLCollection_item(NtsDomHTMLCollection* self, double index);
 NtsDomElement* nts_dom_HTMLCollection_namedItem(NtsDomHTMLCollection* self, const NtsBorrowedString* name);
+NtsDomElement* nts_dom_HTMLCollection_named_get(NtsDomHTMLCollection* self, const NtsBorrowedString* name);
 double nts_dom_DOMRectReadOnly_get_x(NtsDomDOMRectReadOnly* self);
 double nts_dom_DOMRectReadOnly_get_y(NtsDomDOMRectReadOnly* self);
 double nts_dom_DOMRectReadOnly_get_width(NtsDomDOMRectReadOnly* self);
@@ -2984,6 +2987,9 @@ double nts_dom_WheelEvent_get_wheelDelta(NtsDomWheelEvent* self);
 bool nts_dom_WheelEvent_get_isTrusted(NtsDomWheelEvent* self);
 NtsDomCustomEvent* nts_dom_as_CustomEvent(NtsDomEvent* event);
 bool nts_dom_CustomEvent_get_isTrusted(NtsDomCustomEvent* self);
+const NtsStringView* nts_dom_DOMStringMap_named_get(NtsDomDOMStringMap* self, const NtsBorrowedString* name);
+void nts_dom_DOMStringMap_named_set(NtsDomDOMStringMap* self, const NtsBorrowedString* name, const NtsBorrowedString* value, NtsDomException** error);
+void nts_dom_DOMStringMap_named_delete(NtsDomDOMStringMap* self, const NtsBorrowedString* name);
 
 #ifdef __cplusplus
 }

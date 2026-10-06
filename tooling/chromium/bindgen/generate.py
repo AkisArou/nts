@@ -570,6 +570,79 @@ class Generator:
                 self.operation(interface, group)
             if interface.identifier == "CSSStyleDeclaration":
                 self.css_properties(interface)
+            else:
+                self.named_properties(interface)
+
+    def named_properties(self, interface):
+        """`dataset.userId`: an interface's named getter, setter and deleter,
+        which have no name of their own, as `_named_get`, `_named_set` and
+        `_named_delete`. Each calls what V8's interceptor calls: the getter
+        as it is implemented (DOMStringMap's `item`), whose null String is a
+        name that is absent (undefined to page script, null here);
+        AnonymousNamedSetter; AnonymousNamedDeleter. The deleter answers
+        nothing: `delete dataset.absent` is true in page script too, where a
+        deleter that does not intercept falls back to ordinary deletion."""
+        properties = interface.indexed_and_named_properties
+        if properties is None:
+            return
+        lines = self.members.setdefault(interface.identifier, [])
+        cls = blink_class_name(interface)
+
+        def named(role, operation, build):
+            symbol = f"nts_dom_{interface.identifier}_named_{role}"
+            try:
+                self.check_member(operation)
+                function = build()
+            except Skip as why:
+                self.skip(interface, f"named {role}", str(why))
+                return
+            self.include(operation)
+            self.functions.append(function)
+            lines.append(self.method_line(interface, f"_named_{role}", function))
+
+        def name_param(operation):
+            param = self.parameter(operation.arguments[0].idl_type, "name")
+            if not param.context:
+                raise Skip(f"name type {operation.arguments[0].idl_type.syntactic_form}")
+            return param
+
+        getter = properties.named_getter
+        if getter is not None:
+            def build_getter():
+                param = name_param(getter)
+                result = self.result(getter.return_type)
+                if result.kind != "string" and result.kind != "node":
+                    raise Skip(f"result type {getter.return_type.syntactic_form}")
+                if result.kind == "string":
+                    result = Result(result.c, result.ts.removesuffix(" | null") + " | null", "string", True)
+                elif not result.ts.endswith(" | null"):
+                    result = Result(result.c, result.ts + " | null", result.kind)
+                method = (getter.extended_attributes.value_of("ImplementedAs") or getter.identifier
+                          or "AnonymousNamedGetter")
+                return Function(interface, f"nts_dom_{interface.identifier}_named_get", [param], result,
+                                f"receiver->{method}({param.expr})", False, False)
+            named("get", getter, build_getter)
+        setter = properties.named_setter
+        if setter is not None:
+            def build_setter():
+                param = name_param(setter)
+                value = self.parameter(setter.arguments[1].idl_type, "value")
+                throws = "RaisesException" in setter.extended_attributes
+                arguments = [param.expr, value.expr] + (["exception_state"] if throws else [])
+                return Function(interface, f"nts_dom_{interface.identifier}_named_set", [param, value],
+                                Result("void", "void", "void"),
+                                f"receiver->AnonymousNamedSetter({', '.join(arguments)})",
+                                throws or value.may_throw, "CEReactions" in setter.extended_attributes)
+            named("set", setter, build_setter)
+        deleter = properties.named_deleter
+        if deleter is not None:
+            def build_deleter():
+                param = name_param(deleter)
+                return Function(interface, f"nts_dom_{interface.identifier}_named_delete", [param],
+                                Result("void", "void", "void"),
+                                f"receiver->AnonymousNamedDeleter(blink::AtomicString({param.expr}.Text()))",
+                                False, "CEReactions" in deleter.extended_attributes)
+            named("delete", deleter, build_deleter)
 
     @staticmethod
     def dashed(attribute):
@@ -620,7 +693,7 @@ class Generator:
                               Result("void", "void", "void"),
                               f"receiver->setProperty(context.document->GetExecutionContext(), {dashed}(), "
                               f"NtsText(context, value).Text(), blink::g_empty_string, exception_state)",
-                              True, False)
+                              True, True)  # the IDL's named setter is [CEReactions]
             self.functions += [getter, setter]
             lines.append(self.method_line(interface, f"_get_{name}", getter))
             lines.append(self.method_line(interface, f"_set_{name}", setter))

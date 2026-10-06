@@ -620,6 +620,7 @@
 #include "third_party/blink/renderer/core/dom/comment.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/document_fragment.h"
+#include "third_party/blink/renderer/core/dom/dom_string_map.h"
 #include "third_party/blink/renderer/core/dom/dom_token_list.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/events/custom_event.h"
@@ -9730,6 +9731,12 @@ void nts_dom_HTMLElement_set_writingSuggestions(NtsDomHTMLElement* self, const N
   receiver->setWritingSuggestions(NtsText(context, value));
 }
 
+NtsDomDOMStringMap* nts_dom_HTMLElement_get_dataset(NtsDomHTMLElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::HTMLElement>(self);
+  return HandleOf<NtsDomDOMStringMap>(receiver->dataset());
+}
+
 const NtsStringView* nts_dom_HTMLElement_get_nonce(NtsDomHTMLElement* self) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::HTMLElement>(self);
@@ -11614,6 +11621,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_accentColor(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_accentColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_accentColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11627,6 +11635,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_alignContent(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_alignContent(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_alignContent(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11640,6 +11649,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_alignItems(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_alignItems(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_alignItems(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11653,6 +11663,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_alignSelf(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_alignSelf(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_alignSelf(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11666,6 +11677,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_alignmentBaseline(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_alignmentBaseline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_alignmentBaseline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11679,6 +11691,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_all(NtsDomCSSStyleDeclarati
 void nts_dom_CSSStyleDeclaration_set_all(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_all(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11692,6 +11705,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_anchorName(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_anchorName(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_anchorName(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11705,6 +11719,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_anchorScope(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_anchorScope(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_anchorScope(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11718,6 +11733,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_animation(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_animation(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animation(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11731,6 +11747,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationComposition(NtsDom
 void nts_dom_CSSStyleDeclaration_set_animationComposition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationComposition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11744,6 +11761,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationDelay(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_animationDelay(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationDelay(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11757,6 +11775,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationDirection(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_animationDirection(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationDirection(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11770,6 +11789,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationDuration(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_animationDuration(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationDuration(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11783,6 +11803,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationFillMode(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_animationFillMode(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationFillMode(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11796,6 +11817,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationIterationCount(Nts
 void nts_dom_CSSStyleDeclaration_set_animationIterationCount(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationIterationCount(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11809,6 +11831,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationName(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_animationName(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationName(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11822,6 +11845,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationPlayState(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_animationPlayState(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationPlayState(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11835,6 +11859,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationRange(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_animationRange(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationRange(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11848,6 +11873,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationRangeEnd(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_animationRangeEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationRangeEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11861,6 +11887,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationRangeStart(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_animationRangeStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationRangeStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11874,6 +11901,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationTimeline(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_animationTimeline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationTimeline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11887,6 +11915,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationTimingFunction(Nts
 void nts_dom_CSSStyleDeclaration_set_animationTimingFunction(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationTimingFunction(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11900,6 +11929,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_appearance(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_appearance(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_appearance(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11913,6 +11943,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_aspectRatio(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_aspectRatio(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_aspectRatio(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11926,6 +11957,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_backdropFilter(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_backdropFilter(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backdropFilter(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11939,6 +11971,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_backfaceVisibility(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_backfaceVisibility(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backfaceVisibility(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11952,6 +11985,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_background(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_background(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_background(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11965,6 +11999,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_backgroundAttachment(NtsDom
 void nts_dom_CSSStyleDeclaration_set_backgroundAttachment(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backgroundAttachment(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11978,6 +12013,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_backgroundBlendMode(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_backgroundBlendMode(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backgroundBlendMode(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -11991,6 +12027,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_backgroundClip(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_backgroundClip(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backgroundClip(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12004,6 +12041,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_backgroundColor(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_backgroundColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backgroundColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12017,6 +12055,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_backgroundImage(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_backgroundImage(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backgroundImage(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12030,6 +12069,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_backgroundOrigin(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_backgroundOrigin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backgroundOrigin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12043,6 +12083,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_backgroundPosition(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_backgroundPosition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backgroundPosition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12056,6 +12097,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_backgroundPositionX(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_backgroundPositionX(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backgroundPositionX(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12069,6 +12111,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_backgroundPositionY(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_backgroundPositionY(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backgroundPositionY(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12082,6 +12125,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_backgroundRepeat(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_backgroundRepeat(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backgroundRepeat(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12095,6 +12139,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_backgroundSize(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_backgroundSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backgroundSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12108,6 +12153,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_baselineShift(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_baselineShift(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_baselineShift(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12121,6 +12167,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_baselineSource(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_baselineSource(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_baselineSource(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12134,6 +12181,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_blockSize(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_blockSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_blockSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12147,6 +12195,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_border(NtsDomCSSStyleDeclar
 void nts_dom_CSSStyleDeclaration_set_border(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_border(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12160,6 +12209,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlock(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_borderBlock(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlock(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12173,6 +12223,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlockColor(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_borderBlockColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlockColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12186,6 +12237,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlockEnd(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_borderBlockEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlockEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12199,6 +12251,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlockEndColor(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_borderBlockEndColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlockEndColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12212,6 +12265,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlockEndStyle(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_borderBlockEndStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlockEndStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12225,6 +12279,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlockEndWidth(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_borderBlockEndWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlockEndWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12238,6 +12293,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlockStart(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_borderBlockStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlockStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12251,6 +12307,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlockStartColor(NtsDo
 void nts_dom_CSSStyleDeclaration_set_borderBlockStartColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlockStartColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12264,6 +12321,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlockStartStyle(NtsDo
 void nts_dom_CSSStyleDeclaration_set_borderBlockStartStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlockStartStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12277,6 +12335,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlockStartWidth(NtsDo
 void nts_dom_CSSStyleDeclaration_set_borderBlockStartWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlockStartWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12290,6 +12349,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlockStyle(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_borderBlockStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlockStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12303,6 +12363,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlockWidth(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_borderBlockWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlockWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12316,6 +12377,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBottom(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_borderBottom(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBottom(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12329,6 +12391,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBottomColor(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_borderBottomColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBottomColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12342,6 +12405,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBottomLeftRadius(NtsD
 void nts_dom_CSSStyleDeclaration_set_borderBottomLeftRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBottomLeftRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12355,6 +12419,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBottomRightRadius(Nts
 void nts_dom_CSSStyleDeclaration_set_borderBottomRightRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBottomRightRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12368,6 +12433,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBottomStyle(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_borderBottomStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBottomStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12381,6 +12447,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBottomWidth(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_borderBottomWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBottomWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12394,6 +12461,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderCollapse(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_borderCollapse(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderCollapse(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12407,6 +12475,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderColor(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_borderColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12420,6 +12489,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderEndEndRadius(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_borderEndEndRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderEndEndRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12433,6 +12503,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderEndStartRadius(NtsDom
 void nts_dom_CSSStyleDeclaration_set_borderEndStartRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderEndStartRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12446,6 +12517,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderImage(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_borderImage(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderImage(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12459,6 +12531,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderImageOutset(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_borderImageOutset(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderImageOutset(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12472,6 +12545,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderImageRepeat(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_borderImageRepeat(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderImageRepeat(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12485,6 +12559,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderImageSlice(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_borderImageSlice(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderImageSlice(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12498,6 +12573,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderImageSource(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_borderImageSource(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderImageSource(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12511,6 +12587,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderImageWidth(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_borderImageWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderImageWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12524,6 +12601,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInline(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_borderInline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12537,6 +12615,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInlineColor(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_borderInlineColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInlineColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12550,6 +12629,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInlineEnd(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_borderInlineEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInlineEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12563,6 +12643,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInlineEndColor(NtsDom
 void nts_dom_CSSStyleDeclaration_set_borderInlineEndColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInlineEndColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12576,6 +12657,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInlineEndStyle(NtsDom
 void nts_dom_CSSStyleDeclaration_set_borderInlineEndStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInlineEndStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12589,6 +12671,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInlineEndWidth(NtsDom
 void nts_dom_CSSStyleDeclaration_set_borderInlineEndWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInlineEndWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12602,6 +12685,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInlineStart(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_borderInlineStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInlineStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12615,6 +12699,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInlineStartColor(NtsD
 void nts_dom_CSSStyleDeclaration_set_borderInlineStartColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInlineStartColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12628,6 +12713,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInlineStartStyle(NtsD
 void nts_dom_CSSStyleDeclaration_set_borderInlineStartStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInlineStartStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12641,6 +12727,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInlineStartWidth(NtsD
 void nts_dom_CSSStyleDeclaration_set_borderInlineStartWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInlineStartWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12654,6 +12741,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInlineStyle(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_borderInlineStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInlineStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12667,6 +12755,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInlineWidth(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_borderInlineWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInlineWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12680,6 +12769,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderLeft(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_borderLeft(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderLeft(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12693,6 +12783,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderLeftColor(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_borderLeftColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderLeftColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12706,6 +12797,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderLeftStyle(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_borderLeftStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderLeftStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12719,6 +12811,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderLeftWidth(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_borderLeftWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderLeftWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12732,6 +12825,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderRadius(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_borderRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12745,6 +12839,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderRight(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_borderRight(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderRight(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12758,6 +12853,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderRightColor(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_borderRightColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderRightColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12771,6 +12867,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderRightStyle(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_borderRightStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderRightStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12784,6 +12881,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderRightWidth(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_borderRightWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderRightWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12797,6 +12895,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderSpacing(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_borderSpacing(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderSpacing(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12810,6 +12909,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderStartEndRadius(NtsDom
 void nts_dom_CSSStyleDeclaration_set_borderStartEndRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderStartEndRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12823,6 +12923,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderStartStartRadius(NtsD
 void nts_dom_CSSStyleDeclaration_set_borderStartStartRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderStartStartRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12836,6 +12937,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderStyle(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_borderStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12849,6 +12951,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderTop(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_borderTop(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderTop(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12862,6 +12965,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderTopColor(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_borderTopColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderTopColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12875,6 +12979,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderTopLeftRadius(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_borderTopLeftRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderTopLeftRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12888,6 +12993,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderTopRightRadius(NtsDom
 void nts_dom_CSSStyleDeclaration_set_borderTopRightRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderTopRightRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12901,6 +13007,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderTopStyle(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_borderTopStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderTopStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12914,6 +13021,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderTopWidth(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_borderTopWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderTopWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12927,6 +13035,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderWidth(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_borderWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12940,6 +13049,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_bottom(NtsDomCSSStyleDeclar
 void nts_dom_CSSStyleDeclaration_set_bottom(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_bottom(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12953,6 +13063,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_boxDecorationBreak(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_boxDecorationBreak(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_boxDecorationBreak(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12966,6 +13077,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_boxShadow(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_boxShadow(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_boxShadow(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12979,6 +13091,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_boxSizing(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_boxSizing(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_boxSizing(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -12992,6 +13105,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_breakAfter(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_breakAfter(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_breakAfter(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13005,6 +13119,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_breakBefore(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_breakBefore(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_breakBefore(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13018,6 +13133,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_breakInside(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_breakInside(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_breakInside(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13031,6 +13147,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_captionSide(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_captionSide(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_captionSide(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13044,6 +13161,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_caretColor(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_caretColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_caretColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13057,6 +13175,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_clear(NtsDomCSSStyleDeclara
 void nts_dom_CSSStyleDeclaration_set_clear(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_clear(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13070,6 +13189,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_clip(NtsDomCSSStyleDeclarat
 void nts_dom_CSSStyleDeclaration_set_clip(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_clip(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13083,6 +13203,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_clipPath(NtsDomCSSStyleDecl
 void nts_dom_CSSStyleDeclaration_set_clipPath(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_clipPath(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13096,6 +13217,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_clipRule(NtsDomCSSStyleDecl
 void nts_dom_CSSStyleDeclaration_set_clipRule(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_clipRule(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13109,6 +13231,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_color(NtsDomCSSStyleDeclara
 void nts_dom_CSSStyleDeclaration_set_color(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_color(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13122,6 +13245,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_colorInterpolation(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_colorInterpolation(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_colorInterpolation(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13135,6 +13259,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_colorInterpolationFilters(N
 void nts_dom_CSSStyleDeclaration_set_colorInterpolationFilters(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_colorInterpolationFilters(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13148,6 +13273,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_colorScheme(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_colorScheme(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_colorScheme(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13161,6 +13287,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_columnCount(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_columnCount(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_columnCount(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13174,6 +13301,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_columnFill(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_columnFill(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_columnFill(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13187,6 +13315,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_columnGap(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_columnGap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_columnGap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13200,6 +13329,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_columnRule(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_columnRule(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_columnRule(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13213,6 +13343,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_columnRuleColor(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_columnRuleColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_columnRuleColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13226,6 +13357,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_columnRuleStyle(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_columnRuleStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_columnRuleStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13239,6 +13371,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_columnRuleWidth(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_columnRuleWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_columnRuleWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13252,6 +13385,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_columnSpan(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_columnSpan(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_columnSpan(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13265,6 +13399,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_columnWidth(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_columnWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_columnWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13278,6 +13413,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_columns(NtsDomCSSStyleDecla
 void nts_dom_CSSStyleDeclaration_set_columns(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_columns(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13291,6 +13427,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_contain(NtsDomCSSStyleDecla
 void nts_dom_CSSStyleDeclaration_set_contain(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_contain(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13304,6 +13441,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_containIntrinsicBlockSize(N
 void nts_dom_CSSStyleDeclaration_set_containIntrinsicBlockSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_containIntrinsicBlockSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13317,6 +13455,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_containIntrinsicHeight(NtsD
 void nts_dom_CSSStyleDeclaration_set_containIntrinsicHeight(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_containIntrinsicHeight(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13330,6 +13469,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_containIntrinsicInlineSize(
 void nts_dom_CSSStyleDeclaration_set_containIntrinsicInlineSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_containIntrinsicInlineSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13343,6 +13483,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_containIntrinsicSize(NtsDom
 void nts_dom_CSSStyleDeclaration_set_containIntrinsicSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_containIntrinsicSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13356,6 +13497,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_containIntrinsicWidth(NtsDo
 void nts_dom_CSSStyleDeclaration_set_containIntrinsicWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_containIntrinsicWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13369,6 +13511,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_container(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_container(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_container(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13382,6 +13525,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_containerName(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_containerName(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_containerName(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13395,6 +13539,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_containerType(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_containerType(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_containerType(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13408,6 +13553,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_content(NtsDomCSSStyleDecla
 void nts_dom_CSSStyleDeclaration_set_content(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_content(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13421,6 +13567,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_contentVisibility(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_contentVisibility(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_contentVisibility(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13434,6 +13581,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_counterIncrement(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_counterIncrement(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_counterIncrement(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13447,6 +13595,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_counterReset(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_counterReset(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_counterReset(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13460,6 +13609,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_counterSet(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_counterSet(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_counterSet(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13473,6 +13623,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_cursor(NtsDomCSSStyleDeclar
 void nts_dom_CSSStyleDeclaration_set_cursor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_cursor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13486,6 +13637,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_cx(NtsDomCSSStyleDeclaratio
 void nts_dom_CSSStyleDeclaration_set_cx(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_cx(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13499,6 +13651,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_cy(NtsDomCSSStyleDeclaratio
 void nts_dom_CSSStyleDeclaration_set_cy(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_cy(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13512,6 +13665,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_d(NtsDomCSSStyleDeclaration
 void nts_dom_CSSStyleDeclaration_set_d(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_d(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13525,6 +13679,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_direction(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_direction(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_direction(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13538,6 +13693,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_display(NtsDomCSSStyleDecla
 void nts_dom_CSSStyleDeclaration_set_display(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_display(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13551,6 +13707,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_dominantBaseline(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_dominantBaseline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_dominantBaseline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13564,6 +13721,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_dynamicRangeLimit(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_dynamicRangeLimit(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_dynamicRangeLimit(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13577,6 +13735,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_emptyCells(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_emptyCells(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_emptyCells(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13590,6 +13749,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fieldSizing(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_fieldSizing(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fieldSizing(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13603,6 +13763,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fill(NtsDomCSSStyleDeclarat
 void nts_dom_CSSStyleDeclaration_set_fill(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fill(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13616,6 +13777,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fillOpacity(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_fillOpacity(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fillOpacity(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13629,6 +13791,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fillRule(NtsDomCSSStyleDecl
 void nts_dom_CSSStyleDeclaration_set_fillRule(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fillRule(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13642,6 +13805,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_filter(NtsDomCSSStyleDeclar
 void nts_dom_CSSStyleDeclaration_set_filter(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_filter(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13655,6 +13819,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_flex(NtsDomCSSStyleDeclarat
 void nts_dom_CSSStyleDeclaration_set_flex(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_flex(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13668,6 +13833,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_flexBasis(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_flexBasis(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_flexBasis(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13681,6 +13847,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_flexDirection(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_flexDirection(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_flexDirection(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13694,6 +13861,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_flexFlow(NtsDomCSSStyleDecl
 void nts_dom_CSSStyleDeclaration_set_flexFlow(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_flexFlow(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13707,6 +13875,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_flexGrow(NtsDomCSSStyleDecl
 void nts_dom_CSSStyleDeclaration_set_flexGrow(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_flexGrow(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13720,6 +13889,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_flexShrink(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_flexShrink(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_flexShrink(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13733,6 +13903,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_flexWrap(NtsDomCSSStyleDecl
 void nts_dom_CSSStyleDeclaration_set_flexWrap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_flexWrap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13746,6 +13917,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_float(NtsDomCSSStyleDeclara
 void nts_dom_CSSStyleDeclaration_set_float(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_float(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13759,6 +13931,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_floodColor(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_floodColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_floodColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13772,6 +13945,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_floodOpacity(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_floodOpacity(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_floodOpacity(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13785,6 +13959,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_font(NtsDomCSSStyleDeclarat
 void nts_dom_CSSStyleDeclaration_set_font(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_font(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13798,6 +13973,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontFamily(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_fontFamily(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontFamily(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13811,6 +13987,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontFeatureSettings(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_fontFeatureSettings(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontFeatureSettings(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13824,6 +14001,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontKerning(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_fontKerning(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontKerning(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13837,6 +14015,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontLanguageOverride(NtsDom
 void nts_dom_CSSStyleDeclaration_set_fontLanguageOverride(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontLanguageOverride(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13850,6 +14029,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontOpticalSizing(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_fontOpticalSizing(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontOpticalSizing(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13863,6 +14043,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontPalette(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_fontPalette(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontPalette(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13876,6 +14057,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontSize(NtsDomCSSStyleDecl
 void nts_dom_CSSStyleDeclaration_set_fontSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13889,6 +14071,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontSizeAdjust(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_fontSizeAdjust(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontSizeAdjust(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13902,6 +14085,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontStretch(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_fontStretch(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontStretch(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13915,6 +14099,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontStyle(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_fontStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13928,6 +14113,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontSynthesis(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_fontSynthesis(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontSynthesis(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13941,6 +14127,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontSynthesisSmallCaps(NtsD
 void nts_dom_CSSStyleDeclaration_set_fontSynthesisSmallCaps(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontSynthesisSmallCaps(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13954,6 +14141,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontSynthesisStyle(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_fontSynthesisStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontSynthesisStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13967,6 +14155,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontSynthesisWeight(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_fontSynthesisWeight(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontSynthesisWeight(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13980,6 +14169,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontVariant(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_fontVariant(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontVariant(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -13993,6 +14183,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontVariantAlternates(NtsDo
 void nts_dom_CSSStyleDeclaration_set_fontVariantAlternates(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontVariantAlternates(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14006,6 +14197,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontVariantCaps(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_fontVariantCaps(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontVariantCaps(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14019,6 +14211,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontVariantEastAsian(NtsDom
 void nts_dom_CSSStyleDeclaration_set_fontVariantEastAsian(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontVariantEastAsian(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14032,6 +14225,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontVariantEmoji(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_fontVariantEmoji(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontVariantEmoji(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14045,6 +14239,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontVariantLigatures(NtsDom
 void nts_dom_CSSStyleDeclaration_set_fontVariantLigatures(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontVariantLigatures(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14058,6 +14253,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontVariantNumeric(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_fontVariantNumeric(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontVariantNumeric(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14071,6 +14267,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontVariantPosition(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_fontVariantPosition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontVariantPosition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14084,6 +14281,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontVariationSettings(NtsDo
 void nts_dom_CSSStyleDeclaration_set_fontVariationSettings(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontVariationSettings(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14097,6 +14295,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontWeight(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_fontWeight(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontWeight(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14110,6 +14309,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_forcedColorAdjust(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_forcedColorAdjust(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_forcedColorAdjust(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14123,6 +14323,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_gap(NtsDomCSSStyleDeclarati
 void nts_dom_CSSStyleDeclaration_set_gap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14136,6 +14337,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_grid(NtsDomCSSStyleDeclarat
 void nts_dom_CSSStyleDeclaration_set_grid(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_grid(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14149,6 +14351,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridArea(NtsDomCSSStyleDecl
 void nts_dom_CSSStyleDeclaration_set_gridArea(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridArea(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14162,6 +14365,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridAutoColumns(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_gridAutoColumns(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridAutoColumns(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14175,6 +14379,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridAutoFlow(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_gridAutoFlow(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridAutoFlow(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14188,6 +14393,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridAutoRows(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_gridAutoRows(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridAutoRows(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14201,6 +14407,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridColumn(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_gridColumn(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridColumn(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14214,6 +14421,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridColumnEnd(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_gridColumnEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridColumnEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14227,6 +14435,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridColumnGap(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_gridColumnGap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridColumnGap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14240,6 +14449,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridColumnStart(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_gridColumnStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridColumnStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14253,6 +14463,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridGap(NtsDomCSSStyleDecla
 void nts_dom_CSSStyleDeclaration_set_gridGap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridGap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14266,6 +14477,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridRow(NtsDomCSSStyleDecla
 void nts_dom_CSSStyleDeclaration_set_gridRow(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridRow(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14279,6 +14491,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridRowEnd(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_gridRowEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridRowEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14292,6 +14505,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridRowGap(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_gridRowGap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridRowGap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14305,6 +14519,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridRowStart(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_gridRowStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridRowStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14318,6 +14533,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridTemplate(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_gridTemplate(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridTemplate(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14331,6 +14547,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridTemplateAreas(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_gridTemplateAreas(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridTemplateAreas(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14344,6 +14561,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridTemplateColumns(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_gridTemplateColumns(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridTemplateColumns(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14357,6 +14575,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridTemplateRows(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_gridTemplateRows(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridTemplateRows(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14370,6 +14589,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_height(NtsDomCSSStyleDeclar
 void nts_dom_CSSStyleDeclaration_set_height(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_height(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14383,6 +14603,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_hyphenateCharacter(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_hyphenateCharacter(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_hyphenateCharacter(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14396,6 +14617,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_hyphenateLimitChars(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_hyphenateLimitChars(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_hyphenateLimitChars(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14409,6 +14631,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_hyphens(NtsDomCSSStyleDecla
 void nts_dom_CSSStyleDeclaration_set_hyphens(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_hyphens(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14422,6 +14645,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_imageOrientation(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_imageOrientation(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_imageOrientation(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14435,6 +14659,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_imageRendering(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_imageRendering(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_imageRendering(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14448,6 +14673,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_inlineSize(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_inlineSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_inlineSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14461,6 +14687,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_inset(NtsDomCSSStyleDeclara
 void nts_dom_CSSStyleDeclaration_set_inset(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_inset(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14474,6 +14701,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_insetBlock(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_insetBlock(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_insetBlock(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14487,6 +14715,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_insetBlockEnd(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_insetBlockEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_insetBlockEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14500,6 +14729,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_insetBlockStart(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_insetBlockStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_insetBlockStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14513,6 +14743,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_insetInline(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_insetInline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_insetInline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14526,6 +14757,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_insetInlineEnd(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_insetInlineEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_insetInlineEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14539,6 +14771,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_insetInlineStart(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_insetInlineStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_insetInlineStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14552,6 +14785,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_isolation(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_isolation(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_isolation(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14565,6 +14799,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_justifyContent(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_justifyContent(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_justifyContent(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14578,6 +14813,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_justifyItems(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_justifyItems(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_justifyItems(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14591,6 +14827,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_justifySelf(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_justifySelf(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_justifySelf(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14604,6 +14841,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_left(NtsDomCSSStyleDeclarat
 void nts_dom_CSSStyleDeclaration_set_left(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_left(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14617,6 +14855,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_letterSpacing(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_letterSpacing(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_letterSpacing(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14630,6 +14869,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_lightingColor(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_lightingColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_lightingColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14643,6 +14883,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_lineBreak(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_lineBreak(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_lineBreak(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14656,6 +14897,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_lineHeight(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_lineHeight(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_lineHeight(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14669,6 +14911,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_listStyle(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_listStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_listStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14682,6 +14925,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_listStyleImage(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_listStyleImage(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_listStyleImage(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14695,6 +14939,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_listStylePosition(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_listStylePosition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_listStylePosition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14708,6 +14953,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_listStyleType(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_listStyleType(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_listStyleType(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14721,6 +14967,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_margin(NtsDomCSSStyleDeclar
 void nts_dom_CSSStyleDeclaration_set_margin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_margin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14734,6 +14981,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_marginBlock(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_marginBlock(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_marginBlock(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14747,6 +14995,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_marginBlockEnd(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_marginBlockEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_marginBlockEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14760,6 +15009,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_marginBlockStart(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_marginBlockStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_marginBlockStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14773,6 +15023,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_marginBottom(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_marginBottom(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_marginBottom(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14786,6 +15037,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_marginInline(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_marginInline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_marginInline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14799,6 +15051,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_marginInlineEnd(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_marginInlineEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_marginInlineEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14812,6 +15065,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_marginInlineStart(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_marginInlineStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_marginInlineStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14825,6 +15079,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_marginLeft(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_marginLeft(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_marginLeft(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14838,6 +15093,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_marginRight(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_marginRight(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_marginRight(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14851,6 +15107,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_marginTop(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_marginTop(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_marginTop(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14864,6 +15121,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_marker(NtsDomCSSStyleDeclar
 void nts_dom_CSSStyleDeclaration_set_marker(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_marker(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14877,6 +15135,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_markerEnd(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_markerEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_markerEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14890,6 +15149,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_markerMid(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_markerMid(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_markerMid(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14903,6 +15163,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_markerStart(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_markerStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_markerStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14916,6 +15177,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_mask(NtsDomCSSStyleDeclarat
 void nts_dom_CSSStyleDeclaration_set_mask(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_mask(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14929,6 +15191,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_maskClip(NtsDomCSSStyleDecl
 void nts_dom_CSSStyleDeclaration_set_maskClip(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maskClip(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14942,6 +15205,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_maskComposite(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_maskComposite(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maskComposite(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14955,6 +15219,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_maskImage(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_maskImage(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maskImage(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14968,6 +15233,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_maskMode(NtsDomCSSStyleDecl
 void nts_dom_CSSStyleDeclaration_set_maskMode(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maskMode(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14981,6 +15247,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_maskOrigin(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_maskOrigin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maskOrigin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -14994,6 +15261,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_maskPosition(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_maskPosition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maskPosition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15007,6 +15275,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_maskRepeat(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_maskRepeat(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maskRepeat(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15020,6 +15289,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_maskSize(NtsDomCSSStyleDecl
 void nts_dom_CSSStyleDeclaration_set_maskSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maskSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15033,6 +15303,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_maskType(NtsDomCSSStyleDecl
 void nts_dom_CSSStyleDeclaration_set_maskType(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maskType(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15046,6 +15317,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_mathDepth(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_mathDepth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_mathDepth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15059,6 +15331,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_mathShift(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_mathShift(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_mathShift(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15072,6 +15345,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_mathStyle(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_mathStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_mathStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15085,6 +15359,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_maxBlockSize(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_maxBlockSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maxBlockSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15098,6 +15373,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_maxHeight(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_maxHeight(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maxHeight(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15111,6 +15387,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_maxInlineSize(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_maxInlineSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maxInlineSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15124,6 +15401,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_maxWidth(NtsDomCSSStyleDecl
 void nts_dom_CSSStyleDeclaration_set_maxWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maxWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15137,6 +15415,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_minBlockSize(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_minBlockSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_minBlockSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15150,6 +15429,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_minHeight(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_minHeight(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_minHeight(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15163,6 +15443,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_minInlineSize(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_minInlineSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_minInlineSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15176,6 +15457,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_minWidth(NtsDomCSSStyleDecl
 void nts_dom_CSSStyleDeclaration_set_minWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_minWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15189,6 +15471,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_mixBlendMode(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_mixBlendMode(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_mixBlendMode(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15202,6 +15485,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_objectFit(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_objectFit(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_objectFit(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15215,6 +15499,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_objectPosition(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_objectPosition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_objectPosition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15228,6 +15513,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_offset(NtsDomCSSStyleDeclar
 void nts_dom_CSSStyleDeclaration_set_offset(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_offset(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15241,6 +15527,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_offsetAnchor(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_offsetAnchor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_offsetAnchor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15254,6 +15541,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_offsetDistance(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_offsetDistance(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_offsetDistance(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15267,6 +15555,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_offsetPath(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_offsetPath(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_offsetPath(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15280,6 +15569,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_offsetPosition(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_offsetPosition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_offsetPosition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15293,6 +15583,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_offsetRotate(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_offsetRotate(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_offsetRotate(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15306,6 +15597,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_opacity(NtsDomCSSStyleDecla
 void nts_dom_CSSStyleDeclaration_set_opacity(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_opacity(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15319,6 +15611,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_order(NtsDomCSSStyleDeclara
 void nts_dom_CSSStyleDeclaration_set_order(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_order(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15332,6 +15625,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_orphans(NtsDomCSSStyleDecla
 void nts_dom_CSSStyleDeclaration_set_orphans(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_orphans(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15345,6 +15639,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_outline(NtsDomCSSStyleDecla
 void nts_dom_CSSStyleDeclaration_set_outline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_outline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15358,6 +15653,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_outlineColor(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_outlineColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_outlineColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15371,6 +15667,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_outlineOffset(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_outlineOffset(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_outlineOffset(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15384,6 +15681,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_outlineStyle(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_outlineStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_outlineStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15397,6 +15695,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_outlineWidth(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_outlineWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_outlineWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15410,6 +15709,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_overflow(NtsDomCSSStyleDecl
 void nts_dom_CSSStyleDeclaration_set_overflow(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overflow(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15423,6 +15723,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_overflowAnchor(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_overflowAnchor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overflowAnchor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15436,6 +15737,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_overflowBlock(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_overflowBlock(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overflowBlock(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15449,6 +15751,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_overflowClipMargin(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_overflowClipMargin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overflowClipMargin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15462,6 +15765,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_overflowInline(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_overflowInline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overflowInline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15475,6 +15779,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_overflowWrap(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_overflowWrap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overflowWrap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15488,6 +15793,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_overflowX(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_overflowX(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overflowX(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15501,6 +15807,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_overflowY(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_overflowY(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overflowY(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15514,6 +15821,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_overscrollBehavior(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_overscrollBehavior(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overscrollBehavior(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15527,6 +15835,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_overscrollBehaviorBlock(Nts
 void nts_dom_CSSStyleDeclaration_set_overscrollBehaviorBlock(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overscrollBehaviorBlock(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15540,6 +15849,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_overscrollBehaviorInline(Nt
 void nts_dom_CSSStyleDeclaration_set_overscrollBehaviorInline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overscrollBehaviorInline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15553,6 +15863,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_overscrollBehaviorX(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_overscrollBehaviorX(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overscrollBehaviorX(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15566,6 +15877,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_overscrollBehaviorY(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_overscrollBehaviorY(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overscrollBehaviorY(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15579,6 +15891,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_padding(NtsDomCSSStyleDecla
 void nts_dom_CSSStyleDeclaration_set_padding(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_padding(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15592,6 +15905,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_paddingBlock(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_paddingBlock(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_paddingBlock(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15605,6 +15919,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_paddingBlockEnd(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_paddingBlockEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_paddingBlockEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15618,6 +15933,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_paddingBlockStart(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_paddingBlockStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_paddingBlockStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15631,6 +15947,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_paddingBottom(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_paddingBottom(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_paddingBottom(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15644,6 +15961,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_paddingInline(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_paddingInline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_paddingInline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15657,6 +15975,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_paddingInlineEnd(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_paddingInlineEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_paddingInlineEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15670,6 +15989,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_paddingInlineStart(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_paddingInlineStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_paddingInlineStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15683,6 +16003,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_paddingLeft(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_paddingLeft(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_paddingLeft(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15696,6 +16017,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_paddingRight(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_paddingRight(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_paddingRight(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15709,6 +16031,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_paddingTop(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_paddingTop(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_paddingTop(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15722,6 +16045,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_page(NtsDomCSSStyleDeclarat
 void nts_dom_CSSStyleDeclaration_set_page(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_page(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15735,6 +16059,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_pageBreakAfter(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_pageBreakAfter(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_pageBreakAfter(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15748,6 +16073,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_pageBreakBefore(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_pageBreakBefore(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_pageBreakBefore(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15761,6 +16087,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_pageBreakInside(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_pageBreakInside(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_pageBreakInside(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15774,6 +16101,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_paintOrder(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_paintOrder(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_paintOrder(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15787,6 +16115,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_perspective(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_perspective(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_perspective(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15800,6 +16129,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_perspectiveOrigin(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_perspectiveOrigin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_perspectiveOrigin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15813,6 +16143,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_placeContent(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_placeContent(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_placeContent(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15826,6 +16157,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_placeItems(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_placeItems(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_placeItems(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15839,6 +16171,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_placeSelf(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_placeSelf(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_placeSelf(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15852,6 +16185,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_pointerEvents(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_pointerEvents(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_pointerEvents(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15865,6 +16199,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_position(NtsDomCSSStyleDecl
 void nts_dom_CSSStyleDeclaration_set_position(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_position(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15878,6 +16213,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_positionAnchor(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_positionAnchor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_positionAnchor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15891,6 +16227,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_positionArea(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_positionArea(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_positionArea(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15904,6 +16241,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_positionTry(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_positionTry(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_positionTry(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15917,6 +16255,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_positionTryFallbacks(NtsDom
 void nts_dom_CSSStyleDeclaration_set_positionTryFallbacks(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_positionTryFallbacks(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15930,6 +16269,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_positionTryOrder(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_positionTryOrder(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_positionTryOrder(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15943,6 +16283,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_positionVisibility(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_positionVisibility(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_positionVisibility(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15956,6 +16297,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_printColorAdjust(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_printColorAdjust(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_printColorAdjust(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15969,6 +16311,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_quotes(NtsDomCSSStyleDeclar
 void nts_dom_CSSStyleDeclaration_set_quotes(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_quotes(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15982,6 +16325,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_r(NtsDomCSSStyleDeclaration
 void nts_dom_CSSStyleDeclaration_set_r(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_r(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -15995,6 +16339,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_resize(NtsDomCSSStyleDeclar
 void nts_dom_CSSStyleDeclaration_set_resize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_resize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16008,6 +16353,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_right(NtsDomCSSStyleDeclara
 void nts_dom_CSSStyleDeclaration_set_right(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_right(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16021,6 +16367,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_rotate(NtsDomCSSStyleDeclar
 void nts_dom_CSSStyleDeclaration_set_rotate(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_rotate(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16034,6 +16381,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_rowGap(NtsDomCSSStyleDeclar
 void nts_dom_CSSStyleDeclaration_set_rowGap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_rowGap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16047,6 +16395,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_rubyAlign(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_rubyAlign(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_rubyAlign(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16060,6 +16409,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_rubyPosition(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_rubyPosition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_rubyPosition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16073,6 +16423,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_rx(NtsDomCSSStyleDeclaratio
 void nts_dom_CSSStyleDeclaration_set_rx(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_rx(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16086,6 +16437,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_ry(NtsDomCSSStyleDeclaratio
 void nts_dom_CSSStyleDeclaration_set_ry(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_ry(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16099,6 +16451,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scale(NtsDomCSSStyleDeclara
 void nts_dom_CSSStyleDeclaration_set_scale(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scale(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16112,6 +16465,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollBehavior(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_scrollBehavior(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollBehavior(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16125,6 +16479,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollMargin(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_scrollMargin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollMargin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16138,6 +16493,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollMarginBlock(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_scrollMarginBlock(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollMarginBlock(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16151,6 +16507,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollMarginBlockEnd(NtsDom
 void nts_dom_CSSStyleDeclaration_set_scrollMarginBlockEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollMarginBlockEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16164,6 +16521,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollMarginBlockStart(NtsD
 void nts_dom_CSSStyleDeclaration_set_scrollMarginBlockStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollMarginBlockStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16177,6 +16535,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollMarginBottom(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_scrollMarginBottom(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollMarginBottom(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16190,6 +16549,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollMarginInline(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_scrollMarginInline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollMarginInline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16203,6 +16563,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollMarginInlineEnd(NtsDo
 void nts_dom_CSSStyleDeclaration_set_scrollMarginInlineEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollMarginInlineEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16216,6 +16577,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollMarginInlineStart(Nts
 void nts_dom_CSSStyleDeclaration_set_scrollMarginInlineStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollMarginInlineStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16229,6 +16591,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollMarginLeft(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_scrollMarginLeft(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollMarginLeft(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16242,6 +16605,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollMarginRight(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_scrollMarginRight(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollMarginRight(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16255,6 +16619,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollMarginTop(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_scrollMarginTop(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollMarginTop(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16268,6 +16633,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollPadding(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_scrollPadding(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollPadding(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16281,6 +16647,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollPaddingBlock(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_scrollPaddingBlock(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollPaddingBlock(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16294,6 +16661,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollPaddingBlockEnd(NtsDo
 void nts_dom_CSSStyleDeclaration_set_scrollPaddingBlockEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollPaddingBlockEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16307,6 +16675,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollPaddingBlockStart(Nts
 void nts_dom_CSSStyleDeclaration_set_scrollPaddingBlockStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollPaddingBlockStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16320,6 +16689,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollPaddingBottom(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_scrollPaddingBottom(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollPaddingBottom(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16333,6 +16703,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollPaddingInline(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_scrollPaddingInline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollPaddingInline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16346,6 +16717,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollPaddingInlineEnd(NtsD
 void nts_dom_CSSStyleDeclaration_set_scrollPaddingInlineEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollPaddingInlineEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16359,6 +16731,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollPaddingInlineStart(Nt
 void nts_dom_CSSStyleDeclaration_set_scrollPaddingInlineStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollPaddingInlineStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16372,6 +16745,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollPaddingLeft(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_scrollPaddingLeft(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollPaddingLeft(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16385,6 +16759,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollPaddingRight(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_scrollPaddingRight(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollPaddingRight(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16398,6 +16773,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollPaddingTop(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_scrollPaddingTop(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollPaddingTop(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16411,6 +16787,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollSnapAlign(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_scrollSnapAlign(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollSnapAlign(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16424,6 +16801,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollSnapStop(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_scrollSnapStop(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollSnapStop(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16437,6 +16815,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollSnapType(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_scrollSnapType(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollSnapType(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16450,6 +16829,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollTimeline(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_scrollTimeline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollTimeline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16463,6 +16843,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollTimelineAxis(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_scrollTimelineAxis(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollTimelineAxis(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16476,6 +16857,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollTimelineName(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_scrollTimelineName(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollTimelineName(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16489,6 +16871,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollbarColor(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_scrollbarColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollbarColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16502,6 +16885,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollbarGutter(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_scrollbarGutter(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollbarGutter(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16515,6 +16899,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollbarWidth(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_scrollbarWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollbarWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16528,6 +16913,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_shapeImageThreshold(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_shapeImageThreshold(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_shapeImageThreshold(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16541,6 +16927,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_shapeMargin(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_shapeMargin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_shapeMargin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16554,6 +16941,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_shapeOutside(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_shapeOutside(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_shapeOutside(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16567,6 +16955,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_shapeRendering(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_shapeRendering(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_shapeRendering(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16580,6 +16969,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_stopColor(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_stopColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_stopColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16593,6 +16983,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_stopOpacity(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_stopOpacity(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_stopOpacity(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16606,6 +16997,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_stroke(NtsDomCSSStyleDeclar
 void nts_dom_CSSStyleDeclaration_set_stroke(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_stroke(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16619,6 +17011,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_strokeDasharray(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_strokeDasharray(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_strokeDasharray(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16632,6 +17025,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_strokeDashoffset(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_strokeDashoffset(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_strokeDashoffset(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16645,6 +17039,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_strokeLinecap(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_strokeLinecap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_strokeLinecap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16658,6 +17053,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_strokeLinejoin(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_strokeLinejoin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_strokeLinejoin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16671,6 +17067,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_strokeMiterlimit(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_strokeMiterlimit(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_strokeMiterlimit(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16684,6 +17081,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_strokeOpacity(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_strokeOpacity(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_strokeOpacity(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16697,6 +17095,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_strokeWidth(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_strokeWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_strokeWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16710,6 +17109,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_tabSize(NtsDomCSSStyleDecla
 void nts_dom_CSSStyleDeclaration_set_tabSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_tabSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16723,6 +17123,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_tableLayout(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_tableLayout(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_tableLayout(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16736,6 +17137,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textAlign(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_textAlign(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textAlign(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16749,6 +17151,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textAlignLast(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_textAlignLast(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textAlignLast(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16762,6 +17165,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textAnchor(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_textAnchor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textAnchor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16775,6 +17179,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textAutospace(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_textAutospace(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textAutospace(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16788,6 +17193,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textBox(NtsDomCSSStyleDecla
 void nts_dom_CSSStyleDeclaration_set_textBox(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textBox(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16801,6 +17207,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textBoxEdge(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_textBoxEdge(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textBoxEdge(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16814,6 +17221,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textBoxTrim(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_textBoxTrim(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textBoxTrim(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16827,6 +17235,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textCombineUpright(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_textCombineUpright(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textCombineUpright(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16840,6 +17249,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textDecoration(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_textDecoration(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textDecoration(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16853,6 +17263,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textDecorationColor(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_textDecorationColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textDecorationColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16866,6 +17277,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textDecorationLine(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_textDecorationLine(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textDecorationLine(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16879,6 +17291,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textDecorationSkipInk(NtsDo
 void nts_dom_CSSStyleDeclaration_set_textDecorationSkipInk(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textDecorationSkipInk(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16892,6 +17305,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textDecorationStyle(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_textDecorationStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textDecorationStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16905,6 +17319,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textDecorationThickness(Nts
 void nts_dom_CSSStyleDeclaration_set_textDecorationThickness(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textDecorationThickness(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16918,6 +17333,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textEmphasis(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_textEmphasis(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textEmphasis(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16931,6 +17347,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textEmphasisColor(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_textEmphasisColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textEmphasisColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16944,6 +17361,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textEmphasisPosition(NtsDom
 void nts_dom_CSSStyleDeclaration_set_textEmphasisPosition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textEmphasisPosition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16957,6 +17375,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textEmphasisStyle(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_textEmphasisStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textEmphasisStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16970,6 +17389,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textIndent(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_textIndent(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textIndent(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16983,6 +17403,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textJustify(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_textJustify(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textJustify(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -16996,6 +17417,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textOrientation(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_textOrientation(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textOrientation(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17009,6 +17431,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textOverflow(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_textOverflow(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textOverflow(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17022,6 +17445,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textRendering(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_textRendering(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textRendering(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17035,6 +17459,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textShadow(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_textShadow(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textShadow(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17048,6 +17473,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textTransform(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_textTransform(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textTransform(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17061,6 +17487,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textUnderlineOffset(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_textUnderlineOffset(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textUnderlineOffset(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17074,6 +17501,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textUnderlinePosition(NtsDo
 void nts_dom_CSSStyleDeclaration_set_textUnderlinePosition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textUnderlinePosition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17087,6 +17515,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textWrap(NtsDomCSSStyleDecl
 void nts_dom_CSSStyleDeclaration_set_textWrap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textWrap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17100,6 +17529,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textWrapMode(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_textWrapMode(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textWrapMode(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17113,6 +17543,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_textWrapStyle(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_textWrapStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textWrapStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17126,6 +17557,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_timelineScope(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_timelineScope(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_timelineScope(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17139,6 +17571,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_top(NtsDomCSSStyleDeclarati
 void nts_dom_CSSStyleDeclaration_set_top(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_top(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17152,6 +17585,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_touchAction(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_touchAction(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_touchAction(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17165,6 +17599,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_transform(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_transform(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_transform(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17178,6 +17613,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_transformBox(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_transformBox(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_transformBox(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17191,6 +17627,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_transformOrigin(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_transformOrigin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_transformOrigin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17204,6 +17641,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_transformStyle(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_transformStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_transformStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17217,6 +17655,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_transition(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_transition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_transition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17230,6 +17669,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_transitionBehavior(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_transitionBehavior(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_transitionBehavior(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17243,6 +17683,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_transitionDelay(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_transitionDelay(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_transitionDelay(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17256,6 +17697,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_transitionDuration(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_transitionDuration(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_transitionDuration(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17269,6 +17711,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_transitionProperty(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_transitionProperty(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_transitionProperty(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17282,6 +17725,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_transitionTimingFunction(Nt
 void nts_dom_CSSStyleDeclaration_set_transitionTimingFunction(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_transitionTimingFunction(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17295,6 +17739,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_translate(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_translate(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_translate(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17308,6 +17753,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_unicodeBidi(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_unicodeBidi(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_unicodeBidi(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17321,6 +17767,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_userSelect(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_userSelect(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_userSelect(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17334,6 +17781,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_vectorEffect(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_vectorEffect(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_vectorEffect(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17347,6 +17795,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_verticalAlign(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_verticalAlign(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_verticalAlign(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17360,6 +17809,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_viewTimeline(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_viewTimeline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_viewTimeline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17373,6 +17823,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_viewTimelineAxis(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_viewTimelineAxis(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_viewTimelineAxis(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17386,6 +17837,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_viewTimelineInset(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_viewTimelineInset(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_viewTimelineInset(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17399,6 +17851,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_viewTimelineName(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_viewTimelineName(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_viewTimelineName(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17412,6 +17865,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_viewTransitionClass(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_viewTransitionClass(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_viewTransitionClass(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17425,6 +17879,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_viewTransitionName(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_viewTransitionName(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_viewTransitionName(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17438,6 +17893,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_visibility(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_visibility(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_visibility(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17451,6 +17907,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAlignContent(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_webkitAlignContent(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAlignContent(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17464,6 +17921,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAlignItems(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_webkitAlignItems(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAlignItems(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17477,6 +17935,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAlignSelf(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_webkitAlignSelf(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAlignSelf(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17490,6 +17949,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAnimation(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_webkitAnimation(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAnimation(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17503,6 +17963,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAnimationDelay(NtsDom
 void nts_dom_CSSStyleDeclaration_set_webkitAnimationDelay(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAnimationDelay(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17516,6 +17977,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAnimationDirection(Nt
 void nts_dom_CSSStyleDeclaration_set_webkitAnimationDirection(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAnimationDirection(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17529,6 +17991,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAnimationDuration(Nts
 void nts_dom_CSSStyleDeclaration_set_webkitAnimationDuration(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAnimationDuration(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17542,6 +18005,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAnimationFillMode(Nts
 void nts_dom_CSSStyleDeclaration_set_webkitAnimationFillMode(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAnimationFillMode(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17555,6 +18019,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAnimationIterationCou
 void nts_dom_CSSStyleDeclaration_set_webkitAnimationIterationCount(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAnimationIterationCount(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17568,6 +18033,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAnimationName(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_webkitAnimationName(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAnimationName(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17581,6 +18047,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAnimationPlayState(Nt
 void nts_dom_CSSStyleDeclaration_set_webkitAnimationPlayState(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAnimationPlayState(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17594,6 +18061,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAnimationTimingFuncti
 void nts_dom_CSSStyleDeclaration_set_webkitAnimationTimingFunction(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAnimationTimingFunction(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17607,6 +18075,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAppearance(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_webkitAppearance(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAppearance(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17620,6 +18089,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBackfaceVisibility(Nt
 void nts_dom_CSSStyleDeclaration_set_webkitBackfaceVisibility(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBackfaceVisibility(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17633,6 +18103,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBackgroundClip(NtsDom
 void nts_dom_CSSStyleDeclaration_set_webkitBackgroundClip(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBackgroundClip(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17646,6 +18117,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBackgroundOrigin(NtsD
 void nts_dom_CSSStyleDeclaration_set_webkitBackgroundOrigin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBackgroundOrigin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17659,6 +18131,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBackgroundSize(NtsDom
 void nts_dom_CSSStyleDeclaration_set_webkitBackgroundSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBackgroundSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17672,6 +18145,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBorderBottomLeftRadiu
 void nts_dom_CSSStyleDeclaration_set_webkitBorderBottomLeftRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBorderBottomLeftRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17685,6 +18159,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBorderBottomRightRadi
 void nts_dom_CSSStyleDeclaration_set_webkitBorderBottomRightRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBorderBottomRightRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17698,6 +18173,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBorderRadius(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_webkitBorderRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBorderRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17711,6 +18187,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBorderTopLeftRadius(N
 void nts_dom_CSSStyleDeclaration_set_webkitBorderTopLeftRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBorderTopLeftRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17724,6 +18201,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBorderTopRightRadius(
 void nts_dom_CSSStyleDeclaration_set_webkitBorderTopRightRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBorderTopRightRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17737,6 +18215,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBoxAlign(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_webkitBoxAlign(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBoxAlign(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17750,6 +18229,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBoxFlex(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_webkitBoxFlex(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBoxFlex(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17763,6 +18243,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBoxOrdinalGroup(NtsDo
 void nts_dom_CSSStyleDeclaration_set_webkitBoxOrdinalGroup(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBoxOrdinalGroup(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17776,6 +18257,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBoxOrient(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_webkitBoxOrient(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBoxOrient(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17789,6 +18271,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBoxPack(NtsDomCSSStyl
 void nts_dom_CSSStyleDeclaration_set_webkitBoxPack(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBoxPack(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17802,6 +18285,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBoxShadow(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_webkitBoxShadow(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBoxShadow(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17815,6 +18299,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBoxSizing(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_webkitBoxSizing(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBoxSizing(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17828,6 +18313,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitFilter(NtsDomCSSStyle
 void nts_dom_CSSStyleDeclaration_set_webkitFilter(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitFilter(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17841,6 +18327,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitFlex(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_webkitFlex(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitFlex(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17854,6 +18341,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitFlexBasis(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_webkitFlexBasis(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitFlexBasis(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17867,6 +18355,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitFlexDirection(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_webkitFlexDirection(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitFlexDirection(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17880,6 +18369,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitFlexFlow(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_webkitFlexFlow(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitFlexFlow(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17893,6 +18383,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitFlexGrow(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_webkitFlexGrow(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitFlexGrow(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17906,6 +18397,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitFlexShrink(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_webkitFlexShrink(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitFlexShrink(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17919,6 +18411,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitFlexWrap(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_webkitFlexWrap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitFlexWrap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17932,6 +18425,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitJustifyContent(NtsDom
 void nts_dom_CSSStyleDeclaration_set_webkitJustifyContent(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitJustifyContent(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17945,6 +18439,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitLineClamp(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_webkitLineClamp(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitLineClamp(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17958,6 +18453,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMask(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_webkitMask(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMask(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17971,6 +18467,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskBoxImage(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_webkitMaskBoxImage(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskBoxImage(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17984,6 +18481,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskBoxImageOutset(Nt
 void nts_dom_CSSStyleDeclaration_set_webkitMaskBoxImageOutset(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskBoxImageOutset(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -17997,6 +18495,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskBoxImageRepeat(Nt
 void nts_dom_CSSStyleDeclaration_set_webkitMaskBoxImageRepeat(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskBoxImageRepeat(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18010,6 +18509,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskBoxImageSlice(Nts
 void nts_dom_CSSStyleDeclaration_set_webkitMaskBoxImageSlice(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskBoxImageSlice(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18023,6 +18523,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskBoxImageSource(Nt
 void nts_dom_CSSStyleDeclaration_set_webkitMaskBoxImageSource(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskBoxImageSource(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18036,6 +18537,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskBoxImageWidth(Nts
 void nts_dom_CSSStyleDeclaration_set_webkitMaskBoxImageWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskBoxImageWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18049,6 +18551,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskClip(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_webkitMaskClip(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskClip(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18062,6 +18565,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskComposite(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_webkitMaskComposite(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskComposite(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18075,6 +18579,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskImage(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_webkitMaskImage(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskImage(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18088,6 +18593,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskOrigin(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_webkitMaskOrigin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskOrigin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18101,6 +18607,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskPosition(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_webkitMaskPosition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskPosition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18114,6 +18621,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskRepeat(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_webkitMaskRepeat(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskRepeat(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18127,6 +18635,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskSize(NtsDomCSSSty
 void nts_dom_CSSStyleDeclaration_set_webkitMaskSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18140,6 +18649,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitOrder(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_webkitOrder(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitOrder(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18153,6 +18663,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitPerspective(NtsDomCSS
 void nts_dom_CSSStyleDeclaration_set_webkitPerspective(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitPerspective(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18166,6 +18677,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitPerspectiveOrigin(Nts
 void nts_dom_CSSStyleDeclaration_set_webkitPerspectiveOrigin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitPerspectiveOrigin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18179,6 +18691,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTextFillColor(NtsDomC
 void nts_dom_CSSStyleDeclaration_set_webkitTextFillColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTextFillColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18192,6 +18705,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTextSizeAdjust(NtsDom
 void nts_dom_CSSStyleDeclaration_set_webkitTextSizeAdjust(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTextSizeAdjust(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18205,6 +18719,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTextStroke(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_webkitTextStroke(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTextStroke(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18218,6 +18733,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTextStrokeColor(NtsDo
 void nts_dom_CSSStyleDeclaration_set_webkitTextStrokeColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTextStrokeColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18231,6 +18747,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTextStrokeWidth(NtsDo
 void nts_dom_CSSStyleDeclaration_set_webkitTextStrokeWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTextStrokeWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18244,6 +18761,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTransform(NtsDomCSSSt
 void nts_dom_CSSStyleDeclaration_set_webkitTransform(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTransform(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18257,6 +18775,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTransformOrigin(NtsDo
 void nts_dom_CSSStyleDeclaration_set_webkitTransformOrigin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTransformOrigin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18270,6 +18789,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTransformStyle(NtsDom
 void nts_dom_CSSStyleDeclaration_set_webkitTransformStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTransformStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18283,6 +18803,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTransition(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_webkitTransition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTransition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18296,6 +18817,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTransitionDelay(NtsDo
 void nts_dom_CSSStyleDeclaration_set_webkitTransitionDelay(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTransitionDelay(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18309,6 +18831,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTransitionDuration(Nt
 void nts_dom_CSSStyleDeclaration_set_webkitTransitionDuration(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTransitionDuration(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18322,6 +18845,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTransitionProperty(Nt
 void nts_dom_CSSStyleDeclaration_set_webkitTransitionProperty(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTransitionProperty(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18335,6 +18859,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTransitionTimingFunct
 void nts_dom_CSSStyleDeclaration_set_webkitTransitionTimingFunction(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTransitionTimingFunction(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18348,6 +18873,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitUserSelect(NtsDomCSSS
 void nts_dom_CSSStyleDeclaration_set_webkitUserSelect(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitUserSelect(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18361,6 +18887,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_whiteSpace(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_whiteSpace(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_whiteSpace(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18374,6 +18901,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_whiteSpaceCollapse(NtsDomCS
 void nts_dom_CSSStyleDeclaration_set_whiteSpaceCollapse(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_whiteSpaceCollapse(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18387,6 +18915,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_widows(NtsDomCSSStyleDeclar
 void nts_dom_CSSStyleDeclaration_set_widows(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_widows(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18400,6 +18929,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_width(NtsDomCSSStyleDeclara
 void nts_dom_CSSStyleDeclaration_set_width(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_width(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18413,6 +18943,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_willChange(NtsDomCSSStyleDe
 void nts_dom_CSSStyleDeclaration_set_willChange(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_willChange(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18426,6 +18957,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_wordBreak(NtsDomCSSStyleDec
 void nts_dom_CSSStyleDeclaration_set_wordBreak(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_wordBreak(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18439,6 +18971,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_wordSpacing(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_wordSpacing(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_wordSpacing(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18452,6 +18985,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_wordWrap(NtsDomCSSStyleDecl
 void nts_dom_CSSStyleDeclaration_set_wordWrap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_wordWrap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18465,6 +18999,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_writingMode(NtsDomCSSStyleD
 void nts_dom_CSSStyleDeclaration_set_writingMode(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_writingMode(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18478,6 +19013,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_x(NtsDomCSSStyleDeclaration
 void nts_dom_CSSStyleDeclaration_set_x(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_x(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18491,6 +19027,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_y(NtsDomCSSStyleDeclaration
 void nts_dom_CSSStyleDeclaration_set_y(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_y(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18504,6 +19041,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_zIndex(NtsDomCSSStyleDeclar
 void nts_dom_CSSStyleDeclaration_set_zIndex(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_zIndex(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18517,6 +19055,7 @@ const NtsStringView* nts_dom_CSSStyleDeclaration_get_zoom(NtsDomCSSStyleDeclarat
 void nts_dom_CSSStyleDeclaration_set_zoom(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), CssProperty_zoom(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
@@ -18555,6 +19094,12 @@ NtsDomElement* nts_dom_HTMLCollection_item(NtsDomHTMLCollection* self, double in
 }
 
 NtsDomElement* nts_dom_HTMLCollection_namedItem(NtsDomHTMLCollection* self, const NtsBorrowedString* name) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::HTMLCollection>(self);
+  return HandleOf<NtsDomElement>(receiver->namedItem(NtsText(context, name)));
+}
+
+NtsDomElement* nts_dom_HTMLCollection_named_get(NtsDomHTMLCollection* self, const NtsBorrowedString* name) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::HTMLCollection>(self);
   return HandleOf<NtsDomElement>(receiver->namedItem(NtsText(context, name)));
@@ -20956,6 +21501,27 @@ bool nts_dom_CustomEvent_get_isTrusted(NtsDomCustomEvent* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::CustomEvent>(self);
   return static_cast<bool>(receiver->isTrusted());
+}
+
+const NtsStringView* nts_dom_DOMStringMap_named_get(NtsDomDOMStringMap* self, const NtsBorrowedString* name) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::DOMStringMap>(self);
+  return context.Lend(nts_dom::AsString(receiver->item(NtsText(context, name))), true);
+}
+
+void nts_dom_DOMStringMap_named_set(NtsDomDOMStringMap* self, const NtsBorrowedString* name, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::DOMStringMap>(self);
+  receiver->AnonymousNamedSetter(NtsText(context, name), NtsText(context, value), exception_state);
+}
+
+void nts_dom_DOMStringMap_named_delete(NtsDomDOMStringMap* self, const NtsBorrowedString* name) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::DOMStringMap>(self);
+  receiver->AnonymousNamedDeleter(blink::AtomicString(NtsText(context, name).Text()));
 }
 }  // extern "C"
 }  // namespace blink

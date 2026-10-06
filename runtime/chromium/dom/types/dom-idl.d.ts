@@ -3710,6 +3710,14 @@ declare module "nts:dom" {
      */
     writingSuggestions: StringView;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_dataset
+     */
+    _get_dataset(this: HTMLElement): DOMStringMap;
+    /**
+     * @ntsGet _get_dataset
+     */
+    readonly dataset: DOMStringMap;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_get_nonce
      */
     _get_nonce(this: HTMLElement): StringView;
@@ -13651,6 +13659,10 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLCollection_namedItem
      */
     namedItem(this: HTMLCollection, name: StringView): Element | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLCollection_named_get
+     */
+    _named_get(this: HTMLCollection, name: StringView): Element | null;
   }
   export type HTMLCollectionMethods = HTMLCollectionOwnMethods;
   export type HTMLCollection = HostClass<"NtsDomHTMLCollection", null, "nts_dom_retain", "nts_dom_release"> & HTMLCollectionMethods;
@@ -16099,4 +16111,22 @@ declare module "nts:dom" {
   export type CustomEvent = HostClass<"NtsDomCustomEvent", Event> & CustomEventMethods;
   /** @ntsSymbol nts_dom_as_CustomEvent */
   export function asCustomEvent(event: Event): CustomEvent | null;
+  export interface DOMStringMapOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_DOMStringMap_named_get
+     */
+    _named_get(this: DOMStringMap, name: StringView): StringView | null;
+    /**
+     * @ntsSymbol nts_dom_DOMStringMap_named_set
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _named_set(this: DOMStringMap, name: StringView, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DOMStringMap_named_delete
+     */
+    _named_delete(this: DOMStringMap, name: StringView): void;
+  }
+  export type DOMStringMapMethods = DOMStringMapOwnMethods;
+  export type DOMStringMap = HostClass<"NtsDomDOMStringMap", null, "nts_dom_retain", "nts_dom_release"> & DOMStringMapMethods;
 }

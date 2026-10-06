@@ -398,6 +398,7 @@ interface DOMRectReadOnly {}
  */
 interface DOMStringList {}
 /**
+ * @ntsBoundBy "nts:dom" DOMStringMap
  * @ntsIs nts_dom_is 128
  */
 interface DOMStringMap {}

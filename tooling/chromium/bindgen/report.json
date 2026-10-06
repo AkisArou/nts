@@ -1,5 +1,5 @@
 {
-  "bound": 2312,
+  "bound": 2317,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -3518,11 +3518,6 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get dataset",
-      "why": "interface DOMStringMap is not bound"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get focusGroup",
       "why": "[RuntimeEnabled]"
     },
@@ -3790,6 +3785,11 @@
       "interface": "HTMLFormElement",
       "member": "get elements",
       "why": "interface HTMLFormControlsCollection is not bound"
+    },
+    {
+      "interface": "HTMLFormElement",
+      "member": "named get",
+      "why": "[CallWith=ScriptState] needs a script context"
     },
     {
       "interface": "HTMLSelectElement",
