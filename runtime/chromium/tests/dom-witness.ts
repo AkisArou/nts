@@ -41,6 +41,8 @@ export function ntsChromiumDomProgram(): number {
   body.appendChild(container);
   if (d.querySelector("#native-dom-count") !== label) return 2;
   if (d.querySelector("#missing") !== null) return 3;
+  // Block bodies: a raising closure answering a handle where `() => void`
+  // is taken still compiles to a refusal stub (contracts/workarounds.md, 6).
   if (!thrown(() => { d.querySelector("["); }).startsWith("SyntaxError: ")) return 4;
   if (!thrown(() => { container.appendChild(container); }).startsWith("HierarchyRequestError: ")) return 5;
   if (!thrown(() => { body.removeChild(label); }).startsWith("NotFoundError: ")) return 6;

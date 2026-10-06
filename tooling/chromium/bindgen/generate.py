@@ -582,13 +582,22 @@ class Generator:
         return variants
 
     @staticmethod
-    def symbol_for(base, variants, tail, params, used):
+    def several_arities(overloads):
+        """Whether the IDL lets a caller write this member at more than one
+        arity: several overloads, an optional argument, or a variadic tail.
+        A property of the IDL alone, so a C name does not change when a
+        sibling arity is skipped, or is bound later."""
+        return len(overloads) > 1 or any(argument.is_optional or argument.is_variadic
+                                         for overload in overloads for argument in overload.arguments)
+
+    @staticmethod
+    def symbol_for(base, several, tail, params, used):
         """One C symbol per variant: an overload set's are told apart by
         arity, or by a variadic tail's arms."""
         symbol = base
         if tail is not None and tail[3] is not None:
             symbol += f"_{tail[3]}"
-        elif len(variants) > 1:
+        elif several:
             symbol += f"_{len(params)}"
             while symbol in used:
                 symbol += "x"
@@ -604,7 +613,7 @@ class Generator:
         lines = self.members.setdefault(interface.identifier, [])
         used = set()
         for operation, params, result, truncate, filled, tail in variants:
-            symbol = self.symbol_for(f"nts_dom_{interface.identifier}_{name}", variants, tail, params, used)
+            symbol = self.symbol_for(f"nts_dom_{interface.identifier}_{name}", self.several_arities(group), tail, params, used)
             try:
                 context = base.make_copy(operation_group=group, operation=operation)
                 function = self.bind(interface, operation, symbol, params, result, context, truncate, filled, tail)
@@ -632,7 +641,7 @@ class Generator:
         base = CodeGenContext(interface=interface, class_name="V8" + identifier)
         used = set()
         for constructor, params, result, truncate, filled, tail in variants:
-            symbol = self.symbol_for(f"nts_dom_new_{identifier}", variants, tail, params, used)
+            symbol = self.symbol_for(f"nts_dom_new_{identifier}", self.several_arities(group), tail, params, used)
             try:
                 context = base.make_copy(constructor_group=group, constructor=constructor)
                 function = self.bind(interface, constructor, symbol, params, result, context, truncate, filled, tail)

@@ -173,7 +173,7 @@ declare module "nts:dom" {
      */
     contains(this: Node, other: Node | null): boolean;
     /**
-     * @ntsSymbol nts_dom_Node_getRootNode
+     * @ntsSymbol nts_dom_Node_getRootNode_0
      */
     getRootNode(this: Node): Node;
     /**
@@ -1406,7 +1406,7 @@ declare module "nts:dom" {
      */
     before(this: Element, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_checkVisibility
+     * @ntsSymbol nts_dom_Element_checkVisibility_0
      */
     checkVisibility(this: Element): boolean;
     /**
@@ -1440,7 +1440,7 @@ declare module "nts:dom" {
      */
     getElementsByTagNameNS(this: Element, namespaceURI: StringView | null, localName: StringView): HTMLCollection;
     /**
-     * @ntsSymbol nts_dom_Element_getHTML
+     * @ntsSymbol nts_dom_Element_getHTML_0
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
@@ -1802,19 +1802,19 @@ declare module "nts:dom" {
      */
     scrollIntoViewIfNeeded(this: Element): void;
     /**
-     * @ntsSymbol nts_dom_Element_setAttribute
+     * @ntsSymbol nts_dom_Element_setAttribute_2
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     setAttribute(this: Element, name: StringView, value: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_setAttributeNS
+     * @ntsSymbol nts_dom_Element_setAttributeNS_3
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     setAttributeNS(this: Element, namespaceURI: StringView | null, name: StringView, value: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_setHTMLUnsafe
+     * @ntsSymbol nts_dom_Element_setHTMLUnsafe_1
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
@@ -1844,11 +1844,11 @@ declare module "nts:dom" {
      */
     webkitMatchesSelector(this: Element, selectors: StringView, error?: Ptr<DOMException | null>): boolean;
     /**
-     * @ntsSymbol nts_dom_Element_webkitRequestFullScreen
+     * @ntsSymbol nts_dom_Element_webkitRequestFullScreen_0
      */
     webkitRequestFullScreen(this: Element): void;
     /**
-     * @ntsSymbol nts_dom_Element_webkitRequestFullscreen
+     * @ntsSymbol nts_dom_Element_webkitRequestFullscreen_0
      */
     webkitRequestFullscreen(this: Element): void;
   }
@@ -4216,13 +4216,13 @@ declare module "nts:dom" {
      */
     createDocumentFragment(this: Document): DocumentFragment;
     /**
-     * @ntsSymbol nts_dom_Document_createElement
+     * @ntsSymbol nts_dom_Document_createElement_1
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     createElement(this: Document, localName: StringView, error?: Ptr<DOMException | null>): Element;
     /**
-     * @ntsSymbol nts_dom_Document_createElementNS
+     * @ntsSymbol nts_dom_Document_createElementNS_2
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
@@ -4294,7 +4294,7 @@ declare module "nts:dom" {
      */
     hasFocus(this: Document): boolean;
     /**
-     * @ntsSymbol nts_dom_Document_importNode
+     * @ntsSymbol nts_dom_Document_importNode_1
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
@@ -5008,10 +5008,6 @@ declare module "nts:dom" {
      */
     dir: StringView;
     /**
-     * @ntsSymbol nts_dom_HTMLElement_set_hidden_boolean
-     */
-    _set_hidden_boolean(this: HTMLElement, value: boolean): void;
-    /**
      * @ntsSymbol nts_dom_HTMLElement_set_hidden_number
      */
     _set_hidden_number(this: HTMLElement, value: CNumber<"double">): void;
@@ -5019,6 +5015,10 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_hidden_string
      */
     _set_hidden_string(this: HTMLElement, value: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_hidden_boolean
+     */
+    _set_hidden_boolean(this: HTMLElement, value: boolean): void;
     /**
      * @ntsSymbol nts_dom_HTMLElement_get_inert
      */
@@ -6495,7 +6495,7 @@ declare module "nts:dom" {
      */
     click(this: HTMLElement): void;
     /**
-     * @ntsSymbol nts_dom_HTMLElement_focus
+     * @ntsSymbol nts_dom_HTMLElement_focus_0
      */
     focus(this: HTMLElement): void;
     /**
@@ -6505,13 +6505,13 @@ declare module "nts:dom" {
      */
     hidePopover(this: HTMLElement, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_HTMLElement_showPopover
+     * @ntsSymbol nts_dom_HTMLElement_showPopover_0
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     showPopover(this: HTMLElement, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_HTMLElement_togglePopover
+     * @ntsSymbol nts_dom_HTMLElement_togglePopover_0
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
@@ -7100,7 +7100,7 @@ declare module "nts:dom" {
      */
     setCustomValidity(this: HTMLInputElement, error_: StringView): void;
     /**
-     * @ntsSymbol nts_dom_HTMLInputElement_setRangeText
+     * @ntsSymbol nts_dom_HTMLInputElement_setRangeText_1
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
@@ -7874,7 +7874,7 @@ declare module "nts:dom" {
   export type EventMethods = EventOwnMethods;
   export type Event = HostClass<"NtsDomEvent", null, "nts_dom_retain", "nts_dom_release"> & EventMethods;
   /**
-   * @ntsSymbol nts_dom_new_Event
+   * @ntsSymbol nts_dom_new_Event_1
    */
   export function newEvent(type: StringView): Event;
   export interface UIEventOwnMethods {
@@ -7936,7 +7936,7 @@ declare module "nts:dom" {
   /** @ntsSymbol nts_dom_as_UIEvent */
   export function asUIEvent(event: Event): UIEvent | null;
   /**
-   * @ntsSymbol nts_dom_new_UIEvent
+   * @ntsSymbol nts_dom_new_UIEvent_1
    */
   export function newUIEvent(type: StringView): UIEvent;
   export interface MouseEventOwnMethods {
@@ -8202,7 +8202,7 @@ declare module "nts:dom" {
   /** @ntsSymbol nts_dom_as_MouseEvent */
   export function asMouseEvent(event: Event): MouseEvent | null;
   /**
-   * @ntsSymbol nts_dom_new_MouseEvent
+   * @ntsSymbol nts_dom_new_MouseEvent_1
    */
   export function newMouseEvent(type: StringView): MouseEvent;
   export interface KeyboardEventOwnMethods {
@@ -8352,7 +8352,7 @@ declare module "nts:dom" {
   /** @ntsSymbol nts_dom_as_KeyboardEvent */
   export function asKeyboardEvent(event: Event): KeyboardEvent | null;
   /**
-   * @ntsSymbol nts_dom_new_KeyboardEvent
+   * @ntsSymbol nts_dom_new_KeyboardEvent_1
    */
   export function newKeyboardEvent(type: StringView): KeyboardEvent;
   export interface DOMTokenListOwnMethods {
@@ -17713,7 +17713,7 @@ declare module "nts:dom" {
      */
     setCustomValidity(this: HTMLTextAreaElement, error_: StringView): void;
     /**
-     * @ntsSymbol nts_dom_HTMLTextAreaElement_setRangeText
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_setRangeText_1
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
@@ -18812,7 +18812,7 @@ declare module "nts:dom" {
   /** @ntsSymbol nts_dom_as_FocusEvent */
   export function asFocusEvent(event: Event): FocusEvent | null;
   /**
-   * @ntsSymbol nts_dom_new_FocusEvent
+   * @ntsSymbol nts_dom_new_FocusEvent_1
    */
   export function newFocusEvent(type: StringView): FocusEvent;
   export interface InputEventOwnMethods {
@@ -18854,7 +18854,7 @@ declare module "nts:dom" {
   /** @ntsSymbol nts_dom_as_InputEvent */
   export function asInputEvent(event: Event): InputEvent | null;
   /**
-   * @ntsSymbol nts_dom_new_InputEvent
+   * @ntsSymbol nts_dom_new_InputEvent_1
    * @ntsThrows error nts_dom_exception_take_message
    * @ntsNoEscape error
    */
@@ -18978,7 +18978,7 @@ declare module "nts:dom" {
   /** @ntsSymbol nts_dom_as_PointerEvent */
   export function asPointerEvent(event: Event): PointerEvent | null;
   /**
-   * @ntsSymbol nts_dom_new_PointerEvent
+   * @ntsSymbol nts_dom_new_PointerEvent_1
    */
   export function newPointerEvent(type: StringView): PointerEvent;
   export interface WheelEventOwnMethods {
@@ -19052,7 +19052,7 @@ declare module "nts:dom" {
   /** @ntsSymbol nts_dom_as_WheelEvent */
   export function asWheelEvent(event: Event): WheelEvent | null;
   /**
-   * @ntsSymbol nts_dom_new_WheelEvent
+   * @ntsSymbol nts_dom_new_WheelEvent_1
    */
   export function newWheelEvent(type: StringView): WheelEvent;
   export interface CustomEventOwnMethods {
@@ -19082,7 +19082,7 @@ declare module "nts:dom" {
   /** @ntsSymbol nts_dom_as_CustomEvent */
   export function asCustomEvent(event: Event): CustomEvent | null;
   /**
-   * @ntsSymbol nts_dom_new_CustomEvent
+   * @ntsSymbol nts_dom_new_CustomEvent_1
    */
   export function newCustomEvent(type: StringView): CustomEvent;
   export interface DOMStringMapOwnMethods {
@@ -21289,7 +21289,7 @@ declare module "nts:dom" {
      */
     readonly signal: AbortSignal;
     /**
-     * @ntsSymbol nts_dom_AbortController_abort
+     * @ntsSymbol nts_dom_AbortController_abort_0
      */
     abort(this: AbortController): void;
   }
@@ -21542,7 +21542,7 @@ declare module "nts:dom" {
   export type URLSearchParamsMethods = URLSearchParamsOwnMethods;
   export type URLSearchParams = HostClass<"NtsDomURLSearchParams", null, "nts_dom_retain", "nts_dom_release"> & URLSearchParamsMethods;
   /**
-   * @ntsSymbol nts_dom_new_URLSearchParams
+   * @ntsSymbol nts_dom_new_URLSearchParams_0
    * @ntsThrows error nts_dom_exception_take_message
    * @ntsNoEscape error
    */

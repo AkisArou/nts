@@ -445,10 +445,7 @@ typedef struct RowsSetup {
 } RowsSetup;
 static void create_rows(void* state) {
   RowsSetup* setup = state;
-  /* The app keeps the table, and program.h says ntsRowsCreate takes over
-     the caller's reference to it: hand it a root of its own. */
-  setup->rows->app =
-      ntsRowsCreate((struct NtsDomElement*)nts_dom_retain(setup->tbody));
+  setup->rows->app = ntsRowsCreate((struct NtsDomElement*)setup->tbody);
 }
 NtsChromiumRows* nts_chromium_rows_create(NtsChromiumProbe* probe,
                                           NtsDomContext* context,

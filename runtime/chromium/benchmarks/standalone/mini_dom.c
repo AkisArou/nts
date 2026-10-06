@@ -390,7 +390,7 @@ static void set_attribute(MiniNode* target, uint32_t key, uint32_t data) {
   target->attribute_names[target->attributes] = key;
   target->attribute_values[target->attributes++] = data;
 }
-void nts_dom_Element_setAttribute(NtsDomElement* self,
+void nts_dom_Element_setAttribute_2(NtsDomElement* self,
                                   const NtsBorrowedString* name,
                                   const NtsBorrowedString* value,
                                   NtsDomException** error) {

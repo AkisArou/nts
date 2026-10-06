@@ -1,4 +1,8 @@
-// expect: emit-c --rc -> emits-c nts_refused(
+// expect: emit-c --rc -> lacks-c nts_refused(
+//
+// **Fixed in a2 (7a5964d71); kept as a guard.** The closure now runs where a
+// `void` signature drops its result, and no refusal stub is emitted. What
+// follows is the report as filed.
 //
 // A closure that answers a host handle (`() => document().body`) passed where
 // `() => void` is taken compiles with no diagnostic, and the call `f()` goes

@@ -14,11 +14,8 @@ shared tooling.
 
 | # | Workaround | Where | Cause | Remove when | Owner |
 |---|---|---|---|---|---|
-| 2 | Nullable text read through a parameter (`shown(value: string \| null)`), not where it was narrowed. | `tests/idl-vectors.ts` (`shown`) | request 9: a narrowed accessor read loses its null check (SEGV) | MainClaude says §9 is fully fixed | C |
-| 3 | The C wrappers retain a handle before passing it to an export (`nts_dom_retain(setup->tbody)`). | `embedder/probe.c` (`create_rows`), `benchmarks/standalone/driver.c` | exports took over their arguments; landing a2 makes them borrow | a2 is on main | C |
-| 4 | The fuzz is three straight calls, not a loop over the seeds. | `tests/idl-vectors.ts` (`idlTranscript`) | blocker `an-owned-handle-used-in-a-loop-is-never-released` (fixed on a2) | a2 is on main; also set the fixture's `once-c` count to 2 | C |
 | 5 | Lone surrogates are built with `String.fromCharCode`, not written as literals. | `tests/idl-vectors.ts` (USVString vectors) | blocker `a-lone-surrogate-in-a-string-literal` (Windows lane's): `"\uD800"` becomes three U+FFFD | the blocker reads FIXED | C |
-| 6 | Closures passed to `thrown()` have block bodies (`() => { d.querySelector("["); }`), never an expression answering a handle. | `tests/dom-witness.ts`, `tests/idl-vectors.ts` | blocker `a-handle-returning-closure-called-as-void`: aborts in `nts_refused` (fixed on a2) | a2 is on main | C |
+| 6 | Closures passed to `thrown()` have block bodies (`() => { d.querySelector("["); }`), never an expression answering a handle. | `tests/dom-witness.ts`, `tests/idl-vectors.ts` | blocker `a-raising-handle-returning-closure-called-as-void`: a raising handle-returning closure passed as `() => void` still compiles to an `nts_refused` stub (a2 fixed only the non-raising case) | the blocker reads FIXED | C |
 | 7 | `setTimeout(handler)` and `setInterval(handler)` are separate `_default` C entry points, not an `@ntsDefault timeout=0`. | `dom/types/dom-abi.d.ts`, `dom/abi/dom_abi.h`, `adapter/dom_bridge.cc` | `@ntsDefault` takes only an integer, and the timeout is a `double` so ToInt32 is applied in the adapter | `@ntsDefault` accepts a floating-point default | C |
 | 8 | A listener that removes itself is a `function` declaration, not a `const` arrow. | `tests/idl-vectors.ts`, `tests/timer-vectors.ts` | a closure capturing its own `const` ("captured above its own declaration") is refused | that capture compiles | C |
 | 9 | Apps may not have module-level state; `app.ts build` refuses a program declaring `module__init`. | `tooling/chromium/app.ts` (`appEntry`) | request 10: module state is process-wide, environments are per document | request 10 delivered | C |
@@ -27,6 +24,8 @@ shared tooling.
 | 12 | The `hidden` getter is not bound. | generator (`report.json`) | its Blink side builds a V8 value from a ScriptState; it needs a union result | a union result type, or a hand-written getter | L |
 
 | 17 | Members taking `any` are not bound (`history.pushState(data, ...)`, `CustomEvent.detail`, `AbortController.abort(reason)` beyond its no-argument form). | generator (`report.json`) | a host function cannot take or return `any` | `any` crosses to C (an erased value with its tag) | C |
+
+| 19 | The fuzz's `pick` closure answers an index into the pool, not the node. | `tests/idl-vectors.ts` (`fuzz`) | blocker `a-closure-returning-a-host-handle-is-refused-since-a2`: a local closure answering a host handle is refused since 7a5964d71 | the blocker reads FIXED | C |
 
 ## Waiting on shared tooling
 

@@ -94,10 +94,7 @@ int main(int argc, char** argv) {
     nts_enter();
     mini_dom_enter(dom);
     live_before_app = nts_live_count();
-    /* ntsRowsCreate takes over the caller's reference to the table it keeps
-       (program.h): hand it a root of its own. */
-    app = ntsRowsCreate(
-        (struct NtsDomElement*)nts_dom_retain(mini_dom_find(dom, "tbody")));
+    app = ntsRowsCreate((struct NtsDomElement*)mini_dom_find(dom, "tbody"));
     mini_dom_leave(dom);
     if (nts_raising() || !app)
       abort();

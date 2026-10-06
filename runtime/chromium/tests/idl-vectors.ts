@@ -21,10 +21,7 @@ export interface VectorHost {
   failure(error: unknown): string;
 }
 
-// Text that may be null, as `"" + value` reads it. Through a parameter typed
-// `string | null`: a read narrowed by an earlier assignment
-// (`div.nodeValue = x; div.nodeValue`) keeps its null check this way
-// (contracts/compiler-requests.md section 9).
+// Text that may be null, as `"" + value` reads it.
 function shown(value: string | null): string {
   return value === null ? "null" : value;
 }
@@ -72,9 +69,11 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   log("toggle3", "" + div.toggleAttribute("data-flag"));
 
   // Nullable text: an element's nodeValue is null; setting it does nothing.
-  log("elementNodeValue", shown(div.nodeValue));
+  // The read after the write is narrowed to `string` by the checker and is
+  // still null: concatenated, it is "null", as page script prints it.
+  log("elementNodeValue", "" + div.nodeValue);
   div.nodeValue = "ignored";
-  log("elementNodeValueAfter", shown(div.nodeValue));
+  log("elementNodeValueAfter", "" + div.nodeValue);
 
   // Tree shape through node results.
   const first = d.createElement("span");
@@ -455,12 +454,8 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
     input.setSelectionRange(0, 1);
   });
   thrown("fine", () => { div.setAttribute("data-ok", "1"); });
-  // Three calls, not a loop over the seeds: a loop around a use of `d`, which
-  // this function's closures capture, leaves `d` rooted under RC
-  // (tooling/conformance/blockers/an-owned-handle-used-in-a-loop-is-never-released).
-  fuzz(d, root, 20261006, log, thrown);
-  fuzz(d, root, 7, log, thrown);
-  fuzz(d, root, 99991, log, thrown);
+  for (const seed of [20261006, 7, 99991])
+    fuzz(d, root, seed, log, thrown);
   textFuzz(d, root, 4242, log, thrown);
   reflectFuzz(d, root, 777, log, thrown);
   return lines.join("\n");
@@ -605,7 +600,9 @@ function fuzz(d: Document, root: Element, start: number, log: (label: string, va
   const arena = d.createElement("div");
   root.appendChild(arena);
   const pool: Node[] = [arena];
-  const pick = (): Node => pool[next(pool.length)];
+  // An index, not the node: a closure answering a host handle is refused
+  // since a2 (contracts/workarounds.md, 19).
+  const pick = (): number => next(pool.length);
   for (let step = 0; step < 400; step += 1) {
     const op = next(14);
     const label = "f" + start + "." + step + "." + op;
@@ -616,20 +613,20 @@ function fuzz(d: Document, root: Element, start: number, log: (label: string, va
       pool.push(d.createTextNode(words[next(words.length)]));
       log(label, "text");
     } else if (op === 2) {
-      const parent = pick();
-      const child = pick();
+      const parent = pool[pick()];
+      const child = pool[pick()];
       thrown(label, () => { parent.appendChild(child); });
     } else if (op === 3) {
-      const parent = pick();
-      const child = pick();
-      const reference = next(4) === 0 ? null : pick();
+      const parent = pool[pick()];
+      const child = pool[pick()];
+      const reference = next(4) === 0 ? null : pool[pick()];
       thrown(label, () => { parent.insertBefore(child, reference); });
     } else if (op === 4) {
-      const parent = pick();
-      const child = pick();
+      const parent = pool[pick()];
+      const child = pool[pick()];
       thrown(label, () => { parent.removeChild(child); });
     } else if (op === 5 || op === 6 || op === 7 || op === 9 || op === 10 || op === 13) {
-      const element = asElement(pick());
+      const element = asElement(pool[pick()]);
       if (element === null) {
         log(label, "-");
         continue;
@@ -644,7 +641,7 @@ function fuzz(d: Document, root: Element, start: number, log: (label: string, va
       } else if (op === 7) {
         thrown(label, () => { element.classList.toggle(word); });
       } else if (op === 9) {
-        const other = pick();
+        const other = pool[pick()];
         thrown(label, () => { element.append(other, word); });
       } else if (op === 10) {
         element.replaceChildren();
@@ -654,16 +651,16 @@ function fuzz(d: Document, root: Element, start: number, log: (label: string, va
         thrown(label, () => { element.insertAdjacentText(place, word); });
       }
     } else if (op === 8) {
-      const node = pick();
+      const node = pool[pick()];
       node.textContent = words[next(words.length)];
       log(label, describe(node));
     } else if (op === 11) {
-      const parent = pick();
-      const replacement = pick();
-      const old = pick();
+      const parent = pool[pick()];
+      const replacement = pool[pick()];
+      const old = pool[pick()];
       thrown(label, () => { parent.replaceChild(replacement, old); });
     } else {
-      const node = pick();
+      const node = pool[pick()];
       pool.push(node.cloneNode(next(2) === 0));
       log(label, "clone");
     }
