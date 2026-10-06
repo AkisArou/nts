@@ -12,7 +12,7 @@
 // Page script has no `asText`/`asHTMLElement`/`asHTMLInputElement`; the
 // oracle defines them (`instanceof`) where the import stood. What a caught
 // error reads as is passed in.
-import { asElement, asHTMLElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
+import { asElement, asHTMLCanvasElement, asHTMLElement, asHTMLImageElement, asHTMLOListElement, asHTMLTableCellElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
 import type { Document, Element, Event, Node, Text } from "nts:dom";
 
 export interface VectorHost {
@@ -340,7 +340,82 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   fuzz(d, root, 7, log, thrown);
   fuzz(d, root, 99991, log, thrown);
   textFuzz(d, root, 4242, log, thrown);
+  reflectFuzz(d, root, 777, log, thrown);
   return lines.join("\n");
+}
+
+// A seeded walk over reflected numeric attributes, whose setters convert as
+// WebIDL says (`long` wraps; `unsigned long` wraps, and HTML then limits it:
+// colSpan clamps to 1..1000, maxLength throws IndexSizeError below 0, size
+// rejects 0) and write the content attribute, which the getter parses back.
+// Each step: one property set to an odd number, then the property and its
+// attribute read back.
+function reflectFuzz(d: Document, root: Element, start: number, log: (label: string, value: string) => void,
+                     thrown: (label: string, run: () => void) => void): void {
+  let seed = start;
+  const next = (n: number): number => {
+    seed = (seed * 48271) % 2147483647;
+    return seed % n;
+  };
+  const values = [0, 1, -1, 2.7, -2.7, 1e10, 0 / 0, 1 / 0, -1 / 0, 2147483647, 2147483648,
+    -2147483649, 4294967295, 4294967296, 1000, 1001, 65534, 65535];
+  const holder = d.createElement("div");
+  root.appendChild(holder);
+  const input = asHTMLInputElement(d.createElement("input"))!;
+  const cell = asHTMLTableCellElement(d.createElement("td"))!;
+  const image = asHTMLImageElement(d.createElement("img"))!;
+  const canvas = asHTMLCanvasElement(d.createElement("canvas"))!;
+  const area = asHTMLTextAreaElement(d.createElement("textarea"))!;
+  const select = asHTMLSelectElement(d.createElement("select"))!;
+  const list = asHTMLOListElement(d.createElement("ol"))!;
+  const div = asHTMLElement(d.createElement("div"))!;
+  holder.append(input, cell, image);
+  holder.append(canvas, area, select);
+  holder.append(list, div);
+  for (let step = 0; step < 300; step += 1) {
+    const prop = next(12);
+    const value = values[next(values.length)];
+    const label = "r" + step + "." + prop + "@" + value;
+    let read = "";
+    if (prop === 0) {
+      thrown(label, () => { input.maxLength = value; });
+      read = input.maxLength + "|" + shown(input.getAttribute("maxlength"));
+    } else if (prop === 1) {
+      thrown(label, () => { input.minLength = value; });
+      read = input.minLength + "|" + shown(input.getAttribute("minlength"));
+    } else if (prop === 2) {
+      thrown(label, () => { input.size = value; });
+      read = input.size + "|" + shown(input.getAttribute("size"));
+    } else if (prop === 3) {
+      thrown(label, () => { div.tabIndex = value; });
+      read = div.tabIndex + "|" + shown(div.getAttribute("tabindex"));
+    } else if (prop === 4) {
+      thrown(label, () => { cell.colSpan = value; });
+      read = cell.colSpan + "|" + shown(cell.getAttribute("colspan"));
+    } else if (prop === 5) {
+      thrown(label, () => { cell.rowSpan = value; });
+      read = cell.rowSpan + "|" + shown(cell.getAttribute("rowspan"));
+    } else if (prop === 6) {
+      thrown(label, () => { image.width = value; });
+      read = image.width + "|" + shown(image.getAttribute("width"));
+    } else if (prop === 7) {
+      thrown(label, () => { canvas.width = value; });
+      read = canvas.width + "|" + shown(canvas.getAttribute("width"));
+    } else if (prop === 8) {
+      thrown(label, () => { area.rows = value; });
+      read = area.rows + "|" + shown(area.getAttribute("rows"));
+    } else if (prop === 9) {
+      thrown(label, () => { area.cols = value; });
+      read = area.cols + "|" + shown(area.getAttribute("cols"));
+    } else if (prop === 10) {
+      thrown(label, () => { select.size = value; });
+      read = select.size + "|" + shown(select.getAttribute("size"));
+    } else {
+      thrown(label, () => { list.start = value; });
+      read = list.start + "|" + shown(list.getAttribute("start"));
+    }
+    log(label, read);
+  }
 }
 
 // A seeded walk over CharacterData's offsets, which are `unsigned long`: each
