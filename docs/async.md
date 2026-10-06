@@ -238,10 +238,11 @@ The promise owns one count for a managed payload; accessors return a borrow.
 Its descriptor visits this erased slot once, rather than listing the same
 payload again among ordinary reference fields.
 
-This runtime contract is implemented in the private full-rejection-value
-checkpoint. Compiler support for each throwing or rejection expression still
-requires its actual erasure and control-flow checks; a tagged runtime slot
-alone does not establish those source capabilities.
+The runtime implements this contract (`nts_promise_reject_value`), and an
+`async` function's `throw` rejects through it with whatever was thrown. Compiler
+support for each other rejecting expression still requires its actual erasure
+and control-flow checks; a tagged runtime slot alone does not establish those
+source capabilities.
 
 The reaction list is the part that constrains the design, because the collector
 has to walk it. `nts_each_reference` knows two shapes — an array of references,

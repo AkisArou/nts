@@ -115,7 +115,9 @@ fn single_representation(
                 }
             }
             OpKind::ArrayGet { array: target, .. } if *target == array => {
-                if !initialized.contains(id) { return None }
+                if !initialized.contains(id) {
+                    return None;
+                }
                 reads.insert(id);
             }
             _ => {}

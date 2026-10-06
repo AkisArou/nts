@@ -19,8 +19,6 @@ use nts_semantic_schema::{
     TypeRecord, syntax,
 };
 
-mod assertions;
-
 use super::facts::Facts;
 use super::{Absent, 
     BinOp, Block, BlockId, Callee, Field, FieldArm, Func, GeneratorKind, HirType, Layout,
@@ -14167,6 +14165,12 @@ fn record_unimplemented_interfaces(hierarchy: &Hierarchy, program: &mut Program)
     program.uncompiled.sort();
 }
 
+/// Whether a closure's result crosses an erased call as itself: already
+/// erased, nothing at all, or something with an erased form.
+fn result_crosses(returns: &HirType) -> bool {
+    matches!(returns, HirType::Erased | HirType::Void | HirType::Never) || erasable(returns)
+}
+
 /// A closure's `#call` in the one ABI a site that cannot know the closure is able
 /// to spell: every written parameter erased, the result erased.
 ///
@@ -14192,12 +14196,6 @@ fn record_unimplemented_interfaces(hierarchy: &Hierarchy, program: &mut Program)
 /// missing ones, so a closure written at one arity and called at another is
 /// correct, and `erased-fn-arity-only` agrees on both arms. Reading "arity is free"
 /// as "parameters are free" is the mistake this function exists downstream of.
-/// Whether a closure's result crosses an erased call as itself: already
-/// erased, nothing at all, or something with an erased form.
-fn result_crosses(returns: &HirType) -> bool {
-    matches!(returns, HirType::Erased | HirType::Void | HirType::Never) || erasable(returns)
-}
-
 fn erased_call(name: String, call: &Func, width: usize, refusing: Option<&str>) -> Option<Func> {
     let origin = Origin::generated(
         call.origin.location,
@@ -14214,9 +14212,10 @@ fn erased_call(name: String, call: &Func, width: usize, refusing: Option<&str>) 
     // variant taught to the backend that spells it and not to the predicate that
     // decides whether it may be asked about. A seventh would be this.
     //
-    // A `bigint` parameter and a native record are the two the bridge tests
-    // found: neither carries a tag, so the `Unerase` below is `NTS2008 a value
-    // of type BigInt cannot be read back yet` and the program stops emitting.
+    // A native record is the case the bridge tests found (a `bigint` was the
+    // other, before it had an erased form): it carries no tag, so the
+    // `Unerase` below would be `NTS2008 a value ... cannot be read back yet`
+    // and the program would stop emitting.
     //
     // **Where they cannot cross the entry still exists, and aborts by name.**
     // Returning `None` here was the first attempt and it is the defect this file
@@ -23387,13 +23386,6 @@ impl<'a> FuncBuilder<'a> {
         ))
     }
 
-    /// Keep a closure admitted into a signature slot, for the comparison this
-    /// cannot make yet. See [`Arrivals::at_signature`].
-    ///
-    /// Extracted when `coerce_arm` reached 117 lines, and the concept earns the
-    /// name: this is the only place in the compiler where "this closure was let
-    /// into that slot" is visible, and the arm it sits in returns the pointer
-    /// unchanged a line later.
     /// A closure whose result has no erased form -- a host handle, today --
     /// admitted where a signature *reads* its result. A call through a
     /// signature goes through the closure's erased entry, which answers its
@@ -23425,6 +23417,13 @@ impl<'a> FuncBuilder<'a> {
         })
     }
 
+    /// Keep a closure admitted into a signature slot, for the comparison this
+    /// cannot make yet. See [`Arrivals::at_signature`].
+    ///
+    /// Extracted when `coerce_arm` reached 117 lines, and the concept earns the
+    /// name: this is the only place in the compiler where "this closure was let
+    /// into that slot" is visible, and the arm it sits in returns the pointer
+    /// unchanged a line later.
     fn record_arrival(&mut self, have: &HirType, want: &HirType, id: NodeId) {
         let (
             HirType::Managed(ManagedType::Object(from)),
@@ -41328,8 +41327,8 @@ impl<'a> FuncBuilder<'a> {
         // answer.** `++1n` is `2n` with `typeof === "bigint"`, while `+1n`
         // *throws* -- so routing one through the arm that rounds a BigInt to a
         // double would answer 2 where the language says 2n. Checked against node
-        // rather than read off the specification, because that arm serves
-        // `Number(x)` too and is right for it.
+        // rather than read off the specification. (`Number(x)`, which *does*
+        // round a BigInt, has its own arm: `coerce_explicit_number`.)
         //
         // **An erased value whose type admits an object**, because `ToNumber` of
         // one is `ToPrimitive`: it runs `valueOf` and `toString` off a prototype
@@ -50779,12 +50778,6 @@ impl<'a> FuncBuilder<'a> {
         )
     }
 
-    /// `x += e`, which is `x = x + e` with the target evaluated once.
-    ///
-    /// Spelled out rather than desugared, so that one place knows a bitwise
-    /// operator needs its coercions and `+=` on strings is concatenation. The
-    /// target goes through [`Self::place_of`], which is what makes
-    /// `xs[next()] += 1` call `next` once rather than twice.
     /// What `a + b` is when the checker typed it `any`: decided by what the
     /// operands are, as JavaScript decides it. Two numbers add, a string on
     /// either side concatenates, two bigints add; anything else stays erased.
@@ -50803,6 +50796,12 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// `x += e`, which is `x = x + e` with the target evaluated once.
+    ///
+    /// Spelled out rather than desugared, so that one place knows a bitwise
+    /// operator needs its coercions and `+=` on strings is concatenation. The
+    /// target goes through [`Self::place_of`], which is what makes
+    /// `xs[next()] += 1` call `next` once rather than twice.
     fn lower_compound(
         &mut self,
         id: NodeId,
@@ -64960,11 +64959,6 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.note_generator_call(call, reserved))
     }
 
-    /// The node that declares a member of a type, where one does.
-    ///
-    /// The checker's property list is flattened, so an inherited member is here
-    /// too and its declaration is the base's -- which is the answer wanted: the
-    /// frame is reserved on the node that carries the body.
     /// **A receiver a copy re-typed from `any`.** The checker resolved such a
     /// call on an `any`, so its target names no callee: no parameters, and an
     /// `any` result. The method the class declares is the one called, so its
@@ -65005,6 +64999,11 @@ impl<'a> FuncBuilder<'a> {
         Ok((lowered?, result))
     }
 
+    /// The node that declares a member of a type, where one does.
+    ///
+    /// The checker's property list is flattened, so an inherited member is here
+    /// too and its declaration is the base's -- which is the answer wanted: the
+    /// frame is reserved on the node that carries the body.
     fn member_declaration(&self, type_id: TypeId, member_name: &str) -> Option<NodeId> {
         let TypeKind::Object { properties } =
             &self.snapshot.types.get(type_id.0 as usize)?.kind
@@ -68911,6 +68910,7 @@ mod tests {
     }
 }
 
+mod assertions;
 mod bigint;
 mod gobject;
 mod initialization;

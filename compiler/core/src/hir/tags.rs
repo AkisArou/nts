@@ -42,8 +42,9 @@ pub const HANDLE_GOBJECT: u32 = 8;
 pub const HANDLE_OBJC: u32 = 9;
 pub const HANDLE_COM: u32 = 10;
 /// An erased `BigInt` payload. `typeof` answers `"bigint"`, so it sits above
-/// the handle block, outside [`OBJECT_BAND`]. The JVM runtime reads it; no
-/// lowering erases a `bigint` for the native backends yet.
+/// the handle block, outside [`OBJECT_BAND`]. Every backend erases one: the
+/// native runtime boxes the 128-bit value (`NtsBigIntBox`), and the JVM
+/// runtime holds its own.
 pub const BIGINT: u32 = 16;
 /// The tag a counted handle of `family` carries in an erased value, which is
 /// its family's place in the block; `None` for a C pointer nothing counts,
@@ -357,15 +358,13 @@ pub fn fold_comparisons(func: &mut super::Func) -> usize {
             continue;
         };
 
-        let (op, wanted) = match (op, wanted) {
-            (BinOp::Eq, TagTest::Is(tag)) => (BinOp::Eq, tag),
-            (BinOp::Ne, TagTest::Is(tag)) => (BinOp::Ne, tag),
-            (_, TagTest::Range { first, end }) => {
+        let wanted = match wanted {
+            TagTest::Is(tag) => tag,
+            TagTest::Range { first, end } => {
                 fold_range(func, index, tag, first, end, op == BinOp::Ne);
                 folded += 1;
                 continue;
             }
-            _ => continue,
         };
 
         let origin = func.values[index].origin.clone();

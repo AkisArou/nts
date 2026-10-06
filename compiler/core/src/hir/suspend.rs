@@ -1113,9 +1113,6 @@ fn resume_function(
             )
         });
     let (base, starts) = segment_layout(func, points, shared_exit);
-    // Immediately after the dispatch chain, which is what `segment_layout`
-    // reserved the extra block for. A generator has no such block: a `yield`
-    // cannot reject, and neither has a function whose every `await` is caught.
     let mut body: Vec<super::Block> = Vec::new();
     let mut resume_at: Vec<super::BlockId> = vec![super::BlockId(starts[0])];
 
@@ -1203,6 +1200,11 @@ fn resume_function(
             // A caught reason is read only on the rejected branch. Computing
             // caught_edge's operands here would read the reason of a
             // fulfilled promise before rejection_check can distinguish it.
+            //
+            // An uncaught rejection goes to `base - 1`, immediately after the
+            // dispatch chain, which is what `segment_layout` reserved the extra
+            // block for. A generator has no such block: a `yield` cannot
+            // reject, and neither has a function whose every `await` is caught.
             let caught = matches!(&build.values[awaited.0 as usize].kind,
                 OpKind::Await { rejects_to: Some(_), .. });
             body.push(rejection_check(

@@ -48,9 +48,9 @@ pub mod suspend;
 pub mod tags;
 pub mod templates;
 pub mod unerase;
-mod initialized;
 
 pub mod floating;
+mod initialized;
 pub mod inline;
 pub mod lower;
 pub mod monomorphize;

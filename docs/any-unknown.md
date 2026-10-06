@@ -445,7 +445,9 @@ A failed native check raises a `TypeError` through an available handler or
 raising entry. At an unhandled entry it reports a named runtime refusal. This
 keeps an incompatible payload from reaching a native load without presenting
 the added safety failure as the JavaScript program's result. Non-null
-assertions follow the same rule.
+assertions follow the same rule where their target is a reference, which the
+program would otherwise dereference; a scalar `x!` stays the type-only claim it
+is in JavaScript (`undefined` read as a number is NaN).
 
 The compiler selects the cheapest valid lowering.
 
