@@ -459,40 +459,34 @@ export default defineConfig({ products: { runner: app.cli({ entry: "./src/main.t
     );
 }
 
-/// A standalone build whose module initialiser the *backend* declined fails.
+/// A bigint through an erased slot at the top level builds.
 ///
-/// **An emitter decline is invisible to every instrument that reads lowering.**
-/// `Map<string, bigint>` lowers perfectly -- `nts hir` says "nothing refused" --
-/// and the C backend then declines the erase, `NTS2008`, because a bigint
-/// payload in a tagged value needs retain and release that switch on the tag.
-/// The body of `module#init` goes away after the HIR has been pronounced well.
+/// This was the witness that a standalone build whose module initialiser the
+/// *backend* declined fails: `Map<string, bigint>` lowered, and the C backend
+/// then declined the erase (`NTS2008`, a bigint payload in a tagged value), so
+/// `module#init` went away after the HIR had been pronounced well. Bigints are
+/// erased now (`NTS_TAG_BIGINT`, a boxed payload), so the same program builds,
+/// and this asserts that it does.
 ///
-/// What that produced: `main.c` declared and called `module__init`, nothing
-/// defined it, and `emit-c` exited 0 having written a program that cannot link.
-/// `drop_orphaned_bodies` records the same story for the Node-API wrapper --
-/// which was taught to consult `Emitted::refused` -- and the executable path was
-/// not, so it happened a second time one output over.
-///
-/// Dropping the call alone is not the fix and would be the worse half of it: the
-/// artifact then links and evaluates none of its top-level code, which is the
-/// quieter failure. The build has to fail, and this is where that is asserted.
+/// **The decline path itself has no source witness left.** The build still
+/// fails when `Emitted::refused` names `module#init`, and nothing in plain
+/// TypeScript reaches an emitter decline today: the next candidate, an
+/// uncounted C pointer in an erased slot, is refused by the lowering first.
+/// Recorded in the compiler lane's plan to be pinned by a test that builds the
+/// decline directly.
 #[test]
-fn a_declined_module_initializer_fails_a_standalone_build() {
+fn a_bigint_in_an_erased_slot_at_the_top_level_builds() {
     if !available() {
         eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
         return;
     }
     let project = fixture(
-        "build-declined-init",
+        "build-bigint-erased-init",
         r#"
 import { defineConfig, app } from "@nts/config";
 export default defineConfig({ products: { runner: app.cli({ entry: "./src/main.ts" }) } });
 "#,
     );
-    // Top-level code whose erase the C backend declines. The `Map` is what puts
-    // the bigint through an erased slot; in every other position -- a local, a
-    // field, an array element, a tuple, a parameter, a return, a module global --
-    // a bigint is an ordinary `__int128` and compiles.
     std::fs::write(
         project.join("src/main.ts"),
         "const m = new Map<string, bigint>();\nm.set(\"k\", 3n);\nlet seen = 0;\nconst v = m.get(\"k\");\nseen = v === undefined ? 0 : 1;\n",
@@ -500,13 +494,13 @@ export default defineConfig({ products: { runner: app.cli({ entry: "./src/main.t
     .expect("writing the program");
     let run = build(&project, &[]);
     assert!(
-        !run.ok,
-        "a standalone build with a declined initialiser reported success:\n{}{}",
+        run.ok,
+        "a bigint through an erased slot at the top level did not build:\n{}{}",
         run.stdout, run.stderr,
     );
     assert!(
-        run.stderr.contains("declined") || run.stdout.contains("declined"),
-        "the failure did not say the top-level code was declined:\n{}{}",
+        !run.stderr.contains("declined") && !run.stdout.contains("declined"),
+        "the build declined top-level code:\n{}{}",
         run.stdout, run.stderr,
     );
 }
