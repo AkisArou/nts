@@ -549,6 +549,41 @@ Three compiler defects surfaced here, each reported with a reduction:
 
 All three are fixed or scheduled by the compiler lane.
 
+**After the surface grew** (45 interfaces and 2312 functions, CSS
+properties and the variadic tree edits included; `perf/kernels-c-45`,
+`perf/kernels-llvm-45` and `perf/rows-c-quiet`, CPU 4, 6 runs, load
+about 3.6):
+
+| kernel, shape | C: compiled/C++ | C: compiled/V8 | LLVM: compiled/C++ | LLVM: compiled/V8 |
+|---|---|---|---|---|
+| create-element, loop | 1.01 | 0.56 | 1.01 | 0.53 |
+| create-element, per-call | 1.37 | 0.57 | 1.26 | 0.67 |
+| counter tree, loop | 0.94 | 0.77 | 0.91 | 0.75 |
+| counter tree, per-call | 1.16 | 1.09 | 0.88 | 0.85 |
+| event round trip, loop | 0.92 | 0.62 | 0.96 | 0.66 |
+| event round trip, per-call | 1.28 | 0.76 | 1.26 | 0.72 |
+
+A larger adapter costs the loops nothing: they still run at C++ speed.
+The first LLVM numbers agree with C's, except counter tree per-call, which
+needs a repeat before it means anything. Rows comes out native/V8 0.84 to
+1.13 per case. Three runs of rows over two days moved by ±15% with no
+direction: rows is Blink's own work, and the V8 lane's timer resolves 100
+us. It shows parity and cannot show a 5% change.
+
+**What an entry costs.** Per-call shapes cost 15 to 20 ns more than C++
+calling the same function. The symbolized profile
+(`perf/kernels-c-entryprof`) splits that into about ten pieces, none over
+0.3% of the run:
+
+- V8's `MicrotasksScope` exit and its checkpoint: 0.26 + 0.09 + 0.07%.
+- `nts_blink_dom_entry`: 0.17%.
+- The runtime's `nts_enter` and `nts_leave`: 0.14% and 0.15%.
+- `nts_callback_enter`: 0.10%.
+- The benchmark's own allocation counting: 0.14%.
+
+Each piece is work V8's callback path does as well, so the entry stays as
+it is.
+
 ## RC defects found by this lane and fixed in the compiler
 
 Measured with `tooling/memory`'s harness on the unmodified compiler (main
