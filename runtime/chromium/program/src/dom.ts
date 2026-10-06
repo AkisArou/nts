@@ -102,9 +102,12 @@ export function ntsChromiumDomProgram(): number {
   container.appendChild(pre);
 
   // A frame callback runs before the next frame, with its time; a cancelled
-  // one never runs. The smoke reads both after its frames have passed.
+  // one never runs. The smoke reads both after its frames have passed. The
+  // first finds the label when it runs rather than capturing it, so nothing
+  // is rooted when this callback returns (the observer logs roots=0).
   requestAnimationFrame((time: number): void => {
-    label.setAttribute("data-frame", time > 0 ? "ran" : "no time");
+    const later = document().querySelector("#native-dom-count");
+    if (later !== null) later.setAttribute("data-frame", time > 0 ? "ran" : "no time");
   });
   cancelAnimationFrame(requestAnimationFrame((): void => {
     label.setAttribute("data-cancelled", "ran");
