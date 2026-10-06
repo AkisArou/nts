@@ -3,10 +3,13 @@
 # to true, so a plain is_debug=false still times assertion-laden Blink and V8.
 # A component build would also put every adapter->Blink->V8 call behind a PLT.
 # This is not the final official/ThinLTO/PGO distribution profile.
+# Symbols at level 1 -- function names and line tables, no types or locals --
+# so a renderer profile names what it measures. `-g1` changes no generated
+# code; the kernels before and after the switch say so.
 is_debug = false
 is_component_build = false
 dcheck_always_on = false
-symbol_level = 0
-blink_symbol_level = 0
-v8_symbol_level = 0
+symbol_level = 1
+blink_symbol_level = 1
+v8_symbol_level = 1
 use_remoteexec = false
