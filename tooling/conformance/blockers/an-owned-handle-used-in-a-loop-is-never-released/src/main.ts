@@ -1,4 +1,10 @@
-// expect: emit-c --rc -> once-c nts_guarded_nts_dom_release((void *)
+// expect: emit-c --rc -> duplicates-c nts_guarded_nts_dom_release((void *)
+//
+// **FIXED 2026-10-07, and kept as a guard**: a parameter the function keeps is
+// released where it dies, after the loop, as well as by the closure's capture
+// -- the two release call sites the paragraph below predicted. The checker has
+// no exact-count form, so `duplicates-c` asserts more than one, and goes red if
+// the parameter's release disappears again. The record follows unchanged.
 //
 // A host handle parameter the callee owns -- `each` captures `d` in a
 // closure, so its caller retains `d` before each call -- is never released
