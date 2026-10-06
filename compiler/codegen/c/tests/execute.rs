@@ -760,8 +760,10 @@ fn an_out_of_bounds_index_traps_rather_than_reading_past_the_end() {
         r#"{CHECK}
 double readAt(double i);
 int main(void) {{
-    // In bounds first, so a failure here is not mistaken for the trap firing.
+    // In bounds first, so a failure here is not mistaken for the trap firing:
+    // it exits cleanly with a FAIL line, which the assertions below reject.
     check("readAt(2)", readAt(2), 30);
+    if (failures) return 0;
     printf("about to read out of bounds\n");
     fflush(stdout);
     readAt(3);

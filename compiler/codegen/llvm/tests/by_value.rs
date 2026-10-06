@@ -299,6 +299,16 @@ fn normalized(line: &str, sizes: &std::collections::BTreeMap<String, u32>) -> St
     } else {
         text
     };
+    // An alignment on a plain `ptr` argument is a hint about the copy it points
+    // to, not part of where the argument goes: clang 23 started writing it on
+    // Win64's pointer-to-a-copy arguments (`ptr align 4`), as it writes
+    // `dead_on_return`, stripped above. `sret`'s and `byval`'s are kept above
+    // and compared, because there the alignment is part of the slot.
+    let mut text = text;
+    while let Some(at) = text.find("ptr align ") {
+        let digits = text[at + "ptr align ".len()..].chars().take_while(char::is_ascii_digit).count();
+        text.replace_range(at + "ptr".len()..at + "ptr align ".len() + digits, "");
+    }
     text.replace("(ptr, i32)", "(i64, i32)").replace("{ ptr, i32 }", "{ i64, i32 }")
 }
 
