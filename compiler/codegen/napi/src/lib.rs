@@ -2882,6 +2882,7 @@ fn emit_object_helper(out: &mut String, layout: &hir::Layout, layouts: &[hir::La
             HirType::Float { .. } | HirType::Int { .. } => {
                 format!("napi_create_double(env, (double)result->{member}, &value)")
             }
+            HirType::BigInt => format!("nts_to_napi_bigint(env, result->{member}, &value)"),
             HirType::Managed(ManagedType::Table(_, _)) => {
                 format!("nts_to_napi_entries(env, result->{member}, &value)")
             }
@@ -4262,6 +4263,43 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every leaf field `object_crosses` admits has an arm in
+    /// `emit_object_helper`, whose catch-all is `unreachable!`: a `bigint`
+    /// field was admitted and panicked the compiler when the object was built.
+    #[test]
+    fn every_field_an_object_crosses_with_is_built() {
+        let leaves = [
+            HirType::Bool,
+            HirType::NUMBER,
+            HirType::Int { bits: 32, signed: true },
+            HirType::BigInt,
+            HirType::Managed(ManagedType::String),
+        ];
+        for ty in leaves {
+            let layout = hir::Layout {
+                types: vec![nts_semantic_schema::TypeId(7)],
+                name: "Holder".to_owned(),
+                fields: vec![hir::Field {
+                    name: "value".to_owned(),
+                    ty: ty.clone(),
+                    declared_by: None,
+                    readonly: false,
+                }],
+                methods: Vec::new(),
+                interfaces: Vec::new(),
+                base: None,
+            };
+            let layouts = [layout];
+            assert!(
+                object_crosses(0, &layouts, &FxHashSet::default(), &mut Vec::new()),
+                "{ty:?} no longer crosses, so this test checks nothing for it"
+            );
+            let mut out = String::new();
+            emit_object_helper(&mut out, &layouts[0], &layouts);
+            assert!(out.contains("result->value"), "{ty:?}: {out}");
+        }
+    }
 
     #[test]
     fn native_pointers_have_no_javascript_marshalling_path() {
