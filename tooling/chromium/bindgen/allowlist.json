@@ -46,6 +46,16 @@
     "PointerEvent",
     "WheelEvent",
     "CustomEvent",
-    "DOMStringMap"
+    "DOMStringMap",
+    "Window",
+    "Performance",
+    "MediaQueryList",
+    "Location",
+    "History",
+    "Screen",
+    "AbortController",
+    "AbortSignal",
+    "URL",
+    "URLSearchParams"
   ]
 }

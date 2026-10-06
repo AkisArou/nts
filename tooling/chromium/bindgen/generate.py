@@ -143,10 +143,11 @@ class Function:
         self.interface, self.symbol, self.params, self.result = interface, symbol, params, result
         self.expression, self.throws, self.reactions = expression, throws, reactions
         self.statements = []  # run before the expression, after the receiver
+        self.receiver = True  # false for a constructor or a downcast: no `self`
 
     def needs_context(self):
         return (self.reactions or self.result.kind == "string" or any(p.context for p in self.params)
-                or "context." in self.expression)
+                or "context." in self.expression or any("context." in s for s in self.statements))
 
 
 class Generator:
@@ -158,7 +159,11 @@ class Generator:
         self.skipped = []
         self.functions = []
         self.members = {}  # interface identifier -> TypeScript member lines
-        self.headers = set()
+        # What bind_gen's expressions name beyond each interface's own header:
+        # its helpers (ToDocumentFromExecutionContext), and LocalDOMWindow,
+        # Window's receiver.
+        self.headers = {"third_party/blink/renderer/bindings/core/v8/generated_code_helper.h",
+                        "third_party/blink/renderer/core/frame/local_dom_window.h"}
         self.statics = []  # adapter-level definitions the functions use
         # Every interface Blink's core component defines, in a fixed order:
         # what `instanceof` can be asked of (nts_dom_is), bound or not.
@@ -174,7 +179,7 @@ class Generator:
         return "NtsDom" + identifier
 
     def bound_interface(self, idl_type):
-        definition = idl_type.unwrap(nullable=True).type_definition_object
+        definition = idl_type.unwrap(nullable=True, typedef=True).type_definition_object
         if definition.identifier not in self.bound:
             raise Skip(f"interface {definition.identifier} is not bound")
         return definition
@@ -209,7 +214,7 @@ class Generator:
     def parameter(self, idl_type, identifier):
         name = self.safe(identifier)
         nullable = idl_type.does_include_nullable_type
-        unwrapped = idl_type.unwrap(nullable=True)
+        unwrapped = idl_type.unwrap(nullable=True, typedef=True)
         or_null = " | null" if nullable else ""
         if unwrapped.is_interface:
             interface = self.bound_interface(idl_type)
@@ -261,7 +266,7 @@ class Generator:
         if idl_type.is_undefined:
             return Result("void", "void", "void")
         nullable = idl_type.does_include_nullable_type
-        unwrapped = idl_type.unwrap(nullable=True)
+        unwrapped = idl_type.unwrap(nullable=True, typedef=True)
         or_null = " | null" if nullable else ""
         if unwrapped.is_interface:
             interface = self.bound_interface(idl_type)
@@ -272,8 +277,11 @@ class Generator:
         # `(DOMString or TrustedScript)?`: Blink's implementation answers the
         # string (`textContentForBinding` is a `String`), and nts_dom::AsString
         # CHECKs that a union it does answer holds its string.
+        # Only where the string is the one primitive arm, as for a parameter:
+        # a union of several primitives answers a V8 value (`hidden`'s Ret).
         if unwrapped.is_union and sum(1 for t in unwrapped.flattened_member_types
-                                      if t.unwrap().keyword_typename in STRINGS) == 1:
+                                      if t.unwrap().keyword_typename in STRINGS) == 1 \
+                and sum(1 for t in unwrapped.flattened_member_types if not t.unwrap().is_interface) == 1:
             return Result("const NtsStringView*", "StringView" + or_null, "string", nullable)
         if keyword in NUMERIC and not nullable:
             return Result("double", 'CNumber<"double">', "scalar")
@@ -282,16 +290,31 @@ class Generator:
             return Result(c, ts, "scalar")
         raise Skip(f"result type {idl_type.syntactic_form}")
 
-    @staticmethod
-    def default_value(argument):
+    def default_value(self, argument):
         """The C++ value of an argument's IDL default, which page script's
         binding passes when the argument is missing."""
         default = argument.default_value
         literal = default.literal if default is not None else None
+        unwrapped = argument.idl_type.unwrap()
+        # `optional EventInit init = {}`: an empty dictionary, as V8's
+        # binding makes one from `undefined`.
+        if literal == "{}" and unwrapped.is_dictionary:
+            dictionary = unwrapped.type_definition_object
+            self.headers.add(PathManager(dictionary).api_path(ext="h"))
+            return f"blink::{dictionary.identifier}::Create(context.v8_isolate.get())"
+        # `(sequence<...> or USVString) init = ""`: the union holding that
+        # string, the arm V8's conversion of the default picks.
+        if (unwrapped.is_union and literal is not None and re.fullmatch(r'"[ -!#-~]*"', literal)
+                and any(t.unwrap().keyword_typename in STRINGS for t in unwrapped.flattened_member_types)):
+            self.headers.add(PathManager(unwrapped.union_definition_object).api_path(ext="h"))
+            union = blink_type_info(unwrapped).typename
+            return f"blink::MakeGarbageCollected<blink::{union}>(blink::String({literal}))"
         if literal in ("true", "false"):
             return literal
         if literal == "null":
-            unwrapped = argument.idl_type.unwrap(nullable=True)
+            unwrapped = argument.idl_type.unwrap(nullable=True, typedef=True)
+            if unwrapped.is_any:
+                return "blink::ScriptValue::CreateNull(context.v8_isolate.get())"
             return "blink::String()" if unwrapped.keyword_typename in STRINGS else "nullptr"
         if literal is not None and re.fullmatch(r"-?[0-9.]+(e-?[0-9]+)?", literal):
             return literal
@@ -309,6 +332,7 @@ class Generator:
             "blink_receiver": "receiver",
             "exception_state": "exception_state",
             "isolate": "context.v8_isolate.get()",
+            "script_state": "script_state",
             "execution_context": "context.document->GetExecutionContext()",
         }
         values.update(arguments)
@@ -339,8 +363,8 @@ class Generator:
             raise Skip("[RuntimeEnabled]")
         if web_idl.Component("modules") in member.components:
             raise Skip("defined in Blink's modules component; the adapter links core")
-        if "ScriptState" in ext.values_of("CallWith") or "ThisValue" in ext.values_of("CallWith"):
-            raise Skip("[CallWith=ScriptState] needs a script context")
+        if "ThisValue" in ext.values_of("CallWith"):
+            raise Skip("[CallWith=ThisValue] needs page script's receiver")
 
     def bind(self, interface, member, symbol, params, result, context, num_of_args=None, filled=(), tail=None):
         placeholders = {}
@@ -361,6 +385,15 @@ class Generator:
             if param.include:
                 self.headers.add(param.include)
         function = Function(interface, symbol, params, result, expression, throws, reactions)
+        # Window is implemented by DOMWindow, and every member but a
+        # [CrossOrigin] one by LocalDOMWindow: bind_gen casts the receiver so,
+        # and the program's window is always its own document's, a local one.
+        function.local_window = (interface.identifier == "Window"
+                                 and "CrossOrigin" not in member.extended_attributes)
+        if re.search(r"\bscript_state\b", expression):
+            # [CallWith=ScriptState]: the main world's, entered for the call.
+            function.statements = ["blink::ScriptState* script_state = context.MainWorld()",
+                                   "blink::ScriptState::Scope script_scope(script_state)"]
         self.functions.append(function)
         return function
 
@@ -426,7 +459,7 @@ class Generator:
     def primitive_arms(self, idl_type):
         """The arms of a union with several primitive members (`hidden`'s
         boolean, unrestricted double and DOMString), or None."""
-        unwrapped = idl_type.unwrap(nullable=True)
+        unwrapped = idl_type.unwrap(nullable=True, typedef=True)
         if not unwrapped.is_union:
             return None
         primitives = [t.unwrap() for t in unwrapped.flattened_member_types if not t.unwrap().is_interface]
@@ -503,6 +536,8 @@ class Generator:
                 value = f"context.Handler({chosen}, handler_closure, handler_destroy)"
             setter = Function(interface, f"nts_dom_{interface.identifier}_set_{identifier}_{arm}", params,
                               Result("void", "void", "void"), "context.Replaced(previous)", False, False)
+            setter.local_window = (interface.identifier == "Window"
+                                   and "CrossOrigin" not in attribute.extended_attributes)
             setter.statements = [
                 "nts_dom::HandlerWrite write",
                 f"blink::EventListener* previous = {previous}",
@@ -511,26 +546,24 @@ class Generator:
             self.functions.append(setter)
             lines.append(self.method_line(interface, f"_set_{identifier}_{arm}", setter))
 
-    def operation(self, interface, group):
+    def variants(self, interface, label, overloads, result_of):
         """Each overload, at each arity a caller can write: every optional
         argument from the first one left out takes its default, or truncates
-        the call where it has none. TypeScript overloads, longest first."""
-        name = group.identifier
-        if not name:
-            return
+        the call where it has none. Longest first, as TypeScript overloads
+        are read. (operation, params, result, truncate, filled, tail)."""
         variants = []
-        for operation in group:
+        for overload in overloads:
             try:
-                self.check_member(operation)
-                result = self.result(operation.return_type)
-                variadic = self.variadic(operation)
+                self.check_member(overload)
+                result = result_of(overload)
+                variadic = self.variadic(overload)
             except Skip as why:
-                self.skip(interface, f"{name}/{len(operation.arguments)}", str(why))
+                self.skip(interface, f"{label}/{len(overload.arguments)}", str(why))
                 continue
             if variadic is not None:
                 variants.extend(variadic(result))
                 continue
-            arguments = operation.arguments
+            arguments = overload.arguments
             required = sum(1 for argument in arguments if not argument.is_optional)
             for count in range(len(arguments), required - 1, -1):
                 try:
@@ -543,21 +576,35 @@ class Generator:
                                      if arguments[index].default_value is None), None)
                     filled = [(argument.identifier, self.default_value(argument))
                               for argument in arguments[count:truncate]]
-                    variants.append((operation, params, result, truncate, filled, None))
+                    variants.append((overload, params, result, truncate, filled, None))
                 except Skip as why:
-                    self.skip(interface, f"{name}/{count}", str(why))
+                    self.skip(interface, f"{label}/{count}", str(why))
+        return variants
+
+    @staticmethod
+    def symbol_for(base, variants, tail, params, used):
+        """One C symbol per variant: an overload set's are told apart by
+        arity, or by a variadic tail's arms."""
+        symbol = base
+        if tail is not None and tail[3] is not None:
+            symbol += f"_{tail[3]}"
+        elif len(variants) > 1:
+            symbol += f"_{len(params)}"
+            while symbol in used:
+                symbol += "x"
+        used.add(symbol)
+        return symbol
+
+    def operation(self, interface, group):
+        name = group.identifier
+        if not name:
+            return
+        variants = self.variants(interface, name, group, lambda operation: self.result(operation.return_type))
         base = CodeGenContext(interface=interface, class_name="V8" + interface.identifier)
         lines = self.members.setdefault(interface.identifier, [])
         used = set()
         for operation, params, result, truncate, filled, tail in variants:
-            symbol = f"nts_dom_{interface.identifier}_{name}"
-            if tail is not None and tail[3] is not None:
-                symbol += f"_{tail[3]}"
-            elif len(variants) > 1:
-                symbol += f"_{len(params)}"
-                while symbol in used:
-                    symbol += "x"
-            used.add(symbol)
+            symbol = self.symbol_for(f"nts_dom_{interface.identifier}_{name}", variants, tail, params, used)
             try:
                 context = base.make_copy(operation_group=group, operation=operation)
                 function = self.bind(interface, operation, symbol, params, result, context, truncate, filled, tail)
@@ -565,6 +612,35 @@ class Generator:
                 self.skip(interface, f"{name}/{len(params)}", str(why))
                 continue
             lines.append(self.method_line(interface, name, function))
+
+    def constructors(self, interface):
+        """`new URL(url, base)` as `newURL(url, base)`: each constructor
+        overload at each arity, calling what V8's binding calls --
+        `URL::Create(...)` -- through Blink's own generator, with the
+        constructed object as the result."""
+        if not interface.constructor_groups:
+            return
+        group = interface.constructor_groups[0]
+        identifier = interface.identifier
+        # `[HTMLConstructor] constructor()` is a custom element's: it throws
+        # anywhere but inside one's definition.
+        if any("HTMLConstructor" in constructor.extended_attributes for constructor in group):
+            self.skip(interface, "constructor", "[HTMLConstructor]: a custom element's constructor")
+            return
+        made = Result(f"{self.handle_tag(identifier)}*", identifier, "node")
+        variants = self.variants(interface, "constructor", group, lambda constructor: made)
+        base = CodeGenContext(interface=interface, class_name="V8" + identifier)
+        used = set()
+        for constructor, params, result, truncate, filled, tail in variants:
+            symbol = self.symbol_for(f"nts_dom_new_{identifier}", variants, tail, params, used)
+            try:
+                context = base.make_copy(constructor_group=group, constructor=constructor)
+                function = self.bind(interface, constructor, symbol, params, result, context, truncate, filled, tail)
+            except Skip as why:
+                self.skip(interface, f"constructor/{len(params)}", str(why))
+                continue
+            function.receiver = False
+            function.constructs = interface
 
     VARIADIC_ARITIES = (0, 1, 2, 3)
 
@@ -651,6 +727,7 @@ class Generator:
         function = Function(interface, f"nts_dom_as_{identifier}", params,
                             Result(f"{tag}*", f"{identifier} | null", "node"), expr, False, False)
         function.downcast = True
+        function.receiver = False
         function.source = source
         self.functions.append(function)
 
@@ -661,6 +738,7 @@ class Generator:
         for interface in self.interfaces:
             self.headers.add(PathManager(interface).blink_path(ext="h"))
             self.downcast(interface)
+            self.constructors(interface)
             for attribute in interface.attributes:
                 self.attribute(interface, attribute)
             for group in interface.operation_groups:
@@ -805,8 +883,7 @@ class Generator:
         return inherited
 
     def adapter_function(self, function):
-        downcast = getattr(function, "downcast", False)
-        c_params = ([] if downcast else [f"{self.handle_tag(function.interface.identifier)}* self"]) + \
+        c_params = ([f"{self.handle_tag(function.interface.identifier)}* self"] if function.receiver else []) + \
             [p.c for p in function.params] + ([ERROR_C] if function.throws else [])
         lines = [f"{function.result.c} {function.symbol}({', '.join(c_params)}) {{"]
         if function.needs_context():
@@ -817,7 +894,9 @@ class Generator:
             lines.append("  Throws exception_state(error);")
         if function.reactions:
             lines.append("  blink::CEReactionsScope reactions(context.v8_isolate);")
-        if not downcast:
+        if function.receiver and getattr(function, "local_window", False):
+            lines.append(f"  auto* receiver = blink::To<blink::LocalDOMWindow>({self.node(function.interface, 'self')});")
+        elif function.receiver:
             lines.append(f"  auto* receiver = {self.node(function.interface, 'self')};")
         preludes = [p.prelude for p in function.params if p.prelude]
         if preludes:
@@ -890,8 +969,7 @@ class Generator:
                              for i in self.interfaces)
         prototypes = []
         for function in self.functions:
-            downcast = getattr(function, "downcast", False)
-            c_params = ([] if downcast else [f"{self.handle_tag(function.interface.identifier)}* self"]) + \
+            c_params = ([f"{self.handle_tag(function.interface.identifier)}* self"] if function.receiver else []) + \
                 [p.c for p in function.params] + ([ERROR_C] if function.throws else [])
             prototypes.append(f"{function.result.c} {function.symbol}({', '.join(c_params)});")
         header = f"""/* {banner} */
@@ -1008,6 +1086,11 @@ bool nts_dom_is(const void* object, uint32_t interface_id) {{
             if downcast is not None:
                 types.append(f"  /** @ntsSymbol nts_dom_as_{identifier} */")
                 types.append(f"  export function as{identifier}({downcast.params[0].ts}): {identifier} | null;")
+            for made in (f for f in self.functions if getattr(f, "constructs", None) is interface):
+                notes = [f"@ntsSymbol {made.symbol}"] + (list(THROWS) if made.throws else [])
+                params = [p.ts for p in made.params] + ([ERROR_TS] if made.throws else [])
+                types.append("  /**\n" + "".join(f"   * {note}\n" for note in notes) + "   */")
+                types.append(f"  export function new{identifier}({', '.join(params)}): {identifier};")
         declarations = f"""// {banner.replace(chr(10), chr(10) + '// ')}
 /** @ntsHeader "dom_idl.h" */
 declare module "nts:dom" {{

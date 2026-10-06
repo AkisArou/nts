@@ -6,11 +6,12 @@
 // only -- lib.dom.d.ts types the program; nothing here changes a type.
 
 /**
+ * @ntsBoundBy "nts:dom" AbortController
  * @ntsIs nts_dom_is 0
  */
 interface AbortController {}
 /**
- * @ntsBoundBy "nts:dom" EventTarget
+ * @ntsBoundBy "nts:dom" AbortSignal
  * @ntsIs nts_dom_is 1
  */
 interface AbortSignal {}
@@ -933,6 +934,7 @@ interface Highlight {}
  */
 interface HighlightRegistry {}
 /**
+ * @ntsBoundBy "nts:dom" History
  * @ntsIs nts_dom_is 269
  */
 interface History {}
@@ -975,6 +977,7 @@ interface KeyframeEffect {}
  */
 interface LargestContentfulPaint {}
 /**
+ * @ntsBoundBy "nts:dom" Location
  * @ntsIs nts_dom_is 301
  */
 interface Location {}
@@ -992,7 +995,7 @@ interface MediaError {}
  */
 interface MediaList {}
 /**
- * @ntsBoundBy "nts:dom" EventTarget
+ * @ntsBoundBy "nts:dom" MediaQueryList
  * @ntsIs nts_dom_is 306
  */
 interface MediaQueryList {}
@@ -1107,7 +1110,7 @@ interface PageSwapEvent {}
  */
 interface PageTransitionEvent {}
 /**
- * @ntsBoundBy "nts:dom" EventTarget
+ * @ntsBoundBy "nts:dom" Performance
  * @ntsIs nts_dom_is 350
  */
 interface Performance {}
@@ -1705,7 +1708,7 @@ interface Sanitizer {}
  */
 interface Scheduler {}
 /**
- * @ntsBoundBy "nts:dom" EventTarget
+ * @ntsBoundBy "nts:dom" Screen
  * @ntsIs nts_dom_is 504
  */
 interface Screen {}
@@ -1758,6 +1761,7 @@ interface StyleSheetList {}
  */
 interface SubmitEvent {}
 /**
+ * @ntsBoundBy "nts:dom" AbortController
  * @ntsIs nts_dom_is 527
  */
 interface TaskController {}
@@ -1767,7 +1771,7 @@ interface TaskController {}
  */
 interface TaskPriorityChangeEvent {}
 /**
- * @ntsBoundBy "nts:dom" EventTarget
+ * @ntsBoundBy "nts:dom" AbortSignal
  * @ntsIs nts_dom_is 529
  */
 interface TaskSignal {}
@@ -1854,6 +1858,7 @@ interface TreeWalker {}
  */
 interface UIEvent {}
 /**
+ * @ntsBoundBy "nts:dom" URL
  * @ntsIs nts_dom_is 564
  */
 interface URL {}
@@ -1862,6 +1867,7 @@ interface URL {}
  */
 interface URLPattern {}
 /**
+ * @ntsBoundBy "nts:dom" URLSearchParams
  * @ntsIs nts_dom_is 566
  */
 interface URLSearchParams {}
@@ -1905,7 +1911,7 @@ interface VisualViewport {}
  */
 interface WheelEvent {}
 /**
- * @ntsBoundBy "nts:dom" EventTarget
+ * @ntsBoundBy "nts:dom" Window
  * @ntsIs nts_dom_is 582
  */
 interface Window {}

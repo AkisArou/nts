@@ -27,6 +27,8 @@ shared tooling.
 | 11 | The `onclick` getter (and every event handler attribute's) is not bound; only the setters are. | `tooling/chromium/bindgen/generate.py` (`event_handler`) | a foreign function cannot return a closure the program lent it | closure results from C | C |
 | 12 | The `hidden` getter is not bound. | generator (`report.json`) | its Blink side builds a V8 value from a ScriptState; it needs a union result | a union result type, or a hand-written getter | L |
 
+| 17 | Members taking `any` are not bound (`history.pushState(data, ...)`, `CustomEvent.detail`, `AbortController.abort(reason)` beyond its no-argument form). | generator (`report.json`) | a host function cannot take or return `any` | `any` crosses to C (an erased value with its tag) | C |
+
 ## Waiting on shared tooling
 
 | # | Workaround | Where | Cause | Remove when | Owner |
@@ -39,4 +41,5 @@ shared tooling.
 | # | Debt | Where | Remove when | Owner |
 |---|---|---|---|---|
 | 15 | `smoke.ts` and `benchmark.ts` each carry their own launch-and-DevTools code; `tooling/chromium/browser.ts` is the shared one. | `tooling/chromium` | both move onto `browser.ts` | L |
+| 18 | Dictionary arguments are not bound, so `newEvent(type)` takes no `EventInit` (no `bubbles`/`cancelable`), and `getRootNode(options)` and the like take only their defaults. | `tooling/chromium/bindgen/generate.py` | dictionaries as C structs (`Struct` with `Fields`, possible today) in the generator | L |
 | 16 | The lane is on file URLs and the test-only `content_shell` targets; no packaged origin or release shell. | `host/app_main.cc`, `embedder/BUILD.gn` | packaging milestone | L |

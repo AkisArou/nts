@@ -56,6 +56,9 @@ void nts_dom_release(void* node);
 
 /* The entered context's document. */
 NtsDomDocument* nts_dom_document(void);
+/* The entered context's window: the document's, which page script's `window`
+ * is. */
+NtsDomWindow* nts_dom_window(void);
 
 /* A reported exception as the message the program throws, "Name: message" --
  * the DOMException's name, or the ECMAScript error's -- in UTF-8, malloc'd

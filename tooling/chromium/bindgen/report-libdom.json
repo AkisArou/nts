@@ -1,30 +1,34 @@
 {
   "libDom": "third_party/typescript-go/internal/bundled/libs/lib.dom.d.ts",
   "totals": {
-    "bound": 1169,
-    "skipped": 340,
+    "bound": 1309,
+    "skipped": 492,
     "absent: constant": 29,
-    "absent: stringifier": 2,
-    "absent: iterable": 8
+    "absent: stringifier": 4,
+    "absent: iterable": 12,
+    "absent: other": 3
   },
   "skippedBy": {
-    "result type": 221,
-    "[CallWith=ScriptState] needs": 23,
-    "[RuntimeEnabled]": 16,
-    "variadic (Node": 15,
-    "defined in": 8,
+    "result type": 362,
+    "[RuntimeEnabled]": 27,
+    "defined in": 20,
+    "parameter type": 11,
     "interface Attr": 7,
-    "parameter type": 6,
+    "interface BarProp": 6,
     "interface ValidityState": 4,
+    "interface CustomElementRegistry": 3,
     "interface HTMLSlotElement": 2,
     "interface ShadowRoot": 2,
+    "interface ViewTransition": 2,
     "interface Range": 2,
-    "interface Window": 2,
+    "interface Selection": 2,
     "interface HTMLTableCaptionElement": 2,
+    "interface Navigator": 2,
+    "variadic any...": 2,
+    "interface Animation": 1,
     "interface NamedNodeMap": 1,
     "interface StylePropertyMapReadOnly": 1,
     "interface DOMRectList": 1,
-    "interface ViewTransition": 1,
     "interface HTMLAllCollection": 1,
     "interface CaretPosition": 1,
     "interface CDATASection": 1,
@@ -35,22 +39,28 @@
     "interface DocumentType": 1,
     "interface XPathResult": 1,
     "interface FontFaceSet": 1,
-    "interface Selection": 1,
     "interface HTMLHeadElement": 1,
     "interface DOMImplementation": 1,
-    "interface Location": 1,
     "interface SVGSVGElement": 1,
     "interface StyleSheetList": 1,
     "interface DocumentTimeline": 1,
     "interface ElementInternals": 1,
     "interface StylePropertyMap": 1,
-    "interface DOMStringMap": 1,
-    "needs ${script_state}": 1,
     "interface FileList": 1,
     "interface CSSRule": 1,
     "interface HTMLFormControlsCollection": 1,
     "interface HTMLOptionsCollection": 1,
-    "interface DataTransfer": 1
+    "interface DataTransfer": 1,
+    "interface External": 1,
+    "interface Navigation": 1,
+    "interface Scheduler": 1,
+    "interface VisualViewport": 1,
+    "interface EventCounts": 1,
+    "interface PerformanceMark": 1,
+    "interface PerformanceMeasure": 1,
+    "interface PerformanceNavigation": 1,
+    "interface PerformanceTiming": 1,
+    "interface DOMStringList": 1
   },
   "interfaces": {
     "EventTarget": {
@@ -69,6 +79,7 @@
         "compareDocumentPosition",
         "contains",
         "firstChild",
+        "getRootNode",
         "hasChildNodes",
         "insertBefore",
         "isConnected",
@@ -91,9 +102,7 @@
         "replaceChild",
         "textContent"
       ],
-      "skipped": {
-        "getRootNode": "parameter type optional GetRootNodeOptions"
-      },
+      "skipped": {},
       "absent": {
         "constant": [
           "ATTRIBUTE_NODE",
@@ -119,6 +128,8 @@
     },
     "Element": {
       "bound": [
+        "after",
+        "append",
         "ariaActiveDescendantElement",
         "ariaAtomic",
         "ariaAutoComplete",
@@ -161,6 +172,8 @@
         "ariaValueMin",
         "ariaValueNow",
         "ariaValueText",
+        "before",
+        "checkVisibility",
         "childElementCount",
         "children",
         "classList",
@@ -177,6 +190,7 @@
         "getElementsByClassName",
         "getElementsByTagName",
         "getElementsByTagNameNS",
+        "getHTML",
         "hasAttribute",
         "hasAttributeNS",
         "hasAttributes",
@@ -196,6 +210,7 @@
         "ownerDocument",
         "part",
         "prefix",
+        "prepend",
         "previousElementSibling",
         "querySelector",
         "querySelectorAll",
@@ -203,6 +218,8 @@
         "remove",
         "removeAttribute",
         "removeAttributeNS",
+        "replaceChildren",
+        "replaceWith",
         "role",
         "scrollHeight",
         "scrollLeft",
@@ -219,9 +236,7 @@
         "webkitMatchesSelector"
       ],
       "skipped": {
-        "after": "variadic (Node or DOMString or TrustedScript)...",
-        "animate": "[CallWith=ScriptState] needs a script context",
-        "append": "variadic (Node or DOMString or TrustedScript)...",
+        "animate": "interface Animation is not bound",
         "ariaColIndexText": "[RuntimeEnabled]",
         "ariaControlsElements": "result type FrozenArray<Element>?",
         "ariaDescribedByElements": "result type FrozenArray<Element>?",
@@ -234,29 +249,23 @@
         "assignedSlot": "interface HTMLSlotElement is not bound",
         "attachShadow": "interface ShadowRoot is not bound",
         "attributes": "interface NamedNodeMap is not bound",
-        "before": "variadic (Node or DOMString or TrustedScript)...",
-        "checkVisibility": "parameter type optional CheckVisibilityOptions",
         "computedStyleMap": "interface StylePropertyMapReadOnly is not bound",
         "currentCSSZoom": "[RuntimeEnabled]",
-        "customElementRegistry": "[CallWith=ScriptState] needs a script context",
+        "customElementRegistry": "interface CustomElementRegistry is not bound",
         "getAnimations": "result type sequence<Animation>",
         "getAttributeNames": "result type sequence<DOMString>",
         "getAttributeNode": "interface Attr is not bound",
         "getAttributeNodeNS": "interface Attr is not bound",
         "getClientRects": "interface DOMRectList is not bound",
-        "getHTML": "parameter type optional GetHTMLOptions",
         "onfullscreenchange": "result type EventHandler",
         "onfullscreenerror": "result type EventHandler",
-        "prepend": "variadic (Node or DOMString or TrustedScript)...",
         "removeAttributeNode": "interface Attr is not bound",
-        "replaceChildren": "variadic (Node or DOMString or TrustedScript)...",
-        "replaceWith": "variadic (Node or DOMString or TrustedScript)...",
-        "requestFullscreen": "[CallWith=ScriptState] needs a script context",
-        "requestPointerLock": "[CallWith=ScriptState] needs a script context",
-        "scroll": "[CallWith=ScriptState] needs a script context",
-        "scrollBy": "[CallWith=ScriptState] needs a script context",
-        "scrollIntoView": "[CallWith=ScriptState] needs a script context",
-        "scrollTo": "[CallWith=ScriptState] needs a script context",
+        "requestFullscreen": "result type Promise<undefined>",
+        "requestPointerLock": "result type Promise<undefined>",
+        "scroll": "result type Promise<ScrollResult>",
+        "scrollBy": "result type Promise<ScrollResult>",
+        "scrollIntoView": "result type Promise<ScrollResult>",
+        "scrollTo": "result type Promise<ScrollResult>",
         "setAttributeNode": "interface Attr is not bound",
         "setAttributeNodeNS": "interface Attr is not bound",
         "shadowRoot": "interface ShadowRoot is not bound"
@@ -265,7 +274,9 @@
     },
     "CharacterData": {
       "bound": [
+        "after",
         "appendData",
+        "before",
         "data",
         "deleteData",
         "insertData",
@@ -275,14 +286,11 @@
         "previousElementSibling",
         "remove",
         "replaceData",
+        "replaceWith",
         "substringData",
         "textContent"
       ],
-      "skipped": {
-        "after": "variadic (Node or DOMString or TrustedScript)...",
-        "before": "variadic (Node or DOMString or TrustedScript)...",
-        "replaceWith": "variadic (Node or DOMString or TrustedScript)..."
-      },
+      "skipped": {},
       "absent": {}
     },
     "Text": {
@@ -302,6 +310,7 @@
         "adoptNode",
         "alinkColor",
         "anchors",
+        "append",
         "applets",
         "bgColor",
         "body",
@@ -319,8 +328,10 @@
         "createDocumentFragment",
         "createElement",
         "createElementNS",
+        "createEvent",
         "createNSResolver",
         "createTextNode",
+        "defaultView",
         "designMode",
         "dir",
         "documentElement",
@@ -350,12 +361,14 @@
         "lastModified",
         "linkColor",
         "links",
+        "location",
         "moveBefore",
         "open",
         "ownerDocument",
         "pictureInPictureElement",
         "plugins",
         "pointerLockElement",
+        "prepend",
         "queryCommandEnabled",
         "queryCommandIndeterm",
         "queryCommandState",
@@ -365,6 +378,7 @@
         "querySelectorAll",
         "referrer",
         "releaseEvents",
+        "replaceChildren",
         "scripts",
         "scrollingElement",
         "textContent",
@@ -377,25 +391,22 @@
         "activeViewTransition": "interface ViewTransition is not bound",
         "adoptedStyleSheets": "result type ObservableArray<CSSStyleSheet>",
         "all": "interface HTMLAllCollection is not bound",
-        "append": "variadic (Node or DOMString or TrustedScript)...",
         "caretPositionFromPoint": "interface CaretPosition is not bound",
         "caretRangeFromPoint": "interface Range is not bound",
         "createAttribute": "interface Attr is not bound",
         "createAttributeNS": "interface Attr is not bound",
         "createCDATASection": "interface CDATASection is not bound",
-        "createEvent": "[CallWith=ScriptState] needs a script context",
         "createExpression": "interface XPathExpression is not bound",
         "createNodeIterator": "interface NodeIterator is not bound",
         "createProcessingInstruction": "interface ProcessingInstruction is not bound",
         "createRange": "interface Range is not bound",
         "createTreeWalker": "interface TreeWalker is not bound",
         "currentScript": "result type HTMLOrSVGScriptElement?",
-        "customElementRegistry": "[CallWith=ScriptState] needs a script context",
-        "defaultView": "interface Window is not bound",
+        "customElementRegistry": "interface CustomElementRegistry is not bound",
         "doctype": "interface DocumentType is not bound",
         "elementsFromPoint": "result type sequence<Element>",
         "evaluate": "interface XPathResult is not bound",
-        "exitFullscreen": "[CallWith=ScriptState] needs a script context",
+        "exitFullscreen": "result type Promise<undefined>",
         "exitPictureInPicture": "defined in Blink's modules component; the adapter links core",
         "fonts": "interface FontFaceSet is not bound",
         "fragmentDirective": "[RuntimeEnabled]",
@@ -404,7 +415,6 @@
         "hasStorageAccess": "defined in Blink's modules component; the adapter links core",
         "head": "interface HTMLHeadElement is not bound",
         "implementation": "interface DOMImplementation is not bound",
-        "location": "interface Location is not bound",
         "onabort": "result type EventHandler",
         "onanimationcancel": "result type EventHandler",
         "onanimationend": "result type EventHandler",
@@ -513,12 +523,10 @@
         "onwebkittransitionend": "result type EventHandler",
         "onwheel": "result type EventHandler",
         "pictureInPictureEnabled": "defined in Blink's modules component; the adapter links core",
-        "prepend": "variadic (Node or DOMString or TrustedScript)...",
         "readyState": "result type DocumentReadyState",
-        "replaceChildren": "variadic (Node or DOMString or TrustedScript)...",
         "requestStorageAccess": "defined in Blink's modules component; the adapter links core",
         "rootElement": "interface SVGSVGElement is not bound",
-        "startViewTransition": "[CallWith=ScriptState] needs a script context",
+        "startViewTransition": "interface ViewTransition is not bound",
         "styleSheets": "interface StyleSheetList is not bound",
         "timeline": "interface DocumentTimeline is not bound",
         "visibilityState": "result type VisibilityState"
@@ -527,6 +535,7 @@
     },
     "DocumentFragment": {
       "bound": [
+        "append",
         "childElementCount",
         "children",
         "firstElementChild",
@@ -534,15 +543,13 @@
         "lastElementChild",
         "moveBefore",
         "ownerDocument",
+        "prepend",
         "querySelector",
         "querySelectorAll",
+        "replaceChildren",
         "textContent"
       ],
-      "skipped": {
-        "append": "variadic (Node or DOMString or TrustedScript)...",
-        "prepend": "variadic (Node or DOMString or TrustedScript)...",
-        "replaceChildren": "variadic (Node or DOMString or TrustedScript)..."
-      },
+      "skipped": {},
       "absent": {}
     },
     "HTMLElement": {
@@ -553,9 +560,12 @@
         "blur",
         "click",
         "contentEditable",
+        "dataset",
         "dir",
         "draggable",
         "enterKeyHint",
+        "focus",
+        "hidden",
         "hidePopover",
         "inert",
         "innerText",
@@ -584,9 +594,6 @@
         "attachInternals": "interface ElementInternals is not bound",
         "attributeStyleMap": "interface StylePropertyMap is not bound",
         "autocorrect": "[RuntimeEnabled]",
-        "dataset": "interface DOMStringMap is not bound",
-        "focus": "parameter type optional FocusOptions",
-        "hidden": "needs ${script_state}",
         "onabort": "result type EventHandler",
         "onanimationcancel": "result type EventHandler",
         "onanimationend": "result type EventHandler",
@@ -752,7 +759,7 @@
         "selectionEnd": "result type unsigned long?",
         "selectionStart": "result type unsigned long?",
         "validity": "interface ValidityState is not bound",
-        "valueAsDate": "[CallWith=ScriptState] needs a script context",
+        "valueAsDate": "result type object?",
         "webkitEntries": "defined in Blink's modules component; the adapter links core"
       },
       "absent": {}
@@ -823,6 +830,7 @@
     "Event": {
       "bound": [
         "bubbles",
+        "cancelBubble",
         "cancelable",
         "composed",
         "currentTarget",
@@ -831,17 +839,16 @@
         "initEvent",
         "isTrusted",
         "preventDefault",
+        "returnValue",
         "srcElement",
         "stopImmediatePropagation",
         "stopPropagation",
         "target",
+        "timeStamp",
         "type"
       ],
       "skipped": {
-        "cancelBubble": "[CallWith=ScriptState] needs a script context",
-        "composedPath": "[CallWith=ScriptState] needs a script context",
-        "returnValue": "[CallWith=ScriptState] needs a script context",
-        "timeStamp": "[CallWith=ScriptState] needs a script context"
+        "composedPath": "result type sequence<EventTarget>"
       },
       "absent": {
         "constant": [
@@ -856,11 +863,10 @@
       "bound": [
         "detail",
         "initUIEvent",
+        "view",
         "which"
       ],
-      "skipped": {
-        "view": "interface Window is not bound"
-      },
+      "skipped": {},
       "absent": {}
     },
     "MouseEvent": {
@@ -872,6 +878,7 @@
         "clientY",
         "ctrlKey",
         "getModifierState",
+        "initMouseEvent",
         "layerX",
         "layerY",
         "metaKey",
@@ -888,9 +895,7 @@
         "x",
         "y"
       ],
-      "skipped": {
-        "initMouseEvent": "[CallWith=ScriptState] needs a script context"
-      },
+      "skipped": {},
       "absent": {}
     },
     "KeyboardEvent": {
@@ -900,6 +905,7 @@
         "code",
         "ctrlKey",
         "getModifierState",
+        "initKeyboardEvent",
         "isComposing",
         "key",
         "keyCode",
@@ -908,9 +914,7 @@
         "repeat",
         "shiftKey"
       ],
-      "skipped": {
-        "initKeyboardEvent": "[CallWith=ScriptState] needs a script context"
-      },
+      "skipped": {},
       "absent": {
         "constant": [
           "DOM_KEY_LOCATION_LEFT",
@@ -1534,7 +1538,7 @@
         "y"
       ],
       "skipped": {
-        "toJSON": "[CallWith=ScriptState] needs a script context"
+        "toJSON": "result type object"
       },
       "absent": {}
     },
@@ -1740,7 +1744,7 @@
         "y"
       ],
       "skipped": {
-        "decode": "[CallWith=ScriptState] needs a script context"
+        "decode": "result type Promise<undefined>"
       },
       "absent": {}
     },
@@ -1908,12 +1912,398 @@
       }
     },
     "CustomEvent": {
-      "bound": [],
+      "bound": [
+        "initCustomEvent"
+      ],
       "skipped": {
-        "detail": "[CallWith=ScriptState] needs a script context",
-        "initCustomEvent": "[CallWith=ScriptState] needs a script context"
+        "detail": "result type any"
       },
       "absent": {}
+    },
+    "DOMStringMap": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "Window": {
+      "bound": [
+        "alert",
+        "atob",
+        "blur",
+        "btoa",
+        "cancelAnimationFrame",
+        "cancelIdleCallback",
+        "captureEvents",
+        "clearInterval",
+        "clearTimeout",
+        "close",
+        "closed",
+        "confirm",
+        "crossOriginIsolated",
+        "devicePixelRatio",
+        "document",
+        "focus",
+        "frameElement",
+        "frames",
+        "getComputedStyle",
+        "history",
+        "innerHeight",
+        "innerWidth",
+        "isSecureContext",
+        "length",
+        "location",
+        "matchMedia",
+        "moveBy",
+        "moveTo",
+        "name",
+        "open",
+        "origin",
+        "outerHeight",
+        "outerWidth",
+        "pageXOffset",
+        "pageYOffset",
+        "parent",
+        "performance",
+        "print",
+        "prompt",
+        "releaseEvents",
+        "resizeBy",
+        "resizeTo",
+        "screen",
+        "screenLeft",
+        "screenTop",
+        "screenX",
+        "screenY",
+        "scrollX",
+        "scrollY",
+        "self",
+        "status",
+        "stop",
+        "top",
+        "window"
+      ],
+      "skipped": {
+        "caches": "defined in Blink's modules component; the adapter links core",
+        "clientInformation": "interface Navigator is not bound",
+        "cookieStore": "defined in Blink's modules component; the adapter links core",
+        "createImageBitmap": "defined in Blink's modules component; the adapter links core",
+        "crypto": "defined in Blink's modules component; the adapter links core",
+        "customElements": "interface CustomElementRegistry is not bound",
+        "event": "result type any",
+        "external": "interface External is not bound",
+        "fetch": "result type Promise<Response>",
+        "getSelection": "interface Selection is not bound",
+        "indexedDB": "defined in Blink's modules component; the adapter links core",
+        "localStorage": "defined in Blink's modules component; the adapter links core",
+        "locationbar": "interface BarProp is not bound",
+        "menubar": "interface BarProp is not bound",
+        "navigation": "interface Navigation is not bound",
+        "navigator": "interface Navigator is not bound",
+        "onabort": "result type EventHandler",
+        "onafterprint": "result type EventHandler",
+        "onanimationcancel": "result type EventHandler",
+        "onanimationend": "result type EventHandler",
+        "onanimationiteration": "result type EventHandler",
+        "onanimationstart": "result type EventHandler",
+        "onauxclick": "result type EventHandler",
+        "onbeforeinput": "result type EventHandler",
+        "onbeforematch": "result type EventHandler",
+        "onbeforeprint": "result type EventHandler",
+        "onbeforetoggle": "result type EventHandler",
+        "onbeforeunload": "result type OnBeforeUnloadEventHandler",
+        "onblur": "result type EventHandler",
+        "oncancel": "result type EventHandler",
+        "oncanplay": "result type EventHandler",
+        "oncanplaythrough": "result type EventHandler",
+        "onchange": "result type EventHandler",
+        "onclick": "result type EventHandler",
+        "onclose": "result type EventHandler",
+        "oncommand": "result type EventHandler",
+        "oncontextlost": "result type EventHandler",
+        "oncontextmenu": "result type EventHandler",
+        "oncontextrestored": "result type EventHandler",
+        "oncuechange": "result type EventHandler",
+        "ondblclick": "result type EventHandler",
+        "ondevicemotion": "defined in Blink's modules component; the adapter links core",
+        "ondeviceorientation": "defined in Blink's modules component; the adapter links core",
+        "ondeviceorientationabsolute": "defined in Blink's modules component; the adapter links core",
+        "ondrag": "result type EventHandler",
+        "ondragend": "result type EventHandler",
+        "ondragenter": "result type EventHandler",
+        "ondragleave": "result type EventHandler",
+        "ondragover": "result type EventHandler",
+        "ondragstart": "result type EventHandler",
+        "ondrop": "result type EventHandler",
+        "ondurationchange": "result type EventHandler",
+        "onemptied": "result type EventHandler",
+        "onended": "result type EventHandler",
+        "onerror": "result type OnErrorEventHandler",
+        "onfocus": "result type EventHandler",
+        "onformdata": "result type EventHandler",
+        "ongamepadconnected": "[RuntimeEnabled]",
+        "ongamepaddisconnected": "[RuntimeEnabled]",
+        "ongotpointercapture": "result type EventHandler",
+        "onhashchange": "result type EventHandler",
+        "oninput": "result type EventHandler",
+        "oninvalid": "result type EventHandler",
+        "onkeydown": "result type EventHandler",
+        "onkeypress": "result type EventHandler",
+        "onkeyup": "result type EventHandler",
+        "onlanguagechange": "result type EventHandler",
+        "onload": "result type EventHandler",
+        "onloadeddata": "result type EventHandler",
+        "onloadedmetadata": "result type EventHandler",
+        "onloadstart": "result type EventHandler",
+        "onlostpointercapture": "result type EventHandler",
+        "onmessage": "result type EventHandler",
+        "onmessageerror": "result type EventHandler",
+        "onmousedown": "result type EventHandler",
+        "onmouseenter": "result type EventHandler",
+        "onmouseleave": "result type EventHandler",
+        "onmousemove": "result type EventHandler",
+        "onmouseout": "result type EventHandler",
+        "onmouseover": "result type EventHandler",
+        "onmouseup": "result type EventHandler",
+        "onoffline": "result type EventHandler",
+        "ononline": "result type EventHandler",
+        "onorientationchange": "[RuntimeEnabled]",
+        "onpagehide": "result type EventHandler",
+        "onpagereveal": "result type EventHandler",
+        "onpageshow": "result type EventHandler",
+        "onpageswap": "[RuntimeEnabled]",
+        "onpause": "result type EventHandler",
+        "onplay": "result type EventHandler",
+        "onplaying": "result type EventHandler",
+        "onpointercancel": "result type EventHandler",
+        "onpointerdown": "result type EventHandler",
+        "onpointerenter": "result type EventHandler",
+        "onpointerleave": "result type EventHandler",
+        "onpointermove": "result type EventHandler",
+        "onpointerout": "result type EventHandler",
+        "onpointerover": "result type EventHandler",
+        "onpointerrawupdate": "result type EventHandler",
+        "onpointerup": "result type EventHandler",
+        "onpopstate": "result type EventHandler",
+        "onprogress": "result type EventHandler",
+        "onratechange": "result type EventHandler",
+        "onrejectionhandled": "result type EventHandler",
+        "onreset": "result type EventHandler",
+        "onresize": "result type EventHandler",
+        "onscroll": "result type EventHandler",
+        "onscrollend": "result type EventHandler",
+        "onsecuritypolicyviolation": "result type EventHandler",
+        "onseeked": "result type EventHandler",
+        "onseeking": "result type EventHandler",
+        "onselect": "result type EventHandler",
+        "onselectionchange": "result type EventHandler",
+        "onselectstart": "result type EventHandler",
+        "onslotchange": "result type EventHandler",
+        "onstalled": "result type EventHandler",
+        "onstorage": "result type EventHandler",
+        "onsubmit": "result type EventHandler",
+        "onsuspend": "result type EventHandler",
+        "ontimeupdate": "result type EventHandler",
+        "ontoggle": "result type EventHandler",
+        "ontouchcancel": "[RuntimeEnabled]",
+        "ontouchend": "[RuntimeEnabled]",
+        "ontouchmove": "[RuntimeEnabled]",
+        "ontouchstart": "[RuntimeEnabled]",
+        "ontransitioncancel": "result type EventHandler",
+        "ontransitionend": "result type EventHandler",
+        "ontransitionrun": "result type EventHandler",
+        "ontransitionstart": "result type EventHandler",
+        "onunhandledrejection": "result type EventHandler",
+        "onunload": "result type EventHandler",
+        "onvolumechange": "result type EventHandler",
+        "onwaiting": "result type EventHandler",
+        "onwebkitanimationend": "result type EventHandler",
+        "onwebkitanimationiteration": "result type EventHandler",
+        "onwebkitanimationstart": "result type EventHandler",
+        "onwebkittransitionend": "result type EventHandler",
+        "onwheel": "result type EventHandler",
+        "opener": "result type any",
+        "orientation": "[RuntimeEnabled]",
+        "originAgentCluster": "[RuntimeEnabled]",
+        "personalbar": "interface BarProp is not bound",
+        "postMessage": "parameter type any",
+        "queueMicrotask": "parameter type VoidFunction",
+        "reportError": "parameter type any",
+        "requestAnimationFrame": "parameter type FrameRequestCallback",
+        "requestIdleCallback": "parameter type IdleRequestCallback",
+        "scheduler": "interface Scheduler is not bound",
+        "scroll": "result type Promise<ScrollResult>",
+        "scrollBy": "result type Promise<ScrollResult>",
+        "scrollTo": "result type Promise<ScrollResult>",
+        "scrollbars": "interface BarProp is not bound",
+        "sessionStorage": "defined in Blink's modules component; the adapter links core",
+        "setInterval": "variadic any...",
+        "setTimeout": "variadic any...",
+        "speechSynthesis": "defined in Blink's modules component; the adapter links core",
+        "statusbar": "interface BarProp is not bound",
+        "structuredClone": "result type any",
+        "toolbar": "interface BarProp is not bound",
+        "visualViewport": "interface VisualViewport is not bound"
+      },
+      "absent": {
+        "other": [
+          "oncopy",
+          "oncut",
+          "onpaste"
+        ]
+      }
+    },
+    "Performance": {
+      "bound": [
+        "clearMarks",
+        "clearMeasures",
+        "clearResourceTimings",
+        "now",
+        "setResourceTimingBufferSize",
+        "timeOrigin"
+      ],
+      "skipped": {
+        "eventCounts": "interface EventCounts is not bound",
+        "getEntries": "result type PerformanceEntryList",
+        "getEntriesByName": "result type PerformanceEntryList",
+        "getEntriesByType": "result type PerformanceEntryList",
+        "interactionCount": "[RuntimeEnabled]",
+        "mark": "interface PerformanceMark is not bound",
+        "measure": "interface PerformanceMeasure is not bound",
+        "navigation": "interface PerformanceNavigation is not bound",
+        "onresourcetimingbufferfull": "result type EventHandler",
+        "timing": "interface PerformanceTiming is not bound",
+        "toJSON": "result type object"
+      },
+      "absent": {}
+    },
+    "MediaQueryList": {
+      "bound": [
+        "matches",
+        "media"
+      ],
+      "skipped": {
+        "addListener": "parameter type EventListener?",
+        "onchange": "result type EventHandler",
+        "removeListener": "parameter type EventListener?"
+      },
+      "absent": {}
+    },
+    "Location": {
+      "bound": [
+        "assign",
+        "hash",
+        "host",
+        "hostname",
+        "href",
+        "origin",
+        "pathname",
+        "port",
+        "protocol",
+        "reload",
+        "replace",
+        "search",
+        "toString"
+      ],
+      "skipped": {
+        "ancestorOrigins": "interface DOMStringList is not bound"
+      },
+      "absent": {}
+    },
+    "History": {
+      "bound": [
+        "back",
+        "forward",
+        "go",
+        "length"
+      ],
+      "skipped": {
+        "pushState": "parameter type any",
+        "replaceState": "parameter type any",
+        "scrollRestoration": "result type ScrollRestoration",
+        "state": "result type any"
+      },
+      "absent": {}
+    },
+    "Screen": {
+      "bound": [
+        "availHeight",
+        "availWidth",
+        "colorDepth",
+        "height",
+        "pixelDepth",
+        "width"
+      ],
+      "skipped": {
+        "orientation": "defined in Blink's modules component; the adapter links core"
+      },
+      "absent": {}
+    },
+    "AbortController": {
+      "bound": [
+        "abort",
+        "signal"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "AbortSignal": {
+      "bound": [
+        "aborted",
+        "throwIfAborted"
+      ],
+      "skipped": {
+        "onabort": "result type EventHandler",
+        "reason": "result type any"
+      },
+      "absent": {}
+    },
+    "URL": {
+      "bound": [
+        "hash",
+        "host",
+        "hostname",
+        "href",
+        "origin",
+        "password",
+        "pathname",
+        "port",
+        "protocol",
+        "search",
+        "searchParams",
+        "toJSON",
+        "username"
+      ],
+      "skipped": {},
+      "absent": {
+        "stringifier": [
+          "toString"
+        ]
+      }
+    },
+    "URLSearchParams": {
+      "bound": [
+        "append",
+        "delete",
+        "get",
+        "has",
+        "set",
+        "size",
+        "sort"
+      ],
+      "skipped": {
+        "getAll": "result type sequence<USVString>"
+      },
+      "absent": {
+        "iterable": [
+          "entries",
+          "forEach",
+          "keys",
+          "values"
+        ],
+        "stringifier": [
+          "toString"
+        ]
+      }
     }
   }
 }

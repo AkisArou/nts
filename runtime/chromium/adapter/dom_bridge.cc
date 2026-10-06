@@ -12,6 +12,7 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/scheduler/web_scheduler_tracked_feature.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/bindings/wrapper_type_info.h"
 #include "third_party/blink/renderer/platform/heap/prefinalizer.h"
@@ -923,6 +924,9 @@ void nts_dom_release(void *node) {
 }
 NtsDomDocument *nts_dom_document(void) {
   return HandleOf<NtsDomDocument>(nts_dom::Current().document.Get());
+}
+NtsDomWindow *nts_dom_window(void) {
+  return HandleOf<NtsDomWindow>(nts_dom::Current().document->domWindow());
 }
 
 

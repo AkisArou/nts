@@ -207,9 +207,13 @@ try {
   // Both oracles: the microtasks page runs the same DOM witness.
   if (domOracle) {
     const source = await readFile(resolve(root, "runtime/chromium/tests/idl-vectors.ts"), "utf8");
-    // Each `asX` the vectors import from nts:dom is `instanceof X` here.
-    const narrowings = [...(/import \{([^}]*)\} from "nts:dom"/.exec(source)?.[1] ?? "").matchAll(/\bas(\w+)/g)]
-      .map(([, name]) => `const as${name} = (node) => node instanceof ${name} ? node : null;`).join("\n");
+    // What the vectors import from nts:dom, as page script spells it: each
+    // `asX` is `instanceof X`, each `newX` is `new X`, and `window()` is the
+    // global.
+    const imported = [...source.matchAll(/import \{([^}]*)\} from "nts:dom"/g)].flatMap(match => match[1].split(",").map(name => name.trim()));
+    const narrowings = imported.map(name => /^as(\w+)$/.test(name) ? `const ${name} = (node) => node instanceof ${name.slice(2)} ? node : null;`
+      : /^new(\w+)$/.test(name) ? `const ${name} = (...args) => new ${name.slice(3)}(...args);`
+      : name === "window" ? "const window = () => globalThis;" : "").join("\n");
     const vectors = stripTypeScriptTypes(source).replace(/^\s*import\s[^;]*;\s*$/gm, "").replace(/^export /gm, "");
     await evaluate(`(() => {
       ${narrowings}
@@ -232,7 +236,7 @@ try {
       // V8's message carries the binding's context ("Failed to execute 'x'
       // on 'Y': "), which the generated binding's does not.
       const failure = (error) => error.name + ": " + error.message
-        .replace(/^Failed to (?:execute '[^']*'|set the '[^']*' property|read the '[^']*' property|(?:set|delete) a named property '[^']*') on '[^']*': /, "");
+        .replace(/^Failed to (?:execute '[^']*'|set the '[^']*' property|read the '[^']*' property|(?:set|delete) a named property '[^']*') on '[^']*': |^Failed to construct '[^']*': /, "");
       const container = document.querySelector('#native-dom');
       const section = document.createElement('section');
       container.appendChild(section);

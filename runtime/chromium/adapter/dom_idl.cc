@@ -5,6 +5,7 @@
 #include <array>
 
 #include "nts/dom_context.h"
+#include "third_party/blink/renderer/bindings/core/v8/generated_code_helper.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_abort_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_abort_signal.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_abstract_range.h"
@@ -29,6 +30,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_cdata_section.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_character_bounds_update_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_character_data.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_check_visibility_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_clipboard_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_close_watcher.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_color_page_popup_controller.h"
@@ -120,6 +122,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_css_view_transition_rule.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_custom_element_registry.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_custom_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_custom_event_init.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_custom_state_set.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_data_transfer.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_data_transfer_item.h"
@@ -157,6 +160,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_error_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_event_counts.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_event_init.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_event_target.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_event_trigger.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_external.h"
@@ -168,18 +172,23 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_file_reader.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_file_reader_sync.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_focus_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_focus_event_init.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_focus_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_font_face.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_font_face_set.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_font_face_set_load_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_form_data.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_form_data_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_fragment_directive.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_fullscreen_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_garbage_collected_script_wrappable.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_gc_observation.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_geolocation.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_geolocation_coordinates.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_geolocation_position.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_geolocation_position_error.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_get_html_options.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_get_root_node_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_hash_change_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_headers.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_highlight.h"
@@ -282,6 +291,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_image_data.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_input_device_capabilities.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_input_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_input_event_init.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_inspector_overlay_host.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_install_result_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_integrity_violation_report_body.h"
@@ -297,6 +307,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_intervention_report_body.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_intrinsic_sizes.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_keyboard_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_keyboard_event_init.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_keyframe_effect.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_largest_contentful_paint.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_layout_child.h"
@@ -324,6 +335,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_mojo_interface_request_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_mojo_watcher.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_mouse_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mouse_event_init.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_mutation_observer.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_mutation_record.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_nadc_attribute_test.h"
@@ -381,6 +393,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_permissions_policy.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_permissions_policy_violation_report_body.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_pointer_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_pointer_event_init.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_pop_state_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_preconnect_data.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_preference_manager.h"
@@ -569,6 +582,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_trusted_type_policy_factory.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_type_conversions.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_ui_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_ui_event_init.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_boolean_string_unrestricteddouble.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_node_string_trustedscript.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_string_trustedhtml.h"
@@ -576,6 +590,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_stringlegacynulltoemptystring_trustedhtml.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_stringlegacynulltoemptystring_trustedscript.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_types_test.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_usvstring_usvstringsequencesequence_usvstringusvstringrecord.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_url.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_url_pattern.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_url_search_params.h"
@@ -593,6 +608,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_vtt_region.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_web_mcp_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_wheel_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_wheel_event_init.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_window.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_window_properties.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_worker.h"
@@ -617,6 +633,9 @@
 #include "third_party/blink/renderer/core/animation/document_animation.h"
 #include "third_party/blink/renderer/core/css/css_style_declaration.h"
 #include "third_party/blink/renderer/core/css/cssom/element_computed_style_map.h"
+#include "third_party/blink/renderer/core/css/media_query_list.h"
+#include "third_party/blink/renderer/core/dom/abort_controller.h"
+#include "third_party/blink/renderer/core/dom/abort_signal.h"
 #include "third_party/blink/renderer/core/dom/character_data.h"
 #include "third_party/blink/renderer/core/dom/comment.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -637,6 +656,13 @@
 #include "third_party/blink/renderer/core/events/pointer_event.h"
 #include "third_party/blink/renderer/core/events/ui_event.h"
 #include "third_party/blink/renderer/core/events/wheel_event.h"
+#include "third_party/blink/renderer/core/fetch/global_fetch.h"
+#include "third_party/blink/renderer/core/fileapi/url_file_api.h"
+#include "third_party/blink/renderer/core/frame/dom_window.h"
+#include "third_party/blink/renderer/core/frame/history.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/frame/location.h"
+#include "third_party/blink/renderer/core/frame/screen.h"
 #include "third_party/blink/renderer/core/fullscreen/document_fullscreen.h"
 #include "third_party/blink/renderer/core/fullscreen/element_fullscreen.h"
 #include "third_party/blink/renderer/core/geometry/dom_rect.h"
@@ -664,8 +690,17 @@
 #include "third_party/blink/renderer/core/html/html_table_section_element.h"
 #include "third_party/blink/renderer/core/html/html_template_element.h"
 #include "third_party/blink/renderer/core/html/html_ulist_element.h"
+#include "third_party/blink/renderer/core/scheduler/dom_scheduler.h"
+#include "third_party/blink/renderer/core/scheduler/dom_timer.h"
+#include "third_party/blink/renderer/core/scheduler/window_idle_tasks.h"
 #include "third_party/blink/renderer/core/script_tools/model_context_supplement.h"
 #include "third_party/blink/renderer/core/svg/svg_document_extensions.h"
+#include "third_party/blink/renderer/core/testing/origin_trials_test_global.h"
+#include "third_party/blink/renderer/core/timing/global_performance.h"
+#include "third_party/blink/renderer/core/timing/performance.h"
+#include "third_party/blink/renderer/core/trustedtypes/global_trusted_types.h"
+#include "third_party/blink/renderer/core/url/url.h"
+#include "third_party/blink/renderer/core/url/url_search_params.h"
 #include "third_party/blink/renderer/core/view_transition/scoped_view_transition.h"
 #include "third_party/blink/renderer/core/view_transition/view_transition_supplement.h"
 #include "third_party/blink/renderer/core/xml/document_xpath_evaluator.h"
@@ -5572,6 +5607,13 @@ bool nts_dom_is(const void* object, uint32_t interface_id) {
   return object && ToWrapperTypeInfo(WrappableOf(object))->IsSubclass(kInterfaces[interface_id]);
 }
 
+NtsDomEventTarget* nts_dom_new_EventTarget() {
+  NtsDomContext& context = nts_dom::Current();
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomEventTarget>(EventTarget::Create(script_state));
+}
+
 bool nts_dom_EventTarget_dispatchEvent(NtsDomEventTarget* self, NtsDomEvent* event, NtsDomException** error) {
   nts_dom::AssertEntered();
   Throws exception_state(error);
@@ -5718,6 +5760,12 @@ bool nts_dom_Node_contains(NtsDomNode* self, NtsDomNode* other) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::Node>(self);
   return static_cast<bool>(receiver->contains(ObjectOf<blink::Node>(other)));
+}
+
+NtsDomNode* nts_dom_Node_getRootNode(NtsDomNode* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Node>(self);
+  return HandleOf<NtsDomNode>(receiver->getRootNode(blink::GetRootNodeOptions::Create(context.v8_isolate.get())));
 }
 
 bool nts_dom_Node_hasChildNodes(NtsDomNode* self) {
@@ -7139,6 +7187,12 @@ void nts_dom_Element_before_0(NtsDomElement* self, NtsDomException** error) {
   receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({}), exception_state);
 }
 
+bool nts_dom_Element_checkVisibility(NtsDomElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Element>(self);
+  return static_cast<bool>(receiver->checkVisibility(blink::CheckVisibilityOptions::Create(context.v8_isolate.get())));
+}
+
 NtsDomElement* nts_dom_Element_closest(NtsDomElement* self, const NtsBorrowedString* selectors, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
@@ -7180,6 +7234,13 @@ NtsDomHTMLCollection* nts_dom_Element_getElementsByTagNameNS(NtsDomElement* self
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::Element>(self);
   return HandleOf<NtsDomHTMLCollection>(receiver->getElementsByTagNameNS(NtsText(context, namespaceURI), NtsText(context, localName)));
+}
+
+const NtsStringView* nts_dom_Element_getHTML(NtsDomElement* self, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  return context.Lend(nts_dom::AsString(receiver->getHTML(blink::GetHTMLOptions::Create(context.v8_isolate.get()), exception_state)), false);
 }
 
 bool nts_dom_Element_hasAttribute(NtsDomElement* self, const NtsBorrowedString* name) {
@@ -7719,6 +7780,18 @@ bool nts_dom_Element_webkitMatchesSelector(NtsDomElement* self, const NtsBorrowe
   return static_cast<bool>(receiver->matches(NtsText(context, selectors), exception_state));
 }
 
+void nts_dom_Element_webkitRequestFullScreen(NtsDomElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Element>(self);
+  ElementFullscreen::webkitRequestFullscreen(*receiver, blink::FullscreenOptions::Create(context.v8_isolate.get()));
+}
+
+void nts_dom_Element_webkitRequestFullscreen(NtsDomElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Element>(self);
+  ElementFullscreen::webkitRequestFullscreen(*receiver, blink::FullscreenOptions::Create(context.v8_isolate.get()));
+}
+
 NtsDomCharacterData* nts_dom_as_CharacterData(NtsDomNode* node) {
   nts_dom::AssertEntered();
   return HandleOf<NtsDomCharacterData>(nts_dom_is(node, NTS_DOM_CharacterData) ? WrappableOf(node) : nullptr);
@@ -8172,6 +8245,16 @@ NtsDomText* nts_dom_as_Text(NtsDomNode* node) {
   return HandleOf<NtsDomText>(nts_dom_is(node, NTS_DOM_Text) ? WrappableOf(node) : nullptr);
 }
 
+NtsDomText* nts_dom_new_Text_1(const NtsBorrowedString* data) {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomText>(Text::Create(bindings::ToDocumentFromExecutionContext(*context.document->GetExecutionContext()), NtsText(context, data)));
+}
+
+NtsDomText* nts_dom_new_Text_0() {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomText>(Text::Create(bindings::ToDocumentFromExecutionContext(*context.document->GetExecutionContext()), blink::AtomicString("")));
+}
+
 const NtsStringView* nts_dom_Text_get_wholeText(NtsDomText* self) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::Text>(self);
@@ -8190,6 +8273,11 @@ NtsDomText* nts_dom_Text_splitText(NtsDomText* self, double offset, NtsDomExcept
 NtsDomDocument* nts_dom_as_Document(NtsDomNode* node) {
   nts_dom::AssertEntered();
   return HandleOf<NtsDomDocument>(nts_dom_is(node, NTS_DOM_Document) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomDocument* nts_dom_new_Document() {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomDocument>(Document::Create(bindings::ToDocumentFromExecutionContext(*context.document->GetExecutionContext())));
 }
 
 const NtsStringView* nts_dom_Document_get_URL(NtsDomDocument* self) {
@@ -8270,6 +8358,12 @@ void nts_dom_Document_set_xmlStandalone(NtsDomDocument* self, bool value, NtsDom
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::Document>(self);
   receiver->setXMLStandalone(value, exception_state);
+}
+
+NtsDomLocation* nts_dom_Document_get_location(NtsDomDocument* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomLocation>(receiver->location());
 }
 
 const NtsStringView* nts_dom_Document_get_domain(NtsDomDocument* self) {
@@ -8385,6 +8479,12 @@ NtsDomHTMLCollection* nts_dom_Document_get_scripts(NtsDomDocument* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::Document>(self);
   return HandleOf<NtsDomHTMLCollection>(receiver->scripts());
+}
+
+NtsDomWindow* nts_dom_Document_get_defaultView(NtsDomDocument* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomWindow>(receiver->defaultView());
 }
 
 const NtsStringView* nts_dom_Document_get_designMode(NtsDomDocument* self) {
@@ -11822,6 +11922,15 @@ NtsDomElement* nts_dom_Document_createElementNS(NtsDomDocument* self, const NtsB
   return HandleOf<NtsDomElement>(receiver->createElementNS(NtsText(context, namespaceURI), NtsText(context, qualifiedName), exception_state));
 }
 
+NtsDomEvent* nts_dom_Document_createEvent(NtsDomDocument* self, const NtsBorrowedString* eventType, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomEvent>(receiver->createEvent(script_state, NtsText(context, eventType), exception_state));
+}
+
 NtsDomNode* nts_dom_Document_createNSResolver(NtsDomDocument* self, NtsDomNode* nodeResolver) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::Document>(self);
@@ -11844,12 +11953,28 @@ NtsDomElement* nts_dom_Document_elementFromPoint(NtsDomDocument* self, double x,
   return HandleOf<NtsDomElement>(receiver->elementFromPoint(x_converted, y_converted));
 }
 
-bool nts_dom_Document_execCommand(NtsDomDocument* self, const NtsBorrowedString* commandId, bool showUI, const NtsBorrowedString* value, NtsDomException** error) {
+bool nts_dom_Document_execCommand_3(NtsDomDocument* self, const NtsBorrowedString* commandId, bool showUI, const NtsBorrowedString* value, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
   return static_cast<bool>(receiver->execCommand(NtsText(context, commandId), showUI, blink::MakeGarbageCollected<blink::V8UnionStringOrTrustedHTML>(NtsText(context, value).Text()), exception_state));
+}
+
+bool nts_dom_Document_execCommand_2(NtsDomDocument* self, const NtsBorrowedString* commandId, bool showUI, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return static_cast<bool>(receiver->execCommand(NtsText(context, commandId), showUI, blink::MakeGarbageCollected<blink::V8UnionStringOrTrustedHTML>(blink::String("")), exception_state));
+}
+
+bool nts_dom_Document_execCommand_1(NtsDomDocument* self, const NtsBorrowedString* commandId, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return static_cast<bool>(receiver->execCommand(NtsText(context, commandId), false, blink::MakeGarbageCollected<blink::V8UnionStringOrTrustedHTML>(blink::String("")), exception_state));
 }
 
 void nts_dom_Document_exitPointerLock(NtsDomDocument* self) {
@@ -11932,6 +12057,13 @@ NtsDomDocument* nts_dom_Document_open_0(NtsDomDocument* self, NtsDomException** 
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
   return HandleOf<NtsDomDocument>(receiver->open(context.v8_isolate.get(), blink::AtomicString("text/html"), blink::AtomicString(""), exception_state));
+}
+
+NtsDomWindow* nts_dom_Document_open_3(NtsDomDocument* self, const NtsBorrowedString* url, const NtsBorrowedString* name, const NtsBorrowedString* features, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomWindow>(receiver->open(context.v8_isolate.get(), NtsText(context, url, /*scalar_values=*/true), NtsText(context, name), NtsText(context, features), exception_state));
 }
 
 void nts_dom_Document_prepend_nnn(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
@@ -12308,6 +12440,11 @@ void nts_dom_Document_writeln_0(NtsDomDocument* self, NtsDomException** error) {
 NtsDomDocumentFragment* nts_dom_as_DocumentFragment(NtsDomNode* node) {
   nts_dom::AssertEntered();
   return HandleOf<NtsDomDocumentFragment>(nts_dom_is(node, NTS_DOM_DocumentFragment) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomDocumentFragment* nts_dom_new_DocumentFragment() {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomDocumentFragment>(DocumentFragment::Create(bindings::ToDocumentFromExecutionContext(*context.document->GetExecutionContext())));
 }
 
 NtsDomHTMLCollection* nts_dom_DocumentFragment_get_children(NtsDomDocumentFragment* self) {
@@ -15731,6 +15868,12 @@ void nts_dom_HTMLElement_click(NtsDomHTMLElement* self) {
   receiver->click();
 }
 
+void nts_dom_HTMLElement_focus(NtsDomHTMLElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::HTMLElement>(self);
+  receiver->focusForBindings(blink::FocusOptions::Create(context.v8_isolate.get()));
+}
+
 void nts_dom_HTMLElement_hidePopover(NtsDomHTMLElement* self, NtsDomException** error) {
   nts_dom::AssertEntered();
   Throws exception_state(error);
@@ -16966,6 +17109,11 @@ void nts_dom_HTMLAnchorElement_set_interestForElement(NtsDomHTMLAnchorElement* s
   receiver->SetElementAttribute(html_names::kInterestforAttr, ObjectOf<blink::Element>(value));
 }
 
+NtsDomEvent* nts_dom_new_Event(const NtsBorrowedString* type) {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomEvent>(Event::Create(NtsText(context, type), blink::EventInit::Create(context.v8_isolate.get())));
+}
+
 const NtsStringView* nts_dom_Event_get_type(NtsDomEvent* self) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::Event>(self);
@@ -17020,10 +17168,50 @@ bool nts_dom_Event_get_isTrusted(NtsDomEvent* self) {
   return static_cast<bool>(receiver->isTrusted());
 }
 
+double nts_dom_Event_get_timeStamp(NtsDomEvent* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Event>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return static_cast<double>(receiver->timeStamp(script_state));
+}
+
 NtsDomEventTarget* nts_dom_Event_get_srcElement(NtsDomEvent* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::Event>(self);
   return HandleOf<NtsDomEventTarget>(receiver->srcElement());
+}
+
+bool nts_dom_Event_get_returnValue(NtsDomEvent* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Event>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return static_cast<bool>(receiver->legacyReturnValue(script_state));
+}
+
+void nts_dom_Event_set_returnValue(NtsDomEvent* self, bool value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Event>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->setLegacyReturnValue(script_state, value);
+}
+
+bool nts_dom_Event_get_cancelBubble(NtsDomEvent* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Event>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return static_cast<bool>(receiver->cancelBubble(script_state));
+}
+
+void nts_dom_Event_set_cancelBubble(NtsDomEvent* self, bool value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Event>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->setCancelBubble(script_state, value);
 }
 
 void nts_dom_Event_initEvent_3(NtsDomEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable) {
@@ -17067,6 +17255,17 @@ NtsDomUIEvent* nts_dom_as_UIEvent(NtsDomEvent* event) {
   return HandleOf<NtsDomUIEvent>(nts_dom_is(event, NTS_DOM_UIEvent) ? WrappableOf(event) : nullptr);
 }
 
+NtsDomUIEvent* nts_dom_new_UIEvent(const NtsBorrowedString* type) {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomUIEvent>(UIEvent::Create(NtsText(context, type), blink::UIEventInit::Create(context.v8_isolate.get())));
+}
+
+NtsDomWindow* nts_dom_UIEvent_get_view(NtsDomUIEvent* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::UIEvent>(self);
+  return HandleOf<NtsDomWindow>(receiver->view());
+}
+
 double nts_dom_UIEvent_get_detail(NtsDomUIEvent* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::UIEvent>(self);
@@ -17083,6 +17282,20 @@ bool nts_dom_UIEvent_get_isTrusted(NtsDomUIEvent* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::UIEvent>(self);
   return static_cast<bool>(receiver->isTrusted());
+}
+
+void nts_dom_UIEvent_initUIEvent_5(NtsDomUIEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable, NtsDomWindow* view, double detail) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::UIEvent>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  const auto detail_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), detail), conversion);
+  receiver->initUIEvent(NtsText(context, type), bubbles, cancelable, ObjectOf<blink::DOMWindow>(view), detail_converted);
+}
+
+void nts_dom_UIEvent_initUIEvent_4(NtsDomUIEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable, NtsDomWindow* view) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::UIEvent>(self);
+  receiver->initUIEvent(NtsText(context, type), bubbles, cancelable, ObjectOf<blink::DOMWindow>(view), 0);
 }
 
 void nts_dom_UIEvent_initUIEvent_3(NtsDomUIEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable) {
@@ -17106,6 +17319,13 @@ void nts_dom_UIEvent_initUIEvent_1(NtsDomUIEvent* self, const NtsBorrowedString*
 NtsDomMouseEvent* nts_dom_as_MouseEvent(NtsDomEvent* event) {
   nts_dom::AssertEntered();
   return HandleOf<NtsDomMouseEvent>(nts_dom_is(event, NTS_DOM_MouseEvent) ? WrappableOf(event) : nullptr);
+}
+
+NtsDomMouseEvent* nts_dom_new_MouseEvent(const NtsBorrowedString* type) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomMouseEvent>(MouseEvent::Create(script_state, NtsText(context, type), blink::MouseEventInit::Create(context.v8_isolate.get())));
 }
 
 double nts_dom_MouseEvent_get_screenX(NtsDomMouseEvent* self) {
@@ -17258,9 +17478,194 @@ bool nts_dom_MouseEvent_getModifierState(NtsDomMouseEvent* self, const NtsBorrow
   return static_cast<bool>(receiver->getModifierState(NtsText(context, keyArg)));
 }
 
+void nts_dom_MouseEvent_initMouseEvent_15(NtsDomMouseEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable, NtsDomWindow* view, double detail, double screenX, double screenY, double clientX, double clientY, bool ctrlKey, bool altKey, bool shiftKey, bool metaKey, double button, NtsDomEventTarget* relatedTarget) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::MouseEvent>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  const auto detail_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), detail), conversion);
+  const auto screenX_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), screenX), conversion);
+  const auto screenY_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), screenY), conversion);
+  const auto clientX_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), clientX), conversion);
+  const auto clientY_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), clientY), conversion);
+  const auto button_converted = blink::NativeValueTraits<blink::IDLUnsignedShort>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), button), conversion);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initMouseEvent(script_state, NtsText(context, type), bubbles, cancelable, ObjectOf<blink::DOMWindow>(view), detail_converted, screenX_converted, screenY_converted, clientX_converted, clientY_converted, ctrlKey, altKey, shiftKey, metaKey, button_converted, ObjectOf<blink::EventTarget>(relatedTarget));
+}
+
+void nts_dom_MouseEvent_initMouseEvent_14(NtsDomMouseEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable, NtsDomWindow* view, double detail, double screenX, double screenY, double clientX, double clientY, bool ctrlKey, bool altKey, bool shiftKey, bool metaKey, double button) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::MouseEvent>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  const auto detail_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), detail), conversion);
+  const auto screenX_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), screenX), conversion);
+  const auto screenY_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), screenY), conversion);
+  const auto clientX_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), clientX), conversion);
+  const auto clientY_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), clientY), conversion);
+  const auto button_converted = blink::NativeValueTraits<blink::IDLUnsignedShort>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), button), conversion);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initMouseEvent(script_state, NtsText(context, type), bubbles, cancelable, ObjectOf<blink::DOMWindow>(view), detail_converted, screenX_converted, screenY_converted, clientX_converted, clientY_converted, ctrlKey, altKey, shiftKey, metaKey, button_converted, nullptr);
+}
+
+void nts_dom_MouseEvent_initMouseEvent_13(NtsDomMouseEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable, NtsDomWindow* view, double detail, double screenX, double screenY, double clientX, double clientY, bool ctrlKey, bool altKey, bool shiftKey, bool metaKey) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::MouseEvent>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  const auto detail_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), detail), conversion);
+  const auto screenX_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), screenX), conversion);
+  const auto screenY_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), screenY), conversion);
+  const auto clientX_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), clientX), conversion);
+  const auto clientY_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), clientY), conversion);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initMouseEvent(script_state, NtsText(context, type), bubbles, cancelable, ObjectOf<blink::DOMWindow>(view), detail_converted, screenX_converted, screenY_converted, clientX_converted, clientY_converted, ctrlKey, altKey, shiftKey, metaKey, 0, nullptr);
+}
+
+void nts_dom_MouseEvent_initMouseEvent_12(NtsDomMouseEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable, NtsDomWindow* view, double detail, double screenX, double screenY, double clientX, double clientY, bool ctrlKey, bool altKey, bool shiftKey) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::MouseEvent>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  const auto detail_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), detail), conversion);
+  const auto screenX_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), screenX), conversion);
+  const auto screenY_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), screenY), conversion);
+  const auto clientX_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), clientX), conversion);
+  const auto clientY_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), clientY), conversion);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initMouseEvent(script_state, NtsText(context, type), bubbles, cancelable, ObjectOf<blink::DOMWindow>(view), detail_converted, screenX_converted, screenY_converted, clientX_converted, clientY_converted, ctrlKey, altKey, shiftKey, false, 0, nullptr);
+}
+
+void nts_dom_MouseEvent_initMouseEvent_11(NtsDomMouseEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable, NtsDomWindow* view, double detail, double screenX, double screenY, double clientX, double clientY, bool ctrlKey, bool altKey) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::MouseEvent>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  const auto detail_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), detail), conversion);
+  const auto screenX_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), screenX), conversion);
+  const auto screenY_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), screenY), conversion);
+  const auto clientX_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), clientX), conversion);
+  const auto clientY_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), clientY), conversion);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initMouseEvent(script_state, NtsText(context, type), bubbles, cancelable, ObjectOf<blink::DOMWindow>(view), detail_converted, screenX_converted, screenY_converted, clientX_converted, clientY_converted, ctrlKey, altKey, false, false, 0, nullptr);
+}
+
+void nts_dom_MouseEvent_initMouseEvent_10(NtsDomMouseEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable, NtsDomWindow* view, double detail, double screenX, double screenY, double clientX, double clientY, bool ctrlKey) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::MouseEvent>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  const auto detail_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), detail), conversion);
+  const auto screenX_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), screenX), conversion);
+  const auto screenY_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), screenY), conversion);
+  const auto clientX_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), clientX), conversion);
+  const auto clientY_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), clientY), conversion);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initMouseEvent(script_state, NtsText(context, type), bubbles, cancelable, ObjectOf<blink::DOMWindow>(view), detail_converted, screenX_converted, screenY_converted, clientX_converted, clientY_converted, ctrlKey, false, false, false, 0, nullptr);
+}
+
+void nts_dom_MouseEvent_initMouseEvent_9(NtsDomMouseEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable, NtsDomWindow* view, double detail, double screenX, double screenY, double clientX, double clientY) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::MouseEvent>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  const auto detail_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), detail), conversion);
+  const auto screenX_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), screenX), conversion);
+  const auto screenY_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), screenY), conversion);
+  const auto clientX_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), clientX), conversion);
+  const auto clientY_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), clientY), conversion);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initMouseEvent(script_state, NtsText(context, type), bubbles, cancelable, ObjectOf<blink::DOMWindow>(view), detail_converted, screenX_converted, screenY_converted, clientX_converted, clientY_converted, false, false, false, false, 0, nullptr);
+}
+
+void nts_dom_MouseEvent_initMouseEvent_8(NtsDomMouseEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable, NtsDomWindow* view, double detail, double screenX, double screenY, double clientX) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::MouseEvent>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  const auto detail_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), detail), conversion);
+  const auto screenX_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), screenX), conversion);
+  const auto screenY_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), screenY), conversion);
+  const auto clientX_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), clientX), conversion);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initMouseEvent(script_state, NtsText(context, type), bubbles, cancelable, ObjectOf<blink::DOMWindow>(view), detail_converted, screenX_converted, screenY_converted, clientX_converted, 0, false, false, false, false, 0, nullptr);
+}
+
+void nts_dom_MouseEvent_initMouseEvent_7(NtsDomMouseEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable, NtsDomWindow* view, double detail, double screenX, double screenY) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::MouseEvent>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  const auto detail_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), detail), conversion);
+  const auto screenX_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), screenX), conversion);
+  const auto screenY_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), screenY), conversion);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initMouseEvent(script_state, NtsText(context, type), bubbles, cancelable, ObjectOf<blink::DOMWindow>(view), detail_converted, screenX_converted, screenY_converted, 0, 0, false, false, false, false, 0, nullptr);
+}
+
+void nts_dom_MouseEvent_initMouseEvent_6(NtsDomMouseEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable, NtsDomWindow* view, double detail, double screenX) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::MouseEvent>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  const auto detail_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), detail), conversion);
+  const auto screenX_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), screenX), conversion);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initMouseEvent(script_state, NtsText(context, type), bubbles, cancelable, ObjectOf<blink::DOMWindow>(view), detail_converted, screenX_converted, 0, 0, 0, false, false, false, false, 0, nullptr);
+}
+
+void nts_dom_MouseEvent_initMouseEvent_5(NtsDomMouseEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable, NtsDomWindow* view, double detail) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::MouseEvent>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  const auto detail_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), detail), conversion);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initMouseEvent(script_state, NtsText(context, type), bubbles, cancelable, ObjectOf<blink::DOMWindow>(view), detail_converted, 0, 0, 0, 0, false, false, false, false, 0, nullptr);
+}
+
+void nts_dom_MouseEvent_initMouseEvent_4(NtsDomMouseEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable, NtsDomWindow* view) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::MouseEvent>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initMouseEvent(script_state, NtsText(context, type), bubbles, cancelable, ObjectOf<blink::DOMWindow>(view), 0, 0, 0, 0, 0, false, false, false, false, 0, nullptr);
+}
+
+void nts_dom_MouseEvent_initMouseEvent_3(NtsDomMouseEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::MouseEvent>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initMouseEvent(script_state, NtsText(context, type), bubbles, cancelable, nullptr, 0, 0, 0, 0, 0, false, false, false, false, 0, nullptr);
+}
+
+void nts_dom_MouseEvent_initMouseEvent_2(NtsDomMouseEvent* self, const NtsBorrowedString* type, bool bubbles) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::MouseEvent>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initMouseEvent(script_state, NtsText(context, type), bubbles, false, nullptr, 0, 0, 0, 0, 0, false, false, false, false, 0, nullptr);
+}
+
+void nts_dom_MouseEvent_initMouseEvent_1(NtsDomMouseEvent* self, const NtsBorrowedString* type) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::MouseEvent>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initMouseEvent(script_state, NtsText(context, type), false, false, nullptr, 0, 0, 0, 0, 0, false, false, false, false, 0, nullptr);
+}
+
 NtsDomKeyboardEvent* nts_dom_as_KeyboardEvent(NtsDomEvent* event) {
   nts_dom::AssertEntered();
   return HandleOf<NtsDomKeyboardEvent>(nts_dom_is(event, NTS_DOM_KeyboardEvent) ? WrappableOf(event) : nullptr);
+}
+
+NtsDomKeyboardEvent* nts_dom_new_KeyboardEvent(const NtsBorrowedString* type) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomKeyboardEvent>(KeyboardEvent::Create(script_state, NtsText(context, type), blink::KeyboardEventInit::Create(context.v8_isolate.get())));
 }
 
 const NtsStringView* nts_dom_KeyboardEvent_get_key(NtsDomKeyboardEvent* self) {
@@ -17339,6 +17744,96 @@ bool nts_dom_KeyboardEvent_getModifierState(NtsDomKeyboardEvent* self, const Nts
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::KeyboardEvent>(self);
   return static_cast<bool>(receiver->getModifierState(NtsText(context, keyArg)));
+}
+
+void nts_dom_KeyboardEvent_initKeyboardEvent_10(NtsDomKeyboardEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable, NtsDomWindow* view, const NtsBorrowedString* keyIdentifier, double location, bool ctrlKey, bool altKey, bool shiftKey, bool metaKey) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::KeyboardEvent>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  const auto location_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), location), conversion);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initKeyboardEvent(script_state, NtsText(context, type), bubbles, cancelable, ObjectOf<blink::DOMWindow>(view), NtsText(context, keyIdentifier), location_converted, ctrlKey, altKey, shiftKey, metaKey);
+}
+
+void nts_dom_KeyboardEvent_initKeyboardEvent_9(NtsDomKeyboardEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable, NtsDomWindow* view, const NtsBorrowedString* keyIdentifier, double location, bool ctrlKey, bool altKey, bool shiftKey) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::KeyboardEvent>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  const auto location_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), location), conversion);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initKeyboardEvent(script_state, NtsText(context, type), bubbles, cancelable, ObjectOf<blink::DOMWindow>(view), NtsText(context, keyIdentifier), location_converted, ctrlKey, altKey, shiftKey, false);
+}
+
+void nts_dom_KeyboardEvent_initKeyboardEvent_8(NtsDomKeyboardEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable, NtsDomWindow* view, const NtsBorrowedString* keyIdentifier, double location, bool ctrlKey, bool altKey) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::KeyboardEvent>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  const auto location_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), location), conversion);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initKeyboardEvent(script_state, NtsText(context, type), bubbles, cancelable, ObjectOf<blink::DOMWindow>(view), NtsText(context, keyIdentifier), location_converted, ctrlKey, altKey, false, false);
+}
+
+void nts_dom_KeyboardEvent_initKeyboardEvent_7(NtsDomKeyboardEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable, NtsDomWindow* view, const NtsBorrowedString* keyIdentifier, double location, bool ctrlKey) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::KeyboardEvent>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  const auto location_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), location), conversion);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initKeyboardEvent(script_state, NtsText(context, type), bubbles, cancelable, ObjectOf<blink::DOMWindow>(view), NtsText(context, keyIdentifier), location_converted, ctrlKey, false, false, false);
+}
+
+void nts_dom_KeyboardEvent_initKeyboardEvent_6(NtsDomKeyboardEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable, NtsDomWindow* view, const NtsBorrowedString* keyIdentifier, double location) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::KeyboardEvent>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  const auto location_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), location), conversion);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initKeyboardEvent(script_state, NtsText(context, type), bubbles, cancelable, ObjectOf<blink::DOMWindow>(view), NtsText(context, keyIdentifier), location_converted, false, false, false, false);
+}
+
+void nts_dom_KeyboardEvent_initKeyboardEvent_5(NtsDomKeyboardEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable, NtsDomWindow* view, const NtsBorrowedString* keyIdentifier) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::KeyboardEvent>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initKeyboardEvent(script_state, NtsText(context, type), bubbles, cancelable, ObjectOf<blink::DOMWindow>(view), NtsText(context, keyIdentifier), 0, false, false, false, false);
+}
+
+void nts_dom_KeyboardEvent_initKeyboardEvent_4(NtsDomKeyboardEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable, NtsDomWindow* view) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::KeyboardEvent>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initKeyboardEvent(script_state, NtsText(context, type), bubbles, cancelable, ObjectOf<blink::DOMWindow>(view), blink::AtomicString(""), 0, false, false, false, false);
+}
+
+void nts_dom_KeyboardEvent_initKeyboardEvent_3(NtsDomKeyboardEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::KeyboardEvent>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initKeyboardEvent(script_state, NtsText(context, type), bubbles, cancelable, nullptr, blink::AtomicString(""), 0, false, false, false, false);
+}
+
+void nts_dom_KeyboardEvent_initKeyboardEvent_2(NtsDomKeyboardEvent* self, const NtsBorrowedString* type, bool bubbles) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::KeyboardEvent>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initKeyboardEvent(script_state, NtsText(context, type), bubbles, false, nullptr, blink::AtomicString(""), 0, false, false, false, false);
+}
+
+void nts_dom_KeyboardEvent_initKeyboardEvent_1(NtsDomKeyboardEvent* self, const NtsBorrowedString* type) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::KeyboardEvent>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initKeyboardEvent(script_state, NtsText(context, type), false, false, nullptr, blink::AtomicString(""), 0, false, false, false, false);
 }
 
 double nts_dom_DOMTokenList_get_length(NtsDomDOMTokenList* self) {
@@ -25000,6 +25495,16 @@ NtsDomComment* nts_dom_as_Comment(NtsDomNode* node) {
   return HandleOf<NtsDomComment>(nts_dom_is(node, NTS_DOM_Comment) ? WrappableOf(node) : nullptr);
 }
 
+NtsDomComment* nts_dom_new_Comment_1(const NtsBorrowedString* data) {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomComment>(Comment::Create(bindings::ToDocumentFromExecutionContext(*context.document->GetExecutionContext()), NtsText(context, data)));
+}
+
+NtsDomComment* nts_dom_new_Comment_0() {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomComment>(Comment::Create(bindings::ToDocumentFromExecutionContext(*context.document->GetExecutionContext()), blink::AtomicString("")));
+}
+
 double nts_dom_NodeList_get_length(NtsDomNodeList* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::NodeList>(self);
@@ -25038,6 +25543,31 @@ NtsDomElement* nts_dom_HTMLCollection_named_get(NtsDomHTMLCollection* self, cons
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::HTMLCollection>(self);
   return HandleOf<NtsDomElement>(receiver->namedItem(NtsText(context, name)));
+}
+
+NtsDomDOMRectReadOnly* nts_dom_new_DOMRectReadOnly_4(double x, double y, double width, double height) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomDOMRectReadOnly>(DOMRectReadOnly::Create(x, y, width, height));
+}
+
+NtsDomDOMRectReadOnly* nts_dom_new_DOMRectReadOnly_3(double x, double y, double width) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomDOMRectReadOnly>(DOMRectReadOnly::Create(x, y, width, 0));
+}
+
+NtsDomDOMRectReadOnly* nts_dom_new_DOMRectReadOnly_2(double x, double y) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomDOMRectReadOnly>(DOMRectReadOnly::Create(x, y, 0, 0));
+}
+
+NtsDomDOMRectReadOnly* nts_dom_new_DOMRectReadOnly_1(double x) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomDOMRectReadOnly>(DOMRectReadOnly::Create(x, 0, 0, 0));
+}
+
+NtsDomDOMRectReadOnly* nts_dom_new_DOMRectReadOnly_0() {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomDOMRectReadOnly>(DOMRectReadOnly::Create(0, 0, 0, 0));
 }
 
 double nts_dom_DOMRectReadOnly_get_x(NtsDomDOMRectReadOnly* self) {
@@ -25091,6 +25621,31 @@ double nts_dom_DOMRectReadOnly_get_left(NtsDomDOMRectReadOnly* self) {
 NtsDomDOMRect* nts_dom_as_DOMRect(NtsDomDOMRectReadOnly* object) {
   nts_dom::AssertEntered();
   return HandleOf<NtsDomDOMRect>(nts_dom_is(object, NTS_DOM_DOMRect) ? WrappableOf(object) : nullptr);
+}
+
+NtsDomDOMRect* nts_dom_new_DOMRect_4(double x, double y, double width, double height) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomDOMRect>(DOMRect::Create(x, y, width, height));
+}
+
+NtsDomDOMRect* nts_dom_new_DOMRect_3(double x, double y, double width) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomDOMRect>(DOMRect::Create(x, y, width, 0));
+}
+
+NtsDomDOMRect* nts_dom_new_DOMRect_2(double x, double y) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomDOMRect>(DOMRect::Create(x, y, 0, 0));
+}
+
+NtsDomDOMRect* nts_dom_new_DOMRect_1(double x) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomDOMRect>(DOMRect::Create(x, 0, 0, 0));
+}
+
+NtsDomDOMRect* nts_dom_new_DOMRect_0() {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomDOMRect>(DOMRect::Create(0, 0, 0, 0));
 }
 
 double nts_dom_DOMRect_get_x(NtsDomDOMRect* self) {
@@ -27244,6 +27799,11 @@ NtsDomFocusEvent* nts_dom_as_FocusEvent(NtsDomEvent* event) {
   return HandleOf<NtsDomFocusEvent>(nts_dom_is(event, NTS_DOM_FocusEvent) ? WrappableOf(event) : nullptr);
 }
 
+NtsDomFocusEvent* nts_dom_new_FocusEvent(const NtsBorrowedString* type) {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomFocusEvent>(FocusEvent::Create(NtsText(context, type), blink::FocusEventInit::Create(context.v8_isolate.get())));
+}
+
 NtsDomEventTarget* nts_dom_FocusEvent_get_relatedTarget(NtsDomFocusEvent* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::FocusEvent>(self);
@@ -27259,6 +27819,12 @@ bool nts_dom_FocusEvent_get_isTrusted(NtsDomFocusEvent* self) {
 NtsDomInputEvent* nts_dom_as_InputEvent(NtsDomEvent* event) {
   nts_dom::AssertEntered();
   return HandleOf<NtsDomInputEvent>(nts_dom_is(event, NTS_DOM_InputEvent) ? WrappableOf(event) : nullptr);
+}
+
+NtsDomInputEvent* nts_dom_new_InputEvent(const NtsBorrowedString* type, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  return HandleOf<NtsDomInputEvent>(InputEvent::Create(NtsText(context, type), blink::InputEventInit::Create(context.v8_isolate.get()), exception_state));
 }
 
 const NtsStringView* nts_dom_InputEvent_get_data(NtsDomInputEvent* self) {
@@ -27288,6 +27854,11 @@ bool nts_dom_InputEvent_get_isTrusted(NtsDomInputEvent* self) {
 NtsDomPointerEvent* nts_dom_as_PointerEvent(NtsDomEvent* event) {
   nts_dom::AssertEntered();
   return HandleOf<NtsDomPointerEvent>(nts_dom_is(event, NTS_DOM_PointerEvent) ? WrappableOf(event) : nullptr);
+}
+
+NtsDomPointerEvent* nts_dom_new_PointerEvent(const NtsBorrowedString* type) {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomPointerEvent>(PointerEvent::Create(NtsText(context, type), blink::PointerEventInit::Create(context.v8_isolate.get())));
 }
 
 double nts_dom_PointerEvent_get_pointerId(NtsDomPointerEvent* self) {
@@ -27379,6 +27950,11 @@ NtsDomWheelEvent* nts_dom_as_WheelEvent(NtsDomEvent* event) {
   return HandleOf<NtsDomWheelEvent>(nts_dom_is(event, NTS_DOM_WheelEvent) ? WrappableOf(event) : nullptr);
 }
 
+NtsDomWheelEvent* nts_dom_new_WheelEvent(const NtsBorrowedString* type) {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomWheelEvent>(WheelEvent::Create(NtsText(context, type), blink::WheelEventInit::Create(context.v8_isolate.get())));
+}
+
 double nts_dom_WheelEvent_get_deltaX(NtsDomWheelEvent* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::WheelEvent>(self);
@@ -27432,10 +28008,41 @@ NtsDomCustomEvent* nts_dom_as_CustomEvent(NtsDomEvent* event) {
   return HandleOf<NtsDomCustomEvent>(nts_dom_is(event, NTS_DOM_CustomEvent) ? WrappableOf(event) : nullptr);
 }
 
+NtsDomCustomEvent* nts_dom_new_CustomEvent(const NtsBorrowedString* type) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomCustomEvent>(CustomEvent::Create(script_state, NtsText(context, type), blink::CustomEventInit::Create(context.v8_isolate.get())));
+}
+
 bool nts_dom_CustomEvent_get_isTrusted(NtsDomCustomEvent* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::CustomEvent>(self);
   return static_cast<bool>(receiver->isTrusted());
+}
+
+void nts_dom_CustomEvent_initCustomEvent_3(NtsDomCustomEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CustomEvent>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initCustomEvent(script_state, NtsText(context, type), bubbles, cancelable, blink::ScriptValue::CreateNull(context.v8_isolate.get()));
+}
+
+void nts_dom_CustomEvent_initCustomEvent_2(NtsDomCustomEvent* self, const NtsBorrowedString* type, bool bubbles) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CustomEvent>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initCustomEvent(script_state, NtsText(context, type), bubbles, false, blink::ScriptValue::CreateNull(context.v8_isolate.get()));
+}
+
+void nts_dom_CustomEvent_initCustomEvent_1(NtsDomCustomEvent* self, const NtsBorrowedString* type) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CustomEvent>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->initCustomEvent(script_state, NtsText(context, type), false, false, blink::ScriptValue::CreateNull(context.v8_isolate.get()));
 }
 
 const NtsStringView* nts_dom_DOMStringMap_named_get(NtsDomDOMStringMap* self, const NtsBorrowedString* name) {
@@ -27457,6 +28064,4214 @@ void nts_dom_DOMStringMap_named_delete(NtsDomDOMStringMap* self, const NtsBorrow
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DOMStringMap>(self);
   receiver->AnonymousNamedDeleter(blink::AtomicString(NtsText(context, name).Text()));
+}
+
+NtsDomWindow* nts_dom_as_Window(NtsDomEventTarget* target) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomWindow>(nts_dom_is(target, NTS_DOM_Window) ? WrappableOf(target) : nullptr);
+}
+
+NtsDomWindow* nts_dom_Window_get_window(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMWindow>(self);
+  return HandleOf<NtsDomWindow>(receiver->window());
+}
+
+NtsDomWindow* nts_dom_Window_get_self(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMWindow>(self);
+  return HandleOf<NtsDomWindow>(receiver->self());
+}
+
+NtsDomDocument* nts_dom_Window_get_document(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return HandleOf<NtsDomDocument>(receiver->document());
+}
+
+const NtsStringView* nts_dom_Window_get_name(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return context.Lend(nts_dom::AsString(receiver->name()), false);
+}
+
+void nts_dom_Window_set_name(NtsDomWindow* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  receiver->setName(NtsText(context, value));
+}
+
+NtsDomLocation* nts_dom_Window_get_location(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMWindow>(self);
+  return HandleOf<NtsDomLocation>(receiver->location());
+}
+
+NtsDomHistory* nts_dom_Window_get_history(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return HandleOf<NtsDomHistory>(receiver->history());
+}
+
+const NtsStringView* nts_dom_Window_get_status(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return context.Lend(nts_dom::AsString(receiver->status()), false);
+}
+
+void nts_dom_Window_set_status(NtsDomWindow* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  receiver->setStatus(NtsText(context, value));
+}
+
+bool nts_dom_Window_get_closed(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMWindow>(self);
+  return static_cast<bool>(receiver->closed());
+}
+
+NtsDomWindow* nts_dom_Window_get_frames(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMWindow>(self);
+  return HandleOf<NtsDomWindow>(receiver->frames());
+}
+
+double nts_dom_Window_get_length(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMWindow>(self);
+  return static_cast<double>(receiver->length());
+}
+
+NtsDomWindow* nts_dom_Window_get_top(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMWindow>(self);
+  return HandleOf<NtsDomWindow>(receiver->top());
+}
+
+NtsDomWindow* nts_dom_Window_get_parent(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMWindow>(self);
+  return HandleOf<NtsDomWindow>(receiver->parent());
+}
+
+NtsDomElement* nts_dom_Window_get_frameElement(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return HandleOf<NtsDomElement>(receiver->frameElement());
+}
+
+const NtsStringView* nts_dom_Window_get_origin(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return context.Lend(nts_dom::AsString(receiver->origin()), false);
+}
+
+NtsDomScreen* nts_dom_Window_get_screen(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return HandleOf<NtsDomScreen>(receiver->screen());
+}
+
+double nts_dom_Window_get_innerWidth(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<double>(receiver->innerWidth());
+}
+
+double nts_dom_Window_get_innerHeight(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<double>(receiver->innerHeight());
+}
+
+double nts_dom_Window_get_scrollX(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<double>(receiver->scrollX());
+}
+
+double nts_dom_Window_get_pageXOffset(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<double>(receiver->pageXOffset());
+}
+
+double nts_dom_Window_get_scrollY(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<double>(receiver->scrollY());
+}
+
+double nts_dom_Window_get_pageYOffset(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<double>(receiver->pageYOffset());
+}
+
+double nts_dom_Window_get_screenX(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<double>(receiver->screenX());
+}
+
+double nts_dom_Window_get_screenY(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<double>(receiver->screenY());
+}
+
+double nts_dom_Window_get_outerWidth(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<double>(receiver->outerWidth());
+}
+
+double nts_dom_Window_get_outerHeight(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<double>(receiver->outerHeight());
+}
+
+double nts_dom_Window_get_devicePixelRatio(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<double>(receiver->devicePixelRatio());
+}
+
+void nts_dom_Window_set_onpagereveal_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpagereveal();
+  receiver->setOnpagereveal(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpagereveal_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpagereveal();
+  receiver->setOnpagereveal(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpagereveal_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpagereveal();
+  receiver->setOnpagereveal(nullptr);
+  context.Replaced(previous);
+}
+
+bool nts_dom_Window_get_offscreenBuffering(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<bool>(receiver->offscreenBuffering());
+}
+
+double nts_dom_Window_get_screenLeft(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<double>(receiver->screenLeft());
+}
+
+double nts_dom_Window_get_screenTop(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<double>(receiver->screenTop());
+}
+
+void nts_dom_Window_set_onsearch_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onsearch();
+  receiver->setOnsearch(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onsearch_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onsearch();
+  receiver->setOnsearch(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onsearch_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onsearch();
+  receiver->setOnsearch(nullptr);
+  context.Replaced(previous);
+}
+
+bool nts_dom_Window_get_testOriginTrialGlobalAttribute(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<bool>(OriginTrialsTestGlobal::testOriginTrialGlobalAttribute(*receiver));
+}
+
+void nts_dom_Window_set_onabort_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onabort();
+  receiver->setOnabort(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onabort_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onabort();
+  receiver->setOnabort(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onabort_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onabort();
+  receiver->setOnabort(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onbeforeinput_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onbeforeinput();
+  receiver->setOnbeforeinput(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onbeforeinput_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onbeforeinput();
+  receiver->setOnbeforeinput(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onbeforeinput_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onbeforeinput();
+  receiver->setOnbeforeinput(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onbeforematch_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onbeforematch();
+  receiver->setOnbeforematch(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onbeforematch_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onbeforematch();
+  receiver->setOnbeforematch(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onbeforematch_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onbeforematch();
+  receiver->setOnbeforematch(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onbeforetoggle_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onbeforetoggle();
+  receiver->setOnbeforetoggle(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onbeforetoggle_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onbeforetoggle();
+  receiver->setOnbeforetoggle(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onbeforetoggle_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onbeforetoggle();
+  receiver->setOnbeforetoggle(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onblur_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onblur();
+  receiver->setOnblur(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onblur_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onblur();
+  receiver->setOnblur(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onblur_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onblur();
+  receiver->setOnblur(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncancel_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncancel();
+  receiver->setOncancel(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncancel_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncancel();
+  receiver->setOncancel(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncancel_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncancel();
+  receiver->setOncancel(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncanplay_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncanplay();
+  receiver->setOncanplay(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncanplay_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncanplay();
+  receiver->setOncanplay(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncanplay_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncanplay();
+  receiver->setOncanplay(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncanplaythrough_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncanplaythrough();
+  receiver->setOncanplaythrough(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncanplaythrough_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncanplaythrough();
+  receiver->setOncanplaythrough(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncanplaythrough_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncanplaythrough();
+  receiver->setOncanplaythrough(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onchange_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onchange();
+  receiver->setOnchange(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onchange_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onchange();
+  receiver->setOnchange(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onchange_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onchange();
+  receiver->setOnchange(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onclick_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onclick();
+  receiver->setOnclick(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onclick_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onclick();
+  receiver->setOnclick(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onclick_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onclick();
+  receiver->setOnclick(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onclose_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onclose();
+  receiver->setOnclose(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onclose_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onclose();
+  receiver->setOnclose(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onclose_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onclose();
+  receiver->setOnclose(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncommand_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncommand();
+  receiver->setOncommand(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncommand_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncommand();
+  receiver->setOncommand(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncommand_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncommand();
+  receiver->setOncommand(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncontentvisibilityautostatechange_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncontentvisibilityautostatechange();
+  receiver->setOncontentvisibilityautostatechange(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncontentvisibilityautostatechange_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncontentvisibilityautostatechange();
+  receiver->setOncontentvisibilityautostatechange(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncontentvisibilityautostatechange_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncontentvisibilityautostatechange();
+  receiver->setOncontentvisibilityautostatechange(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncontextlost_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncontextlost();
+  receiver->setOncontextlost(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncontextlost_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncontextlost();
+  receiver->setOncontextlost(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncontextlost_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncontextlost();
+  receiver->setOncontextlost(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncontextmenu_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncontextmenu();
+  receiver->setOncontextmenu(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncontextmenu_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncontextmenu();
+  receiver->setOncontextmenu(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncontextmenu_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncontextmenu();
+  receiver->setOncontextmenu(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncontextrestored_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncontextrestored();
+  receiver->setOncontextrestored(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncontextrestored_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncontextrestored();
+  receiver->setOncontextrestored(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncontextrestored_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncontextrestored();
+  receiver->setOncontextrestored(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncuechange_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncuechange();
+  receiver->setOncuechange(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncuechange_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncuechange();
+  receiver->setOncuechange(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oncuechange_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oncuechange();
+  receiver->setOncuechange(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondblclick_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondblclick();
+  receiver->setOndblclick(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondblclick_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondblclick();
+  receiver->setOndblclick(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondblclick_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondblclick();
+  receiver->setOndblclick(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondrag_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondrag();
+  receiver->setOndrag(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondrag_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondrag();
+  receiver->setOndrag(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondrag_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondrag();
+  receiver->setOndrag(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondragend_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondragend();
+  receiver->setOndragend(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondragend_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondragend();
+  receiver->setOndragend(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondragend_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondragend();
+  receiver->setOndragend(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondragenter_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondragenter();
+  receiver->setOndragenter(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondragenter_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondragenter();
+  receiver->setOndragenter(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondragenter_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondragenter();
+  receiver->setOndragenter(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondragleave_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondragleave();
+  receiver->setOndragleave(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondragleave_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondragleave();
+  receiver->setOndragleave(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondragleave_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondragleave();
+  receiver->setOndragleave(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondragover_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondragover();
+  receiver->setOndragover(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondragover_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondragover();
+  receiver->setOndragover(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondragover_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondragover();
+  receiver->setOndragover(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondragstart_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondragstart();
+  receiver->setOndragstart(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondragstart_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondragstart();
+  receiver->setOndragstart(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondragstart_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondragstart();
+  receiver->setOndragstart(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondrop_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondrop();
+  receiver->setOndrop(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondrop_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondrop();
+  receiver->setOndrop(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondrop_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondrop();
+  receiver->setOndrop(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondurationchange_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondurationchange();
+  receiver->setOndurationchange(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondurationchange_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondurationchange();
+  receiver->setOndurationchange(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ondurationchange_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ondurationchange();
+  receiver->setOndurationchange(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onemptied_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onemptied();
+  receiver->setOnemptied(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onemptied_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onemptied();
+  receiver->setOnemptied(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onemptied_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onemptied();
+  receiver->setOnemptied(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onended_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onended();
+  receiver->setOnended(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onended_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onended();
+  receiver->setOnended(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onended_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onended();
+  receiver->setOnended(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onfocus_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onfocus();
+  receiver->setOnfocus(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onfocus_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onfocus();
+  receiver->setOnfocus(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onfocus_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onfocus();
+  receiver->setOnfocus(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onformdata_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onformdata();
+  receiver->setOnformdata(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onformdata_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onformdata();
+  receiver->setOnformdata(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onformdata_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onformdata();
+  receiver->setOnformdata(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oninput_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oninput();
+  receiver->setOninput(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oninput_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oninput();
+  receiver->setOninput(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oninput_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oninput();
+  receiver->setOninput(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oninvalid_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oninvalid();
+  receiver->setOninvalid(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oninvalid_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oninvalid();
+  receiver->setOninvalid(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_oninvalid_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->oninvalid();
+  receiver->setOninvalid(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onkeydown_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onkeydown();
+  receiver->setOnkeydown(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onkeydown_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onkeydown();
+  receiver->setOnkeydown(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onkeydown_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onkeydown();
+  receiver->setOnkeydown(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onkeypress_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onkeypress();
+  receiver->setOnkeypress(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onkeypress_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onkeypress();
+  receiver->setOnkeypress(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onkeypress_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onkeypress();
+  receiver->setOnkeypress(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onkeyup_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onkeyup();
+  receiver->setOnkeyup(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onkeyup_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onkeyup();
+  receiver->setOnkeyup(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onkeyup_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onkeyup();
+  receiver->setOnkeyup(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onload_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onload();
+  receiver->setOnload(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onload_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onload();
+  receiver->setOnload(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onload_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onload();
+  receiver->setOnload(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onloadeddata_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onloadeddata();
+  receiver->setOnloadeddata(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onloadeddata_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onloadeddata();
+  receiver->setOnloadeddata(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onloadeddata_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onloadeddata();
+  receiver->setOnloadeddata(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onloadedmetadata_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onloadedmetadata();
+  receiver->setOnloadedmetadata(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onloadedmetadata_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onloadedmetadata();
+  receiver->setOnloadedmetadata(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onloadedmetadata_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onloadedmetadata();
+  receiver->setOnloadedmetadata(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onloadstart_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onloadstart();
+  receiver->setOnloadstart(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onloadstart_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onloadstart();
+  receiver->setOnloadstart(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onloadstart_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onloadstart();
+  receiver->setOnloadstart(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmousedown_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmousedown();
+  receiver->setOnmousedown(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmousedown_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmousedown();
+  receiver->setOnmousedown(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmousedown_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmousedown();
+  receiver->setOnmousedown(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmouseenter_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmouseenter();
+  receiver->setOnmouseenter(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmouseenter_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmouseenter();
+  receiver->setOnmouseenter(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmouseenter_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmouseenter();
+  receiver->setOnmouseenter(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmouseleave_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmouseleave();
+  receiver->setOnmouseleave(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmouseleave_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmouseleave();
+  receiver->setOnmouseleave(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmouseleave_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmouseleave();
+  receiver->setOnmouseleave(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmousemove_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmousemove();
+  receiver->setOnmousemove(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmousemove_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmousemove();
+  receiver->setOnmousemove(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmousemove_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmousemove();
+  receiver->setOnmousemove(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmouseout_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmouseout();
+  receiver->setOnmouseout(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmouseout_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmouseout();
+  receiver->setOnmouseout(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmouseout_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmouseout();
+  receiver->setOnmouseout(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmouseover_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmouseover();
+  receiver->setOnmouseover(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmouseover_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmouseover();
+  receiver->setOnmouseover(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmouseover_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmouseover();
+  receiver->setOnmouseover(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmouseup_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmouseup();
+  receiver->setOnmouseup(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmouseup_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmouseup();
+  receiver->setOnmouseup(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmouseup_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmouseup();
+  receiver->setOnmouseup(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmousewheel_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmousewheel();
+  receiver->setOnmousewheel(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmousewheel_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmousewheel();
+  receiver->setOnmousewheel(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmousewheel_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmousewheel();
+  receiver->setOnmousewheel(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpause_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpause();
+  receiver->setOnpause(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpause_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpause();
+  receiver->setOnpause(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpause_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpause();
+  receiver->setOnpause(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onplay_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onplay();
+  receiver->setOnplay(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onplay_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onplay();
+  receiver->setOnplay(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onplay_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onplay();
+  receiver->setOnplay(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onplaying_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onplaying();
+  receiver->setOnplaying(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onplaying_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onplaying();
+  receiver->setOnplaying(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onplaying_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onplaying();
+  receiver->setOnplaying(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onprogress_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onprogress();
+  receiver->setOnprogress(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onprogress_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onprogress();
+  receiver->setOnprogress(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onprogress_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onprogress();
+  receiver->setOnprogress(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onratechange_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onratechange();
+  receiver->setOnratechange(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onratechange_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onratechange();
+  receiver->setOnratechange(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onratechange_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onratechange();
+  receiver->setOnratechange(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onreset_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onreset();
+  receiver->setOnreset(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onreset_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onreset();
+  receiver->setOnreset(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onreset_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onreset();
+  receiver->setOnreset(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onresize_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onresize();
+  receiver->setOnresize(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onresize_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onresize();
+  receiver->setOnresize(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onresize_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onresize();
+  receiver->setOnresize(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onscroll_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onscroll();
+  receiver->setOnscroll(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onscroll_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onscroll();
+  receiver->setOnscroll(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onscroll_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onscroll();
+  receiver->setOnscroll(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onscrollend_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onscrollend();
+  receiver->setOnscrollend(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onscrollend_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onscrollend();
+  receiver->setOnscrollend(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onscrollend_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onscrollend();
+  receiver->setOnscrollend(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onsecuritypolicyviolation_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onsecuritypolicyviolation();
+  receiver->setOnsecuritypolicyviolation(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onsecuritypolicyviolation_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onsecuritypolicyviolation();
+  receiver->setOnsecuritypolicyviolation(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onsecuritypolicyviolation_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onsecuritypolicyviolation();
+  receiver->setOnsecuritypolicyviolation(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onseeked_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onseeked();
+  receiver->setOnseeked(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onseeked_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onseeked();
+  receiver->setOnseeked(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onseeked_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onseeked();
+  receiver->setOnseeked(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onseeking_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onseeking();
+  receiver->setOnseeking(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onseeking_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onseeking();
+  receiver->setOnseeking(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onseeking_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onseeking();
+  receiver->setOnseeking(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onselect_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onselect();
+  receiver->setOnselect(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onselect_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onselect();
+  receiver->setOnselect(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onselect_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onselect();
+  receiver->setOnselect(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onslotchange_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onslotchange();
+  receiver->setOnslotchange(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onslotchange_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onslotchange();
+  receiver->setOnslotchange(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onslotchange_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onslotchange();
+  receiver->setOnslotchange(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onstalled_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onstalled();
+  receiver->setOnstalled(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onstalled_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onstalled();
+  receiver->setOnstalled(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onstalled_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onstalled();
+  receiver->setOnstalled(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onsubmit_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onsubmit();
+  receiver->setOnsubmit(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onsubmit_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onsubmit();
+  receiver->setOnsubmit(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onsubmit_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onsubmit();
+  receiver->setOnsubmit(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onsuspend_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onsuspend();
+  receiver->setOnsuspend(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onsuspend_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onsuspend();
+  receiver->setOnsuspend(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onsuspend_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onsuspend();
+  receiver->setOnsuspend(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ontimeupdate_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ontimeupdate();
+  receiver->setOntimeupdate(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ontimeupdate_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ontimeupdate();
+  receiver->setOntimeupdate(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ontimeupdate_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ontimeupdate();
+  receiver->setOntimeupdate(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ontoggle_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ontoggle();
+  receiver->setOntoggle(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ontoggle_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ontoggle();
+  receiver->setOntoggle(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ontoggle_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ontoggle();
+  receiver->setOntoggle(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onvolumechange_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onvolumechange();
+  receiver->setOnvolumechange(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onvolumechange_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onvolumechange();
+  receiver->setOnvolumechange(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onvolumechange_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onvolumechange();
+  receiver->setOnvolumechange(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onwaiting_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onwaiting();
+  receiver->setOnwaiting(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onwaiting_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onwaiting();
+  receiver->setOnwaiting(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onwaiting_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onwaiting();
+  receiver->setOnwaiting(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onwebkitanimationend_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onwebkitanimationend();
+  receiver->setOnwebkitanimationend(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onwebkitanimationend_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onwebkitanimationend();
+  receiver->setOnwebkitanimationend(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onwebkitanimationend_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onwebkitanimationend();
+  receiver->setOnwebkitanimationend(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onwebkitanimationiteration_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onwebkitanimationiteration();
+  receiver->setOnwebkitanimationiteration(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onwebkitanimationiteration_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onwebkitanimationiteration();
+  receiver->setOnwebkitanimationiteration(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onwebkitanimationiteration_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onwebkitanimationiteration();
+  receiver->setOnwebkitanimationiteration(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onwebkitanimationstart_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onwebkitanimationstart();
+  receiver->setOnwebkitanimationstart(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onwebkitanimationstart_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onwebkitanimationstart();
+  receiver->setOnwebkitanimationstart(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onwebkitanimationstart_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onwebkitanimationstart();
+  receiver->setOnwebkitanimationstart(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onwebkittransitionend_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onwebkittransitionend();
+  receiver->setOnwebkittransitionend(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onwebkittransitionend_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onwebkittransitionend();
+  receiver->setOnwebkittransitionend(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onwebkittransitionend_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onwebkittransitionend();
+  receiver->setOnwebkittransitionend(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onwheel_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onwheel();
+  receiver->setOnwheel(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onwheel_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onwheel();
+  receiver->setOnwheel(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onwheel_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onwheel();
+  receiver->setOnwheel(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onauxclick_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onauxclick();
+  receiver->setOnauxclick(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onauxclick_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onauxclick();
+  receiver->setOnauxclick(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onauxclick_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onauxclick();
+  receiver->setOnauxclick(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ongotpointercapture_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ongotpointercapture();
+  receiver->setOngotpointercapture(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ongotpointercapture_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ongotpointercapture();
+  receiver->setOngotpointercapture(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ongotpointercapture_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ongotpointercapture();
+  receiver->setOngotpointercapture(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onlostpointercapture_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onlostpointercapture();
+  receiver->setOnlostpointercapture(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onlostpointercapture_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onlostpointercapture();
+  receiver->setOnlostpointercapture(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onlostpointercapture_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onlostpointercapture();
+  receiver->setOnlostpointercapture(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointerdown_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointerdown();
+  receiver->setOnpointerdown(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointerdown_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointerdown();
+  receiver->setOnpointerdown(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointerdown_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointerdown();
+  receiver->setOnpointerdown(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointermove_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointermove();
+  receiver->setOnpointermove(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointermove_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointermove();
+  receiver->setOnpointermove(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointermove_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointermove();
+  receiver->setOnpointermove(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointerrawupdate_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointerrawupdate();
+  receiver->setOnpointerrawupdate(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointerrawupdate_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointerrawupdate();
+  receiver->setOnpointerrawupdate(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointerrawupdate_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointerrawupdate();
+  receiver->setOnpointerrawupdate(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointerup_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointerup();
+  receiver->setOnpointerup(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointerup_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointerup();
+  receiver->setOnpointerup(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointerup_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointerup();
+  receiver->setOnpointerup(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointercancel_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointercancel();
+  receiver->setOnpointercancel(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointercancel_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointercancel();
+  receiver->setOnpointercancel(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointercancel_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointercancel();
+  receiver->setOnpointercancel(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointerover_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointerover();
+  receiver->setOnpointerover(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointerover_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointerover();
+  receiver->setOnpointerover(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointerover_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointerover();
+  receiver->setOnpointerover(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointerout_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointerout();
+  receiver->setOnpointerout(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointerout_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointerout();
+  receiver->setOnpointerout(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointerout_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointerout();
+  receiver->setOnpointerout(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointerenter_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointerenter();
+  receiver->setOnpointerenter(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointerenter_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointerenter();
+  receiver->setOnpointerenter(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointerenter_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointerenter();
+  receiver->setOnpointerenter(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointerleave_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointerleave();
+  receiver->setOnpointerleave(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointerleave_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointerleave();
+  receiver->setOnpointerleave(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpointerleave_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpointerleave();
+  receiver->setOnpointerleave(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onselectstart_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onselectstart();
+  receiver->setOnselectstart(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onselectstart_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onselectstart();
+  receiver->setOnselectstart(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onselectstart_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onselectstart();
+  receiver->setOnselectstart(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onselectionchange_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onselectionchange();
+  receiver->setOnselectionchange(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onselectionchange_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onselectionchange();
+  receiver->setOnselectionchange(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onselectionchange_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onselectionchange();
+  receiver->setOnselectionchange(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onanimationcancel_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onanimationcancel();
+  receiver->setOnanimationcancel(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onanimationcancel_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onanimationcancel();
+  receiver->setOnanimationcancel(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onanimationcancel_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onanimationcancel();
+  receiver->setOnanimationcancel(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onanimationend_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onanimationend();
+  receiver->setOnanimationend(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onanimationend_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onanimationend();
+  receiver->setOnanimationend(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onanimationend_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onanimationend();
+  receiver->setOnanimationend(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onanimationiteration_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onanimationiteration();
+  receiver->setOnanimationiteration(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onanimationiteration_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onanimationiteration();
+  receiver->setOnanimationiteration(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onanimationiteration_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onanimationiteration();
+  receiver->setOnanimationiteration(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onanimationstart_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onanimationstart();
+  receiver->setOnanimationstart(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onanimationstart_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onanimationstart();
+  receiver->setOnanimationstart(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onanimationstart_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onanimationstart();
+  receiver->setOnanimationstart(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ontransitionrun_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ontransitionrun();
+  receiver->setOntransitionrun(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ontransitionrun_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ontransitionrun();
+  receiver->setOntransitionrun(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ontransitionrun_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ontransitionrun();
+  receiver->setOntransitionrun(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ontransitionstart_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ontransitionstart();
+  receiver->setOntransitionstart(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ontransitionstart_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ontransitionstart();
+  receiver->setOntransitionstart(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ontransitionstart_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ontransitionstart();
+  receiver->setOntransitionstart(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ontransitionend_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ontransitionend();
+  receiver->setOntransitionend(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ontransitionend_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ontransitionend();
+  receiver->setOntransitionend(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ontransitionend_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ontransitionend();
+  receiver->setOntransitionend(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ontransitioncancel_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ontransitioncancel();
+  receiver->setOntransitioncancel(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ontransitioncancel_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ontransitioncancel();
+  receiver->setOntransitioncancel(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ontransitioncancel_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ontransitioncancel();
+  receiver->setOntransitioncancel(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onafterprint_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onafterprint();
+  receiver->setOnafterprint(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onafterprint_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onafterprint();
+  receiver->setOnafterprint(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onafterprint_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onafterprint();
+  receiver->setOnafterprint(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onbeforeprint_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onbeforeprint();
+  receiver->setOnbeforeprint(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onbeforeprint_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onbeforeprint();
+  receiver->setOnbeforeprint(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onbeforeprint_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onbeforeprint();
+  receiver->setOnbeforeprint(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onhashchange_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onhashchange();
+  receiver->setOnhashchange(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onhashchange_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onhashchange();
+  receiver->setOnhashchange(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onhashchange_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onhashchange();
+  receiver->setOnhashchange(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onlanguagechange_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onlanguagechange();
+  receiver->setOnlanguagechange(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onlanguagechange_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onlanguagechange();
+  receiver->setOnlanguagechange(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onlanguagechange_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onlanguagechange();
+  receiver->setOnlanguagechange(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmessage_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmessage();
+  receiver->setOnmessage(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmessage_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmessage();
+  receiver->setOnmessage(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmessage_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmessage();
+  receiver->setOnmessage(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmessageerror_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmessageerror();
+  receiver->setOnmessageerror(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmessageerror_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmessageerror();
+  receiver->setOnmessageerror(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onmessageerror_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onmessageerror();
+  receiver->setOnmessageerror(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onoffline_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onoffline();
+  receiver->setOnoffline(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onoffline_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onoffline();
+  receiver->setOnoffline(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onoffline_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onoffline();
+  receiver->setOnoffline(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ononline_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ononline();
+  receiver->setOnonline(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ononline_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ononline();
+  receiver->setOnonline(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_ononline_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->ononline();
+  receiver->setOnonline(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpagehide_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpagehide();
+  receiver->setOnpagehide(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpagehide_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpagehide();
+  receiver->setOnpagehide(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpagehide_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpagehide();
+  receiver->setOnpagehide(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpageshow_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpageshow();
+  receiver->setOnpageshow(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpageshow_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpageshow();
+  receiver->setOnpageshow(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpageshow_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpageshow();
+  receiver->setOnpageshow(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpopstate_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpopstate();
+  receiver->setOnpopstate(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpopstate_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpopstate();
+  receiver->setOnpopstate(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onpopstate_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onpopstate();
+  receiver->setOnpopstate(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onrejectionhandled_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onrejectionhandled();
+  receiver->setOnrejectionhandled(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onrejectionhandled_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onrejectionhandled();
+  receiver->setOnrejectionhandled(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onrejectionhandled_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onrejectionhandled();
+  receiver->setOnrejectionhandled(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onstorage_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onstorage();
+  receiver->setOnstorage(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onstorage_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onstorage();
+  receiver->setOnstorage(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onstorage_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onstorage();
+  receiver->setOnstorage(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onunhandledrejection_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onunhandledrejection();
+  receiver->setOnunhandledrejection(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onunhandledrejection_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onunhandledrejection();
+  receiver->setOnunhandledrejection(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onunhandledrejection_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onunhandledrejection();
+  receiver->setOnunhandledrejection(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onunload_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onunload();
+  receiver->setOnunload(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onunload_boolean(NtsDomWindow* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onunload();
+  receiver->setOnunload(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Window_set_onunload_null(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onunload();
+  receiver->setOnunload(nullptr);
+  context.Replaced(previous);
+}
+
+bool nts_dom_Window_get_isSecureContext(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return static_cast<bool>(receiver->isSecureContextForBindings(script_state));
+}
+
+bool nts_dom_Window_get_crossOriginIsolated(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<bool>(receiver->crossOriginIsolated());
+}
+
+NtsDomPerformance* nts_dom_Window_get_performance(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return HandleOf<NtsDomPerformance>(GlobalPerformance::performance(*receiver));
+}
+
+void nts_dom_Window_alert_0(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->alert(script_state);
+}
+
+void nts_dom_Window_alert_1(NtsDomWindow* self, const NtsBorrowedString* message) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->alert(script_state, NtsText(context, message));
+}
+
+const NtsStringView* nts_dom_Window_atob(NtsDomWindow* self, const NtsBorrowedString* atob, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return context.Lend(nts_dom::AsString(receiver->atob(NtsText(context, atob), exception_state)), false);
+}
+
+void nts_dom_Window_blur(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMWindow>(self);
+  receiver->blur();
+}
+
+const NtsStringView* nts_dom_Window_btoa(NtsDomWindow* self, const NtsBorrowedString* btoa, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return context.Lend(nts_dom::AsString(receiver->btoa(NtsText(context, btoa), exception_state)), false);
+}
+
+void nts_dom_Window_cancelAnimationFrame(NtsDomWindow* self, double handle) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::DummyExceptionStateForTesting conversion;
+  const auto handle_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), handle), conversion);
+  receiver->cancelAnimationFrame(handle_converted);
+}
+
+void nts_dom_Window_cancelIdleCallback(NtsDomWindow* self, double handle) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::DummyExceptionStateForTesting conversion;
+  const auto handle_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), handle), conversion);
+  WindowIdleTasks::cancelIdleCallback(*receiver, handle_converted);
+}
+
+void nts_dom_Window_captureEvents(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  receiver->captureEvents();
+}
+
+void nts_dom_Window_clearInterval_1(NtsDomWindow* self, double handle) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::DummyExceptionStateForTesting conversion;
+  const auto handle_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), handle), conversion);
+  DOMTimer::clearInterval(*receiver, handle_converted);
+}
+
+void nts_dom_Window_clearInterval_0(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  DOMTimer::clearInterval(*receiver, 0);
+}
+
+void nts_dom_Window_clearTimeout_1(NtsDomWindow* self, double handle) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::DummyExceptionStateForTesting conversion;
+  const auto handle_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), handle), conversion);
+  DOMTimer::clearTimeout(*receiver, handle_converted);
+}
+
+void nts_dom_Window_clearTimeout_0(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  DOMTimer::clearTimeout(*receiver, 0);
+}
+
+void nts_dom_Window_close(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::DOMWindow>(self);
+  receiver->close(context.v8_isolate.get());
+}
+
+bool nts_dom_Window_confirm_1(NtsDomWindow* self, const NtsBorrowedString* message) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return static_cast<bool>(receiver->confirm(script_state, NtsText(context, message)));
+}
+
+bool nts_dom_Window_confirm_0(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return static_cast<bool>(receiver->confirm(script_state, blink::AtomicString("")));
+}
+
+bool nts_dom_Window_find_7(NtsDomWindow* self, const NtsBorrowedString* string, bool caseSensitive, bool backwards, bool wrap, bool wholeWord, bool searchInFrames, bool showDialog) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<bool>(receiver->find(NtsText(context, string), caseSensitive, backwards, wrap, wholeWord, searchInFrames, showDialog));
+}
+
+bool nts_dom_Window_find_6(NtsDomWindow* self, const NtsBorrowedString* string, bool caseSensitive, bool backwards, bool wrap, bool wholeWord, bool searchInFrames) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<bool>(receiver->find(NtsText(context, string), caseSensitive, backwards, wrap, wholeWord, searchInFrames, false));
+}
+
+bool nts_dom_Window_find_5(NtsDomWindow* self, const NtsBorrowedString* string, bool caseSensitive, bool backwards, bool wrap, bool wholeWord) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<bool>(receiver->find(NtsText(context, string), caseSensitive, backwards, wrap, wholeWord, false, false));
+}
+
+bool nts_dom_Window_find_4(NtsDomWindow* self, const NtsBorrowedString* string, bool caseSensitive, bool backwards, bool wrap) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<bool>(receiver->find(NtsText(context, string), caseSensitive, backwards, wrap, false, false, false));
+}
+
+bool nts_dom_Window_find_3(NtsDomWindow* self, const NtsBorrowedString* string, bool caseSensitive, bool backwards) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<bool>(receiver->find(NtsText(context, string), caseSensitive, backwards, false, false, false, false));
+}
+
+bool nts_dom_Window_find_2(NtsDomWindow* self, const NtsBorrowedString* string, bool caseSensitive) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<bool>(receiver->find(NtsText(context, string), caseSensitive, false, false, false, false, false));
+}
+
+bool nts_dom_Window_find_1(NtsDomWindow* self, const NtsBorrowedString* string) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<bool>(receiver->find(NtsText(context, string), false, false, false, false, false, false));
+}
+
+bool nts_dom_Window_find_0(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return static_cast<bool>(receiver->find(blink::AtomicString(""), false, false, false, false, false, false));
+}
+
+void nts_dom_Window_focus(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::DOMWindow>(self);
+  receiver->focus(context.v8_isolate.get());
+}
+
+NtsDomCSSStyleDeclaration* nts_dom_Window_getComputedStyle_2(NtsDomWindow* self, NtsDomElement* elt, const NtsBorrowedString* pseudoElt) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return HandleOf<NtsDomCSSStyleDeclaration>(receiver->getComputedStyle(ObjectOf<blink::Element>(elt), NtsText(context, pseudoElt)));
+}
+
+NtsDomCSSStyleDeclaration* nts_dom_Window_getComputedStyle_1(NtsDomWindow* self, NtsDomElement* elt) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return HandleOf<NtsDomCSSStyleDeclaration>(receiver->getComputedStyle(ObjectOf<blink::Element>(elt)));
+}
+
+NtsDomMediaQueryList* nts_dom_Window_matchMedia(NtsDomWindow* self, const NtsBorrowedString* query) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return HandleOf<NtsDomMediaQueryList>(receiver->matchMedia(NtsText(context, query)));
+}
+
+void nts_dom_Window_moveBy(NtsDomWindow* self, double x, double y) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::DummyExceptionStateForTesting conversion;
+  const auto x_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), x), conversion);
+  const auto y_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), y), conversion);
+  receiver->moveBy(x_converted, y_converted);
+}
+
+void nts_dom_Window_moveTo(NtsDomWindow* self, double x, double y) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::DummyExceptionStateForTesting conversion;
+  const auto x_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), x), conversion);
+  const auto y_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), y), conversion);
+  receiver->moveTo(x_converted, y_converted);
+}
+
+NtsDomWindow* nts_dom_Window_open_3(NtsDomWindow* self, const NtsBorrowedString* url, const NtsBorrowedString* target, const NtsBorrowedString* features, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return HandleOf<NtsDomWindow>(receiver->open(context.v8_isolate.get(), NtsText(context, url, /*scalar_values=*/true), NtsText(context, target), NtsText(context, features), exception_state));
+}
+
+NtsDomWindow* nts_dom_Window_open_2(NtsDomWindow* self, const NtsBorrowedString* url, const NtsBorrowedString* target, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return HandleOf<NtsDomWindow>(receiver->open(context.v8_isolate.get(), NtsText(context, url, /*scalar_values=*/true), NtsText(context, target), blink::AtomicString(""), exception_state));
+}
+
+NtsDomWindow* nts_dom_Window_open_1(NtsDomWindow* self, const NtsBorrowedString* url, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return HandleOf<NtsDomWindow>(receiver->open(context.v8_isolate.get(), NtsText(context, url, /*scalar_values=*/true), blink::AtomicString("_blank"), blink::AtomicString(""), exception_state));
+}
+
+NtsDomWindow* nts_dom_Window_open_0(NtsDomWindow* self, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return HandleOf<NtsDomWindow>(receiver->open(context.v8_isolate.get(), blink::AtomicString(""), blink::AtomicString("_blank"), blink::AtomicString(""), exception_state));
+}
+
+void nts_dom_Window_print(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->print(script_state);
+}
+
+const NtsStringView* nts_dom_Window_prompt_2(NtsDomWindow* self, const NtsBorrowedString* message, const NtsBorrowedString* defaultValue) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return context.Lend(nts_dom::AsString(receiver->prompt(script_state, NtsText(context, message), NtsText(context, defaultValue))), true);
+}
+
+const NtsStringView* nts_dom_Window_prompt_1(NtsDomWindow* self, const NtsBorrowedString* message) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return context.Lend(nts_dom::AsString(receiver->prompt(script_state, NtsText(context, message), blink::AtomicString(""))), true);
+}
+
+const NtsStringView* nts_dom_Window_prompt_0(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return context.Lend(nts_dom::AsString(receiver->prompt(script_state, blink::AtomicString(""), blink::AtomicString(""))), true);
+}
+
+void nts_dom_Window_releaseEvents(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  receiver->releaseEvents();
+}
+
+void nts_dom_Window_resizeBy(NtsDomWindow* self, double x, double y, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  const auto x_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), x), exception_state);
+  const auto y_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), y), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->resizeBy(x_converted, y_converted, exception_state);
+}
+
+void nts_dom_Window_resizeTo(NtsDomWindow* self, double x, double y, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  const auto x_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), x), exception_state);
+  const auto y_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), y), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->resizeTo(x_converted, y_converted, exception_state);
+}
+
+void nts_dom_Window_stop(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  receiver->stop();
+}
+
+void nts_dom_Window_webkitCancelAnimationFrame(NtsDomWindow* self, double id) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::DummyExceptionStateForTesting conversion;
+  const auto id_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), id), conversion);
+  receiver->cancelAnimationFrame(id_converted);
+}
+
+NtsDomPerformance* nts_dom_as_Performance(NtsDomEventTarget* target) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomPerformance>(nts_dom_is(target, NTS_DOM_Performance) ? WrappableOf(target) : nullptr);
+}
+
+double nts_dom_Performance_get_timeOrigin(NtsDomPerformance* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Performance>(self);
+  return static_cast<double>(receiver->timeOrigin());
+}
+
+void nts_dom_Performance_set_onresourcetimingbufferfull_void(NtsDomPerformance* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Performance>(self);
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onresourcetimingbufferfull();
+  receiver->setOnresourcetimingbufferfull(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Performance_set_onresourcetimingbufferfull_boolean(NtsDomPerformance* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Performance>(self);
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onresourcetimingbufferfull();
+  receiver->setOnresourcetimingbufferfull(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Performance_set_onresourcetimingbufferfull_null(NtsDomPerformance* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Performance>(self);
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onresourcetimingbufferfull();
+  receiver->setOnresourcetimingbufferfull(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_Performance_clearMarks_1(NtsDomPerformance* self, const NtsBorrowedString* markName) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Performance>(self);
+  receiver->clearMarks(NtsText(context, markName));
+}
+
+void nts_dom_Performance_clearMarks_0(NtsDomPerformance* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Performance>(self);
+  receiver->clearMarks();
+}
+
+void nts_dom_Performance_clearMeasures_1(NtsDomPerformance* self, const NtsBorrowedString* measureName) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Performance>(self);
+  receiver->clearMeasures(NtsText(context, measureName));
+}
+
+void nts_dom_Performance_clearMeasures_0(NtsDomPerformance* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Performance>(self);
+  receiver->clearMeasures();
+}
+
+void nts_dom_Performance_clearResourceTimings(NtsDomPerformance* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Performance>(self);
+  receiver->clearResourceTimings();
+}
+
+double nts_dom_Performance_now(NtsDomPerformance* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Performance>(self);
+  return static_cast<double>(receiver->now());
+}
+
+void nts_dom_Performance_setResourceTimingBufferSize(NtsDomPerformance* self, double maxSize) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Performance>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  const auto maxSize_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), maxSize), conversion);
+  receiver->setResourceTimingBufferSize(maxSize_converted);
+}
+
+NtsDomMediaQueryList* nts_dom_as_MediaQueryList(NtsDomEventTarget* target) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomMediaQueryList>(nts_dom_is(target, NTS_DOM_MediaQueryList) ? WrappableOf(target) : nullptr);
+}
+
+const NtsStringView* nts_dom_MediaQueryList_get_media(NtsDomMediaQueryList* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::MediaQueryList>(self);
+  return context.Lend(nts_dom::AsString(receiver->media()), false);
+}
+
+bool nts_dom_MediaQueryList_get_matches(NtsDomMediaQueryList* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::MediaQueryList>(self);
+  return static_cast<bool>(receiver->matches());
+}
+
+void nts_dom_MediaQueryList_set_onchange_void(NtsDomMediaQueryList* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::MediaQueryList>(self);
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onchange();
+  receiver->setOnchange(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_MediaQueryList_set_onchange_boolean(NtsDomMediaQueryList* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::MediaQueryList>(self);
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onchange();
+  receiver->setOnchange(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_MediaQueryList_set_onchange_null(NtsDomMediaQueryList* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::MediaQueryList>(self);
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onchange();
+  receiver->setOnchange(nullptr);
+  context.Replaced(previous);
+}
+
+const NtsStringView* nts_dom_Location_get_href(NtsDomLocation* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Location>(self);
+  return context.Lend(nts_dom::AsString(receiver->href()), false);
+}
+
+void nts_dom_Location_set_href(NtsDomLocation* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Location>(self);
+  receiver->setHref(context.v8_isolate.get(), NtsText(context, value, /*scalar_values=*/true), exception_state);
+}
+
+const NtsStringView* nts_dom_Location_get_origin(NtsDomLocation* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Location>(self);
+  return context.Lend(nts_dom::AsString(receiver->origin()), false);
+}
+
+const NtsStringView* nts_dom_Location_get_protocol(NtsDomLocation* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Location>(self);
+  return context.Lend(nts_dom::AsString(receiver->protocol()), false);
+}
+
+void nts_dom_Location_set_protocol(NtsDomLocation* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Location>(self);
+  receiver->setProtocol(context.v8_isolate.get(), NtsText(context, value, /*scalar_values=*/true), exception_state);
+}
+
+const NtsStringView* nts_dom_Location_get_host(NtsDomLocation* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Location>(self);
+  return context.Lend(nts_dom::AsString(receiver->host()), false);
+}
+
+void nts_dom_Location_set_host(NtsDomLocation* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Location>(self);
+  receiver->setHost(context.v8_isolate.get(), NtsText(context, value, /*scalar_values=*/true), exception_state);
+}
+
+const NtsStringView* nts_dom_Location_get_hostname(NtsDomLocation* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Location>(self);
+  return context.Lend(nts_dom::AsString(receiver->hostname()), false);
+}
+
+void nts_dom_Location_set_hostname(NtsDomLocation* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Location>(self);
+  receiver->setHostname(context.v8_isolate.get(), NtsText(context, value, /*scalar_values=*/true), exception_state);
+}
+
+const NtsStringView* nts_dom_Location_get_port(NtsDomLocation* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Location>(self);
+  return context.Lend(nts_dom::AsString(receiver->port()), false);
+}
+
+void nts_dom_Location_set_port(NtsDomLocation* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Location>(self);
+  receiver->setPort(context.v8_isolate.get(), NtsText(context, value, /*scalar_values=*/true), exception_state);
+}
+
+const NtsStringView* nts_dom_Location_get_pathname(NtsDomLocation* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Location>(self);
+  return context.Lend(nts_dom::AsString(receiver->pathname()), false);
+}
+
+void nts_dom_Location_set_pathname(NtsDomLocation* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Location>(self);
+  receiver->setPathname(context.v8_isolate.get(), NtsText(context, value, /*scalar_values=*/true), exception_state);
+}
+
+const NtsStringView* nts_dom_Location_get_search(NtsDomLocation* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Location>(self);
+  return context.Lend(nts_dom::AsString(receiver->search()), false);
+}
+
+void nts_dom_Location_set_search(NtsDomLocation* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Location>(self);
+  receiver->setSearch(context.v8_isolate.get(), NtsText(context, value, /*scalar_values=*/true), exception_state);
+}
+
+const NtsStringView* nts_dom_Location_get_hash(NtsDomLocation* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Location>(self);
+  return context.Lend(nts_dom::AsString(receiver->hash()), false);
+}
+
+void nts_dom_Location_set_hash(NtsDomLocation* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Location>(self);
+  receiver->setHash(context.v8_isolate.get(), NtsText(context, value, /*scalar_values=*/true), exception_state);
+}
+
+void nts_dom_Location_assign(NtsDomLocation* self, const NtsBorrowedString* url, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Location>(self);
+  receiver->assign(context.v8_isolate.get(), NtsText(context, url, /*scalar_values=*/true), exception_state);
+}
+
+void nts_dom_Location_reload(NtsDomLocation* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Location>(self);
+  receiver->reload();
+}
+
+void nts_dom_Location_replace(NtsDomLocation* self, const NtsBorrowedString* url, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Location>(self);
+  receiver->replace(context.v8_isolate.get(), NtsText(context, url, /*scalar_values=*/true), exception_state);
+}
+
+const NtsStringView* nts_dom_Location_toString(NtsDomLocation* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Location>(self);
+  return context.Lend(nts_dom::AsString(receiver->toString()), false);
+}
+
+double nts_dom_History_get_length(NtsDomHistory* self, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::History>(self);
+  return static_cast<double>(receiver->length(exception_state));
+}
+
+void nts_dom_History_back(NtsDomHistory* self, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::History>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->back(script_state, exception_state);
+}
+
+void nts_dom_History_forward(NtsDomHistory* self, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::History>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->forward(script_state, exception_state);
+}
+
+void nts_dom_History_go_1(NtsDomHistory* self, double delta, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::History>(self);
+  const auto delta_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), delta), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->go(script_state, delta_converted, exception_state);
+}
+
+void nts_dom_History_go_0(NtsDomHistory* self, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::History>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->go(script_state, 0, exception_state);
+}
+
+NtsDomScreen* nts_dom_as_Screen(NtsDomEventTarget* target) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomScreen>(nts_dom_is(target, NTS_DOM_Screen) ? WrappableOf(target) : nullptr);
+}
+
+double nts_dom_Screen_get_availWidth(NtsDomScreen* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Screen>(self);
+  return static_cast<double>(receiver->availWidth());
+}
+
+double nts_dom_Screen_get_availHeight(NtsDomScreen* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Screen>(self);
+  return static_cast<double>(receiver->availHeight());
+}
+
+double nts_dom_Screen_get_width(NtsDomScreen* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Screen>(self);
+  return static_cast<double>(receiver->width());
+}
+
+double nts_dom_Screen_get_height(NtsDomScreen* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Screen>(self);
+  return static_cast<double>(receiver->height());
+}
+
+double nts_dom_Screen_get_colorDepth(NtsDomScreen* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Screen>(self);
+  return static_cast<double>(receiver->colorDepth());
+}
+
+double nts_dom_Screen_get_pixelDepth(NtsDomScreen* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Screen>(self);
+  return static_cast<double>(receiver->pixelDepth());
+}
+
+double nts_dom_Screen_get_availLeft(NtsDomScreen* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Screen>(self);
+  return static_cast<double>(receiver->availLeft());
+}
+
+double nts_dom_Screen_get_availTop(NtsDomScreen* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Screen>(self);
+  return static_cast<double>(receiver->availTop());
+}
+
+void nts_dom_Screen_set_onchange_void(NtsDomScreen* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Screen>(self);
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onchange();
+  receiver->setOnchange(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Screen_set_onchange_boolean(NtsDomScreen* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Screen>(self);
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onchange();
+  receiver->setOnchange(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Screen_set_onchange_null(NtsDomScreen* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Screen>(self);
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onchange();
+  receiver->setOnchange(nullptr);
+  context.Replaced(previous);
+}
+
+bool nts_dom_Screen_get_isExtended(NtsDomScreen* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Screen>(self);
+  return static_cast<bool>(receiver->isExtended());
+}
+
+NtsDomAbortController* nts_dom_new_AbortController() {
+  NtsDomContext& context = nts_dom::Current();
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomAbortController>(AbortController::Create(script_state));
+}
+
+NtsDomAbortSignal* nts_dom_AbortController_get_signal(NtsDomAbortController* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::AbortController>(self);
+  return HandleOf<NtsDomAbortSignal>(receiver->signal());
+}
+
+void nts_dom_AbortController_abort(NtsDomAbortController* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::AbortController>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->abort(script_state);
+}
+
+NtsDomAbortSignal* nts_dom_as_AbortSignal(NtsDomEventTarget* target) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomAbortSignal>(nts_dom_is(target, NTS_DOM_AbortSignal) ? WrappableOf(target) : nullptr);
+}
+
+bool nts_dom_AbortSignal_get_aborted(NtsDomAbortSignal* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::AbortSignal>(self);
+  return static_cast<bool>(receiver->aborted());
+}
+
+void nts_dom_AbortSignal_set_onabort_void(NtsDomAbortSignal* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::AbortSignal>(self);
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onabort();
+  receiver->setOnabort(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_AbortSignal_set_onabort_boolean(NtsDomAbortSignal* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::AbortSignal>(self);
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onabort();
+  receiver->setOnabort(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_AbortSignal_set_onabort_null(NtsDomAbortSignal* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::AbortSignal>(self);
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onabort();
+  receiver->setOnabort(nullptr);
+  context.Replaced(previous);
+}
+
+void nts_dom_AbortSignal_throwIfAborted(NtsDomAbortSignal* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::AbortSignal>(self);
+  receiver->throwIfAborted(context.v8_isolate.get());
+}
+
+NtsDomURL* nts_dom_new_URL_2(const NtsBorrowedString* url, const NtsBorrowedString* base, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  return HandleOf<NtsDomURL>(URL::Create(NtsText(context, url, /*scalar_values=*/true), NtsText(context, base, /*scalar_values=*/true), exception_state));
+}
+
+NtsDomURL* nts_dom_new_URL_1(const NtsBorrowedString* url, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  return HandleOf<NtsDomURL>(URL::Create(NtsText(context, url, /*scalar_values=*/true), exception_state));
+}
+
+const NtsStringView* nts_dom_URL_get_origin(NtsDomURL* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URL>(self);
+  return context.Lend(nts_dom::AsString(receiver->origin()), false);
+}
+
+const NtsStringView* nts_dom_URL_get_protocol(NtsDomURL* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URL>(self);
+  return context.Lend(nts_dom::AsString(receiver->protocol()), false);
+}
+
+void nts_dom_URL_set_protocol(NtsDomURL* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URL>(self);
+  receiver->setProtocol(NtsText(context, value, /*scalar_values=*/true));
+}
+
+const NtsStringView* nts_dom_URL_get_username(NtsDomURL* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URL>(self);
+  return context.Lend(nts_dom::AsString(receiver->username()), false);
+}
+
+void nts_dom_URL_set_username(NtsDomURL* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URL>(self);
+  receiver->setUsername(NtsText(context, value, /*scalar_values=*/true));
+}
+
+const NtsStringView* nts_dom_URL_get_password(NtsDomURL* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URL>(self);
+  return context.Lend(nts_dom::AsString(receiver->password()), false);
+}
+
+void nts_dom_URL_set_password(NtsDomURL* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URL>(self);
+  receiver->setPassword(NtsText(context, value, /*scalar_values=*/true));
+}
+
+const NtsStringView* nts_dom_URL_get_host(NtsDomURL* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URL>(self);
+  return context.Lend(nts_dom::AsString(receiver->host()), false);
+}
+
+void nts_dom_URL_set_host(NtsDomURL* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URL>(self);
+  receiver->setHost(NtsText(context, value, /*scalar_values=*/true));
+}
+
+const NtsStringView* nts_dom_URL_get_hostname(NtsDomURL* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URL>(self);
+  return context.Lend(nts_dom::AsString(receiver->hostname()), false);
+}
+
+void nts_dom_URL_set_hostname(NtsDomURL* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URL>(self);
+  receiver->setHostname(NtsText(context, value, /*scalar_values=*/true));
+}
+
+const NtsStringView* nts_dom_URL_get_port(NtsDomURL* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URL>(self);
+  return context.Lend(nts_dom::AsString(receiver->port()), false);
+}
+
+void nts_dom_URL_set_port(NtsDomURL* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URL>(self);
+  receiver->setPort(NtsText(context, value, /*scalar_values=*/true));
+}
+
+const NtsStringView* nts_dom_URL_get_pathname(NtsDomURL* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URL>(self);
+  return context.Lend(nts_dom::AsString(receiver->pathname()), false);
+}
+
+void nts_dom_URL_set_pathname(NtsDomURL* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URL>(self);
+  receiver->setPathname(NtsText(context, value, /*scalar_values=*/true));
+}
+
+const NtsStringView* nts_dom_URL_get_search(NtsDomURL* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URL>(self);
+  return context.Lend(nts_dom::AsString(receiver->search()), false);
+}
+
+void nts_dom_URL_set_search(NtsDomURL* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URL>(self);
+  receiver->setSearch(NtsText(context, value, /*scalar_values=*/true));
+}
+
+NtsDomURLSearchParams* nts_dom_URL_get_searchParams(NtsDomURL* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::URL>(self);
+  return HandleOf<NtsDomURLSearchParams>(receiver->searchParams());
+}
+
+const NtsStringView* nts_dom_URL_get_hash(NtsDomURL* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URL>(self);
+  return context.Lend(nts_dom::AsString(receiver->hash()), false);
+}
+
+void nts_dom_URL_set_hash(NtsDomURL* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URL>(self);
+  receiver->setHash(NtsText(context, value, /*scalar_values=*/true));
+}
+
+const NtsStringView* nts_dom_URL_get_href(NtsDomURL* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URL>(self);
+  return context.Lend(nts_dom::AsString(receiver->href()), false);
+}
+
+void nts_dom_URL_set_href(NtsDomURL* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::URL>(self);
+  receiver->setHref(NtsText(context, value, /*scalar_values=*/true), exception_state);
+}
+
+const NtsStringView* nts_dom_URL_toJSON(NtsDomURL* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URL>(self);
+  return context.Lend(nts_dom::AsString(receiver->toJSON()), false);
+}
+
+NtsDomURLSearchParams* nts_dom_new_URLSearchParams(NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  return HandleOf<NtsDomURLSearchParams>(URLSearchParams::Create(blink::MakeGarbageCollected<blink::V8UnionUSVStringOrUSVStringSequenceSequenceOrUSVStringUSVStringRecord>(blink::String("")), exception_state));
+}
+
+double nts_dom_URLSearchParams_get_size(NtsDomURLSearchParams* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::URLSearchParams>(self);
+  return static_cast<double>(receiver->size());
+}
+
+void nts_dom_URLSearchParams_append(NtsDomURLSearchParams* self, const NtsBorrowedString* name, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URLSearchParams>(self);
+  receiver->append(NtsText(context, name, /*scalar_values=*/true), NtsText(context, value, /*scalar_values=*/true));
+}
+
+void nts_dom_URLSearchParams_delete_2(NtsDomURLSearchParams* self, const NtsBorrowedString* name, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URLSearchParams>(self);
+  receiver->deleteAllWithNameOrTuple(context.document->GetExecutionContext(), NtsText(context, name, /*scalar_values=*/true), NtsText(context, value, /*scalar_values=*/true));
+}
+
+void nts_dom_URLSearchParams_delete_1(NtsDomURLSearchParams* self, const NtsBorrowedString* name) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URLSearchParams>(self);
+  receiver->deleteAllWithNameOrTuple(context.document->GetExecutionContext(), NtsText(context, name, /*scalar_values=*/true));
+}
+
+const NtsStringView* nts_dom_URLSearchParams_get(NtsDomURLSearchParams* self, const NtsBorrowedString* name) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URLSearchParams>(self);
+  return context.Lend(nts_dom::AsString(receiver->get(NtsText(context, name, /*scalar_values=*/true))), true);
+}
+
+bool nts_dom_URLSearchParams_has_2(NtsDomURLSearchParams* self, const NtsBorrowedString* name, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URLSearchParams>(self);
+  return static_cast<bool>(receiver->has(context.document->GetExecutionContext(), NtsText(context, name, /*scalar_values=*/true), NtsText(context, value, /*scalar_values=*/true)));
+}
+
+bool nts_dom_URLSearchParams_has_1(NtsDomURLSearchParams* self, const NtsBorrowedString* name) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URLSearchParams>(self);
+  return static_cast<bool>(receiver->has(context.document->GetExecutionContext(), NtsText(context, name, /*scalar_values=*/true)));
+}
+
+void nts_dom_URLSearchParams_set(NtsDomURLSearchParams* self, const NtsBorrowedString* name, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URLSearchParams>(self);
+  receiver->set(NtsText(context, name, /*scalar_values=*/true), NtsText(context, value, /*scalar_values=*/true));
+}
+
+void nts_dom_URLSearchParams_sort(NtsDomURLSearchParams* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::URLSearchParams>(self);
+  receiver->sort();
 }
 }  // extern "C"
 }  // namespace blink

@@ -197,6 +197,14 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
   void RunTimer(nts_dom::NtsTimer *timer);
   // Gives a closure back where the program's environment is entered.
   void GiveBack(NtsDomDestroy destroy, void *closure);
+  // The document's main-world script state: what a member Blink's IDL marks
+  // [CallWith=ScriptState] is given, the one page script's binding passes.
+  // The generated call enters it for that call only (dom_idl.cc).
+  blink::ScriptState *MainWorld() const {
+    auto *script = blink::ToScriptStateForMainWorld(document->GetFrame());
+    CHECK(script && script->ContextIsValid());
+    return script;
+  }
   // A job queued by native code, run as a microtask or at the end of the
   // checkpoint; idle work, between frames. Each revoked with the document.
   void Enqueue(void (*run)(void *), void (*drop)(void *), void *state,

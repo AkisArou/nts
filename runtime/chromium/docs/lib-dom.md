@@ -192,6 +192,8 @@ generated, and checked against page script by the differential vectors.
 | `el.onclick = f` | `_set_onclick_void(f)`; `_set_onclick_boolean(f)`, whose false cancels | the closure's static result type |
 | `el.onclick = null` | `_set_onclick_null()` | a null write |
 | `style.backgroundColor` | the property `backgroundColor`, on CSSStyleDeclaration | a read or write |
+| `new URL(url, base)` | `newURL(url, base)`, one per constructor overload and arity, calling Blink's `URL::Create` | `new` on a bound interface |
+| `window` (the global) | `window()` | a read of the global |
 | `for (const n of nodeList)` | no binding: a loop over `item(i)` while `i < length`, re-reading `length` each step, as `%Array.prototype.values%` does | lowering of a bound indexed collection |
 | `nodeList.forEach(f)` (and `classList.forEach`) | no binding: `length` read once, then `f(item(i), i, list)` for each `i` whose item is still there, as `%Array.prototype.forEach%` does; the closure is called inline and never crosses C | lowering of a value-iterable's `forEach` |
 

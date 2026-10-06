@@ -41,6 +41,12 @@ declare module "nts:dom" {
   /** The document the running code is part of. */
   /** @ntsSymbol nts_dom_document */
   export function document(): Document;
+  /**
+   * The window of the document the running code is part of: page script's
+   * `window`.
+   * @ntsSymbol nts_dom_window
+   */
+  export function window(): Window;
   export interface EventTargetOwnMethods {
     /**
      * `addEventListener(type, listener)` for a compiled closure, called with

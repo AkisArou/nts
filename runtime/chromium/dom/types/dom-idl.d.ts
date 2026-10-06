@@ -15,6 +15,10 @@ declare module "nts:dom" {
   }
   export type EventTargetMethods = EventTargetOwnMethods;
   export type EventTarget = HostClass<"NtsDomEventTarget", null, "nts_dom_retain", "nts_dom_release"> & EventTargetMethods;
+  /**
+   * @ntsSymbol nts_dom_new_EventTarget
+   */
+  export function newEventTarget(): EventTarget;
   export interface NodeOwnMethods {
     /**
      * @ntsSymbol nts_dom_Node_get_nodeType
@@ -168,6 +172,10 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Node_contains
      */
     contains(this: Node, other: Node | null): boolean;
+    /**
+     * @ntsSymbol nts_dom_Node_getRootNode
+     */
+    getRootNode(this: Node): Node;
     /**
      * @ntsSymbol nts_dom_Node_hasChildNodes
      */
@@ -1398,6 +1406,10 @@ declare module "nts:dom" {
      */
     before(this: Element, error?: Ptr<DOMException | null>): void;
     /**
+     * @ntsSymbol nts_dom_Element_checkVisibility
+     */
+    checkVisibility(this: Element): boolean;
+    /**
      * @ntsSymbol nts_dom_Element_closest
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
@@ -1427,6 +1439,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Element_getElementsByTagNameNS
      */
     getElementsByTagNameNS(this: Element, namespaceURI: StringView | null, localName: StringView): HTMLCollection;
+    /**
+     * @ntsSymbol nts_dom_Element_getHTML
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    getHTML(this: Element, error?: Ptr<DOMException | null>): StringView;
     /**
      * @ntsSymbol nts_dom_Element_hasAttribute
      */
@@ -1825,6 +1843,14 @@ declare module "nts:dom" {
      * @ntsNoEscape error
      */
     webkitMatchesSelector(this: Element, selectors: StringView, error?: Ptr<DOMException | null>): boolean;
+    /**
+     * @ntsSymbol nts_dom_Element_webkitRequestFullScreen
+     */
+    webkitRequestFullScreen(this: Element): void;
+    /**
+     * @ntsSymbol nts_dom_Element_webkitRequestFullscreen
+     */
+    webkitRequestFullscreen(this: Element): void;
   }
   export type ElementMethods = ElementOwnMethods & NodeMethods;
   export type Element = HostClass<"NtsDomElement", Node> & ElementMethods;
@@ -2197,6 +2223,14 @@ declare module "nts:dom" {
   export type Text = HostClass<"NtsDomText", CharacterData> & TextMethods;
   /** @ntsSymbol nts_dom_as_Text */
   export function asText(node: Node): Text | null;
+  /**
+   * @ntsSymbol nts_dom_new_Text_1
+   */
+  export function newText(data: StringView): Text;
+  /**
+   * @ntsSymbol nts_dom_new_Text_0
+   */
+  export function newText(): Text;
   export interface DocumentOwnMethods {
     /**
      * @ntsSymbol nts_dom_Document_get_URL
@@ -2300,6 +2334,14 @@ declare module "nts:dom" {
      * @ntsSet _set_xmlStandalone
      */
     xmlStandalone: boolean;
+    /**
+     * @ntsSymbol nts_dom_Document_get_location
+     */
+    _get_location(this: Document): Location | null;
+    /**
+     * @ntsGet _get_location
+     */
+    readonly location: Location | null;
     /**
      * @ntsSymbol nts_dom_Document_get_domain
      */
@@ -2437,6 +2479,14 @@ declare module "nts:dom" {
      * @ntsGet _get_scripts
      */
     readonly scripts: HTMLCollection;
+    /**
+     * @ntsSymbol nts_dom_Document_get_defaultView
+     */
+    _get_defaultView(this: Document): Window | null;
+    /**
+     * @ntsGet _get_defaultView
+     */
+    readonly defaultView: Window | null;
     /**
      * @ntsSymbol nts_dom_Document_get_designMode
      */
@@ -4178,6 +4228,12 @@ declare module "nts:dom" {
      */
     createElementNS(this: Document, namespaceURI: StringView | null, qualifiedName: StringView, error?: Ptr<DOMException | null>): Element;
     /**
+     * @ntsSymbol nts_dom_Document_createEvent
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    createEvent(this: Document, eventType: StringView, error?: Ptr<DOMException | null>): Event;
+    /**
      * @ntsSymbol nts_dom_Document_createNSResolver
      */
     createNSResolver(this: Document, nodeResolver: Node): Node;
@@ -4192,11 +4248,23 @@ declare module "nts:dom" {
      */
     elementFromPoint(this: Document, x: CNumber<"double">, y: CNumber<"double">, error?: Ptr<DOMException | null>): Element | null;
     /**
-     * @ntsSymbol nts_dom_Document_execCommand
+     * @ntsSymbol nts_dom_Document_execCommand_3
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     execCommand(this: Document, commandId: StringView, showUI: boolean, value: StringView, error?: Ptr<DOMException | null>): boolean;
+    /**
+     * @ntsSymbol nts_dom_Document_execCommand_2
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    execCommand(this: Document, commandId: StringView, showUI: boolean, error?: Ptr<DOMException | null>): boolean;
+    /**
+     * @ntsSymbol nts_dom_Document_execCommand_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    execCommand(this: Document, commandId: StringView, error?: Ptr<DOMException | null>): boolean;
     /**
      * @ntsSymbol nts_dom_Document_exitPointerLock
      */
@@ -4255,6 +4323,12 @@ declare module "nts:dom" {
      * @ntsNoEscape error
      */
     open(this: Document, error?: Ptr<DOMException | null>): Document;
+    /**
+     * @ntsSymbol nts_dom_Document_open_3
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    open(this: Document, url: StringView, name: StringView, features: StringView, error?: Ptr<DOMException | null>): Window;
     /**
      * @ntsSymbol nts_dom_Document_prepend_nnn
      * @ntsThrows error nts_dom_exception_take_message
@@ -4542,6 +4616,10 @@ declare module "nts:dom" {
   export type Document = HostClass<"NtsDomDocument", Node> & DocumentMethods;
   /** @ntsSymbol nts_dom_as_Document */
   export function asDocument(node: Node): Document | null;
+  /**
+   * @ntsSymbol nts_dom_new_Document
+   */
+  export function newDocument(): Document;
   export interface DocumentFragmentOwnMethods {
     /**
      * @ntsSymbol nts_dom_DocumentFragment_get_children
@@ -4872,6 +4950,10 @@ declare module "nts:dom" {
   export type DocumentFragment = HostClass<"NtsDomDocumentFragment", Node> & DocumentFragmentMethods;
   /** @ntsSymbol nts_dom_as_DocumentFragment */
   export function asDocumentFragment(node: Node): DocumentFragment | null;
+  /**
+   * @ntsSymbol nts_dom_new_DocumentFragment
+   */
+  export function newDocumentFragment(): DocumentFragment;
   export interface HTMLElementOwnMethods {
     /**
      * @ntsSymbol nts_dom_HTMLElement_get_title
@@ -6413,6 +6495,10 @@ declare module "nts:dom" {
      */
     click(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_focus
+     */
+    focus(this: HTMLElement): void;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_hidePopover
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
@@ -7719,6 +7805,14 @@ declare module "nts:dom" {
      */
     readonly isTrusted: boolean;
     /**
+     * @ntsSymbol nts_dom_Event_get_timeStamp
+     */
+    _get_timeStamp(this: Event): CNumber<"double">;
+    /**
+     * @ntsGet _get_timeStamp
+     */
+    readonly timeStamp: CNumber<"double">;
+    /**
      * @ntsSymbol nts_dom_Event_get_srcElement
      */
     _get_srcElement(this: Event): EventTarget | null;
@@ -7726,6 +7820,32 @@ declare module "nts:dom" {
      * @ntsGet _get_srcElement
      */
     readonly srcElement: EventTarget | null;
+    /**
+     * @ntsSymbol nts_dom_Event_get_returnValue
+     */
+    _get_returnValue(this: Event): boolean;
+    /**
+     * @ntsSymbol nts_dom_Event_set_returnValue
+     */
+    _set_returnValue(this: Event, value: boolean): void;
+    /**
+     * @ntsGet _get_returnValue
+     * @ntsSet _set_returnValue
+     */
+    returnValue: boolean;
+    /**
+     * @ntsSymbol nts_dom_Event_get_cancelBubble
+     */
+    _get_cancelBubble(this: Event): boolean;
+    /**
+     * @ntsSymbol nts_dom_Event_set_cancelBubble
+     */
+    _set_cancelBubble(this: Event, value: boolean): void;
+    /**
+     * @ntsGet _get_cancelBubble
+     * @ntsSet _set_cancelBubble
+     */
+    cancelBubble: boolean;
     /**
      * @ntsSymbol nts_dom_Event_initEvent_3
      */
@@ -7753,7 +7873,19 @@ declare module "nts:dom" {
   }
   export type EventMethods = EventOwnMethods;
   export type Event = HostClass<"NtsDomEvent", null, "nts_dom_retain", "nts_dom_release"> & EventMethods;
+  /**
+   * @ntsSymbol nts_dom_new_Event
+   */
+  export function newEvent(type: StringView): Event;
   export interface UIEventOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_UIEvent_get_view
+     */
+    _get_view(this: UIEvent): Window | null;
+    /**
+     * @ntsGet _get_view
+     */
+    readonly view: Window | null;
     /**
      * @ntsSymbol nts_dom_UIEvent_get_detail
      */
@@ -7779,6 +7911,14 @@ declare module "nts:dom" {
      */
     readonly isTrusted: boolean;
     /**
+     * @ntsSymbol nts_dom_UIEvent_initUIEvent_5
+     */
+    initUIEvent(this: UIEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">): void;
+    /**
+     * @ntsSymbol nts_dom_UIEvent_initUIEvent_4
+     */
+    initUIEvent(this: UIEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null): void;
+    /**
      * @ntsSymbol nts_dom_UIEvent_initUIEvent_3
      */
     initUIEvent(this: UIEvent, type: StringView, bubbles: boolean, cancelable: boolean): void;
@@ -7795,6 +7935,10 @@ declare module "nts:dom" {
   export type UIEvent = HostClass<"NtsDomUIEvent", Event> & UIEventMethods;
   /** @ntsSymbol nts_dom_as_UIEvent */
   export function asUIEvent(event: Event): UIEvent | null;
+  /**
+   * @ntsSymbol nts_dom_new_UIEvent
+   */
+  export function newUIEvent(type: StringView): UIEvent;
   export interface MouseEventOwnMethods {
     /**
      * @ntsSymbol nts_dom_MouseEvent_get_screenX
@@ -7992,11 +8136,75 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_MouseEvent_getModifierState
      */
     getModifierState(this: MouseEvent, keyArg: StringView): boolean;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_15
+     */
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">, screenX: CNumber<"double">, screenY: CNumber<"double">, clientX: CNumber<"double">, clientY: CNumber<"double">, ctrlKey: boolean, altKey: boolean, shiftKey: boolean, metaKey: boolean, button: CNumber<"double">, relatedTarget: EventTarget | null): void;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_14
+     */
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">, screenX: CNumber<"double">, screenY: CNumber<"double">, clientX: CNumber<"double">, clientY: CNumber<"double">, ctrlKey: boolean, altKey: boolean, shiftKey: boolean, metaKey: boolean, button: CNumber<"double">): void;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_13
+     */
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">, screenX: CNumber<"double">, screenY: CNumber<"double">, clientX: CNumber<"double">, clientY: CNumber<"double">, ctrlKey: boolean, altKey: boolean, shiftKey: boolean, metaKey: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_12
+     */
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">, screenX: CNumber<"double">, screenY: CNumber<"double">, clientX: CNumber<"double">, clientY: CNumber<"double">, ctrlKey: boolean, altKey: boolean, shiftKey: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_11
+     */
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">, screenX: CNumber<"double">, screenY: CNumber<"double">, clientX: CNumber<"double">, clientY: CNumber<"double">, ctrlKey: boolean, altKey: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_10
+     */
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">, screenX: CNumber<"double">, screenY: CNumber<"double">, clientX: CNumber<"double">, clientY: CNumber<"double">, ctrlKey: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_9
+     */
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">, screenX: CNumber<"double">, screenY: CNumber<"double">, clientX: CNumber<"double">, clientY: CNumber<"double">): void;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_8
+     */
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">, screenX: CNumber<"double">, screenY: CNumber<"double">, clientX: CNumber<"double">): void;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_7
+     */
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">, screenX: CNumber<"double">, screenY: CNumber<"double">): void;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_6
+     */
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">, screenX: CNumber<"double">): void;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_5
+     */
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">): void;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_4
+     */
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null): void;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_3
+     */
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_2
+     */
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_1
+     */
+    initMouseEvent(this: MouseEvent, type: StringView): void;
   }
   export type MouseEventMethods = MouseEventOwnMethods & UIEventMethods;
   export type MouseEvent = HostClass<"NtsDomMouseEvent", UIEvent> & MouseEventMethods;
   /** @ntsSymbol nts_dom_as_MouseEvent */
   export function asMouseEvent(event: Event): MouseEvent | null;
+  /**
+   * @ntsSymbol nts_dom_new_MouseEvent
+   */
+  export function newMouseEvent(type: StringView): MouseEvent;
   export interface KeyboardEventOwnMethods {
     /**
      * @ntsSymbol nts_dom_KeyboardEvent_get_key
@@ -8098,11 +8306,55 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_KeyboardEvent_getModifierState
      */
     getModifierState(this: KeyboardEvent, keyArg: StringView): boolean;
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_initKeyboardEvent_10
+     */
+    initKeyboardEvent(this: KeyboardEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, keyIdentifier: StringView, location: CNumber<"double">, ctrlKey: boolean, altKey: boolean, shiftKey: boolean, metaKey: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_initKeyboardEvent_9
+     */
+    initKeyboardEvent(this: KeyboardEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, keyIdentifier: StringView, location: CNumber<"double">, ctrlKey: boolean, altKey: boolean, shiftKey: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_initKeyboardEvent_8
+     */
+    initKeyboardEvent(this: KeyboardEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, keyIdentifier: StringView, location: CNumber<"double">, ctrlKey: boolean, altKey: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_initKeyboardEvent_7
+     */
+    initKeyboardEvent(this: KeyboardEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, keyIdentifier: StringView, location: CNumber<"double">, ctrlKey: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_initKeyboardEvent_6
+     */
+    initKeyboardEvent(this: KeyboardEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, keyIdentifier: StringView, location: CNumber<"double">): void;
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_initKeyboardEvent_5
+     */
+    initKeyboardEvent(this: KeyboardEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, keyIdentifier: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_initKeyboardEvent_4
+     */
+    initKeyboardEvent(this: KeyboardEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null): void;
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_initKeyboardEvent_3
+     */
+    initKeyboardEvent(this: KeyboardEvent, type: StringView, bubbles: boolean, cancelable: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_initKeyboardEvent_2
+     */
+    initKeyboardEvent(this: KeyboardEvent, type: StringView, bubbles: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_KeyboardEvent_initKeyboardEvent_1
+     */
+    initKeyboardEvent(this: KeyboardEvent, type: StringView): void;
   }
   export type KeyboardEventMethods = KeyboardEventOwnMethods & UIEventMethods;
   export type KeyboardEvent = HostClass<"NtsDomKeyboardEvent", UIEvent> & KeyboardEventMethods;
   /** @ntsSymbol nts_dom_as_KeyboardEvent */
   export function asKeyboardEvent(event: Event): KeyboardEvent | null;
+  /**
+   * @ntsSymbol nts_dom_new_KeyboardEvent
+   */
+  export function newKeyboardEvent(type: StringView): KeyboardEvent;
   export interface DOMTokenListOwnMethods {
     /**
      * @ntsSymbol nts_dom_DOMTokenList_get_length
@@ -16266,6 +16518,14 @@ declare module "nts:dom" {
   export type Comment = HostClass<"NtsDomComment", CharacterData> & CommentMethods;
   /** @ntsSymbol nts_dom_as_Comment */
   export function asComment(node: Node): Comment | null;
+  /**
+   * @ntsSymbol nts_dom_new_Comment_1
+   */
+  export function newComment(data: StringView): Comment;
+  /**
+   * @ntsSymbol nts_dom_new_Comment_0
+   */
+  export function newComment(): Comment;
   export interface NodeListOwnMethods {
     /**
      * @ntsSymbol nts_dom_NodeList_get_length
@@ -16374,6 +16634,26 @@ declare module "nts:dom" {
   }
   export type DOMRectReadOnlyMethods = DOMRectReadOnlyOwnMethods;
   export type DOMRectReadOnly = HostClass<"NtsDomDOMRectReadOnly", null, "nts_dom_retain", "nts_dom_release"> & DOMRectReadOnlyMethods;
+  /**
+   * @ntsSymbol nts_dom_new_DOMRectReadOnly_4
+   */
+  export function newDOMRectReadOnly(x: CNumber<"double">, y: CNumber<"double">, width: CNumber<"double">, height: CNumber<"double">): DOMRectReadOnly;
+  /**
+   * @ntsSymbol nts_dom_new_DOMRectReadOnly_3
+   */
+  export function newDOMRectReadOnly(x: CNumber<"double">, y: CNumber<"double">, width: CNumber<"double">): DOMRectReadOnly;
+  /**
+   * @ntsSymbol nts_dom_new_DOMRectReadOnly_2
+   */
+  export function newDOMRectReadOnly(x: CNumber<"double">, y: CNumber<"double">): DOMRectReadOnly;
+  /**
+   * @ntsSymbol nts_dom_new_DOMRectReadOnly_1
+   */
+  export function newDOMRectReadOnly(x: CNumber<"double">): DOMRectReadOnly;
+  /**
+   * @ntsSymbol nts_dom_new_DOMRectReadOnly_0
+   */
+  export function newDOMRectReadOnly(): DOMRectReadOnly;
   export interface DOMRectOwnMethods {
     /**
      * @ntsSymbol nts_dom_DOMRect_get_x
@@ -16432,6 +16712,26 @@ declare module "nts:dom" {
   export type DOMRect = HostClass<"NtsDomDOMRect", DOMRectReadOnly> & DOMRectMethods;
   /** @ntsSymbol nts_dom_as_DOMRect */
   export function asDOMRect(object: DOMRectReadOnly): DOMRect | null;
+  /**
+   * @ntsSymbol nts_dom_new_DOMRect_4
+   */
+  export function newDOMRect(x: CNumber<"double">, y: CNumber<"double">, width: CNumber<"double">, height: CNumber<"double">): DOMRect;
+  /**
+   * @ntsSymbol nts_dom_new_DOMRect_3
+   */
+  export function newDOMRect(x: CNumber<"double">, y: CNumber<"double">, width: CNumber<"double">): DOMRect;
+  /**
+   * @ntsSymbol nts_dom_new_DOMRect_2
+   */
+  export function newDOMRect(x: CNumber<"double">, y: CNumber<"double">): DOMRect;
+  /**
+   * @ntsSymbol nts_dom_new_DOMRect_1
+   */
+  export function newDOMRect(x: CNumber<"double">): DOMRect;
+  /**
+   * @ntsSymbol nts_dom_new_DOMRect_0
+   */
+  export function newDOMRect(): DOMRect;
   export interface HTMLDivElementOwnMethods {
     /**
      * @ntsSymbol nts_dom_HTMLDivElement_get_align
@@ -18511,6 +18811,10 @@ declare module "nts:dom" {
   export type FocusEvent = HostClass<"NtsDomFocusEvent", UIEvent> & FocusEventMethods;
   /** @ntsSymbol nts_dom_as_FocusEvent */
   export function asFocusEvent(event: Event): FocusEvent | null;
+  /**
+   * @ntsSymbol nts_dom_new_FocusEvent
+   */
+  export function newFocusEvent(type: StringView): FocusEvent;
   export interface InputEventOwnMethods {
     /**
      * @ntsSymbol nts_dom_InputEvent_get_data
@@ -18549,6 +18853,12 @@ declare module "nts:dom" {
   export type InputEvent = HostClass<"NtsDomInputEvent", UIEvent> & InputEventMethods;
   /** @ntsSymbol nts_dom_as_InputEvent */
   export function asInputEvent(event: Event): InputEvent | null;
+  /**
+   * @ntsSymbol nts_dom_new_InputEvent
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newInputEvent(type: StringView, error?: Ptr<DOMException | null>): InputEvent;
   export interface PointerEventOwnMethods {
     /**
      * @ntsSymbol nts_dom_PointerEvent_get_pointerId
@@ -18667,6 +18977,10 @@ declare module "nts:dom" {
   export type PointerEvent = HostClass<"NtsDomPointerEvent", MouseEvent> & PointerEventMethods;
   /** @ntsSymbol nts_dom_as_PointerEvent */
   export function asPointerEvent(event: Event): PointerEvent | null;
+  /**
+   * @ntsSymbol nts_dom_new_PointerEvent
+   */
+  export function newPointerEvent(type: StringView): PointerEvent;
   export interface WheelEventOwnMethods {
     /**
      * @ntsSymbol nts_dom_WheelEvent_get_deltaX
@@ -18737,6 +19051,10 @@ declare module "nts:dom" {
   export type WheelEvent = HostClass<"NtsDomWheelEvent", MouseEvent> & WheelEventMethods;
   /** @ntsSymbol nts_dom_as_WheelEvent */
   export function asWheelEvent(event: Event): WheelEvent | null;
+  /**
+   * @ntsSymbol nts_dom_new_WheelEvent
+   */
+  export function newWheelEvent(type: StringView): WheelEvent;
   export interface CustomEventOwnMethods {
     /**
      * @ntsSymbol nts_dom_CustomEvent_get_isTrusted
@@ -18746,11 +19064,27 @@ declare module "nts:dom" {
      * @ntsGet _get_isTrusted
      */
     readonly isTrusted: boolean;
+    /**
+     * @ntsSymbol nts_dom_CustomEvent_initCustomEvent_3
+     */
+    initCustomEvent(this: CustomEvent, type: StringView, bubbles: boolean, cancelable: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_CustomEvent_initCustomEvent_2
+     */
+    initCustomEvent(this: CustomEvent, type: StringView, bubbles: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_CustomEvent_initCustomEvent_1
+     */
+    initCustomEvent(this: CustomEvent, type: StringView): void;
   }
   export type CustomEventMethods = CustomEventOwnMethods & EventMethods;
   export type CustomEvent = HostClass<"NtsDomCustomEvent", Event> & CustomEventMethods;
   /** @ntsSymbol nts_dom_as_CustomEvent */
   export function asCustomEvent(event: Event): CustomEvent | null;
+  /**
+   * @ntsSymbol nts_dom_new_CustomEvent
+   */
+  export function newCustomEvent(type: StringView): CustomEvent;
   export interface DOMStringMapOwnMethods {
     /**
      * @ntsSymbol nts_dom_DOMStringMap_named_get
@@ -18769,4 +19103,2448 @@ declare module "nts:dom" {
   }
   export type DOMStringMapMethods = DOMStringMapOwnMethods;
   export type DOMStringMap = HostClass<"NtsDomDOMStringMap", null, "nts_dom_retain", "nts_dom_release"> & DOMStringMapMethods;
+  export interface WindowOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_Window_get_window
+     */
+    _get_window(this: Window): Window;
+    /**
+     * @ntsGet _get_window
+     */
+    readonly window: Window;
+    /**
+     * @ntsSymbol nts_dom_Window_get_self
+     */
+    _get_self(this: Window): Window;
+    /**
+     * @ntsGet _get_self
+     */
+    readonly self: Window;
+    /**
+     * @ntsSymbol nts_dom_Window_get_document
+     */
+    _get_document(this: Window): Document;
+    /**
+     * @ntsGet _get_document
+     */
+    readonly document: Document;
+    /**
+     * @ntsSymbol nts_dom_Window_get_name
+     */
+    _get_name(this: Window): StringView;
+    /**
+     * @ntsSymbol nts_dom_Window_set_name
+     */
+    _set_name(this: Window, value: StringView): void;
+    /**
+     * @ntsGet _get_name
+     * @ntsSet _set_name
+     */
+    name: StringView;
+    /**
+     * @ntsSymbol nts_dom_Window_get_location
+     */
+    _get_location(this: Window): Location;
+    /**
+     * @ntsGet _get_location
+     */
+    readonly location: Location;
+    /**
+     * @ntsSymbol nts_dom_Window_get_history
+     */
+    _get_history(this: Window): History;
+    /**
+     * @ntsGet _get_history
+     */
+    readonly history: History;
+    /**
+     * @ntsSymbol nts_dom_Window_get_status
+     */
+    _get_status(this: Window): StringView;
+    /**
+     * @ntsSymbol nts_dom_Window_set_status
+     */
+    _set_status(this: Window, value: StringView): void;
+    /**
+     * @ntsGet _get_status
+     * @ntsSet _set_status
+     */
+    status: StringView;
+    /**
+     * @ntsSymbol nts_dom_Window_get_closed
+     */
+    _get_closed(this: Window): boolean;
+    /**
+     * @ntsGet _get_closed
+     */
+    readonly closed: boolean;
+    /**
+     * @ntsSymbol nts_dom_Window_get_frames
+     */
+    _get_frames(this: Window): Window;
+    /**
+     * @ntsGet _get_frames
+     */
+    readonly frames: Window;
+    /**
+     * @ntsSymbol nts_dom_Window_get_length
+     */
+    _get_length(this: Window): CNumber<"double">;
+    /**
+     * @ntsGet _get_length
+     */
+    readonly length: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Window_get_top
+     */
+    _get_top(this: Window): Window | null;
+    /**
+     * @ntsGet _get_top
+     */
+    readonly top: Window | null;
+    /**
+     * @ntsSymbol nts_dom_Window_get_parent
+     */
+    _get_parent(this: Window): Window | null;
+    /**
+     * @ntsGet _get_parent
+     */
+    readonly parent: Window | null;
+    /**
+     * @ntsSymbol nts_dom_Window_get_frameElement
+     */
+    _get_frameElement(this: Window): Element | null;
+    /**
+     * @ntsGet _get_frameElement
+     */
+    readonly frameElement: Element | null;
+    /**
+     * @ntsSymbol nts_dom_Window_get_origin
+     */
+    _get_origin(this: Window): StringView;
+    /**
+     * @ntsGet _get_origin
+     */
+    readonly origin: StringView;
+    /**
+     * @ntsSymbol nts_dom_Window_get_screen
+     */
+    _get_screen(this: Window): Screen;
+    /**
+     * @ntsGet _get_screen
+     */
+    readonly screen: Screen;
+    /**
+     * @ntsSymbol nts_dom_Window_get_innerWidth
+     */
+    _get_innerWidth(this: Window): CNumber<"double">;
+    /**
+     * @ntsGet _get_innerWidth
+     */
+    readonly innerWidth: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Window_get_innerHeight
+     */
+    _get_innerHeight(this: Window): CNumber<"double">;
+    /**
+     * @ntsGet _get_innerHeight
+     */
+    readonly innerHeight: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Window_get_scrollX
+     */
+    _get_scrollX(this: Window): CNumber<"double">;
+    /**
+     * @ntsGet _get_scrollX
+     */
+    readonly scrollX: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Window_get_pageXOffset
+     */
+    _get_pageXOffset(this: Window): CNumber<"double">;
+    /**
+     * @ntsGet _get_pageXOffset
+     */
+    readonly pageXOffset: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Window_get_scrollY
+     */
+    _get_scrollY(this: Window): CNumber<"double">;
+    /**
+     * @ntsGet _get_scrollY
+     */
+    readonly scrollY: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Window_get_pageYOffset
+     */
+    _get_pageYOffset(this: Window): CNumber<"double">;
+    /**
+     * @ntsGet _get_pageYOffset
+     */
+    readonly pageYOffset: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Window_get_screenX
+     */
+    _get_screenX(this: Window): CNumber<"double">;
+    /**
+     * @ntsGet _get_screenX
+     */
+    readonly screenX: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Window_get_screenY
+     */
+    _get_screenY(this: Window): CNumber<"double">;
+    /**
+     * @ntsGet _get_screenY
+     */
+    readonly screenY: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Window_get_outerWidth
+     */
+    _get_outerWidth(this: Window): CNumber<"double">;
+    /**
+     * @ntsGet _get_outerWidth
+     */
+    readonly outerWidth: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Window_get_outerHeight
+     */
+    _get_outerHeight(this: Window): CNumber<"double">;
+    /**
+     * @ntsGet _get_outerHeight
+     */
+    readonly outerHeight: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Window_get_devicePixelRatio
+     */
+    _get_devicePixelRatio(this: Window): CNumber<"double">;
+    /**
+     * @ntsGet _get_devicePixelRatio
+     */
+    readonly devicePixelRatio: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpagereveal_void
+     */
+    _set_onpagereveal_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpagereveal_boolean
+     */
+    _set_onpagereveal_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpagereveal_null
+     */
+    _set_onpagereveal_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_offscreenBuffering
+     */
+    _get_offscreenBuffering(this: Window): boolean;
+    /**
+     * @ntsGet _get_offscreenBuffering
+     */
+    readonly offscreenBuffering: boolean;
+    /**
+     * @ntsSymbol nts_dom_Window_get_screenLeft
+     */
+    _get_screenLeft(this: Window): CNumber<"double">;
+    /**
+     * @ntsGet _get_screenLeft
+     */
+    readonly screenLeft: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Window_get_screenTop
+     */
+    _get_screenTop(this: Window): CNumber<"double">;
+    /**
+     * @ntsGet _get_screenTop
+     */
+    readonly screenTop: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onsearch_void
+     */
+    _set_onsearch_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onsearch_boolean
+     */
+    _set_onsearch_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onsearch_null
+     */
+    _set_onsearch_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_testOriginTrialGlobalAttribute
+     */
+    _get_testOriginTrialGlobalAttribute(this: Window): boolean;
+    /**
+     * @ntsGet _get_testOriginTrialGlobalAttribute
+     */
+    readonly testOriginTrialGlobalAttribute: boolean;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onabort_void
+     */
+    _set_onabort_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onabort_boolean
+     */
+    _set_onabort_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onabort_null
+     */
+    _set_onabort_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onbeforeinput_void
+     */
+    _set_onbeforeinput_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onbeforeinput_boolean
+     */
+    _set_onbeforeinput_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onbeforeinput_null
+     */
+    _set_onbeforeinput_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onbeforematch_void
+     */
+    _set_onbeforematch_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onbeforematch_boolean
+     */
+    _set_onbeforematch_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onbeforematch_null
+     */
+    _set_onbeforematch_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onbeforetoggle_void
+     */
+    _set_onbeforetoggle_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onbeforetoggle_boolean
+     */
+    _set_onbeforetoggle_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onbeforetoggle_null
+     */
+    _set_onbeforetoggle_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onblur_void
+     */
+    _set_onblur_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onblur_boolean
+     */
+    _set_onblur_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onblur_null
+     */
+    _set_onblur_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncancel_void
+     */
+    _set_oncancel_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncancel_boolean
+     */
+    _set_oncancel_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncancel_null
+     */
+    _set_oncancel_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncanplay_void
+     */
+    _set_oncanplay_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncanplay_boolean
+     */
+    _set_oncanplay_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncanplay_null
+     */
+    _set_oncanplay_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncanplaythrough_void
+     */
+    _set_oncanplaythrough_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncanplaythrough_boolean
+     */
+    _set_oncanplaythrough_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncanplaythrough_null
+     */
+    _set_oncanplaythrough_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onchange_void
+     */
+    _set_onchange_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onchange_boolean
+     */
+    _set_onchange_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onchange_null
+     */
+    _set_onchange_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onclick_void
+     */
+    _set_onclick_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onclick_boolean
+     */
+    _set_onclick_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onclick_null
+     */
+    _set_onclick_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onclose_void
+     */
+    _set_onclose_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onclose_boolean
+     */
+    _set_onclose_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onclose_null
+     */
+    _set_onclose_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncommand_void
+     */
+    _set_oncommand_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncommand_boolean
+     */
+    _set_oncommand_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncommand_null
+     */
+    _set_oncommand_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncontentvisibilityautostatechange_void
+     */
+    _set_oncontentvisibilityautostatechange_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncontentvisibilityautostatechange_boolean
+     */
+    _set_oncontentvisibilityautostatechange_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncontentvisibilityautostatechange_null
+     */
+    _set_oncontentvisibilityautostatechange_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncontextlost_void
+     */
+    _set_oncontextlost_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncontextlost_boolean
+     */
+    _set_oncontextlost_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncontextlost_null
+     */
+    _set_oncontextlost_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncontextmenu_void
+     */
+    _set_oncontextmenu_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncontextmenu_boolean
+     */
+    _set_oncontextmenu_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncontextmenu_null
+     */
+    _set_oncontextmenu_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncontextrestored_void
+     */
+    _set_oncontextrestored_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncontextrestored_boolean
+     */
+    _set_oncontextrestored_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncontextrestored_null
+     */
+    _set_oncontextrestored_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncuechange_void
+     */
+    _set_oncuechange_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncuechange_boolean
+     */
+    _set_oncuechange_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oncuechange_null
+     */
+    _set_oncuechange_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondblclick_void
+     */
+    _set_ondblclick_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondblclick_boolean
+     */
+    _set_ondblclick_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondblclick_null
+     */
+    _set_ondblclick_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondrag_void
+     */
+    _set_ondrag_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondrag_boolean
+     */
+    _set_ondrag_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondrag_null
+     */
+    _set_ondrag_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondragend_void
+     */
+    _set_ondragend_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondragend_boolean
+     */
+    _set_ondragend_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondragend_null
+     */
+    _set_ondragend_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondragenter_void
+     */
+    _set_ondragenter_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondragenter_boolean
+     */
+    _set_ondragenter_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondragenter_null
+     */
+    _set_ondragenter_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondragleave_void
+     */
+    _set_ondragleave_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondragleave_boolean
+     */
+    _set_ondragleave_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondragleave_null
+     */
+    _set_ondragleave_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondragover_void
+     */
+    _set_ondragover_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondragover_boolean
+     */
+    _set_ondragover_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondragover_null
+     */
+    _set_ondragover_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondragstart_void
+     */
+    _set_ondragstart_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondragstart_boolean
+     */
+    _set_ondragstart_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondragstart_null
+     */
+    _set_ondragstart_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondrop_void
+     */
+    _set_ondrop_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondrop_boolean
+     */
+    _set_ondrop_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondrop_null
+     */
+    _set_ondrop_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondurationchange_void
+     */
+    _set_ondurationchange_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondurationchange_boolean
+     */
+    _set_ondurationchange_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ondurationchange_null
+     */
+    _set_ondurationchange_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onemptied_void
+     */
+    _set_onemptied_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onemptied_boolean
+     */
+    _set_onemptied_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onemptied_null
+     */
+    _set_onemptied_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onended_void
+     */
+    _set_onended_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onended_boolean
+     */
+    _set_onended_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onended_null
+     */
+    _set_onended_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onfocus_void
+     */
+    _set_onfocus_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onfocus_boolean
+     */
+    _set_onfocus_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onfocus_null
+     */
+    _set_onfocus_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onformdata_void
+     */
+    _set_onformdata_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onformdata_boolean
+     */
+    _set_onformdata_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onformdata_null
+     */
+    _set_onformdata_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oninput_void
+     */
+    _set_oninput_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oninput_boolean
+     */
+    _set_oninput_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oninput_null
+     */
+    _set_oninput_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oninvalid_void
+     */
+    _set_oninvalid_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oninvalid_boolean
+     */
+    _set_oninvalid_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_oninvalid_null
+     */
+    _set_oninvalid_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onkeydown_void
+     */
+    _set_onkeydown_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onkeydown_boolean
+     */
+    _set_onkeydown_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onkeydown_null
+     */
+    _set_onkeydown_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onkeypress_void
+     */
+    _set_onkeypress_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onkeypress_boolean
+     */
+    _set_onkeypress_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onkeypress_null
+     */
+    _set_onkeypress_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onkeyup_void
+     */
+    _set_onkeyup_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onkeyup_boolean
+     */
+    _set_onkeyup_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onkeyup_null
+     */
+    _set_onkeyup_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onload_void
+     */
+    _set_onload_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onload_boolean
+     */
+    _set_onload_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onload_null
+     */
+    _set_onload_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onloadeddata_void
+     */
+    _set_onloadeddata_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onloadeddata_boolean
+     */
+    _set_onloadeddata_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onloadeddata_null
+     */
+    _set_onloadeddata_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onloadedmetadata_void
+     */
+    _set_onloadedmetadata_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onloadedmetadata_boolean
+     */
+    _set_onloadedmetadata_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onloadedmetadata_null
+     */
+    _set_onloadedmetadata_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onloadstart_void
+     */
+    _set_onloadstart_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onloadstart_boolean
+     */
+    _set_onloadstart_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onloadstart_null
+     */
+    _set_onloadstart_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmousedown_void
+     */
+    _set_onmousedown_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmousedown_boolean
+     */
+    _set_onmousedown_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmousedown_null
+     */
+    _set_onmousedown_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmouseenter_void
+     */
+    _set_onmouseenter_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmouseenter_boolean
+     */
+    _set_onmouseenter_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmouseenter_null
+     */
+    _set_onmouseenter_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmouseleave_void
+     */
+    _set_onmouseleave_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmouseleave_boolean
+     */
+    _set_onmouseleave_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmouseleave_null
+     */
+    _set_onmouseleave_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmousemove_void
+     */
+    _set_onmousemove_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmousemove_boolean
+     */
+    _set_onmousemove_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmousemove_null
+     */
+    _set_onmousemove_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmouseout_void
+     */
+    _set_onmouseout_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmouseout_boolean
+     */
+    _set_onmouseout_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmouseout_null
+     */
+    _set_onmouseout_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmouseover_void
+     */
+    _set_onmouseover_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmouseover_boolean
+     */
+    _set_onmouseover_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmouseover_null
+     */
+    _set_onmouseover_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmouseup_void
+     */
+    _set_onmouseup_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmouseup_boolean
+     */
+    _set_onmouseup_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmouseup_null
+     */
+    _set_onmouseup_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmousewheel_void
+     */
+    _set_onmousewheel_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmousewheel_boolean
+     */
+    _set_onmousewheel_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmousewheel_null
+     */
+    _set_onmousewheel_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpause_void
+     */
+    _set_onpause_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpause_boolean
+     */
+    _set_onpause_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpause_null
+     */
+    _set_onpause_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onplay_void
+     */
+    _set_onplay_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onplay_boolean
+     */
+    _set_onplay_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onplay_null
+     */
+    _set_onplay_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onplaying_void
+     */
+    _set_onplaying_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onplaying_boolean
+     */
+    _set_onplaying_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onplaying_null
+     */
+    _set_onplaying_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onprogress_void
+     */
+    _set_onprogress_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onprogress_boolean
+     */
+    _set_onprogress_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onprogress_null
+     */
+    _set_onprogress_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onratechange_void
+     */
+    _set_onratechange_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onratechange_boolean
+     */
+    _set_onratechange_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onratechange_null
+     */
+    _set_onratechange_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onreset_void
+     */
+    _set_onreset_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onreset_boolean
+     */
+    _set_onreset_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onreset_null
+     */
+    _set_onreset_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onresize_void
+     */
+    _set_onresize_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onresize_boolean
+     */
+    _set_onresize_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onresize_null
+     */
+    _set_onresize_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onscroll_void
+     */
+    _set_onscroll_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onscroll_boolean
+     */
+    _set_onscroll_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onscroll_null
+     */
+    _set_onscroll_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onscrollend_void
+     */
+    _set_onscrollend_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onscrollend_boolean
+     */
+    _set_onscrollend_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onscrollend_null
+     */
+    _set_onscrollend_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onsecuritypolicyviolation_void
+     */
+    _set_onsecuritypolicyviolation_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onsecuritypolicyviolation_boolean
+     */
+    _set_onsecuritypolicyviolation_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onsecuritypolicyviolation_null
+     */
+    _set_onsecuritypolicyviolation_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onseeked_void
+     */
+    _set_onseeked_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onseeked_boolean
+     */
+    _set_onseeked_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onseeked_null
+     */
+    _set_onseeked_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onseeking_void
+     */
+    _set_onseeking_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onseeking_boolean
+     */
+    _set_onseeking_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onseeking_null
+     */
+    _set_onseeking_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onselect_void
+     */
+    _set_onselect_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onselect_boolean
+     */
+    _set_onselect_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onselect_null
+     */
+    _set_onselect_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onslotchange_void
+     */
+    _set_onslotchange_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onslotchange_boolean
+     */
+    _set_onslotchange_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onslotchange_null
+     */
+    _set_onslotchange_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onstalled_void
+     */
+    _set_onstalled_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onstalled_boolean
+     */
+    _set_onstalled_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onstalled_null
+     */
+    _set_onstalled_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onsubmit_void
+     */
+    _set_onsubmit_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onsubmit_boolean
+     */
+    _set_onsubmit_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onsubmit_null
+     */
+    _set_onsubmit_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onsuspend_void
+     */
+    _set_onsuspend_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onsuspend_boolean
+     */
+    _set_onsuspend_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onsuspend_null
+     */
+    _set_onsuspend_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ontimeupdate_void
+     */
+    _set_ontimeupdate_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ontimeupdate_boolean
+     */
+    _set_ontimeupdate_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ontimeupdate_null
+     */
+    _set_ontimeupdate_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ontoggle_void
+     */
+    _set_ontoggle_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ontoggle_boolean
+     */
+    _set_ontoggle_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ontoggle_null
+     */
+    _set_ontoggle_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onvolumechange_void
+     */
+    _set_onvolumechange_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onvolumechange_boolean
+     */
+    _set_onvolumechange_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onvolumechange_null
+     */
+    _set_onvolumechange_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onwaiting_void
+     */
+    _set_onwaiting_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onwaiting_boolean
+     */
+    _set_onwaiting_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onwaiting_null
+     */
+    _set_onwaiting_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onwebkitanimationend_void
+     */
+    _set_onwebkitanimationend_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onwebkitanimationend_boolean
+     */
+    _set_onwebkitanimationend_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onwebkitanimationend_null
+     */
+    _set_onwebkitanimationend_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onwebkitanimationiteration_void
+     */
+    _set_onwebkitanimationiteration_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onwebkitanimationiteration_boolean
+     */
+    _set_onwebkitanimationiteration_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onwebkitanimationiteration_null
+     */
+    _set_onwebkitanimationiteration_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onwebkitanimationstart_void
+     */
+    _set_onwebkitanimationstart_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onwebkitanimationstart_boolean
+     */
+    _set_onwebkitanimationstart_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onwebkitanimationstart_null
+     */
+    _set_onwebkitanimationstart_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onwebkittransitionend_void
+     */
+    _set_onwebkittransitionend_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onwebkittransitionend_boolean
+     */
+    _set_onwebkittransitionend_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onwebkittransitionend_null
+     */
+    _set_onwebkittransitionend_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onwheel_void
+     */
+    _set_onwheel_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onwheel_boolean
+     */
+    _set_onwheel_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onwheel_null
+     */
+    _set_onwheel_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onauxclick_void
+     */
+    _set_onauxclick_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onauxclick_boolean
+     */
+    _set_onauxclick_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onauxclick_null
+     */
+    _set_onauxclick_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ongotpointercapture_void
+     */
+    _set_ongotpointercapture_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ongotpointercapture_boolean
+     */
+    _set_ongotpointercapture_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ongotpointercapture_null
+     */
+    _set_ongotpointercapture_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onlostpointercapture_void
+     */
+    _set_onlostpointercapture_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onlostpointercapture_boolean
+     */
+    _set_onlostpointercapture_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onlostpointercapture_null
+     */
+    _set_onlostpointercapture_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointerdown_void
+     */
+    _set_onpointerdown_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointerdown_boolean
+     */
+    _set_onpointerdown_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointerdown_null
+     */
+    _set_onpointerdown_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointermove_void
+     */
+    _set_onpointermove_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointermove_boolean
+     */
+    _set_onpointermove_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointermove_null
+     */
+    _set_onpointermove_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointerrawupdate_void
+     */
+    _set_onpointerrawupdate_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointerrawupdate_boolean
+     */
+    _set_onpointerrawupdate_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointerrawupdate_null
+     */
+    _set_onpointerrawupdate_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointerup_void
+     */
+    _set_onpointerup_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointerup_boolean
+     */
+    _set_onpointerup_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointerup_null
+     */
+    _set_onpointerup_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointercancel_void
+     */
+    _set_onpointercancel_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointercancel_boolean
+     */
+    _set_onpointercancel_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointercancel_null
+     */
+    _set_onpointercancel_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointerover_void
+     */
+    _set_onpointerover_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointerover_boolean
+     */
+    _set_onpointerover_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointerover_null
+     */
+    _set_onpointerover_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointerout_void
+     */
+    _set_onpointerout_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointerout_boolean
+     */
+    _set_onpointerout_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointerout_null
+     */
+    _set_onpointerout_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointerenter_void
+     */
+    _set_onpointerenter_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointerenter_boolean
+     */
+    _set_onpointerenter_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointerenter_null
+     */
+    _set_onpointerenter_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointerleave_void
+     */
+    _set_onpointerleave_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointerleave_boolean
+     */
+    _set_onpointerleave_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpointerleave_null
+     */
+    _set_onpointerleave_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onselectstart_void
+     */
+    _set_onselectstart_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onselectstart_boolean
+     */
+    _set_onselectstart_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onselectstart_null
+     */
+    _set_onselectstart_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onselectionchange_void
+     */
+    _set_onselectionchange_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onselectionchange_boolean
+     */
+    _set_onselectionchange_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onselectionchange_null
+     */
+    _set_onselectionchange_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onanimationcancel_void
+     */
+    _set_onanimationcancel_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onanimationcancel_boolean
+     */
+    _set_onanimationcancel_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onanimationcancel_null
+     */
+    _set_onanimationcancel_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onanimationend_void
+     */
+    _set_onanimationend_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onanimationend_boolean
+     */
+    _set_onanimationend_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onanimationend_null
+     */
+    _set_onanimationend_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onanimationiteration_void
+     */
+    _set_onanimationiteration_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onanimationiteration_boolean
+     */
+    _set_onanimationiteration_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onanimationiteration_null
+     */
+    _set_onanimationiteration_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onanimationstart_void
+     */
+    _set_onanimationstart_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onanimationstart_boolean
+     */
+    _set_onanimationstart_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onanimationstart_null
+     */
+    _set_onanimationstart_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ontransitionrun_void
+     */
+    _set_ontransitionrun_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ontransitionrun_boolean
+     */
+    _set_ontransitionrun_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ontransitionrun_null
+     */
+    _set_ontransitionrun_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ontransitionstart_void
+     */
+    _set_ontransitionstart_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ontransitionstart_boolean
+     */
+    _set_ontransitionstart_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ontransitionstart_null
+     */
+    _set_ontransitionstart_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ontransitionend_void
+     */
+    _set_ontransitionend_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ontransitionend_boolean
+     */
+    _set_ontransitionend_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ontransitionend_null
+     */
+    _set_ontransitionend_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ontransitioncancel_void
+     */
+    _set_ontransitioncancel_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ontransitioncancel_boolean
+     */
+    _set_ontransitioncancel_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ontransitioncancel_null
+     */
+    _set_ontransitioncancel_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onafterprint_void
+     */
+    _set_onafterprint_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onafterprint_boolean
+     */
+    _set_onafterprint_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onafterprint_null
+     */
+    _set_onafterprint_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onbeforeprint_void
+     */
+    _set_onbeforeprint_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onbeforeprint_boolean
+     */
+    _set_onbeforeprint_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onbeforeprint_null
+     */
+    _set_onbeforeprint_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onhashchange_void
+     */
+    _set_onhashchange_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onhashchange_boolean
+     */
+    _set_onhashchange_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onhashchange_null
+     */
+    _set_onhashchange_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onlanguagechange_void
+     */
+    _set_onlanguagechange_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onlanguagechange_boolean
+     */
+    _set_onlanguagechange_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onlanguagechange_null
+     */
+    _set_onlanguagechange_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmessage_void
+     */
+    _set_onmessage_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmessage_boolean
+     */
+    _set_onmessage_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmessage_null
+     */
+    _set_onmessage_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmessageerror_void
+     */
+    _set_onmessageerror_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmessageerror_boolean
+     */
+    _set_onmessageerror_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onmessageerror_null
+     */
+    _set_onmessageerror_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onoffline_void
+     */
+    _set_onoffline_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onoffline_boolean
+     */
+    _set_onoffline_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onoffline_null
+     */
+    _set_onoffline_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ononline_void
+     */
+    _set_ononline_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ononline_boolean
+     */
+    _set_ononline_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_ononline_null
+     */
+    _set_ononline_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpagehide_void
+     */
+    _set_onpagehide_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpagehide_boolean
+     */
+    _set_onpagehide_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpagehide_null
+     */
+    _set_onpagehide_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpageshow_void
+     */
+    _set_onpageshow_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpageshow_boolean
+     */
+    _set_onpageshow_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpageshow_null
+     */
+    _set_onpageshow_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpopstate_void
+     */
+    _set_onpopstate_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpopstate_boolean
+     */
+    _set_onpopstate_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpopstate_null
+     */
+    _set_onpopstate_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onrejectionhandled_void
+     */
+    _set_onrejectionhandled_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onrejectionhandled_boolean
+     */
+    _set_onrejectionhandled_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onrejectionhandled_null
+     */
+    _set_onrejectionhandled_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onstorage_void
+     */
+    _set_onstorage_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onstorage_boolean
+     */
+    _set_onstorage_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onstorage_null
+     */
+    _set_onstorage_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onunhandledrejection_void
+     */
+    _set_onunhandledrejection_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onunhandledrejection_boolean
+     */
+    _set_onunhandledrejection_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onunhandledrejection_null
+     */
+    _set_onunhandledrejection_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onunload_void
+     */
+    _set_onunload_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onunload_boolean
+     */
+    _set_onunload_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onunload_null
+     */
+    _set_onunload_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_isSecureContext
+     */
+    _get_isSecureContext(this: Window): boolean;
+    /**
+     * @ntsGet _get_isSecureContext
+     */
+    readonly isSecureContext: boolean;
+    /**
+     * @ntsSymbol nts_dom_Window_get_crossOriginIsolated
+     */
+    _get_crossOriginIsolated(this: Window): boolean;
+    /**
+     * @ntsGet _get_crossOriginIsolated
+     */
+    readonly crossOriginIsolated: boolean;
+    /**
+     * @ntsSymbol nts_dom_Window_get_performance
+     */
+    _get_performance(this: Window): Performance;
+    /**
+     * @ntsGet _get_performance
+     */
+    readonly performance: Performance;
+    /**
+     * @ntsSymbol nts_dom_Window_alert_0
+     */
+    alert(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_alert_1
+     */
+    alert(this: Window, message: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_Window_atob
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    atob(this: Window, atob: StringView, error?: Ptr<DOMException | null>): StringView;
+    /**
+     * @ntsSymbol nts_dom_Window_blur
+     */
+    blur(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_btoa
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    btoa(this: Window, btoa: StringView, error?: Ptr<DOMException | null>): StringView;
+    /**
+     * @ntsSymbol nts_dom_Window_cancelAnimationFrame
+     */
+    cancelAnimationFrame(this: Window, handle: CNumber<"double">): void;
+    /**
+     * @ntsSymbol nts_dom_Window_cancelIdleCallback
+     */
+    cancelIdleCallback(this: Window, handle: CNumber<"double">): void;
+    /**
+     * @ntsSymbol nts_dom_Window_captureEvents
+     */
+    captureEvents(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_clearInterval_1
+     */
+    clearInterval(this: Window, handle: CNumber<"double">): void;
+    /**
+     * @ntsSymbol nts_dom_Window_clearInterval_0
+     */
+    clearInterval(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_clearTimeout_1
+     */
+    clearTimeout(this: Window, handle: CNumber<"double">): void;
+    /**
+     * @ntsSymbol nts_dom_Window_clearTimeout_0
+     */
+    clearTimeout(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_close
+     */
+    close(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_confirm_1
+     */
+    confirm(this: Window, message: StringView): boolean;
+    /**
+     * @ntsSymbol nts_dom_Window_confirm_0
+     */
+    confirm(this: Window): boolean;
+    /**
+     * @ntsSymbol nts_dom_Window_find_7
+     */
+    find(this: Window, string: StringView, caseSensitive: boolean, backwards: boolean, wrap: boolean, wholeWord: boolean, searchInFrames: boolean, showDialog: boolean): boolean;
+    /**
+     * @ntsSymbol nts_dom_Window_find_6
+     */
+    find(this: Window, string: StringView, caseSensitive: boolean, backwards: boolean, wrap: boolean, wholeWord: boolean, searchInFrames: boolean): boolean;
+    /**
+     * @ntsSymbol nts_dom_Window_find_5
+     */
+    find(this: Window, string: StringView, caseSensitive: boolean, backwards: boolean, wrap: boolean, wholeWord: boolean): boolean;
+    /**
+     * @ntsSymbol nts_dom_Window_find_4
+     */
+    find(this: Window, string: StringView, caseSensitive: boolean, backwards: boolean, wrap: boolean): boolean;
+    /**
+     * @ntsSymbol nts_dom_Window_find_3
+     */
+    find(this: Window, string: StringView, caseSensitive: boolean, backwards: boolean): boolean;
+    /**
+     * @ntsSymbol nts_dom_Window_find_2
+     */
+    find(this: Window, string: StringView, caseSensitive: boolean): boolean;
+    /**
+     * @ntsSymbol nts_dom_Window_find_1
+     */
+    find(this: Window, string: StringView): boolean;
+    /**
+     * @ntsSymbol nts_dom_Window_find_0
+     */
+    find(this: Window): boolean;
+    /**
+     * @ntsSymbol nts_dom_Window_focus
+     */
+    focus(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_getComputedStyle_2
+     */
+    getComputedStyle(this: Window, elt: Element, pseudoElt: StringView | null): CSSStyleDeclaration;
+    /**
+     * @ntsSymbol nts_dom_Window_getComputedStyle_1
+     */
+    getComputedStyle(this: Window, elt: Element): CSSStyleDeclaration;
+    /**
+     * @ntsSymbol nts_dom_Window_matchMedia
+     */
+    matchMedia(this: Window, query: StringView): MediaQueryList;
+    /**
+     * @ntsSymbol nts_dom_Window_moveBy
+     */
+    moveBy(this: Window, x: CNumber<"double">, y: CNumber<"double">): void;
+    /**
+     * @ntsSymbol nts_dom_Window_moveTo
+     */
+    moveTo(this: Window, x: CNumber<"double">, y: CNumber<"double">): void;
+    /**
+     * @ntsSymbol nts_dom_Window_open_3
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    open(this: Window, url: StringView, target: StringView, features: StringView, error?: Ptr<DOMException | null>): Window | null;
+    /**
+     * @ntsSymbol nts_dom_Window_open_2
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    open(this: Window, url: StringView, target: StringView, error?: Ptr<DOMException | null>): Window | null;
+    /**
+     * @ntsSymbol nts_dom_Window_open_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    open(this: Window, url: StringView, error?: Ptr<DOMException | null>): Window | null;
+    /**
+     * @ntsSymbol nts_dom_Window_open_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    open(this: Window, error?: Ptr<DOMException | null>): Window | null;
+    /**
+     * @ntsSymbol nts_dom_Window_print
+     */
+    print(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_prompt_2
+     */
+    prompt(this: Window, message: StringView, defaultValue: StringView): StringView | null;
+    /**
+     * @ntsSymbol nts_dom_Window_prompt_1
+     */
+    prompt(this: Window, message: StringView): StringView | null;
+    /**
+     * @ntsSymbol nts_dom_Window_prompt_0
+     */
+    prompt(this: Window): StringView | null;
+    /**
+     * @ntsSymbol nts_dom_Window_releaseEvents
+     */
+    releaseEvents(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_resizeBy
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    resizeBy(this: Window, x: CNumber<"double">, y: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_resizeTo
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    resizeTo(this: Window, x: CNumber<"double">, y: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_stop
+     */
+    stop(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_webkitCancelAnimationFrame
+     */
+    webkitCancelAnimationFrame(this: Window, id: CNumber<"double">): void;
+  }
+  export type WindowMethods = WindowOwnMethods & EventTargetMethods;
+  export type Window = HostClass<"NtsDomWindow", EventTarget> & WindowMethods;
+  /** @ntsSymbol nts_dom_as_Window */
+  export function asWindow(target: EventTarget): Window | null;
+  export interface PerformanceOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_Performance_get_timeOrigin
+     */
+    _get_timeOrigin(this: Performance): CNumber<"double">;
+    /**
+     * @ntsGet _get_timeOrigin
+     */
+    readonly timeOrigin: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Performance_set_onresourcetimingbufferfull_void
+     */
+    _set_onresourcetimingbufferfull_void(this: Performance, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Performance_set_onresourcetimingbufferfull_boolean
+     */
+    _set_onresourcetimingbufferfull_boolean(this: Performance, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Performance_set_onresourcetimingbufferfull_null
+     */
+    _set_onresourcetimingbufferfull_null(this: Performance): void;
+    /**
+     * @ntsSymbol nts_dom_Performance_clearMarks_1
+     */
+    clearMarks(this: Performance, markName: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_Performance_clearMarks_0
+     */
+    clearMarks(this: Performance): void;
+    /**
+     * @ntsSymbol nts_dom_Performance_clearMeasures_1
+     */
+    clearMeasures(this: Performance, measureName: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_Performance_clearMeasures_0
+     */
+    clearMeasures(this: Performance): void;
+    /**
+     * @ntsSymbol nts_dom_Performance_clearResourceTimings
+     */
+    clearResourceTimings(this: Performance): void;
+    /**
+     * @ntsSymbol nts_dom_Performance_now
+     */
+    now(this: Performance): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Performance_setResourceTimingBufferSize
+     */
+    setResourceTimingBufferSize(this: Performance, maxSize: CNumber<"double">): void;
+  }
+  export type PerformanceMethods = PerformanceOwnMethods & EventTargetMethods;
+  export type Performance = HostClass<"NtsDomPerformance", EventTarget> & PerformanceMethods;
+  /** @ntsSymbol nts_dom_as_Performance */
+  export function asPerformance(target: EventTarget): Performance | null;
+  export interface MediaQueryListOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_MediaQueryList_get_media
+     */
+    _get_media(this: MediaQueryList): StringView;
+    /**
+     * @ntsGet _get_media
+     */
+    readonly media: StringView;
+    /**
+     * @ntsSymbol nts_dom_MediaQueryList_get_matches
+     */
+    _get_matches(this: MediaQueryList): boolean;
+    /**
+     * @ntsGet _get_matches
+     */
+    readonly matches: boolean;
+    /**
+     * @ntsSymbol nts_dom_MediaQueryList_set_onchange_void
+     */
+    _set_onchange_void(this: MediaQueryList, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_MediaQueryList_set_onchange_boolean
+     */
+    _set_onchange_boolean(this: MediaQueryList, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_MediaQueryList_set_onchange_null
+     */
+    _set_onchange_null(this: MediaQueryList): void;
+  }
+  export type MediaQueryListMethods = MediaQueryListOwnMethods & EventTargetMethods;
+  export type MediaQueryList = HostClass<"NtsDomMediaQueryList", EventTarget> & MediaQueryListMethods;
+  /** @ntsSymbol nts_dom_as_MediaQueryList */
+  export function asMediaQueryList(target: EventTarget): MediaQueryList | null;
+  export interface LocationOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_Location_get_href
+     */
+    _get_href(this: Location): StringView;
+    /**
+     * @ntsSymbol nts_dom_Location_set_href
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_href(this: Location, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_href
+     * @ntsSet _set_href
+     */
+    href: StringView;
+    /**
+     * @ntsSymbol nts_dom_Location_get_origin
+     */
+    _get_origin(this: Location): StringView;
+    /**
+     * @ntsGet _get_origin
+     */
+    readonly origin: StringView;
+    /**
+     * @ntsSymbol nts_dom_Location_get_protocol
+     */
+    _get_protocol(this: Location): StringView;
+    /**
+     * @ntsSymbol nts_dom_Location_set_protocol
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_protocol(this: Location, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_protocol
+     * @ntsSet _set_protocol
+     */
+    protocol: StringView;
+    /**
+     * @ntsSymbol nts_dom_Location_get_host
+     */
+    _get_host(this: Location): StringView;
+    /**
+     * @ntsSymbol nts_dom_Location_set_host
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_host(this: Location, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_host
+     * @ntsSet _set_host
+     */
+    host: StringView;
+    /**
+     * @ntsSymbol nts_dom_Location_get_hostname
+     */
+    _get_hostname(this: Location): StringView;
+    /**
+     * @ntsSymbol nts_dom_Location_set_hostname
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_hostname(this: Location, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_hostname
+     * @ntsSet _set_hostname
+     */
+    hostname: StringView;
+    /**
+     * @ntsSymbol nts_dom_Location_get_port
+     */
+    _get_port(this: Location): StringView;
+    /**
+     * @ntsSymbol nts_dom_Location_set_port
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_port(this: Location, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_port
+     * @ntsSet _set_port
+     */
+    port: StringView;
+    /**
+     * @ntsSymbol nts_dom_Location_get_pathname
+     */
+    _get_pathname(this: Location): StringView;
+    /**
+     * @ntsSymbol nts_dom_Location_set_pathname
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_pathname(this: Location, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_pathname
+     * @ntsSet _set_pathname
+     */
+    pathname: StringView;
+    /**
+     * @ntsSymbol nts_dom_Location_get_search
+     */
+    _get_search(this: Location): StringView;
+    /**
+     * @ntsSymbol nts_dom_Location_set_search
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_search(this: Location, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_search
+     * @ntsSet _set_search
+     */
+    search: StringView;
+    /**
+     * @ntsSymbol nts_dom_Location_get_hash
+     */
+    _get_hash(this: Location): StringView;
+    /**
+     * @ntsSymbol nts_dom_Location_set_hash
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_hash(this: Location, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_hash
+     * @ntsSet _set_hash
+     */
+    hash: StringView;
+    /**
+     * @ntsSymbol nts_dom_Location_assign
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    assign(this: Location, url: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Location_reload
+     */
+    reload(this: Location): void;
+    /**
+     * @ntsSymbol nts_dom_Location_replace
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replace(this: Location, url: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Location_toString
+     */
+    toString(this: Location): StringView;
+  }
+  export type LocationMethods = LocationOwnMethods;
+  export type Location = HostClass<"NtsDomLocation", null, "nts_dom_retain", "nts_dom_release"> & LocationMethods;
+  export interface HistoryOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_History_get_length
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _get_length(this: History, error?: Ptr<DOMException | null>): CNumber<"double">;
+    /**
+     * @ntsGet _get_length
+     */
+    readonly length: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_History_back
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    back(this: History, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_History_forward
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    forward(this: History, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_History_go_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    go(this: History, delta: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_History_go_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    go(this: History, error?: Ptr<DOMException | null>): void;
+  }
+  export type HistoryMethods = HistoryOwnMethods;
+  export type History = HostClass<"NtsDomHistory", null, "nts_dom_retain", "nts_dom_release"> & HistoryMethods;
+  export interface ScreenOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_Screen_get_availWidth
+     */
+    _get_availWidth(this: Screen): CNumber<"double">;
+    /**
+     * @ntsGet _get_availWidth
+     */
+    readonly availWidth: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Screen_get_availHeight
+     */
+    _get_availHeight(this: Screen): CNumber<"double">;
+    /**
+     * @ntsGet _get_availHeight
+     */
+    readonly availHeight: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Screen_get_width
+     */
+    _get_width(this: Screen): CNumber<"double">;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Screen_get_height
+     */
+    _get_height(this: Screen): CNumber<"double">;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Screen_get_colorDepth
+     */
+    _get_colorDepth(this: Screen): CNumber<"double">;
+    /**
+     * @ntsGet _get_colorDepth
+     */
+    readonly colorDepth: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Screen_get_pixelDepth
+     */
+    _get_pixelDepth(this: Screen): CNumber<"double">;
+    /**
+     * @ntsGet _get_pixelDepth
+     */
+    readonly pixelDepth: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Screen_get_availLeft
+     */
+    _get_availLeft(this: Screen): CNumber<"double">;
+    /**
+     * @ntsGet _get_availLeft
+     */
+    readonly availLeft: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Screen_get_availTop
+     */
+    _get_availTop(this: Screen): CNumber<"double">;
+    /**
+     * @ntsGet _get_availTop
+     */
+    readonly availTop: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Screen_set_onchange_void
+     */
+    _set_onchange_void(this: Screen, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Screen_set_onchange_boolean
+     */
+    _set_onchange_boolean(this: Screen, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Screen_set_onchange_null
+     */
+    _set_onchange_null(this: Screen): void;
+    /**
+     * @ntsSymbol nts_dom_Screen_get_isExtended
+     */
+    _get_isExtended(this: Screen): boolean;
+    /**
+     * @ntsGet _get_isExtended
+     */
+    readonly isExtended: boolean;
+  }
+  export type ScreenMethods = ScreenOwnMethods & EventTargetMethods;
+  export type Screen = HostClass<"NtsDomScreen", EventTarget> & ScreenMethods;
+  /** @ntsSymbol nts_dom_as_Screen */
+  export function asScreen(target: EventTarget): Screen | null;
+  export interface AbortControllerOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_AbortController_get_signal
+     */
+    _get_signal(this: AbortController): AbortSignal;
+    /**
+     * @ntsGet _get_signal
+     */
+    readonly signal: AbortSignal;
+    /**
+     * @ntsSymbol nts_dom_AbortController_abort
+     */
+    abort(this: AbortController): void;
+  }
+  export type AbortControllerMethods = AbortControllerOwnMethods;
+  export type AbortController = HostClass<"NtsDomAbortController", null, "nts_dom_retain", "nts_dom_release"> & AbortControllerMethods;
+  /**
+   * @ntsSymbol nts_dom_new_AbortController
+   */
+  export function newAbortController(): AbortController;
+  export interface AbortSignalOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_AbortSignal_get_aborted
+     */
+    _get_aborted(this: AbortSignal): boolean;
+    /**
+     * @ntsGet _get_aborted
+     */
+    readonly aborted: boolean;
+    /**
+     * @ntsSymbol nts_dom_AbortSignal_set_onabort_void
+     */
+    _set_onabort_void(this: AbortSignal, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_AbortSignal_set_onabort_boolean
+     */
+    _set_onabort_boolean(this: AbortSignal, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_AbortSignal_set_onabort_null
+     */
+    _set_onabort_null(this: AbortSignal): void;
+    /**
+     * @ntsSymbol nts_dom_AbortSignal_throwIfAborted
+     */
+    throwIfAborted(this: AbortSignal): void;
+  }
+  export type AbortSignalMethods = AbortSignalOwnMethods & EventTargetMethods;
+  export type AbortSignal = HostClass<"NtsDomAbortSignal", EventTarget> & AbortSignalMethods;
+  /** @ntsSymbol nts_dom_as_AbortSignal */
+  export function asAbortSignal(target: EventTarget): AbortSignal | null;
+  export interface URLOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_URL_get_origin
+     */
+    _get_origin(this: URL): StringView;
+    /**
+     * @ntsGet _get_origin
+     */
+    readonly origin: StringView;
+    /**
+     * @ntsSymbol nts_dom_URL_get_protocol
+     */
+    _get_protocol(this: URL): StringView;
+    /**
+     * @ntsSymbol nts_dom_URL_set_protocol
+     */
+    _set_protocol(this: URL, value: StringView): void;
+    /**
+     * @ntsGet _get_protocol
+     * @ntsSet _set_protocol
+     */
+    protocol: StringView;
+    /**
+     * @ntsSymbol nts_dom_URL_get_username
+     */
+    _get_username(this: URL): StringView;
+    /**
+     * @ntsSymbol nts_dom_URL_set_username
+     */
+    _set_username(this: URL, value: StringView): void;
+    /**
+     * @ntsGet _get_username
+     * @ntsSet _set_username
+     */
+    username: StringView;
+    /**
+     * @ntsSymbol nts_dom_URL_get_password
+     */
+    _get_password(this: URL): StringView;
+    /**
+     * @ntsSymbol nts_dom_URL_set_password
+     */
+    _set_password(this: URL, value: StringView): void;
+    /**
+     * @ntsGet _get_password
+     * @ntsSet _set_password
+     */
+    password: StringView;
+    /**
+     * @ntsSymbol nts_dom_URL_get_host
+     */
+    _get_host(this: URL): StringView;
+    /**
+     * @ntsSymbol nts_dom_URL_set_host
+     */
+    _set_host(this: URL, value: StringView): void;
+    /**
+     * @ntsGet _get_host
+     * @ntsSet _set_host
+     */
+    host: StringView;
+    /**
+     * @ntsSymbol nts_dom_URL_get_hostname
+     */
+    _get_hostname(this: URL): StringView;
+    /**
+     * @ntsSymbol nts_dom_URL_set_hostname
+     */
+    _set_hostname(this: URL, value: StringView): void;
+    /**
+     * @ntsGet _get_hostname
+     * @ntsSet _set_hostname
+     */
+    hostname: StringView;
+    /**
+     * @ntsSymbol nts_dom_URL_get_port
+     */
+    _get_port(this: URL): StringView;
+    /**
+     * @ntsSymbol nts_dom_URL_set_port
+     */
+    _set_port(this: URL, value: StringView): void;
+    /**
+     * @ntsGet _get_port
+     * @ntsSet _set_port
+     */
+    port: StringView;
+    /**
+     * @ntsSymbol nts_dom_URL_get_pathname
+     */
+    _get_pathname(this: URL): StringView;
+    /**
+     * @ntsSymbol nts_dom_URL_set_pathname
+     */
+    _set_pathname(this: URL, value: StringView): void;
+    /**
+     * @ntsGet _get_pathname
+     * @ntsSet _set_pathname
+     */
+    pathname: StringView;
+    /**
+     * @ntsSymbol nts_dom_URL_get_search
+     */
+    _get_search(this: URL): StringView;
+    /**
+     * @ntsSymbol nts_dom_URL_set_search
+     */
+    _set_search(this: URL, value: StringView): void;
+    /**
+     * @ntsGet _get_search
+     * @ntsSet _set_search
+     */
+    search: StringView;
+    /**
+     * @ntsSymbol nts_dom_URL_get_searchParams
+     */
+    _get_searchParams(this: URL): URLSearchParams;
+    /**
+     * @ntsGet _get_searchParams
+     */
+    readonly searchParams: URLSearchParams;
+    /**
+     * @ntsSymbol nts_dom_URL_get_hash
+     */
+    _get_hash(this: URL): StringView;
+    /**
+     * @ntsSymbol nts_dom_URL_set_hash
+     */
+    _set_hash(this: URL, value: StringView): void;
+    /**
+     * @ntsGet _get_hash
+     * @ntsSet _set_hash
+     */
+    hash: StringView;
+    /**
+     * @ntsSymbol nts_dom_URL_get_href
+     */
+    _get_href(this: URL): StringView;
+    /**
+     * @ntsSymbol nts_dom_URL_set_href
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_href(this: URL, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_href
+     * @ntsSet _set_href
+     */
+    href: StringView;
+    /**
+     * @ntsSymbol nts_dom_URL_toJSON
+     */
+    toJSON(this: URL): StringView;
+  }
+  export type URLMethods = URLOwnMethods;
+  export type URL = HostClass<"NtsDomURL", null, "nts_dom_retain", "nts_dom_release"> & URLMethods;
+  /**
+   * @ntsSymbol nts_dom_new_URL_2
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newURL(url: StringView, base: StringView, error?: Ptr<DOMException | null>): URL;
+  /**
+   * @ntsSymbol nts_dom_new_URL_1
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newURL(url: StringView, error?: Ptr<DOMException | null>): URL;
+  export interface URLSearchParamsOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_URLSearchParams_get_size
+     */
+    _get_size(this: URLSearchParams): CNumber<"double">;
+    /**
+     * @ntsGet _get_size
+     */
+    readonly size: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_URLSearchParams_append
+     */
+    append(this: URLSearchParams, name: StringView, value: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_URLSearchParams_delete_2
+     */
+    delete(this: URLSearchParams, name: StringView, value: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_URLSearchParams_delete_1
+     */
+    delete(this: URLSearchParams, name: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_URLSearchParams_get
+     */
+    get(this: URLSearchParams, name: StringView): StringView | null;
+    /**
+     * @ntsSymbol nts_dom_URLSearchParams_has_2
+     */
+    has(this: URLSearchParams, name: StringView, value: StringView): boolean;
+    /**
+     * @ntsSymbol nts_dom_URLSearchParams_has_1
+     */
+    has(this: URLSearchParams, name: StringView): boolean;
+    /**
+     * @ntsSymbol nts_dom_URLSearchParams_set
+     */
+    set(this: URLSearchParams, name: StringView, value: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_URLSearchParams_sort
+     */
+    sort(this: URLSearchParams): void;
+  }
+  export type URLSearchParamsMethods = URLSearchParamsOwnMethods;
+  export type URLSearchParams = HostClass<"NtsDomURLSearchParams", null, "nts_dom_retain", "nts_dom_release"> & URLSearchParamsMethods;
+  /**
+   * @ntsSymbol nts_dom_new_URLSearchParams
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newURLSearchParams(error?: Ptr<DOMException | null>): URLSearchParams;
 }

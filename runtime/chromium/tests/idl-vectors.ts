@@ -12,6 +12,7 @@
 // Page script has no `asText`/`asHTMLElement`/`asHTMLInputElement`; the
 // oracle defines them (`instanceof`) where the import stood. What a caught
 // error reads as is passed in.
+import { newAbortController, newCustomEvent, newEvent, newKeyboardEvent, newMouseEvent, newURL, newURLSearchParams, window } from "nts:dom";
 import { asElement, asHTMLAnchorElement, asHTMLCanvasElement, asHTMLElement, asHTMLImageElement, asHTMLOListElement, asHTMLTableCellElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
 import type { Document, Element, Event, Node, Text } from "nts:dom";
 
@@ -354,6 +355,62 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   remover.click();
   remover.removeEventListener("click", afterIt);
   log("selfRemoval", selfRemoving.count + "|" + selfRemoving.note);
+
+  // The window: computed style, a media query, the clock, the history. The
+  // page's own geometry differs between the two shells' runs, so only what
+  // both must agree on is logged.
+  const w = window();
+  const styled = asHTMLElement(d.createElement("div"))!;
+  root.appendChild(styled);
+  styled.style.color = "red";
+  styled.style.display = "inline-block";
+  const computed = w.getComputedStyle(styled);
+  log("computed", computed.getPropertyValue("color") + "|" + computed.getPropertyValue("display"));
+  const query = w.matchMedia("(min-width: 1px)");
+  log("matchMedia", query.media + "|" + (query.matches ? "matches" : "no"));
+  const earlier = w.performance.now();
+  const later = w.performance.now();
+  log("clock", (earlier >= 0 ? "+" : "-") + (later >= earlier ? "monotonic" : "backwards"));
+  log("window", (w.innerWidth > 0 ? "sized" : "empty") + "|" + w.location.protocol + "|" + (w.history.length >= 1 ? "history" : "none"));
+
+  // URL: parsing, resolution against a base, its search parameters; an
+  // invalid one throws.
+  const url = newURL("HTTPS://Example.com:443/a/./b/../c?x=1&y=two#frag");
+  log("url", url.href + "|" + url.host + "|" + url.pathname + "|" + shown(url.searchParams.get("y")));
+  const relative = newURL("../d?q=%20s", "https://example.com/a/b/c");
+  log("urlBase", relative.href + "|" + shown(relative.searchParams.get("q")));
+  thrown("urlInvalid", () => { newURL("not a url"); });
+  const params = newURLSearchParams();
+  params.append("a", "1");
+  params.append("b", "x y");
+  params.append("a", "3");
+  log("params", params.size + "|" + shown(params.get("a")) + "|" + (params.has("b") ? "has" : "no") + "|" + shown(params.get("missing")));
+
+  // Events made by the program: dispatched to a listener, with the
+  // constructor's defaults.
+  const target = d.createElement("span");
+  root.appendChild(target);
+  const heard = { type: "", trusted: "" };
+  const listener = (event: Event): void => {
+    heard.type = event.type;
+    heard.trusted = event.isTrusted ? "trusted" : "untrusted";
+  };
+  target.addEventListener("ping", listener);
+  const custom = newCustomEvent("ping");
+  const delivered = target.dispatchEvent(custom);
+  target.removeEventListener("ping", listener);
+  log("customEvent", heard.type + "|" + heard.trusted + "|" + (delivered ? "notCanceled" : "canceled") + "|" + (custom.bubbles ? "bubbles" : "flat"));
+  const plain = newEvent("plain");
+  const mouse = newMouseEvent("click");
+  const key = newKeyboardEvent("keydown");
+  log("eventDefaults", plain.type + "|" + (plain.cancelable ? "cancelable" : "fixed") + "|" + mouse.button + "|" + mouse.clientX + "|" + key.key + "|" + (key.repeat ? "repeat" : "once"));
+
+  // AbortController: a signal that aborts once.
+  const controller = newAbortController();
+  const signal = controller.signal;
+  const wasAborted = signal.aborted;
+  controller.abort();
+  log("abort", (wasAborted ? "aborted" : "live") + "|" + (signal.aborted ? "aborted" : "live"));
 
   // What the members raise: each exception's name and Blink's message.
   thrown("syntax", () => { d.querySelector("["); });

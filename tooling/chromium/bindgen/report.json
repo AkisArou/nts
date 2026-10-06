@@ -1,5 +1,5 @@
 {
-  "bound": 2977,
+  "bound": 3566,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -30,11 +30,6 @@
       "interface": "Node",
       "member": "getRootNode/1",
       "why": "parameter type optional GetRootNodeOptions"
-    },
-    {
-      "interface": "Node",
-      "member": "getRootNode/0",
-      "why": "default `{}` of argument options"
     },
     {
       "interface": "Element",
@@ -149,7 +144,7 @@
     {
       "interface": "Element",
       "member": "get customElementRegistry",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "interface CustomElementRegistry is not bound"
     },
     {
       "interface": "Element",
@@ -309,7 +304,7 @@
     {
       "interface": "Element",
       "member": "animate/2",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "interface Animation is not bound"
     },
     {
       "interface": "Element",
@@ -345,11 +340,6 @@
       "interface": "Element",
       "member": "checkVisibility/1",
       "why": "parameter type optional CheckVisibilityOptions"
-    },
-    {
-      "interface": "Element",
-      "member": "checkVisibility/0",
-      "why": "default `{}` of argument options"
     },
     {
       "interface": "Element",
@@ -408,11 +398,6 @@
     },
     {
       "interface": "Element",
-      "member": "getHTML/0",
-      "why": "default `{}` of argument options"
-    },
-    {
-      "interface": "Element",
       "member": "matchContainer/1",
       "why": "[RuntimeEnabled]"
     },
@@ -449,47 +434,47 @@
     {
       "interface": "Element",
       "member": "requestFullscreen/1",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "result type Promise<undefined>"
     },
     {
       "interface": "Element",
       "member": "requestPointerLock/1",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "result type Promise<undefined>"
     },
     {
       "interface": "Element",
       "member": "scroll/1",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "result type Promise<ScrollResult>"
     },
     {
       "interface": "Element",
       "member": "scroll/2",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "result type Promise<ScrollResult>"
     },
     {
       "interface": "Element",
       "member": "scrollBy/1",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "result type Promise<ScrollResult>"
     },
     {
       "interface": "Element",
       "member": "scrollBy/2",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "result type Promise<ScrollResult>"
     },
     {
       "interface": "Element",
       "member": "scrollIntoView/1",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "result type Promise<ScrollResult>"
     },
     {
       "interface": "Element",
       "member": "scrollTo/1",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "result type Promise<ScrollResult>"
     },
     {
       "interface": "Element",
       "member": "scrollTo/2",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "result type Promise<ScrollResult>"
     },
     {
       "interface": "Element",
@@ -529,17 +514,17 @@
     {
       "interface": "Element",
       "member": "startViewTransition/0",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "interface ViewTransition is not bound"
     },
     {
       "interface": "Element",
       "member": "startViewTransition/1",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "interface ViewTransition is not bound"
     },
     {
       "interface": "Element",
       "member": "startViewTransition/1",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "interface ViewTransition is not bound"
     },
     {
       "interface": "Element",
@@ -608,18 +593,8 @@
     },
     {
       "interface": "Element",
-      "member": "webkitRequestFullScreen/0",
-      "why": "default `{}` of argument options"
-    },
-    {
-      "interface": "Element",
       "member": "webkitRequestFullscreen/1",
       "why": "parameter type optional FullscreenOptions"
-    },
-    {
-      "interface": "Element",
-      "member": "webkitRequestFullscreen/0",
-      "why": "default `{}` of argument options"
     },
     {
       "interface": "CharacterData",
@@ -718,11 +693,6 @@
     },
     {
       "interface": "Document",
-      "member": "get location",
-      "why": "interface Location is not bound"
-    },
-    {
-      "interface": "Document",
       "member": "get readyState",
       "why": "result type DocumentReadyState"
     },
@@ -735,11 +705,6 @@
       "interface": "Document",
       "member": "get currentScript",
       "why": "result type HTMLOrSVGScriptElement?"
-    },
-    {
-      "interface": "Document",
-      "member": "get defaultView",
-      "why": "interface Window is not bound"
     },
     {
       "interface": "Document",
@@ -2164,7 +2129,7 @@
     {
       "interface": "Document",
       "member": "get customElementRegistry",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "interface CustomElementRegistry is not bound"
     },
     {
       "interface": "Document",
@@ -2233,11 +2198,6 @@
     },
     {
       "interface": "Document",
-      "member": "createEvent/1",
-      "why": "[CallWith=ScriptState] needs a script context"
-    },
-    {
-      "interface": "Document",
       "member": "createExpression/2",
       "why": "interface XPathExpression is not bound"
     },
@@ -2273,18 +2233,8 @@
     },
     {
       "interface": "Document",
-      "member": "execCommand/2",
-      "why": "default `\"\"` of argument value"
-    },
-    {
-      "interface": "Document",
-      "member": "execCommand/1",
-      "why": "default `\"\"` of argument value"
-    },
-    {
-      "interface": "Document",
       "member": "exitFullscreen/0",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "result type Promise<undefined>"
     },
     {
       "interface": "Document",
@@ -2333,11 +2283,6 @@
     },
     {
       "interface": "Document",
-      "member": "open/3",
-      "why": "interface Window is not bound"
-    },
-    {
-      "interface": "Document",
       "member": "requestStorageAccess/0",
       "why": "defined in Blink's modules component; the adapter links core"
     },
@@ -2359,17 +2304,17 @@
     {
       "interface": "Document",
       "member": "startViewTransition/0",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "interface ViewTransition is not bound"
     },
     {
       "interface": "Document",
       "member": "startViewTransition/1",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "interface ViewTransition is not bound"
     },
     {
       "interface": "Document",
       "member": "startViewTransition/1",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "interface ViewTransition is not bound"
     },
     {
       "interface": "Document",
@@ -2413,8 +2358,13 @@
     },
     {
       "interface": "HTMLElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLElement",
       "member": "get hidden",
-      "why": "needs ${script_state}"
+      "why": "result type (boolean or unrestricted double or DOMString)?"
     },
     {
       "interface": "HTMLElement",
@@ -3678,13 +3628,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "focus/0",
-      "why": "default `{}` of argument options"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "hideUnboundedElement/0",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "result type Promise<undefined>"
     },
     {
       "interface": "HTMLElement",
@@ -3699,12 +3644,17 @@
     {
       "interface": "HTMLElement",
       "member": "showUnboundedElement/0",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "result type Promise<undefined>"
     },
     {
       "interface": "HTMLElement",
       "member": "togglePopover/1",
       "why": "parameter type optional (TogglePopoverOptions or boolean)"
+    },
+    {
+      "interface": "HTMLInputElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
     },
     {
       "interface": "HTMLInputElement",
@@ -3749,12 +3699,12 @@
     {
       "interface": "HTMLInputElement",
       "member": "get valueAsDate",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "result type object?"
     },
     {
       "interface": "HTMLInputElement",
       "member": "set valueAsDate",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "parameter type object?"
     },
     {
       "interface": "HTMLInputElement",
@@ -3813,8 +3763,18 @@
     },
     {
       "interface": "HTMLButtonElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLButtonElement",
       "member": "get validity",
       "why": "interface ValidityState is not bound"
+    },
+    {
+      "interface": "HTMLAnchorElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
     },
     {
       "interface": "HTMLAnchorElement",
@@ -3828,38 +3788,18 @@
     },
     {
       "interface": "Event",
-      "member": "get timeStamp",
-      "why": "[CallWith=ScriptState] needs a script context"
-    },
-    {
-      "interface": "Event",
-      "member": "get returnValue",
-      "why": "[CallWith=ScriptState] needs a script context"
-    },
-    {
-      "interface": "Event",
-      "member": "set returnValue",
-      "why": "[CallWith=ScriptState] needs a script context"
-    },
-    {
-      "interface": "Event",
-      "member": "get cancelBubble",
-      "why": "[CallWith=ScriptState] needs a script context"
-    },
-    {
-      "interface": "Event",
-      "member": "set cancelBubble",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "member": "constructor/2",
+      "why": "parameter type optional EventInit"
     },
     {
       "interface": "Event",
       "member": "composedPath/0",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "result type sequence<EventTarget>"
     },
     {
       "interface": "UIEvent",
-      "member": "get view",
-      "why": "interface Window is not bound"
+      "member": "constructor/2",
+      "why": "parameter type optional UIEventInit"
     },
     {
       "interface": "UIEvent",
@@ -3872,24 +3812,14 @@
       "why": "[RuntimeEnabled]"
     },
     {
-      "interface": "UIEvent",
-      "member": "initUIEvent/5",
-      "why": "interface Window is not bound"
-    },
-    {
-      "interface": "UIEvent",
-      "member": "initUIEvent/4",
-      "why": "interface Window is not bound"
-    },
-    {
       "interface": "MouseEvent",
-      "member": "initMouseEvent/15",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "member": "constructor/2",
+      "why": "parameter type optional MouseEventInit"
     },
     {
       "interface": "KeyboardEvent",
-      "member": "initKeyboardEvent/10",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "member": "constructor/2",
+      "why": "parameter type optional KeyboardEventInit"
     },
     {
       "interface": "CSSStyleDeclaration",
@@ -3899,7 +3829,7 @@
     {
       "interface": "DOMRectReadOnly",
       "member": "toJSON/0",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "result type object"
     },
     {
       "interface": "DOMRectReadOnly",
@@ -3912,6 +3842,46 @@
       "why": "static"
     },
     {
+      "interface": "HTMLDivElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLSpanElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLParagraphElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLLabelElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLUListElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLOListElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLLIElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLFormElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
       "interface": "HTMLFormElement",
       "member": "get elements",
       "why": "interface HTMLFormControlsCollection is not bound"
@@ -3919,7 +3889,12 @@
     {
       "interface": "HTMLFormElement",
       "member": "named get",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "result type (RadioNodeList or Element)"
+    },
+    {
+      "interface": "HTMLSelectElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
     },
     {
       "interface": "HTMLSelectElement",
@@ -3952,6 +3927,16 @@
       "why": "parameter type (HTMLOptionElement or HTMLOptGroupElement)"
     },
     {
+      "interface": "HTMLOptionElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLTextAreaElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
       "interface": "HTMLTextAreaElement",
       "member": "get validity",
       "why": "interface ValidityState is not bound"
@@ -3970,6 +3955,11 @@
       "interface": "HTMLTextAreaElement",
       "member": "setRangeText/3",
       "why": "default `\"preserve\"` of argument selectionMode"
+    },
+    {
+      "interface": "HTMLImageElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
     },
     {
       "interface": "HTMLImageElement",
@@ -4019,7 +4009,12 @@
     {
       "interface": "HTMLImageElement",
       "member": "decode/0",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "result type Promise<undefined>"
+    },
+    {
+      "interface": "HTMLCanvasElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
     },
     {
       "interface": "HTMLCanvasElement",
@@ -4118,6 +4113,11 @@
     },
     {
       "interface": "HTMLTableElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLTableElement",
       "member": "get caption",
       "why": "interface HTMLTableCaptionElement is not bound"
     },
@@ -4130,6 +4130,26 @@
       "interface": "HTMLTableElement",
       "member": "createCaption/0",
       "why": "interface HTMLTableCaptionElement is not bound"
+    },
+    {
+      "interface": "HTMLTableSectionElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLTableRowElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLTableCellElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLTemplateElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
     },
     {
       "interface": "HTMLTemplateElement",
@@ -4232,6 +4252,16 @@
       "why": "[RuntimeEnabled]"
     },
     {
+      "interface": "FocusEvent",
+      "member": "constructor/2",
+      "why": "parameter type optional FocusEventInit"
+    },
+    {
+      "interface": "InputEvent",
+      "member": "constructor/2",
+      "why": "parameter type optional InputEventInit"
+    },
+    {
       "interface": "InputEvent",
       "member": "get dataTransfer",
       "why": "interface DataTransfer is not bound"
@@ -4240,6 +4270,11 @@
       "interface": "InputEvent",
       "member": "getTargetRanges/0",
       "why": "result type sequence<StaticRange>"
+    },
+    {
+      "interface": "PointerEvent",
+      "member": "constructor/2",
+      "why": "parameter type optional PointerEventInit"
     },
     {
       "interface": "PointerEvent",
@@ -4253,18 +4288,2188 @@
     },
     {
       "interface": "WheelEvent",
+      "member": "constructor/2",
+      "why": "parameter type optional WheelEventInit"
+    },
+    {
+      "interface": "WheelEvent",
       "member": "get momentum",
       "why": "[RuntimeEnabled]"
     },
     {
       "interface": "CustomEvent",
+      "member": "constructor/2",
+      "why": "parameter type optional CustomEventInit"
+    },
+    {
+      "interface": "CustomEvent",
       "member": "get detail",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "result type any"
     },
     {
       "interface": "CustomEvent",
       "member": "initCustomEvent/4",
-      "why": "[CallWith=ScriptState] needs a script context"
+      "why": "parameter type optional any"
+    },
+    {
+      "interface": "Window",
+      "member": "get customElements",
+      "why": "interface CustomElementRegistry is not bound"
+    },
+    {
+      "interface": "Window",
+      "member": "get navigation",
+      "why": "interface Navigation is not bound"
+    },
+    {
+      "interface": "Window",
+      "member": "get locationbar",
+      "why": "interface BarProp is not bound"
+    },
+    {
+      "interface": "Window",
+      "member": "get menubar",
+      "why": "interface BarProp is not bound"
+    },
+    {
+      "interface": "Window",
+      "member": "get personalbar",
+      "why": "interface BarProp is not bound"
+    },
+    {
+      "interface": "Window",
+      "member": "get scrollbars",
+      "why": "interface BarProp is not bound"
+    },
+    {
+      "interface": "Window",
+      "member": "get statusbar",
+      "why": "interface BarProp is not bound"
+    },
+    {
+      "interface": "Window",
+      "member": "get toolbar",
+      "why": "interface BarProp is not bound"
+    },
+    {
+      "interface": "Window",
+      "member": "get alwaysOnTop",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get opener",
+      "why": "result type any"
+    },
+    {
+      "interface": "Window",
+      "member": "set opener",
+      "why": "parameter type any"
+    },
+    {
+      "interface": "Window",
+      "member": "get navigator",
+      "why": "interface Navigator is not bound"
+    },
+    {
+      "interface": "Window",
+      "member": "get originAgentCluster",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get external",
+      "why": "interface External is not bound"
+    },
+    {
+      "interface": "Window",
+      "member": "get visualViewport",
+      "why": "interface VisualViewport is not bound"
+    },
+    {
+      "interface": "Window",
+      "member": "get viewport",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onorientationchange",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onorientationchange",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set onorientationchange",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get orientation",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpageswap",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpageswap",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set onpageswap",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpagereveal",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpagereveal",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get event",
+      "why": "result type any"
+    },
+    {
+      "interface": "Window",
+      "member": "get clientInformation",
+      "why": "interface Navigator is not bound"
+    },
+    {
+      "interface": "Window",
+      "member": "get defaultStatus",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "set defaultStatus",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get defaultstatus",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "set defaultstatus",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get styleMedia",
+      "why": "interface StyleMedia is not bound"
+    },
+    {
+      "interface": "Window",
+      "member": "get onsearch",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onsearch",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get credentialless",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get fence",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get crashReport",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onappinstalled",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get onappinstalled",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set onappinstalled",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get onbeforeinstallprompt",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get onbeforeinstallprompt",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set onbeforeinstallprompt",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get cookieStore",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondevicemotion",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondevicemotion",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set ondevicemotion",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondeviceorientation",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondeviceorientation",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set ondeviceorientation",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondeviceorientationabsolute",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondeviceorientationabsolute",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set ondeviceorientationabsolute",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get documentPictureInPicture",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get launchQueue",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get sharedStorage",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get speechSynthesis",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get subApps",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get onabort",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onabort",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onbeforefilter",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onbeforefilter",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set onbeforefilter",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onbeforeinput",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onbeforeinput",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onbeforematch",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onbeforematch",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onbeforetoggle",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onbeforetoggle",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onblur",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onblur",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get oncancel",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get oncancel",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get oncanplay",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get oncanplay",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get oncanplaythrough",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get oncanplaythrough",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onchange",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onclick",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onclick",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onclose",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onclose",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get oncommand",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get oncommand",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get oncomplete",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get oncomplete",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set oncomplete",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get oncontentvisibilityautostatechange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get oncontentvisibilityautostatechange",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get oncontextlost",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get oncontextlost",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get oncontextmenu",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get oncontextmenu",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get oncontextrestored",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get oncontextrestored",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get oncuechange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get oncuechange",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondblclick",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondblclick",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondrag",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondrag",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondragend",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondragend",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondragenter",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondragenter",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondragleave",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondragleave",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondragover",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondragover",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondragstart",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondragstart",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondrop",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondrop",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondurationchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get ondurationchange",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onemptied",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onemptied",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onended",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onended",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onerror",
+      "why": "result type OnErrorEventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "set onerror",
+      "why": "parameter type OnErrorEventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onfocus",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onfocus",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onformdata",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onformdata",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get oninput",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get oninput",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get oninvalid",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get oninvalid",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onkeydown",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onkeydown",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onkeypress",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onkeypress",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onkeyup",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onkeyup",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onload",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onload",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onloadeddata",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onloadeddata",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onloadedmetadata",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onloadedmetadata",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onloadstart",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onloadstart",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onmousedown",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onmousedown",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onmouseenter",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onmouseenter",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onmouseleave",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onmouseleave",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onmousemove",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onmousemove",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onmouseout",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onmouseout",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onmouseover",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onmouseover",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onmouseup",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onmouseup",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onmousewheel",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onmousewheel",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onoverscrollcancel",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onoverscrollcancel",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set onoverscrollcancel",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onoverscrollchanging",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onoverscrollchanging",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set onoverscrollchanging",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onoverscrollend",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onoverscrollend",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set onoverscrollend",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onoverscrollstart",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onoverscrollstart",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set onoverscrollstart",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpause",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpause",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onplay",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onplay",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onplaying",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onplaying",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onprogress",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onprogress",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onratechange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onratechange",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onreset",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onreset",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onresize",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onresize",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onscroll",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onscroll",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onscrollend",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onscrollend",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onsecuritypolicyviolation",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onsecuritypolicyviolation",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onseeked",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onseeked",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onseeking",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onseeking",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onselect",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onselect",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onslotchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onslotchange",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onscrollsnapchange",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onscrollsnapchange",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set onscrollsnapchange",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onscrollsnapchanging",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onscrollsnapchanging",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set onscrollsnapchanging",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onstalled",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onstalled",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onsubmit",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onsubmit",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onsuspend",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onsuspend",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get ontimeupdate",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get ontimeupdate",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get ontoggle",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get ontoggle",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onvolumechange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onvolumechange",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onwaiting",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onwaiting",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onwebkitanimationend",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onwebkitanimationend",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onwebkitanimationiteration",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onwebkitanimationiteration",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onwebkitanimationstart",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onwebkitanimationstart",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onwebkittransitionend",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onwebkittransitionend",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onwheel",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onwheel",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onauxclick",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onauxclick",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get ongotpointercapture",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get ongotpointercapture",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onlostpointercapture",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onlostpointercapture",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpointerdown",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpointerdown",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpointermove",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpointermove",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpointerrawupdate",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpointerrawupdate",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpointerup",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpointerup",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpointercancel",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpointercancel",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpointerover",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpointerover",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpointerout",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpointerout",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpointerenter",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpointerenter",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpointerleave",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpointerleave",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get ontouchcancel",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get ontouchcancel",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set ontouchcancel",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get ontouchend",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get ontouchend",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set ontouchend",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get ontouchmove",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get ontouchmove",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set ontouchmove",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get ontouchstart",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get ontouchstart",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set ontouchstart",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onselectstart",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onselectstart",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onselectionchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onselectionchange",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onanimationcancel",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onanimationcancel",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onanimationend",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onanimationend",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onanimationiteration",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onanimationiteration",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onanimationstart",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onanimationstart",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get ontransitionrun",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get ontransitionrun",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get ontransitionstart",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get ontransitionstart",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get ontransitionend",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get ontransitionend",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get ontransitioncancel",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get ontransitioncancel",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onbeforexrselect",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get onbeforexrselect",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set onbeforexrselect",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get onafterprint",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onafterprint",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onbeforeprint",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onbeforeprint",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onbeforeunload",
+      "why": "result type OnBeforeUnloadEventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "set onbeforeunload",
+      "why": "parameter type OnBeforeUnloadEventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onhashchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onhashchange",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onlanguagechange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onlanguagechange",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onmessage",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onmessage",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onmessageerror",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onmessageerror",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onmove",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onmove",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set onmove",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onoffline",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onoffline",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get ononline",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get ononline",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpagehide",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpagehide",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpageshow",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpageshow",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpopstate",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onpopstate",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onrejectionhandled",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onrejectionhandled",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onstorage",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onstorage",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get ontimezonechange",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get ontimezonechange",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set ontimezonechange",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get onunhandledrejection",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onunhandledrejection",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get onunload",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Window",
+      "member": "get onunload",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "get ongamepadconnected",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get ongamepadconnected",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set ongamepadconnected",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get ongamepaddisconnected",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get ongamepaddisconnected",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set ongamepaddisconnected",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get ongamepadrawinputchanged",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get ongamepadrawinputchanged",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Window",
+      "member": "set ongamepadrawinputchanged",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get crossOriginEmbedderPolicy",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "get scheduler",
+      "why": "interface Scheduler is not bound"
+    },
+    {
+      "interface": "Window",
+      "member": "get trustedTypes",
+      "why": "interface TrustedTypePolicyFactory is not bound"
+    },
+    {
+      "interface": "Window",
+      "member": "get caches",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get crypto",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get indexedDB",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get printing",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get localStorage",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "get sessionStorage",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "createImageBitmap/2",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "createImageBitmap/6",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "fetch/2",
+      "why": "result type Promise<Response>"
+    },
+    {
+      "interface": "Window",
+      "member": "fetchLater/2",
+      "why": "interface FetchLaterResult is not bound"
+    },
+    {
+      "interface": "Window",
+      "member": "getDigitalGoodsService/1",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "getScreenDetails/0",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "getSelection/0",
+      "why": "interface Selection is not bound"
+    },
+    {
+      "interface": "Window",
+      "member": "maximize/0",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "minimize/0",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "postMessage/3",
+      "why": "parameter type any"
+    },
+    {
+      "interface": "Window",
+      "member": "postMessage/2",
+      "why": "parameter type any"
+    },
+    {
+      "interface": "Window",
+      "member": "postMessage/2",
+      "why": "parameter type any"
+    },
+    {
+      "interface": "Window",
+      "member": "postMessage/1",
+      "why": "parameter type any"
+    },
+    {
+      "interface": "Window",
+      "member": "queryLocalFonts/1",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "queueMicrotask/1",
+      "why": "parameter type VoidFunction"
+    },
+    {
+      "interface": "Window",
+      "member": "reportError/1",
+      "why": "parameter type any"
+    },
+    {
+      "interface": "Window",
+      "member": "requestAnimationFrame/1",
+      "why": "parameter type FrameRequestCallback"
+    },
+    {
+      "interface": "Window",
+      "member": "requestIdleCallback/2",
+      "why": "parameter type IdleRequestCallback"
+    },
+    {
+      "interface": "Window",
+      "member": "requestIdleCallback/1",
+      "why": "parameter type IdleRequestCallback"
+    },
+    {
+      "interface": "Window",
+      "member": "requestResize/0",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "restore/0",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "scroll/1",
+      "why": "result type Promise<ScrollResult>"
+    },
+    {
+      "interface": "Window",
+      "member": "scroll/2",
+      "why": "result type Promise<ScrollResult>"
+    },
+    {
+      "interface": "Window",
+      "member": "scrollBy/1",
+      "why": "result type Promise<ScrollResult>"
+    },
+    {
+      "interface": "Window",
+      "member": "scrollBy/2",
+      "why": "result type Promise<ScrollResult>"
+    },
+    {
+      "interface": "Window",
+      "member": "scrollTo/1",
+      "why": "result type Promise<ScrollResult>"
+    },
+    {
+      "interface": "Window",
+      "member": "scrollTo/2",
+      "why": "result type Promise<ScrollResult>"
+    },
+    {
+      "interface": "Window",
+      "member": "setInterval/3",
+      "why": "variadic any..."
+    },
+    {
+      "interface": "Window",
+      "member": "setInterval/3",
+      "why": "variadic any..."
+    },
+    {
+      "interface": "Window",
+      "member": "setResizable/1",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "setTimeout/3",
+      "why": "variadic any..."
+    },
+    {
+      "interface": "Window",
+      "member": "setTimeout/3",
+      "why": "variadic any..."
+    },
+    {
+      "interface": "Window",
+      "member": "showDirectoryPicker/1",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "showOpenFilePicker/1",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "showSaveFilePicker/1",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "Window",
+      "member": "structuredClone/2",
+      "why": "result type any"
+    },
+    {
+      "interface": "Window",
+      "member": "webkitRequestAnimationFrame/1",
+      "why": "parameter type FrameRequestCallback"
+    },
+    {
+      "interface": "Window",
+      "member": "webkitRequestFileSystem/4",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "webkitResolveLocalFileSystemURL/3",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Window",
+      "member": "named get",
+      "why": "result type object"
+    },
+    {
+      "interface": "Performance",
+      "member": "get onresourcetimingbufferfull",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Performance",
+      "member": "get onresourcetimingbufferfull",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Performance",
+      "member": "get timing",
+      "why": "interface PerformanceTiming is not bound"
+    },
+    {
+      "interface": "Performance",
+      "member": "get navigation",
+      "why": "interface PerformanceNavigation is not bound"
+    },
+    {
+      "interface": "Performance",
+      "member": "get memory",
+      "why": "interface MemoryInfo is not bound"
+    },
+    {
+      "interface": "Performance",
+      "member": "get eventCounts",
+      "why": "interface EventCounts is not bound"
+    },
+    {
+      "interface": "Performance",
+      "member": "get interactionCount",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Performance",
+      "member": "bind/3",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Performance",
+      "member": "getEntries/0",
+      "why": "result type PerformanceEntryList"
+    },
+    {
+      "interface": "Performance",
+      "member": "getEntriesByName/2",
+      "why": "result type PerformanceEntryList"
+    },
+    {
+      "interface": "Performance",
+      "member": "getEntriesByType/1",
+      "why": "result type PerformanceEntryList"
+    },
+    {
+      "interface": "Performance",
+      "member": "getSpeculations/0",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Performance",
+      "member": "mark/2",
+      "why": "interface PerformanceMark is not bound"
+    },
+    {
+      "interface": "Performance",
+      "member": "markConditional/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Performance",
+      "member": "measure/3",
+      "why": "interface PerformanceMeasure is not bound"
+    },
+    {
+      "interface": "Performance",
+      "member": "measureConditional/3",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Performance",
+      "member": "measureUserAgentSpecificMemory/0",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Performance",
+      "member": "toJSON/0",
+      "why": "result type object"
+    },
+    {
+      "interface": "MediaQueryList",
+      "member": "get onchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "MediaQueryList",
+      "member": "get onchange",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "MediaQueryList",
+      "member": "addListener/1",
+      "why": "parameter type EventListener?"
+    },
+    {
+      "interface": "MediaQueryList",
+      "member": "removeListener/1",
+      "why": "parameter type EventListener?"
+    },
+    {
+      "interface": "Location",
+      "member": "get ancestorOrigins",
+      "why": "interface DOMStringList is not bound"
+    },
+    {
+      "interface": "History",
+      "member": "get scrollRestoration",
+      "why": "result type ScrollRestoration"
+    },
+    {
+      "interface": "History",
+      "member": "set scrollRestoration",
+      "why": "parameter type ScrollRestoration"
+    },
+    {
+      "interface": "History",
+      "member": "get state",
+      "why": "result type any"
+    },
+    {
+      "interface": "History",
+      "member": "pushState/3",
+      "why": "parameter type any"
+    },
+    {
+      "interface": "History",
+      "member": "pushState/2",
+      "why": "parameter type any"
+    },
+    {
+      "interface": "History",
+      "member": "replaceState/3",
+      "why": "parameter type any"
+    },
+    {
+      "interface": "History",
+      "member": "replaceState/2",
+      "why": "parameter type any"
+    },
+    {
+      "interface": "Screen",
+      "member": "get onchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Screen",
+      "member": "get onchange",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Screen",
+      "member": "get orientation",
+      "why": "defined in Blink's modules component; the adapter links core"
+    },
+    {
+      "interface": "AbortController",
+      "member": "abort/1",
+      "why": "parameter type optional any"
+    },
+    {
+      "interface": "AbortSignal",
+      "member": "get reason",
+      "why": "result type any"
+    },
+    {
+      "interface": "AbortSignal",
+      "member": "get onabort",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "AbortSignal",
+      "member": "get onabort",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "AbortSignal",
+      "member": "abort/1",
+      "why": "static"
+    },
+    {
+      "interface": "AbortSignal",
+      "member": "any/1",
+      "why": "static"
+    },
+    {
+      "interface": "AbortSignal",
+      "member": "timeout/1",
+      "why": "static"
+    },
+    {
+      "interface": "URL",
+      "member": "canParse/2",
+      "why": "static"
+    },
+    {
+      "interface": "URL",
+      "member": "createObjectURL/1",
+      "why": "static"
+    },
+    {
+      "interface": "URL",
+      "member": "createObjectURL/1",
+      "why": "static"
+    },
+    {
+      "interface": "URL",
+      "member": "parse/2",
+      "why": "static"
+    },
+    {
+      "interface": "URL",
+      "member": "revokeObjectURL/1",
+      "why": "static"
+    },
+    {
+      "interface": "URLSearchParams",
+      "member": "constructor/1",
+      "why": "parameter type optional (sequence<sequence<USVString>> or record<USVString, USVString> or USVString)"
+    },
+    {
+      "interface": "URLSearchParams",
+      "member": "getAll/1",
+      "why": "result type sequence<USVString>"
     }
   ]
 }
