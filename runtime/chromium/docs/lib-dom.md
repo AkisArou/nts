@@ -33,12 +33,20 @@ Each fact below was measured on the compiler at 6c08170ef.
   `interface Node`, `Element`, `Document`. A brand chain is a tuple, so
   `Element`'s chain extends `Node`'s exactly as lib.dom's own inheritance
   does. The compiler then treats a lib.dom `Document` as a native handle.
-- **Members do not follow yet.** A tagged member merged into lib.dom's
-  `Element` -- an `@ntsSymbol` overload of `setAttribute`, or an `@ntsGet`
-  property -- is refused: `setAttribute on an opaque C pointer, which has no
-  method table`. It fails for a non-generic member too. The cause is
-  undetermined: either TypeScript resolves the call to lib.dom's own
-  overload, or tags in a `declare global` block do not reach lowering.
+- **Properties already bind by redeclaration.** An overlay redeclares
+  `readonly childElementCount: number` in a merged `interface Element`,
+  with `@ntsGet` naming a tagged method beside it. `div.childElementCount`
+  on lib.dom's own type then lowers to Blink's getter: accessor lowering
+  looks for tags across every declaration of the property's symbol. A
+  getter answering `Element` behind lib.dom's `documentElement: HTMLElement`
+  lowers with a trusted cast, as page script's typing implies.
+- **Methods do not.** A tagged overload of `setAttribute` merged into
+  `Element` is refused (`setAttribute on an opaque C pointer, which has no
+  method table`), because the checker resolves the call to lib.dom's own
+  declaration and lowering uses only that one. The same tagged method under
+  a name lib.dom lacks (`ntsSetAttribute`) binds.
+- **Globals do not.** A tagged `declare var document` is read as a C global
+  variable (`v0 = document;`); `@ntsGet` on a global variable is ignored.
 - **Coverage, by `tooling/chromium/bindgen/libdom.py`:**
   - lib.dom.d.ts declares 1329 members on the 22 interfaces bound today.
   - 440 are bound and 321 are in Blink's IDL but skipped, with
@@ -144,6 +152,23 @@ JSON-described SDK could be bound the same way.
   - constants;
   - iterables;
   - stringifiers.
+
+## The minimal alternative the measurements show (B')
+
+B fails only at methods and globals, so two small compiler changes would
+make B work:
+
+1. A method call whose resolved declaration has no native tags lowers
+   through a tagged declaration of the same symbol at the call's arity. This
+   is what accessor lowering already does for properties.
+2. `@ntsGet` on a variable is honoured where the variable is read.
+
+Its cost is the editor. The overlay's helper members show in completions on
+lib.dom's types: the `_get_x` methods behind properties, the tagged
+overloads with ABI types (`StringView`, `Ptr<DOMException>`), and the
+`__c_chain` brand. C shows nothing but lib.dom. B' is cheaper to build; C is
+cleaner for the person writing the program. `instanceof`, listener variance
+and listener identity are needed either way.
 
 ## Open questions for the discussion
 
