@@ -4065,6 +4065,17 @@ fn collect_function_values(
         // A class method reaches here too, and is collected separately below:
         // its declaration is a `METHOD_DECLARATION` and the closure it becomes
         // carries a receiver, which a free function's does not.
+        // **Importing a function is not using it as a value.** The name in
+        // `import { nextTick } from "./tick"` is an identifier whose symbol
+        // follows to the declaration, and nothing calls it there -- so it read
+        // as a use, and every imported function was wrapped. That wrapper was
+        // dead, and harmless, until a generic one also got an erased kernel
+        // (`generic_values::register`): `nextTick<A extends unknown[]>` then
+        // refused at its rest parameter in a program that only ever calls it
+        // (blockers/a-generic-rest-forwarded-to-its-callback).
+        if node.parent.and_then(|parent| probe.kind_of(parent)) == Some(syntax::IMPORT_SPECIFIER) {
+            continue;
+        }
         let used_as_value = if probe.names_a_member(id) {
             node.parent.is_some_and(|parent| {
                 probe.kind_of(parent) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)

@@ -292,6 +292,10 @@ pub const SOURCE_FILE: u16 = 307;
 /// `import ... from "..."`. Read off real output: a file with exactly two
 /// imports has exactly two children of this kind.
 pub const IMPORT_DECLARATION: u16 = 273;
+/// `{ nextTick }` in `import { nextTick } from "./tick"`: the identifier under
+/// it binds a local name to the declaring module's, and is not a read of it.
+/// Read off real output: the parent of `nextTick` in exactly that import.
+pub const IMPORT_SPECIFIER: u16 = 277;
 /// `export { x } from "..."` and `export * from "..."`, and also a plain
 /// `export { x }` with no specifier. Only the forms *with* a specifier name
 /// another module; the rest resolve to nothing, which is what distinguishes
