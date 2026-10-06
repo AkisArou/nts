@@ -56,6 +56,50 @@ pub(super) fn register(snapshot: &SemanticSnapshot, closures: &[ClosureInfo], fo
         }
     }
     generics::settle_value_contexts(snapshot, found);
+    pin_alias_calls(&probe, &sources, found);
+}
+
+/// A call through a `const` alias of a generic function -- `const id:
+/// (v: bigint) => bigint = identity; id(x)` -- is the call the alias's own
+/// signature makes, and that signature has a context where it is a receiving
+/// type [`register`] gave one -- and the erased root where it is not, as any
+/// other use of the value past a typed context. Nothing pinned a copy for such
+/// a call (its resolved signature names no type parameter), so it named the
+/// bare generic function, which nothing defines.
+fn pin_alias_calls(probe: &FuncBuilder<'_>, sources: &rustc_hash::FxHashSet<NodeId>, found: &mut GenericFunctions) {
+    let snapshot = probe.snapshot;
+    let mut pinned = Vec::new();
+    for call in snapshot.call_targets.keys() {
+        if found.at_call.contains_key(call) {
+            continue;
+        }
+        let Some(callee) = probe.children(*call).first().copied() else { continue; };
+        if probe.kind_of(callee) != Some(syntax::IDENTIFIER) {
+            continue;
+        }
+        // The function the alias chain names; the checker's own callee for
+        // such a call is the alias.
+        let Some(declaration) = source_function(probe, callee, sources) else { continue; };
+        // Through an alias, not the function's own name: a call by its name
+        // pins its own copy from its own arguments.
+        if probe.node(callee).symbol.map(|symbol| probe.denoted_symbol(symbol))
+            == probe.node(declaration).symbol.map(|symbol| probe.denoted_symbol(symbol))
+        {
+            continue;
+        }
+        // The alias's own signature's context where it has one, and otherwise
+        // the erased root every use of the value past a typed context takes.
+        let receiving = snapshot.node_types.get(&callee);
+        let context = found
+            .value_contexts
+            .get(&declaration)
+            .and_then(|contexts| contexts.iter().find(|context| receiving.is_some_and(|ty| context.receiving.contains(ty))))
+            .map(|context| &context.instance)
+            .or_else(|| found.value_fallbacks.get(&declaration));
+        let Some(instance) = context else { continue; };
+        pinned.push((*call, instance.suffix.clone()));
+    }
+    found.at_call.extend(pinned);
 }
 
 fn source_function(probe: &FuncBuilder<'_>, mut node: NodeId, sources: &rustc_hash::FxHashSet<NodeId>) -> Option<NodeId> {
