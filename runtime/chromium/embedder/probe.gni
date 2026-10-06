@@ -1,6 +1,12 @@
 declare_args() {
   # Empty disables the experiment; c/llvm select the precompiled native fixture.
   nts_probe_backend = ""
+
+  # Empty builds no app; c/llvm select the staged app program
+  # (tooling/chromium/app.ts) that nts_app links.
+  nts_app_backend = ""
 }
 assert(nts_probe_backend == "" || nts_probe_backend == "c" ||
        nts_probe_backend == "llvm")
+assert(nts_app_backend == "" || nts_app_backend == "c" ||
+       nts_app_backend == "llvm")

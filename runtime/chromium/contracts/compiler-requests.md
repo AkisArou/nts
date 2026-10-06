@@ -308,3 +308,25 @@ TypeScript `get` -- is typed by the accessor's declared result, not by the
 assignment narrowing, wherever the representation depends on nullability.
 
 **Accept.** The reduction checks the getter's result for NULL.
+
+## 10. Module-level state per environment
+
+**Requested 2026-10-06. Blocks: apps with module-level state.**
+
+The renderer hosts one program per document, each in a fresh environment
+(`nts_environment_create`), and reload or navigation destroys that
+environment once nothing of the program remains. Module-level state is
+compiled to process-wide C statics, set once by `module__init`. So it is
+shared by every document's environment, and nothing releases what it holds
+when one ends. A natural app -- `let state = createState();` at module
+scope, read by `main` -- would carry the first document's objects into the
+second, and fail the host's end-of-document check.
+
+`tooling/chromium/app.ts` therefore refuses a program whose `program.h`
+declares `module__init`, naming this request. What would lift it, either of:
+
+- module state scoped to the current environment, initialised in each;
+- a `module__fini` the host calls before destroying an environment,
+  releasing what module state holds, and a re-run of `module__init` for the
+  next.
+

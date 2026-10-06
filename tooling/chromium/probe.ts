@@ -14,10 +14,18 @@ const lane = resolve(root, "runtime/chromium");
 const fixture = resolve(lane, "embedder/program");
 const staged = resolve(source, "nts");
 const backend = process.argv[2];
-if (backend !== "c" && backend !== "llvm") throw new Error("Usage: node tooling/chromium/probe.ts <c|llvm> [--profile baseline|perf]");
-const selectedProfile = buildProfile(process.argv.slice(3));
-const extra = process.argv.slice(3);
-if (extra.length && !(extra.length === 2 && extra[0] === "--profile")) throw new Error("Only --profile baseline|perf is supported after the backend");
+const usage = "Usage: node tooling/chromium/probe.ts <c|llvm> [--profile baseline|perf] [--app <archive>]";
+if (backend !== "c" && backend !== "llvm") throw new Error(usage);
+// `--app` stages an app's program archive (tooling/chromium/app.ts) beside the
+// probe's, for the nts_app executable.
+const options = new Map<string, string>();
+for (let i = 3; i < process.argv.length; i += 2) {
+  const [name, value] = [process.argv[i], process.argv[i + 1]];
+  if ((name !== "--profile" && name !== "--app") || value === undefined || options.has(name)) throw new Error(usage);
+  options.set(name, value);
+}
+const selectedProfile = buildProfile(options.has("--profile") ? ["--profile", options.get("--profile")!] : []);
+const appArchive = options.get("--app");
 const activeBuild = activeChromiumBuild(root);
 if (activeBuild) throw new Error(`Build ${activeBuild} is running; finish it before staging the probe`);
 
@@ -51,9 +59,11 @@ if (existsSync(blinkStaging)) {
 }
 const argsFile = resolve(source, selectedProfile.directory, "args.gn");
 const profile = readFileSync(resolve(import.meta.dirname, selectedProfile.argumentsFile), "utf8");
-const probeProfile = (variant: string): string => `${profile}\nroot_extra_deps = [ "//nts:nts_shell" ]\nnts_probe_backend = "${variant}"\n`;
+const probeProfile = (variant: string, app = false): string => app
+  ? `${profile}\nroot_extra_deps = [ "//nts:nts_shell", "//nts:nts_app" ]\nnts_probe_backend = "${variant}"\nnts_app_backend = "${variant}"\n`
+  : `${profile}\nroot_extra_deps = [ "//nts:nts_shell" ]\nnts_probe_backend = "${variant}"\n`;
 const oldArgs = existsSync(argsFile) ? readFileSync(argsFile, "utf8") : profile;
-if (![profile, probeProfile("c"), probeProfile("llvm")].includes(oldArgs)) {
+if (![profile, probeProfile("c"), probeProfile("llvm"), probeProfile("c", true), probeProfile("llvm", true)].includes(oldArgs)) {
   throw new Error(`Build arguments differ from the owned ${selectedProfile.name}/probe profiles`);
 }
 
@@ -81,6 +91,10 @@ for (const [directory, names] of Object.entries(sources)) {
 // Beside dom_abi.h and dom_bridge.h, which include it: the one C++ half of
 // StringView, the same for both backends.
 stage(resolve(root, "runtime/c/nts_string_view.h"), "nts_string_view.h");
+if (appArchive !== undefined) {
+  for (const name of ["app.h", "app_observer.cc", "app_observer.h", "app_main.cc"]) stage(resolve(lane, "host", name), name);
+  stage(resolve(appArchive), `generated/app/${backend}/program.a`);
+}
 for (const variant of ["c", "llvm"] as const) {
   const generated = resolve(output, "native-bootstrap", variant === "c" ? "probe" : "probe-llvm", "linux-gnu-x86_64");
   for (const file of ["program.h", "nts_runtime.h", "nts_string_view.h"]) stage(resolve(generated, file), `generated/${variant}/${file}`);
@@ -96,7 +110,7 @@ const exclusions = ["/nts/", "/third_party/blink/renderer/nts/"];
 const missing = exclusions.filter(path => !existing.split("\n").includes(path));
 if (missing.length) writeFileSync(exclude, `${existing}\n# NTS-owned derived renderer experiments\n${missing.join("\n")}\n`);
 mkdirSync(dirname(argsFile), { recursive: true });
-writeFileSync(argsFile, probeProfile(backend));
+writeFileSync(argsFile, probeProfile(backend, appArchive !== undefined));
 execFileSync(resolve(depot, "gn"), ["gen", selectedProfile.directory], {
   cwd: source, stdio: "inherit", env: { ...process.env, PATH: `${depot}${delimiter}${process.env.PATH ?? ""}`, DEPOT_TOOLS_UPDATE: "0", DEPOT_TOOLS_METRICS: "0" },
 });

@@ -67,3 +67,54 @@ executable("nts_shell") {
     configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
   }
 }
+
+# An app (host/app.h): the program tooling/chromium/app.ts staged, run in
+# every main-frame document that opts in with <meta name="nts-app">, in its
+# own executable so that it links only its own program. testonly because
+# content_shell, which it derives from, is.
+if (nts_app_backend != "") {
+  source_set("renderer_app") {
+    testonly = true
+    sources = [
+      "app.h",
+      "app_observer.cc",
+      "app_observer.h",
+      "dom_bridge.h",
+      "dom_bridge_bindings.h",
+    ]
+    inputs = [ "generated/app/$nts_app_backend/program.a" ]
+    libs = [
+      "//nts/generated/app/$nts_app_backend/program.a",
+      "m",
+    ]
+    deps = [
+      "//base",
+      "//content/public/renderer",
+      "//third_party/blink/public:blink",
+      "//third_party/blink/renderer/nts:dom_bridge",
+    ]
+  }
+
+  executable("nts_app") {
+    testonly = true
+    sources = [ "app_main.cc" ]
+    deps = [
+      ":renderer_app",
+      "//base",
+      "//content/public/app",
+      "//content/shell:content_shell_app",
+      "//content/shell:content_shell_lib",
+      "//content/shell:pak",
+      "//sandbox",
+    ]
+    data_deps = [
+      "//components/crash/core/app:chrome_crashpad_handler",
+      "//content/shell:pak",
+      "//tools/v8_context_snapshot",
+    ]
+    write_runtime_deps = "$root_out_dir/nts_app.runtime_deps"
+    if (!is_component_build) {
+      configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
+    }
+  }
+}

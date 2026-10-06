@@ -118,10 +118,13 @@ function activeBuildPid(): number | undefined {
   return activeChromiumBuild(root);
 }
 
-function selectedTarget(): { name: string; label: string } {
+function selectedTarget(): { name: string; label: string; app: boolean } {
   const args = resolve(buildDir, "args.gn");
-  const native = existsSync(args) && readFileSync(args, "utf8").includes('root_extra_deps = [ "//nts:nts_shell" ]');
-  return native ? { name: "nts_shell", label: "//nts:nts_shell" } : { name: "content_shell", label: "//content/shell:content_shell" };
+  const text = existsSync(args) ? readFileSync(args, "utf8") : "";
+  const native = /^root_extra_deps = \[ "\/\/nts:nts_shell"/m.test(text);
+  // tooling/chromium/app.ts stages an app beside the probe: nts_app too.
+  const app = native && text.includes('"//nts:nts_app"');
+  return native ? { name: "nts_shell", label: "//nts:nts_shell", app } : { name: "content_shell", label: "//content/shell:content_shell", app: false };
 }
 
 function build(jobs: number): void {
@@ -137,14 +140,15 @@ function build(jobs: number): void {
   const resultFile = resolve(evidence, "build-result.json");
   writeFileSync(resultFile, `${JSON.stringify({ state: "running", pid: process.pid, startedAt, jobs, target: target.name })}\n`);
   try {
-    const targets = target.name === "nts_shell" ? ["nts_shell", "content_shell"] : [target.name];
+    const targets = target.name === "nts_shell" ? ["nts_shell", "content_shell", ...(target.app ? ["nts_app"] : [])] : [target.name];
     run([resolve(depot, "autoninja"), "-C", relative(source, buildDir), "-j", String(jobs), ...targets], source, environment());
     const resources = execFileSync(resolve(depot, "gn"), ["desc", relative(source, buildDir), target.label, "runtime_deps"], { cwd: source, env: environment(), encoding: "utf8" });
     writeFileSync(resolve(evidence, "runtime-deps.txt"), resources);
     const manifest = resolve(source, "nts/manifest.json");
     writeFileSync(resultFile, `${JSON.stringify({ state: "passed", startedAt, finishedAt: new Date().toISOString(), jobs, profile: profile.name, target: target.name, chromiumRevision: revision(source),
       gnArgsSha256: hash(resolve(buildDir, "args.gn")), executableSha256: hash(resolve(buildDir, target.name)), nativeManifestSha256: target.name === "nts_shell" ? hash(manifest) : undefined,
-      v8ControlExecutableSha256: hash(resolve(buildDir, "content_shell")), targets })}\n`);
+      v8ControlExecutableSha256: hash(resolve(buildDir, "content_shell")),
+      appExecutableSha256: target.app ? hash(resolve(buildDir, "nts_app")) : undefined, targets })}\n`);
   } catch (error) {
     writeFileSync(resultFile, `${JSON.stringify({ state: "failed", startedAt, finishedAt: new Date().toISOString(), target: target.name, error: String(error) })}\n`);
     throw error;

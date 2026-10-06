@@ -1,0 +1,189 @@
+#!/usr/bin/env node
+/**
+ * Builds and runs an app on the compiled renderer.
+ *
+ *   node tooling/chromium/app.ts build <dir> [--backend c|llvm] [--profile perf|baseline]
+ *   node tooling/chromium/app.ts run   <dir> [--backend c|llvm] [--profile perf|baseline] [-- <shell flags>]
+ *   node tooling/chromium/app.ts check <dir> [--profile perf|baseline] [--expect <selector>]
+ *
+ * An app is a directory: `index.html`, which opts in with
+ * `<meta name="nts-app">`, and `main.ts`, whose `main(document: Document)` runs
+ * once the page has loaded, with an optional `unload()` for when it ends;
+ * other TypeScript beside them, and the page's assets. Nothing else: the
+ * build's configuration is written here, under target/chromium/apps/<name>.
+ *
+ * `build` compiles the program, archives it with the app host
+ * (runtime/chromium/host) by Chromium's toolchain, stages it beside the test
+ * probe, and builds `nts_app`. `run` opens the app's page in it. `check` runs
+ * the built app headless through its lifecycle: it starts, renders what
+ * `--expect` names, ends cleanly on reload and starts again, and the shell
+ * exits when its window closes, with no renderer check failing on the way.
+ *
+ * `unload()` runs whenever the document ends in a renderer that goes on --
+ * reload, navigation. Closing the window may end the renderer process without
+ * unloading, as Chromium does for a page with no unload handlers ("fast
+ * shutdown"), which is what page script's `unload` gets too.
+ */
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { basename, relative, resolve } from "node:path";
+import { archiveProgram, chromiumToolchain } from "./archive.ts";
+import { openPage } from "./browser.ts";
+import { buildProfile } from "./profiles.ts";
+
+const root = resolve(import.meta.dirname, "../..");
+const lane = resolve(root, "runtime/chromium");
+const usage = "Usage: node tooling/chromium/app.ts build|run|check <dir> [--backend c|llvm] [--profile perf|baseline] [--expect <selector>] [-- <shell flags>]";
+
+const [command, directory, ...rest] = process.argv.slice(2);
+if ((command !== "build" && command !== "run" && command !== "check") || directory === undefined) throw new Error(usage);
+const separator = rest.indexOf("--");
+const options = separator < 0 ? rest : rest.slice(0, separator);
+const shellFlags = separator < 0 ? [] : rest.slice(separator + 1);
+const option = (name: string, fallback: string): string => {
+  const at = options.indexOf(name);
+  return at < 0 ? fallback : options[at + 1] ?? fallback;
+};
+const backend = option("--backend", "c");
+if (backend !== "c" && backend !== "llvm") throw new Error(usage);
+const profile = buildProfile(["--profile", option("--profile", "perf")]);
+
+const app = resolve(directory);
+const page = resolve(app, "index.html");
+const entry = resolve(app, "main.ts");
+if (!existsSync(page) || !existsSync(entry)) throw new Error(`${app} needs index.html and main.ts`);
+if (!/<meta\s+name="nts-app"/.test(readFileSync(page, "utf8"))) {
+  throw new Error(`${relative(root, page)} does not opt in: add <meta name="nts-app">`);
+}
+const name = basename(app);
+const work = resolve(root, "target/chromium/apps", name);
+const source = resolve(root, "third_party/chromium/src");
+const shell = resolve(source, profile.directory, "nts_app");
+
+if (command === "build") build();
+else if (command === "run") run();
+else await check();
+
+function build(): void {
+  mkdirSync(work, { recursive: true });
+  // The build's configuration, so the app directory needs none: every
+  // TypeScript file in it, compiled against the nts:dom surface.
+  const sources = typescriptFiles(app);
+  // The product's entry is a module here that re-exports the app's: the
+  // build takes a package's native code from the configuration above its
+  // files, and this one must be above one of them.
+  const reexport = resolve(work, "entry.ts");
+  writeFileSync(reexport, `// Written by tooling/chromium/app.ts: the app's entry, re-exported.\nexport * from ${JSON.stringify(entry)};\n`);
+  writeFileSync(resolve(work, "tsconfig.json"), `${JSON.stringify({
+    extends: resolve(root, "tsconfig.fixtures.json"),
+    files: [reexport, ...sources, resolve(lane, "dom/types/dom-idl.d.ts"), resolve(lane, "dom/types/dom-abi.d.ts"),
+      resolve(root, "runtime/native/libc.d.ts")],
+  }, null, 2)}\n`);
+  const product = backend === "c" ? "app" : "app-llvm";
+  writeFileSync(resolve(work, "nts.config.ts"), `// Written by tooling/chromium/app.ts for ${relative(root, app)}.
+import { defineConfig, library, sources, target } from ${JSON.stringify(resolve(root, "tooling/config/src/index.ts"))};
+export default defineConfig({
+  products: {
+    ${JSON.stringify(product)}: library.staticNative({
+      targets: [target.linux({ backend: ${JSON.stringify(backend)} })],
+      entry: "./entry.ts",
+    }),
+  },
+  native: [sources({ dir: ${JSON.stringify(relative(work, resolve(lane, "dom/abi")))} })],
+});
+`);
+  const nts = resolve(root, process.env.NTS_BIN ?? "target/release/nts");
+  const output = resolve(work, "out");
+  execFileSync(nts, ["build", resolve(work, "tsconfig.json"), "--out", output, "--rc"], {
+    cwd: root, stdio: "inherit", env: { ...process.env, NTS_NO_ACQUIRE: "1" },
+  });
+  const generated = resolve(output, product, "linux-gnu-x86_64");
+  const entryHeader = resolve(work, backend);
+  mkdirSync(entryHeader, { recursive: true });
+  writeFileSync(resolve(entryHeader, "app_entry.h"), appEntry(readFileSync(resolve(generated, "program.h"), "utf8")));
+  const archive = resolve(work, backend, "app.a");
+  archiveProgram({ root, toolchain: chromiumToolchain(root), backend, generated, archive,
+    sources: [resolve(lane, "host/host.c"), resolve(lane, "host/app.c")], includes: [entryHeader] });
+  // Stage beside the test probe (its own program is rebuilt and checked too)
+  // and build nts_app with it.
+  execFileSync(process.execPath, [resolve(root, "tooling/chromium/probe.ts"), backend, "--profile", profile.name, "--app", archive],
+    { cwd: root, stdio: "inherit" });
+  execFileSync(process.execPath, [resolve(root, "tooling/chromium/chromium.ts"), "build", "--profile", profile.name],
+    { cwd: root, stdio: "inherit" });
+  const result = resolve(root, profile.evidence, "build-result.json");
+  for (;;) {
+    const state = existsSync(result) ? (JSON.parse(readFileSync(result, "utf8")) as { state: string }).state : "running";
+    if (state === "passed") break;
+    if (state === "failed") throw new Error(`The build failed; see ${relative(root, resolve(root, profile.evidence, "build.log"))}`);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5_000);
+  }
+  console.log(`Built ${relative(root, shell)} with ${name} (${backend}). Run: node tooling/chromium/app.ts run ${relative(root, app)}`);
+}
+
+function run(): void {
+  if (!existsSync(shell)) throw new Error(`No ${relative(root, shell)}; run: node tooling/chromium/app.ts build ${relative(root, app)}`);
+  const status = spawnSync(shell, [...shellFlags, `file://${page}`], { stdio: "inherit" }).status;
+  process.exit(status ?? 1);
+}
+
+async function check(): Promise<void> {
+  if (!existsSync(shell)) throw new Error(`No ${relative(root, shell)}; run: node tooling/chromium/app.ts build ${relative(root, app)}`);
+  const expected = option("--expect", "");
+  mkdirSync(work, { recursive: true });
+  const page = await openPage(shell, `file://${resolve(app, "index.html")}`, { temporary: work, args: shellFlags });
+  const starts = (): number => page.log().match(/NTS_APP start/g)?.length ?? 0;
+  const stops = (): number => page.log().match(/NTS_APP stop/g)?.length ?? 0;
+  try {
+    await page.until(() => starts() === 1, "the app to start");
+    if (expected !== "") await page.until(() => page.evaluate<boolean>(`document.querySelector(${JSON.stringify(expected)}) !== null`), `${expected} to render`);
+    await page.cdp("Page.reload");
+    await page.until(() => stops() === 1 && starts() === 2, "the app to end and start again on reload");
+    if (expected !== "") await page.until(() => page.evaluate<boolean>(`document.querySelector(${JSON.stringify(expected)}) !== null`), `${expected} to render again`);
+  } finally {
+    await page.close();
+  }
+  writeFileSync(resolve(work, "check.log"), page.log());
+  console.log(`PASS: ${name} started, rendered${expected === "" ? "" : ` ${expected}`}, ended cleanly and restarted on reload, and closed`);
+}
+
+/** Every TypeScript file of the app, but not its dependencies or output. */
+function typescriptFiles(directory: string): string[] {
+  const found: string[] = [];
+  for (const item of readdirSync(directory, { withFileTypes: true })) {
+    if (item.name === "node_modules" || item.name.startsWith(".")) continue;
+    const path = resolve(directory, item.name);
+    if (item.isDirectory()) found.push(...typescriptFiles(path));
+    else if (item.name.endsWith(".ts")) found.push(path);
+  }
+  return found;
+}
+
+/**
+ * The host's view of the program (host/app.c): the C symbol of `main` -- the
+ * compiler escapes a C keyword or reserved name, and says which in
+ * program.h -- whether it takes over the caller's reference to the document,
+ * and `unload`'s symbol, if the program exports one.
+ */
+function appEntry(header: string): string {
+  const exported = (name: string): RegExpExecArray | null =>
+    new RegExp(`/\\* Export: ${name}\\. C symbol: (\\w+)\\.([^*]*)\\*/`).exec(header);
+  const main = exported("main");
+  if (main === null) throw new Error("main.ts must export `function main(document: Document): void`");
+  // Module-level state is process-wide in a compiled program, and an app's
+  // program lives per document: what a reload left in it would outlive its
+  // environment. Until the compiler scopes module state to an environment,
+  // an app keeps its state in what `main` creates.
+  if (/\bmodule__init\s*\(/.test(header)) {
+    throw new Error("The app has module-level state (program.h declares module__init). " +
+      "Keep the app's state in what main() creates -- the closures its listeners and timers hold -- " +
+      "until module state per document is supported.");
+  }
+  const unload = exported("unload");
+  return [
+    "/* Written by tooling/chromium/app.ts from the app's program.h. */",
+    `#define NTS_APP_MAIN ${main[1]}`,
+    `#define NTS_APP_MAIN_TAKES_DOCUMENT ${/Takes over the caller's reference/.test(main[2]) ? 1 : 0}`,
+    ...(unload === null ? [] : [`#define NTS_APP_UNLOAD ${unload[1]}`]),
+    "",
+  ].join("\n");
+}

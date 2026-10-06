@@ -24,6 +24,22 @@ heaps coexist and none collects the others: the program's (RC with trial-
 deletion cycle collection), Oilpan's (Blink's nodes), and V8's (page script and
 wrappers, when there is any).
 
+**Who hosts the program.** `host/host.c` is the one host. Each document's
+program gets a fresh NTS environment; every native callback enters it
+through one invoker; Blink owns its microtasks and idle time; and the
+environment ends only once nothing of the program remains. Two clients sit on
+the host:
+- An **app** (`host/app.c`, the `nts_app` shell). The app's `main(document)`
+  runs at DOMContentLoaded of each main-frame document that opts in with
+  `<meta name="nts-app">`. Its `unload()` runs when that document ends, and
+  ending gives back every closure Blink held.
+- The **test probe** (`embedder/probe.c`, `nts_shell`), whose fixtures each
+  start by element id.
+An app links only its own program, in its own executable. Built and run by
+`tooling/chromium/app.ts`. Module-level state is process-wide in a compiled
+program, so it would outlive the document: the app build refuses it until
+the compiler scopes it to an environment (compiler request 10).
+
 Workers, if they come, are another instance of the same arrangement on the
 worker's thread; nothing here assumes a single thread except the node root set
 (section 3), which is per thread by construction.

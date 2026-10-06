@@ -1,0 +1,9 @@
+{
+  "//": "For the editor: the app's sources and the nts:dom surface. tooling/chromium/app.ts writes the build's own configuration.",
+  "extends": "../../../../tsconfig.fixtures.json",
+  "files": [
+    "main.ts", "todo.ts",
+    "../../dom/types/dom-idl.d.ts", "../../dom/types/dom-abi.d.ts",
+    "../../../native/libc.d.ts"
+  ]
+}
