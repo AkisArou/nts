@@ -44,6 +44,9 @@ NtsDomNode* nts_blink_dom_element_by_id(NtsDomContext* context,
 // The nodes the program keeps off the stack, rooted by nts_dom_retain: how
 // many distinct ones, on this thread.
 size_t nts_blink_dom_roots(void);
+// Logs each root left (NTS_DOM_ROOT Interface xcount): what a handle the
+// program never released was.
+void nts_blink_dom_log_roots(void);
 void nts_blink_dom_callback(NtsDomContext* context,
                             void (*run)(void*),
                             void* state);

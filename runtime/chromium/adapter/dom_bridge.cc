@@ -4,8 +4,10 @@
 #include <string>
 
 #include "base/check.h"
+#include "base/logging.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
+#include "third_party/blink/renderer/platform/bindings/wrapper_type_info.h"
 
 namespace nts_dom {
 // The objects the program keeps off the stack -- nodes, events, token lists
@@ -624,6 +626,15 @@ size_t nts_blink_dom_held_closures(NtsDomContext *context) {
   return context->listeners->set.size() + context->listeners->frames.size();
 }
 size_t nts_blink_dom_roots(void) { return HeldObjects().counts.size(); }
+// Logs each root left, as "Interface xcount": what a handle the program
+// never released was.
+void nts_blink_dom_log_roots(void) {
+  for (const auto &entry : HeldObjects().counts) {
+    LOG(INFO) << "NTS_DOM_ROOT "
+              << blink::ToWrapperTypeInfo(entry.key.Get())->interface_name
+              << " x" << entry.value;
+  }
+}
 // The benchmark's controls (dom/abi/dom_testing.h), each inside an entry: a
 // conservative collection now, as an allocation would trigger, and text from
 // a prepared buffer at its width, the control for a program's own string.

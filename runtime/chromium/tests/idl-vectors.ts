@@ -12,7 +12,7 @@
 // Page script has no `asText`/`asHTMLElement`/`asHTMLInputElement`; the
 // oracle defines them (`instanceof`) where the import stood. What a caught
 // error reads as is passed in.
-import { asHTMLElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
+import { asElement, asHTMLElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
 import type { Document, Element, Event, Node } from "nts:dom";
 
 export interface VectorHost {
@@ -333,5 +333,101 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
     input.setSelectionRange(0, 1);
   });
   thrown("fine", () => { div.setAttribute("data-ok", "1"); });
+  // Three calls, not a loop over the seeds: a loop around a use of `d`, which
+  // this function's closures capture, leaves `d` rooted under RC
+  // (tooling/conformance/blockers/an-owned-handle-used-in-a-loop-is-never-released).
+  fuzz(d, root, 20261006, log, thrown);
+  fuzz(d, root, 7, log, thrown);
+  fuzz(d, root, 99991, log, thrown);
   return lines.join("\n");
+}
+
+// A seeded walk over the tree-editing surface: each step one operation on
+// nodes drawn from a growing pool, valid or not -- a node into its own
+// descendant, a reference that is not a child, an attribute name that is
+// not one -- so the transcript holds each outcome or exception, the arena's
+// markup every 25 steps, and where every node ended. A Lehmer generator on
+// doubles is exact (every product is below 2^53), so both engines draw the
+// same steps.
+function fuzz(d: Document, root: Element, start: number, log: (label: string, value: string) => void,
+              thrown: (label: string, run: () => void) => void): void {
+  let seed = start;
+  const next = (n: number): number => {
+    seed = (seed * 48271) % 2147483647;
+    return seed % n;
+  };
+  const tags = ["div", "span", "p", "ul", "li", "b"];
+  const names = ["id", "class", "title", "data-x", "1bad", "aria-label"];
+  const words = ["", "a", "b c", "é", "x"];
+  const places = ["beforebegin", "afterbegin", "beforeend", "afterend", "inside"];
+  const arena = d.createElement("div");
+  root.appendChild(arena);
+  const pool: Node[] = [arena];
+  const pick = (): Node => pool[next(pool.length)];
+  for (let step = 0; step < 400; step += 1) {
+    const op = next(14);
+    const label = "f" + start + "." + step + "." + op;
+    if (op === 0) {
+      pool.push(d.createElement(tags[next(tags.length)]));
+      log(label, "element");
+    } else if (op === 1) {
+      pool.push(d.createTextNode(words[next(words.length)]));
+      log(label, "text");
+    } else if (op === 2) {
+      const parent = pick();
+      const child = pick();
+      thrown(label, () => { parent.appendChild(child); });
+    } else if (op === 3) {
+      const parent = pick();
+      const child = pick();
+      const reference = next(4) === 0 ? null : pick();
+      thrown(label, () => { parent.insertBefore(child, reference); });
+    } else if (op === 4) {
+      const parent = pick();
+      const child = pick();
+      thrown(label, () => { parent.removeChild(child); });
+    } else if (op === 5 || op === 6 || op === 7 || op === 9 || op === 10 || op === 13) {
+      const element = asElement(pick());
+      if (element === null) {
+        log(label, "-");
+        continue;
+      }
+      const name = names[next(names.length)];
+      const word = words[next(words.length)];
+      if (op === 5) {
+        thrown(label, () => { element.setAttribute(name, word); });
+      } else if (op === 6) {
+        element.removeAttribute(name);
+        log(label, shown(element.getAttribute("class")));
+      } else if (op === 7) {
+        thrown(label, () => { element.classList.toggle(word); });
+      } else if (op === 9) {
+        const other = pick();
+        thrown(label, () => { element.append(other, word); });
+      } else if (op === 10) {
+        element.replaceChildren();
+        log(label, "cleared");
+      } else {
+        const place = places[next(places.length)];
+        thrown(label, () => { element.insertAdjacentText(place, word); });
+      }
+    } else if (op === 8) {
+      const node = pick();
+      node.textContent = words[next(words.length)];
+      log(label, describe(node));
+    } else if (op === 11) {
+      const parent = pick();
+      const replacement = pick();
+      const old = pick();
+      thrown(label, () => { parent.replaceChild(replacement, old); });
+    } else {
+      const node = pick();
+      pool.push(node.cloneNode(next(2) === 0));
+      log(label, "clone");
+    }
+    if (step % 25 === 24)
+      log("arena" + start + "." + step, arena.innerHTML);
+  }
+  log("arenaEnd" + start, arena.innerHTML);
+  log("pool" + start, pool.map((node: Node): string => node.nodeName + "<" + describe(node.parentNode) + ":" + node.childNodes.length).join(","));
 }

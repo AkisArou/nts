@@ -154,6 +154,7 @@ class ProbeObserver final : public content::RenderFrameObserver {
       LOG(INFO) << "NTS_DOM backend=" << NTS_CHROMIUM_PROBE_BACKEND
                 << " result=" << dom_result
                 << " roots=" << nts_blink_dom_roots();
+      nts_blink_dom_log_roots();
     }
     auto input = document.GetElementById(
         blink::WebString::FromAscii("native-increment"));

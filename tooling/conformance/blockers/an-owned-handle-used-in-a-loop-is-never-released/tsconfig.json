@@ -1,0 +1,10 @@
+{
+  "//": "Host handles need the Chromium DOM declarations (nts:dom), which the fixtures' config can include and the blockers' ESNext base cannot.",
+  "extends": "../../../../tsconfig.fixtures.json",
+  "files": [
+    "src/main.ts",
+    "../../../../runtime/chromium/dom/types/dom-idl.d.ts",
+    "../../../../runtime/chromium/dom/types/dom-abi.d.ts",
+    "../../../../runtime/native/libc.d.ts"
+  ]
+}
