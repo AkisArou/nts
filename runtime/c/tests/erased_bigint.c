@@ -132,6 +132,13 @@ int main(void) {
   one_value(minimum, "-170141183460469231731687303715884105728",
             "-170141183460469231731687303715884105728n");
 
+  /* `Number(x)` of a bigint rounds to the nearest double, ties to even: node
+   * answers 9007199254740992 for 2^53 + 1. `one_value`'s check compares the
+   * same cast on both sides; this one is a value written down. */
+  NtsValue rounded = bigint((__int128)9007199254740993ULL);
+  expect("explicit Number rounds 2^53 + 1 to 2^53",
+         nts_value_to_number_explicit(rounded) == 9007199254740992.0);
+  nts_value_release(rounded);
   NtsValue low = bigint(7);
   NtsValue high = bigint(((__int128)1 << 64) + 7);
   expect("equality reads the high word", !nts_value_strict_eq(low, high));
@@ -145,8 +152,12 @@ int main(void) {
   nts_release((NtsHeader *)map);
   nts_value_release(low);
   nts_value_release(high);
+#ifdef NTS_PROVIDER_RC
   nts_collect_cycles();
   expect("every native box and container is released",
          nts_live_bytes() == baseline);
+#else
+  (void)baseline;
+#endif
   return failures == 0 ? 0 : 1;
 }

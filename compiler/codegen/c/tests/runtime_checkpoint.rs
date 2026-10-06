@@ -271,8 +271,12 @@ fn an_erased_value_keeps_its_tag_across_a_promise() {
 
 #[test]
 fn an_erased_bigint_keeps_value_semantics_and_owned_storage() {
-    let report = run_suite("erased_bigint", &["-DNTS_PROVIDER_RC", "-fsanitize=address,undefined"]);
-    assert!(checks(&report) >= 134, "{report}");
+    // Both providers: the boxes are the runtime's under either, and only
+    // reference counting gives them back, which the suite checks under it.
+    let counted = run_suite("erased_bigint", &["-DNTS_PROVIDER_RC", "-fsanitize=address,undefined"]);
+    assert!(checks(&counted) >= 135, "{counted}");
+    let never_freed = run_suite("erased_bigint", &["-fsanitize=undefined"]);
+    assert!(checks(&never_freed) >= 134, "{never_freed}");
 }
 
 #[test]
