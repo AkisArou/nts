@@ -281,3 +281,30 @@ host result); kept, it is retained through the family's pair.
 **Accept.** Arms `{ empty(node: Node): boolean }` and `{ make(): Node }`
 compile on both backends, with no retain for a handle that stays on the
 stack, and `leak=0` under RC.
+
+## 9. Defect: a narrowed accessor read loses its null check
+
+Found 2026-10-06 in the browser, as a SEGV in `nts_concat` inside the
+differential vectors. TypeScript narrows a property after an assignment:
+after `div.nodeValue = "x"`, `div.nodeValue` is `string`. The compiler trusts
+the narrowed type for the read, which here goes through a native accessor
+(`@ntsGet` over a `StringView | null` getter), and drops the null check. But
+a getter need not return what was set -- an element's `nodeValue` is null
+whatever is assigned -- so the NULL result reaches `nts_concat`. JavaScript
+gives `"null"`; the compiled program dereferences NULL.
+
+```ts
+const div = document().createElement("div");
+div.nodeValue = "x";
+return ("" + div.nodeValue).length;
+// v42 = nts_string_from_view(v41); v43 = nts_concat(v39, v42);  -- no check
+```
+
+Control, one difference: the same read through a local typed `string |
+null` emits the `(NtsString *)0` comparison and the `"null"` text.
+
+**Proposed.** A read through an accessor -- a native `@ntsGet`, and arguably a
+TypeScript `get` -- is typed by the accessor's declared result, not by the
+assignment narrowing, wherever the representation depends on nullability.
+
+**Accept.** The reduction checks the getter's result for NULL.
