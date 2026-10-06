@@ -4997,3 +4997,47 @@ void node_set_value(struct _Node *self, const struct NtsBorrowedString *value) {
         }
     }
 }
+
+/// A `number` reaching C integer storage takes JavaScript's conversion to the
+/// width on both backends: an argument (`ToInt32`, and the 16-bit modular
+/// narrowing) and a store through a native pointer, which was a C cast --
+/// undefined for NaN and anything out of range. The C backend's
+/// `a_number_reaches_a_c_integer_through_to_int32` covers more widths; this is
+/// the same answer from the IR the LLVM backend writes.
+#[test]
+fn a_number_reaches_c_integer_storage_through_javascripts_conversion_on_both_backends() {
+    let source = r#"
+import type { CNumber, Ptr, c_int } from "c:types";
+declare function seen_i32(v: CNumber<"int32">): CNumber<"double">;
+declare function seen_u16(v: CNumber<"uint16">): CNumber<"double">;
+declare function slots(): Ptr<c_int>;
+export function run(big: number, nan: number): number {
+    const p = slots();
+    p[0] = big as c_int;
+    p[1] = nan as c_int;
+    return (seen_i32(big) === 5 ? 1 : 0)
+        + (seen_i32(nan) === 0 ? 2 : 0)
+        + (seen_u16(-1) === 65535 ? 4 : 0)
+        + ((p[0] as number) === 5 ? 8 : 0)
+        + ((p[1] as number) === 0 ? 16 : 0);
+}
+"#;
+    let library = r"
+#include <stdint.h>
+static int the[2] = { 7, 7 };
+int *slots(void) { return the; }
+double seen_i32(int32_t v) { return v; }
+double seen_u16(uint16_t v) { return v; }
+";
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(
+            r#"printf("%.0f", run(4294967301.0, NAN));"#,
+            "run(4294967301.0, NAN);",
+        );
+        let caller = format!("#include <math.h>\n{caller}");
+        let Some((_, outputs)) = run_on_both_backends("c-integer-storage", source, provider, library, &caller) else { return; };
+        for output in outputs {
+            assert_eq!(output, expect("31", provider), "{provider:?}");
+        }
+    }
+}

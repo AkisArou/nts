@@ -1043,11 +1043,12 @@ export function sameType(): boolean { const e = node_at(0 as c_int); return node
 /// smaller one.
 /// It was `(int32_t)v0`, which C leaves undefined for NaN, an infinity and
 /// anything out of range -- clang folds `(int32_t)NAN` to whatever it likes.
+/// A store through a native pointer (`p[0] = x`) takes the same conversion.
 /// Reported by the Chromium lane; GTK's `gint` parameters take the same path.
 #[test]
 fn a_number_reaches_a_c_integer_through_to_int32() {
     let source = r#"
-import type { CNumber } from "c:types";
+import type { CNumber, Ptr, c_int } from "c:types";
 declare function seen_i32(v: CNumber<"int32">): CNumber<"double">;
 declare function seen_u32(v: CNumber<"uint32">): CNumber<"double">;
 declare function seen_i8(v: CNumber<"int8">): CNumber<"double">;
@@ -1056,6 +1057,8 @@ export function i32(x: number): number { return seen_i32(x); }
 export function u32(x: number): number { return seen_u32(x); }
 export function i8(x: number): number { return seen_i8(x); }
 export function u16(x: number): number { return seen_u16(x); }
+export function store(p: Ptr<c_int>, x: number): void { p[0] = x as c_int; }
+export function storeNaN(p: Ptr<c_int>): void { p[1] = NaN as c_int; }
 "#;
     let Some((dir, prepared)) = prepare_with_types("to-int32", source, false) else {
         return;
@@ -1097,6 +1100,11 @@ export function u16(x: number): number { return seen_u16(x); }
            check(\"i8 -129.5\", i8(-129.5), 127);\n\
            check(\"u16 -1\", u16(-1), 65535);\n\
            check(\"u16 NaN\", u16(NAN), 0);\n\
+           int slots[2] = { 7, 7 };\n\
+           store(slots, 4294967301.0); check(\"store 2^32+5\", slots[0], 5);\n\
+           store(slots, NAN); check(\"store NaN\", slots[0], 0);\n\
+           store(slots, -1.9); check(\"store -1.9\", slots[0], -1);\n\
+           storeNaN(slots); check(\"store constant NaN\", slots[1], 0);\n\
            return failed;\n\
          }\n",
     )

@@ -26991,8 +26991,8 @@ impl<'a> FuncBuilder<'a> {
     /// integer through JavaScript's own conversion, and anything else as it is.
     fn unboxed_argument(&mut self, value: ValueId, parameter: &super::native::Type, origin: &Origin) -> ValueId {
         let want = parameter.representation();
-        if let (HirType::Float { .. }, HirType::Int { bits: 1..=32, signed }) = (&self.values[value.0 as usize].ty, &want) {
-            return self.integer_argument(value, &want, *signed, origin);
+        if let (HirType::Float { .. }, HirType::Int { bits: 1..=32, .. }) = (&self.values[value.0 as usize].ty, &want) {
+            return self.integer_argument(value, &want, origin);
         }
         if self.values[value.0 as usize].ty != HirType::Managed(ManagedType::Object(TypeId(super::BOXED_RECORD))) {
             return value;
@@ -27000,23 +27000,19 @@ impl<'a> FuncBuilder<'a> {
         self.unbox_record(value, &want, origin)
     }
 
-    /// A `number` handed to a C integer of 32 bits or fewer, through `ToInt32`
-    /// -- `ToUint32` for an unsigned 32-bit one -- as `WebIDL`'s `long` and
-    /// `GJS`'s `gint` take a number, and never C's own conversion: a `double` cast to
+    /// A `number` handed to a C integer of 32 bits or fewer, through
+    /// JavaScript's conversion to that width -- `ToInt32`, `ToUint32`, and their
+    /// 8- and 16-bit modular narrowings -- as `WebIDL`'s `long` and `GJS`'s
+    /// `gint` take a number, and never C's own conversion: a `double` cast to
     /// `int32_t` is undefined for NaN, an infinity or anything out of range,
-    /// and `(int32_t)v0` is what this emitted. The result of either is a whole
-    /// number in range, so converting it to the 32-bit integer is exact, and a
-    /// narrower one is an integer narrowing, which every backend defines.
-    fn integer_argument(&mut self, value: ValueId, want: &HirType, signed: bool, origin: &Origin) -> ValueId {
-        let HirType::Int { bits, .. } = *want else { return value };
-        let op = if bits == 32 && !signed { UnOp::ToUint32 } else { UnOp::ToInt32 };
-        let whole = self.push(OpKind::Unary { op, operand: value }, HirType::NUMBER, origin.clone());
-        let word = HirType::Int { bits: 32, signed: bits < 32 || signed };
-        let converted = self.push(OpKind::Convert(whole), word.clone(), origin.clone());
-        if word == *want {
-            return converted;
-        }
-        self.push(OpKind::Convert(converted), want.clone(), origin.clone())
+    /// and `(int32_t)v0` is what this emitted. The conversion is
+    /// [`super::builtin::element_coercion`]'s, which a typed array's store and
+    /// a store through a native pointer (`specialize::stored_operand`) use too.
+    fn integer_argument(&mut self, value: ValueId, want: &HirType, origin: &Origin) -> ValueId {
+        let Some(helper) = super::builtin::element_coercion(want) else {
+            return value;
+        };
+        self.runtime_call(helper, vec![value], want.clone(), origin.clone())
     }
 
     /// The struct a boxed record's box holds, as the C pointer `want` a
