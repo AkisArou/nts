@@ -376,8 +376,8 @@ fn consumes_both_operands(operator: u16) -> bool {
 }
 
 /// A producer's representation, rather than a type demanded by a use or an
-/// assertion. Initially recover numbers and strings; object/layout and shared
-/// storage facts remain with their existing planners.
+/// assertion: a literal, a `new`, a `const` alias, a parameter or a declared
+/// function's result, at what [`recoverable`] admits.
 pub(super) fn produced(
     probe: &FuncBuilder<'_>,
     argument: NodeId,
@@ -395,7 +395,7 @@ pub(super) fn produced(
     if kind == syntax::IDENTIFIER {
         let symbol = probe.node(argument).symbol?;
         if let Some(ty) = copied.get(&symbol.0) {
-            return recoverable(ty).then(|| ty.clone());
+            return recoverable(probe, ty).then(|| ty.clone());
         }
         let record = probe.snapshot.symbols.get(symbol.0 as usize)?;
         let [declaration] = record.declarations.as_slice() else {
@@ -432,16 +432,39 @@ pub(super) fn produced(
         syntax::NUMERIC_LITERAL
             | syntax::STRING_LITERAL
             | syntax::NO_SUBSTITUTION_TEMPLATE_LITERAL
+            | syntax::TRUE_KEYWORD
+            | syntax::FALSE_KEYWORD
             | syntax::PREFIX_UNARY_EXPRESSION
             | syntax::BINARY_EXPRESSION
+            | syntax::NEW_EXPRESSION
     ) {
         return None;
     }
-    recoverable(&represented).then_some(represented)
+    recoverable(probe, &represented).then_some(represented)
 }
 
-fn recoverable(ty: &HirType) -> bool {
-    *ty == HirType::NUMBER || *ty == HirType::Managed(super::ManagedType::String)
+/// A representation a producer can hand a copy's parameter. An instance of a
+/// nominal class is the same object either way, so its identity and every
+/// mutation through it are shared with the caller, and its layout is its own,
+/// with any subclass's fields laid out after it. An interface or a structural
+/// type is not: a value of it can have another layout, which only dispatch can
+/// read.
+///
+/// Not yet an array: an element read through one is still `any` to the
+/// checker, and the paths that store such a read (`s += xs[i]`) coerce through
+/// that `any` rather than the element's own type.
+fn recoverable(probe: &FuncBuilder<'_>, ty: &HirType) -> bool {
+    match ty {
+        HirType::Managed(super::ManagedType::Object(class)) => {
+            !super::super::is_closure_type(*class) && super::assertions::is_nominal_class(probe, *class)
+        }
+        _ => primitive(ty),
+    }
+}
+
+/// Recovered representations whose methods lower inline as primitive methods.
+fn primitive(ty: &HirType) -> bool {
+    matches!(ty, HirType::Bool | HirType::Managed(super::ManagedType::String)) || *ty == HirType::NUMBER
 }
 
 /// A primitive receiver changed by this copy is lowered inline by the
@@ -467,7 +490,7 @@ pub(super) fn inline_method(probe: &FuncBuilder<'_>, call: NodeId) -> bool {
         .node(receiver)
         .symbol
         .and_then(|symbol| probe.retyped_symbols.get(&symbol.0))
-        .is_some_and(recoverable)
+        .is_some_and(primitive)
 }
 
 /// Exception eligibility belongs to a specialization, not to the unspecialized

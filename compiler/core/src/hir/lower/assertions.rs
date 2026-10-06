@@ -50,7 +50,7 @@ fn check(probe: &FuncBuilder<'_>, id: NodeId) -> Option<Check> {
     Some(Check::Primitive { target, tag })
 }
 
-fn is_nominal_class(probe: &FuncBuilder<'_>, ty: TypeId) -> bool {
+pub(super) fn is_nominal_class(probe: &FuncBuilder<'_>, ty: TypeId) -> bool {
     probe
         .snapshot
         .types

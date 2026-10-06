@@ -111,3 +111,4 @@ a-nested-function-used-before-its-declaration 1 the boundary arm: a hoisted clos
 # source copies compile all 18 exported roots. Count roots rather than the
 # forwarding cascade below `fixed`, as the table header requires.
 a-closed-call-recovers-an-erased-parameter 9 ordinary erased arithmetic and method receivers still refuse; closed number/string copies supply the behavioral roots
+a-closed-call-recovers-an-erased-object-parameter 3 the erased originals of `sum`, `measured` and `moved` still refuse a field and two methods on `any`; class-instance copies supply every root

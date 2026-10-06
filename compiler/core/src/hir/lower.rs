@@ -64811,8 +64811,9 @@ impl<'a> FuncBuilder<'a> {
 
         let callee = self.callee_for(id, type_id, &member_name)?;
 
+        let (lowered, declared_result) = self.method_arguments(id, type_id, &member_name, arguments, receiver)?;
         let mut args = vec![receiver];
-        args.extend(self.lower_arguments_on(id, arguments, receiver)?);
+        args.extend(lowered);
         // Calling a generator produces its **frame**, not the `Generator<T, …>`
         // the checker says -- that interface describes an object this compiler
         // does not build. The plain-call path says the same thing three hundred
@@ -64824,6 +64825,7 @@ impl<'a> FuncBuilder<'a> {
             .and_then(|declaration| self.generators.get(&declaration).copied());
         let ty = reserved
             .map(|index| HirType::Managed(ManagedType::Object(super::generator_frame(index))))
+            .or(declared_result)
             .or_else(|| self.type_of(id))
             .ok_or_else(|| self.unrepresentable(id, "a call result"))?;
         let origin = self.origin(id);
@@ -64854,6 +64856,46 @@ impl<'a> FuncBuilder<'a> {
     /// The checker's property list is flattened, so an inherited member is here
     /// too and its declaration is the base's -- which is the answer wanted: the
     /// frame is reserved on the node that carries the body.
+    /// **A receiver a copy re-typed from `any`.** The checker resolved such a
+    /// call on an `any`, so its target names no callee: no parameters, and an
+    /// `any` result. The method the class declares is the one called, so its
+    /// function type is what the arguments and the result answer to -- without
+    /// it `p.shift(by)` dropped `by` and typed `shift`'s result erased.
+    fn signature_behind_any(&self, id: NodeId, type_id: TypeId, member_name: &str) -> Option<TypeId> {
+        self.snapshot
+            .call_targets
+            .get(&id)
+            .is_none_or(|target| target.callee.is_none())
+            .then(|| self.member_declaration(type_id, member_name))
+            .flatten()
+            .and_then(|declaration| self.snapshot.node_types.get(&declaration).copied())
+    }
+
+    /// A method call's arguments, answering to [`Self::signature_behind_any`]
+    /// where it applies, and the result type that signature declares.
+    fn method_arguments(
+        &mut self,
+        id: NodeId,
+        type_id: TypeId,
+        member_name: &str,
+        arguments: &[NodeId],
+        receiver: ValueId,
+    ) -> Result<(Vec<ValueId>, Option<HirType>), Diagnostic> {
+        let declared = self.signature_behind_any(id, type_id, member_name);
+        let outer = declared.map(|function_ty| self.callee_signature.replace((id, function_ty)));
+        let lowered = self.lower_arguments_on(id, arguments, receiver);
+        if let Some(outer) = outer {
+            self.callee_signature = outer;
+        }
+        let result = declared
+            .and_then(|function_ty| match self.snapshot.types.get(function_ty.0 as usize)?.kind {
+                TypeKind::Function(signature) => self.snapshot.signatures.get(signature.0 as usize),
+                _ => None,
+            })
+            .and_then(|signature| self.represent(signature.return_type));
+        Ok((lowered?, result))
+    }
+
     fn member_declaration(&self, type_id: TypeId, member_name: &str) -> Option<NodeId> {
         let TypeKind::Object { properties } =
             &self.snapshot.types.get(type_id.0 as usize)?.kind
