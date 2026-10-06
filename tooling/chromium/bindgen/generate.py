@@ -219,7 +219,7 @@ class Generator:
             if len(strings) != 1:
                 raise Skip(f"parameter type {idl_type.syntactic_form}")
             union = blink_type_info(unwrapped).typename
-            expr = f"blink::MakeGarbageCollected<blink::{union}>(blink::String({self.text(strings[0], name)}))"
+            expr = f"blink::MakeGarbageCollected<blink::{union}>({self.text(strings[0], name)}.Text())"
             if nullable:
                 expr = f"({name} ? {expr} : nullptr)"
             return Param(name, f"const NtsBorrowedString* {name}", f"{name}: StringView{or_null}", expr, True,
@@ -490,7 +490,7 @@ class Generator:
                     param = self.parameter(element, f"{tail.identifier}{index + 1}")
                     param.idl_name = None
                     params.append(param)
-                    values.append(f"blink::String({param.expr})")
+                    values.append(f"{param.expr}.Text()")
                 vector = f"blink::Vector<blink::String>({{{', '.join(values)}}})"
                 out.append((operation, params, result, None, [], (tail.identifier, len(fixed), vector)))
             return out

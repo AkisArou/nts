@@ -1398,7 +1398,7 @@ void nts_dom_Node_set_textContent(NtsDomNode* self, const NtsBorrowedString* val
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Node>(self);
-  receiver->setTextContentForBinding((value ? blink::MakeGarbageCollected<blink::V8UnionStringOrTrustedScript>(blink::String(NtsText(context, value))) : nullptr), exception_state);
+  receiver->setTextContentForBinding((value ? blink::MakeGarbageCollected<blink::V8UnionStringOrTrustedScript>(NtsText(context, value).Text()) : nullptr), exception_state);
 }
 
 NtsDomNode* nts_dom_Node_appendChild(NtsDomNode* self, NtsDomNode* node, NtsDomException** error) {
@@ -1595,7 +1595,7 @@ void nts_dom_Element_set_innerHTML(NtsDomElement* self, const NtsBorrowedString*
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->setInnerHTML(blink::MakeGarbageCollected<blink::V8UnionStringLegacyNullToEmptyStringOrTrustedHTML>(blink::String(NtsText(context, value))), exception_state);
+  receiver->setInnerHTML(blink::MakeGarbageCollected<blink::V8UnionStringLegacyNullToEmptyStringOrTrustedHTML>(NtsText(context, value).Text()), exception_state);
 }
 
 const NtsStringView* nts_dom_Element_get_outerHTML(NtsDomElement* self) {
@@ -1609,7 +1609,7 @@ void nts_dom_Element_set_outerHTML(NtsDomElement* self, const NtsBorrowedString*
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->setOuterHTML(blink::MakeGarbageCollected<blink::V8UnionStringLegacyNullToEmptyStringOrTrustedHTML>(blink::String(NtsText(context, value))), exception_state);
+  receiver->setOuterHTML(blink::MakeGarbageCollected<blink::V8UnionStringLegacyNullToEmptyStringOrTrustedHTML>(NtsText(context, value).Text()), exception_state);
 }
 
 double nts_dom_Element_get_scrollTop(NtsDomElement* self) {
@@ -2362,7 +2362,7 @@ void nts_dom_Element_insertAdjacentHTML(NtsDomElement* self, const NtsBorrowedSt
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->insertAdjacentHTML(NtsText(context, position), blink::MakeGarbageCollected<blink::V8UnionStringOrTrustedHTML>(blink::String(NtsText(context, text))), exception_state);
+  receiver->insertAdjacentHTML(NtsText(context, position), blink::MakeGarbageCollected<blink::V8UnionStringOrTrustedHTML>(NtsText(context, text).Text()), exception_state);
 }
 
 void nts_dom_Element_insertAdjacentText(NtsDomElement* self, const NtsBorrowedString* where, const NtsBorrowedString* data, NtsDomException** error) {
@@ -2465,7 +2465,7 @@ void nts_dom_Element_setHTMLUnsafe(NtsDomElement* self, const NtsBorrowedString*
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->setHTMLUnsafe(blink::MakeGarbageCollected<blink::V8UnionStringOrTrustedHTML>(blink::String(NtsText(context, html))), exception_state);
+  receiver->setHTMLUnsafe(blink::MakeGarbageCollected<blink::V8UnionStringOrTrustedHTML>(NtsText(context, html).Text()), exception_state);
 }
 
 void nts_dom_Element_setPointerCapture(NtsDomElement* self, double pointerId, NtsDomException** error) {
@@ -3069,7 +3069,7 @@ NtsDomElement* nts_dom_Document_createElement_2(NtsDomDocument* self, const NtsB
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::Document>(self);
-  return HandleOf<NtsDomElement>(receiver->CreateElementForBinding(NtsText(context, localName), blink::MakeGarbageCollected<blink::V8UnionElementCreationOptionsOrString>(blink::String(NtsText(context, options))), exception_state));
+  return HandleOf<NtsDomElement>(receiver->CreateElementForBinding(NtsText(context, localName), blink::MakeGarbageCollected<blink::V8UnionElementCreationOptionsOrString>(NtsText(context, options).Text()), exception_state));
 }
 
 NtsDomElement* nts_dom_Document_createElementNS_2(NtsDomDocument* self, const NtsBorrowedString* namespaceURI, const NtsBorrowedString* qualifiedName, NtsDomException** error) {
@@ -3083,7 +3083,7 @@ NtsDomElement* nts_dom_Document_createElementNS_3(NtsDomDocument* self, const Nt
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::Document>(self);
-  return HandleOf<NtsDomElement>(receiver->createElementNS(NtsText(context, namespaceURI), NtsText(context, qualifiedName), blink::MakeGarbageCollected<blink::V8UnionElementCreationOptionsOrString>(blink::String(NtsText(context, options))), exception_state));
+  return HandleOf<NtsDomElement>(receiver->createElementNS(NtsText(context, namespaceURI), NtsText(context, qualifiedName), blink::MakeGarbageCollected<blink::V8UnionElementCreationOptionsOrString>(NtsText(context, options).Text()), exception_state));
 }
 
 NtsDomNode* nts_dom_Document_createNSResolver(NtsDomDocument* self, NtsDomNode* nodeResolver) {
@@ -3113,7 +3113,7 @@ bool nts_dom_Document_execCommand(NtsDomDocument* self, const NtsBorrowedString*
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  return static_cast<bool>(receiver->execCommand(NtsText(context, commandId), showUI, blink::MakeGarbageCollected<blink::V8UnionStringOrTrustedHTML>(blink::String(NtsText(context, value))), exception_state));
+  return static_cast<bool>(receiver->execCommand(NtsText(context, commandId), showUI, blink::MakeGarbageCollected<blink::V8UnionStringOrTrustedHTML>(NtsText(context, value).Text()), exception_state));
 }
 
 void nts_dom_Document_exitPointerLock(NtsDomDocument* self) {
@@ -3270,7 +3270,7 @@ void nts_dom_Document_write_3(NtsDomDocument* self, const NtsBorrowedString* tex
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->write(context.v8_isolate.get(), blink::Vector<blink::String>({blink::String(NtsText(context, text1)), blink::String(NtsText(context, text2)), blink::String(NtsText(context, text3))}), exception_state);
+  receiver->write(context.v8_isolate.get(), blink::Vector<blink::String>({NtsText(context, text1).Text(), NtsText(context, text2).Text(), NtsText(context, text3).Text()}), exception_state);
 }
 
 void nts_dom_Document_write_2(NtsDomDocument* self, const NtsBorrowedString* text1, const NtsBorrowedString* text2, NtsDomException** error) {
@@ -3278,7 +3278,7 @@ void nts_dom_Document_write_2(NtsDomDocument* self, const NtsBorrowedString* tex
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->write(context.v8_isolate.get(), blink::Vector<blink::String>({blink::String(NtsText(context, text1)), blink::String(NtsText(context, text2))}), exception_state);
+  receiver->write(context.v8_isolate.get(), blink::Vector<blink::String>({NtsText(context, text1).Text(), NtsText(context, text2).Text()}), exception_state);
 }
 
 void nts_dom_Document_write_1(NtsDomDocument* self, const NtsBorrowedString* text1, NtsDomException** error) {
@@ -3286,7 +3286,7 @@ void nts_dom_Document_write_1(NtsDomDocument* self, const NtsBorrowedString* tex
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->write(context.v8_isolate.get(), blink::Vector<blink::String>({blink::String(NtsText(context, text1))}), exception_state);
+  receiver->write(context.v8_isolate.get(), blink::Vector<blink::String>({NtsText(context, text1).Text()}), exception_state);
 }
 
 void nts_dom_Document_writeln_3(NtsDomDocument* self, const NtsBorrowedString* text1, const NtsBorrowedString* text2, const NtsBorrowedString* text3, NtsDomException** error) {
@@ -3294,7 +3294,7 @@ void nts_dom_Document_writeln_3(NtsDomDocument* self, const NtsBorrowedString* t
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->writeln(context.v8_isolate.get(), blink::Vector<blink::String>({blink::String(NtsText(context, text1)), blink::String(NtsText(context, text2)), blink::String(NtsText(context, text3))}), exception_state);
+  receiver->writeln(context.v8_isolate.get(), blink::Vector<blink::String>({NtsText(context, text1).Text(), NtsText(context, text2).Text(), NtsText(context, text3).Text()}), exception_state);
 }
 
 void nts_dom_Document_writeln_2(NtsDomDocument* self, const NtsBorrowedString* text1, const NtsBorrowedString* text2, NtsDomException** error) {
@@ -3302,7 +3302,7 @@ void nts_dom_Document_writeln_2(NtsDomDocument* self, const NtsBorrowedString* t
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->writeln(context.v8_isolate.get(), blink::Vector<blink::String>({blink::String(NtsText(context, text1)), blink::String(NtsText(context, text2))}), exception_state);
+  receiver->writeln(context.v8_isolate.get(), blink::Vector<blink::String>({NtsText(context, text1).Text(), NtsText(context, text2).Text()}), exception_state);
 }
 
 void nts_dom_Document_writeln_1(NtsDomDocument* self, const NtsBorrowedString* text1, NtsDomException** error) {
@@ -3310,7 +3310,7 @@ void nts_dom_Document_writeln_1(NtsDomDocument* self, const NtsBorrowedString* t
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->writeln(context.v8_isolate.get(), blink::Vector<blink::String>({blink::String(NtsText(context, text1))}), exception_state);
+  receiver->writeln(context.v8_isolate.get(), blink::Vector<blink::String>({NtsText(context, text1).Text()}), exception_state);
 }
 
 NtsDomDocumentFragment* nts_dom_as_DocumentFragment(NtsDomNode* node) {
@@ -3431,7 +3431,7 @@ void nts_dom_HTMLElement_set_hidden(NtsDomHTMLElement* self, const NtsBorrowedSt
   NtsDomContext& context = nts_dom::Current();
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::HTMLElement>(self);
-  receiver->setHidden((value ? blink::MakeGarbageCollected<blink::V8UnionBooleanOrStringOrUnrestrictedDouble>(blink::String(NtsText(context, value))) : nullptr));
+  receiver->setHidden((value ? blink::MakeGarbageCollected<blink::V8UnionBooleanOrStringOrUnrestrictedDouble>(NtsText(context, value).Text()) : nullptr));
 }
 
 bool nts_dom_HTMLElement_get_inert(NtsDomHTMLElement* self) {
@@ -3624,7 +3624,7 @@ void nts_dom_HTMLElement_set_innerText(NtsDomHTMLElement* self, const NtsBorrowe
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::HTMLElement>(self);
-  receiver->setInnerTextForBinding(blink::MakeGarbageCollected<blink::V8UnionStringLegacyNullToEmptyStringOrTrustedScript>(blink::String(NtsText(context, value))), exception_state);
+  receiver->setInnerTextForBinding(blink::MakeGarbageCollected<blink::V8UnionStringLegacyNullToEmptyStringOrTrustedScript>(NtsText(context, value).Text()), exception_state);
 }
 
 const NtsStringView* nts_dom_HTMLElement_get_outerText(NtsDomHTMLElement* self) {
@@ -5347,7 +5347,7 @@ void nts_dom_DOMTokenList_add_3(NtsDomDOMTokenList* self, const NtsBorrowedStrin
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DOMTokenList>(self);
-  receiver->add(blink::Vector<blink::String>({blink::String(NtsText(context, tokens1)), blink::String(NtsText(context, tokens2)), blink::String(NtsText(context, tokens3))}), exception_state);
+  receiver->add(blink::Vector<blink::String>({NtsText(context, tokens1).Text(), NtsText(context, tokens2).Text(), NtsText(context, tokens3).Text()}), exception_state);
 }
 
 void nts_dom_DOMTokenList_add_2(NtsDomDOMTokenList* self, const NtsBorrowedString* tokens1, const NtsBorrowedString* tokens2, NtsDomException** error) {
@@ -5355,7 +5355,7 @@ void nts_dom_DOMTokenList_add_2(NtsDomDOMTokenList* self, const NtsBorrowedStrin
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DOMTokenList>(self);
-  receiver->add(blink::Vector<blink::String>({blink::String(NtsText(context, tokens1)), blink::String(NtsText(context, tokens2))}), exception_state);
+  receiver->add(blink::Vector<blink::String>({NtsText(context, tokens1).Text(), NtsText(context, tokens2).Text()}), exception_state);
 }
 
 void nts_dom_DOMTokenList_add_1(NtsDomDOMTokenList* self, const NtsBorrowedString* tokens1, NtsDomException** error) {
@@ -5363,7 +5363,7 @@ void nts_dom_DOMTokenList_add_1(NtsDomDOMTokenList* self, const NtsBorrowedStrin
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DOMTokenList>(self);
-  receiver->add(blink::Vector<blink::String>({blink::String(NtsText(context, tokens1))}), exception_state);
+  receiver->add(blink::Vector<blink::String>({NtsText(context, tokens1).Text()}), exception_state);
 }
 
 bool nts_dom_DOMTokenList_contains(NtsDomDOMTokenList* self, const NtsBorrowedString* token) {
@@ -5385,7 +5385,7 @@ void nts_dom_DOMTokenList_remove_3(NtsDomDOMTokenList* self, const NtsBorrowedSt
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DOMTokenList>(self);
-  receiver->remove(blink::Vector<blink::String>({blink::String(NtsText(context, tokens1)), blink::String(NtsText(context, tokens2)), blink::String(NtsText(context, tokens3))}), exception_state);
+  receiver->remove(blink::Vector<blink::String>({NtsText(context, tokens1).Text(), NtsText(context, tokens2).Text(), NtsText(context, tokens3).Text()}), exception_state);
 }
 
 void nts_dom_DOMTokenList_remove_2(NtsDomDOMTokenList* self, const NtsBorrowedString* tokens1, const NtsBorrowedString* tokens2, NtsDomException** error) {
@@ -5393,7 +5393,7 @@ void nts_dom_DOMTokenList_remove_2(NtsDomDOMTokenList* self, const NtsBorrowedSt
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DOMTokenList>(self);
-  receiver->remove(blink::Vector<blink::String>({blink::String(NtsText(context, tokens1)), blink::String(NtsText(context, tokens2))}), exception_state);
+  receiver->remove(blink::Vector<blink::String>({NtsText(context, tokens1).Text(), NtsText(context, tokens2).Text()}), exception_state);
 }
 
 void nts_dom_DOMTokenList_remove_1(NtsDomDOMTokenList* self, const NtsBorrowedString* tokens1, NtsDomException** error) {
@@ -5401,7 +5401,7 @@ void nts_dom_DOMTokenList_remove_1(NtsDomDOMTokenList* self, const NtsBorrowedSt
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DOMTokenList>(self);
-  receiver->remove(blink::Vector<blink::String>({blink::String(NtsText(context, tokens1))}), exception_state);
+  receiver->remove(blink::Vector<blink::String>({NtsText(context, tokens1).Text()}), exception_state);
 }
 
 bool nts_dom_DOMTokenList_replace(NtsDomDOMTokenList* self, const NtsBorrowedString* token, const NtsBorrowedString* newToken, NtsDomException** error) {

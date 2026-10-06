@@ -515,6 +515,24 @@ held every run: both engines build identical DOMs (asserted), two roots per
 row, and 4662 program allocations per create1k, as before. A quiet-machine
 rerun is owed.
 
+**What a string costs through `textContent`** (`perf/binding-c-text` and
+the A/B `perf/binding-c-ab`, 6 runs each). Writing the program's own string
+costs 196, 286 and 1545 ns at 16, 256 and 4096 Latin-1 units, where a
+prepared buffer costs 187, 188 and 218, and V8 127, 128 and 1690. The
+hand-written ABI had matched the prepared buffer at every length because it
+called `setTextContent` directly. The generated setter calls what the IDL
+names, `setTextContentForBinding`, with a freshly allocated
+`(DOMString or TrustedScript)` union, exactly as V8's binding does. The
+union is garbage-collected, so it keeps the text alive until the next
+collection rather than until the node drops it, and the cost grows with
+length. The A/B arm that skipped the union went back to 227 ns at 4096,
+which shows the union is the whole difference.
+
+Reusing one union and clearing it after the call would recover this, but
+it is observable if a Blink method keeps the union object, and nothing in
+the IDL says which may. So the generated binding pays what page script
+pays: 1.5 against 1.7 us at 4096 units, about 10 ns at 16.
+
 **Correctness in the browser.** The DOM witness passes on C and LLVM.
 compare.ts has C and LLVM, DOM and microtasks, each agreeing with the
 independently run V8 oracle, including the 82-line differential transcript

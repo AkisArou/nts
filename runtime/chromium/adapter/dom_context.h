@@ -265,7 +265,11 @@ public:
   NtsText(NtsDomContext &context, const NtsBorrowedString *string,
           bool scalar_values = false)
       : context_(&context), string_(string), scalar_values_(scalar_values) {}
-  operator blink::String() const {
+  operator blink::String() const { return Text(); }
+  // The text as a String, explicitly: `blink::String(text)` could reach a
+  // String through the AtomicString conversion, interning the whole text on
+  // every call.
+  blink::String Text() const {
     if (!string_)
       return blink::String();
     blink::String text = context_->Text(nts_string_view(string_));
@@ -276,7 +280,7 @@ public:
     if (!string_)
       return blink::g_null_atom;
     if (scalar_values_)
-      return blink::AtomicString(static_cast<blink::String>(*this));
+      return blink::AtomicString(Text());
     return context_->Name(nts_string_view(string_));
   }
 
