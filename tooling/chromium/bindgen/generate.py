@@ -157,6 +157,7 @@ class Generator:
         self.functions = []
         self.members = {}  # interface identifier -> TypeScript member lines
         self.headers = set()
+        self.statics = []  # adapter-level definitions the functions use
         # Every interface Blink's core component defines, in a fixed order:
         # what `instanceof` can be asked of (nts_dom_is), bound or not.
         self.checkable = sorted((i for i in database.interfaces
@@ -527,6 +528,63 @@ class Generator:
                 self.attribute(interface, attribute)
             for group in interface.operation_groups:
                 self.operation(interface, group)
+            if interface.identifier == "CSSStyleDeclaration":
+                self.css_properties(interface)
+
+    @staticmethod
+    def dashed(attribute):
+        """CSSOM's camel-cased attribute to its property: a dash before each
+        upper-case letter, lowered; a webkit-cased one (`webkitFoo`) starts
+        with a dash too."""
+        out = "".join("-" + c.lower() if c.isupper() else c for c in attribute)
+        return "-" + out if attribute.startswith("webkit") else out
+
+    def css_properties(self, interface):
+        """`style.alignContent`: the CSS properties lib.dom.d.ts declares on
+        CSSStyleDeclaration, which Blink serves through a named-property
+        interceptor rather than IDL attributes. Read through Blink's own
+        AnonymousNamedGetter -- what page script's read calls -- and written
+        as CSSOM defines a camel-cased attribute's setter:
+        setProperty(dashed name, value, "")."""
+        import libdom
+        lib = libdom.interfaces(open(libdom.LIB_DOM).read())
+        if "CSSStyleDeclaration" not in lib:
+            return
+        # lib.dom.d.ts declares them on ancestors (CSSStyleDeclaration extends
+        # CSSStyleProperties extends CSSStyleDeclarationBase); the receiver is
+        # still a CSSStyleDeclaration.
+        members, pending = set(lib["CSSStyleDeclaration"]["members"]), list(lib["CSSStyleDeclaration"]["extends"])
+        while pending:
+            parent = pending.pop()
+            if parent in lib and parent not in self.bound:
+                members |= lib[parent]["members"]
+                pending += lib[parent]["extends"]
+        declared = {"members": members}
+        idl = {a.identifier for a in interface.attributes} | {g.identifier for g in interface.operation_groups}
+        lines = self.members.setdefault(interface.identifier, [])
+        cls = blink_class_name(interface)
+        for name in sorted(declared["members"] - idl):
+            if not re.fullmatch(r"[a-z][A-Za-z0-9]*", name) or name in ("length",):
+                continue
+            camel, dashed = f"CssName_{name}", f"CssProperty_{name}"
+            self.statics.append(
+                f"const blink::AtomicString& {camel}() {{\n"
+                f"  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, (\"{name}\"));\n  return name;\n}}\n"
+                f"const blink::String& {dashed}() {{\n"
+                f"  DEFINE_STATIC_LOCAL(const blink::String, name, (\"{self.dashed(name)}\"));\n  return name;\n}}")
+            getter = Function(interface, f"nts_dom_CSSStyleDeclaration_get_{name}", [],
+                              Result("const NtsStringView*", "StringView", "string"),
+                              f"receiver->AnonymousNamedGetter({camel}())", False, False)
+            value = Param("value", "const NtsBorrowedString* value", "value: StringView", "", True)
+            setter = Function(interface, f"nts_dom_CSSStyleDeclaration_set_{name}", [value],
+                              Result("void", "void", "void"),
+                              f"receiver->setProperty(context.document->GetExecutionContext(), {dashed}(), "
+                              f"NtsText(context, value).Text(), blink::g_empty_string, exception_state)",
+                              True, False)
+            self.functions += [getter, setter]
+            lines.append(self.method_line(interface, f"_get_{name}", getter))
+            lines.append(self.method_line(interface, f"_set_{name}", setter))
+            lines.append(f"    /**\n     * @ntsGet _get_{name}\n     * @ntsSet _set_{name}\n     */\n    {name}: StringView;")
 
     # -- files -----------------------------------------------------------
 
@@ -690,6 +748,10 @@ class Throws {{
   blink::DummyExceptionStateForTesting state_;
   NtsDomException** error_;  // STACK_ALLOCATED: no BackupRefPtr per call
 }};
+}}  // namespace
+
+namespace {{
+{(chr(10)).join(self.statics)}
 }}  // namespace
 
 // In Blink's namespace, as the bindings are: bind_gen's expressions name

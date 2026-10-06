@@ -669,6 +669,4265 @@ class Throws {
 };
 }  // namespace
 
+namespace {
+const blink::AtomicString& CssName_accentColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("accentColor"));
+  return name;
+}
+const blink::String& CssProperty_accentColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("accent-color"));
+  return name;
+}
+const blink::AtomicString& CssName_alignContent() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("alignContent"));
+  return name;
+}
+const blink::String& CssProperty_alignContent() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("align-content"));
+  return name;
+}
+const blink::AtomicString& CssName_alignItems() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("alignItems"));
+  return name;
+}
+const blink::String& CssProperty_alignItems() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("align-items"));
+  return name;
+}
+const blink::AtomicString& CssName_alignSelf() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("alignSelf"));
+  return name;
+}
+const blink::String& CssProperty_alignSelf() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("align-self"));
+  return name;
+}
+const blink::AtomicString& CssName_alignmentBaseline() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("alignmentBaseline"));
+  return name;
+}
+const blink::String& CssProperty_alignmentBaseline() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("alignment-baseline"));
+  return name;
+}
+const blink::AtomicString& CssName_all() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("all"));
+  return name;
+}
+const blink::String& CssProperty_all() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("all"));
+  return name;
+}
+const blink::AtomicString& CssName_anchorName() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("anchorName"));
+  return name;
+}
+const blink::String& CssProperty_anchorName() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("anchor-name"));
+  return name;
+}
+const blink::AtomicString& CssName_anchorScope() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("anchorScope"));
+  return name;
+}
+const blink::String& CssProperty_anchorScope() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("anchor-scope"));
+  return name;
+}
+const blink::AtomicString& CssName_animation() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("animation"));
+  return name;
+}
+const blink::String& CssProperty_animation() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("animation"));
+  return name;
+}
+const blink::AtomicString& CssName_animationComposition() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("animationComposition"));
+  return name;
+}
+const blink::String& CssProperty_animationComposition() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("animation-composition"));
+  return name;
+}
+const blink::AtomicString& CssName_animationDelay() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("animationDelay"));
+  return name;
+}
+const blink::String& CssProperty_animationDelay() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("animation-delay"));
+  return name;
+}
+const blink::AtomicString& CssName_animationDirection() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("animationDirection"));
+  return name;
+}
+const blink::String& CssProperty_animationDirection() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("animation-direction"));
+  return name;
+}
+const blink::AtomicString& CssName_animationDuration() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("animationDuration"));
+  return name;
+}
+const blink::String& CssProperty_animationDuration() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("animation-duration"));
+  return name;
+}
+const blink::AtomicString& CssName_animationFillMode() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("animationFillMode"));
+  return name;
+}
+const blink::String& CssProperty_animationFillMode() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("animation-fill-mode"));
+  return name;
+}
+const blink::AtomicString& CssName_animationIterationCount() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("animationIterationCount"));
+  return name;
+}
+const blink::String& CssProperty_animationIterationCount() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("animation-iteration-count"));
+  return name;
+}
+const blink::AtomicString& CssName_animationName() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("animationName"));
+  return name;
+}
+const blink::String& CssProperty_animationName() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("animation-name"));
+  return name;
+}
+const blink::AtomicString& CssName_animationPlayState() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("animationPlayState"));
+  return name;
+}
+const blink::String& CssProperty_animationPlayState() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("animation-play-state"));
+  return name;
+}
+const blink::AtomicString& CssName_animationRange() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("animationRange"));
+  return name;
+}
+const blink::String& CssProperty_animationRange() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("animation-range"));
+  return name;
+}
+const blink::AtomicString& CssName_animationRangeEnd() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("animationRangeEnd"));
+  return name;
+}
+const blink::String& CssProperty_animationRangeEnd() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("animation-range-end"));
+  return name;
+}
+const blink::AtomicString& CssName_animationRangeStart() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("animationRangeStart"));
+  return name;
+}
+const blink::String& CssProperty_animationRangeStart() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("animation-range-start"));
+  return name;
+}
+const blink::AtomicString& CssName_animationTimeline() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("animationTimeline"));
+  return name;
+}
+const blink::String& CssProperty_animationTimeline() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("animation-timeline"));
+  return name;
+}
+const blink::AtomicString& CssName_animationTimingFunction() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("animationTimingFunction"));
+  return name;
+}
+const blink::String& CssProperty_animationTimingFunction() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("animation-timing-function"));
+  return name;
+}
+const blink::AtomicString& CssName_appearance() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("appearance"));
+  return name;
+}
+const blink::String& CssProperty_appearance() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("appearance"));
+  return name;
+}
+const blink::AtomicString& CssName_aspectRatio() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("aspectRatio"));
+  return name;
+}
+const blink::String& CssProperty_aspectRatio() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("aspect-ratio"));
+  return name;
+}
+const blink::AtomicString& CssName_backdropFilter() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("backdropFilter"));
+  return name;
+}
+const blink::String& CssProperty_backdropFilter() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("backdrop-filter"));
+  return name;
+}
+const blink::AtomicString& CssName_backfaceVisibility() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("backfaceVisibility"));
+  return name;
+}
+const blink::String& CssProperty_backfaceVisibility() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("backface-visibility"));
+  return name;
+}
+const blink::AtomicString& CssName_background() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("background"));
+  return name;
+}
+const blink::String& CssProperty_background() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("background"));
+  return name;
+}
+const blink::AtomicString& CssName_backgroundAttachment() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("backgroundAttachment"));
+  return name;
+}
+const blink::String& CssProperty_backgroundAttachment() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("background-attachment"));
+  return name;
+}
+const blink::AtomicString& CssName_backgroundBlendMode() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("backgroundBlendMode"));
+  return name;
+}
+const blink::String& CssProperty_backgroundBlendMode() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("background-blend-mode"));
+  return name;
+}
+const blink::AtomicString& CssName_backgroundClip() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("backgroundClip"));
+  return name;
+}
+const blink::String& CssProperty_backgroundClip() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("background-clip"));
+  return name;
+}
+const blink::AtomicString& CssName_backgroundColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("backgroundColor"));
+  return name;
+}
+const blink::String& CssProperty_backgroundColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("background-color"));
+  return name;
+}
+const blink::AtomicString& CssName_backgroundImage() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("backgroundImage"));
+  return name;
+}
+const blink::String& CssProperty_backgroundImage() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("background-image"));
+  return name;
+}
+const blink::AtomicString& CssName_backgroundOrigin() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("backgroundOrigin"));
+  return name;
+}
+const blink::String& CssProperty_backgroundOrigin() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("background-origin"));
+  return name;
+}
+const blink::AtomicString& CssName_backgroundPosition() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("backgroundPosition"));
+  return name;
+}
+const blink::String& CssProperty_backgroundPosition() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("background-position"));
+  return name;
+}
+const blink::AtomicString& CssName_backgroundPositionX() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("backgroundPositionX"));
+  return name;
+}
+const blink::String& CssProperty_backgroundPositionX() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("background-position-x"));
+  return name;
+}
+const blink::AtomicString& CssName_backgroundPositionY() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("backgroundPositionY"));
+  return name;
+}
+const blink::String& CssProperty_backgroundPositionY() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("background-position-y"));
+  return name;
+}
+const blink::AtomicString& CssName_backgroundRepeat() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("backgroundRepeat"));
+  return name;
+}
+const blink::String& CssProperty_backgroundRepeat() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("background-repeat"));
+  return name;
+}
+const blink::AtomicString& CssName_backgroundSize() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("backgroundSize"));
+  return name;
+}
+const blink::String& CssProperty_backgroundSize() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("background-size"));
+  return name;
+}
+const blink::AtomicString& CssName_baselineShift() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("baselineShift"));
+  return name;
+}
+const blink::String& CssProperty_baselineShift() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("baseline-shift"));
+  return name;
+}
+const blink::AtomicString& CssName_baselineSource() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("baselineSource"));
+  return name;
+}
+const blink::String& CssProperty_baselineSource() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("baseline-source"));
+  return name;
+}
+const blink::AtomicString& CssName_blockSize() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("blockSize"));
+  return name;
+}
+const blink::String& CssProperty_blockSize() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("block-size"));
+  return name;
+}
+const blink::AtomicString& CssName_border() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("border"));
+  return name;
+}
+const blink::String& CssProperty_border() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border"));
+  return name;
+}
+const blink::AtomicString& CssName_borderBlock() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderBlock"));
+  return name;
+}
+const blink::String& CssProperty_borderBlock() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-block"));
+  return name;
+}
+const blink::AtomicString& CssName_borderBlockColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderBlockColor"));
+  return name;
+}
+const blink::String& CssProperty_borderBlockColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-block-color"));
+  return name;
+}
+const blink::AtomicString& CssName_borderBlockEnd() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderBlockEnd"));
+  return name;
+}
+const blink::String& CssProperty_borderBlockEnd() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-block-end"));
+  return name;
+}
+const blink::AtomicString& CssName_borderBlockEndColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderBlockEndColor"));
+  return name;
+}
+const blink::String& CssProperty_borderBlockEndColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-block-end-color"));
+  return name;
+}
+const blink::AtomicString& CssName_borderBlockEndStyle() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderBlockEndStyle"));
+  return name;
+}
+const blink::String& CssProperty_borderBlockEndStyle() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-block-end-style"));
+  return name;
+}
+const blink::AtomicString& CssName_borderBlockEndWidth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderBlockEndWidth"));
+  return name;
+}
+const blink::String& CssProperty_borderBlockEndWidth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-block-end-width"));
+  return name;
+}
+const blink::AtomicString& CssName_borderBlockStart() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderBlockStart"));
+  return name;
+}
+const blink::String& CssProperty_borderBlockStart() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-block-start"));
+  return name;
+}
+const blink::AtomicString& CssName_borderBlockStartColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderBlockStartColor"));
+  return name;
+}
+const blink::String& CssProperty_borderBlockStartColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-block-start-color"));
+  return name;
+}
+const blink::AtomicString& CssName_borderBlockStartStyle() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderBlockStartStyle"));
+  return name;
+}
+const blink::String& CssProperty_borderBlockStartStyle() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-block-start-style"));
+  return name;
+}
+const blink::AtomicString& CssName_borderBlockStartWidth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderBlockStartWidth"));
+  return name;
+}
+const blink::String& CssProperty_borderBlockStartWidth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-block-start-width"));
+  return name;
+}
+const blink::AtomicString& CssName_borderBlockStyle() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderBlockStyle"));
+  return name;
+}
+const blink::String& CssProperty_borderBlockStyle() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-block-style"));
+  return name;
+}
+const blink::AtomicString& CssName_borderBlockWidth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderBlockWidth"));
+  return name;
+}
+const blink::String& CssProperty_borderBlockWidth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-block-width"));
+  return name;
+}
+const blink::AtomicString& CssName_borderBottom() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderBottom"));
+  return name;
+}
+const blink::String& CssProperty_borderBottom() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-bottom"));
+  return name;
+}
+const blink::AtomicString& CssName_borderBottomColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderBottomColor"));
+  return name;
+}
+const blink::String& CssProperty_borderBottomColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-bottom-color"));
+  return name;
+}
+const blink::AtomicString& CssName_borderBottomLeftRadius() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderBottomLeftRadius"));
+  return name;
+}
+const blink::String& CssProperty_borderBottomLeftRadius() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-bottom-left-radius"));
+  return name;
+}
+const blink::AtomicString& CssName_borderBottomRightRadius() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderBottomRightRadius"));
+  return name;
+}
+const blink::String& CssProperty_borderBottomRightRadius() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-bottom-right-radius"));
+  return name;
+}
+const blink::AtomicString& CssName_borderBottomStyle() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderBottomStyle"));
+  return name;
+}
+const blink::String& CssProperty_borderBottomStyle() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-bottom-style"));
+  return name;
+}
+const blink::AtomicString& CssName_borderBottomWidth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderBottomWidth"));
+  return name;
+}
+const blink::String& CssProperty_borderBottomWidth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-bottom-width"));
+  return name;
+}
+const blink::AtomicString& CssName_borderCollapse() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderCollapse"));
+  return name;
+}
+const blink::String& CssProperty_borderCollapse() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-collapse"));
+  return name;
+}
+const blink::AtomicString& CssName_borderColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderColor"));
+  return name;
+}
+const blink::String& CssProperty_borderColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-color"));
+  return name;
+}
+const blink::AtomicString& CssName_borderEndEndRadius() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderEndEndRadius"));
+  return name;
+}
+const blink::String& CssProperty_borderEndEndRadius() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-end-end-radius"));
+  return name;
+}
+const blink::AtomicString& CssName_borderEndStartRadius() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderEndStartRadius"));
+  return name;
+}
+const blink::String& CssProperty_borderEndStartRadius() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-end-start-radius"));
+  return name;
+}
+const blink::AtomicString& CssName_borderImage() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderImage"));
+  return name;
+}
+const blink::String& CssProperty_borderImage() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-image"));
+  return name;
+}
+const blink::AtomicString& CssName_borderImageOutset() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderImageOutset"));
+  return name;
+}
+const blink::String& CssProperty_borderImageOutset() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-image-outset"));
+  return name;
+}
+const blink::AtomicString& CssName_borderImageRepeat() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderImageRepeat"));
+  return name;
+}
+const blink::String& CssProperty_borderImageRepeat() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-image-repeat"));
+  return name;
+}
+const blink::AtomicString& CssName_borderImageSlice() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderImageSlice"));
+  return name;
+}
+const blink::String& CssProperty_borderImageSlice() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-image-slice"));
+  return name;
+}
+const blink::AtomicString& CssName_borderImageSource() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderImageSource"));
+  return name;
+}
+const blink::String& CssProperty_borderImageSource() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-image-source"));
+  return name;
+}
+const blink::AtomicString& CssName_borderImageWidth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderImageWidth"));
+  return name;
+}
+const blink::String& CssProperty_borderImageWidth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-image-width"));
+  return name;
+}
+const blink::AtomicString& CssName_borderInline() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderInline"));
+  return name;
+}
+const blink::String& CssProperty_borderInline() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-inline"));
+  return name;
+}
+const blink::AtomicString& CssName_borderInlineColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderInlineColor"));
+  return name;
+}
+const blink::String& CssProperty_borderInlineColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-inline-color"));
+  return name;
+}
+const blink::AtomicString& CssName_borderInlineEnd() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderInlineEnd"));
+  return name;
+}
+const blink::String& CssProperty_borderInlineEnd() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-inline-end"));
+  return name;
+}
+const blink::AtomicString& CssName_borderInlineEndColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderInlineEndColor"));
+  return name;
+}
+const blink::String& CssProperty_borderInlineEndColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-inline-end-color"));
+  return name;
+}
+const blink::AtomicString& CssName_borderInlineEndStyle() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderInlineEndStyle"));
+  return name;
+}
+const blink::String& CssProperty_borderInlineEndStyle() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-inline-end-style"));
+  return name;
+}
+const blink::AtomicString& CssName_borderInlineEndWidth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderInlineEndWidth"));
+  return name;
+}
+const blink::String& CssProperty_borderInlineEndWidth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-inline-end-width"));
+  return name;
+}
+const blink::AtomicString& CssName_borderInlineStart() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderInlineStart"));
+  return name;
+}
+const blink::String& CssProperty_borderInlineStart() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-inline-start"));
+  return name;
+}
+const blink::AtomicString& CssName_borderInlineStartColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderInlineStartColor"));
+  return name;
+}
+const blink::String& CssProperty_borderInlineStartColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-inline-start-color"));
+  return name;
+}
+const blink::AtomicString& CssName_borderInlineStartStyle() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderInlineStartStyle"));
+  return name;
+}
+const blink::String& CssProperty_borderInlineStartStyle() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-inline-start-style"));
+  return name;
+}
+const blink::AtomicString& CssName_borderInlineStartWidth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderInlineStartWidth"));
+  return name;
+}
+const blink::String& CssProperty_borderInlineStartWidth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-inline-start-width"));
+  return name;
+}
+const blink::AtomicString& CssName_borderInlineStyle() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderInlineStyle"));
+  return name;
+}
+const blink::String& CssProperty_borderInlineStyle() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-inline-style"));
+  return name;
+}
+const blink::AtomicString& CssName_borderInlineWidth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderInlineWidth"));
+  return name;
+}
+const blink::String& CssProperty_borderInlineWidth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-inline-width"));
+  return name;
+}
+const blink::AtomicString& CssName_borderLeft() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderLeft"));
+  return name;
+}
+const blink::String& CssProperty_borderLeft() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-left"));
+  return name;
+}
+const blink::AtomicString& CssName_borderLeftColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderLeftColor"));
+  return name;
+}
+const blink::String& CssProperty_borderLeftColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-left-color"));
+  return name;
+}
+const blink::AtomicString& CssName_borderLeftStyle() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderLeftStyle"));
+  return name;
+}
+const blink::String& CssProperty_borderLeftStyle() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-left-style"));
+  return name;
+}
+const blink::AtomicString& CssName_borderLeftWidth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderLeftWidth"));
+  return name;
+}
+const blink::String& CssProperty_borderLeftWidth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-left-width"));
+  return name;
+}
+const blink::AtomicString& CssName_borderRadius() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderRadius"));
+  return name;
+}
+const blink::String& CssProperty_borderRadius() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-radius"));
+  return name;
+}
+const blink::AtomicString& CssName_borderRight() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderRight"));
+  return name;
+}
+const blink::String& CssProperty_borderRight() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-right"));
+  return name;
+}
+const blink::AtomicString& CssName_borderRightColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderRightColor"));
+  return name;
+}
+const blink::String& CssProperty_borderRightColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-right-color"));
+  return name;
+}
+const blink::AtomicString& CssName_borderRightStyle() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderRightStyle"));
+  return name;
+}
+const blink::String& CssProperty_borderRightStyle() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-right-style"));
+  return name;
+}
+const blink::AtomicString& CssName_borderRightWidth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderRightWidth"));
+  return name;
+}
+const blink::String& CssProperty_borderRightWidth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-right-width"));
+  return name;
+}
+const blink::AtomicString& CssName_borderSpacing() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderSpacing"));
+  return name;
+}
+const blink::String& CssProperty_borderSpacing() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-spacing"));
+  return name;
+}
+const blink::AtomicString& CssName_borderStartEndRadius() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderStartEndRadius"));
+  return name;
+}
+const blink::String& CssProperty_borderStartEndRadius() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-start-end-radius"));
+  return name;
+}
+const blink::AtomicString& CssName_borderStartStartRadius() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderStartStartRadius"));
+  return name;
+}
+const blink::String& CssProperty_borderStartStartRadius() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-start-start-radius"));
+  return name;
+}
+const blink::AtomicString& CssName_borderStyle() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderStyle"));
+  return name;
+}
+const blink::String& CssProperty_borderStyle() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-style"));
+  return name;
+}
+const blink::AtomicString& CssName_borderTop() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderTop"));
+  return name;
+}
+const blink::String& CssProperty_borderTop() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-top"));
+  return name;
+}
+const blink::AtomicString& CssName_borderTopColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderTopColor"));
+  return name;
+}
+const blink::String& CssProperty_borderTopColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-top-color"));
+  return name;
+}
+const blink::AtomicString& CssName_borderTopLeftRadius() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderTopLeftRadius"));
+  return name;
+}
+const blink::String& CssProperty_borderTopLeftRadius() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-top-left-radius"));
+  return name;
+}
+const blink::AtomicString& CssName_borderTopRightRadius() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderTopRightRadius"));
+  return name;
+}
+const blink::String& CssProperty_borderTopRightRadius() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-top-right-radius"));
+  return name;
+}
+const blink::AtomicString& CssName_borderTopStyle() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderTopStyle"));
+  return name;
+}
+const blink::String& CssProperty_borderTopStyle() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-top-style"));
+  return name;
+}
+const blink::AtomicString& CssName_borderTopWidth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderTopWidth"));
+  return name;
+}
+const blink::String& CssProperty_borderTopWidth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-top-width"));
+  return name;
+}
+const blink::AtomicString& CssName_borderWidth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("borderWidth"));
+  return name;
+}
+const blink::String& CssProperty_borderWidth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("border-width"));
+  return name;
+}
+const blink::AtomicString& CssName_bottom() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("bottom"));
+  return name;
+}
+const blink::String& CssProperty_bottom() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("bottom"));
+  return name;
+}
+const blink::AtomicString& CssName_boxDecorationBreak() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("boxDecorationBreak"));
+  return name;
+}
+const blink::String& CssProperty_boxDecorationBreak() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("box-decoration-break"));
+  return name;
+}
+const blink::AtomicString& CssName_boxShadow() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("boxShadow"));
+  return name;
+}
+const blink::String& CssProperty_boxShadow() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("box-shadow"));
+  return name;
+}
+const blink::AtomicString& CssName_boxSizing() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("boxSizing"));
+  return name;
+}
+const blink::String& CssProperty_boxSizing() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("box-sizing"));
+  return name;
+}
+const blink::AtomicString& CssName_breakAfter() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("breakAfter"));
+  return name;
+}
+const blink::String& CssProperty_breakAfter() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("break-after"));
+  return name;
+}
+const blink::AtomicString& CssName_breakBefore() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("breakBefore"));
+  return name;
+}
+const blink::String& CssProperty_breakBefore() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("break-before"));
+  return name;
+}
+const blink::AtomicString& CssName_breakInside() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("breakInside"));
+  return name;
+}
+const blink::String& CssProperty_breakInside() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("break-inside"));
+  return name;
+}
+const blink::AtomicString& CssName_captionSide() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("captionSide"));
+  return name;
+}
+const blink::String& CssProperty_captionSide() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("caption-side"));
+  return name;
+}
+const blink::AtomicString& CssName_caretColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("caretColor"));
+  return name;
+}
+const blink::String& CssProperty_caretColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("caret-color"));
+  return name;
+}
+const blink::AtomicString& CssName_clear() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("clear"));
+  return name;
+}
+const blink::String& CssProperty_clear() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("clear"));
+  return name;
+}
+const blink::AtomicString& CssName_clip() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("clip"));
+  return name;
+}
+const blink::String& CssProperty_clip() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("clip"));
+  return name;
+}
+const blink::AtomicString& CssName_clipPath() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("clipPath"));
+  return name;
+}
+const blink::String& CssProperty_clipPath() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("clip-path"));
+  return name;
+}
+const blink::AtomicString& CssName_clipRule() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("clipRule"));
+  return name;
+}
+const blink::String& CssProperty_clipRule() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("clip-rule"));
+  return name;
+}
+const blink::AtomicString& CssName_color() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("color"));
+  return name;
+}
+const blink::String& CssProperty_color() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("color"));
+  return name;
+}
+const blink::AtomicString& CssName_colorInterpolation() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("colorInterpolation"));
+  return name;
+}
+const blink::String& CssProperty_colorInterpolation() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("color-interpolation"));
+  return name;
+}
+const blink::AtomicString& CssName_colorInterpolationFilters() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("colorInterpolationFilters"));
+  return name;
+}
+const blink::String& CssProperty_colorInterpolationFilters() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("color-interpolation-filters"));
+  return name;
+}
+const blink::AtomicString& CssName_colorScheme() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("colorScheme"));
+  return name;
+}
+const blink::String& CssProperty_colorScheme() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("color-scheme"));
+  return name;
+}
+const blink::AtomicString& CssName_columnCount() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("columnCount"));
+  return name;
+}
+const blink::String& CssProperty_columnCount() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("column-count"));
+  return name;
+}
+const blink::AtomicString& CssName_columnFill() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("columnFill"));
+  return name;
+}
+const blink::String& CssProperty_columnFill() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("column-fill"));
+  return name;
+}
+const blink::AtomicString& CssName_columnGap() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("columnGap"));
+  return name;
+}
+const blink::String& CssProperty_columnGap() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("column-gap"));
+  return name;
+}
+const blink::AtomicString& CssName_columnRule() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("columnRule"));
+  return name;
+}
+const blink::String& CssProperty_columnRule() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("column-rule"));
+  return name;
+}
+const blink::AtomicString& CssName_columnRuleColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("columnRuleColor"));
+  return name;
+}
+const blink::String& CssProperty_columnRuleColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("column-rule-color"));
+  return name;
+}
+const blink::AtomicString& CssName_columnRuleStyle() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("columnRuleStyle"));
+  return name;
+}
+const blink::String& CssProperty_columnRuleStyle() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("column-rule-style"));
+  return name;
+}
+const blink::AtomicString& CssName_columnRuleWidth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("columnRuleWidth"));
+  return name;
+}
+const blink::String& CssProperty_columnRuleWidth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("column-rule-width"));
+  return name;
+}
+const blink::AtomicString& CssName_columnSpan() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("columnSpan"));
+  return name;
+}
+const blink::String& CssProperty_columnSpan() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("column-span"));
+  return name;
+}
+const blink::AtomicString& CssName_columnWidth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("columnWidth"));
+  return name;
+}
+const blink::String& CssProperty_columnWidth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("column-width"));
+  return name;
+}
+const blink::AtomicString& CssName_columns() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("columns"));
+  return name;
+}
+const blink::String& CssProperty_columns() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("columns"));
+  return name;
+}
+const blink::AtomicString& CssName_contain() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("contain"));
+  return name;
+}
+const blink::String& CssProperty_contain() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("contain"));
+  return name;
+}
+const blink::AtomicString& CssName_containIntrinsicBlockSize() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("containIntrinsicBlockSize"));
+  return name;
+}
+const blink::String& CssProperty_containIntrinsicBlockSize() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("contain-intrinsic-block-size"));
+  return name;
+}
+const blink::AtomicString& CssName_containIntrinsicHeight() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("containIntrinsicHeight"));
+  return name;
+}
+const blink::String& CssProperty_containIntrinsicHeight() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("contain-intrinsic-height"));
+  return name;
+}
+const blink::AtomicString& CssName_containIntrinsicInlineSize() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("containIntrinsicInlineSize"));
+  return name;
+}
+const blink::String& CssProperty_containIntrinsicInlineSize() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("contain-intrinsic-inline-size"));
+  return name;
+}
+const blink::AtomicString& CssName_containIntrinsicSize() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("containIntrinsicSize"));
+  return name;
+}
+const blink::String& CssProperty_containIntrinsicSize() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("contain-intrinsic-size"));
+  return name;
+}
+const blink::AtomicString& CssName_containIntrinsicWidth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("containIntrinsicWidth"));
+  return name;
+}
+const blink::String& CssProperty_containIntrinsicWidth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("contain-intrinsic-width"));
+  return name;
+}
+const blink::AtomicString& CssName_container() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("container"));
+  return name;
+}
+const blink::String& CssProperty_container() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("container"));
+  return name;
+}
+const blink::AtomicString& CssName_containerName() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("containerName"));
+  return name;
+}
+const blink::String& CssProperty_containerName() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("container-name"));
+  return name;
+}
+const blink::AtomicString& CssName_containerType() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("containerType"));
+  return name;
+}
+const blink::String& CssProperty_containerType() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("container-type"));
+  return name;
+}
+const blink::AtomicString& CssName_content() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("content"));
+  return name;
+}
+const blink::String& CssProperty_content() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("content"));
+  return name;
+}
+const blink::AtomicString& CssName_contentVisibility() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("contentVisibility"));
+  return name;
+}
+const blink::String& CssProperty_contentVisibility() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("content-visibility"));
+  return name;
+}
+const blink::AtomicString& CssName_counterIncrement() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("counterIncrement"));
+  return name;
+}
+const blink::String& CssProperty_counterIncrement() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("counter-increment"));
+  return name;
+}
+const blink::AtomicString& CssName_counterReset() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("counterReset"));
+  return name;
+}
+const blink::String& CssProperty_counterReset() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("counter-reset"));
+  return name;
+}
+const blink::AtomicString& CssName_counterSet() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("counterSet"));
+  return name;
+}
+const blink::String& CssProperty_counterSet() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("counter-set"));
+  return name;
+}
+const blink::AtomicString& CssName_cursor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("cursor"));
+  return name;
+}
+const blink::String& CssProperty_cursor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("cursor"));
+  return name;
+}
+const blink::AtomicString& CssName_cx() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("cx"));
+  return name;
+}
+const blink::String& CssProperty_cx() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("cx"));
+  return name;
+}
+const blink::AtomicString& CssName_cy() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("cy"));
+  return name;
+}
+const blink::String& CssProperty_cy() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("cy"));
+  return name;
+}
+const blink::AtomicString& CssName_d() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("d"));
+  return name;
+}
+const blink::String& CssProperty_d() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("d"));
+  return name;
+}
+const blink::AtomicString& CssName_direction() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("direction"));
+  return name;
+}
+const blink::String& CssProperty_direction() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("direction"));
+  return name;
+}
+const blink::AtomicString& CssName_display() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("display"));
+  return name;
+}
+const blink::String& CssProperty_display() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("display"));
+  return name;
+}
+const blink::AtomicString& CssName_dominantBaseline() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("dominantBaseline"));
+  return name;
+}
+const blink::String& CssProperty_dominantBaseline() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("dominant-baseline"));
+  return name;
+}
+const blink::AtomicString& CssName_dynamicRangeLimit() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("dynamicRangeLimit"));
+  return name;
+}
+const blink::String& CssProperty_dynamicRangeLimit() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("dynamic-range-limit"));
+  return name;
+}
+const blink::AtomicString& CssName_emptyCells() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("emptyCells"));
+  return name;
+}
+const blink::String& CssProperty_emptyCells() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("empty-cells"));
+  return name;
+}
+const blink::AtomicString& CssName_fieldSizing() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fieldSizing"));
+  return name;
+}
+const blink::String& CssProperty_fieldSizing() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("field-sizing"));
+  return name;
+}
+const blink::AtomicString& CssName_fill() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fill"));
+  return name;
+}
+const blink::String& CssProperty_fill() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("fill"));
+  return name;
+}
+const blink::AtomicString& CssName_fillOpacity() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fillOpacity"));
+  return name;
+}
+const blink::String& CssProperty_fillOpacity() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("fill-opacity"));
+  return name;
+}
+const blink::AtomicString& CssName_fillRule() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fillRule"));
+  return name;
+}
+const blink::String& CssProperty_fillRule() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("fill-rule"));
+  return name;
+}
+const blink::AtomicString& CssName_filter() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("filter"));
+  return name;
+}
+const blink::String& CssProperty_filter() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("filter"));
+  return name;
+}
+const blink::AtomicString& CssName_flex() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("flex"));
+  return name;
+}
+const blink::String& CssProperty_flex() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("flex"));
+  return name;
+}
+const blink::AtomicString& CssName_flexBasis() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("flexBasis"));
+  return name;
+}
+const blink::String& CssProperty_flexBasis() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("flex-basis"));
+  return name;
+}
+const blink::AtomicString& CssName_flexDirection() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("flexDirection"));
+  return name;
+}
+const blink::String& CssProperty_flexDirection() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("flex-direction"));
+  return name;
+}
+const blink::AtomicString& CssName_flexFlow() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("flexFlow"));
+  return name;
+}
+const blink::String& CssProperty_flexFlow() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("flex-flow"));
+  return name;
+}
+const blink::AtomicString& CssName_flexGrow() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("flexGrow"));
+  return name;
+}
+const blink::String& CssProperty_flexGrow() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("flex-grow"));
+  return name;
+}
+const blink::AtomicString& CssName_flexShrink() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("flexShrink"));
+  return name;
+}
+const blink::String& CssProperty_flexShrink() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("flex-shrink"));
+  return name;
+}
+const blink::AtomicString& CssName_flexWrap() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("flexWrap"));
+  return name;
+}
+const blink::String& CssProperty_flexWrap() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("flex-wrap"));
+  return name;
+}
+const blink::AtomicString& CssName_float() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("float"));
+  return name;
+}
+const blink::String& CssProperty_float() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("float"));
+  return name;
+}
+const blink::AtomicString& CssName_floodColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("floodColor"));
+  return name;
+}
+const blink::String& CssProperty_floodColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("flood-color"));
+  return name;
+}
+const blink::AtomicString& CssName_floodOpacity() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("floodOpacity"));
+  return name;
+}
+const blink::String& CssProperty_floodOpacity() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("flood-opacity"));
+  return name;
+}
+const blink::AtomicString& CssName_font() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("font"));
+  return name;
+}
+const blink::String& CssProperty_font() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font"));
+  return name;
+}
+const blink::AtomicString& CssName_fontFamily() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontFamily"));
+  return name;
+}
+const blink::String& CssProperty_fontFamily() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-family"));
+  return name;
+}
+const blink::AtomicString& CssName_fontFeatureSettings() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontFeatureSettings"));
+  return name;
+}
+const blink::String& CssProperty_fontFeatureSettings() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-feature-settings"));
+  return name;
+}
+const blink::AtomicString& CssName_fontKerning() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontKerning"));
+  return name;
+}
+const blink::String& CssProperty_fontKerning() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-kerning"));
+  return name;
+}
+const blink::AtomicString& CssName_fontLanguageOverride() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontLanguageOverride"));
+  return name;
+}
+const blink::String& CssProperty_fontLanguageOverride() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-language-override"));
+  return name;
+}
+const blink::AtomicString& CssName_fontOpticalSizing() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontOpticalSizing"));
+  return name;
+}
+const blink::String& CssProperty_fontOpticalSizing() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-optical-sizing"));
+  return name;
+}
+const blink::AtomicString& CssName_fontPalette() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontPalette"));
+  return name;
+}
+const blink::String& CssProperty_fontPalette() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-palette"));
+  return name;
+}
+const blink::AtomicString& CssName_fontSize() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontSize"));
+  return name;
+}
+const blink::String& CssProperty_fontSize() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-size"));
+  return name;
+}
+const blink::AtomicString& CssName_fontSizeAdjust() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontSizeAdjust"));
+  return name;
+}
+const blink::String& CssProperty_fontSizeAdjust() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-size-adjust"));
+  return name;
+}
+const blink::AtomicString& CssName_fontStretch() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontStretch"));
+  return name;
+}
+const blink::String& CssProperty_fontStretch() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-stretch"));
+  return name;
+}
+const blink::AtomicString& CssName_fontStyle() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontStyle"));
+  return name;
+}
+const blink::String& CssProperty_fontStyle() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-style"));
+  return name;
+}
+const blink::AtomicString& CssName_fontSynthesis() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontSynthesis"));
+  return name;
+}
+const blink::String& CssProperty_fontSynthesis() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-synthesis"));
+  return name;
+}
+const blink::AtomicString& CssName_fontSynthesisSmallCaps() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontSynthesisSmallCaps"));
+  return name;
+}
+const blink::String& CssProperty_fontSynthesisSmallCaps() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-synthesis-small-caps"));
+  return name;
+}
+const blink::AtomicString& CssName_fontSynthesisStyle() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontSynthesisStyle"));
+  return name;
+}
+const blink::String& CssProperty_fontSynthesisStyle() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-synthesis-style"));
+  return name;
+}
+const blink::AtomicString& CssName_fontSynthesisWeight() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontSynthesisWeight"));
+  return name;
+}
+const blink::String& CssProperty_fontSynthesisWeight() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-synthesis-weight"));
+  return name;
+}
+const blink::AtomicString& CssName_fontVariant() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontVariant"));
+  return name;
+}
+const blink::String& CssProperty_fontVariant() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-variant"));
+  return name;
+}
+const blink::AtomicString& CssName_fontVariantAlternates() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontVariantAlternates"));
+  return name;
+}
+const blink::String& CssProperty_fontVariantAlternates() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-variant-alternates"));
+  return name;
+}
+const blink::AtomicString& CssName_fontVariantCaps() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontVariantCaps"));
+  return name;
+}
+const blink::String& CssProperty_fontVariantCaps() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-variant-caps"));
+  return name;
+}
+const blink::AtomicString& CssName_fontVariantEastAsian() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontVariantEastAsian"));
+  return name;
+}
+const blink::String& CssProperty_fontVariantEastAsian() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-variant-east-asian"));
+  return name;
+}
+const blink::AtomicString& CssName_fontVariantEmoji() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontVariantEmoji"));
+  return name;
+}
+const blink::String& CssProperty_fontVariantEmoji() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-variant-emoji"));
+  return name;
+}
+const blink::AtomicString& CssName_fontVariantLigatures() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontVariantLigatures"));
+  return name;
+}
+const blink::String& CssProperty_fontVariantLigatures() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-variant-ligatures"));
+  return name;
+}
+const blink::AtomicString& CssName_fontVariantNumeric() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontVariantNumeric"));
+  return name;
+}
+const blink::String& CssProperty_fontVariantNumeric() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-variant-numeric"));
+  return name;
+}
+const blink::AtomicString& CssName_fontVariantPosition() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontVariantPosition"));
+  return name;
+}
+const blink::String& CssProperty_fontVariantPosition() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-variant-position"));
+  return name;
+}
+const blink::AtomicString& CssName_fontVariationSettings() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontVariationSettings"));
+  return name;
+}
+const blink::String& CssProperty_fontVariationSettings() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-variation-settings"));
+  return name;
+}
+const blink::AtomicString& CssName_fontWeight() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("fontWeight"));
+  return name;
+}
+const blink::String& CssProperty_fontWeight() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("font-weight"));
+  return name;
+}
+const blink::AtomicString& CssName_forcedColorAdjust() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("forcedColorAdjust"));
+  return name;
+}
+const blink::String& CssProperty_forcedColorAdjust() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("forced-color-adjust"));
+  return name;
+}
+const blink::AtomicString& CssName_gap() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("gap"));
+  return name;
+}
+const blink::String& CssProperty_gap() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("gap"));
+  return name;
+}
+const blink::AtomicString& CssName_grid() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("grid"));
+  return name;
+}
+const blink::String& CssProperty_grid() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("grid"));
+  return name;
+}
+const blink::AtomicString& CssName_gridArea() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("gridArea"));
+  return name;
+}
+const blink::String& CssProperty_gridArea() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("grid-area"));
+  return name;
+}
+const blink::AtomicString& CssName_gridAutoColumns() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("gridAutoColumns"));
+  return name;
+}
+const blink::String& CssProperty_gridAutoColumns() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("grid-auto-columns"));
+  return name;
+}
+const blink::AtomicString& CssName_gridAutoFlow() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("gridAutoFlow"));
+  return name;
+}
+const blink::String& CssProperty_gridAutoFlow() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("grid-auto-flow"));
+  return name;
+}
+const blink::AtomicString& CssName_gridAutoRows() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("gridAutoRows"));
+  return name;
+}
+const blink::String& CssProperty_gridAutoRows() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("grid-auto-rows"));
+  return name;
+}
+const blink::AtomicString& CssName_gridColumn() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("gridColumn"));
+  return name;
+}
+const blink::String& CssProperty_gridColumn() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("grid-column"));
+  return name;
+}
+const blink::AtomicString& CssName_gridColumnEnd() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("gridColumnEnd"));
+  return name;
+}
+const blink::String& CssProperty_gridColumnEnd() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("grid-column-end"));
+  return name;
+}
+const blink::AtomicString& CssName_gridColumnGap() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("gridColumnGap"));
+  return name;
+}
+const blink::String& CssProperty_gridColumnGap() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("grid-column-gap"));
+  return name;
+}
+const blink::AtomicString& CssName_gridColumnStart() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("gridColumnStart"));
+  return name;
+}
+const blink::String& CssProperty_gridColumnStart() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("grid-column-start"));
+  return name;
+}
+const blink::AtomicString& CssName_gridGap() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("gridGap"));
+  return name;
+}
+const blink::String& CssProperty_gridGap() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("grid-gap"));
+  return name;
+}
+const blink::AtomicString& CssName_gridRow() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("gridRow"));
+  return name;
+}
+const blink::String& CssProperty_gridRow() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("grid-row"));
+  return name;
+}
+const blink::AtomicString& CssName_gridRowEnd() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("gridRowEnd"));
+  return name;
+}
+const blink::String& CssProperty_gridRowEnd() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("grid-row-end"));
+  return name;
+}
+const blink::AtomicString& CssName_gridRowGap() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("gridRowGap"));
+  return name;
+}
+const blink::String& CssProperty_gridRowGap() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("grid-row-gap"));
+  return name;
+}
+const blink::AtomicString& CssName_gridRowStart() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("gridRowStart"));
+  return name;
+}
+const blink::String& CssProperty_gridRowStart() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("grid-row-start"));
+  return name;
+}
+const blink::AtomicString& CssName_gridTemplate() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("gridTemplate"));
+  return name;
+}
+const blink::String& CssProperty_gridTemplate() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("grid-template"));
+  return name;
+}
+const blink::AtomicString& CssName_gridTemplateAreas() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("gridTemplateAreas"));
+  return name;
+}
+const blink::String& CssProperty_gridTemplateAreas() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("grid-template-areas"));
+  return name;
+}
+const blink::AtomicString& CssName_gridTemplateColumns() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("gridTemplateColumns"));
+  return name;
+}
+const blink::String& CssProperty_gridTemplateColumns() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("grid-template-columns"));
+  return name;
+}
+const blink::AtomicString& CssName_gridTemplateRows() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("gridTemplateRows"));
+  return name;
+}
+const blink::String& CssProperty_gridTemplateRows() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("grid-template-rows"));
+  return name;
+}
+const blink::AtomicString& CssName_height() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("height"));
+  return name;
+}
+const blink::String& CssProperty_height() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("height"));
+  return name;
+}
+const blink::AtomicString& CssName_hyphenateCharacter() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("hyphenateCharacter"));
+  return name;
+}
+const blink::String& CssProperty_hyphenateCharacter() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("hyphenate-character"));
+  return name;
+}
+const blink::AtomicString& CssName_hyphenateLimitChars() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("hyphenateLimitChars"));
+  return name;
+}
+const blink::String& CssProperty_hyphenateLimitChars() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("hyphenate-limit-chars"));
+  return name;
+}
+const blink::AtomicString& CssName_hyphens() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("hyphens"));
+  return name;
+}
+const blink::String& CssProperty_hyphens() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("hyphens"));
+  return name;
+}
+const blink::AtomicString& CssName_imageOrientation() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("imageOrientation"));
+  return name;
+}
+const blink::String& CssProperty_imageOrientation() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("image-orientation"));
+  return name;
+}
+const blink::AtomicString& CssName_imageRendering() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("imageRendering"));
+  return name;
+}
+const blink::String& CssProperty_imageRendering() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("image-rendering"));
+  return name;
+}
+const blink::AtomicString& CssName_inlineSize() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("inlineSize"));
+  return name;
+}
+const blink::String& CssProperty_inlineSize() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("inline-size"));
+  return name;
+}
+const blink::AtomicString& CssName_inset() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("inset"));
+  return name;
+}
+const blink::String& CssProperty_inset() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("inset"));
+  return name;
+}
+const blink::AtomicString& CssName_insetBlock() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("insetBlock"));
+  return name;
+}
+const blink::String& CssProperty_insetBlock() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("inset-block"));
+  return name;
+}
+const blink::AtomicString& CssName_insetBlockEnd() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("insetBlockEnd"));
+  return name;
+}
+const blink::String& CssProperty_insetBlockEnd() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("inset-block-end"));
+  return name;
+}
+const blink::AtomicString& CssName_insetBlockStart() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("insetBlockStart"));
+  return name;
+}
+const blink::String& CssProperty_insetBlockStart() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("inset-block-start"));
+  return name;
+}
+const blink::AtomicString& CssName_insetInline() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("insetInline"));
+  return name;
+}
+const blink::String& CssProperty_insetInline() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("inset-inline"));
+  return name;
+}
+const blink::AtomicString& CssName_insetInlineEnd() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("insetInlineEnd"));
+  return name;
+}
+const blink::String& CssProperty_insetInlineEnd() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("inset-inline-end"));
+  return name;
+}
+const blink::AtomicString& CssName_insetInlineStart() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("insetInlineStart"));
+  return name;
+}
+const blink::String& CssProperty_insetInlineStart() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("inset-inline-start"));
+  return name;
+}
+const blink::AtomicString& CssName_isolation() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("isolation"));
+  return name;
+}
+const blink::String& CssProperty_isolation() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("isolation"));
+  return name;
+}
+const blink::AtomicString& CssName_justifyContent() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("justifyContent"));
+  return name;
+}
+const blink::String& CssProperty_justifyContent() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("justify-content"));
+  return name;
+}
+const blink::AtomicString& CssName_justifyItems() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("justifyItems"));
+  return name;
+}
+const blink::String& CssProperty_justifyItems() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("justify-items"));
+  return name;
+}
+const blink::AtomicString& CssName_justifySelf() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("justifySelf"));
+  return name;
+}
+const blink::String& CssProperty_justifySelf() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("justify-self"));
+  return name;
+}
+const blink::AtomicString& CssName_left() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("left"));
+  return name;
+}
+const blink::String& CssProperty_left() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("left"));
+  return name;
+}
+const blink::AtomicString& CssName_letterSpacing() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("letterSpacing"));
+  return name;
+}
+const blink::String& CssProperty_letterSpacing() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("letter-spacing"));
+  return name;
+}
+const blink::AtomicString& CssName_lightingColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("lightingColor"));
+  return name;
+}
+const blink::String& CssProperty_lightingColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("lighting-color"));
+  return name;
+}
+const blink::AtomicString& CssName_lineBreak() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("lineBreak"));
+  return name;
+}
+const blink::String& CssProperty_lineBreak() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("line-break"));
+  return name;
+}
+const blink::AtomicString& CssName_lineHeight() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("lineHeight"));
+  return name;
+}
+const blink::String& CssProperty_lineHeight() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("line-height"));
+  return name;
+}
+const blink::AtomicString& CssName_listStyle() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("listStyle"));
+  return name;
+}
+const blink::String& CssProperty_listStyle() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("list-style"));
+  return name;
+}
+const blink::AtomicString& CssName_listStyleImage() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("listStyleImage"));
+  return name;
+}
+const blink::String& CssProperty_listStyleImage() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("list-style-image"));
+  return name;
+}
+const blink::AtomicString& CssName_listStylePosition() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("listStylePosition"));
+  return name;
+}
+const blink::String& CssProperty_listStylePosition() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("list-style-position"));
+  return name;
+}
+const blink::AtomicString& CssName_listStyleType() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("listStyleType"));
+  return name;
+}
+const blink::String& CssProperty_listStyleType() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("list-style-type"));
+  return name;
+}
+const blink::AtomicString& CssName_margin() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("margin"));
+  return name;
+}
+const blink::String& CssProperty_margin() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("margin"));
+  return name;
+}
+const blink::AtomicString& CssName_marginBlock() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("marginBlock"));
+  return name;
+}
+const blink::String& CssProperty_marginBlock() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("margin-block"));
+  return name;
+}
+const blink::AtomicString& CssName_marginBlockEnd() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("marginBlockEnd"));
+  return name;
+}
+const blink::String& CssProperty_marginBlockEnd() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("margin-block-end"));
+  return name;
+}
+const blink::AtomicString& CssName_marginBlockStart() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("marginBlockStart"));
+  return name;
+}
+const blink::String& CssProperty_marginBlockStart() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("margin-block-start"));
+  return name;
+}
+const blink::AtomicString& CssName_marginBottom() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("marginBottom"));
+  return name;
+}
+const blink::String& CssProperty_marginBottom() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("margin-bottom"));
+  return name;
+}
+const blink::AtomicString& CssName_marginInline() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("marginInline"));
+  return name;
+}
+const blink::String& CssProperty_marginInline() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("margin-inline"));
+  return name;
+}
+const blink::AtomicString& CssName_marginInlineEnd() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("marginInlineEnd"));
+  return name;
+}
+const blink::String& CssProperty_marginInlineEnd() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("margin-inline-end"));
+  return name;
+}
+const blink::AtomicString& CssName_marginInlineStart() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("marginInlineStart"));
+  return name;
+}
+const blink::String& CssProperty_marginInlineStart() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("margin-inline-start"));
+  return name;
+}
+const blink::AtomicString& CssName_marginLeft() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("marginLeft"));
+  return name;
+}
+const blink::String& CssProperty_marginLeft() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("margin-left"));
+  return name;
+}
+const blink::AtomicString& CssName_marginRight() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("marginRight"));
+  return name;
+}
+const blink::String& CssProperty_marginRight() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("margin-right"));
+  return name;
+}
+const blink::AtomicString& CssName_marginTop() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("marginTop"));
+  return name;
+}
+const blink::String& CssProperty_marginTop() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("margin-top"));
+  return name;
+}
+const blink::AtomicString& CssName_marker() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("marker"));
+  return name;
+}
+const blink::String& CssProperty_marker() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("marker"));
+  return name;
+}
+const blink::AtomicString& CssName_markerEnd() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("markerEnd"));
+  return name;
+}
+const blink::String& CssProperty_markerEnd() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("marker-end"));
+  return name;
+}
+const blink::AtomicString& CssName_markerMid() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("markerMid"));
+  return name;
+}
+const blink::String& CssProperty_markerMid() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("marker-mid"));
+  return name;
+}
+const blink::AtomicString& CssName_markerStart() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("markerStart"));
+  return name;
+}
+const blink::String& CssProperty_markerStart() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("marker-start"));
+  return name;
+}
+const blink::AtomicString& CssName_mask() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("mask"));
+  return name;
+}
+const blink::String& CssProperty_mask() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("mask"));
+  return name;
+}
+const blink::AtomicString& CssName_maskClip() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("maskClip"));
+  return name;
+}
+const blink::String& CssProperty_maskClip() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("mask-clip"));
+  return name;
+}
+const blink::AtomicString& CssName_maskComposite() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("maskComposite"));
+  return name;
+}
+const blink::String& CssProperty_maskComposite() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("mask-composite"));
+  return name;
+}
+const blink::AtomicString& CssName_maskImage() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("maskImage"));
+  return name;
+}
+const blink::String& CssProperty_maskImage() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("mask-image"));
+  return name;
+}
+const blink::AtomicString& CssName_maskMode() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("maskMode"));
+  return name;
+}
+const blink::String& CssProperty_maskMode() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("mask-mode"));
+  return name;
+}
+const blink::AtomicString& CssName_maskOrigin() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("maskOrigin"));
+  return name;
+}
+const blink::String& CssProperty_maskOrigin() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("mask-origin"));
+  return name;
+}
+const blink::AtomicString& CssName_maskPosition() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("maskPosition"));
+  return name;
+}
+const blink::String& CssProperty_maskPosition() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("mask-position"));
+  return name;
+}
+const blink::AtomicString& CssName_maskRepeat() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("maskRepeat"));
+  return name;
+}
+const blink::String& CssProperty_maskRepeat() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("mask-repeat"));
+  return name;
+}
+const blink::AtomicString& CssName_maskSize() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("maskSize"));
+  return name;
+}
+const blink::String& CssProperty_maskSize() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("mask-size"));
+  return name;
+}
+const blink::AtomicString& CssName_maskType() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("maskType"));
+  return name;
+}
+const blink::String& CssProperty_maskType() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("mask-type"));
+  return name;
+}
+const blink::AtomicString& CssName_mathDepth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("mathDepth"));
+  return name;
+}
+const blink::String& CssProperty_mathDepth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("math-depth"));
+  return name;
+}
+const blink::AtomicString& CssName_mathShift() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("mathShift"));
+  return name;
+}
+const blink::String& CssProperty_mathShift() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("math-shift"));
+  return name;
+}
+const blink::AtomicString& CssName_mathStyle() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("mathStyle"));
+  return name;
+}
+const blink::String& CssProperty_mathStyle() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("math-style"));
+  return name;
+}
+const blink::AtomicString& CssName_maxBlockSize() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("maxBlockSize"));
+  return name;
+}
+const blink::String& CssProperty_maxBlockSize() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("max-block-size"));
+  return name;
+}
+const blink::AtomicString& CssName_maxHeight() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("maxHeight"));
+  return name;
+}
+const blink::String& CssProperty_maxHeight() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("max-height"));
+  return name;
+}
+const blink::AtomicString& CssName_maxInlineSize() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("maxInlineSize"));
+  return name;
+}
+const blink::String& CssProperty_maxInlineSize() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("max-inline-size"));
+  return name;
+}
+const blink::AtomicString& CssName_maxWidth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("maxWidth"));
+  return name;
+}
+const blink::String& CssProperty_maxWidth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("max-width"));
+  return name;
+}
+const blink::AtomicString& CssName_minBlockSize() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("minBlockSize"));
+  return name;
+}
+const blink::String& CssProperty_minBlockSize() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("min-block-size"));
+  return name;
+}
+const blink::AtomicString& CssName_minHeight() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("minHeight"));
+  return name;
+}
+const blink::String& CssProperty_minHeight() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("min-height"));
+  return name;
+}
+const blink::AtomicString& CssName_minInlineSize() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("minInlineSize"));
+  return name;
+}
+const blink::String& CssProperty_minInlineSize() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("min-inline-size"));
+  return name;
+}
+const blink::AtomicString& CssName_minWidth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("minWidth"));
+  return name;
+}
+const blink::String& CssProperty_minWidth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("min-width"));
+  return name;
+}
+const blink::AtomicString& CssName_mixBlendMode() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("mixBlendMode"));
+  return name;
+}
+const blink::String& CssProperty_mixBlendMode() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("mix-blend-mode"));
+  return name;
+}
+const blink::AtomicString& CssName_objectFit() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("objectFit"));
+  return name;
+}
+const blink::String& CssProperty_objectFit() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("object-fit"));
+  return name;
+}
+const blink::AtomicString& CssName_objectPosition() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("objectPosition"));
+  return name;
+}
+const blink::String& CssProperty_objectPosition() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("object-position"));
+  return name;
+}
+const blink::AtomicString& CssName_offset() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("offset"));
+  return name;
+}
+const blink::String& CssProperty_offset() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("offset"));
+  return name;
+}
+const blink::AtomicString& CssName_offsetAnchor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("offsetAnchor"));
+  return name;
+}
+const blink::String& CssProperty_offsetAnchor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("offset-anchor"));
+  return name;
+}
+const blink::AtomicString& CssName_offsetDistance() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("offsetDistance"));
+  return name;
+}
+const blink::String& CssProperty_offsetDistance() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("offset-distance"));
+  return name;
+}
+const blink::AtomicString& CssName_offsetPath() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("offsetPath"));
+  return name;
+}
+const blink::String& CssProperty_offsetPath() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("offset-path"));
+  return name;
+}
+const blink::AtomicString& CssName_offsetPosition() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("offsetPosition"));
+  return name;
+}
+const blink::String& CssProperty_offsetPosition() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("offset-position"));
+  return name;
+}
+const blink::AtomicString& CssName_offsetRotate() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("offsetRotate"));
+  return name;
+}
+const blink::String& CssProperty_offsetRotate() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("offset-rotate"));
+  return name;
+}
+const blink::AtomicString& CssName_opacity() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("opacity"));
+  return name;
+}
+const blink::String& CssProperty_opacity() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("opacity"));
+  return name;
+}
+const blink::AtomicString& CssName_order() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("order"));
+  return name;
+}
+const blink::String& CssProperty_order() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("order"));
+  return name;
+}
+const blink::AtomicString& CssName_orphans() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("orphans"));
+  return name;
+}
+const blink::String& CssProperty_orphans() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("orphans"));
+  return name;
+}
+const blink::AtomicString& CssName_outline() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("outline"));
+  return name;
+}
+const blink::String& CssProperty_outline() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("outline"));
+  return name;
+}
+const blink::AtomicString& CssName_outlineColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("outlineColor"));
+  return name;
+}
+const blink::String& CssProperty_outlineColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("outline-color"));
+  return name;
+}
+const blink::AtomicString& CssName_outlineOffset() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("outlineOffset"));
+  return name;
+}
+const blink::String& CssProperty_outlineOffset() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("outline-offset"));
+  return name;
+}
+const blink::AtomicString& CssName_outlineStyle() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("outlineStyle"));
+  return name;
+}
+const blink::String& CssProperty_outlineStyle() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("outline-style"));
+  return name;
+}
+const blink::AtomicString& CssName_outlineWidth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("outlineWidth"));
+  return name;
+}
+const blink::String& CssProperty_outlineWidth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("outline-width"));
+  return name;
+}
+const blink::AtomicString& CssName_overflow() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("overflow"));
+  return name;
+}
+const blink::String& CssProperty_overflow() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("overflow"));
+  return name;
+}
+const blink::AtomicString& CssName_overflowAnchor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("overflowAnchor"));
+  return name;
+}
+const blink::String& CssProperty_overflowAnchor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("overflow-anchor"));
+  return name;
+}
+const blink::AtomicString& CssName_overflowBlock() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("overflowBlock"));
+  return name;
+}
+const blink::String& CssProperty_overflowBlock() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("overflow-block"));
+  return name;
+}
+const blink::AtomicString& CssName_overflowClipMargin() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("overflowClipMargin"));
+  return name;
+}
+const blink::String& CssProperty_overflowClipMargin() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("overflow-clip-margin"));
+  return name;
+}
+const blink::AtomicString& CssName_overflowInline() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("overflowInline"));
+  return name;
+}
+const blink::String& CssProperty_overflowInline() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("overflow-inline"));
+  return name;
+}
+const blink::AtomicString& CssName_overflowWrap() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("overflowWrap"));
+  return name;
+}
+const blink::String& CssProperty_overflowWrap() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("overflow-wrap"));
+  return name;
+}
+const blink::AtomicString& CssName_overflowX() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("overflowX"));
+  return name;
+}
+const blink::String& CssProperty_overflowX() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("overflow-x"));
+  return name;
+}
+const blink::AtomicString& CssName_overflowY() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("overflowY"));
+  return name;
+}
+const blink::String& CssProperty_overflowY() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("overflow-y"));
+  return name;
+}
+const blink::AtomicString& CssName_overscrollBehavior() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("overscrollBehavior"));
+  return name;
+}
+const blink::String& CssProperty_overscrollBehavior() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("overscroll-behavior"));
+  return name;
+}
+const blink::AtomicString& CssName_overscrollBehaviorBlock() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("overscrollBehaviorBlock"));
+  return name;
+}
+const blink::String& CssProperty_overscrollBehaviorBlock() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("overscroll-behavior-block"));
+  return name;
+}
+const blink::AtomicString& CssName_overscrollBehaviorInline() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("overscrollBehaviorInline"));
+  return name;
+}
+const blink::String& CssProperty_overscrollBehaviorInline() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("overscroll-behavior-inline"));
+  return name;
+}
+const blink::AtomicString& CssName_overscrollBehaviorX() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("overscrollBehaviorX"));
+  return name;
+}
+const blink::String& CssProperty_overscrollBehaviorX() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("overscroll-behavior-x"));
+  return name;
+}
+const blink::AtomicString& CssName_overscrollBehaviorY() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("overscrollBehaviorY"));
+  return name;
+}
+const blink::String& CssProperty_overscrollBehaviorY() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("overscroll-behavior-y"));
+  return name;
+}
+const blink::AtomicString& CssName_padding() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("padding"));
+  return name;
+}
+const blink::String& CssProperty_padding() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("padding"));
+  return name;
+}
+const blink::AtomicString& CssName_paddingBlock() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("paddingBlock"));
+  return name;
+}
+const blink::String& CssProperty_paddingBlock() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("padding-block"));
+  return name;
+}
+const blink::AtomicString& CssName_paddingBlockEnd() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("paddingBlockEnd"));
+  return name;
+}
+const blink::String& CssProperty_paddingBlockEnd() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("padding-block-end"));
+  return name;
+}
+const blink::AtomicString& CssName_paddingBlockStart() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("paddingBlockStart"));
+  return name;
+}
+const blink::String& CssProperty_paddingBlockStart() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("padding-block-start"));
+  return name;
+}
+const blink::AtomicString& CssName_paddingBottom() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("paddingBottom"));
+  return name;
+}
+const blink::String& CssProperty_paddingBottom() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("padding-bottom"));
+  return name;
+}
+const blink::AtomicString& CssName_paddingInline() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("paddingInline"));
+  return name;
+}
+const blink::String& CssProperty_paddingInline() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("padding-inline"));
+  return name;
+}
+const blink::AtomicString& CssName_paddingInlineEnd() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("paddingInlineEnd"));
+  return name;
+}
+const blink::String& CssProperty_paddingInlineEnd() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("padding-inline-end"));
+  return name;
+}
+const blink::AtomicString& CssName_paddingInlineStart() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("paddingInlineStart"));
+  return name;
+}
+const blink::String& CssProperty_paddingInlineStart() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("padding-inline-start"));
+  return name;
+}
+const blink::AtomicString& CssName_paddingLeft() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("paddingLeft"));
+  return name;
+}
+const blink::String& CssProperty_paddingLeft() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("padding-left"));
+  return name;
+}
+const blink::AtomicString& CssName_paddingRight() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("paddingRight"));
+  return name;
+}
+const blink::String& CssProperty_paddingRight() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("padding-right"));
+  return name;
+}
+const blink::AtomicString& CssName_paddingTop() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("paddingTop"));
+  return name;
+}
+const blink::String& CssProperty_paddingTop() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("padding-top"));
+  return name;
+}
+const blink::AtomicString& CssName_page() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("page"));
+  return name;
+}
+const blink::String& CssProperty_page() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("page"));
+  return name;
+}
+const blink::AtomicString& CssName_pageBreakAfter() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("pageBreakAfter"));
+  return name;
+}
+const blink::String& CssProperty_pageBreakAfter() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("page-break-after"));
+  return name;
+}
+const blink::AtomicString& CssName_pageBreakBefore() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("pageBreakBefore"));
+  return name;
+}
+const blink::String& CssProperty_pageBreakBefore() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("page-break-before"));
+  return name;
+}
+const blink::AtomicString& CssName_pageBreakInside() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("pageBreakInside"));
+  return name;
+}
+const blink::String& CssProperty_pageBreakInside() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("page-break-inside"));
+  return name;
+}
+const blink::AtomicString& CssName_paintOrder() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("paintOrder"));
+  return name;
+}
+const blink::String& CssProperty_paintOrder() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("paint-order"));
+  return name;
+}
+const blink::AtomicString& CssName_perspective() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("perspective"));
+  return name;
+}
+const blink::String& CssProperty_perspective() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("perspective"));
+  return name;
+}
+const blink::AtomicString& CssName_perspectiveOrigin() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("perspectiveOrigin"));
+  return name;
+}
+const blink::String& CssProperty_perspectiveOrigin() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("perspective-origin"));
+  return name;
+}
+const blink::AtomicString& CssName_placeContent() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("placeContent"));
+  return name;
+}
+const blink::String& CssProperty_placeContent() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("place-content"));
+  return name;
+}
+const blink::AtomicString& CssName_placeItems() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("placeItems"));
+  return name;
+}
+const blink::String& CssProperty_placeItems() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("place-items"));
+  return name;
+}
+const blink::AtomicString& CssName_placeSelf() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("placeSelf"));
+  return name;
+}
+const blink::String& CssProperty_placeSelf() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("place-self"));
+  return name;
+}
+const blink::AtomicString& CssName_pointerEvents() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("pointerEvents"));
+  return name;
+}
+const blink::String& CssProperty_pointerEvents() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("pointer-events"));
+  return name;
+}
+const blink::AtomicString& CssName_position() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("position"));
+  return name;
+}
+const blink::String& CssProperty_position() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("position"));
+  return name;
+}
+const blink::AtomicString& CssName_positionAnchor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("positionAnchor"));
+  return name;
+}
+const blink::String& CssProperty_positionAnchor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("position-anchor"));
+  return name;
+}
+const blink::AtomicString& CssName_positionArea() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("positionArea"));
+  return name;
+}
+const blink::String& CssProperty_positionArea() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("position-area"));
+  return name;
+}
+const blink::AtomicString& CssName_positionTry() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("positionTry"));
+  return name;
+}
+const blink::String& CssProperty_positionTry() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("position-try"));
+  return name;
+}
+const blink::AtomicString& CssName_positionTryFallbacks() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("positionTryFallbacks"));
+  return name;
+}
+const blink::String& CssProperty_positionTryFallbacks() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("position-try-fallbacks"));
+  return name;
+}
+const blink::AtomicString& CssName_positionTryOrder() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("positionTryOrder"));
+  return name;
+}
+const blink::String& CssProperty_positionTryOrder() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("position-try-order"));
+  return name;
+}
+const blink::AtomicString& CssName_positionVisibility() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("positionVisibility"));
+  return name;
+}
+const blink::String& CssProperty_positionVisibility() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("position-visibility"));
+  return name;
+}
+const blink::AtomicString& CssName_printColorAdjust() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("printColorAdjust"));
+  return name;
+}
+const blink::String& CssProperty_printColorAdjust() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("print-color-adjust"));
+  return name;
+}
+const blink::AtomicString& CssName_quotes() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("quotes"));
+  return name;
+}
+const blink::String& CssProperty_quotes() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("quotes"));
+  return name;
+}
+const blink::AtomicString& CssName_r() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("r"));
+  return name;
+}
+const blink::String& CssProperty_r() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("r"));
+  return name;
+}
+const blink::AtomicString& CssName_resize() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("resize"));
+  return name;
+}
+const blink::String& CssProperty_resize() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("resize"));
+  return name;
+}
+const blink::AtomicString& CssName_right() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("right"));
+  return name;
+}
+const blink::String& CssProperty_right() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("right"));
+  return name;
+}
+const blink::AtomicString& CssName_rotate() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("rotate"));
+  return name;
+}
+const blink::String& CssProperty_rotate() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("rotate"));
+  return name;
+}
+const blink::AtomicString& CssName_rowGap() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("rowGap"));
+  return name;
+}
+const blink::String& CssProperty_rowGap() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("row-gap"));
+  return name;
+}
+const blink::AtomicString& CssName_rubyAlign() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("rubyAlign"));
+  return name;
+}
+const blink::String& CssProperty_rubyAlign() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("ruby-align"));
+  return name;
+}
+const blink::AtomicString& CssName_rubyPosition() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("rubyPosition"));
+  return name;
+}
+const blink::String& CssProperty_rubyPosition() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("ruby-position"));
+  return name;
+}
+const blink::AtomicString& CssName_rx() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("rx"));
+  return name;
+}
+const blink::String& CssProperty_rx() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("rx"));
+  return name;
+}
+const blink::AtomicString& CssName_ry() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("ry"));
+  return name;
+}
+const blink::String& CssProperty_ry() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("ry"));
+  return name;
+}
+const blink::AtomicString& CssName_scale() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scale"));
+  return name;
+}
+const blink::String& CssProperty_scale() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scale"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollBehavior() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollBehavior"));
+  return name;
+}
+const blink::String& CssProperty_scrollBehavior() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-behavior"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollMargin() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollMargin"));
+  return name;
+}
+const blink::String& CssProperty_scrollMargin() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-margin"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollMarginBlock() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollMarginBlock"));
+  return name;
+}
+const blink::String& CssProperty_scrollMarginBlock() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-margin-block"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollMarginBlockEnd() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollMarginBlockEnd"));
+  return name;
+}
+const blink::String& CssProperty_scrollMarginBlockEnd() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-margin-block-end"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollMarginBlockStart() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollMarginBlockStart"));
+  return name;
+}
+const blink::String& CssProperty_scrollMarginBlockStart() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-margin-block-start"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollMarginBottom() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollMarginBottom"));
+  return name;
+}
+const blink::String& CssProperty_scrollMarginBottom() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-margin-bottom"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollMarginInline() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollMarginInline"));
+  return name;
+}
+const blink::String& CssProperty_scrollMarginInline() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-margin-inline"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollMarginInlineEnd() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollMarginInlineEnd"));
+  return name;
+}
+const blink::String& CssProperty_scrollMarginInlineEnd() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-margin-inline-end"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollMarginInlineStart() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollMarginInlineStart"));
+  return name;
+}
+const blink::String& CssProperty_scrollMarginInlineStart() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-margin-inline-start"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollMarginLeft() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollMarginLeft"));
+  return name;
+}
+const blink::String& CssProperty_scrollMarginLeft() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-margin-left"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollMarginRight() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollMarginRight"));
+  return name;
+}
+const blink::String& CssProperty_scrollMarginRight() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-margin-right"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollMarginTop() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollMarginTop"));
+  return name;
+}
+const blink::String& CssProperty_scrollMarginTop() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-margin-top"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollPadding() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollPadding"));
+  return name;
+}
+const blink::String& CssProperty_scrollPadding() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-padding"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollPaddingBlock() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollPaddingBlock"));
+  return name;
+}
+const blink::String& CssProperty_scrollPaddingBlock() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-padding-block"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollPaddingBlockEnd() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollPaddingBlockEnd"));
+  return name;
+}
+const blink::String& CssProperty_scrollPaddingBlockEnd() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-padding-block-end"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollPaddingBlockStart() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollPaddingBlockStart"));
+  return name;
+}
+const blink::String& CssProperty_scrollPaddingBlockStart() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-padding-block-start"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollPaddingBottom() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollPaddingBottom"));
+  return name;
+}
+const blink::String& CssProperty_scrollPaddingBottom() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-padding-bottom"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollPaddingInline() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollPaddingInline"));
+  return name;
+}
+const blink::String& CssProperty_scrollPaddingInline() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-padding-inline"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollPaddingInlineEnd() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollPaddingInlineEnd"));
+  return name;
+}
+const blink::String& CssProperty_scrollPaddingInlineEnd() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-padding-inline-end"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollPaddingInlineStart() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollPaddingInlineStart"));
+  return name;
+}
+const blink::String& CssProperty_scrollPaddingInlineStart() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-padding-inline-start"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollPaddingLeft() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollPaddingLeft"));
+  return name;
+}
+const blink::String& CssProperty_scrollPaddingLeft() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-padding-left"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollPaddingRight() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollPaddingRight"));
+  return name;
+}
+const blink::String& CssProperty_scrollPaddingRight() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-padding-right"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollPaddingTop() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollPaddingTop"));
+  return name;
+}
+const blink::String& CssProperty_scrollPaddingTop() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-padding-top"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollSnapAlign() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollSnapAlign"));
+  return name;
+}
+const blink::String& CssProperty_scrollSnapAlign() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-snap-align"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollSnapStop() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollSnapStop"));
+  return name;
+}
+const blink::String& CssProperty_scrollSnapStop() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-snap-stop"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollSnapType() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollSnapType"));
+  return name;
+}
+const blink::String& CssProperty_scrollSnapType() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-snap-type"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollTimeline() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollTimeline"));
+  return name;
+}
+const blink::String& CssProperty_scrollTimeline() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-timeline"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollTimelineAxis() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollTimelineAxis"));
+  return name;
+}
+const blink::String& CssProperty_scrollTimelineAxis() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-timeline-axis"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollTimelineName() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollTimelineName"));
+  return name;
+}
+const blink::String& CssProperty_scrollTimelineName() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scroll-timeline-name"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollbarColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollbarColor"));
+  return name;
+}
+const blink::String& CssProperty_scrollbarColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scrollbar-color"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollbarGutter() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollbarGutter"));
+  return name;
+}
+const blink::String& CssProperty_scrollbarGutter() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scrollbar-gutter"));
+  return name;
+}
+const blink::AtomicString& CssName_scrollbarWidth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("scrollbarWidth"));
+  return name;
+}
+const blink::String& CssProperty_scrollbarWidth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("scrollbar-width"));
+  return name;
+}
+const blink::AtomicString& CssName_shapeImageThreshold() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("shapeImageThreshold"));
+  return name;
+}
+const blink::String& CssProperty_shapeImageThreshold() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("shape-image-threshold"));
+  return name;
+}
+const blink::AtomicString& CssName_shapeMargin() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("shapeMargin"));
+  return name;
+}
+const blink::String& CssProperty_shapeMargin() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("shape-margin"));
+  return name;
+}
+const blink::AtomicString& CssName_shapeOutside() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("shapeOutside"));
+  return name;
+}
+const blink::String& CssProperty_shapeOutside() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("shape-outside"));
+  return name;
+}
+const blink::AtomicString& CssName_shapeRendering() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("shapeRendering"));
+  return name;
+}
+const blink::String& CssProperty_shapeRendering() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("shape-rendering"));
+  return name;
+}
+const blink::AtomicString& CssName_stopColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("stopColor"));
+  return name;
+}
+const blink::String& CssProperty_stopColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("stop-color"));
+  return name;
+}
+const blink::AtomicString& CssName_stopOpacity() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("stopOpacity"));
+  return name;
+}
+const blink::String& CssProperty_stopOpacity() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("stop-opacity"));
+  return name;
+}
+const blink::AtomicString& CssName_stroke() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("stroke"));
+  return name;
+}
+const blink::String& CssProperty_stroke() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("stroke"));
+  return name;
+}
+const blink::AtomicString& CssName_strokeDasharray() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("strokeDasharray"));
+  return name;
+}
+const blink::String& CssProperty_strokeDasharray() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("stroke-dasharray"));
+  return name;
+}
+const blink::AtomicString& CssName_strokeDashoffset() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("strokeDashoffset"));
+  return name;
+}
+const blink::String& CssProperty_strokeDashoffset() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("stroke-dashoffset"));
+  return name;
+}
+const blink::AtomicString& CssName_strokeLinecap() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("strokeLinecap"));
+  return name;
+}
+const blink::String& CssProperty_strokeLinecap() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("stroke-linecap"));
+  return name;
+}
+const blink::AtomicString& CssName_strokeLinejoin() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("strokeLinejoin"));
+  return name;
+}
+const blink::String& CssProperty_strokeLinejoin() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("stroke-linejoin"));
+  return name;
+}
+const blink::AtomicString& CssName_strokeMiterlimit() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("strokeMiterlimit"));
+  return name;
+}
+const blink::String& CssProperty_strokeMiterlimit() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("stroke-miterlimit"));
+  return name;
+}
+const blink::AtomicString& CssName_strokeOpacity() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("strokeOpacity"));
+  return name;
+}
+const blink::String& CssProperty_strokeOpacity() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("stroke-opacity"));
+  return name;
+}
+const blink::AtomicString& CssName_strokeWidth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("strokeWidth"));
+  return name;
+}
+const blink::String& CssProperty_strokeWidth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("stroke-width"));
+  return name;
+}
+const blink::AtomicString& CssName_tabSize() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("tabSize"));
+  return name;
+}
+const blink::String& CssProperty_tabSize() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("tab-size"));
+  return name;
+}
+const blink::AtomicString& CssName_tableLayout() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("tableLayout"));
+  return name;
+}
+const blink::String& CssProperty_tableLayout() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("table-layout"));
+  return name;
+}
+const blink::AtomicString& CssName_textAlign() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textAlign"));
+  return name;
+}
+const blink::String& CssProperty_textAlign() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-align"));
+  return name;
+}
+const blink::AtomicString& CssName_textAlignLast() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textAlignLast"));
+  return name;
+}
+const blink::String& CssProperty_textAlignLast() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-align-last"));
+  return name;
+}
+const blink::AtomicString& CssName_textAnchor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textAnchor"));
+  return name;
+}
+const blink::String& CssProperty_textAnchor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-anchor"));
+  return name;
+}
+const blink::AtomicString& CssName_textAutospace() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textAutospace"));
+  return name;
+}
+const blink::String& CssProperty_textAutospace() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-autospace"));
+  return name;
+}
+const blink::AtomicString& CssName_textBox() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textBox"));
+  return name;
+}
+const blink::String& CssProperty_textBox() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-box"));
+  return name;
+}
+const blink::AtomicString& CssName_textBoxEdge() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textBoxEdge"));
+  return name;
+}
+const blink::String& CssProperty_textBoxEdge() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-box-edge"));
+  return name;
+}
+const blink::AtomicString& CssName_textBoxTrim() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textBoxTrim"));
+  return name;
+}
+const blink::String& CssProperty_textBoxTrim() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-box-trim"));
+  return name;
+}
+const blink::AtomicString& CssName_textCombineUpright() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textCombineUpright"));
+  return name;
+}
+const blink::String& CssProperty_textCombineUpright() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-combine-upright"));
+  return name;
+}
+const blink::AtomicString& CssName_textDecoration() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textDecoration"));
+  return name;
+}
+const blink::String& CssProperty_textDecoration() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-decoration"));
+  return name;
+}
+const blink::AtomicString& CssName_textDecorationColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textDecorationColor"));
+  return name;
+}
+const blink::String& CssProperty_textDecorationColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-decoration-color"));
+  return name;
+}
+const blink::AtomicString& CssName_textDecorationLine() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textDecorationLine"));
+  return name;
+}
+const blink::String& CssProperty_textDecorationLine() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-decoration-line"));
+  return name;
+}
+const blink::AtomicString& CssName_textDecorationSkipInk() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textDecorationSkipInk"));
+  return name;
+}
+const blink::String& CssProperty_textDecorationSkipInk() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-decoration-skip-ink"));
+  return name;
+}
+const blink::AtomicString& CssName_textDecorationStyle() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textDecorationStyle"));
+  return name;
+}
+const blink::String& CssProperty_textDecorationStyle() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-decoration-style"));
+  return name;
+}
+const blink::AtomicString& CssName_textDecorationThickness() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textDecorationThickness"));
+  return name;
+}
+const blink::String& CssProperty_textDecorationThickness() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-decoration-thickness"));
+  return name;
+}
+const blink::AtomicString& CssName_textEmphasis() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textEmphasis"));
+  return name;
+}
+const blink::String& CssProperty_textEmphasis() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-emphasis"));
+  return name;
+}
+const blink::AtomicString& CssName_textEmphasisColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textEmphasisColor"));
+  return name;
+}
+const blink::String& CssProperty_textEmphasisColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-emphasis-color"));
+  return name;
+}
+const blink::AtomicString& CssName_textEmphasisPosition() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textEmphasisPosition"));
+  return name;
+}
+const blink::String& CssProperty_textEmphasisPosition() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-emphasis-position"));
+  return name;
+}
+const blink::AtomicString& CssName_textEmphasisStyle() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textEmphasisStyle"));
+  return name;
+}
+const blink::String& CssProperty_textEmphasisStyle() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-emphasis-style"));
+  return name;
+}
+const blink::AtomicString& CssName_textIndent() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textIndent"));
+  return name;
+}
+const blink::String& CssProperty_textIndent() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-indent"));
+  return name;
+}
+const blink::AtomicString& CssName_textJustify() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textJustify"));
+  return name;
+}
+const blink::String& CssProperty_textJustify() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-justify"));
+  return name;
+}
+const blink::AtomicString& CssName_textOrientation() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textOrientation"));
+  return name;
+}
+const blink::String& CssProperty_textOrientation() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-orientation"));
+  return name;
+}
+const blink::AtomicString& CssName_textOverflow() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textOverflow"));
+  return name;
+}
+const blink::String& CssProperty_textOverflow() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-overflow"));
+  return name;
+}
+const blink::AtomicString& CssName_textRendering() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textRendering"));
+  return name;
+}
+const blink::String& CssProperty_textRendering() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-rendering"));
+  return name;
+}
+const blink::AtomicString& CssName_textShadow() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textShadow"));
+  return name;
+}
+const blink::String& CssProperty_textShadow() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-shadow"));
+  return name;
+}
+const blink::AtomicString& CssName_textTransform() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textTransform"));
+  return name;
+}
+const blink::String& CssProperty_textTransform() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-transform"));
+  return name;
+}
+const blink::AtomicString& CssName_textUnderlineOffset() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textUnderlineOffset"));
+  return name;
+}
+const blink::String& CssProperty_textUnderlineOffset() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-underline-offset"));
+  return name;
+}
+const blink::AtomicString& CssName_textUnderlinePosition() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textUnderlinePosition"));
+  return name;
+}
+const blink::String& CssProperty_textUnderlinePosition() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-underline-position"));
+  return name;
+}
+const blink::AtomicString& CssName_textWrap() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textWrap"));
+  return name;
+}
+const blink::String& CssProperty_textWrap() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-wrap"));
+  return name;
+}
+const blink::AtomicString& CssName_textWrapMode() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textWrapMode"));
+  return name;
+}
+const blink::String& CssProperty_textWrapMode() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-wrap-mode"));
+  return name;
+}
+const blink::AtomicString& CssName_textWrapStyle() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("textWrapStyle"));
+  return name;
+}
+const blink::String& CssProperty_textWrapStyle() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("text-wrap-style"));
+  return name;
+}
+const blink::AtomicString& CssName_timelineScope() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("timelineScope"));
+  return name;
+}
+const blink::String& CssProperty_timelineScope() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("timeline-scope"));
+  return name;
+}
+const blink::AtomicString& CssName_top() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("top"));
+  return name;
+}
+const blink::String& CssProperty_top() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("top"));
+  return name;
+}
+const blink::AtomicString& CssName_touchAction() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("touchAction"));
+  return name;
+}
+const blink::String& CssProperty_touchAction() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("touch-action"));
+  return name;
+}
+const blink::AtomicString& CssName_transform() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("transform"));
+  return name;
+}
+const blink::String& CssProperty_transform() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("transform"));
+  return name;
+}
+const blink::AtomicString& CssName_transformBox() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("transformBox"));
+  return name;
+}
+const blink::String& CssProperty_transformBox() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("transform-box"));
+  return name;
+}
+const blink::AtomicString& CssName_transformOrigin() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("transformOrigin"));
+  return name;
+}
+const blink::String& CssProperty_transformOrigin() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("transform-origin"));
+  return name;
+}
+const blink::AtomicString& CssName_transformStyle() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("transformStyle"));
+  return name;
+}
+const blink::String& CssProperty_transformStyle() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("transform-style"));
+  return name;
+}
+const blink::AtomicString& CssName_transition() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("transition"));
+  return name;
+}
+const blink::String& CssProperty_transition() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("transition"));
+  return name;
+}
+const blink::AtomicString& CssName_transitionBehavior() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("transitionBehavior"));
+  return name;
+}
+const blink::String& CssProperty_transitionBehavior() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("transition-behavior"));
+  return name;
+}
+const blink::AtomicString& CssName_transitionDelay() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("transitionDelay"));
+  return name;
+}
+const blink::String& CssProperty_transitionDelay() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("transition-delay"));
+  return name;
+}
+const blink::AtomicString& CssName_transitionDuration() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("transitionDuration"));
+  return name;
+}
+const blink::String& CssProperty_transitionDuration() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("transition-duration"));
+  return name;
+}
+const blink::AtomicString& CssName_transitionProperty() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("transitionProperty"));
+  return name;
+}
+const blink::String& CssProperty_transitionProperty() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("transition-property"));
+  return name;
+}
+const blink::AtomicString& CssName_transitionTimingFunction() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("transitionTimingFunction"));
+  return name;
+}
+const blink::String& CssProperty_transitionTimingFunction() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("transition-timing-function"));
+  return name;
+}
+const blink::AtomicString& CssName_translate() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("translate"));
+  return name;
+}
+const blink::String& CssProperty_translate() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("translate"));
+  return name;
+}
+const blink::AtomicString& CssName_unicodeBidi() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("unicodeBidi"));
+  return name;
+}
+const blink::String& CssProperty_unicodeBidi() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("unicode-bidi"));
+  return name;
+}
+const blink::AtomicString& CssName_userSelect() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("userSelect"));
+  return name;
+}
+const blink::String& CssProperty_userSelect() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("user-select"));
+  return name;
+}
+const blink::AtomicString& CssName_vectorEffect() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("vectorEffect"));
+  return name;
+}
+const blink::String& CssProperty_vectorEffect() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("vector-effect"));
+  return name;
+}
+const blink::AtomicString& CssName_verticalAlign() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("verticalAlign"));
+  return name;
+}
+const blink::String& CssProperty_verticalAlign() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("vertical-align"));
+  return name;
+}
+const blink::AtomicString& CssName_viewTimeline() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("viewTimeline"));
+  return name;
+}
+const blink::String& CssProperty_viewTimeline() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("view-timeline"));
+  return name;
+}
+const blink::AtomicString& CssName_viewTimelineAxis() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("viewTimelineAxis"));
+  return name;
+}
+const blink::String& CssProperty_viewTimelineAxis() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("view-timeline-axis"));
+  return name;
+}
+const blink::AtomicString& CssName_viewTimelineInset() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("viewTimelineInset"));
+  return name;
+}
+const blink::String& CssProperty_viewTimelineInset() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("view-timeline-inset"));
+  return name;
+}
+const blink::AtomicString& CssName_viewTimelineName() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("viewTimelineName"));
+  return name;
+}
+const blink::String& CssProperty_viewTimelineName() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("view-timeline-name"));
+  return name;
+}
+const blink::AtomicString& CssName_viewTransitionClass() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("viewTransitionClass"));
+  return name;
+}
+const blink::String& CssProperty_viewTransitionClass() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("view-transition-class"));
+  return name;
+}
+const blink::AtomicString& CssName_viewTransitionName() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("viewTransitionName"));
+  return name;
+}
+const blink::String& CssProperty_viewTransitionName() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("view-transition-name"));
+  return name;
+}
+const blink::AtomicString& CssName_visibility() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("visibility"));
+  return name;
+}
+const blink::String& CssProperty_visibility() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("visibility"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitAlignContent() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitAlignContent"));
+  return name;
+}
+const blink::String& CssProperty_webkitAlignContent() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-align-content"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitAlignItems() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitAlignItems"));
+  return name;
+}
+const blink::String& CssProperty_webkitAlignItems() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-align-items"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitAlignSelf() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitAlignSelf"));
+  return name;
+}
+const blink::String& CssProperty_webkitAlignSelf() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-align-self"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitAnimation() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitAnimation"));
+  return name;
+}
+const blink::String& CssProperty_webkitAnimation() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-animation"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitAnimationDelay() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitAnimationDelay"));
+  return name;
+}
+const blink::String& CssProperty_webkitAnimationDelay() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-animation-delay"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitAnimationDirection() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitAnimationDirection"));
+  return name;
+}
+const blink::String& CssProperty_webkitAnimationDirection() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-animation-direction"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitAnimationDuration() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitAnimationDuration"));
+  return name;
+}
+const blink::String& CssProperty_webkitAnimationDuration() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-animation-duration"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitAnimationFillMode() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitAnimationFillMode"));
+  return name;
+}
+const blink::String& CssProperty_webkitAnimationFillMode() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-animation-fill-mode"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitAnimationIterationCount() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitAnimationIterationCount"));
+  return name;
+}
+const blink::String& CssProperty_webkitAnimationIterationCount() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-animation-iteration-count"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitAnimationName() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitAnimationName"));
+  return name;
+}
+const blink::String& CssProperty_webkitAnimationName() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-animation-name"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitAnimationPlayState() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitAnimationPlayState"));
+  return name;
+}
+const blink::String& CssProperty_webkitAnimationPlayState() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-animation-play-state"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitAnimationTimingFunction() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitAnimationTimingFunction"));
+  return name;
+}
+const blink::String& CssProperty_webkitAnimationTimingFunction() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-animation-timing-function"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitAppearance() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitAppearance"));
+  return name;
+}
+const blink::String& CssProperty_webkitAppearance() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-appearance"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitBackfaceVisibility() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitBackfaceVisibility"));
+  return name;
+}
+const blink::String& CssProperty_webkitBackfaceVisibility() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-backface-visibility"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitBackgroundClip() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitBackgroundClip"));
+  return name;
+}
+const blink::String& CssProperty_webkitBackgroundClip() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-background-clip"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitBackgroundOrigin() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitBackgroundOrigin"));
+  return name;
+}
+const blink::String& CssProperty_webkitBackgroundOrigin() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-background-origin"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitBackgroundSize() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitBackgroundSize"));
+  return name;
+}
+const blink::String& CssProperty_webkitBackgroundSize() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-background-size"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitBorderBottomLeftRadius() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitBorderBottomLeftRadius"));
+  return name;
+}
+const blink::String& CssProperty_webkitBorderBottomLeftRadius() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-border-bottom-left-radius"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitBorderBottomRightRadius() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitBorderBottomRightRadius"));
+  return name;
+}
+const blink::String& CssProperty_webkitBorderBottomRightRadius() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-border-bottom-right-radius"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitBorderRadius() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitBorderRadius"));
+  return name;
+}
+const blink::String& CssProperty_webkitBorderRadius() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-border-radius"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitBorderTopLeftRadius() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitBorderTopLeftRadius"));
+  return name;
+}
+const blink::String& CssProperty_webkitBorderTopLeftRadius() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-border-top-left-radius"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitBorderTopRightRadius() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitBorderTopRightRadius"));
+  return name;
+}
+const blink::String& CssProperty_webkitBorderTopRightRadius() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-border-top-right-radius"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitBoxAlign() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitBoxAlign"));
+  return name;
+}
+const blink::String& CssProperty_webkitBoxAlign() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-box-align"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitBoxFlex() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitBoxFlex"));
+  return name;
+}
+const blink::String& CssProperty_webkitBoxFlex() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-box-flex"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitBoxOrdinalGroup() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitBoxOrdinalGroup"));
+  return name;
+}
+const blink::String& CssProperty_webkitBoxOrdinalGroup() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-box-ordinal-group"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitBoxOrient() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitBoxOrient"));
+  return name;
+}
+const blink::String& CssProperty_webkitBoxOrient() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-box-orient"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitBoxPack() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitBoxPack"));
+  return name;
+}
+const blink::String& CssProperty_webkitBoxPack() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-box-pack"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitBoxShadow() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitBoxShadow"));
+  return name;
+}
+const blink::String& CssProperty_webkitBoxShadow() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-box-shadow"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitBoxSizing() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitBoxSizing"));
+  return name;
+}
+const blink::String& CssProperty_webkitBoxSizing() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-box-sizing"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitFilter() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitFilter"));
+  return name;
+}
+const blink::String& CssProperty_webkitFilter() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-filter"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitFlex() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitFlex"));
+  return name;
+}
+const blink::String& CssProperty_webkitFlex() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-flex"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitFlexBasis() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitFlexBasis"));
+  return name;
+}
+const blink::String& CssProperty_webkitFlexBasis() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-flex-basis"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitFlexDirection() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitFlexDirection"));
+  return name;
+}
+const blink::String& CssProperty_webkitFlexDirection() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-flex-direction"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitFlexFlow() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitFlexFlow"));
+  return name;
+}
+const blink::String& CssProperty_webkitFlexFlow() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-flex-flow"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitFlexGrow() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitFlexGrow"));
+  return name;
+}
+const blink::String& CssProperty_webkitFlexGrow() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-flex-grow"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitFlexShrink() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitFlexShrink"));
+  return name;
+}
+const blink::String& CssProperty_webkitFlexShrink() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-flex-shrink"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitFlexWrap() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitFlexWrap"));
+  return name;
+}
+const blink::String& CssProperty_webkitFlexWrap() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-flex-wrap"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitJustifyContent() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitJustifyContent"));
+  return name;
+}
+const blink::String& CssProperty_webkitJustifyContent() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-justify-content"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitLineClamp() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitLineClamp"));
+  return name;
+}
+const blink::String& CssProperty_webkitLineClamp() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-line-clamp"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitMask() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitMask"));
+  return name;
+}
+const blink::String& CssProperty_webkitMask() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-mask"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitMaskBoxImage() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitMaskBoxImage"));
+  return name;
+}
+const blink::String& CssProperty_webkitMaskBoxImage() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-mask-box-image"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitMaskBoxImageOutset() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitMaskBoxImageOutset"));
+  return name;
+}
+const blink::String& CssProperty_webkitMaskBoxImageOutset() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-mask-box-image-outset"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitMaskBoxImageRepeat() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitMaskBoxImageRepeat"));
+  return name;
+}
+const blink::String& CssProperty_webkitMaskBoxImageRepeat() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-mask-box-image-repeat"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitMaskBoxImageSlice() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitMaskBoxImageSlice"));
+  return name;
+}
+const blink::String& CssProperty_webkitMaskBoxImageSlice() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-mask-box-image-slice"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitMaskBoxImageSource() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitMaskBoxImageSource"));
+  return name;
+}
+const blink::String& CssProperty_webkitMaskBoxImageSource() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-mask-box-image-source"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitMaskBoxImageWidth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitMaskBoxImageWidth"));
+  return name;
+}
+const blink::String& CssProperty_webkitMaskBoxImageWidth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-mask-box-image-width"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitMaskClip() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitMaskClip"));
+  return name;
+}
+const blink::String& CssProperty_webkitMaskClip() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-mask-clip"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitMaskComposite() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitMaskComposite"));
+  return name;
+}
+const blink::String& CssProperty_webkitMaskComposite() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-mask-composite"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitMaskImage() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitMaskImage"));
+  return name;
+}
+const blink::String& CssProperty_webkitMaskImage() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-mask-image"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitMaskOrigin() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitMaskOrigin"));
+  return name;
+}
+const blink::String& CssProperty_webkitMaskOrigin() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-mask-origin"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitMaskPosition() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitMaskPosition"));
+  return name;
+}
+const blink::String& CssProperty_webkitMaskPosition() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-mask-position"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitMaskRepeat() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitMaskRepeat"));
+  return name;
+}
+const blink::String& CssProperty_webkitMaskRepeat() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-mask-repeat"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitMaskSize() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitMaskSize"));
+  return name;
+}
+const blink::String& CssProperty_webkitMaskSize() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-mask-size"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitOrder() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitOrder"));
+  return name;
+}
+const blink::String& CssProperty_webkitOrder() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-order"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitPerspective() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitPerspective"));
+  return name;
+}
+const blink::String& CssProperty_webkitPerspective() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-perspective"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitPerspectiveOrigin() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitPerspectiveOrigin"));
+  return name;
+}
+const blink::String& CssProperty_webkitPerspectiveOrigin() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-perspective-origin"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitTextFillColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitTextFillColor"));
+  return name;
+}
+const blink::String& CssProperty_webkitTextFillColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-text-fill-color"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitTextSizeAdjust() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitTextSizeAdjust"));
+  return name;
+}
+const blink::String& CssProperty_webkitTextSizeAdjust() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-text-size-adjust"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitTextStroke() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitTextStroke"));
+  return name;
+}
+const blink::String& CssProperty_webkitTextStroke() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-text-stroke"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitTextStrokeColor() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitTextStrokeColor"));
+  return name;
+}
+const blink::String& CssProperty_webkitTextStrokeColor() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-text-stroke-color"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitTextStrokeWidth() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitTextStrokeWidth"));
+  return name;
+}
+const blink::String& CssProperty_webkitTextStrokeWidth() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-text-stroke-width"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitTransform() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitTransform"));
+  return name;
+}
+const blink::String& CssProperty_webkitTransform() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-transform"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitTransformOrigin() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitTransformOrigin"));
+  return name;
+}
+const blink::String& CssProperty_webkitTransformOrigin() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-transform-origin"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitTransformStyle() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitTransformStyle"));
+  return name;
+}
+const blink::String& CssProperty_webkitTransformStyle() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-transform-style"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitTransition() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitTransition"));
+  return name;
+}
+const blink::String& CssProperty_webkitTransition() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-transition"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitTransitionDelay() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitTransitionDelay"));
+  return name;
+}
+const blink::String& CssProperty_webkitTransitionDelay() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-transition-delay"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitTransitionDuration() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitTransitionDuration"));
+  return name;
+}
+const blink::String& CssProperty_webkitTransitionDuration() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-transition-duration"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitTransitionProperty() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitTransitionProperty"));
+  return name;
+}
+const blink::String& CssProperty_webkitTransitionProperty() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-transition-property"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitTransitionTimingFunction() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitTransitionTimingFunction"));
+  return name;
+}
+const blink::String& CssProperty_webkitTransitionTimingFunction() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-transition-timing-function"));
+  return name;
+}
+const blink::AtomicString& CssName_webkitUserSelect() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("webkitUserSelect"));
+  return name;
+}
+const blink::String& CssProperty_webkitUserSelect() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("-webkit-user-select"));
+  return name;
+}
+const blink::AtomicString& CssName_whiteSpace() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("whiteSpace"));
+  return name;
+}
+const blink::String& CssProperty_whiteSpace() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("white-space"));
+  return name;
+}
+const blink::AtomicString& CssName_whiteSpaceCollapse() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("whiteSpaceCollapse"));
+  return name;
+}
+const blink::String& CssProperty_whiteSpaceCollapse() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("white-space-collapse"));
+  return name;
+}
+const blink::AtomicString& CssName_widows() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("widows"));
+  return name;
+}
+const blink::String& CssProperty_widows() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("widows"));
+  return name;
+}
+const blink::AtomicString& CssName_width() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("width"));
+  return name;
+}
+const blink::String& CssProperty_width() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("width"));
+  return name;
+}
+const blink::AtomicString& CssName_willChange() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("willChange"));
+  return name;
+}
+const blink::String& CssProperty_willChange() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("will-change"));
+  return name;
+}
+const blink::AtomicString& CssName_wordBreak() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("wordBreak"));
+  return name;
+}
+const blink::String& CssProperty_wordBreak() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("word-break"));
+  return name;
+}
+const blink::AtomicString& CssName_wordSpacing() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("wordSpacing"));
+  return name;
+}
+const blink::String& CssProperty_wordSpacing() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("word-spacing"));
+  return name;
+}
+const blink::AtomicString& CssName_wordWrap() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("wordWrap"));
+  return name;
+}
+const blink::String& CssProperty_wordWrap() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("word-wrap"));
+  return name;
+}
+const blink::AtomicString& CssName_writingMode() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("writingMode"));
+  return name;
+}
+const blink::String& CssProperty_writingMode() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("writing-mode"));
+  return name;
+}
+const blink::AtomicString& CssName_x() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("x"));
+  return name;
+}
+const blink::String& CssProperty_x() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("x"));
+  return name;
+}
+const blink::AtomicString& CssName_y() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("y"));
+  return name;
+}
+const blink::String& CssProperty_y() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("y"));
+  return name;
+}
+const blink::AtomicString& CssName_zIndex() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("zIndex"));
+  return name;
+}
+const blink::String& CssProperty_zIndex() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("z-index"));
+  return name;
+}
+const blink::AtomicString& CssName_zoom() {
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, name, ("zoom"));
+  return name;
+}
+const blink::String& CssProperty_zoom() {
+  DEFINE_STATIC_LOCAL(const blink::String, name, ("zoom"));
+  return name;
+}
+}  // namespace
+
 // In Blink's namespace, as the bindings are: bind_gen's expressions name
 // Blink's own (`html_names::kClassAttr`). The symbols are C's either way.
 // What `instanceof` checks against, by NtsDomInterface id: each interface's
@@ -5511,6 +9770,6922 @@ void nts_dom_CSSStyleDeclaration_setProperty_2(NtsDomCSSStyleDeclaration* self, 
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
   receiver->setProperty(context.document->GetExecutionContext(), NtsText(context, property), NtsText(context, value), blink::AtomicString(""), exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_accentColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_accentColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_accentColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_accentColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_alignContent(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_alignContent())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_alignContent(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_alignContent(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_alignItems(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_alignItems())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_alignItems(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_alignItems(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_alignSelf(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_alignSelf())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_alignSelf(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_alignSelf(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_alignmentBaseline(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_alignmentBaseline())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_alignmentBaseline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_alignmentBaseline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_all(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_all())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_all(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_all(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_anchorName(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_anchorName())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_anchorName(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_anchorName(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_anchorScope(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_anchorScope())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_anchorScope(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_anchorScope(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_animation(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_animation())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_animation(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animation(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationComposition(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_animationComposition())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_animationComposition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationComposition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationDelay(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_animationDelay())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_animationDelay(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationDelay(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationDirection(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_animationDirection())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_animationDirection(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationDirection(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationDuration(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_animationDuration())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_animationDuration(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationDuration(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationFillMode(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_animationFillMode())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_animationFillMode(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationFillMode(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationIterationCount(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_animationIterationCount())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_animationIterationCount(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationIterationCount(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationName(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_animationName())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_animationName(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationName(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationPlayState(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_animationPlayState())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_animationPlayState(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationPlayState(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationRange(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_animationRange())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_animationRange(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationRange(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationRangeEnd(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_animationRangeEnd())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_animationRangeEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationRangeEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationRangeStart(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_animationRangeStart())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_animationRangeStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationRangeStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationTimeline(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_animationTimeline())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_animationTimeline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationTimeline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_animationTimingFunction(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_animationTimingFunction())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_animationTimingFunction(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_animationTimingFunction(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_appearance(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_appearance())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_appearance(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_appearance(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_aspectRatio(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_aspectRatio())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_aspectRatio(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_aspectRatio(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_backdropFilter(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_backdropFilter())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_backdropFilter(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backdropFilter(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_backfaceVisibility(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_backfaceVisibility())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_backfaceVisibility(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backfaceVisibility(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_background(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_background())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_background(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_background(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_backgroundAttachment(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_backgroundAttachment())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_backgroundAttachment(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backgroundAttachment(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_backgroundBlendMode(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_backgroundBlendMode())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_backgroundBlendMode(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backgroundBlendMode(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_backgroundClip(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_backgroundClip())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_backgroundClip(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backgroundClip(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_backgroundColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_backgroundColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_backgroundColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backgroundColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_backgroundImage(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_backgroundImage())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_backgroundImage(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backgroundImage(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_backgroundOrigin(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_backgroundOrigin())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_backgroundOrigin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backgroundOrigin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_backgroundPosition(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_backgroundPosition())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_backgroundPosition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backgroundPosition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_backgroundPositionX(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_backgroundPositionX())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_backgroundPositionX(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backgroundPositionX(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_backgroundPositionY(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_backgroundPositionY())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_backgroundPositionY(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backgroundPositionY(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_backgroundRepeat(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_backgroundRepeat())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_backgroundRepeat(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backgroundRepeat(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_backgroundSize(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_backgroundSize())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_backgroundSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_backgroundSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_baselineShift(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_baselineShift())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_baselineShift(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_baselineShift(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_baselineSource(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_baselineSource())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_baselineSource(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_baselineSource(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_blockSize(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_blockSize())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_blockSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_blockSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_border(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_border())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_border(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_border(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlock(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderBlock())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderBlock(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlock(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlockColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderBlockColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderBlockColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlockColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlockEnd(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderBlockEnd())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderBlockEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlockEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlockEndColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderBlockEndColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderBlockEndColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlockEndColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlockEndStyle(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderBlockEndStyle())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderBlockEndStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlockEndStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlockEndWidth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderBlockEndWidth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderBlockEndWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlockEndWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlockStart(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderBlockStart())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderBlockStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlockStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlockStartColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderBlockStartColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderBlockStartColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlockStartColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlockStartStyle(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderBlockStartStyle())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderBlockStartStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlockStartStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlockStartWidth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderBlockStartWidth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderBlockStartWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlockStartWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlockStyle(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderBlockStyle())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderBlockStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlockStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBlockWidth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderBlockWidth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderBlockWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBlockWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBottom(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderBottom())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderBottom(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBottom(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBottomColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderBottomColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderBottomColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBottomColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBottomLeftRadius(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderBottomLeftRadius())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderBottomLeftRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBottomLeftRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBottomRightRadius(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderBottomRightRadius())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderBottomRightRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBottomRightRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBottomStyle(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderBottomStyle())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderBottomStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBottomStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderBottomWidth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderBottomWidth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderBottomWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderBottomWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderCollapse(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderCollapse())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderCollapse(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderCollapse(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderEndEndRadius(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderEndEndRadius())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderEndEndRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderEndEndRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderEndStartRadius(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderEndStartRadius())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderEndStartRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderEndStartRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderImage(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderImage())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderImage(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderImage(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderImageOutset(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderImageOutset())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderImageOutset(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderImageOutset(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderImageRepeat(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderImageRepeat())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderImageRepeat(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderImageRepeat(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderImageSlice(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderImageSlice())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderImageSlice(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderImageSlice(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderImageSource(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderImageSource())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderImageSource(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderImageSource(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderImageWidth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderImageWidth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderImageWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderImageWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInline(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderInline())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderInline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInlineColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderInlineColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderInlineColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInlineColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInlineEnd(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderInlineEnd())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderInlineEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInlineEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInlineEndColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderInlineEndColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderInlineEndColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInlineEndColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInlineEndStyle(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderInlineEndStyle())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderInlineEndStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInlineEndStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInlineEndWidth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderInlineEndWidth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderInlineEndWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInlineEndWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInlineStart(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderInlineStart())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderInlineStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInlineStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInlineStartColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderInlineStartColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderInlineStartColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInlineStartColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInlineStartStyle(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderInlineStartStyle())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderInlineStartStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInlineStartStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInlineStartWidth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderInlineStartWidth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderInlineStartWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInlineStartWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInlineStyle(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderInlineStyle())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderInlineStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInlineStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderInlineWidth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderInlineWidth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderInlineWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderInlineWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderLeft(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderLeft())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderLeft(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderLeft(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderLeftColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderLeftColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderLeftColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderLeftColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderLeftStyle(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderLeftStyle())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderLeftStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderLeftStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderLeftWidth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderLeftWidth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderLeftWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderLeftWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderRadius(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderRadius())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderRight(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderRight())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderRight(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderRight(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderRightColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderRightColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderRightColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderRightColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderRightStyle(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderRightStyle())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderRightStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderRightStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderRightWidth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderRightWidth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderRightWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderRightWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderSpacing(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderSpacing())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderSpacing(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderSpacing(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderStartEndRadius(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderStartEndRadius())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderStartEndRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderStartEndRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderStartStartRadius(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderStartStartRadius())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderStartStartRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderStartStartRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderStyle(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderStyle())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderTop(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderTop())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderTop(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderTop(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderTopColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderTopColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderTopColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderTopColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderTopLeftRadius(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderTopLeftRadius())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderTopLeftRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderTopLeftRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderTopRightRadius(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderTopRightRadius())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderTopRightRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderTopRightRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderTopStyle(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderTopStyle())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderTopStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderTopStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderTopWidth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderTopWidth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderTopWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderTopWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_borderWidth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_borderWidth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_borderWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_borderWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_bottom(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_bottom())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_bottom(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_bottom(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_boxDecorationBreak(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_boxDecorationBreak())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_boxDecorationBreak(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_boxDecorationBreak(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_boxShadow(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_boxShadow())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_boxShadow(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_boxShadow(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_boxSizing(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_boxSizing())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_boxSizing(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_boxSizing(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_breakAfter(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_breakAfter())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_breakAfter(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_breakAfter(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_breakBefore(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_breakBefore())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_breakBefore(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_breakBefore(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_breakInside(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_breakInside())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_breakInside(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_breakInside(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_captionSide(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_captionSide())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_captionSide(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_captionSide(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_caretColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_caretColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_caretColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_caretColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_clear(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_clear())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_clear(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_clear(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_clip(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_clip())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_clip(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_clip(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_clipPath(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_clipPath())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_clipPath(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_clipPath(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_clipRule(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_clipRule())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_clipRule(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_clipRule(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_color(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_color())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_color(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_color(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_colorInterpolation(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_colorInterpolation())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_colorInterpolation(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_colorInterpolation(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_colorInterpolationFilters(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_colorInterpolationFilters())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_colorInterpolationFilters(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_colorInterpolationFilters(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_colorScheme(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_colorScheme())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_colorScheme(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_colorScheme(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_columnCount(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_columnCount())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_columnCount(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_columnCount(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_columnFill(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_columnFill())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_columnFill(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_columnFill(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_columnGap(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_columnGap())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_columnGap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_columnGap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_columnRule(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_columnRule())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_columnRule(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_columnRule(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_columnRuleColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_columnRuleColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_columnRuleColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_columnRuleColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_columnRuleStyle(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_columnRuleStyle())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_columnRuleStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_columnRuleStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_columnRuleWidth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_columnRuleWidth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_columnRuleWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_columnRuleWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_columnSpan(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_columnSpan())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_columnSpan(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_columnSpan(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_columnWidth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_columnWidth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_columnWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_columnWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_columns(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_columns())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_columns(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_columns(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_contain(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_contain())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_contain(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_contain(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_containIntrinsicBlockSize(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_containIntrinsicBlockSize())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_containIntrinsicBlockSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_containIntrinsicBlockSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_containIntrinsicHeight(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_containIntrinsicHeight())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_containIntrinsicHeight(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_containIntrinsicHeight(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_containIntrinsicInlineSize(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_containIntrinsicInlineSize())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_containIntrinsicInlineSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_containIntrinsicInlineSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_containIntrinsicSize(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_containIntrinsicSize())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_containIntrinsicSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_containIntrinsicSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_containIntrinsicWidth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_containIntrinsicWidth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_containIntrinsicWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_containIntrinsicWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_container(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_container())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_container(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_container(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_containerName(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_containerName())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_containerName(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_containerName(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_containerType(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_containerType())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_containerType(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_containerType(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_content(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_content())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_content(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_content(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_contentVisibility(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_contentVisibility())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_contentVisibility(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_contentVisibility(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_counterIncrement(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_counterIncrement())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_counterIncrement(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_counterIncrement(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_counterReset(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_counterReset())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_counterReset(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_counterReset(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_counterSet(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_counterSet())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_counterSet(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_counterSet(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_cursor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_cursor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_cursor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_cursor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_cx(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_cx())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_cx(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_cx(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_cy(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_cy())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_cy(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_cy(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_d(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_d())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_d(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_d(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_direction(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_direction())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_direction(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_direction(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_display(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_display())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_display(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_display(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_dominantBaseline(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_dominantBaseline())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_dominantBaseline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_dominantBaseline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_dynamicRangeLimit(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_dynamicRangeLimit())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_dynamicRangeLimit(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_dynamicRangeLimit(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_emptyCells(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_emptyCells())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_emptyCells(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_emptyCells(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fieldSizing(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fieldSizing())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fieldSizing(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fieldSizing(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fill(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fill())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fill(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fill(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fillOpacity(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fillOpacity())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fillOpacity(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fillOpacity(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fillRule(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fillRule())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fillRule(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fillRule(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_filter(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_filter())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_filter(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_filter(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_flex(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_flex())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_flex(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_flex(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_flexBasis(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_flexBasis())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_flexBasis(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_flexBasis(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_flexDirection(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_flexDirection())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_flexDirection(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_flexDirection(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_flexFlow(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_flexFlow())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_flexFlow(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_flexFlow(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_flexGrow(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_flexGrow())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_flexGrow(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_flexGrow(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_flexShrink(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_flexShrink())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_flexShrink(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_flexShrink(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_flexWrap(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_flexWrap())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_flexWrap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_flexWrap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_float(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_float())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_float(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_float(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_floodColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_floodColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_floodColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_floodColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_floodOpacity(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_floodOpacity())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_floodOpacity(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_floodOpacity(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_font(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_font())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_font(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_font(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontFamily(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontFamily())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontFamily(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontFamily(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontFeatureSettings(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontFeatureSettings())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontFeatureSettings(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontFeatureSettings(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontKerning(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontKerning())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontKerning(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontKerning(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontLanguageOverride(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontLanguageOverride())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontLanguageOverride(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontLanguageOverride(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontOpticalSizing(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontOpticalSizing())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontOpticalSizing(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontOpticalSizing(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontPalette(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontPalette())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontPalette(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontPalette(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontSize(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontSize())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontSizeAdjust(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontSizeAdjust())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontSizeAdjust(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontSizeAdjust(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontStretch(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontStretch())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontStretch(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontStretch(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontStyle(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontStyle())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontSynthesis(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontSynthesis())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontSynthesis(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontSynthesis(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontSynthesisSmallCaps(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontSynthesisSmallCaps())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontSynthesisSmallCaps(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontSynthesisSmallCaps(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontSynthesisStyle(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontSynthesisStyle())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontSynthesisStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontSynthesisStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontSynthesisWeight(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontSynthesisWeight())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontSynthesisWeight(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontSynthesisWeight(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontVariant(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontVariant())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontVariant(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontVariant(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontVariantAlternates(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontVariantAlternates())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontVariantAlternates(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontVariantAlternates(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontVariantCaps(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontVariantCaps())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontVariantCaps(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontVariantCaps(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontVariantEastAsian(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontVariantEastAsian())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontVariantEastAsian(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontVariantEastAsian(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontVariantEmoji(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontVariantEmoji())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontVariantEmoji(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontVariantEmoji(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontVariantLigatures(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontVariantLigatures())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontVariantLigatures(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontVariantLigatures(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontVariantNumeric(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontVariantNumeric())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontVariantNumeric(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontVariantNumeric(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontVariantPosition(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontVariantPosition())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontVariantPosition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontVariantPosition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontVariationSettings(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontVariationSettings())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontVariationSettings(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontVariationSettings(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_fontWeight(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_fontWeight())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_fontWeight(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_fontWeight(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_forcedColorAdjust(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_forcedColorAdjust())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_forcedColorAdjust(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_forcedColorAdjust(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_gap(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_gap())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_gap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_grid(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_grid())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_grid(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_grid(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridArea(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_gridArea())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_gridArea(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridArea(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridAutoColumns(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_gridAutoColumns())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_gridAutoColumns(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridAutoColumns(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridAutoFlow(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_gridAutoFlow())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_gridAutoFlow(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridAutoFlow(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridAutoRows(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_gridAutoRows())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_gridAutoRows(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridAutoRows(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridColumn(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_gridColumn())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_gridColumn(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridColumn(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridColumnEnd(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_gridColumnEnd())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_gridColumnEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridColumnEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridColumnGap(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_gridColumnGap())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_gridColumnGap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridColumnGap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridColumnStart(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_gridColumnStart())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_gridColumnStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridColumnStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridGap(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_gridGap())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_gridGap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridGap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridRow(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_gridRow())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_gridRow(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridRow(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridRowEnd(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_gridRowEnd())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_gridRowEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridRowEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridRowGap(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_gridRowGap())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_gridRowGap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridRowGap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridRowStart(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_gridRowStart())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_gridRowStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridRowStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridTemplate(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_gridTemplate())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_gridTemplate(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridTemplate(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridTemplateAreas(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_gridTemplateAreas())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_gridTemplateAreas(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridTemplateAreas(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridTemplateColumns(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_gridTemplateColumns())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_gridTemplateColumns(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridTemplateColumns(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_gridTemplateRows(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_gridTemplateRows())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_gridTemplateRows(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_gridTemplateRows(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_height(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_height())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_height(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_height(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_hyphenateCharacter(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_hyphenateCharacter())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_hyphenateCharacter(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_hyphenateCharacter(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_hyphenateLimitChars(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_hyphenateLimitChars())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_hyphenateLimitChars(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_hyphenateLimitChars(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_hyphens(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_hyphens())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_hyphens(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_hyphens(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_imageOrientation(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_imageOrientation())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_imageOrientation(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_imageOrientation(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_imageRendering(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_imageRendering())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_imageRendering(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_imageRendering(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_inlineSize(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_inlineSize())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_inlineSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_inlineSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_inset(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_inset())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_inset(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_inset(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_insetBlock(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_insetBlock())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_insetBlock(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_insetBlock(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_insetBlockEnd(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_insetBlockEnd())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_insetBlockEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_insetBlockEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_insetBlockStart(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_insetBlockStart())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_insetBlockStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_insetBlockStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_insetInline(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_insetInline())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_insetInline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_insetInline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_insetInlineEnd(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_insetInlineEnd())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_insetInlineEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_insetInlineEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_insetInlineStart(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_insetInlineStart())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_insetInlineStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_insetInlineStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_isolation(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_isolation())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_isolation(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_isolation(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_justifyContent(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_justifyContent())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_justifyContent(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_justifyContent(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_justifyItems(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_justifyItems())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_justifyItems(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_justifyItems(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_justifySelf(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_justifySelf())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_justifySelf(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_justifySelf(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_left(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_left())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_left(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_left(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_letterSpacing(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_letterSpacing())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_letterSpacing(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_letterSpacing(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_lightingColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_lightingColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_lightingColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_lightingColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_lineBreak(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_lineBreak())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_lineBreak(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_lineBreak(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_lineHeight(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_lineHeight())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_lineHeight(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_lineHeight(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_listStyle(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_listStyle())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_listStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_listStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_listStyleImage(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_listStyleImage())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_listStyleImage(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_listStyleImage(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_listStylePosition(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_listStylePosition())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_listStylePosition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_listStylePosition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_listStyleType(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_listStyleType())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_listStyleType(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_listStyleType(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_margin(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_margin())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_margin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_margin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_marginBlock(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_marginBlock())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_marginBlock(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_marginBlock(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_marginBlockEnd(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_marginBlockEnd())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_marginBlockEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_marginBlockEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_marginBlockStart(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_marginBlockStart())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_marginBlockStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_marginBlockStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_marginBottom(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_marginBottom())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_marginBottom(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_marginBottom(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_marginInline(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_marginInline())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_marginInline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_marginInline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_marginInlineEnd(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_marginInlineEnd())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_marginInlineEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_marginInlineEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_marginInlineStart(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_marginInlineStart())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_marginInlineStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_marginInlineStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_marginLeft(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_marginLeft())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_marginLeft(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_marginLeft(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_marginRight(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_marginRight())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_marginRight(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_marginRight(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_marginTop(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_marginTop())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_marginTop(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_marginTop(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_marker(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_marker())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_marker(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_marker(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_markerEnd(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_markerEnd())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_markerEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_markerEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_markerMid(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_markerMid())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_markerMid(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_markerMid(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_markerStart(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_markerStart())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_markerStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_markerStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_mask(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_mask())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_mask(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_mask(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_maskClip(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_maskClip())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_maskClip(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maskClip(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_maskComposite(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_maskComposite())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_maskComposite(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maskComposite(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_maskImage(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_maskImage())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_maskImage(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maskImage(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_maskMode(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_maskMode())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_maskMode(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maskMode(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_maskOrigin(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_maskOrigin())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_maskOrigin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maskOrigin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_maskPosition(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_maskPosition())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_maskPosition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maskPosition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_maskRepeat(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_maskRepeat())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_maskRepeat(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maskRepeat(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_maskSize(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_maskSize())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_maskSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maskSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_maskType(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_maskType())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_maskType(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maskType(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_mathDepth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_mathDepth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_mathDepth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_mathDepth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_mathShift(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_mathShift())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_mathShift(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_mathShift(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_mathStyle(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_mathStyle())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_mathStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_mathStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_maxBlockSize(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_maxBlockSize())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_maxBlockSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maxBlockSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_maxHeight(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_maxHeight())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_maxHeight(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maxHeight(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_maxInlineSize(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_maxInlineSize())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_maxInlineSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maxInlineSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_maxWidth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_maxWidth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_maxWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_maxWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_minBlockSize(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_minBlockSize())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_minBlockSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_minBlockSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_minHeight(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_minHeight())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_minHeight(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_minHeight(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_minInlineSize(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_minInlineSize())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_minInlineSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_minInlineSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_minWidth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_minWidth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_minWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_minWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_mixBlendMode(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_mixBlendMode())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_mixBlendMode(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_mixBlendMode(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_objectFit(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_objectFit())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_objectFit(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_objectFit(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_objectPosition(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_objectPosition())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_objectPosition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_objectPosition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_offset(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_offset())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_offset(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_offset(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_offsetAnchor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_offsetAnchor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_offsetAnchor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_offsetAnchor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_offsetDistance(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_offsetDistance())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_offsetDistance(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_offsetDistance(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_offsetPath(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_offsetPath())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_offsetPath(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_offsetPath(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_offsetPosition(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_offsetPosition())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_offsetPosition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_offsetPosition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_offsetRotate(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_offsetRotate())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_offsetRotate(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_offsetRotate(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_opacity(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_opacity())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_opacity(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_opacity(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_order(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_order())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_order(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_order(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_orphans(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_orphans())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_orphans(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_orphans(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_outline(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_outline())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_outline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_outline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_outlineColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_outlineColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_outlineColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_outlineColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_outlineOffset(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_outlineOffset())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_outlineOffset(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_outlineOffset(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_outlineStyle(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_outlineStyle())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_outlineStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_outlineStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_outlineWidth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_outlineWidth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_outlineWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_outlineWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_overflow(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_overflow())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_overflow(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overflow(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_overflowAnchor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_overflowAnchor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_overflowAnchor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overflowAnchor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_overflowBlock(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_overflowBlock())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_overflowBlock(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overflowBlock(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_overflowClipMargin(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_overflowClipMargin())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_overflowClipMargin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overflowClipMargin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_overflowInline(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_overflowInline())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_overflowInline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overflowInline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_overflowWrap(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_overflowWrap())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_overflowWrap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overflowWrap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_overflowX(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_overflowX())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_overflowX(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overflowX(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_overflowY(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_overflowY())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_overflowY(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overflowY(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_overscrollBehavior(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_overscrollBehavior())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_overscrollBehavior(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overscrollBehavior(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_overscrollBehaviorBlock(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_overscrollBehaviorBlock())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_overscrollBehaviorBlock(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overscrollBehaviorBlock(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_overscrollBehaviorInline(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_overscrollBehaviorInline())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_overscrollBehaviorInline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overscrollBehaviorInline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_overscrollBehaviorX(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_overscrollBehaviorX())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_overscrollBehaviorX(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overscrollBehaviorX(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_overscrollBehaviorY(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_overscrollBehaviorY())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_overscrollBehaviorY(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_overscrollBehaviorY(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_padding(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_padding())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_padding(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_padding(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_paddingBlock(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_paddingBlock())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_paddingBlock(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_paddingBlock(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_paddingBlockEnd(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_paddingBlockEnd())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_paddingBlockEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_paddingBlockEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_paddingBlockStart(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_paddingBlockStart())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_paddingBlockStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_paddingBlockStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_paddingBottom(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_paddingBottom())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_paddingBottom(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_paddingBottom(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_paddingInline(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_paddingInline())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_paddingInline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_paddingInline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_paddingInlineEnd(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_paddingInlineEnd())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_paddingInlineEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_paddingInlineEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_paddingInlineStart(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_paddingInlineStart())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_paddingInlineStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_paddingInlineStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_paddingLeft(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_paddingLeft())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_paddingLeft(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_paddingLeft(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_paddingRight(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_paddingRight())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_paddingRight(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_paddingRight(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_paddingTop(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_paddingTop())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_paddingTop(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_paddingTop(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_page(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_page())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_page(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_page(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_pageBreakAfter(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_pageBreakAfter())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_pageBreakAfter(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_pageBreakAfter(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_pageBreakBefore(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_pageBreakBefore())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_pageBreakBefore(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_pageBreakBefore(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_pageBreakInside(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_pageBreakInside())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_pageBreakInside(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_pageBreakInside(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_paintOrder(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_paintOrder())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_paintOrder(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_paintOrder(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_perspective(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_perspective())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_perspective(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_perspective(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_perspectiveOrigin(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_perspectiveOrigin())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_perspectiveOrigin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_perspectiveOrigin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_placeContent(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_placeContent())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_placeContent(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_placeContent(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_placeItems(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_placeItems())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_placeItems(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_placeItems(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_placeSelf(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_placeSelf())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_placeSelf(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_placeSelf(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_pointerEvents(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_pointerEvents())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_pointerEvents(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_pointerEvents(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_position(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_position())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_position(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_position(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_positionAnchor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_positionAnchor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_positionAnchor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_positionAnchor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_positionArea(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_positionArea())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_positionArea(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_positionArea(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_positionTry(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_positionTry())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_positionTry(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_positionTry(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_positionTryFallbacks(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_positionTryFallbacks())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_positionTryFallbacks(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_positionTryFallbacks(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_positionTryOrder(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_positionTryOrder())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_positionTryOrder(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_positionTryOrder(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_positionVisibility(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_positionVisibility())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_positionVisibility(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_positionVisibility(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_printColorAdjust(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_printColorAdjust())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_printColorAdjust(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_printColorAdjust(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_quotes(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_quotes())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_quotes(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_quotes(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_r(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_r())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_r(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_r(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_resize(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_resize())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_resize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_resize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_right(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_right())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_right(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_right(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_rotate(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_rotate())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_rotate(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_rotate(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_rowGap(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_rowGap())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_rowGap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_rowGap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_rubyAlign(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_rubyAlign())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_rubyAlign(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_rubyAlign(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_rubyPosition(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_rubyPosition())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_rubyPosition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_rubyPosition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_rx(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_rx())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_rx(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_rx(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_ry(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_ry())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_ry(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_ry(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scale(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scale())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scale(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scale(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollBehavior(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollBehavior())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollBehavior(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollBehavior(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollMargin(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollMargin())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollMargin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollMargin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollMarginBlock(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollMarginBlock())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollMarginBlock(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollMarginBlock(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollMarginBlockEnd(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollMarginBlockEnd())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollMarginBlockEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollMarginBlockEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollMarginBlockStart(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollMarginBlockStart())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollMarginBlockStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollMarginBlockStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollMarginBottom(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollMarginBottom())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollMarginBottom(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollMarginBottom(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollMarginInline(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollMarginInline())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollMarginInline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollMarginInline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollMarginInlineEnd(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollMarginInlineEnd())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollMarginInlineEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollMarginInlineEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollMarginInlineStart(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollMarginInlineStart())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollMarginInlineStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollMarginInlineStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollMarginLeft(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollMarginLeft())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollMarginLeft(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollMarginLeft(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollMarginRight(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollMarginRight())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollMarginRight(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollMarginRight(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollMarginTop(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollMarginTop())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollMarginTop(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollMarginTop(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollPadding(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollPadding())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollPadding(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollPadding(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollPaddingBlock(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollPaddingBlock())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollPaddingBlock(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollPaddingBlock(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollPaddingBlockEnd(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollPaddingBlockEnd())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollPaddingBlockEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollPaddingBlockEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollPaddingBlockStart(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollPaddingBlockStart())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollPaddingBlockStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollPaddingBlockStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollPaddingBottom(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollPaddingBottom())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollPaddingBottom(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollPaddingBottom(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollPaddingInline(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollPaddingInline())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollPaddingInline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollPaddingInline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollPaddingInlineEnd(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollPaddingInlineEnd())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollPaddingInlineEnd(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollPaddingInlineEnd(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollPaddingInlineStart(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollPaddingInlineStart())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollPaddingInlineStart(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollPaddingInlineStart(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollPaddingLeft(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollPaddingLeft())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollPaddingLeft(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollPaddingLeft(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollPaddingRight(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollPaddingRight())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollPaddingRight(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollPaddingRight(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollPaddingTop(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollPaddingTop())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollPaddingTop(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollPaddingTop(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollSnapAlign(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollSnapAlign())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollSnapAlign(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollSnapAlign(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollSnapStop(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollSnapStop())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollSnapStop(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollSnapStop(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollSnapType(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollSnapType())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollSnapType(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollSnapType(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollTimeline(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollTimeline())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollTimeline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollTimeline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollTimelineAxis(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollTimelineAxis())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollTimelineAxis(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollTimelineAxis(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollTimelineName(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollTimelineName())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollTimelineName(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollTimelineName(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollbarColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollbarColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollbarColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollbarColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollbarGutter(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollbarGutter())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollbarGutter(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollbarGutter(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_scrollbarWidth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_scrollbarWidth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_scrollbarWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_scrollbarWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_shapeImageThreshold(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_shapeImageThreshold())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_shapeImageThreshold(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_shapeImageThreshold(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_shapeMargin(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_shapeMargin())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_shapeMargin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_shapeMargin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_shapeOutside(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_shapeOutside())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_shapeOutside(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_shapeOutside(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_shapeRendering(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_shapeRendering())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_shapeRendering(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_shapeRendering(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_stopColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_stopColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_stopColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_stopColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_stopOpacity(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_stopOpacity())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_stopOpacity(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_stopOpacity(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_stroke(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_stroke())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_stroke(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_stroke(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_strokeDasharray(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_strokeDasharray())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_strokeDasharray(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_strokeDasharray(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_strokeDashoffset(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_strokeDashoffset())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_strokeDashoffset(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_strokeDashoffset(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_strokeLinecap(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_strokeLinecap())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_strokeLinecap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_strokeLinecap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_strokeLinejoin(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_strokeLinejoin())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_strokeLinejoin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_strokeLinejoin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_strokeMiterlimit(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_strokeMiterlimit())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_strokeMiterlimit(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_strokeMiterlimit(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_strokeOpacity(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_strokeOpacity())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_strokeOpacity(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_strokeOpacity(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_strokeWidth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_strokeWidth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_strokeWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_strokeWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_tabSize(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_tabSize())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_tabSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_tabSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_tableLayout(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_tableLayout())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_tableLayout(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_tableLayout(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textAlign(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textAlign())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textAlign(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textAlign(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textAlignLast(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textAlignLast())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textAlignLast(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textAlignLast(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textAnchor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textAnchor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textAnchor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textAnchor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textAutospace(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textAutospace())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textAutospace(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textAutospace(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textBox(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textBox())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textBox(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textBox(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textBoxEdge(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textBoxEdge())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textBoxEdge(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textBoxEdge(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textBoxTrim(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textBoxTrim())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textBoxTrim(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textBoxTrim(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textCombineUpright(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textCombineUpright())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textCombineUpright(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textCombineUpright(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textDecoration(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textDecoration())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textDecoration(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textDecoration(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textDecorationColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textDecorationColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textDecorationColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textDecorationColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textDecorationLine(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textDecorationLine())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textDecorationLine(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textDecorationLine(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textDecorationSkipInk(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textDecorationSkipInk())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textDecorationSkipInk(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textDecorationSkipInk(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textDecorationStyle(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textDecorationStyle())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textDecorationStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textDecorationStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textDecorationThickness(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textDecorationThickness())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textDecorationThickness(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textDecorationThickness(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textEmphasis(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textEmphasis())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textEmphasis(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textEmphasis(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textEmphasisColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textEmphasisColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textEmphasisColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textEmphasisColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textEmphasisPosition(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textEmphasisPosition())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textEmphasisPosition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textEmphasisPosition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textEmphasisStyle(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textEmphasisStyle())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textEmphasisStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textEmphasisStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textIndent(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textIndent())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textIndent(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textIndent(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textJustify(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textJustify())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textJustify(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textJustify(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textOrientation(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textOrientation())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textOrientation(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textOrientation(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textOverflow(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textOverflow())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textOverflow(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textOverflow(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textRendering(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textRendering())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textRendering(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textRendering(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textShadow(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textShadow())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textShadow(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textShadow(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textTransform(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textTransform())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textTransform(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textTransform(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textUnderlineOffset(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textUnderlineOffset())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textUnderlineOffset(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textUnderlineOffset(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textUnderlinePosition(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textUnderlinePosition())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textUnderlinePosition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textUnderlinePosition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textWrap(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textWrap())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textWrap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textWrap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textWrapMode(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textWrapMode())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textWrapMode(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textWrapMode(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_textWrapStyle(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_textWrapStyle())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_textWrapStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_textWrapStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_timelineScope(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_timelineScope())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_timelineScope(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_timelineScope(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_top(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_top())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_top(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_top(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_touchAction(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_touchAction())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_touchAction(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_touchAction(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_transform(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_transform())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_transform(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_transform(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_transformBox(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_transformBox())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_transformBox(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_transformBox(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_transformOrigin(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_transformOrigin())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_transformOrigin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_transformOrigin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_transformStyle(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_transformStyle())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_transformStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_transformStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_transition(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_transition())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_transition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_transition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_transitionBehavior(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_transitionBehavior())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_transitionBehavior(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_transitionBehavior(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_transitionDelay(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_transitionDelay())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_transitionDelay(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_transitionDelay(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_transitionDuration(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_transitionDuration())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_transitionDuration(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_transitionDuration(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_transitionProperty(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_transitionProperty())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_transitionProperty(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_transitionProperty(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_transitionTimingFunction(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_transitionTimingFunction())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_transitionTimingFunction(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_transitionTimingFunction(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_translate(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_translate())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_translate(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_translate(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_unicodeBidi(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_unicodeBidi())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_unicodeBidi(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_unicodeBidi(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_userSelect(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_userSelect())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_userSelect(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_userSelect(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_vectorEffect(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_vectorEffect())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_vectorEffect(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_vectorEffect(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_verticalAlign(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_verticalAlign())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_verticalAlign(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_verticalAlign(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_viewTimeline(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_viewTimeline())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_viewTimeline(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_viewTimeline(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_viewTimelineAxis(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_viewTimelineAxis())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_viewTimelineAxis(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_viewTimelineAxis(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_viewTimelineInset(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_viewTimelineInset())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_viewTimelineInset(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_viewTimelineInset(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_viewTimelineName(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_viewTimelineName())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_viewTimelineName(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_viewTimelineName(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_viewTransitionClass(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_viewTransitionClass())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_viewTransitionClass(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_viewTransitionClass(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_viewTransitionName(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_viewTransitionName())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_viewTransitionName(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_viewTransitionName(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_visibility(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_visibility())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_visibility(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_visibility(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAlignContent(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitAlignContent())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitAlignContent(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAlignContent(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAlignItems(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitAlignItems())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitAlignItems(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAlignItems(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAlignSelf(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitAlignSelf())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitAlignSelf(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAlignSelf(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAnimation(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitAnimation())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitAnimation(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAnimation(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAnimationDelay(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitAnimationDelay())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitAnimationDelay(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAnimationDelay(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAnimationDirection(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitAnimationDirection())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitAnimationDirection(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAnimationDirection(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAnimationDuration(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitAnimationDuration())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitAnimationDuration(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAnimationDuration(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAnimationFillMode(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitAnimationFillMode())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitAnimationFillMode(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAnimationFillMode(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAnimationIterationCount(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitAnimationIterationCount())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitAnimationIterationCount(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAnimationIterationCount(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAnimationName(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitAnimationName())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitAnimationName(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAnimationName(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAnimationPlayState(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitAnimationPlayState())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitAnimationPlayState(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAnimationPlayState(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAnimationTimingFunction(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitAnimationTimingFunction())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitAnimationTimingFunction(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAnimationTimingFunction(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitAppearance(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitAppearance())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitAppearance(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitAppearance(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBackfaceVisibility(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitBackfaceVisibility())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitBackfaceVisibility(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBackfaceVisibility(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBackgroundClip(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitBackgroundClip())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitBackgroundClip(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBackgroundClip(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBackgroundOrigin(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitBackgroundOrigin())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitBackgroundOrigin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBackgroundOrigin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBackgroundSize(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitBackgroundSize())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitBackgroundSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBackgroundSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBorderBottomLeftRadius(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitBorderBottomLeftRadius())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitBorderBottomLeftRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBorderBottomLeftRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBorderBottomRightRadius(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitBorderBottomRightRadius())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitBorderBottomRightRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBorderBottomRightRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBorderRadius(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitBorderRadius())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitBorderRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBorderRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBorderTopLeftRadius(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitBorderTopLeftRadius())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitBorderTopLeftRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBorderTopLeftRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBorderTopRightRadius(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitBorderTopRightRadius())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitBorderTopRightRadius(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBorderTopRightRadius(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBoxAlign(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitBoxAlign())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitBoxAlign(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBoxAlign(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBoxFlex(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitBoxFlex())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitBoxFlex(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBoxFlex(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBoxOrdinalGroup(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitBoxOrdinalGroup())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitBoxOrdinalGroup(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBoxOrdinalGroup(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBoxOrient(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitBoxOrient())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitBoxOrient(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBoxOrient(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBoxPack(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitBoxPack())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitBoxPack(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBoxPack(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBoxShadow(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitBoxShadow())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitBoxShadow(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBoxShadow(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitBoxSizing(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitBoxSizing())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitBoxSizing(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitBoxSizing(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitFilter(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitFilter())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitFilter(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitFilter(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitFlex(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitFlex())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitFlex(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitFlex(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitFlexBasis(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitFlexBasis())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitFlexBasis(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitFlexBasis(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitFlexDirection(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitFlexDirection())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitFlexDirection(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitFlexDirection(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitFlexFlow(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitFlexFlow())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitFlexFlow(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitFlexFlow(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitFlexGrow(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitFlexGrow())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitFlexGrow(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitFlexGrow(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitFlexShrink(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitFlexShrink())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitFlexShrink(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitFlexShrink(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitFlexWrap(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitFlexWrap())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitFlexWrap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitFlexWrap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitJustifyContent(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitJustifyContent())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitJustifyContent(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitJustifyContent(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitLineClamp(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitLineClamp())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitLineClamp(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitLineClamp(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMask(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitMask())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitMask(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMask(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskBoxImage(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitMaskBoxImage())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitMaskBoxImage(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskBoxImage(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskBoxImageOutset(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitMaskBoxImageOutset())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitMaskBoxImageOutset(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskBoxImageOutset(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskBoxImageRepeat(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitMaskBoxImageRepeat())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitMaskBoxImageRepeat(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskBoxImageRepeat(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskBoxImageSlice(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitMaskBoxImageSlice())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitMaskBoxImageSlice(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskBoxImageSlice(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskBoxImageSource(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitMaskBoxImageSource())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitMaskBoxImageSource(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskBoxImageSource(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskBoxImageWidth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitMaskBoxImageWidth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitMaskBoxImageWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskBoxImageWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskClip(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitMaskClip())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitMaskClip(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskClip(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskComposite(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitMaskComposite())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitMaskComposite(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskComposite(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskImage(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitMaskImage())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitMaskImage(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskImage(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskOrigin(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitMaskOrigin())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitMaskOrigin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskOrigin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskPosition(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitMaskPosition())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitMaskPosition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskPosition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskRepeat(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitMaskRepeat())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitMaskRepeat(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskRepeat(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitMaskSize(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitMaskSize())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitMaskSize(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitMaskSize(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitOrder(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitOrder())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitOrder(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitOrder(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitPerspective(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitPerspective())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitPerspective(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitPerspective(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitPerspectiveOrigin(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitPerspectiveOrigin())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitPerspectiveOrigin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitPerspectiveOrigin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTextFillColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitTextFillColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitTextFillColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTextFillColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTextSizeAdjust(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitTextSizeAdjust())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitTextSizeAdjust(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTextSizeAdjust(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTextStroke(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitTextStroke())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitTextStroke(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTextStroke(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTextStrokeColor(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitTextStrokeColor())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitTextStrokeColor(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTextStrokeColor(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTextStrokeWidth(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitTextStrokeWidth())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitTextStrokeWidth(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTextStrokeWidth(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTransform(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitTransform())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitTransform(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTransform(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTransformOrigin(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitTransformOrigin())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitTransformOrigin(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTransformOrigin(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTransformStyle(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitTransformStyle())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitTransformStyle(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTransformStyle(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTransition(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitTransition())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitTransition(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTransition(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTransitionDelay(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitTransitionDelay())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitTransitionDelay(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTransitionDelay(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTransitionDuration(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitTransitionDuration())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitTransitionDuration(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTransitionDuration(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTransitionProperty(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitTransitionProperty())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitTransitionProperty(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTransitionProperty(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitTransitionTimingFunction(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitTransitionTimingFunction())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitTransitionTimingFunction(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitTransitionTimingFunction(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_webkitUserSelect(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_webkitUserSelect())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_webkitUserSelect(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_webkitUserSelect(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_whiteSpace(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_whiteSpace())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_whiteSpace(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_whiteSpace(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_whiteSpaceCollapse(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_whiteSpaceCollapse())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_whiteSpaceCollapse(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_whiteSpaceCollapse(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_widows(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_widows())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_widows(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_widows(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_width(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_width())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_width(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_width(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_willChange(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_willChange())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_willChange(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_willChange(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_wordBreak(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_wordBreak())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_wordBreak(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_wordBreak(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_wordSpacing(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_wordSpacing())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_wordSpacing(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_wordSpacing(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_wordWrap(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_wordWrap())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_wordWrap(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_wordWrap(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_writingMode(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_writingMode())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_writingMode(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_writingMode(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_x(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_x())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_x(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_x(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_y(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_y())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_y(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_y(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_zIndex(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_zIndex())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_zIndex(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_zIndex(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
+}
+
+const NtsStringView* nts_dom_CSSStyleDeclaration_get_zoom(NtsDomCSSStyleDeclaration* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  return context.Lend(nts_dom::AsString(receiver->AnonymousNamedGetter(CssName_zoom())), false);
+}
+
+void nts_dom_CSSStyleDeclaration_set_zoom(NtsDomCSSStyleDeclaration* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CSSStyleDeclaration>(self);
+  receiver->setProperty(context.document->GetExecutionContext(), CssProperty_zoom(), NtsText(context, value).Text(), blink::g_empty_string, exception_state);
 }
 
 NtsDomComment* nts_dom_as_Comment(NtsDomNode* node) {

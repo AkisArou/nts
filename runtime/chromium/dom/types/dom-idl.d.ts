@@ -4275,6 +4275,7986 @@ declare module "nts:dom" {
      * @ntsNoEscape error
      */
     setProperty(this: CSSStyleDeclaration, property: StringView, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_accentColor
+     */
+    _get_accentColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_accentColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_accentColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_accentColor
+     * @ntsSet _set_accentColor
+     */
+    accentColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_alignContent
+     */
+    _get_alignContent(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_alignContent
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_alignContent(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_alignContent
+     * @ntsSet _set_alignContent
+     */
+    alignContent: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_alignItems
+     */
+    _get_alignItems(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_alignItems
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_alignItems(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_alignItems
+     * @ntsSet _set_alignItems
+     */
+    alignItems: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_alignSelf
+     */
+    _get_alignSelf(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_alignSelf
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_alignSelf(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_alignSelf
+     * @ntsSet _set_alignSelf
+     */
+    alignSelf: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_alignmentBaseline
+     */
+    _get_alignmentBaseline(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_alignmentBaseline
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_alignmentBaseline(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_alignmentBaseline
+     * @ntsSet _set_alignmentBaseline
+     */
+    alignmentBaseline: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_all
+     */
+    _get_all(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_all
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_all(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_all
+     * @ntsSet _set_all
+     */
+    all: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_anchorName
+     */
+    _get_anchorName(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_anchorName
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_anchorName(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_anchorName
+     * @ntsSet _set_anchorName
+     */
+    anchorName: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_anchorScope
+     */
+    _get_anchorScope(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_anchorScope
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_anchorScope(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_anchorScope
+     * @ntsSet _set_anchorScope
+     */
+    anchorScope: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_animation
+     */
+    _get_animation(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_animation
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_animation(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_animation
+     * @ntsSet _set_animation
+     */
+    animation: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_animationComposition
+     */
+    _get_animationComposition(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_animationComposition
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_animationComposition(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_animationComposition
+     * @ntsSet _set_animationComposition
+     */
+    animationComposition: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_animationDelay
+     */
+    _get_animationDelay(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_animationDelay
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_animationDelay(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_animationDelay
+     * @ntsSet _set_animationDelay
+     */
+    animationDelay: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_animationDirection
+     */
+    _get_animationDirection(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_animationDirection
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_animationDirection(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_animationDirection
+     * @ntsSet _set_animationDirection
+     */
+    animationDirection: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_animationDuration
+     */
+    _get_animationDuration(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_animationDuration
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_animationDuration(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_animationDuration
+     * @ntsSet _set_animationDuration
+     */
+    animationDuration: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_animationFillMode
+     */
+    _get_animationFillMode(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_animationFillMode
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_animationFillMode(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_animationFillMode
+     * @ntsSet _set_animationFillMode
+     */
+    animationFillMode: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_animationIterationCount
+     */
+    _get_animationIterationCount(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_animationIterationCount
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_animationIterationCount(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_animationIterationCount
+     * @ntsSet _set_animationIterationCount
+     */
+    animationIterationCount: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_animationName
+     */
+    _get_animationName(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_animationName
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_animationName(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_animationName
+     * @ntsSet _set_animationName
+     */
+    animationName: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_animationPlayState
+     */
+    _get_animationPlayState(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_animationPlayState
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_animationPlayState(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_animationPlayState
+     * @ntsSet _set_animationPlayState
+     */
+    animationPlayState: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_animationRange
+     */
+    _get_animationRange(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_animationRange
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_animationRange(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_animationRange
+     * @ntsSet _set_animationRange
+     */
+    animationRange: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_animationRangeEnd
+     */
+    _get_animationRangeEnd(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_animationRangeEnd
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_animationRangeEnd(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_animationRangeEnd
+     * @ntsSet _set_animationRangeEnd
+     */
+    animationRangeEnd: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_animationRangeStart
+     */
+    _get_animationRangeStart(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_animationRangeStart
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_animationRangeStart(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_animationRangeStart
+     * @ntsSet _set_animationRangeStart
+     */
+    animationRangeStart: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_animationTimeline
+     */
+    _get_animationTimeline(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_animationTimeline
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_animationTimeline(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_animationTimeline
+     * @ntsSet _set_animationTimeline
+     */
+    animationTimeline: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_animationTimingFunction
+     */
+    _get_animationTimingFunction(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_animationTimingFunction
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_animationTimingFunction(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_animationTimingFunction
+     * @ntsSet _set_animationTimingFunction
+     */
+    animationTimingFunction: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_appearance
+     */
+    _get_appearance(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_appearance
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_appearance(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_appearance
+     * @ntsSet _set_appearance
+     */
+    appearance: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_aspectRatio
+     */
+    _get_aspectRatio(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_aspectRatio
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_aspectRatio(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_aspectRatio
+     * @ntsSet _set_aspectRatio
+     */
+    aspectRatio: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_backdropFilter
+     */
+    _get_backdropFilter(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_backdropFilter
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_backdropFilter(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_backdropFilter
+     * @ntsSet _set_backdropFilter
+     */
+    backdropFilter: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_backfaceVisibility
+     */
+    _get_backfaceVisibility(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_backfaceVisibility
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_backfaceVisibility(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_backfaceVisibility
+     * @ntsSet _set_backfaceVisibility
+     */
+    backfaceVisibility: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_background
+     */
+    _get_background(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_background
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_background(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_background
+     * @ntsSet _set_background
+     */
+    background: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_backgroundAttachment
+     */
+    _get_backgroundAttachment(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_backgroundAttachment
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_backgroundAttachment(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_backgroundAttachment
+     * @ntsSet _set_backgroundAttachment
+     */
+    backgroundAttachment: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_backgroundBlendMode
+     */
+    _get_backgroundBlendMode(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_backgroundBlendMode
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_backgroundBlendMode(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_backgroundBlendMode
+     * @ntsSet _set_backgroundBlendMode
+     */
+    backgroundBlendMode: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_backgroundClip
+     */
+    _get_backgroundClip(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_backgroundClip
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_backgroundClip(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_backgroundClip
+     * @ntsSet _set_backgroundClip
+     */
+    backgroundClip: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_backgroundColor
+     */
+    _get_backgroundColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_backgroundColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_backgroundColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_backgroundColor
+     * @ntsSet _set_backgroundColor
+     */
+    backgroundColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_backgroundImage
+     */
+    _get_backgroundImage(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_backgroundImage
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_backgroundImage(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_backgroundImage
+     * @ntsSet _set_backgroundImage
+     */
+    backgroundImage: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_backgroundOrigin
+     */
+    _get_backgroundOrigin(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_backgroundOrigin
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_backgroundOrigin(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_backgroundOrigin
+     * @ntsSet _set_backgroundOrigin
+     */
+    backgroundOrigin: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_backgroundPosition
+     */
+    _get_backgroundPosition(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_backgroundPosition
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_backgroundPosition(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_backgroundPosition
+     * @ntsSet _set_backgroundPosition
+     */
+    backgroundPosition: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_backgroundPositionX
+     */
+    _get_backgroundPositionX(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_backgroundPositionX
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_backgroundPositionX(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_backgroundPositionX
+     * @ntsSet _set_backgroundPositionX
+     */
+    backgroundPositionX: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_backgroundPositionY
+     */
+    _get_backgroundPositionY(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_backgroundPositionY
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_backgroundPositionY(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_backgroundPositionY
+     * @ntsSet _set_backgroundPositionY
+     */
+    backgroundPositionY: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_backgroundRepeat
+     */
+    _get_backgroundRepeat(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_backgroundRepeat
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_backgroundRepeat(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_backgroundRepeat
+     * @ntsSet _set_backgroundRepeat
+     */
+    backgroundRepeat: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_backgroundSize
+     */
+    _get_backgroundSize(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_backgroundSize
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_backgroundSize(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_backgroundSize
+     * @ntsSet _set_backgroundSize
+     */
+    backgroundSize: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_baselineShift
+     */
+    _get_baselineShift(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_baselineShift
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_baselineShift(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_baselineShift
+     * @ntsSet _set_baselineShift
+     */
+    baselineShift: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_baselineSource
+     */
+    _get_baselineSource(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_baselineSource
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_baselineSource(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_baselineSource
+     * @ntsSet _set_baselineSource
+     */
+    baselineSource: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_blockSize
+     */
+    _get_blockSize(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_blockSize
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_blockSize(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_blockSize
+     * @ntsSet _set_blockSize
+     */
+    blockSize: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_border
+     */
+    _get_border(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_border
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_border(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_border
+     * @ntsSet _set_border
+     */
+    border: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderBlock
+     */
+    _get_borderBlock(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderBlock
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderBlock(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderBlock
+     * @ntsSet _set_borderBlock
+     */
+    borderBlock: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderBlockColor
+     */
+    _get_borderBlockColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderBlockColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderBlockColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderBlockColor
+     * @ntsSet _set_borderBlockColor
+     */
+    borderBlockColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderBlockEnd
+     */
+    _get_borderBlockEnd(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderBlockEnd
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderBlockEnd(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderBlockEnd
+     * @ntsSet _set_borderBlockEnd
+     */
+    borderBlockEnd: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderBlockEndColor
+     */
+    _get_borderBlockEndColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderBlockEndColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderBlockEndColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderBlockEndColor
+     * @ntsSet _set_borderBlockEndColor
+     */
+    borderBlockEndColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderBlockEndStyle
+     */
+    _get_borderBlockEndStyle(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderBlockEndStyle
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderBlockEndStyle(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderBlockEndStyle
+     * @ntsSet _set_borderBlockEndStyle
+     */
+    borderBlockEndStyle: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderBlockEndWidth
+     */
+    _get_borderBlockEndWidth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderBlockEndWidth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderBlockEndWidth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderBlockEndWidth
+     * @ntsSet _set_borderBlockEndWidth
+     */
+    borderBlockEndWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderBlockStart
+     */
+    _get_borderBlockStart(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderBlockStart
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderBlockStart(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderBlockStart
+     * @ntsSet _set_borderBlockStart
+     */
+    borderBlockStart: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderBlockStartColor
+     */
+    _get_borderBlockStartColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderBlockStartColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderBlockStartColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderBlockStartColor
+     * @ntsSet _set_borderBlockStartColor
+     */
+    borderBlockStartColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderBlockStartStyle
+     */
+    _get_borderBlockStartStyle(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderBlockStartStyle
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderBlockStartStyle(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderBlockStartStyle
+     * @ntsSet _set_borderBlockStartStyle
+     */
+    borderBlockStartStyle: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderBlockStartWidth
+     */
+    _get_borderBlockStartWidth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderBlockStartWidth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderBlockStartWidth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderBlockStartWidth
+     * @ntsSet _set_borderBlockStartWidth
+     */
+    borderBlockStartWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderBlockStyle
+     */
+    _get_borderBlockStyle(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderBlockStyle
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderBlockStyle(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderBlockStyle
+     * @ntsSet _set_borderBlockStyle
+     */
+    borderBlockStyle: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderBlockWidth
+     */
+    _get_borderBlockWidth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderBlockWidth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderBlockWidth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderBlockWidth
+     * @ntsSet _set_borderBlockWidth
+     */
+    borderBlockWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderBottom
+     */
+    _get_borderBottom(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderBottom
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderBottom(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderBottom
+     * @ntsSet _set_borderBottom
+     */
+    borderBottom: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderBottomColor
+     */
+    _get_borderBottomColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderBottomColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderBottomColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderBottomColor
+     * @ntsSet _set_borderBottomColor
+     */
+    borderBottomColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderBottomLeftRadius
+     */
+    _get_borderBottomLeftRadius(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderBottomLeftRadius
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderBottomLeftRadius(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderBottomLeftRadius
+     * @ntsSet _set_borderBottomLeftRadius
+     */
+    borderBottomLeftRadius: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderBottomRightRadius
+     */
+    _get_borderBottomRightRadius(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderBottomRightRadius
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderBottomRightRadius(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderBottomRightRadius
+     * @ntsSet _set_borderBottomRightRadius
+     */
+    borderBottomRightRadius: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderBottomStyle
+     */
+    _get_borderBottomStyle(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderBottomStyle
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderBottomStyle(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderBottomStyle
+     * @ntsSet _set_borderBottomStyle
+     */
+    borderBottomStyle: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderBottomWidth
+     */
+    _get_borderBottomWidth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderBottomWidth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderBottomWidth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderBottomWidth
+     * @ntsSet _set_borderBottomWidth
+     */
+    borderBottomWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderCollapse
+     */
+    _get_borderCollapse(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderCollapse
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderCollapse(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderCollapse
+     * @ntsSet _set_borderCollapse
+     */
+    borderCollapse: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderColor
+     */
+    _get_borderColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderColor
+     * @ntsSet _set_borderColor
+     */
+    borderColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderEndEndRadius
+     */
+    _get_borderEndEndRadius(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderEndEndRadius
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderEndEndRadius(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderEndEndRadius
+     * @ntsSet _set_borderEndEndRadius
+     */
+    borderEndEndRadius: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderEndStartRadius
+     */
+    _get_borderEndStartRadius(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderEndStartRadius
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderEndStartRadius(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderEndStartRadius
+     * @ntsSet _set_borderEndStartRadius
+     */
+    borderEndStartRadius: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderImage
+     */
+    _get_borderImage(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderImage
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderImage(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderImage
+     * @ntsSet _set_borderImage
+     */
+    borderImage: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderImageOutset
+     */
+    _get_borderImageOutset(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderImageOutset
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderImageOutset(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderImageOutset
+     * @ntsSet _set_borderImageOutset
+     */
+    borderImageOutset: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderImageRepeat
+     */
+    _get_borderImageRepeat(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderImageRepeat
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderImageRepeat(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderImageRepeat
+     * @ntsSet _set_borderImageRepeat
+     */
+    borderImageRepeat: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderImageSlice
+     */
+    _get_borderImageSlice(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderImageSlice
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderImageSlice(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderImageSlice
+     * @ntsSet _set_borderImageSlice
+     */
+    borderImageSlice: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderImageSource
+     */
+    _get_borderImageSource(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderImageSource
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderImageSource(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderImageSource
+     * @ntsSet _set_borderImageSource
+     */
+    borderImageSource: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderImageWidth
+     */
+    _get_borderImageWidth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderImageWidth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderImageWidth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderImageWidth
+     * @ntsSet _set_borderImageWidth
+     */
+    borderImageWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderInline
+     */
+    _get_borderInline(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderInline
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderInline(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderInline
+     * @ntsSet _set_borderInline
+     */
+    borderInline: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderInlineColor
+     */
+    _get_borderInlineColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderInlineColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderInlineColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderInlineColor
+     * @ntsSet _set_borderInlineColor
+     */
+    borderInlineColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderInlineEnd
+     */
+    _get_borderInlineEnd(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderInlineEnd
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderInlineEnd(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderInlineEnd
+     * @ntsSet _set_borderInlineEnd
+     */
+    borderInlineEnd: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderInlineEndColor
+     */
+    _get_borderInlineEndColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderInlineEndColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderInlineEndColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderInlineEndColor
+     * @ntsSet _set_borderInlineEndColor
+     */
+    borderInlineEndColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderInlineEndStyle
+     */
+    _get_borderInlineEndStyle(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderInlineEndStyle
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderInlineEndStyle(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderInlineEndStyle
+     * @ntsSet _set_borderInlineEndStyle
+     */
+    borderInlineEndStyle: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderInlineEndWidth
+     */
+    _get_borderInlineEndWidth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderInlineEndWidth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderInlineEndWidth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderInlineEndWidth
+     * @ntsSet _set_borderInlineEndWidth
+     */
+    borderInlineEndWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderInlineStart
+     */
+    _get_borderInlineStart(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderInlineStart
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderInlineStart(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderInlineStart
+     * @ntsSet _set_borderInlineStart
+     */
+    borderInlineStart: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderInlineStartColor
+     */
+    _get_borderInlineStartColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderInlineStartColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderInlineStartColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderInlineStartColor
+     * @ntsSet _set_borderInlineStartColor
+     */
+    borderInlineStartColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderInlineStartStyle
+     */
+    _get_borderInlineStartStyle(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderInlineStartStyle
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderInlineStartStyle(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderInlineStartStyle
+     * @ntsSet _set_borderInlineStartStyle
+     */
+    borderInlineStartStyle: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderInlineStartWidth
+     */
+    _get_borderInlineStartWidth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderInlineStartWidth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderInlineStartWidth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderInlineStartWidth
+     * @ntsSet _set_borderInlineStartWidth
+     */
+    borderInlineStartWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderInlineStyle
+     */
+    _get_borderInlineStyle(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderInlineStyle
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderInlineStyle(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderInlineStyle
+     * @ntsSet _set_borderInlineStyle
+     */
+    borderInlineStyle: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderInlineWidth
+     */
+    _get_borderInlineWidth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderInlineWidth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderInlineWidth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderInlineWidth
+     * @ntsSet _set_borderInlineWidth
+     */
+    borderInlineWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderLeft
+     */
+    _get_borderLeft(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderLeft
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderLeft(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderLeft
+     * @ntsSet _set_borderLeft
+     */
+    borderLeft: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderLeftColor
+     */
+    _get_borderLeftColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderLeftColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderLeftColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderLeftColor
+     * @ntsSet _set_borderLeftColor
+     */
+    borderLeftColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderLeftStyle
+     */
+    _get_borderLeftStyle(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderLeftStyle
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderLeftStyle(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderLeftStyle
+     * @ntsSet _set_borderLeftStyle
+     */
+    borderLeftStyle: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderLeftWidth
+     */
+    _get_borderLeftWidth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderLeftWidth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderLeftWidth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderLeftWidth
+     * @ntsSet _set_borderLeftWidth
+     */
+    borderLeftWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderRadius
+     */
+    _get_borderRadius(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderRadius
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderRadius(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderRadius
+     * @ntsSet _set_borderRadius
+     */
+    borderRadius: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderRight
+     */
+    _get_borderRight(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderRight
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderRight(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderRight
+     * @ntsSet _set_borderRight
+     */
+    borderRight: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderRightColor
+     */
+    _get_borderRightColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderRightColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderRightColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderRightColor
+     * @ntsSet _set_borderRightColor
+     */
+    borderRightColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderRightStyle
+     */
+    _get_borderRightStyle(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderRightStyle
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderRightStyle(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderRightStyle
+     * @ntsSet _set_borderRightStyle
+     */
+    borderRightStyle: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderRightWidth
+     */
+    _get_borderRightWidth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderRightWidth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderRightWidth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderRightWidth
+     * @ntsSet _set_borderRightWidth
+     */
+    borderRightWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderSpacing
+     */
+    _get_borderSpacing(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderSpacing
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderSpacing(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderSpacing
+     * @ntsSet _set_borderSpacing
+     */
+    borderSpacing: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderStartEndRadius
+     */
+    _get_borderStartEndRadius(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderStartEndRadius
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderStartEndRadius(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderStartEndRadius
+     * @ntsSet _set_borderStartEndRadius
+     */
+    borderStartEndRadius: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderStartStartRadius
+     */
+    _get_borderStartStartRadius(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderStartStartRadius
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderStartStartRadius(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderStartStartRadius
+     * @ntsSet _set_borderStartStartRadius
+     */
+    borderStartStartRadius: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderStyle
+     */
+    _get_borderStyle(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderStyle
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderStyle(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderStyle
+     * @ntsSet _set_borderStyle
+     */
+    borderStyle: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderTop
+     */
+    _get_borderTop(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderTop
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderTop(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderTop
+     * @ntsSet _set_borderTop
+     */
+    borderTop: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderTopColor
+     */
+    _get_borderTopColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderTopColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderTopColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderTopColor
+     * @ntsSet _set_borderTopColor
+     */
+    borderTopColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderTopLeftRadius
+     */
+    _get_borderTopLeftRadius(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderTopLeftRadius
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderTopLeftRadius(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderTopLeftRadius
+     * @ntsSet _set_borderTopLeftRadius
+     */
+    borderTopLeftRadius: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderTopRightRadius
+     */
+    _get_borderTopRightRadius(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderTopRightRadius
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderTopRightRadius(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderTopRightRadius
+     * @ntsSet _set_borderTopRightRadius
+     */
+    borderTopRightRadius: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderTopStyle
+     */
+    _get_borderTopStyle(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderTopStyle
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderTopStyle(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderTopStyle
+     * @ntsSet _set_borderTopStyle
+     */
+    borderTopStyle: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderTopWidth
+     */
+    _get_borderTopWidth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderTopWidth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderTopWidth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderTopWidth
+     * @ntsSet _set_borderTopWidth
+     */
+    borderTopWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_borderWidth
+     */
+    _get_borderWidth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_borderWidth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_borderWidth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_borderWidth
+     * @ntsSet _set_borderWidth
+     */
+    borderWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_bottom
+     */
+    _get_bottom(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_bottom
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_bottom(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_bottom
+     * @ntsSet _set_bottom
+     */
+    bottom: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_boxDecorationBreak
+     */
+    _get_boxDecorationBreak(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_boxDecorationBreak
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_boxDecorationBreak(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_boxDecorationBreak
+     * @ntsSet _set_boxDecorationBreak
+     */
+    boxDecorationBreak: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_boxShadow
+     */
+    _get_boxShadow(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_boxShadow
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_boxShadow(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_boxShadow
+     * @ntsSet _set_boxShadow
+     */
+    boxShadow: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_boxSizing
+     */
+    _get_boxSizing(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_boxSizing
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_boxSizing(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_boxSizing
+     * @ntsSet _set_boxSizing
+     */
+    boxSizing: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_breakAfter
+     */
+    _get_breakAfter(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_breakAfter
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_breakAfter(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_breakAfter
+     * @ntsSet _set_breakAfter
+     */
+    breakAfter: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_breakBefore
+     */
+    _get_breakBefore(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_breakBefore
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_breakBefore(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_breakBefore
+     * @ntsSet _set_breakBefore
+     */
+    breakBefore: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_breakInside
+     */
+    _get_breakInside(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_breakInside
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_breakInside(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_breakInside
+     * @ntsSet _set_breakInside
+     */
+    breakInside: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_captionSide
+     */
+    _get_captionSide(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_captionSide
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_captionSide(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_captionSide
+     * @ntsSet _set_captionSide
+     */
+    captionSide: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_caretColor
+     */
+    _get_caretColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_caretColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_caretColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_caretColor
+     * @ntsSet _set_caretColor
+     */
+    caretColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_clear
+     */
+    _get_clear(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_clear
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_clear(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_clear
+     * @ntsSet _set_clear
+     */
+    clear: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_clip
+     */
+    _get_clip(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_clip
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_clip(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_clip
+     * @ntsSet _set_clip
+     */
+    clip: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_clipPath
+     */
+    _get_clipPath(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_clipPath
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_clipPath(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_clipPath
+     * @ntsSet _set_clipPath
+     */
+    clipPath: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_clipRule
+     */
+    _get_clipRule(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_clipRule
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_clipRule(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_clipRule
+     * @ntsSet _set_clipRule
+     */
+    clipRule: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_color
+     */
+    _get_color(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_color
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_color(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_color
+     * @ntsSet _set_color
+     */
+    color: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_colorInterpolation
+     */
+    _get_colorInterpolation(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_colorInterpolation
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_colorInterpolation(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_colorInterpolation
+     * @ntsSet _set_colorInterpolation
+     */
+    colorInterpolation: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_colorInterpolationFilters
+     */
+    _get_colorInterpolationFilters(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_colorInterpolationFilters
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_colorInterpolationFilters(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_colorInterpolationFilters
+     * @ntsSet _set_colorInterpolationFilters
+     */
+    colorInterpolationFilters: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_colorScheme
+     */
+    _get_colorScheme(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_colorScheme
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_colorScheme(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_colorScheme
+     * @ntsSet _set_colorScheme
+     */
+    colorScheme: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_columnCount
+     */
+    _get_columnCount(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_columnCount
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_columnCount(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_columnCount
+     * @ntsSet _set_columnCount
+     */
+    columnCount: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_columnFill
+     */
+    _get_columnFill(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_columnFill
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_columnFill(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_columnFill
+     * @ntsSet _set_columnFill
+     */
+    columnFill: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_columnGap
+     */
+    _get_columnGap(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_columnGap
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_columnGap(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_columnGap
+     * @ntsSet _set_columnGap
+     */
+    columnGap: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_columnRule
+     */
+    _get_columnRule(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_columnRule
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_columnRule(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_columnRule
+     * @ntsSet _set_columnRule
+     */
+    columnRule: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_columnRuleColor
+     */
+    _get_columnRuleColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_columnRuleColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_columnRuleColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_columnRuleColor
+     * @ntsSet _set_columnRuleColor
+     */
+    columnRuleColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_columnRuleStyle
+     */
+    _get_columnRuleStyle(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_columnRuleStyle
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_columnRuleStyle(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_columnRuleStyle
+     * @ntsSet _set_columnRuleStyle
+     */
+    columnRuleStyle: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_columnRuleWidth
+     */
+    _get_columnRuleWidth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_columnRuleWidth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_columnRuleWidth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_columnRuleWidth
+     * @ntsSet _set_columnRuleWidth
+     */
+    columnRuleWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_columnSpan
+     */
+    _get_columnSpan(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_columnSpan
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_columnSpan(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_columnSpan
+     * @ntsSet _set_columnSpan
+     */
+    columnSpan: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_columnWidth
+     */
+    _get_columnWidth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_columnWidth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_columnWidth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_columnWidth
+     * @ntsSet _set_columnWidth
+     */
+    columnWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_columns
+     */
+    _get_columns(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_columns
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_columns(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_columns
+     * @ntsSet _set_columns
+     */
+    columns: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_contain
+     */
+    _get_contain(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_contain
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_contain(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_contain
+     * @ntsSet _set_contain
+     */
+    contain: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_containIntrinsicBlockSize
+     */
+    _get_containIntrinsicBlockSize(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_containIntrinsicBlockSize
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_containIntrinsicBlockSize(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_containIntrinsicBlockSize
+     * @ntsSet _set_containIntrinsicBlockSize
+     */
+    containIntrinsicBlockSize: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_containIntrinsicHeight
+     */
+    _get_containIntrinsicHeight(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_containIntrinsicHeight
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_containIntrinsicHeight(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_containIntrinsicHeight
+     * @ntsSet _set_containIntrinsicHeight
+     */
+    containIntrinsicHeight: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_containIntrinsicInlineSize
+     */
+    _get_containIntrinsicInlineSize(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_containIntrinsicInlineSize
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_containIntrinsicInlineSize(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_containIntrinsicInlineSize
+     * @ntsSet _set_containIntrinsicInlineSize
+     */
+    containIntrinsicInlineSize: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_containIntrinsicSize
+     */
+    _get_containIntrinsicSize(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_containIntrinsicSize
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_containIntrinsicSize(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_containIntrinsicSize
+     * @ntsSet _set_containIntrinsicSize
+     */
+    containIntrinsicSize: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_containIntrinsicWidth
+     */
+    _get_containIntrinsicWidth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_containIntrinsicWidth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_containIntrinsicWidth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_containIntrinsicWidth
+     * @ntsSet _set_containIntrinsicWidth
+     */
+    containIntrinsicWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_container
+     */
+    _get_container(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_container
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_container(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_container
+     * @ntsSet _set_container
+     */
+    container: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_containerName
+     */
+    _get_containerName(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_containerName
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_containerName(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_containerName
+     * @ntsSet _set_containerName
+     */
+    containerName: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_containerType
+     */
+    _get_containerType(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_containerType
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_containerType(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_containerType
+     * @ntsSet _set_containerType
+     */
+    containerType: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_content
+     */
+    _get_content(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_content
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_content(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_content
+     * @ntsSet _set_content
+     */
+    content: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_contentVisibility
+     */
+    _get_contentVisibility(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_contentVisibility
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_contentVisibility(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_contentVisibility
+     * @ntsSet _set_contentVisibility
+     */
+    contentVisibility: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_counterIncrement
+     */
+    _get_counterIncrement(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_counterIncrement
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_counterIncrement(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_counterIncrement
+     * @ntsSet _set_counterIncrement
+     */
+    counterIncrement: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_counterReset
+     */
+    _get_counterReset(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_counterReset
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_counterReset(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_counterReset
+     * @ntsSet _set_counterReset
+     */
+    counterReset: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_counterSet
+     */
+    _get_counterSet(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_counterSet
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_counterSet(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_counterSet
+     * @ntsSet _set_counterSet
+     */
+    counterSet: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_cursor
+     */
+    _get_cursor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_cursor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_cursor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_cursor
+     * @ntsSet _set_cursor
+     */
+    cursor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_cx
+     */
+    _get_cx(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_cx
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_cx(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_cx
+     * @ntsSet _set_cx
+     */
+    cx: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_cy
+     */
+    _get_cy(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_cy
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_cy(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_cy
+     * @ntsSet _set_cy
+     */
+    cy: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_d
+     */
+    _get_d(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_d
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_d(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_d
+     * @ntsSet _set_d
+     */
+    d: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_direction
+     */
+    _get_direction(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_direction
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_direction(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_direction
+     * @ntsSet _set_direction
+     */
+    direction: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_display
+     */
+    _get_display(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_display
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_display(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_display
+     * @ntsSet _set_display
+     */
+    display: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_dominantBaseline
+     */
+    _get_dominantBaseline(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_dominantBaseline
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_dominantBaseline(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_dominantBaseline
+     * @ntsSet _set_dominantBaseline
+     */
+    dominantBaseline: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_dynamicRangeLimit
+     */
+    _get_dynamicRangeLimit(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_dynamicRangeLimit
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_dynamicRangeLimit(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_dynamicRangeLimit
+     * @ntsSet _set_dynamicRangeLimit
+     */
+    dynamicRangeLimit: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_emptyCells
+     */
+    _get_emptyCells(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_emptyCells
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_emptyCells(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_emptyCells
+     * @ntsSet _set_emptyCells
+     */
+    emptyCells: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fieldSizing
+     */
+    _get_fieldSizing(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fieldSizing
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fieldSizing(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fieldSizing
+     * @ntsSet _set_fieldSizing
+     */
+    fieldSizing: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fill
+     */
+    _get_fill(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fill
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fill(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fill
+     * @ntsSet _set_fill
+     */
+    fill: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fillOpacity
+     */
+    _get_fillOpacity(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fillOpacity
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fillOpacity(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fillOpacity
+     * @ntsSet _set_fillOpacity
+     */
+    fillOpacity: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fillRule
+     */
+    _get_fillRule(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fillRule
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fillRule(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fillRule
+     * @ntsSet _set_fillRule
+     */
+    fillRule: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_filter
+     */
+    _get_filter(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_filter
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_filter(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_filter
+     * @ntsSet _set_filter
+     */
+    filter: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_flex
+     */
+    _get_flex(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_flex
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_flex(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_flex
+     * @ntsSet _set_flex
+     */
+    flex: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_flexBasis
+     */
+    _get_flexBasis(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_flexBasis
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_flexBasis(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_flexBasis
+     * @ntsSet _set_flexBasis
+     */
+    flexBasis: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_flexDirection
+     */
+    _get_flexDirection(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_flexDirection
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_flexDirection(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_flexDirection
+     * @ntsSet _set_flexDirection
+     */
+    flexDirection: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_flexFlow
+     */
+    _get_flexFlow(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_flexFlow
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_flexFlow(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_flexFlow
+     * @ntsSet _set_flexFlow
+     */
+    flexFlow: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_flexGrow
+     */
+    _get_flexGrow(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_flexGrow
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_flexGrow(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_flexGrow
+     * @ntsSet _set_flexGrow
+     */
+    flexGrow: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_flexShrink
+     */
+    _get_flexShrink(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_flexShrink
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_flexShrink(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_flexShrink
+     * @ntsSet _set_flexShrink
+     */
+    flexShrink: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_flexWrap
+     */
+    _get_flexWrap(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_flexWrap
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_flexWrap(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_flexWrap
+     * @ntsSet _set_flexWrap
+     */
+    flexWrap: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_float
+     */
+    _get_float(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_float
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_float(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_float
+     * @ntsSet _set_float
+     */
+    float: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_floodColor
+     */
+    _get_floodColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_floodColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_floodColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_floodColor
+     * @ntsSet _set_floodColor
+     */
+    floodColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_floodOpacity
+     */
+    _get_floodOpacity(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_floodOpacity
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_floodOpacity(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_floodOpacity
+     * @ntsSet _set_floodOpacity
+     */
+    floodOpacity: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_font
+     */
+    _get_font(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_font
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_font(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_font
+     * @ntsSet _set_font
+     */
+    font: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontFamily
+     */
+    _get_fontFamily(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontFamily
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontFamily(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontFamily
+     * @ntsSet _set_fontFamily
+     */
+    fontFamily: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontFeatureSettings
+     */
+    _get_fontFeatureSettings(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontFeatureSettings
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontFeatureSettings(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontFeatureSettings
+     * @ntsSet _set_fontFeatureSettings
+     */
+    fontFeatureSettings: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontKerning
+     */
+    _get_fontKerning(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontKerning
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontKerning(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontKerning
+     * @ntsSet _set_fontKerning
+     */
+    fontKerning: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontLanguageOverride
+     */
+    _get_fontLanguageOverride(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontLanguageOverride
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontLanguageOverride(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontLanguageOverride
+     * @ntsSet _set_fontLanguageOverride
+     */
+    fontLanguageOverride: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontOpticalSizing
+     */
+    _get_fontOpticalSizing(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontOpticalSizing
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontOpticalSizing(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontOpticalSizing
+     * @ntsSet _set_fontOpticalSizing
+     */
+    fontOpticalSizing: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontPalette
+     */
+    _get_fontPalette(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontPalette
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontPalette(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontPalette
+     * @ntsSet _set_fontPalette
+     */
+    fontPalette: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontSize
+     */
+    _get_fontSize(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontSize
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontSize(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontSize
+     * @ntsSet _set_fontSize
+     */
+    fontSize: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontSizeAdjust
+     */
+    _get_fontSizeAdjust(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontSizeAdjust
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontSizeAdjust(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontSizeAdjust
+     * @ntsSet _set_fontSizeAdjust
+     */
+    fontSizeAdjust: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontStretch
+     */
+    _get_fontStretch(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontStretch
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontStretch(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontStretch
+     * @ntsSet _set_fontStretch
+     */
+    fontStretch: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontStyle
+     */
+    _get_fontStyle(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontStyle
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontStyle(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontStyle
+     * @ntsSet _set_fontStyle
+     */
+    fontStyle: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontSynthesis
+     */
+    _get_fontSynthesis(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontSynthesis
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontSynthesis(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontSynthesis
+     * @ntsSet _set_fontSynthesis
+     */
+    fontSynthesis: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontSynthesisSmallCaps
+     */
+    _get_fontSynthesisSmallCaps(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontSynthesisSmallCaps
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontSynthesisSmallCaps(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontSynthesisSmallCaps
+     * @ntsSet _set_fontSynthesisSmallCaps
+     */
+    fontSynthesisSmallCaps: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontSynthesisStyle
+     */
+    _get_fontSynthesisStyle(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontSynthesisStyle
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontSynthesisStyle(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontSynthesisStyle
+     * @ntsSet _set_fontSynthesisStyle
+     */
+    fontSynthesisStyle: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontSynthesisWeight
+     */
+    _get_fontSynthesisWeight(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontSynthesisWeight
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontSynthesisWeight(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontSynthesisWeight
+     * @ntsSet _set_fontSynthesisWeight
+     */
+    fontSynthesisWeight: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontVariant
+     */
+    _get_fontVariant(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontVariant
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontVariant(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontVariant
+     * @ntsSet _set_fontVariant
+     */
+    fontVariant: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontVariantAlternates
+     */
+    _get_fontVariantAlternates(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontVariantAlternates
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontVariantAlternates(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontVariantAlternates
+     * @ntsSet _set_fontVariantAlternates
+     */
+    fontVariantAlternates: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontVariantCaps
+     */
+    _get_fontVariantCaps(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontVariantCaps
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontVariantCaps(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontVariantCaps
+     * @ntsSet _set_fontVariantCaps
+     */
+    fontVariantCaps: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontVariantEastAsian
+     */
+    _get_fontVariantEastAsian(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontVariantEastAsian
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontVariantEastAsian(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontVariantEastAsian
+     * @ntsSet _set_fontVariantEastAsian
+     */
+    fontVariantEastAsian: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontVariantEmoji
+     */
+    _get_fontVariantEmoji(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontVariantEmoji
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontVariantEmoji(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontVariantEmoji
+     * @ntsSet _set_fontVariantEmoji
+     */
+    fontVariantEmoji: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontVariantLigatures
+     */
+    _get_fontVariantLigatures(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontVariantLigatures
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontVariantLigatures(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontVariantLigatures
+     * @ntsSet _set_fontVariantLigatures
+     */
+    fontVariantLigatures: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontVariantNumeric
+     */
+    _get_fontVariantNumeric(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontVariantNumeric
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontVariantNumeric(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontVariantNumeric
+     * @ntsSet _set_fontVariantNumeric
+     */
+    fontVariantNumeric: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontVariantPosition
+     */
+    _get_fontVariantPosition(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontVariantPosition
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontVariantPosition(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontVariantPosition
+     * @ntsSet _set_fontVariantPosition
+     */
+    fontVariantPosition: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontVariationSettings
+     */
+    _get_fontVariationSettings(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontVariationSettings
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontVariationSettings(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontVariationSettings
+     * @ntsSet _set_fontVariationSettings
+     */
+    fontVariationSettings: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_fontWeight
+     */
+    _get_fontWeight(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_fontWeight
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fontWeight(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_fontWeight
+     * @ntsSet _set_fontWeight
+     */
+    fontWeight: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_forcedColorAdjust
+     */
+    _get_forcedColorAdjust(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_forcedColorAdjust
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_forcedColorAdjust(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_forcedColorAdjust
+     * @ntsSet _set_forcedColorAdjust
+     */
+    forcedColorAdjust: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_gap
+     */
+    _get_gap(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_gap
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_gap(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_gap
+     * @ntsSet _set_gap
+     */
+    gap: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_grid
+     */
+    _get_grid(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_grid
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_grid(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_grid
+     * @ntsSet _set_grid
+     */
+    grid: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_gridArea
+     */
+    _get_gridArea(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_gridArea
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_gridArea(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_gridArea
+     * @ntsSet _set_gridArea
+     */
+    gridArea: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_gridAutoColumns
+     */
+    _get_gridAutoColumns(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_gridAutoColumns
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_gridAutoColumns(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_gridAutoColumns
+     * @ntsSet _set_gridAutoColumns
+     */
+    gridAutoColumns: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_gridAutoFlow
+     */
+    _get_gridAutoFlow(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_gridAutoFlow
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_gridAutoFlow(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_gridAutoFlow
+     * @ntsSet _set_gridAutoFlow
+     */
+    gridAutoFlow: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_gridAutoRows
+     */
+    _get_gridAutoRows(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_gridAutoRows
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_gridAutoRows(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_gridAutoRows
+     * @ntsSet _set_gridAutoRows
+     */
+    gridAutoRows: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_gridColumn
+     */
+    _get_gridColumn(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_gridColumn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_gridColumn(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_gridColumn
+     * @ntsSet _set_gridColumn
+     */
+    gridColumn: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_gridColumnEnd
+     */
+    _get_gridColumnEnd(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_gridColumnEnd
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_gridColumnEnd(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_gridColumnEnd
+     * @ntsSet _set_gridColumnEnd
+     */
+    gridColumnEnd: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_gridColumnGap
+     */
+    _get_gridColumnGap(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_gridColumnGap
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_gridColumnGap(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_gridColumnGap
+     * @ntsSet _set_gridColumnGap
+     */
+    gridColumnGap: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_gridColumnStart
+     */
+    _get_gridColumnStart(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_gridColumnStart
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_gridColumnStart(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_gridColumnStart
+     * @ntsSet _set_gridColumnStart
+     */
+    gridColumnStart: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_gridGap
+     */
+    _get_gridGap(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_gridGap
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_gridGap(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_gridGap
+     * @ntsSet _set_gridGap
+     */
+    gridGap: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_gridRow
+     */
+    _get_gridRow(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_gridRow
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_gridRow(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_gridRow
+     * @ntsSet _set_gridRow
+     */
+    gridRow: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_gridRowEnd
+     */
+    _get_gridRowEnd(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_gridRowEnd
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_gridRowEnd(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_gridRowEnd
+     * @ntsSet _set_gridRowEnd
+     */
+    gridRowEnd: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_gridRowGap
+     */
+    _get_gridRowGap(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_gridRowGap
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_gridRowGap(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_gridRowGap
+     * @ntsSet _set_gridRowGap
+     */
+    gridRowGap: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_gridRowStart
+     */
+    _get_gridRowStart(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_gridRowStart
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_gridRowStart(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_gridRowStart
+     * @ntsSet _set_gridRowStart
+     */
+    gridRowStart: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_gridTemplate
+     */
+    _get_gridTemplate(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_gridTemplate
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_gridTemplate(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_gridTemplate
+     * @ntsSet _set_gridTemplate
+     */
+    gridTemplate: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_gridTemplateAreas
+     */
+    _get_gridTemplateAreas(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_gridTemplateAreas
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_gridTemplateAreas(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_gridTemplateAreas
+     * @ntsSet _set_gridTemplateAreas
+     */
+    gridTemplateAreas: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_gridTemplateColumns
+     */
+    _get_gridTemplateColumns(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_gridTemplateColumns
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_gridTemplateColumns(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_gridTemplateColumns
+     * @ntsSet _set_gridTemplateColumns
+     */
+    gridTemplateColumns: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_gridTemplateRows
+     */
+    _get_gridTemplateRows(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_gridTemplateRows
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_gridTemplateRows(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_gridTemplateRows
+     * @ntsSet _set_gridTemplateRows
+     */
+    gridTemplateRows: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_height
+     */
+    _get_height(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_height
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_height(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_height
+     * @ntsSet _set_height
+     */
+    height: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_hyphenateCharacter
+     */
+    _get_hyphenateCharacter(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_hyphenateCharacter
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_hyphenateCharacter(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_hyphenateCharacter
+     * @ntsSet _set_hyphenateCharacter
+     */
+    hyphenateCharacter: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_hyphenateLimitChars
+     */
+    _get_hyphenateLimitChars(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_hyphenateLimitChars
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_hyphenateLimitChars(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_hyphenateLimitChars
+     * @ntsSet _set_hyphenateLimitChars
+     */
+    hyphenateLimitChars: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_hyphens
+     */
+    _get_hyphens(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_hyphens
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_hyphens(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_hyphens
+     * @ntsSet _set_hyphens
+     */
+    hyphens: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_imageOrientation
+     */
+    _get_imageOrientation(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_imageOrientation
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_imageOrientation(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_imageOrientation
+     * @ntsSet _set_imageOrientation
+     */
+    imageOrientation: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_imageRendering
+     */
+    _get_imageRendering(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_imageRendering
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_imageRendering(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_imageRendering
+     * @ntsSet _set_imageRendering
+     */
+    imageRendering: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_inlineSize
+     */
+    _get_inlineSize(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_inlineSize
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_inlineSize(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_inlineSize
+     * @ntsSet _set_inlineSize
+     */
+    inlineSize: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_inset
+     */
+    _get_inset(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_inset
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_inset(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_inset
+     * @ntsSet _set_inset
+     */
+    inset: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_insetBlock
+     */
+    _get_insetBlock(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_insetBlock
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_insetBlock(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_insetBlock
+     * @ntsSet _set_insetBlock
+     */
+    insetBlock: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_insetBlockEnd
+     */
+    _get_insetBlockEnd(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_insetBlockEnd
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_insetBlockEnd(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_insetBlockEnd
+     * @ntsSet _set_insetBlockEnd
+     */
+    insetBlockEnd: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_insetBlockStart
+     */
+    _get_insetBlockStart(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_insetBlockStart
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_insetBlockStart(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_insetBlockStart
+     * @ntsSet _set_insetBlockStart
+     */
+    insetBlockStart: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_insetInline
+     */
+    _get_insetInline(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_insetInline
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_insetInline(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_insetInline
+     * @ntsSet _set_insetInline
+     */
+    insetInline: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_insetInlineEnd
+     */
+    _get_insetInlineEnd(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_insetInlineEnd
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_insetInlineEnd(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_insetInlineEnd
+     * @ntsSet _set_insetInlineEnd
+     */
+    insetInlineEnd: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_insetInlineStart
+     */
+    _get_insetInlineStart(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_insetInlineStart
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_insetInlineStart(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_insetInlineStart
+     * @ntsSet _set_insetInlineStart
+     */
+    insetInlineStart: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_isolation
+     */
+    _get_isolation(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_isolation
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_isolation(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_isolation
+     * @ntsSet _set_isolation
+     */
+    isolation: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_justifyContent
+     */
+    _get_justifyContent(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_justifyContent
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_justifyContent(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_justifyContent
+     * @ntsSet _set_justifyContent
+     */
+    justifyContent: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_justifyItems
+     */
+    _get_justifyItems(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_justifyItems
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_justifyItems(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_justifyItems
+     * @ntsSet _set_justifyItems
+     */
+    justifyItems: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_justifySelf
+     */
+    _get_justifySelf(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_justifySelf
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_justifySelf(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_justifySelf
+     * @ntsSet _set_justifySelf
+     */
+    justifySelf: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_left
+     */
+    _get_left(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_left
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_left(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_left
+     * @ntsSet _set_left
+     */
+    left: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_letterSpacing
+     */
+    _get_letterSpacing(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_letterSpacing
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_letterSpacing(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_letterSpacing
+     * @ntsSet _set_letterSpacing
+     */
+    letterSpacing: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_lightingColor
+     */
+    _get_lightingColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_lightingColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_lightingColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_lightingColor
+     * @ntsSet _set_lightingColor
+     */
+    lightingColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_lineBreak
+     */
+    _get_lineBreak(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_lineBreak
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_lineBreak(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_lineBreak
+     * @ntsSet _set_lineBreak
+     */
+    lineBreak: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_lineHeight
+     */
+    _get_lineHeight(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_lineHeight
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_lineHeight(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_lineHeight
+     * @ntsSet _set_lineHeight
+     */
+    lineHeight: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_listStyle
+     */
+    _get_listStyle(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_listStyle
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_listStyle(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_listStyle
+     * @ntsSet _set_listStyle
+     */
+    listStyle: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_listStyleImage
+     */
+    _get_listStyleImage(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_listStyleImage
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_listStyleImage(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_listStyleImage
+     * @ntsSet _set_listStyleImage
+     */
+    listStyleImage: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_listStylePosition
+     */
+    _get_listStylePosition(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_listStylePosition
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_listStylePosition(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_listStylePosition
+     * @ntsSet _set_listStylePosition
+     */
+    listStylePosition: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_listStyleType
+     */
+    _get_listStyleType(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_listStyleType
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_listStyleType(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_listStyleType
+     * @ntsSet _set_listStyleType
+     */
+    listStyleType: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_margin
+     */
+    _get_margin(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_margin
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_margin(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_margin
+     * @ntsSet _set_margin
+     */
+    margin: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_marginBlock
+     */
+    _get_marginBlock(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_marginBlock
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_marginBlock(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_marginBlock
+     * @ntsSet _set_marginBlock
+     */
+    marginBlock: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_marginBlockEnd
+     */
+    _get_marginBlockEnd(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_marginBlockEnd
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_marginBlockEnd(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_marginBlockEnd
+     * @ntsSet _set_marginBlockEnd
+     */
+    marginBlockEnd: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_marginBlockStart
+     */
+    _get_marginBlockStart(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_marginBlockStart
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_marginBlockStart(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_marginBlockStart
+     * @ntsSet _set_marginBlockStart
+     */
+    marginBlockStart: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_marginBottom
+     */
+    _get_marginBottom(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_marginBottom
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_marginBottom(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_marginBottom
+     * @ntsSet _set_marginBottom
+     */
+    marginBottom: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_marginInline
+     */
+    _get_marginInline(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_marginInline
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_marginInline(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_marginInline
+     * @ntsSet _set_marginInline
+     */
+    marginInline: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_marginInlineEnd
+     */
+    _get_marginInlineEnd(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_marginInlineEnd
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_marginInlineEnd(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_marginInlineEnd
+     * @ntsSet _set_marginInlineEnd
+     */
+    marginInlineEnd: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_marginInlineStart
+     */
+    _get_marginInlineStart(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_marginInlineStart
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_marginInlineStart(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_marginInlineStart
+     * @ntsSet _set_marginInlineStart
+     */
+    marginInlineStart: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_marginLeft
+     */
+    _get_marginLeft(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_marginLeft
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_marginLeft(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_marginLeft
+     * @ntsSet _set_marginLeft
+     */
+    marginLeft: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_marginRight
+     */
+    _get_marginRight(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_marginRight
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_marginRight(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_marginRight
+     * @ntsSet _set_marginRight
+     */
+    marginRight: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_marginTop
+     */
+    _get_marginTop(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_marginTop
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_marginTop(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_marginTop
+     * @ntsSet _set_marginTop
+     */
+    marginTop: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_marker
+     */
+    _get_marker(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_marker
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_marker(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_marker
+     * @ntsSet _set_marker
+     */
+    marker: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_markerEnd
+     */
+    _get_markerEnd(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_markerEnd
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_markerEnd(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_markerEnd
+     * @ntsSet _set_markerEnd
+     */
+    markerEnd: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_markerMid
+     */
+    _get_markerMid(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_markerMid
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_markerMid(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_markerMid
+     * @ntsSet _set_markerMid
+     */
+    markerMid: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_markerStart
+     */
+    _get_markerStart(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_markerStart
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_markerStart(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_markerStart
+     * @ntsSet _set_markerStart
+     */
+    markerStart: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_mask
+     */
+    _get_mask(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_mask
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_mask(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_mask
+     * @ntsSet _set_mask
+     */
+    mask: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_maskClip
+     */
+    _get_maskClip(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_maskClip
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_maskClip(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_maskClip
+     * @ntsSet _set_maskClip
+     */
+    maskClip: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_maskComposite
+     */
+    _get_maskComposite(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_maskComposite
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_maskComposite(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_maskComposite
+     * @ntsSet _set_maskComposite
+     */
+    maskComposite: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_maskImage
+     */
+    _get_maskImage(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_maskImage
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_maskImage(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_maskImage
+     * @ntsSet _set_maskImage
+     */
+    maskImage: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_maskMode
+     */
+    _get_maskMode(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_maskMode
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_maskMode(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_maskMode
+     * @ntsSet _set_maskMode
+     */
+    maskMode: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_maskOrigin
+     */
+    _get_maskOrigin(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_maskOrigin
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_maskOrigin(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_maskOrigin
+     * @ntsSet _set_maskOrigin
+     */
+    maskOrigin: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_maskPosition
+     */
+    _get_maskPosition(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_maskPosition
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_maskPosition(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_maskPosition
+     * @ntsSet _set_maskPosition
+     */
+    maskPosition: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_maskRepeat
+     */
+    _get_maskRepeat(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_maskRepeat
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_maskRepeat(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_maskRepeat
+     * @ntsSet _set_maskRepeat
+     */
+    maskRepeat: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_maskSize
+     */
+    _get_maskSize(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_maskSize
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_maskSize(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_maskSize
+     * @ntsSet _set_maskSize
+     */
+    maskSize: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_maskType
+     */
+    _get_maskType(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_maskType
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_maskType(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_maskType
+     * @ntsSet _set_maskType
+     */
+    maskType: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_mathDepth
+     */
+    _get_mathDepth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_mathDepth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_mathDepth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_mathDepth
+     * @ntsSet _set_mathDepth
+     */
+    mathDepth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_mathShift
+     */
+    _get_mathShift(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_mathShift
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_mathShift(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_mathShift
+     * @ntsSet _set_mathShift
+     */
+    mathShift: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_mathStyle
+     */
+    _get_mathStyle(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_mathStyle
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_mathStyle(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_mathStyle
+     * @ntsSet _set_mathStyle
+     */
+    mathStyle: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_maxBlockSize
+     */
+    _get_maxBlockSize(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_maxBlockSize
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_maxBlockSize(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_maxBlockSize
+     * @ntsSet _set_maxBlockSize
+     */
+    maxBlockSize: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_maxHeight
+     */
+    _get_maxHeight(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_maxHeight
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_maxHeight(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_maxHeight
+     * @ntsSet _set_maxHeight
+     */
+    maxHeight: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_maxInlineSize
+     */
+    _get_maxInlineSize(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_maxInlineSize
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_maxInlineSize(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_maxInlineSize
+     * @ntsSet _set_maxInlineSize
+     */
+    maxInlineSize: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_maxWidth
+     */
+    _get_maxWidth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_maxWidth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_maxWidth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_maxWidth
+     * @ntsSet _set_maxWidth
+     */
+    maxWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_minBlockSize
+     */
+    _get_minBlockSize(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_minBlockSize
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_minBlockSize(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_minBlockSize
+     * @ntsSet _set_minBlockSize
+     */
+    minBlockSize: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_minHeight
+     */
+    _get_minHeight(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_minHeight
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_minHeight(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_minHeight
+     * @ntsSet _set_minHeight
+     */
+    minHeight: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_minInlineSize
+     */
+    _get_minInlineSize(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_minInlineSize
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_minInlineSize(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_minInlineSize
+     * @ntsSet _set_minInlineSize
+     */
+    minInlineSize: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_minWidth
+     */
+    _get_minWidth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_minWidth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_minWidth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_minWidth
+     * @ntsSet _set_minWidth
+     */
+    minWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_mixBlendMode
+     */
+    _get_mixBlendMode(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_mixBlendMode
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_mixBlendMode(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_mixBlendMode
+     * @ntsSet _set_mixBlendMode
+     */
+    mixBlendMode: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_objectFit
+     */
+    _get_objectFit(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_objectFit
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_objectFit(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_objectFit
+     * @ntsSet _set_objectFit
+     */
+    objectFit: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_objectPosition
+     */
+    _get_objectPosition(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_objectPosition
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_objectPosition(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_objectPosition
+     * @ntsSet _set_objectPosition
+     */
+    objectPosition: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_offset
+     */
+    _get_offset(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_offset
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_offset(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_offset
+     * @ntsSet _set_offset
+     */
+    offset: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_offsetAnchor
+     */
+    _get_offsetAnchor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_offsetAnchor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_offsetAnchor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_offsetAnchor
+     * @ntsSet _set_offsetAnchor
+     */
+    offsetAnchor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_offsetDistance
+     */
+    _get_offsetDistance(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_offsetDistance
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_offsetDistance(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_offsetDistance
+     * @ntsSet _set_offsetDistance
+     */
+    offsetDistance: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_offsetPath
+     */
+    _get_offsetPath(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_offsetPath
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_offsetPath(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_offsetPath
+     * @ntsSet _set_offsetPath
+     */
+    offsetPath: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_offsetPosition
+     */
+    _get_offsetPosition(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_offsetPosition
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_offsetPosition(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_offsetPosition
+     * @ntsSet _set_offsetPosition
+     */
+    offsetPosition: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_offsetRotate
+     */
+    _get_offsetRotate(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_offsetRotate
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_offsetRotate(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_offsetRotate
+     * @ntsSet _set_offsetRotate
+     */
+    offsetRotate: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_opacity
+     */
+    _get_opacity(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_opacity
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_opacity(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_opacity
+     * @ntsSet _set_opacity
+     */
+    opacity: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_order
+     */
+    _get_order(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_order
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_order(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_order
+     * @ntsSet _set_order
+     */
+    order: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_orphans
+     */
+    _get_orphans(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_orphans
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_orphans(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_orphans
+     * @ntsSet _set_orphans
+     */
+    orphans: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_outline
+     */
+    _get_outline(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_outline
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_outline(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_outline
+     * @ntsSet _set_outline
+     */
+    outline: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_outlineColor
+     */
+    _get_outlineColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_outlineColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_outlineColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_outlineColor
+     * @ntsSet _set_outlineColor
+     */
+    outlineColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_outlineOffset
+     */
+    _get_outlineOffset(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_outlineOffset
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_outlineOffset(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_outlineOffset
+     * @ntsSet _set_outlineOffset
+     */
+    outlineOffset: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_outlineStyle
+     */
+    _get_outlineStyle(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_outlineStyle
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_outlineStyle(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_outlineStyle
+     * @ntsSet _set_outlineStyle
+     */
+    outlineStyle: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_outlineWidth
+     */
+    _get_outlineWidth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_outlineWidth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_outlineWidth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_outlineWidth
+     * @ntsSet _set_outlineWidth
+     */
+    outlineWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_overflow
+     */
+    _get_overflow(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_overflow
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_overflow(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_overflow
+     * @ntsSet _set_overflow
+     */
+    overflow: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_overflowAnchor
+     */
+    _get_overflowAnchor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_overflowAnchor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_overflowAnchor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_overflowAnchor
+     * @ntsSet _set_overflowAnchor
+     */
+    overflowAnchor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_overflowBlock
+     */
+    _get_overflowBlock(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_overflowBlock
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_overflowBlock(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_overflowBlock
+     * @ntsSet _set_overflowBlock
+     */
+    overflowBlock: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_overflowClipMargin
+     */
+    _get_overflowClipMargin(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_overflowClipMargin
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_overflowClipMargin(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_overflowClipMargin
+     * @ntsSet _set_overflowClipMargin
+     */
+    overflowClipMargin: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_overflowInline
+     */
+    _get_overflowInline(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_overflowInline
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_overflowInline(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_overflowInline
+     * @ntsSet _set_overflowInline
+     */
+    overflowInline: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_overflowWrap
+     */
+    _get_overflowWrap(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_overflowWrap
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_overflowWrap(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_overflowWrap
+     * @ntsSet _set_overflowWrap
+     */
+    overflowWrap: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_overflowX
+     */
+    _get_overflowX(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_overflowX
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_overflowX(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_overflowX
+     * @ntsSet _set_overflowX
+     */
+    overflowX: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_overflowY
+     */
+    _get_overflowY(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_overflowY
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_overflowY(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_overflowY
+     * @ntsSet _set_overflowY
+     */
+    overflowY: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_overscrollBehavior
+     */
+    _get_overscrollBehavior(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_overscrollBehavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_overscrollBehavior(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_overscrollBehavior
+     * @ntsSet _set_overscrollBehavior
+     */
+    overscrollBehavior: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_overscrollBehaviorBlock
+     */
+    _get_overscrollBehaviorBlock(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_overscrollBehaviorBlock
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_overscrollBehaviorBlock(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_overscrollBehaviorBlock
+     * @ntsSet _set_overscrollBehaviorBlock
+     */
+    overscrollBehaviorBlock: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_overscrollBehaviorInline
+     */
+    _get_overscrollBehaviorInline(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_overscrollBehaviorInline
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_overscrollBehaviorInline(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_overscrollBehaviorInline
+     * @ntsSet _set_overscrollBehaviorInline
+     */
+    overscrollBehaviorInline: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_overscrollBehaviorX
+     */
+    _get_overscrollBehaviorX(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_overscrollBehaviorX
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_overscrollBehaviorX(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_overscrollBehaviorX
+     * @ntsSet _set_overscrollBehaviorX
+     */
+    overscrollBehaviorX: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_overscrollBehaviorY
+     */
+    _get_overscrollBehaviorY(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_overscrollBehaviorY
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_overscrollBehaviorY(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_overscrollBehaviorY
+     * @ntsSet _set_overscrollBehaviorY
+     */
+    overscrollBehaviorY: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_padding
+     */
+    _get_padding(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_padding
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_padding(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_padding
+     * @ntsSet _set_padding
+     */
+    padding: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_paddingBlock
+     */
+    _get_paddingBlock(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_paddingBlock
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_paddingBlock(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_paddingBlock
+     * @ntsSet _set_paddingBlock
+     */
+    paddingBlock: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_paddingBlockEnd
+     */
+    _get_paddingBlockEnd(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_paddingBlockEnd
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_paddingBlockEnd(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_paddingBlockEnd
+     * @ntsSet _set_paddingBlockEnd
+     */
+    paddingBlockEnd: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_paddingBlockStart
+     */
+    _get_paddingBlockStart(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_paddingBlockStart
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_paddingBlockStart(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_paddingBlockStart
+     * @ntsSet _set_paddingBlockStart
+     */
+    paddingBlockStart: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_paddingBottom
+     */
+    _get_paddingBottom(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_paddingBottom
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_paddingBottom(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_paddingBottom
+     * @ntsSet _set_paddingBottom
+     */
+    paddingBottom: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_paddingInline
+     */
+    _get_paddingInline(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_paddingInline
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_paddingInline(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_paddingInline
+     * @ntsSet _set_paddingInline
+     */
+    paddingInline: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_paddingInlineEnd
+     */
+    _get_paddingInlineEnd(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_paddingInlineEnd
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_paddingInlineEnd(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_paddingInlineEnd
+     * @ntsSet _set_paddingInlineEnd
+     */
+    paddingInlineEnd: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_paddingInlineStart
+     */
+    _get_paddingInlineStart(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_paddingInlineStart
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_paddingInlineStart(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_paddingInlineStart
+     * @ntsSet _set_paddingInlineStart
+     */
+    paddingInlineStart: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_paddingLeft
+     */
+    _get_paddingLeft(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_paddingLeft
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_paddingLeft(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_paddingLeft
+     * @ntsSet _set_paddingLeft
+     */
+    paddingLeft: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_paddingRight
+     */
+    _get_paddingRight(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_paddingRight
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_paddingRight(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_paddingRight
+     * @ntsSet _set_paddingRight
+     */
+    paddingRight: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_paddingTop
+     */
+    _get_paddingTop(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_paddingTop
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_paddingTop(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_paddingTop
+     * @ntsSet _set_paddingTop
+     */
+    paddingTop: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_page
+     */
+    _get_page(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_page
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_page(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_page
+     * @ntsSet _set_page
+     */
+    page: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_pageBreakAfter
+     */
+    _get_pageBreakAfter(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_pageBreakAfter
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_pageBreakAfter(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_pageBreakAfter
+     * @ntsSet _set_pageBreakAfter
+     */
+    pageBreakAfter: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_pageBreakBefore
+     */
+    _get_pageBreakBefore(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_pageBreakBefore
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_pageBreakBefore(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_pageBreakBefore
+     * @ntsSet _set_pageBreakBefore
+     */
+    pageBreakBefore: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_pageBreakInside
+     */
+    _get_pageBreakInside(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_pageBreakInside
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_pageBreakInside(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_pageBreakInside
+     * @ntsSet _set_pageBreakInside
+     */
+    pageBreakInside: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_paintOrder
+     */
+    _get_paintOrder(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_paintOrder
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_paintOrder(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_paintOrder
+     * @ntsSet _set_paintOrder
+     */
+    paintOrder: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_perspective
+     */
+    _get_perspective(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_perspective
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_perspective(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_perspective
+     * @ntsSet _set_perspective
+     */
+    perspective: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_perspectiveOrigin
+     */
+    _get_perspectiveOrigin(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_perspectiveOrigin
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_perspectiveOrigin(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_perspectiveOrigin
+     * @ntsSet _set_perspectiveOrigin
+     */
+    perspectiveOrigin: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_placeContent
+     */
+    _get_placeContent(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_placeContent
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_placeContent(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_placeContent
+     * @ntsSet _set_placeContent
+     */
+    placeContent: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_placeItems
+     */
+    _get_placeItems(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_placeItems
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_placeItems(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_placeItems
+     * @ntsSet _set_placeItems
+     */
+    placeItems: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_placeSelf
+     */
+    _get_placeSelf(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_placeSelf
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_placeSelf(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_placeSelf
+     * @ntsSet _set_placeSelf
+     */
+    placeSelf: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_pointerEvents
+     */
+    _get_pointerEvents(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_pointerEvents
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_pointerEvents(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_pointerEvents
+     * @ntsSet _set_pointerEvents
+     */
+    pointerEvents: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_position
+     */
+    _get_position(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_position
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_position(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_position
+     * @ntsSet _set_position
+     */
+    position: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_positionAnchor
+     */
+    _get_positionAnchor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_positionAnchor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_positionAnchor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_positionAnchor
+     * @ntsSet _set_positionAnchor
+     */
+    positionAnchor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_positionArea
+     */
+    _get_positionArea(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_positionArea
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_positionArea(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_positionArea
+     * @ntsSet _set_positionArea
+     */
+    positionArea: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_positionTry
+     */
+    _get_positionTry(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_positionTry
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_positionTry(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_positionTry
+     * @ntsSet _set_positionTry
+     */
+    positionTry: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_positionTryFallbacks
+     */
+    _get_positionTryFallbacks(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_positionTryFallbacks
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_positionTryFallbacks(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_positionTryFallbacks
+     * @ntsSet _set_positionTryFallbacks
+     */
+    positionTryFallbacks: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_positionTryOrder
+     */
+    _get_positionTryOrder(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_positionTryOrder
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_positionTryOrder(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_positionTryOrder
+     * @ntsSet _set_positionTryOrder
+     */
+    positionTryOrder: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_positionVisibility
+     */
+    _get_positionVisibility(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_positionVisibility
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_positionVisibility(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_positionVisibility
+     * @ntsSet _set_positionVisibility
+     */
+    positionVisibility: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_printColorAdjust
+     */
+    _get_printColorAdjust(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_printColorAdjust
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_printColorAdjust(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_printColorAdjust
+     * @ntsSet _set_printColorAdjust
+     */
+    printColorAdjust: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_quotes
+     */
+    _get_quotes(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_quotes
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_quotes(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_quotes
+     * @ntsSet _set_quotes
+     */
+    quotes: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_r
+     */
+    _get_r(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_r
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_r(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_r
+     * @ntsSet _set_r
+     */
+    r: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_resize
+     */
+    _get_resize(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_resize
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_resize(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_resize
+     * @ntsSet _set_resize
+     */
+    resize: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_right
+     */
+    _get_right(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_right
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_right(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_right
+     * @ntsSet _set_right
+     */
+    right: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_rotate
+     */
+    _get_rotate(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_rotate
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_rotate(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_rotate
+     * @ntsSet _set_rotate
+     */
+    rotate: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_rowGap
+     */
+    _get_rowGap(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_rowGap
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_rowGap(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_rowGap
+     * @ntsSet _set_rowGap
+     */
+    rowGap: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_rubyAlign
+     */
+    _get_rubyAlign(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_rubyAlign
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_rubyAlign(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_rubyAlign
+     * @ntsSet _set_rubyAlign
+     */
+    rubyAlign: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_rubyPosition
+     */
+    _get_rubyPosition(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_rubyPosition
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_rubyPosition(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_rubyPosition
+     * @ntsSet _set_rubyPosition
+     */
+    rubyPosition: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_rx
+     */
+    _get_rx(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_rx
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_rx(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_rx
+     * @ntsSet _set_rx
+     */
+    rx: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_ry
+     */
+    _get_ry(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_ry
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_ry(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_ry
+     * @ntsSet _set_ry
+     */
+    ry: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scale
+     */
+    _get_scale(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scale
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scale(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scale
+     * @ntsSet _set_scale
+     */
+    scale: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollBehavior
+     */
+    _get_scrollBehavior(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollBehavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollBehavior(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollBehavior
+     * @ntsSet _set_scrollBehavior
+     */
+    scrollBehavior: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollMargin
+     */
+    _get_scrollMargin(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollMargin
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollMargin(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollMargin
+     * @ntsSet _set_scrollMargin
+     */
+    scrollMargin: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollMarginBlock
+     */
+    _get_scrollMarginBlock(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollMarginBlock
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollMarginBlock(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollMarginBlock
+     * @ntsSet _set_scrollMarginBlock
+     */
+    scrollMarginBlock: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollMarginBlockEnd
+     */
+    _get_scrollMarginBlockEnd(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollMarginBlockEnd
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollMarginBlockEnd(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollMarginBlockEnd
+     * @ntsSet _set_scrollMarginBlockEnd
+     */
+    scrollMarginBlockEnd: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollMarginBlockStart
+     */
+    _get_scrollMarginBlockStart(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollMarginBlockStart
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollMarginBlockStart(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollMarginBlockStart
+     * @ntsSet _set_scrollMarginBlockStart
+     */
+    scrollMarginBlockStart: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollMarginBottom
+     */
+    _get_scrollMarginBottom(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollMarginBottom
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollMarginBottom(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollMarginBottom
+     * @ntsSet _set_scrollMarginBottom
+     */
+    scrollMarginBottom: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollMarginInline
+     */
+    _get_scrollMarginInline(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollMarginInline
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollMarginInline(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollMarginInline
+     * @ntsSet _set_scrollMarginInline
+     */
+    scrollMarginInline: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollMarginInlineEnd
+     */
+    _get_scrollMarginInlineEnd(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollMarginInlineEnd
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollMarginInlineEnd(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollMarginInlineEnd
+     * @ntsSet _set_scrollMarginInlineEnd
+     */
+    scrollMarginInlineEnd: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollMarginInlineStart
+     */
+    _get_scrollMarginInlineStart(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollMarginInlineStart
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollMarginInlineStart(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollMarginInlineStart
+     * @ntsSet _set_scrollMarginInlineStart
+     */
+    scrollMarginInlineStart: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollMarginLeft
+     */
+    _get_scrollMarginLeft(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollMarginLeft
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollMarginLeft(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollMarginLeft
+     * @ntsSet _set_scrollMarginLeft
+     */
+    scrollMarginLeft: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollMarginRight
+     */
+    _get_scrollMarginRight(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollMarginRight
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollMarginRight(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollMarginRight
+     * @ntsSet _set_scrollMarginRight
+     */
+    scrollMarginRight: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollMarginTop
+     */
+    _get_scrollMarginTop(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollMarginTop
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollMarginTop(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollMarginTop
+     * @ntsSet _set_scrollMarginTop
+     */
+    scrollMarginTop: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollPadding
+     */
+    _get_scrollPadding(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollPadding
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollPadding(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollPadding
+     * @ntsSet _set_scrollPadding
+     */
+    scrollPadding: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollPaddingBlock
+     */
+    _get_scrollPaddingBlock(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollPaddingBlock
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollPaddingBlock(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollPaddingBlock
+     * @ntsSet _set_scrollPaddingBlock
+     */
+    scrollPaddingBlock: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollPaddingBlockEnd
+     */
+    _get_scrollPaddingBlockEnd(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollPaddingBlockEnd
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollPaddingBlockEnd(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollPaddingBlockEnd
+     * @ntsSet _set_scrollPaddingBlockEnd
+     */
+    scrollPaddingBlockEnd: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollPaddingBlockStart
+     */
+    _get_scrollPaddingBlockStart(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollPaddingBlockStart
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollPaddingBlockStart(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollPaddingBlockStart
+     * @ntsSet _set_scrollPaddingBlockStart
+     */
+    scrollPaddingBlockStart: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollPaddingBottom
+     */
+    _get_scrollPaddingBottom(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollPaddingBottom
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollPaddingBottom(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollPaddingBottom
+     * @ntsSet _set_scrollPaddingBottom
+     */
+    scrollPaddingBottom: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollPaddingInline
+     */
+    _get_scrollPaddingInline(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollPaddingInline
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollPaddingInline(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollPaddingInline
+     * @ntsSet _set_scrollPaddingInline
+     */
+    scrollPaddingInline: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollPaddingInlineEnd
+     */
+    _get_scrollPaddingInlineEnd(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollPaddingInlineEnd
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollPaddingInlineEnd(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollPaddingInlineEnd
+     * @ntsSet _set_scrollPaddingInlineEnd
+     */
+    scrollPaddingInlineEnd: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollPaddingInlineStart
+     */
+    _get_scrollPaddingInlineStart(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollPaddingInlineStart
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollPaddingInlineStart(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollPaddingInlineStart
+     * @ntsSet _set_scrollPaddingInlineStart
+     */
+    scrollPaddingInlineStart: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollPaddingLeft
+     */
+    _get_scrollPaddingLeft(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollPaddingLeft
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollPaddingLeft(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollPaddingLeft
+     * @ntsSet _set_scrollPaddingLeft
+     */
+    scrollPaddingLeft: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollPaddingRight
+     */
+    _get_scrollPaddingRight(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollPaddingRight
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollPaddingRight(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollPaddingRight
+     * @ntsSet _set_scrollPaddingRight
+     */
+    scrollPaddingRight: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollPaddingTop
+     */
+    _get_scrollPaddingTop(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollPaddingTop
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollPaddingTop(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollPaddingTop
+     * @ntsSet _set_scrollPaddingTop
+     */
+    scrollPaddingTop: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollSnapAlign
+     */
+    _get_scrollSnapAlign(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollSnapAlign
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollSnapAlign(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollSnapAlign
+     * @ntsSet _set_scrollSnapAlign
+     */
+    scrollSnapAlign: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollSnapStop
+     */
+    _get_scrollSnapStop(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollSnapStop
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollSnapStop(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollSnapStop
+     * @ntsSet _set_scrollSnapStop
+     */
+    scrollSnapStop: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollSnapType
+     */
+    _get_scrollSnapType(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollSnapType
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollSnapType(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollSnapType
+     * @ntsSet _set_scrollSnapType
+     */
+    scrollSnapType: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollTimeline
+     */
+    _get_scrollTimeline(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollTimeline
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollTimeline(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollTimeline
+     * @ntsSet _set_scrollTimeline
+     */
+    scrollTimeline: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollTimelineAxis
+     */
+    _get_scrollTimelineAxis(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollTimelineAxis
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollTimelineAxis(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollTimelineAxis
+     * @ntsSet _set_scrollTimelineAxis
+     */
+    scrollTimelineAxis: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollTimelineName
+     */
+    _get_scrollTimelineName(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollTimelineName
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollTimelineName(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollTimelineName
+     * @ntsSet _set_scrollTimelineName
+     */
+    scrollTimelineName: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollbarColor
+     */
+    _get_scrollbarColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollbarColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollbarColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollbarColor
+     * @ntsSet _set_scrollbarColor
+     */
+    scrollbarColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollbarGutter
+     */
+    _get_scrollbarGutter(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollbarGutter
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollbarGutter(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollbarGutter
+     * @ntsSet _set_scrollbarGutter
+     */
+    scrollbarGutter: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_scrollbarWidth
+     */
+    _get_scrollbarWidth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_scrollbarWidth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_scrollbarWidth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_scrollbarWidth
+     * @ntsSet _set_scrollbarWidth
+     */
+    scrollbarWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_shapeImageThreshold
+     */
+    _get_shapeImageThreshold(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_shapeImageThreshold
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_shapeImageThreshold(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_shapeImageThreshold
+     * @ntsSet _set_shapeImageThreshold
+     */
+    shapeImageThreshold: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_shapeMargin
+     */
+    _get_shapeMargin(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_shapeMargin
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_shapeMargin(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_shapeMargin
+     * @ntsSet _set_shapeMargin
+     */
+    shapeMargin: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_shapeOutside
+     */
+    _get_shapeOutside(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_shapeOutside
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_shapeOutside(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_shapeOutside
+     * @ntsSet _set_shapeOutside
+     */
+    shapeOutside: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_shapeRendering
+     */
+    _get_shapeRendering(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_shapeRendering
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_shapeRendering(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_shapeRendering
+     * @ntsSet _set_shapeRendering
+     */
+    shapeRendering: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_stopColor
+     */
+    _get_stopColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_stopColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_stopColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_stopColor
+     * @ntsSet _set_stopColor
+     */
+    stopColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_stopOpacity
+     */
+    _get_stopOpacity(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_stopOpacity
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_stopOpacity(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_stopOpacity
+     * @ntsSet _set_stopOpacity
+     */
+    stopOpacity: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_stroke
+     */
+    _get_stroke(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_stroke
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_stroke(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_stroke
+     * @ntsSet _set_stroke
+     */
+    stroke: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_strokeDasharray
+     */
+    _get_strokeDasharray(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_strokeDasharray
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_strokeDasharray(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_strokeDasharray
+     * @ntsSet _set_strokeDasharray
+     */
+    strokeDasharray: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_strokeDashoffset
+     */
+    _get_strokeDashoffset(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_strokeDashoffset
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_strokeDashoffset(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_strokeDashoffset
+     * @ntsSet _set_strokeDashoffset
+     */
+    strokeDashoffset: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_strokeLinecap
+     */
+    _get_strokeLinecap(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_strokeLinecap
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_strokeLinecap(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_strokeLinecap
+     * @ntsSet _set_strokeLinecap
+     */
+    strokeLinecap: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_strokeLinejoin
+     */
+    _get_strokeLinejoin(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_strokeLinejoin
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_strokeLinejoin(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_strokeLinejoin
+     * @ntsSet _set_strokeLinejoin
+     */
+    strokeLinejoin: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_strokeMiterlimit
+     */
+    _get_strokeMiterlimit(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_strokeMiterlimit
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_strokeMiterlimit(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_strokeMiterlimit
+     * @ntsSet _set_strokeMiterlimit
+     */
+    strokeMiterlimit: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_strokeOpacity
+     */
+    _get_strokeOpacity(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_strokeOpacity
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_strokeOpacity(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_strokeOpacity
+     * @ntsSet _set_strokeOpacity
+     */
+    strokeOpacity: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_strokeWidth
+     */
+    _get_strokeWidth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_strokeWidth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_strokeWidth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_strokeWidth
+     * @ntsSet _set_strokeWidth
+     */
+    strokeWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_tabSize
+     */
+    _get_tabSize(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_tabSize
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_tabSize(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_tabSize
+     * @ntsSet _set_tabSize
+     */
+    tabSize: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_tableLayout
+     */
+    _get_tableLayout(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_tableLayout
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_tableLayout(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_tableLayout
+     * @ntsSet _set_tableLayout
+     */
+    tableLayout: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textAlign
+     */
+    _get_textAlign(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textAlign
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textAlign(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textAlign
+     * @ntsSet _set_textAlign
+     */
+    textAlign: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textAlignLast
+     */
+    _get_textAlignLast(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textAlignLast
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textAlignLast(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textAlignLast
+     * @ntsSet _set_textAlignLast
+     */
+    textAlignLast: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textAnchor
+     */
+    _get_textAnchor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textAnchor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textAnchor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textAnchor
+     * @ntsSet _set_textAnchor
+     */
+    textAnchor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textAutospace
+     */
+    _get_textAutospace(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textAutospace
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textAutospace(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textAutospace
+     * @ntsSet _set_textAutospace
+     */
+    textAutospace: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textBox
+     */
+    _get_textBox(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textBox
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textBox(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textBox
+     * @ntsSet _set_textBox
+     */
+    textBox: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textBoxEdge
+     */
+    _get_textBoxEdge(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textBoxEdge
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textBoxEdge(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textBoxEdge
+     * @ntsSet _set_textBoxEdge
+     */
+    textBoxEdge: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textBoxTrim
+     */
+    _get_textBoxTrim(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textBoxTrim
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textBoxTrim(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textBoxTrim
+     * @ntsSet _set_textBoxTrim
+     */
+    textBoxTrim: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textCombineUpright
+     */
+    _get_textCombineUpright(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textCombineUpright
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textCombineUpright(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textCombineUpright
+     * @ntsSet _set_textCombineUpright
+     */
+    textCombineUpright: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textDecoration
+     */
+    _get_textDecoration(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textDecoration
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textDecoration(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textDecoration
+     * @ntsSet _set_textDecoration
+     */
+    textDecoration: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textDecorationColor
+     */
+    _get_textDecorationColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textDecorationColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textDecorationColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textDecorationColor
+     * @ntsSet _set_textDecorationColor
+     */
+    textDecorationColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textDecorationLine
+     */
+    _get_textDecorationLine(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textDecorationLine
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textDecorationLine(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textDecorationLine
+     * @ntsSet _set_textDecorationLine
+     */
+    textDecorationLine: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textDecorationSkipInk
+     */
+    _get_textDecorationSkipInk(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textDecorationSkipInk
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textDecorationSkipInk(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textDecorationSkipInk
+     * @ntsSet _set_textDecorationSkipInk
+     */
+    textDecorationSkipInk: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textDecorationStyle
+     */
+    _get_textDecorationStyle(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textDecorationStyle
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textDecorationStyle(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textDecorationStyle
+     * @ntsSet _set_textDecorationStyle
+     */
+    textDecorationStyle: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textDecorationThickness
+     */
+    _get_textDecorationThickness(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textDecorationThickness
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textDecorationThickness(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textDecorationThickness
+     * @ntsSet _set_textDecorationThickness
+     */
+    textDecorationThickness: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textEmphasis
+     */
+    _get_textEmphasis(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textEmphasis
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textEmphasis(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textEmphasis
+     * @ntsSet _set_textEmphasis
+     */
+    textEmphasis: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textEmphasisColor
+     */
+    _get_textEmphasisColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textEmphasisColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textEmphasisColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textEmphasisColor
+     * @ntsSet _set_textEmphasisColor
+     */
+    textEmphasisColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textEmphasisPosition
+     */
+    _get_textEmphasisPosition(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textEmphasisPosition
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textEmphasisPosition(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textEmphasisPosition
+     * @ntsSet _set_textEmphasisPosition
+     */
+    textEmphasisPosition: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textEmphasisStyle
+     */
+    _get_textEmphasisStyle(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textEmphasisStyle
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textEmphasisStyle(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textEmphasisStyle
+     * @ntsSet _set_textEmphasisStyle
+     */
+    textEmphasisStyle: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textIndent
+     */
+    _get_textIndent(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textIndent
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textIndent(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textIndent
+     * @ntsSet _set_textIndent
+     */
+    textIndent: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textJustify
+     */
+    _get_textJustify(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textJustify
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textJustify(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textJustify
+     * @ntsSet _set_textJustify
+     */
+    textJustify: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textOrientation
+     */
+    _get_textOrientation(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textOrientation
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textOrientation(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textOrientation
+     * @ntsSet _set_textOrientation
+     */
+    textOrientation: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textOverflow
+     */
+    _get_textOverflow(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textOverflow
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textOverflow(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textOverflow
+     * @ntsSet _set_textOverflow
+     */
+    textOverflow: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textRendering
+     */
+    _get_textRendering(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textRendering
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textRendering(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textRendering
+     * @ntsSet _set_textRendering
+     */
+    textRendering: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textShadow
+     */
+    _get_textShadow(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textShadow
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textShadow(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textShadow
+     * @ntsSet _set_textShadow
+     */
+    textShadow: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textTransform
+     */
+    _get_textTransform(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textTransform
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textTransform(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textTransform
+     * @ntsSet _set_textTransform
+     */
+    textTransform: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textUnderlineOffset
+     */
+    _get_textUnderlineOffset(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textUnderlineOffset
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textUnderlineOffset(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textUnderlineOffset
+     * @ntsSet _set_textUnderlineOffset
+     */
+    textUnderlineOffset: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textUnderlinePosition
+     */
+    _get_textUnderlinePosition(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textUnderlinePosition
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textUnderlinePosition(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textUnderlinePosition
+     * @ntsSet _set_textUnderlinePosition
+     */
+    textUnderlinePosition: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textWrap
+     */
+    _get_textWrap(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textWrap
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textWrap(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textWrap
+     * @ntsSet _set_textWrap
+     */
+    textWrap: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textWrapMode
+     */
+    _get_textWrapMode(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textWrapMode
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textWrapMode(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textWrapMode
+     * @ntsSet _set_textWrapMode
+     */
+    textWrapMode: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_textWrapStyle
+     */
+    _get_textWrapStyle(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_textWrapStyle
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textWrapStyle(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textWrapStyle
+     * @ntsSet _set_textWrapStyle
+     */
+    textWrapStyle: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_timelineScope
+     */
+    _get_timelineScope(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_timelineScope
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_timelineScope(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_timelineScope
+     * @ntsSet _set_timelineScope
+     */
+    timelineScope: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_top
+     */
+    _get_top(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_top
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_top(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_top
+     * @ntsSet _set_top
+     */
+    top: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_touchAction
+     */
+    _get_touchAction(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_touchAction
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_touchAction(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_touchAction
+     * @ntsSet _set_touchAction
+     */
+    touchAction: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_transform
+     */
+    _get_transform(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_transform
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_transform(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_transform
+     * @ntsSet _set_transform
+     */
+    transform: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_transformBox
+     */
+    _get_transformBox(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_transformBox
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_transformBox(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_transformBox
+     * @ntsSet _set_transformBox
+     */
+    transformBox: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_transformOrigin
+     */
+    _get_transformOrigin(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_transformOrigin
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_transformOrigin(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_transformOrigin
+     * @ntsSet _set_transformOrigin
+     */
+    transformOrigin: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_transformStyle
+     */
+    _get_transformStyle(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_transformStyle
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_transformStyle(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_transformStyle
+     * @ntsSet _set_transformStyle
+     */
+    transformStyle: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_transition
+     */
+    _get_transition(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_transition
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_transition(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_transition
+     * @ntsSet _set_transition
+     */
+    transition: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_transitionBehavior
+     */
+    _get_transitionBehavior(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_transitionBehavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_transitionBehavior(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_transitionBehavior
+     * @ntsSet _set_transitionBehavior
+     */
+    transitionBehavior: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_transitionDelay
+     */
+    _get_transitionDelay(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_transitionDelay
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_transitionDelay(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_transitionDelay
+     * @ntsSet _set_transitionDelay
+     */
+    transitionDelay: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_transitionDuration
+     */
+    _get_transitionDuration(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_transitionDuration
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_transitionDuration(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_transitionDuration
+     * @ntsSet _set_transitionDuration
+     */
+    transitionDuration: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_transitionProperty
+     */
+    _get_transitionProperty(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_transitionProperty
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_transitionProperty(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_transitionProperty
+     * @ntsSet _set_transitionProperty
+     */
+    transitionProperty: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_transitionTimingFunction
+     */
+    _get_transitionTimingFunction(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_transitionTimingFunction
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_transitionTimingFunction(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_transitionTimingFunction
+     * @ntsSet _set_transitionTimingFunction
+     */
+    transitionTimingFunction: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_translate
+     */
+    _get_translate(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_translate
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_translate(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_translate
+     * @ntsSet _set_translate
+     */
+    translate: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_unicodeBidi
+     */
+    _get_unicodeBidi(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_unicodeBidi
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_unicodeBidi(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_unicodeBidi
+     * @ntsSet _set_unicodeBidi
+     */
+    unicodeBidi: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_userSelect
+     */
+    _get_userSelect(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_userSelect
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_userSelect(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_userSelect
+     * @ntsSet _set_userSelect
+     */
+    userSelect: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_vectorEffect
+     */
+    _get_vectorEffect(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_vectorEffect
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_vectorEffect(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_vectorEffect
+     * @ntsSet _set_vectorEffect
+     */
+    vectorEffect: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_verticalAlign
+     */
+    _get_verticalAlign(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_verticalAlign
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_verticalAlign(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_verticalAlign
+     * @ntsSet _set_verticalAlign
+     */
+    verticalAlign: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_viewTimeline
+     */
+    _get_viewTimeline(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_viewTimeline
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_viewTimeline(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_viewTimeline
+     * @ntsSet _set_viewTimeline
+     */
+    viewTimeline: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_viewTimelineAxis
+     */
+    _get_viewTimelineAxis(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_viewTimelineAxis
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_viewTimelineAxis(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_viewTimelineAxis
+     * @ntsSet _set_viewTimelineAxis
+     */
+    viewTimelineAxis: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_viewTimelineInset
+     */
+    _get_viewTimelineInset(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_viewTimelineInset
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_viewTimelineInset(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_viewTimelineInset
+     * @ntsSet _set_viewTimelineInset
+     */
+    viewTimelineInset: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_viewTimelineName
+     */
+    _get_viewTimelineName(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_viewTimelineName
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_viewTimelineName(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_viewTimelineName
+     * @ntsSet _set_viewTimelineName
+     */
+    viewTimelineName: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_viewTransitionClass
+     */
+    _get_viewTransitionClass(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_viewTransitionClass
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_viewTransitionClass(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_viewTransitionClass
+     * @ntsSet _set_viewTransitionClass
+     */
+    viewTransitionClass: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_viewTransitionName
+     */
+    _get_viewTransitionName(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_viewTransitionName
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_viewTransitionName(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_viewTransitionName
+     * @ntsSet _set_viewTransitionName
+     */
+    viewTransitionName: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_visibility
+     */
+    _get_visibility(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_visibility
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_visibility(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_visibility
+     * @ntsSet _set_visibility
+     */
+    visibility: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitAlignContent
+     */
+    _get_webkitAlignContent(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitAlignContent
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitAlignContent(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitAlignContent
+     * @ntsSet _set_webkitAlignContent
+     */
+    webkitAlignContent: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitAlignItems
+     */
+    _get_webkitAlignItems(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitAlignItems
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitAlignItems(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitAlignItems
+     * @ntsSet _set_webkitAlignItems
+     */
+    webkitAlignItems: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitAlignSelf
+     */
+    _get_webkitAlignSelf(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitAlignSelf
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitAlignSelf(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitAlignSelf
+     * @ntsSet _set_webkitAlignSelf
+     */
+    webkitAlignSelf: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitAnimation
+     */
+    _get_webkitAnimation(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitAnimation
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitAnimation(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitAnimation
+     * @ntsSet _set_webkitAnimation
+     */
+    webkitAnimation: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitAnimationDelay
+     */
+    _get_webkitAnimationDelay(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitAnimationDelay
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitAnimationDelay(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitAnimationDelay
+     * @ntsSet _set_webkitAnimationDelay
+     */
+    webkitAnimationDelay: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitAnimationDirection
+     */
+    _get_webkitAnimationDirection(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitAnimationDirection
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitAnimationDirection(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitAnimationDirection
+     * @ntsSet _set_webkitAnimationDirection
+     */
+    webkitAnimationDirection: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitAnimationDuration
+     */
+    _get_webkitAnimationDuration(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitAnimationDuration
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitAnimationDuration(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitAnimationDuration
+     * @ntsSet _set_webkitAnimationDuration
+     */
+    webkitAnimationDuration: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitAnimationFillMode
+     */
+    _get_webkitAnimationFillMode(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitAnimationFillMode
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitAnimationFillMode(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitAnimationFillMode
+     * @ntsSet _set_webkitAnimationFillMode
+     */
+    webkitAnimationFillMode: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitAnimationIterationCount
+     */
+    _get_webkitAnimationIterationCount(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitAnimationIterationCount
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitAnimationIterationCount(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitAnimationIterationCount
+     * @ntsSet _set_webkitAnimationIterationCount
+     */
+    webkitAnimationIterationCount: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitAnimationName
+     */
+    _get_webkitAnimationName(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitAnimationName
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitAnimationName(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitAnimationName
+     * @ntsSet _set_webkitAnimationName
+     */
+    webkitAnimationName: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitAnimationPlayState
+     */
+    _get_webkitAnimationPlayState(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitAnimationPlayState
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitAnimationPlayState(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitAnimationPlayState
+     * @ntsSet _set_webkitAnimationPlayState
+     */
+    webkitAnimationPlayState: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitAnimationTimingFunction
+     */
+    _get_webkitAnimationTimingFunction(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitAnimationTimingFunction
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitAnimationTimingFunction(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitAnimationTimingFunction
+     * @ntsSet _set_webkitAnimationTimingFunction
+     */
+    webkitAnimationTimingFunction: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitAppearance
+     */
+    _get_webkitAppearance(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitAppearance
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitAppearance(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitAppearance
+     * @ntsSet _set_webkitAppearance
+     */
+    webkitAppearance: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitBackfaceVisibility
+     */
+    _get_webkitBackfaceVisibility(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitBackfaceVisibility
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitBackfaceVisibility(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitBackfaceVisibility
+     * @ntsSet _set_webkitBackfaceVisibility
+     */
+    webkitBackfaceVisibility: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitBackgroundClip
+     */
+    _get_webkitBackgroundClip(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitBackgroundClip
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitBackgroundClip(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitBackgroundClip
+     * @ntsSet _set_webkitBackgroundClip
+     */
+    webkitBackgroundClip: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitBackgroundOrigin
+     */
+    _get_webkitBackgroundOrigin(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitBackgroundOrigin
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitBackgroundOrigin(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitBackgroundOrigin
+     * @ntsSet _set_webkitBackgroundOrigin
+     */
+    webkitBackgroundOrigin: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitBackgroundSize
+     */
+    _get_webkitBackgroundSize(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitBackgroundSize
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitBackgroundSize(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitBackgroundSize
+     * @ntsSet _set_webkitBackgroundSize
+     */
+    webkitBackgroundSize: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitBorderBottomLeftRadius
+     */
+    _get_webkitBorderBottomLeftRadius(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitBorderBottomLeftRadius
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitBorderBottomLeftRadius(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitBorderBottomLeftRadius
+     * @ntsSet _set_webkitBorderBottomLeftRadius
+     */
+    webkitBorderBottomLeftRadius: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitBorderBottomRightRadius
+     */
+    _get_webkitBorderBottomRightRadius(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitBorderBottomRightRadius
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitBorderBottomRightRadius(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitBorderBottomRightRadius
+     * @ntsSet _set_webkitBorderBottomRightRadius
+     */
+    webkitBorderBottomRightRadius: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitBorderRadius
+     */
+    _get_webkitBorderRadius(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitBorderRadius
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitBorderRadius(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitBorderRadius
+     * @ntsSet _set_webkitBorderRadius
+     */
+    webkitBorderRadius: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitBorderTopLeftRadius
+     */
+    _get_webkitBorderTopLeftRadius(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitBorderTopLeftRadius
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitBorderTopLeftRadius(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitBorderTopLeftRadius
+     * @ntsSet _set_webkitBorderTopLeftRadius
+     */
+    webkitBorderTopLeftRadius: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitBorderTopRightRadius
+     */
+    _get_webkitBorderTopRightRadius(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitBorderTopRightRadius
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitBorderTopRightRadius(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitBorderTopRightRadius
+     * @ntsSet _set_webkitBorderTopRightRadius
+     */
+    webkitBorderTopRightRadius: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitBoxAlign
+     */
+    _get_webkitBoxAlign(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitBoxAlign
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitBoxAlign(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitBoxAlign
+     * @ntsSet _set_webkitBoxAlign
+     */
+    webkitBoxAlign: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitBoxFlex
+     */
+    _get_webkitBoxFlex(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitBoxFlex
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitBoxFlex(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitBoxFlex
+     * @ntsSet _set_webkitBoxFlex
+     */
+    webkitBoxFlex: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitBoxOrdinalGroup
+     */
+    _get_webkitBoxOrdinalGroup(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitBoxOrdinalGroup
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitBoxOrdinalGroup(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitBoxOrdinalGroup
+     * @ntsSet _set_webkitBoxOrdinalGroup
+     */
+    webkitBoxOrdinalGroup: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitBoxOrient
+     */
+    _get_webkitBoxOrient(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitBoxOrient
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitBoxOrient(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitBoxOrient
+     * @ntsSet _set_webkitBoxOrient
+     */
+    webkitBoxOrient: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitBoxPack
+     */
+    _get_webkitBoxPack(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitBoxPack
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitBoxPack(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitBoxPack
+     * @ntsSet _set_webkitBoxPack
+     */
+    webkitBoxPack: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitBoxShadow
+     */
+    _get_webkitBoxShadow(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitBoxShadow
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitBoxShadow(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitBoxShadow
+     * @ntsSet _set_webkitBoxShadow
+     */
+    webkitBoxShadow: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitBoxSizing
+     */
+    _get_webkitBoxSizing(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitBoxSizing
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitBoxSizing(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitBoxSizing
+     * @ntsSet _set_webkitBoxSizing
+     */
+    webkitBoxSizing: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitFilter
+     */
+    _get_webkitFilter(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitFilter
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitFilter(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitFilter
+     * @ntsSet _set_webkitFilter
+     */
+    webkitFilter: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitFlex
+     */
+    _get_webkitFlex(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitFlex
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitFlex(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitFlex
+     * @ntsSet _set_webkitFlex
+     */
+    webkitFlex: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitFlexBasis
+     */
+    _get_webkitFlexBasis(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitFlexBasis
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitFlexBasis(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitFlexBasis
+     * @ntsSet _set_webkitFlexBasis
+     */
+    webkitFlexBasis: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitFlexDirection
+     */
+    _get_webkitFlexDirection(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitFlexDirection
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitFlexDirection(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitFlexDirection
+     * @ntsSet _set_webkitFlexDirection
+     */
+    webkitFlexDirection: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitFlexFlow
+     */
+    _get_webkitFlexFlow(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitFlexFlow
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitFlexFlow(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitFlexFlow
+     * @ntsSet _set_webkitFlexFlow
+     */
+    webkitFlexFlow: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitFlexGrow
+     */
+    _get_webkitFlexGrow(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitFlexGrow
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitFlexGrow(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitFlexGrow
+     * @ntsSet _set_webkitFlexGrow
+     */
+    webkitFlexGrow: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitFlexShrink
+     */
+    _get_webkitFlexShrink(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitFlexShrink
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitFlexShrink(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitFlexShrink
+     * @ntsSet _set_webkitFlexShrink
+     */
+    webkitFlexShrink: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitFlexWrap
+     */
+    _get_webkitFlexWrap(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitFlexWrap
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitFlexWrap(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitFlexWrap
+     * @ntsSet _set_webkitFlexWrap
+     */
+    webkitFlexWrap: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitJustifyContent
+     */
+    _get_webkitJustifyContent(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitJustifyContent
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitJustifyContent(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitJustifyContent
+     * @ntsSet _set_webkitJustifyContent
+     */
+    webkitJustifyContent: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitLineClamp
+     */
+    _get_webkitLineClamp(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitLineClamp
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitLineClamp(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitLineClamp
+     * @ntsSet _set_webkitLineClamp
+     */
+    webkitLineClamp: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitMask
+     */
+    _get_webkitMask(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitMask
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitMask(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitMask
+     * @ntsSet _set_webkitMask
+     */
+    webkitMask: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitMaskBoxImage
+     */
+    _get_webkitMaskBoxImage(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitMaskBoxImage
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitMaskBoxImage(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitMaskBoxImage
+     * @ntsSet _set_webkitMaskBoxImage
+     */
+    webkitMaskBoxImage: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitMaskBoxImageOutset
+     */
+    _get_webkitMaskBoxImageOutset(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitMaskBoxImageOutset
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitMaskBoxImageOutset(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitMaskBoxImageOutset
+     * @ntsSet _set_webkitMaskBoxImageOutset
+     */
+    webkitMaskBoxImageOutset: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitMaskBoxImageRepeat
+     */
+    _get_webkitMaskBoxImageRepeat(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitMaskBoxImageRepeat
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitMaskBoxImageRepeat(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitMaskBoxImageRepeat
+     * @ntsSet _set_webkitMaskBoxImageRepeat
+     */
+    webkitMaskBoxImageRepeat: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitMaskBoxImageSlice
+     */
+    _get_webkitMaskBoxImageSlice(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitMaskBoxImageSlice
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitMaskBoxImageSlice(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitMaskBoxImageSlice
+     * @ntsSet _set_webkitMaskBoxImageSlice
+     */
+    webkitMaskBoxImageSlice: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitMaskBoxImageSource
+     */
+    _get_webkitMaskBoxImageSource(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitMaskBoxImageSource
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitMaskBoxImageSource(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitMaskBoxImageSource
+     * @ntsSet _set_webkitMaskBoxImageSource
+     */
+    webkitMaskBoxImageSource: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitMaskBoxImageWidth
+     */
+    _get_webkitMaskBoxImageWidth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitMaskBoxImageWidth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitMaskBoxImageWidth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitMaskBoxImageWidth
+     * @ntsSet _set_webkitMaskBoxImageWidth
+     */
+    webkitMaskBoxImageWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitMaskClip
+     */
+    _get_webkitMaskClip(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitMaskClip
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitMaskClip(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitMaskClip
+     * @ntsSet _set_webkitMaskClip
+     */
+    webkitMaskClip: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitMaskComposite
+     */
+    _get_webkitMaskComposite(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitMaskComposite
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitMaskComposite(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitMaskComposite
+     * @ntsSet _set_webkitMaskComposite
+     */
+    webkitMaskComposite: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitMaskImage
+     */
+    _get_webkitMaskImage(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitMaskImage
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitMaskImage(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitMaskImage
+     * @ntsSet _set_webkitMaskImage
+     */
+    webkitMaskImage: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitMaskOrigin
+     */
+    _get_webkitMaskOrigin(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitMaskOrigin
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitMaskOrigin(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitMaskOrigin
+     * @ntsSet _set_webkitMaskOrigin
+     */
+    webkitMaskOrigin: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitMaskPosition
+     */
+    _get_webkitMaskPosition(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitMaskPosition
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitMaskPosition(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitMaskPosition
+     * @ntsSet _set_webkitMaskPosition
+     */
+    webkitMaskPosition: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitMaskRepeat
+     */
+    _get_webkitMaskRepeat(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitMaskRepeat
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitMaskRepeat(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitMaskRepeat
+     * @ntsSet _set_webkitMaskRepeat
+     */
+    webkitMaskRepeat: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitMaskSize
+     */
+    _get_webkitMaskSize(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitMaskSize
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitMaskSize(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitMaskSize
+     * @ntsSet _set_webkitMaskSize
+     */
+    webkitMaskSize: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitOrder
+     */
+    _get_webkitOrder(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitOrder
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitOrder(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitOrder
+     * @ntsSet _set_webkitOrder
+     */
+    webkitOrder: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitPerspective
+     */
+    _get_webkitPerspective(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitPerspective
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitPerspective(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitPerspective
+     * @ntsSet _set_webkitPerspective
+     */
+    webkitPerspective: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitPerspectiveOrigin
+     */
+    _get_webkitPerspectiveOrigin(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitPerspectiveOrigin
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitPerspectiveOrigin(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitPerspectiveOrigin
+     * @ntsSet _set_webkitPerspectiveOrigin
+     */
+    webkitPerspectiveOrigin: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitTextFillColor
+     */
+    _get_webkitTextFillColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitTextFillColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitTextFillColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitTextFillColor
+     * @ntsSet _set_webkitTextFillColor
+     */
+    webkitTextFillColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitTextSizeAdjust
+     */
+    _get_webkitTextSizeAdjust(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitTextSizeAdjust
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitTextSizeAdjust(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitTextSizeAdjust
+     * @ntsSet _set_webkitTextSizeAdjust
+     */
+    webkitTextSizeAdjust: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitTextStroke
+     */
+    _get_webkitTextStroke(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitTextStroke
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitTextStroke(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitTextStroke
+     * @ntsSet _set_webkitTextStroke
+     */
+    webkitTextStroke: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitTextStrokeColor
+     */
+    _get_webkitTextStrokeColor(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitTextStrokeColor
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitTextStrokeColor(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitTextStrokeColor
+     * @ntsSet _set_webkitTextStrokeColor
+     */
+    webkitTextStrokeColor: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitTextStrokeWidth
+     */
+    _get_webkitTextStrokeWidth(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitTextStrokeWidth
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitTextStrokeWidth(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitTextStrokeWidth
+     * @ntsSet _set_webkitTextStrokeWidth
+     */
+    webkitTextStrokeWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitTransform
+     */
+    _get_webkitTransform(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitTransform
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitTransform(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitTransform
+     * @ntsSet _set_webkitTransform
+     */
+    webkitTransform: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitTransformOrigin
+     */
+    _get_webkitTransformOrigin(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitTransformOrigin
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitTransformOrigin(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitTransformOrigin
+     * @ntsSet _set_webkitTransformOrigin
+     */
+    webkitTransformOrigin: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitTransformStyle
+     */
+    _get_webkitTransformStyle(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitTransformStyle
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitTransformStyle(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitTransformStyle
+     * @ntsSet _set_webkitTransformStyle
+     */
+    webkitTransformStyle: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitTransition
+     */
+    _get_webkitTransition(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitTransition
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitTransition(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitTransition
+     * @ntsSet _set_webkitTransition
+     */
+    webkitTransition: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitTransitionDelay
+     */
+    _get_webkitTransitionDelay(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitTransitionDelay
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitTransitionDelay(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitTransitionDelay
+     * @ntsSet _set_webkitTransitionDelay
+     */
+    webkitTransitionDelay: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitTransitionDuration
+     */
+    _get_webkitTransitionDuration(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitTransitionDuration
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitTransitionDuration(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitTransitionDuration
+     * @ntsSet _set_webkitTransitionDuration
+     */
+    webkitTransitionDuration: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitTransitionProperty
+     */
+    _get_webkitTransitionProperty(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitTransitionProperty
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitTransitionProperty(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitTransitionProperty
+     * @ntsSet _set_webkitTransitionProperty
+     */
+    webkitTransitionProperty: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitTransitionTimingFunction
+     */
+    _get_webkitTransitionTimingFunction(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitTransitionTimingFunction
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitTransitionTimingFunction(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitTransitionTimingFunction
+     * @ntsSet _set_webkitTransitionTimingFunction
+     */
+    webkitTransitionTimingFunction: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_webkitUserSelect
+     */
+    _get_webkitUserSelect(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_webkitUserSelect
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_webkitUserSelect(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_webkitUserSelect
+     * @ntsSet _set_webkitUserSelect
+     */
+    webkitUserSelect: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_whiteSpace
+     */
+    _get_whiteSpace(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_whiteSpace
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_whiteSpace(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_whiteSpace
+     * @ntsSet _set_whiteSpace
+     */
+    whiteSpace: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_whiteSpaceCollapse
+     */
+    _get_whiteSpaceCollapse(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_whiteSpaceCollapse
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_whiteSpaceCollapse(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_whiteSpaceCollapse
+     * @ntsSet _set_whiteSpaceCollapse
+     */
+    whiteSpaceCollapse: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_widows
+     */
+    _get_widows(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_widows
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_widows(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_widows
+     * @ntsSet _set_widows
+     */
+    widows: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_width
+     */
+    _get_width(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_width
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_width(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_width
+     * @ntsSet _set_width
+     */
+    width: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_willChange
+     */
+    _get_willChange(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_willChange
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_willChange(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_willChange
+     * @ntsSet _set_willChange
+     */
+    willChange: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_wordBreak
+     */
+    _get_wordBreak(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_wordBreak
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_wordBreak(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_wordBreak
+     * @ntsSet _set_wordBreak
+     */
+    wordBreak: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_wordSpacing
+     */
+    _get_wordSpacing(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_wordSpacing
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_wordSpacing(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_wordSpacing
+     * @ntsSet _set_wordSpacing
+     */
+    wordSpacing: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_wordWrap
+     */
+    _get_wordWrap(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_wordWrap
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_wordWrap(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_wordWrap
+     * @ntsSet _set_wordWrap
+     */
+    wordWrap: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_writingMode
+     */
+    _get_writingMode(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_writingMode
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_writingMode(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_writingMode
+     * @ntsSet _set_writingMode
+     */
+    writingMode: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_x
+     */
+    _get_x(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_x
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_x(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_x
+     * @ntsSet _set_x
+     */
+    x: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_y
+     */
+    _get_y(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_y
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_y(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_y
+     * @ntsSet _set_y
+     */
+    y: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_zIndex
+     */
+    _get_zIndex(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_zIndex
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_zIndex(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_zIndex
+     * @ntsSet _set_zIndex
+     */
+    zIndex: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_zoom
+     */
+    _get_zoom(this: CSSStyleDeclaration): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_set_zoom
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_zoom(this: CSSStyleDeclaration, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_zoom
+     * @ntsSet _set_zoom
+     */
+    zoom: StringView;
   }
   export type CSSStyleDeclarationMethods = CSSStyleDeclarationOwnMethods;
   export type CSSStyleDeclaration = HostClass<"NtsDomCSSStyleDeclaration", null, "nts_dom_retain", "nts_dom_release"> & CSSStyleDeclarationMethods;

@@ -189,6 +189,19 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   const rect = box.getBoundingClientRect();
   log("rect", rect.width + "x" + rect.height);
   log("removed", box.style.removeProperty("height") + "|" + box.style.cssText);
+  // CSS properties as camel-cased attributes, which Blink serves through a
+  // named-property interceptor rather than the IDL: a set and its read-back,
+  // an invalid value CSS ignores, removal by the empty string, a
+  // webkit-cased name.
+  box.style.backgroundColor = "red";
+  box.style.borderTopWidth = "2px";
+  box.style.width = "bogus";
+  log("camelSet", box.style.backgroundColor + "|" + box.style.getPropertyValue("background-color"));
+  log("camelInvalid", box.style.width);
+  box.style.borderTopWidth = "";
+  log("camelRemoved", box.style.borderTopWidth + "|" + box.style.cssText);
+  box.style.webkitLineClamp = "2";
+  log("webkitCased", box.style.webkitLineClamp + "|" + box.style.getPropertyValue("-webkit-line-clamp"));
 
   // What the members raise: each exception's name and Blink's message.
   thrown("syntax", () => { d.querySelector("["); });
