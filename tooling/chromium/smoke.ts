@@ -223,6 +223,11 @@ try {
       // \`_set_hidden_boolean\` and its siblings: one union setter, per arm.
       for (const arm of ["boolean", "string", "number"])
         HTMLElement.prototype["_set_hidden_" + arm] = function (value) { this.hidden = value; };
+      // \`_set_onclick_void\` and its siblings: an event handler attribute,
+      // set per closure result, or cleared.
+      for (const arm of ["void", "boolean"])
+        HTMLElement.prototype["_set_onclick_" + arm] = function (handler) { this.onclick = handler; };
+      HTMLElement.prototype._set_onclick_null = function () { this.onclick = null; };
       ${vectors}
       // V8's message carries the binding's context ("Failed to execute 'x'
       // on 'Y': "), which the generated binding's does not.

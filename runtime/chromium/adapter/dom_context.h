@@ -62,8 +62,27 @@ inline constinit thread_local NtsDomContext *entered = nullptr;
 class ListenerSet;
 class NativeJob;
 using NtsDomCallback = void (*)(NtsDomEvent *, void *);
+using NtsDomCancelCallback = bool (*)(NtsDomEvent *, void *);
 using NtsDomDestroy = void (*)(void *);
 using NtsDomFrameCallback = void (*)(double, void *);
+
+// Whether an event handler attribute write by the program is in progress
+// (HandlerWrite). The program's handlers are their own world, as an isolated
+// world's are: Blink finds the attribute's current handler by asking each
+// listener whether it belongs to the current world, and a compiled one does
+// only during the program's write -- so the program replaces its own handler
+// in place, and page script's `onclick` never sees it.
+inline constinit thread_local bool writing_handler = false;
+class HandlerWrite {
+  STACK_ALLOCATED();
+
+public:
+  HandlerWrite() : previous_(std::exchange(writing_handler, true)) {}
+  ~HandlerWrite() { writing_handler = previous_; }
+
+private:
+  bool previous_;
+};
 
 // A handle is the object's address as a ScriptWrappable, whatever interface
 // it is typed as: NtsDomElement * and NtsDomNode * name one object, as
@@ -137,6 +156,7 @@ using nts_dom::NodeOf;
 using nts_dom::ObjectOf;
 using nts_dom::WrappableOf;
 using nts_dom::NtsDomCallback;
+using nts_dom::NtsDomCancelCallback;
 using nts_dom::NtsDomDestroy;
 using nts_dom::NtsDomFrameCallback;
 
@@ -146,7 +166,19 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
 
   // A compiled listener's call: its own entry, as any native callback, and
   // the program's environment entered by the host that owns the program.
-  void Dispatch(NtsDomCallback callback, blink::Event *event, void *closure);
+  // An event handler whose closure answers a boolean (`cancel`) cancels the
+  // event when it answers false, as HTML's event handler processing does.
+  void Dispatch(NtsDomCallback callback, NtsDomCancelCallback cancel,
+                blink::Event *event, void *closure);
+  // An event handler attribute's value for a compiled closure (`onclick`):
+  // `callback` or `cancel`, the other null. It holds the closure until a
+  // later write replaces it or the document ends.
+  blink::EventListener *Handler(NtsDomCallback callback,
+                                NtsDomCancelCallback cancel, void *closure,
+                                NtsDomDestroy destroy);
+  // The value an event handler attribute held before the program's write:
+  // a compiled handler stops and gives its closure back.
+  void Replaced(blink::EventListener *previous);
   // A compiled frame callback's call, its own entry like a dispatch; the
   // closure goes back once it has run.
   void RunFrame(NtsDomFrameCallback callback, double time, void *closure,

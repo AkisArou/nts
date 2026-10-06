@@ -13,7 +13,7 @@
 // oracle defines them (`instanceof`) where the import stood. What a caught
 // error reads as is passed in.
 import { asHTMLElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
-import type { Document, Element, Node } from "nts:dom";
+import type { Document, Element, Event, Node } from "nts:dom";
 
 export interface VectorHost {
   // "Name: message", the binding's own context prefix left out.
@@ -278,6 +278,40 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   card._set_hidden_boolean(false);
   log("hidden", afterTrue + "|" + afterUntil + "|" + afterZero + "|" + afterTwo + "|" + afterEmpty + "|" + shown(card.getAttribute("hidden")));
   log("namedItem", describe(root.children.namedItem("native-idl-missing")));
+
+  // Event handler attributes (`onclick`), written as the bindings name
+  // them: a replaced handler keeps its place among the target's listeners;
+  // one answering false cancels the event, as a later listener sees; null
+  // removes it.
+  const order: string[] = [];
+  const button = asHTMLElement(d.createElement("button"))!;
+  root.appendChild(button);
+  const before = (event: Event): void => { order.push("a"); };
+  const after = (event: Event): void => { order.push("b"); };
+  button.addEventListener("click", before);
+  button._set_onclick_void((event: Event) => { order.push("h1"); });
+  button.addEventListener("click", after);
+  button._set_onclick_void((event: Event) => { order.push("h2"); });
+  button.click();
+  button._set_onclick_null();
+  button.click();
+  log("handlerOrder", order.join(","));
+  button.removeEventListener("click", before);
+  button.removeEventListener("click", after);
+  const checkbox = asHTMLInputElement(d.createElement("input"))!;
+  checkbox.type = "checkbox";
+  root.appendChild(checkbox);
+  let prevented = "";
+  checkbox._set_onclick_boolean((event: Event) => false);
+  const seen = (event: Event): void => { prevented += event.defaultPrevented ? "y" : "n"; };
+  checkbox.addEventListener("click", seen);
+  checkbox.click();
+  const cancelled = checkbox.checked;
+  checkbox._set_onclick_boolean((event: Event) => true);
+  checkbox.click();
+  log("handlerCancel", (cancelled ? "checked" : "unchecked") + "|" + (checkbox.checked ? "checked" : "unchecked") + "|" + prevented);
+  checkbox._set_onclick_null();
+  checkbox.removeEventListener("click", seen);
 
   // What the members raise: each exception's name and Blink's message.
   thrown("syntax", () => { d.querySelector("["); });

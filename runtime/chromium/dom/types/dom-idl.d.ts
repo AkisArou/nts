@@ -2,7 +2,7 @@
 // Do not edit; regenerate.
 /** @ntsHeader "dom_idl.h" */
 declare module "nts:dom" {
-  import type { CNumber, HostClass, Opaque, Ptr, StringView } from "c:types";
+  import type { Closure, CNumber, HostClass, Opaque, Ptr, StringView } from "c:types";
   /** A DOM exception a member reported, thrown as an `Error` "Name: message". */
   export type DOMException = Opaque<"NtsDomException">;
   export interface EventTargetOwnMethods {
@@ -412,6 +412,54 @@ declare module "nts:dom" {
      */
     readonly clientHeight: CNumber<"double">;
     /**
+     * @ntsSymbol nts_dom_Element_set_onbeforecopy_void
+     */
+    _set_onbeforecopy_void(this: Element, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onbeforecopy_boolean
+     */
+    _set_onbeforecopy_boolean(this: Element, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onbeforecopy_null
+     */
+    _set_onbeforecopy_null(this: Element): void;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onbeforecut_void
+     */
+    _set_onbeforecut_void(this: Element, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onbeforecut_boolean
+     */
+    _set_onbeforecut_boolean(this: Element, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onbeforecut_null
+     */
+    _set_onbeforecut_null(this: Element): void;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onbeforepaste_void
+     */
+    _set_onbeforepaste_void(this: Element, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onbeforepaste_boolean
+     */
+    _set_onbeforepaste_boolean(this: Element, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onbeforepaste_null
+     */
+    _set_onbeforepaste_null(this: Element): void;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onsearch_void
+     */
+    _set_onsearch_void(this: Element, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onsearch_boolean
+     */
+    _set_onsearch_boolean(this: Element, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onsearch_null
+     */
+    _set_onsearch_null(this: Element): void;
+    /**
      * @ntsSymbol nts_dom_Element_get_elementTiming
      */
     _get_elementTiming(this: Element): StringView;
@@ -424,6 +472,54 @@ declare module "nts:dom" {
      * @ntsSet _set_elementTiming
      */
     elementTiming: StringView;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onfullscreenchange_void
+     */
+    _set_onfullscreenchange_void(this: Element, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onfullscreenchange_boolean
+     */
+    _set_onfullscreenchange_boolean(this: Element, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onfullscreenchange_null
+     */
+    _set_onfullscreenchange_null(this: Element): void;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onfullscreenerror_void
+     */
+    _set_onfullscreenerror_void(this: Element, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onfullscreenerror_boolean
+     */
+    _set_onfullscreenerror_boolean(this: Element, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onfullscreenerror_null
+     */
+    _set_onfullscreenerror_null(this: Element): void;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onwebkitfullscreenchange_void
+     */
+    _set_onwebkitfullscreenchange_void(this: Element, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onwebkitfullscreenchange_boolean
+     */
+    _set_onwebkitfullscreenchange_boolean(this: Element, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onwebkitfullscreenchange_null
+     */
+    _set_onwebkitfullscreenchange_null(this: Element): void;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onwebkitfullscreenerror_void
+     */
+    _set_onwebkitfullscreenerror_void(this: Element, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onwebkitfullscreenerror_boolean
+     */
+    _set_onwebkitfullscreenerror_boolean(this: Element, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_set_onwebkitfullscreenerror_null
+     */
+    _set_onwebkitfullscreenerror_null(this: Element): void;
     /**
      * @ntsSymbol nts_dom_Element_get_role
      */
@@ -2355,6 +2451,18 @@ declare module "nts:dom" {
      */
     designMode: StringView;
     /**
+     * @ntsSymbol nts_dom_Document_set_onreadystatechange_void
+     */
+    _set_onreadystatechange_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onreadystatechange_boolean
+     */
+    _set_onreadystatechange_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onreadystatechange_null
+     */
+    _set_onreadystatechange_null(this: Document): void;
+    /**
      * @ntsSymbol nts_dom_Document_get_anchors
      */
     _get_anchors(this: Document): HTMLCollection;
@@ -2444,6 +2552,30 @@ declare module "nts:dom" {
      */
     readonly scrollingElement: Element | null;
     /**
+     * @ntsSymbol nts_dom_Document_set_onpointerlockchange_void
+     */
+    _set_onpointerlockchange_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerlockchange_boolean
+     */
+    _set_onpointerlockchange_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerlockchange_null
+     */
+    _set_onpointerlockchange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerlockerror_void
+     */
+    _set_onpointerlockerror_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerlockerror_boolean
+     */
+    _set_onpointerlockerror_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerlockerror_null
+     */
+    _set_onpointerlockerror_null(this: Document): void;
+    /**
      * @ntsSymbol nts_dom_Document_get_hidden
      */
     _get_hidden(this: Document): boolean;
@@ -2484,6 +2616,102 @@ declare module "nts:dom" {
      */
     readonly webkitHidden: boolean;
     /**
+     * @ntsSymbol nts_dom_Document_set_onbeforecopy_void
+     */
+    _set_onbeforecopy_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onbeforecopy_boolean
+     */
+    _set_onbeforecopy_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onbeforecopy_null
+     */
+    _set_onbeforecopy_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onbeforecut_void
+     */
+    _set_onbeforecut_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onbeforecut_boolean
+     */
+    _set_onbeforecut_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onbeforecut_null
+     */
+    _set_onbeforecut_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onbeforepaste_void
+     */
+    _set_onbeforepaste_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onbeforepaste_boolean
+     */
+    _set_onbeforepaste_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onbeforepaste_null
+     */
+    _set_onbeforepaste_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onfreeze_void
+     */
+    _set_onfreeze_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onfreeze_boolean
+     */
+    _set_onfreeze_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onfreeze_null
+     */
+    _set_onfreeze_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onprerenderingchange_void
+     */
+    _set_onprerenderingchange_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onprerenderingchange_boolean
+     */
+    _set_onprerenderingchange_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onprerenderingchange_null
+     */
+    _set_onprerenderingchange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onresume_void
+     */
+    _set_onresume_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onresume_boolean
+     */
+    _set_onresume_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onresume_null
+     */
+    _set_onresume_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onsearch_void
+     */
+    _set_onsearch_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onsearch_boolean
+     */
+    _set_onsearch_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onsearch_null
+     */
+    _set_onsearch_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onvisibilitychange_void
+     */
+    _set_onvisibilitychange_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onvisibilitychange_boolean
+     */
+    _set_onvisibilitychange_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onvisibilitychange_null
+     */
+    _set_onvisibilitychange_null(this: Document): void;
+    /**
      * @ntsSymbol nts_dom_Document_get_fullscreenEnabled
      */
     _get_fullscreenEnabled(this: Document): boolean;
@@ -2499,6 +2727,30 @@ declare module "nts:dom" {
      * @ntsGet _get_fullscreen
      */
     readonly fullscreen: boolean;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onfullscreenchange_void
+     */
+    _set_onfullscreenchange_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onfullscreenchange_boolean
+     */
+    _set_onfullscreenchange_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onfullscreenchange_null
+     */
+    _set_onfullscreenchange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onfullscreenerror_void
+     */
+    _set_onfullscreenerror_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onfullscreenerror_boolean
+     */
+    _set_onfullscreenerror_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onfullscreenerror_null
+     */
+    _set_onfullscreenerror_null(this: Document): void;
     /**
      * @ntsSymbol nts_dom_Document_get_webkitIsFullScreen
      */
@@ -2531,6 +2783,1206 @@ declare module "nts:dom" {
      * @ntsGet _get_webkitFullscreenElement
      */
     readonly webkitFullscreenElement: Element;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwebkitfullscreenchange_void
+     */
+    _set_onwebkitfullscreenchange_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwebkitfullscreenchange_boolean
+     */
+    _set_onwebkitfullscreenchange_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwebkitfullscreenchange_null
+     */
+    _set_onwebkitfullscreenchange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwebkitfullscreenerror_void
+     */
+    _set_onwebkitfullscreenerror_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwebkitfullscreenerror_boolean
+     */
+    _set_onwebkitfullscreenerror_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwebkitfullscreenerror_null
+     */
+    _set_onwebkitfullscreenerror_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onabort_void
+     */
+    _set_onabort_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onabort_boolean
+     */
+    _set_onabort_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onabort_null
+     */
+    _set_onabort_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onbeforeinput_void
+     */
+    _set_onbeforeinput_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onbeforeinput_boolean
+     */
+    _set_onbeforeinput_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onbeforeinput_null
+     */
+    _set_onbeforeinput_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onbeforematch_void
+     */
+    _set_onbeforematch_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onbeforematch_boolean
+     */
+    _set_onbeforematch_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onbeforematch_null
+     */
+    _set_onbeforematch_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onbeforetoggle_void
+     */
+    _set_onbeforetoggle_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onbeforetoggle_boolean
+     */
+    _set_onbeforetoggle_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onbeforetoggle_null
+     */
+    _set_onbeforetoggle_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onblur_void
+     */
+    _set_onblur_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onblur_boolean
+     */
+    _set_onblur_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onblur_null
+     */
+    _set_onblur_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncancel_void
+     */
+    _set_oncancel_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncancel_boolean
+     */
+    _set_oncancel_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncancel_null
+     */
+    _set_oncancel_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncanplay_void
+     */
+    _set_oncanplay_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncanplay_boolean
+     */
+    _set_oncanplay_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncanplay_null
+     */
+    _set_oncanplay_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncanplaythrough_void
+     */
+    _set_oncanplaythrough_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncanplaythrough_boolean
+     */
+    _set_oncanplaythrough_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncanplaythrough_null
+     */
+    _set_oncanplaythrough_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onchange_void
+     */
+    _set_onchange_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onchange_boolean
+     */
+    _set_onchange_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onchange_null
+     */
+    _set_onchange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onclick_void
+     */
+    _set_onclick_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onclick_boolean
+     */
+    _set_onclick_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onclick_null
+     */
+    _set_onclick_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onclose_void
+     */
+    _set_onclose_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onclose_boolean
+     */
+    _set_onclose_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onclose_null
+     */
+    _set_onclose_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncommand_void
+     */
+    _set_oncommand_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncommand_boolean
+     */
+    _set_oncommand_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncommand_null
+     */
+    _set_oncommand_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncontentvisibilityautostatechange_void
+     */
+    _set_oncontentvisibilityautostatechange_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncontentvisibilityautostatechange_boolean
+     */
+    _set_oncontentvisibilityautostatechange_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncontentvisibilityautostatechange_null
+     */
+    _set_oncontentvisibilityautostatechange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncontextlost_void
+     */
+    _set_oncontextlost_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncontextlost_boolean
+     */
+    _set_oncontextlost_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncontextlost_null
+     */
+    _set_oncontextlost_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncontextmenu_void
+     */
+    _set_oncontextmenu_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncontextmenu_boolean
+     */
+    _set_oncontextmenu_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncontextmenu_null
+     */
+    _set_oncontextmenu_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncontextrestored_void
+     */
+    _set_oncontextrestored_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncontextrestored_boolean
+     */
+    _set_oncontextrestored_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncontextrestored_null
+     */
+    _set_oncontextrestored_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncuechange_void
+     */
+    _set_oncuechange_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncuechange_boolean
+     */
+    _set_oncuechange_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncuechange_null
+     */
+    _set_oncuechange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondblclick_void
+     */
+    _set_ondblclick_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondblclick_boolean
+     */
+    _set_ondblclick_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondblclick_null
+     */
+    _set_ondblclick_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondrag_void
+     */
+    _set_ondrag_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondrag_boolean
+     */
+    _set_ondrag_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondrag_null
+     */
+    _set_ondrag_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondragend_void
+     */
+    _set_ondragend_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondragend_boolean
+     */
+    _set_ondragend_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondragend_null
+     */
+    _set_ondragend_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondragenter_void
+     */
+    _set_ondragenter_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondragenter_boolean
+     */
+    _set_ondragenter_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondragenter_null
+     */
+    _set_ondragenter_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondragleave_void
+     */
+    _set_ondragleave_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondragleave_boolean
+     */
+    _set_ondragleave_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondragleave_null
+     */
+    _set_ondragleave_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondragover_void
+     */
+    _set_ondragover_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondragover_boolean
+     */
+    _set_ondragover_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondragover_null
+     */
+    _set_ondragover_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondragstart_void
+     */
+    _set_ondragstart_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondragstart_boolean
+     */
+    _set_ondragstart_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondragstart_null
+     */
+    _set_ondragstart_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondrop_void
+     */
+    _set_ondrop_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondrop_boolean
+     */
+    _set_ondrop_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondrop_null
+     */
+    _set_ondrop_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondurationchange_void
+     */
+    _set_ondurationchange_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondurationchange_boolean
+     */
+    _set_ondurationchange_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ondurationchange_null
+     */
+    _set_ondurationchange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onemptied_void
+     */
+    _set_onemptied_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onemptied_boolean
+     */
+    _set_onemptied_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onemptied_null
+     */
+    _set_onemptied_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onended_void
+     */
+    _set_onended_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onended_boolean
+     */
+    _set_onended_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onended_null
+     */
+    _set_onended_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onfocus_void
+     */
+    _set_onfocus_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onfocus_boolean
+     */
+    _set_onfocus_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onfocus_null
+     */
+    _set_onfocus_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onformdata_void
+     */
+    _set_onformdata_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onformdata_boolean
+     */
+    _set_onformdata_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onformdata_null
+     */
+    _set_onformdata_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oninput_void
+     */
+    _set_oninput_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oninput_boolean
+     */
+    _set_oninput_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oninput_null
+     */
+    _set_oninput_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oninvalid_void
+     */
+    _set_oninvalid_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oninvalid_boolean
+     */
+    _set_oninvalid_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oninvalid_null
+     */
+    _set_oninvalid_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onkeydown_void
+     */
+    _set_onkeydown_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onkeydown_boolean
+     */
+    _set_onkeydown_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onkeydown_null
+     */
+    _set_onkeydown_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onkeypress_void
+     */
+    _set_onkeypress_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onkeypress_boolean
+     */
+    _set_onkeypress_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onkeypress_null
+     */
+    _set_onkeypress_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onkeyup_void
+     */
+    _set_onkeyup_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onkeyup_boolean
+     */
+    _set_onkeyup_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onkeyup_null
+     */
+    _set_onkeyup_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onload_void
+     */
+    _set_onload_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onload_boolean
+     */
+    _set_onload_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onload_null
+     */
+    _set_onload_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onloadeddata_void
+     */
+    _set_onloadeddata_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onloadeddata_boolean
+     */
+    _set_onloadeddata_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onloadeddata_null
+     */
+    _set_onloadeddata_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onloadedmetadata_void
+     */
+    _set_onloadedmetadata_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onloadedmetadata_boolean
+     */
+    _set_onloadedmetadata_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onloadedmetadata_null
+     */
+    _set_onloadedmetadata_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onloadstart_void
+     */
+    _set_onloadstart_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onloadstart_boolean
+     */
+    _set_onloadstart_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onloadstart_null
+     */
+    _set_onloadstart_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmousedown_void
+     */
+    _set_onmousedown_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmousedown_boolean
+     */
+    _set_onmousedown_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmousedown_null
+     */
+    _set_onmousedown_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmouseenter_void
+     */
+    _set_onmouseenter_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmouseenter_boolean
+     */
+    _set_onmouseenter_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmouseenter_null
+     */
+    _set_onmouseenter_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmouseleave_void
+     */
+    _set_onmouseleave_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmouseleave_boolean
+     */
+    _set_onmouseleave_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmouseleave_null
+     */
+    _set_onmouseleave_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmousemove_void
+     */
+    _set_onmousemove_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmousemove_boolean
+     */
+    _set_onmousemove_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmousemove_null
+     */
+    _set_onmousemove_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmouseout_void
+     */
+    _set_onmouseout_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmouseout_boolean
+     */
+    _set_onmouseout_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmouseout_null
+     */
+    _set_onmouseout_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmouseover_void
+     */
+    _set_onmouseover_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmouseover_boolean
+     */
+    _set_onmouseover_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmouseover_null
+     */
+    _set_onmouseover_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmouseup_void
+     */
+    _set_onmouseup_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmouseup_boolean
+     */
+    _set_onmouseup_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmouseup_null
+     */
+    _set_onmouseup_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmousewheel_void
+     */
+    _set_onmousewheel_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmousewheel_boolean
+     */
+    _set_onmousewheel_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onmousewheel_null
+     */
+    _set_onmousewheel_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpause_void
+     */
+    _set_onpause_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpause_boolean
+     */
+    _set_onpause_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpause_null
+     */
+    _set_onpause_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onplay_void
+     */
+    _set_onplay_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onplay_boolean
+     */
+    _set_onplay_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onplay_null
+     */
+    _set_onplay_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onplaying_void
+     */
+    _set_onplaying_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onplaying_boolean
+     */
+    _set_onplaying_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onplaying_null
+     */
+    _set_onplaying_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onprogress_void
+     */
+    _set_onprogress_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onprogress_boolean
+     */
+    _set_onprogress_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onprogress_null
+     */
+    _set_onprogress_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onratechange_void
+     */
+    _set_onratechange_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onratechange_boolean
+     */
+    _set_onratechange_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onratechange_null
+     */
+    _set_onratechange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onreset_void
+     */
+    _set_onreset_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onreset_boolean
+     */
+    _set_onreset_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onreset_null
+     */
+    _set_onreset_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onresize_void
+     */
+    _set_onresize_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onresize_boolean
+     */
+    _set_onresize_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onresize_null
+     */
+    _set_onresize_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onscroll_void
+     */
+    _set_onscroll_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onscroll_boolean
+     */
+    _set_onscroll_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onscroll_null
+     */
+    _set_onscroll_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onscrollend_void
+     */
+    _set_onscrollend_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onscrollend_boolean
+     */
+    _set_onscrollend_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onscrollend_null
+     */
+    _set_onscrollend_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onsecuritypolicyviolation_void
+     */
+    _set_onsecuritypolicyviolation_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onsecuritypolicyviolation_boolean
+     */
+    _set_onsecuritypolicyviolation_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onsecuritypolicyviolation_null
+     */
+    _set_onsecuritypolicyviolation_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onseeked_void
+     */
+    _set_onseeked_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onseeked_boolean
+     */
+    _set_onseeked_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onseeked_null
+     */
+    _set_onseeked_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onseeking_void
+     */
+    _set_onseeking_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onseeking_boolean
+     */
+    _set_onseeking_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onseeking_null
+     */
+    _set_onseeking_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onselect_void
+     */
+    _set_onselect_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onselect_boolean
+     */
+    _set_onselect_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onselect_null
+     */
+    _set_onselect_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onslotchange_void
+     */
+    _set_onslotchange_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onslotchange_boolean
+     */
+    _set_onslotchange_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onslotchange_null
+     */
+    _set_onslotchange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onstalled_void
+     */
+    _set_onstalled_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onstalled_boolean
+     */
+    _set_onstalled_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onstalled_null
+     */
+    _set_onstalled_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onsubmit_void
+     */
+    _set_onsubmit_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onsubmit_boolean
+     */
+    _set_onsubmit_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onsubmit_null
+     */
+    _set_onsubmit_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onsuspend_void
+     */
+    _set_onsuspend_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onsuspend_boolean
+     */
+    _set_onsuspend_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onsuspend_null
+     */
+    _set_onsuspend_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ontimeupdate_void
+     */
+    _set_ontimeupdate_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ontimeupdate_boolean
+     */
+    _set_ontimeupdate_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ontimeupdate_null
+     */
+    _set_ontimeupdate_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ontoggle_void
+     */
+    _set_ontoggle_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ontoggle_boolean
+     */
+    _set_ontoggle_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ontoggle_null
+     */
+    _set_ontoggle_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onvolumechange_void
+     */
+    _set_onvolumechange_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onvolumechange_boolean
+     */
+    _set_onvolumechange_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onvolumechange_null
+     */
+    _set_onvolumechange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwaiting_void
+     */
+    _set_onwaiting_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwaiting_boolean
+     */
+    _set_onwaiting_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwaiting_null
+     */
+    _set_onwaiting_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwebkitanimationend_void
+     */
+    _set_onwebkitanimationend_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwebkitanimationend_boolean
+     */
+    _set_onwebkitanimationend_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwebkitanimationend_null
+     */
+    _set_onwebkitanimationend_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwebkitanimationiteration_void
+     */
+    _set_onwebkitanimationiteration_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwebkitanimationiteration_boolean
+     */
+    _set_onwebkitanimationiteration_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwebkitanimationiteration_null
+     */
+    _set_onwebkitanimationiteration_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwebkitanimationstart_void
+     */
+    _set_onwebkitanimationstart_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwebkitanimationstart_boolean
+     */
+    _set_onwebkitanimationstart_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwebkitanimationstart_null
+     */
+    _set_onwebkitanimationstart_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwebkittransitionend_void
+     */
+    _set_onwebkittransitionend_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwebkittransitionend_boolean
+     */
+    _set_onwebkittransitionend_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwebkittransitionend_null
+     */
+    _set_onwebkittransitionend_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwheel_void
+     */
+    _set_onwheel_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwheel_boolean
+     */
+    _set_onwheel_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onwheel_null
+     */
+    _set_onwheel_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onauxclick_void
+     */
+    _set_onauxclick_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onauxclick_boolean
+     */
+    _set_onauxclick_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onauxclick_null
+     */
+    _set_onauxclick_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ongotpointercapture_void
+     */
+    _set_ongotpointercapture_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ongotpointercapture_boolean
+     */
+    _set_ongotpointercapture_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ongotpointercapture_null
+     */
+    _set_ongotpointercapture_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onlostpointercapture_void
+     */
+    _set_onlostpointercapture_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onlostpointercapture_boolean
+     */
+    _set_onlostpointercapture_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onlostpointercapture_null
+     */
+    _set_onlostpointercapture_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerdown_void
+     */
+    _set_onpointerdown_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerdown_boolean
+     */
+    _set_onpointerdown_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerdown_null
+     */
+    _set_onpointerdown_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointermove_void
+     */
+    _set_onpointermove_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointermove_boolean
+     */
+    _set_onpointermove_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointermove_null
+     */
+    _set_onpointermove_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerrawupdate_void
+     */
+    _set_onpointerrawupdate_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerrawupdate_boolean
+     */
+    _set_onpointerrawupdate_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerrawupdate_null
+     */
+    _set_onpointerrawupdate_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerup_void
+     */
+    _set_onpointerup_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerup_boolean
+     */
+    _set_onpointerup_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerup_null
+     */
+    _set_onpointerup_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointercancel_void
+     */
+    _set_onpointercancel_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointercancel_boolean
+     */
+    _set_onpointercancel_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointercancel_null
+     */
+    _set_onpointercancel_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerover_void
+     */
+    _set_onpointerover_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerover_boolean
+     */
+    _set_onpointerover_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerover_null
+     */
+    _set_onpointerover_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerout_void
+     */
+    _set_onpointerout_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerout_boolean
+     */
+    _set_onpointerout_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerout_null
+     */
+    _set_onpointerout_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerenter_void
+     */
+    _set_onpointerenter_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerenter_boolean
+     */
+    _set_onpointerenter_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerenter_null
+     */
+    _set_onpointerenter_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerleave_void
+     */
+    _set_onpointerleave_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerleave_boolean
+     */
+    _set_onpointerleave_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpointerleave_null
+     */
+    _set_onpointerleave_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onselectstart_void
+     */
+    _set_onselectstart_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onselectstart_boolean
+     */
+    _set_onselectstart_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onselectstart_null
+     */
+    _set_onselectstart_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onselectionchange_void
+     */
+    _set_onselectionchange_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onselectionchange_boolean
+     */
+    _set_onselectionchange_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onselectionchange_null
+     */
+    _set_onselectionchange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onanimationcancel_void
+     */
+    _set_onanimationcancel_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onanimationcancel_boolean
+     */
+    _set_onanimationcancel_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onanimationcancel_null
+     */
+    _set_onanimationcancel_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onanimationend_void
+     */
+    _set_onanimationend_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onanimationend_boolean
+     */
+    _set_onanimationend_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onanimationend_null
+     */
+    _set_onanimationend_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onanimationiteration_void
+     */
+    _set_onanimationiteration_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onanimationiteration_boolean
+     */
+    _set_onanimationiteration_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onanimationiteration_null
+     */
+    _set_onanimationiteration_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onanimationstart_void
+     */
+    _set_onanimationstart_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onanimationstart_boolean
+     */
+    _set_onanimationstart_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onanimationstart_null
+     */
+    _set_onanimationstart_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ontransitionrun_void
+     */
+    _set_ontransitionrun_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ontransitionrun_boolean
+     */
+    _set_ontransitionrun_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ontransitionrun_null
+     */
+    _set_ontransitionrun_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ontransitionstart_void
+     */
+    _set_ontransitionstart_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ontransitionstart_boolean
+     */
+    _set_ontransitionstart_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ontransitionstart_null
+     */
+    _set_ontransitionstart_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ontransitionend_void
+     */
+    _set_ontransitionend_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ontransitionend_boolean
+     */
+    _set_ontransitionend_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ontransitionend_null
+     */
+    _set_ontransitionend_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ontransitioncancel_void
+     */
+    _set_ontransitioncancel_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ontransitioncancel_boolean
+     */
+    _set_ontransitioncancel_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_ontransitioncancel_null
+     */
+    _set_ontransitioncancel_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncopy_void
+     */
+    _set_oncopy_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncopy_boolean
+     */
+    _set_oncopy_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncopy_null
+     */
+    _set_oncopy_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncut_void
+     */
+    _set_oncut_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncut_boolean
+     */
+    _set_oncut_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_oncut_null
+     */
+    _set_oncut_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpaste_void
+     */
+    _set_onpaste_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpaste_boolean
+     */
+    _set_onpaste_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onpaste_null
+     */
+    _set_onpaste_null(this: Document): void;
     /**
      * @ntsSymbol nts_dom_Document_get_children
      */
@@ -3474,6 +4926,10 @@ declare module "nts:dom" {
      */
     dir: StringView;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_set_hidden_boolean
+     */
+    _set_hidden_boolean(this: HTMLElement, value: boolean): void;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_hidden_number
      */
     _set_hidden_number(this: HTMLElement, value: CNumber<"double">): void;
@@ -3481,10 +4937,6 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_hidden_string
      */
     _set_hidden_string(this: HTMLElement, value: StringView): void;
-    /**
-     * @ntsSymbol nts_dom_HTMLElement_set_hidden_boolean
-     */
-    _set_hidden_boolean(this: HTMLElement, value: boolean): void;
     /**
      * @ntsSymbol nts_dom_HTMLElement_get_inert
      */
@@ -3721,6 +5173,1182 @@ declare module "nts:dom" {
      * @ntsSet _set_writingSuggestions
      */
     writingSuggestions: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onabort_void
+     */
+    _set_onabort_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onabort_boolean
+     */
+    _set_onabort_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onabort_null
+     */
+    _set_onabort_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onbeforeinput_void
+     */
+    _set_onbeforeinput_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onbeforeinput_boolean
+     */
+    _set_onbeforeinput_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onbeforeinput_null
+     */
+    _set_onbeforeinput_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onbeforematch_void
+     */
+    _set_onbeforematch_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onbeforematch_boolean
+     */
+    _set_onbeforematch_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onbeforematch_null
+     */
+    _set_onbeforematch_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onbeforetoggle_void
+     */
+    _set_onbeforetoggle_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onbeforetoggle_boolean
+     */
+    _set_onbeforetoggle_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onbeforetoggle_null
+     */
+    _set_onbeforetoggle_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onblur_void
+     */
+    _set_onblur_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onblur_boolean
+     */
+    _set_onblur_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onblur_null
+     */
+    _set_onblur_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncancel_void
+     */
+    _set_oncancel_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncancel_boolean
+     */
+    _set_oncancel_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncancel_null
+     */
+    _set_oncancel_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncanplay_void
+     */
+    _set_oncanplay_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncanplay_boolean
+     */
+    _set_oncanplay_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncanplay_null
+     */
+    _set_oncanplay_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncanplaythrough_void
+     */
+    _set_oncanplaythrough_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncanplaythrough_boolean
+     */
+    _set_oncanplaythrough_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncanplaythrough_null
+     */
+    _set_oncanplaythrough_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onchange_void
+     */
+    _set_onchange_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onchange_boolean
+     */
+    _set_onchange_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onchange_null
+     */
+    _set_onchange_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onclick_void
+     */
+    _set_onclick_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onclick_boolean
+     */
+    _set_onclick_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onclick_null
+     */
+    _set_onclick_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onclose_void
+     */
+    _set_onclose_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onclose_boolean
+     */
+    _set_onclose_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onclose_null
+     */
+    _set_onclose_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncommand_void
+     */
+    _set_oncommand_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncommand_boolean
+     */
+    _set_oncommand_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncommand_null
+     */
+    _set_oncommand_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncontentvisibilityautostatechange_void
+     */
+    _set_oncontentvisibilityautostatechange_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncontentvisibilityautostatechange_boolean
+     */
+    _set_oncontentvisibilityautostatechange_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncontentvisibilityautostatechange_null
+     */
+    _set_oncontentvisibilityautostatechange_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncontextlost_void
+     */
+    _set_oncontextlost_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncontextlost_boolean
+     */
+    _set_oncontextlost_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncontextlost_null
+     */
+    _set_oncontextlost_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncontextmenu_void
+     */
+    _set_oncontextmenu_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncontextmenu_boolean
+     */
+    _set_oncontextmenu_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncontextmenu_null
+     */
+    _set_oncontextmenu_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncontextrestored_void
+     */
+    _set_oncontextrestored_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncontextrestored_boolean
+     */
+    _set_oncontextrestored_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncontextrestored_null
+     */
+    _set_oncontextrestored_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncuechange_void
+     */
+    _set_oncuechange_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncuechange_boolean
+     */
+    _set_oncuechange_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncuechange_null
+     */
+    _set_oncuechange_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondblclick_void
+     */
+    _set_ondblclick_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondblclick_boolean
+     */
+    _set_ondblclick_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondblclick_null
+     */
+    _set_ondblclick_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondrag_void
+     */
+    _set_ondrag_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondrag_boolean
+     */
+    _set_ondrag_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondrag_null
+     */
+    _set_ondrag_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondragend_void
+     */
+    _set_ondragend_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondragend_boolean
+     */
+    _set_ondragend_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondragend_null
+     */
+    _set_ondragend_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondragenter_void
+     */
+    _set_ondragenter_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondragenter_boolean
+     */
+    _set_ondragenter_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondragenter_null
+     */
+    _set_ondragenter_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondragleave_void
+     */
+    _set_ondragleave_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondragleave_boolean
+     */
+    _set_ondragleave_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondragleave_null
+     */
+    _set_ondragleave_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondragover_void
+     */
+    _set_ondragover_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondragover_boolean
+     */
+    _set_ondragover_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondragover_null
+     */
+    _set_ondragover_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondragstart_void
+     */
+    _set_ondragstart_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondragstart_boolean
+     */
+    _set_ondragstart_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondragstart_null
+     */
+    _set_ondragstart_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondrop_void
+     */
+    _set_ondrop_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondrop_boolean
+     */
+    _set_ondrop_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondrop_null
+     */
+    _set_ondrop_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondurationchange_void
+     */
+    _set_ondurationchange_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondurationchange_boolean
+     */
+    _set_ondurationchange_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ondurationchange_null
+     */
+    _set_ondurationchange_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onemptied_void
+     */
+    _set_onemptied_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onemptied_boolean
+     */
+    _set_onemptied_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onemptied_null
+     */
+    _set_onemptied_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onended_void
+     */
+    _set_onended_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onended_boolean
+     */
+    _set_onended_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onended_null
+     */
+    _set_onended_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onfocus_void
+     */
+    _set_onfocus_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onfocus_boolean
+     */
+    _set_onfocus_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onfocus_null
+     */
+    _set_onfocus_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onformdata_void
+     */
+    _set_onformdata_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onformdata_boolean
+     */
+    _set_onformdata_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onformdata_null
+     */
+    _set_onformdata_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oninput_void
+     */
+    _set_oninput_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oninput_boolean
+     */
+    _set_oninput_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oninput_null
+     */
+    _set_oninput_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oninvalid_void
+     */
+    _set_oninvalid_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oninvalid_boolean
+     */
+    _set_oninvalid_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oninvalid_null
+     */
+    _set_oninvalid_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onkeydown_void
+     */
+    _set_onkeydown_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onkeydown_boolean
+     */
+    _set_onkeydown_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onkeydown_null
+     */
+    _set_onkeydown_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onkeypress_void
+     */
+    _set_onkeypress_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onkeypress_boolean
+     */
+    _set_onkeypress_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onkeypress_null
+     */
+    _set_onkeypress_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onkeyup_void
+     */
+    _set_onkeyup_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onkeyup_boolean
+     */
+    _set_onkeyup_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onkeyup_null
+     */
+    _set_onkeyup_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onload_void
+     */
+    _set_onload_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onload_boolean
+     */
+    _set_onload_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onload_null
+     */
+    _set_onload_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onloadeddata_void
+     */
+    _set_onloadeddata_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onloadeddata_boolean
+     */
+    _set_onloadeddata_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onloadeddata_null
+     */
+    _set_onloadeddata_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onloadedmetadata_void
+     */
+    _set_onloadedmetadata_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onloadedmetadata_boolean
+     */
+    _set_onloadedmetadata_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onloadedmetadata_null
+     */
+    _set_onloadedmetadata_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onloadstart_void
+     */
+    _set_onloadstart_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onloadstart_boolean
+     */
+    _set_onloadstart_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onloadstart_null
+     */
+    _set_onloadstart_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmousedown_void
+     */
+    _set_onmousedown_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmousedown_boolean
+     */
+    _set_onmousedown_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmousedown_null
+     */
+    _set_onmousedown_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmouseenter_void
+     */
+    _set_onmouseenter_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmouseenter_boolean
+     */
+    _set_onmouseenter_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmouseenter_null
+     */
+    _set_onmouseenter_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmouseleave_void
+     */
+    _set_onmouseleave_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmouseleave_boolean
+     */
+    _set_onmouseleave_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmouseleave_null
+     */
+    _set_onmouseleave_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmousemove_void
+     */
+    _set_onmousemove_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmousemove_boolean
+     */
+    _set_onmousemove_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmousemove_null
+     */
+    _set_onmousemove_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmouseout_void
+     */
+    _set_onmouseout_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmouseout_boolean
+     */
+    _set_onmouseout_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmouseout_null
+     */
+    _set_onmouseout_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmouseover_void
+     */
+    _set_onmouseover_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmouseover_boolean
+     */
+    _set_onmouseover_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmouseover_null
+     */
+    _set_onmouseover_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmouseup_void
+     */
+    _set_onmouseup_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmouseup_boolean
+     */
+    _set_onmouseup_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmouseup_null
+     */
+    _set_onmouseup_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmousewheel_void
+     */
+    _set_onmousewheel_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmousewheel_boolean
+     */
+    _set_onmousewheel_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onmousewheel_null
+     */
+    _set_onmousewheel_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpause_void
+     */
+    _set_onpause_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpause_boolean
+     */
+    _set_onpause_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpause_null
+     */
+    _set_onpause_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onplay_void
+     */
+    _set_onplay_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onplay_boolean
+     */
+    _set_onplay_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onplay_null
+     */
+    _set_onplay_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onplaying_void
+     */
+    _set_onplaying_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onplaying_boolean
+     */
+    _set_onplaying_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onplaying_null
+     */
+    _set_onplaying_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onprogress_void
+     */
+    _set_onprogress_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onprogress_boolean
+     */
+    _set_onprogress_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onprogress_null
+     */
+    _set_onprogress_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onratechange_void
+     */
+    _set_onratechange_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onratechange_boolean
+     */
+    _set_onratechange_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onratechange_null
+     */
+    _set_onratechange_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onreset_void
+     */
+    _set_onreset_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onreset_boolean
+     */
+    _set_onreset_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onreset_null
+     */
+    _set_onreset_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onresize_void
+     */
+    _set_onresize_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onresize_boolean
+     */
+    _set_onresize_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onresize_null
+     */
+    _set_onresize_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onscroll_void
+     */
+    _set_onscroll_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onscroll_boolean
+     */
+    _set_onscroll_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onscroll_null
+     */
+    _set_onscroll_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onscrollend_void
+     */
+    _set_onscrollend_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onscrollend_boolean
+     */
+    _set_onscrollend_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onscrollend_null
+     */
+    _set_onscrollend_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onsecuritypolicyviolation_void
+     */
+    _set_onsecuritypolicyviolation_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onsecuritypolicyviolation_boolean
+     */
+    _set_onsecuritypolicyviolation_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onsecuritypolicyviolation_null
+     */
+    _set_onsecuritypolicyviolation_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onseeked_void
+     */
+    _set_onseeked_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onseeked_boolean
+     */
+    _set_onseeked_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onseeked_null
+     */
+    _set_onseeked_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onseeking_void
+     */
+    _set_onseeking_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onseeking_boolean
+     */
+    _set_onseeking_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onseeking_null
+     */
+    _set_onseeking_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onselect_void
+     */
+    _set_onselect_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onselect_boolean
+     */
+    _set_onselect_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onselect_null
+     */
+    _set_onselect_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onslotchange_void
+     */
+    _set_onslotchange_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onslotchange_boolean
+     */
+    _set_onslotchange_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onslotchange_null
+     */
+    _set_onslotchange_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onstalled_void
+     */
+    _set_onstalled_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onstalled_boolean
+     */
+    _set_onstalled_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onstalled_null
+     */
+    _set_onstalled_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onsubmit_void
+     */
+    _set_onsubmit_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onsubmit_boolean
+     */
+    _set_onsubmit_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onsubmit_null
+     */
+    _set_onsubmit_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onsuspend_void
+     */
+    _set_onsuspend_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onsuspend_boolean
+     */
+    _set_onsuspend_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onsuspend_null
+     */
+    _set_onsuspend_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ontimeupdate_void
+     */
+    _set_ontimeupdate_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ontimeupdate_boolean
+     */
+    _set_ontimeupdate_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ontimeupdate_null
+     */
+    _set_ontimeupdate_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ontoggle_void
+     */
+    _set_ontoggle_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ontoggle_boolean
+     */
+    _set_ontoggle_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ontoggle_null
+     */
+    _set_ontoggle_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onvolumechange_void
+     */
+    _set_onvolumechange_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onvolumechange_boolean
+     */
+    _set_onvolumechange_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onvolumechange_null
+     */
+    _set_onvolumechange_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onwaiting_void
+     */
+    _set_onwaiting_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onwaiting_boolean
+     */
+    _set_onwaiting_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onwaiting_null
+     */
+    _set_onwaiting_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onwebkitanimationend_void
+     */
+    _set_onwebkitanimationend_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onwebkitanimationend_boolean
+     */
+    _set_onwebkitanimationend_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onwebkitanimationend_null
+     */
+    _set_onwebkitanimationend_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onwebkitanimationiteration_void
+     */
+    _set_onwebkitanimationiteration_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onwebkitanimationiteration_boolean
+     */
+    _set_onwebkitanimationiteration_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onwebkitanimationiteration_null
+     */
+    _set_onwebkitanimationiteration_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onwebkitanimationstart_void
+     */
+    _set_onwebkitanimationstart_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onwebkitanimationstart_boolean
+     */
+    _set_onwebkitanimationstart_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onwebkitanimationstart_null
+     */
+    _set_onwebkitanimationstart_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onwebkittransitionend_void
+     */
+    _set_onwebkittransitionend_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onwebkittransitionend_boolean
+     */
+    _set_onwebkittransitionend_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onwebkittransitionend_null
+     */
+    _set_onwebkittransitionend_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onwheel_void
+     */
+    _set_onwheel_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onwheel_boolean
+     */
+    _set_onwheel_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onwheel_null
+     */
+    _set_onwheel_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onauxclick_void
+     */
+    _set_onauxclick_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onauxclick_boolean
+     */
+    _set_onauxclick_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onauxclick_null
+     */
+    _set_onauxclick_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ongotpointercapture_void
+     */
+    _set_ongotpointercapture_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ongotpointercapture_boolean
+     */
+    _set_ongotpointercapture_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ongotpointercapture_null
+     */
+    _set_ongotpointercapture_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onlostpointercapture_void
+     */
+    _set_onlostpointercapture_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onlostpointercapture_boolean
+     */
+    _set_onlostpointercapture_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onlostpointercapture_null
+     */
+    _set_onlostpointercapture_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointerdown_void
+     */
+    _set_onpointerdown_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointerdown_boolean
+     */
+    _set_onpointerdown_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointerdown_null
+     */
+    _set_onpointerdown_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointermove_void
+     */
+    _set_onpointermove_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointermove_boolean
+     */
+    _set_onpointermove_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointermove_null
+     */
+    _set_onpointermove_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointerrawupdate_void
+     */
+    _set_onpointerrawupdate_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointerrawupdate_boolean
+     */
+    _set_onpointerrawupdate_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointerrawupdate_null
+     */
+    _set_onpointerrawupdate_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointerup_void
+     */
+    _set_onpointerup_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointerup_boolean
+     */
+    _set_onpointerup_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointerup_null
+     */
+    _set_onpointerup_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointercancel_void
+     */
+    _set_onpointercancel_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointercancel_boolean
+     */
+    _set_onpointercancel_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointercancel_null
+     */
+    _set_onpointercancel_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointerover_void
+     */
+    _set_onpointerover_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointerover_boolean
+     */
+    _set_onpointerover_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointerover_null
+     */
+    _set_onpointerover_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointerout_void
+     */
+    _set_onpointerout_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointerout_boolean
+     */
+    _set_onpointerout_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointerout_null
+     */
+    _set_onpointerout_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointerenter_void
+     */
+    _set_onpointerenter_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointerenter_boolean
+     */
+    _set_onpointerenter_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointerenter_null
+     */
+    _set_onpointerenter_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointerleave_void
+     */
+    _set_onpointerleave_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointerleave_boolean
+     */
+    _set_onpointerleave_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpointerleave_null
+     */
+    _set_onpointerleave_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onselectstart_void
+     */
+    _set_onselectstart_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onselectstart_boolean
+     */
+    _set_onselectstart_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onselectstart_null
+     */
+    _set_onselectstart_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onselectionchange_void
+     */
+    _set_onselectionchange_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onselectionchange_boolean
+     */
+    _set_onselectionchange_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onselectionchange_null
+     */
+    _set_onselectionchange_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onanimationcancel_void
+     */
+    _set_onanimationcancel_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onanimationcancel_boolean
+     */
+    _set_onanimationcancel_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onanimationcancel_null
+     */
+    _set_onanimationcancel_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onanimationend_void
+     */
+    _set_onanimationend_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onanimationend_boolean
+     */
+    _set_onanimationend_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onanimationend_null
+     */
+    _set_onanimationend_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onanimationiteration_void
+     */
+    _set_onanimationiteration_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onanimationiteration_boolean
+     */
+    _set_onanimationiteration_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onanimationiteration_null
+     */
+    _set_onanimationiteration_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onanimationstart_void
+     */
+    _set_onanimationstart_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onanimationstart_boolean
+     */
+    _set_onanimationstart_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onanimationstart_null
+     */
+    _set_onanimationstart_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ontransitionrun_void
+     */
+    _set_ontransitionrun_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ontransitionrun_boolean
+     */
+    _set_ontransitionrun_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ontransitionrun_null
+     */
+    _set_ontransitionrun_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ontransitionstart_void
+     */
+    _set_ontransitionstart_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ontransitionstart_boolean
+     */
+    _set_ontransitionstart_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ontransitionstart_null
+     */
+    _set_ontransitionstart_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ontransitionend_void
+     */
+    _set_ontransitionend_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ontransitionend_boolean
+     */
+    _set_ontransitionend_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ontransitionend_null
+     */
+    _set_ontransitionend_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ontransitioncancel_void
+     */
+    _set_ontransitioncancel_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ontransitioncancel_boolean
+     */
+    _set_ontransitioncancel_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_ontransitioncancel_null
+     */
+    _set_ontransitioncancel_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncopy_void
+     */
+    _set_oncopy_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncopy_boolean
+     */
+    _set_oncopy_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncopy_null
+     */
+    _set_oncopy_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncut_void
+     */
+    _set_oncut_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncut_boolean
+     */
+    _set_oncut_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_oncut_null
+     */
+    _set_oncut_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpaste_void
+     */
+    _set_onpaste_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpaste_boolean
+     */
+    _set_onpaste_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onpaste_null
+     */
+    _set_onpaste_null(this: HTMLElement): void;
     /**
      * @ntsSymbol nts_dom_HTMLElement_get_dataset
      */

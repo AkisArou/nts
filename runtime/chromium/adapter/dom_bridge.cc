@@ -38,27 +38,47 @@ public:
               NtsDomCallback callback, void *closure, NtsDomDestroy destroy)
       : context_(context), target_(target), type_(type), capture_(capture),
         callback_(callback), closure_(closure), destroy_(destroy) {}
+  // An event handler attribute's value (`onclick`): no target or type of
+  // its own -- Blink's attribute setter registers it where the attribute
+  // says, the window for body's `onblur` -- and `cancel` set when the
+  // closure answers whether the event goes on.
+  NtsListener(NtsDomContext *context, NtsDomCallback callback,
+              NtsDomCancelCallback cancel, void *closure,
+              NtsDomDestroy destroy)
+      : context_(context), capture_(false), handler_(true),
+        callback_(callback), cancel_(cancel), closure_(closure),
+        destroy_(destroy) {}
 
   // Whether this is the listener addEventListener(type, closure, capture)
   // on its target names: the DOM's own equality, with the closure's native
-  // context standing for the function -- one per closure object.
+  // context standing for the function -- one per closure object. A handler
+  // is never one.
   bool Is(const blink::AtomicString &type, bool capture,
           const void *closure) const {
-    return callback_ && type_ == type && capture_ == capture &&
+    return !handler_ && callback_ && type_ == type && capture_ == capture &&
            closure_.get() == closure;
   }
   blink::EventTarget *target() const { return target_.Get(); }
 
   void Invoke(blink::ExecutionContext *, blink::Event *event) override;
+  bool IsEventHandler() const override { return handler_; }
+  // The program's handlers are their own world (nts_dom::writing_handler).
+  bool BelongsToTheCurrentWorld(blink::ExecutionContext *) const override {
+    return handler_ && nts_dom::writing_handler;
+  }
 
   // Takes the listener off its target and hands back what gives the
   // closure back; the caller runs it where the program's environment is
-  // entered. Nothing the second time.
+  // entered. Nothing the second time. A handler stays where Blink keeps
+  // it, stopped: a later write replaces it there, and page script's never
+  // finds it.
   NtsDomDestroy Detach(void *&closure) {
-    if (!callback_)
+    if (!callback_ && !cancel_)
       return nullptr;
-    target_->removeEventListener(type_, this, capture_);
+    if (!handler_)
+      target_->removeEventListener(type_, this, capture_);
     callback_ = nullptr;
+    cancel_ = nullptr;
     context_ = nullptr;
     closure = closure_.ExtractAsDangling();
     return std::exchange(destroy_, nullptr);
@@ -74,7 +94,9 @@ private:
   blink::Member<blink::EventTarget> target_;
   blink::AtomicString type_;
   bool capture_;
+  bool handler_ = false;
   NtsDomCallback callback_;
+  NtsDomCancelCallback cancel_ = nullptr;
   raw_ptr<void> closure_;
   NtsDomDestroy destroy_;
 };
@@ -126,6 +148,7 @@ public:
     visitor->Trace(set);
     visitor->Trace(frames);
     visitor->Trace(by_target);
+    visitor->Trace(handlers);
   }
   // The listener added for (type, closure, capture) on `target`, or null.
   NtsListener *Find(blink::EventTarget *target, const blink::AtomicString &type,
@@ -156,6 +179,11 @@ public:
   blink::HeapHashMap<blink::Member<blink::EventTarget>,
                      blink::Member<TargetListeners>>
       by_target;
+  // The handlers in `set`, by the EventListener an attribute's getter
+  // answers, so a getter's value is looked up rather than cast.
+  blink::HeapHashMap<blink::Member<blink::EventListener>,
+                     blink::Member<NtsListener>>
+      handlers;
 };
 
 // Listener handles the program keeps off the stack, as Roots for objects.
@@ -244,9 +272,9 @@ using nts_dom::HeldObjects;
 
 namespace nts_dom {
 void NtsListener::Invoke(blink::ExecutionContext *, blink::Event *event) {
-  if (!callback_)
+  if (!callback_ && !cancel_)
     return;
-  context_->Dispatch(callback_, event, closure_.get());
+  context_->Dispatch(callback_, cancel_, event, closure_.get());
 }
 
 void NtsFrame::Invoke(double time) {
@@ -270,7 +298,8 @@ NtsDomContext::~NtsDomContext() = default;
 
 // A compiled listener's call: its own entry, as any native callback, and
 // the program's environment entered by the host that owns the program.
-void NtsDomContext::Dispatch(NtsDomCallback callback, blink::Event *event,
+void NtsDomContext::Dispatch(NtsDomCallback callback,
+                             NtsDomCancelCallback cancel, blink::Event *event,
                              void *closure) {
   if (closed || !invoke)
     return;
@@ -285,16 +314,52 @@ void NtsDomContext::Dispatch(NtsDomCallback callback, blink::Event *event,
 
   public:
     NtsDomCallback callback;
+    NtsDomCancelCallback cancel;
     NtsDomEvent *event;
     void *closure;
-  } call{callback, HandleOf<NtsDomEvent>(event), closure};
+    bool proceed;
+  } call{callback, cancel, HandleOf<NtsDomEvent>(event), closure, true};
   invoke(
       invoke_host.get(),
       [](void *state) {
         auto *call = static_cast<Call *>(state);
-        call->callback(call->event, call->closure);
+        if (call->cancel)
+          call->proceed = call->cancel(call->event, call->closure);
+        else
+          call->callback(call->event, call->closure);
       },
       &call);
+  if (!call.proceed)
+    event->preventDefault();
+}
+
+blink::EventListener *NtsDomContext::Handler(NtsDomCallback callback,
+                                             NtsDomCancelCallback cancel,
+                                             void *closure,
+                                             NtsDomDestroy destroy) {
+  CHECK(invoke);
+  auto *handler = blink::MakeGarbageCollected<NtsListener>(
+      this, callback, cancel, closure, destroy);
+  listeners->set.insert(handler);
+  listeners->handlers.insert(handler, handler);
+  return handler;
+}
+
+void NtsDomContext::Replaced(blink::EventListener *previous) {
+  if (!previous)
+    return;
+  // A compiled handler is one of this context's listeners; page script's,
+  // or another context's, is not.
+  const auto found = listeners->handlers.find(previous);
+  if (found == listeners->handlers.end())
+    return;
+  NtsListener *handler = found->value.Get();
+  listeners->handlers.erase(found);
+  listeners->set.erase(handler);
+  void *closure = nullptr;
+  // Inside the program's call: its environment is entered already.
+  if (auto destroy = handler->Detach(closure))
+    destroy(closure);
 }
 
 
@@ -449,6 +514,7 @@ void NtsDomContext::Close() {
   blink::HeapVector<blink::Member<NtsListener>> remaining(listeners->set);
   listeners->set.clear();
   listeners->by_target.clear();
+  listeners->handlers.clear();
   for (auto &listener : remaining) {
     void *closure = nullptr;
     if (auto destroy = listener->Detach(closure))

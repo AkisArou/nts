@@ -142,6 +142,7 @@ class Function:
     def __init__(self, interface, symbol, params, result, expression, throws, reactions):
         self.interface, self.symbol, self.params, self.result = interface, symbol, params, result
         self.expression, self.throws, self.reactions = expression, throws, reactions
+        self.statements = []  # run before the expression, after the receiver
 
     def needs_context(self):
         return (self.reactions or self.result.kind == "string" or any(p.context for p in self.params)
@@ -383,6 +384,9 @@ class Generator:
                                result, context)
         except Skip as why:
             self.skip(interface, "get " + identifier, str(why))
+        if attribute.idl_type.syntactic_form == "EventHandler":
+            self.event_handler(interface, attribute, base)
+            return
         arms = self.primitive_arms(attribute.idl_type) if not attribute.is_readonly else None
         if arms:
             self.arm_setters(interface, attribute, base, arms)
@@ -456,6 +460,56 @@ class Generator:
                 self.skip(interface, f"set {identifier} ({name})", str(why))
                 continue
             lines.append(self.method_line(interface, f"_set_{identifier}_{name}", setter))
+
+    HANDLER_ARMS = {
+        # arm: (the closure's result in TypeScript and in C, the context's arguments)
+        "void": ("void", "void", "handler, nullptr"),
+        "boolean": ("boolean", "bool", "nullptr, handler"),
+    }
+
+    def event_handler(self, interface, attribute, base):
+        """`onclick`, an EventHandler attribute, written with a compiled
+        closure: one setter per closure result -- `_set_onclick_void`, and
+        `_set_onclick_boolean`, whose false cancels the event as HTML's event
+        handler processing says -- and `_set_onclick_null`. Each goes through
+        Blink's own attribute accessors, so a handler lands where the
+        attribute puts it (body's `onblur` on the window), replaces the
+        program's previous one in place, and gives that one's closure back.
+        The getter would answer the program's closure, which no binding
+        returns yet."""
+        identifier = attribute.identifier
+        self.skip(interface, "get " + identifier, "an event handler's value is the program's closure")
+        try:
+            self.check_member(attribute)
+        except Skip as why:
+            self.skip(interface, "set " + identifier, str(why))
+            return
+        self.include(attribute)
+        get_context = base.make_copy(attribute=attribute, attribute_get=True)
+        set_context = base.make_copy(attribute=attribute, attribute_set=True)
+        previous = self.call(get_context, {})
+        lines = self.members.setdefault(interface.identifier, [])
+        arms = dict(self.HANDLER_ARMS)
+        arms["null"] = None
+        for arm, shape in arms.items():
+            if shape is None:
+                params, value = [], "nullptr"
+            else:
+                ts_result, c_result, chosen = shape
+                params = [Param("handler",
+                                f"{c_result} (*handler)(NtsDomEvent*, void*), void* handler_closure, "
+                                f"void (*handler_destroy)(void*)",
+                                f"handler: Closure<(event: Event) => {ts_result}>", "", True)]
+                value = f"context.Handler({chosen}, handler_closure, handler_destroy)"
+            setter = Function(interface, f"nts_dom_{interface.identifier}_set_{identifier}_{arm}", params,
+                              Result("void", "void", "void"), "context.Replaced(previous)", False, False)
+            setter.statements = [
+                "nts_dom::HandlerWrite write",
+                f"blink::EventListener* previous = {previous}",
+                self.call(set_context, {"arg1_value": value}),
+            ]
+            self.functions.append(setter)
+            lines.append(self.method_line(interface, f"_set_{identifier}_{arm}", setter))
 
     def operation(self, interface, group):
         """Each overload, at each arity a caller can write: every optional
@@ -777,6 +831,7 @@ class Generator:
             if function.throws:
                 failed = "static_cast<blink::ExceptionState&>(exception_state).HadException()"
                 lines.append(f"  if ({failed}) return{'' if function.result.kind == 'void' else ' {}'};")
+        lines += ["  " + statement + ";" for statement in function.statements]
         expression = function.expression
         kind = function.result.kind
         if kind == "void":
@@ -956,7 +1011,7 @@ bool nts_dom_is(const void* object, uint32_t interface_id) {{
         declarations = f"""// {banner.replace(chr(10), chr(10) + '// ')}
 /** @ntsHeader "dom_idl.h" */
 declare module "nts:dom" {{
-  import type {{ CNumber, HostClass, Opaque, Ptr, StringView }} from "c:types";
+  import type {{ Closure, CNumber, HostClass, Opaque, Ptr, StringView }} from "c:types";
   /** A DOM exception a member reported, thrown as an `Error` "Name: message". */
   export type DOMException = Opaque<"NtsDomException">;
 {chr(10).join(types)}
