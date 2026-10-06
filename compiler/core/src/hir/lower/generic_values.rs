@@ -108,9 +108,15 @@ fn guard(snapshot: &SemanticSnapshot, ty: TypeId, depth: u32) -> Option<Guard> {
         TypeKind::Number => scalar(crate::hir::tags::NUMBER),
         TypeKind::Boolean => scalar(crate::hir::tags::BOOLEAN),
         TypeKind::String => scalar(crate::hir::tags::STRING),
+        TypeKind::BigInt => scalar(crate::hir::tags::BIGINT),
+        TypeKind::Symbol => scalar(crate::hir::tags::SYMBOL),
         TypeKind::Literal(literal @ LiteralValue::Number(_)) => Some(Guard::Scalar(crate::hir::tags::NUMBER, Some(literal.clone()))),
         TypeKind::Literal(literal @ LiteralValue::Boolean(_)) => Some(Guard::Scalar(crate::hir::tags::BOOLEAN, Some(literal.clone()))),
         TypeKind::Literal(literal @ LiteralValue::String(_)) => Some(Guard::Scalar(crate::hir::tags::STRING, Some(literal.clone()))),
+        TypeKind::Literal(literal @ LiteralValue::BigInt(digits)) => {
+            super::parse_bigint(digits)?;
+            Some(Guard::Scalar(crate::hir::tags::BIGINT, Some(literal.clone())))
+        }
         TypeKind::Union(items) => {
             let mut guards = Vec::new();
             for item in items {
@@ -298,6 +304,8 @@ fn guard_carries(guard: &Guard, ty: &HirType) -> bool {
             HirType::Float { bits: 64 } => *tag == crate::hir::tags::NUMBER,
             HirType::Bool => *tag == crate::hir::tags::BOOLEAN,
             HirType::Managed(ManagedType::String) => *tag == crate::hir::tags::STRING,
+            HirType::Managed(ManagedType::Symbol) => *tag == crate::hir::tags::SYMBOL,
+            HirType::BigInt => *tag == crate::hir::tags::BIGINT,
             _ => false,
         },
         Guard::Class(class) => *ty == HirType::Managed(ManagedType::Object(*class)),
@@ -331,8 +339,10 @@ fn emit_guard(
                     LiteralValue::Number(number) => (HirType::NUMBER, OpKind::ConstFloat(*number)),
                     LiteralValue::Boolean(boolean) => (HirType::Bool, OpKind::ConstBool(*boolean)),
                     LiteralValue::String(string) => (HirType::Managed(ManagedType::String), OpKind::ConstString(string.clone())),
-                    LiteralValue::BigInt(_) => return Err(builder.unsupported(id,
-                        "a BigInt literal guard before an erased BigInt carrier exists")),
+                    LiteralValue::BigInt(digits) => (HirType::BigInt,
+                        OpKind::ConstInt(super::parse_bigint(digits)
+                            .ok_or_else(|| builder.unsupported(id,
+                                "a BigInt literal guard outside the signed 128-bit profile"))?)),
                 };
                 let actual = builder.push(OpKind::Unerase { value }, ty.clone(), origin.clone());
                 let expected = builder.push(kind, ty.clone(), origin.clone());
