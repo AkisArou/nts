@@ -36,4 +36,4 @@ runtime/node/tty 2
 runtime/node/url 691
 runtime/node/util 2118
 runtime/node/zlib 2685
-runtime/web-platform 2413
+runtime/web-platform 2382
