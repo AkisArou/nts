@@ -149,13 +149,15 @@
 // violation or a project not measured. Exit 2: the tool could not start.
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { OUTCOMES, materialise, outcomeFixtures, runMode } from "./outcomes-project.ts";
 import { frontendFor } from "./pin.ts";
+import { limiter, longestFirst, recordCosts } from "../gate/costs.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -903,7 +905,15 @@ if (disorder) {
   process.exit(1);
 }
 
-const run = (args) =>
+// **One pool of `WORKERS` nts processes, shared by every project's four
+// listings**, which run at once rather than one after another. The four are
+// independent reads of the same project, and serially they put four times the
+// largest project's lowering on the critical path: `runtime/web-platform`'s
+// four calls were the last thing `integrity --runtime` waited for. Projects
+// are queued longest first (tooling/gate/costs.mjs), so the expensive ones
+// start while every worker is still free.
+const slot = limiter(WORKERS);
+const run = (args) => slot(() =>
   new Promise((resolve) => {
     const child = spawn(NTS, args, { cwd: ROOT, env });
     let stdout = "";
@@ -913,7 +923,7 @@ const run = (args) =>
     child.stderr.on("data", (c) => (stderr += c));
     child.on("error", (error) => { clearTimeout(timer); resolve({ error, stdout, stderr }); });
     child.on("close", (status, signal) => { clearTimeout(timer); resolve({ status, signal, stdout, stderr }); });
-  });
+  }));
 
 const found = [];
 const unmeasured = [];
@@ -921,11 +931,38 @@ const skipped = [];
 let measured = 0;
 let functions = 0;
 
+// **The `hir --prepared` listing of each runtime module, kept for `definitions`.**
+// That step ran the identical command over the identical modules and parsed
+// the same `func` lines and summary -- a strict subset of this one's work, a
+// full lowering of the runtime corpus repeated (968-1,308 s on 2026-10-06). With
+// NTS_INTEGRITY_KEEP set (run.mjs sets it when both steps are in one run) each
+// listing is written there with how the process ended, and `meta.json` records
+// the binary's sha256, which definitions.ts checks against its own before it
+// reads a byte: one invocation, one binary, one run.
+const KEEP = process.env.NTS_INTEGRITY_KEEP;
+const sha256Of = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
+if (KEEP) {
+  rmSync(KEEP, { recursive: true, force: true });
+  mkdirSync(KEEP, { recursive: true });
+}
+function keep(project, done) {
+  if (!KEEP || !ADDON.test(project)) return;
+  const name = project.replaceAll("/", "_");
+  writeFileSync(join(KEEP, `${name}.txt`), `${done.stdout}${done.stderr}`);
+  writeFileSync(join(KEEP, `${name}.json`), JSON.stringify({ status: done.status ?? null, signal: done.signal ?? null, error: done.error?.message ?? null }));
+}
+
+const cost = {};
 async function scan(project) {
   const listings = {};
   const at = pathOf.get(project) ?? project;
-  for (const [key, args] of [["prepared", ["hir", "--prepared", at]], ["plain", ["hir", at]], ["layouts", ["layouts", at]], ["refusals", ["refusals", at]]]) {
-    const done = await run(args);
+  const began = Date.now();
+  const commands = [["prepared", ["hir", "--prepared", at]], ["plain", ["hir", at]], ["layouts", ["layouts", at]], ["refusals", ["refusals", at]]];
+  const results = await Promise.all(commands.map(([, args]) => run(args)));
+  cost[project] = (Date.now() - began) / 1000;
+  keep(project, results[0]);
+  for (const [i, [key, args]] of commands.entries()) {
+    const done = results[i];
     if (done.error || done.signal) {
       unmeasured.push(`${project}: nts ${args[0]} ${done.signal ?? done.error?.message}`);
       return;
@@ -952,10 +989,10 @@ async function scan(project) {
 }
 
 const started = Date.now();
-let next = 0;
-await Promise.all(Array.from({ length: Math.min(WORKERS, projects.length) }, async () => {
-  while (next < projects.length) await scan(projects[next++]);
-}));
+const costKey = process.argv.includes("--runtime") ? "integrity-runtime" : "integrity";
+await Promise.all(longestFirst(costKey, projects, (p) => pathOf.get(p) ?? p).map(scan));
+recordCosts(costKey, cost);
+if (KEEP) writeFileSync(join(KEEP, "meta.json"), JSON.stringify({ nts: NTS, sha256: sha256Of(NTS), projects }, null, 1));
 
 const key = (v) => `${v.project}\t${v.rule}\t${stable(v.subject)}`;
 const fresh = found.filter((v) => !known.has(key(v))).sort((a, b) => key(a).localeCompare(key(b)));

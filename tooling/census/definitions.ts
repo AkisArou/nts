@@ -44,6 +44,7 @@
 // and a module the table has no row for.
 
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -96,15 +97,64 @@ const run = (args) =>
     child.on("close", (status, signal) => { clearTimeout(timer); resolve({ status, signal, out }); });
   });
 
+// **`--from` the listings `integrity --runtime` kept, instead of lowering the
+// corpus a second time** (NTS_DEFINITIONS_FROM, which run.mjs sets when both
+// steps are in one run). They are the same command over the same modules, so
+// only where the bytes come from changes, and three things are checked before
+// one is read: the directory was written by the binary this run gates (its
+// sha256, not its path), it lists the same modules this step would measure, and
+// every module has its listing. Anything else is NOT MEASURED, never a guess.
+let FROM = process.env.NTS_DEFINITIONS_FROM;
+async function listing(module) {
+  if (!FROM) return run(["hir", "--prepared", module]);
+  const name = module.replaceAll("/", "_");
+  if (!existsSync(join(FROM, `${name}.txt`)) || !existsSync(join(FROM, `${name}.json`))) {
+    return { error: { message: `has no listing in ${FROM} -- integrity --runtime did not write one` }, out: "" };
+  }
+  const meta = JSON.parse(readFileSync(join(FROM, `${name}.json`), "utf8"));
+  return {
+    status: meta.status,
+    signal: meta.signal ?? undefined,
+    error: meta.error ? { message: meta.error } : undefined,
+    out: readFileSync(join(FROM, `${name}.txt`), "utf8"),
+  };
+}
+if (FROM) {
+  const metaPath = join(FROM, "meta.json");
+  if (!existsSync(metaPath)) {
+    // integrity --runtime ended before writing its listings (it crashed, or
+    // was stopped). Do the work ourselves rather than report nothing: this
+    // step's verdict must not depend on whether another step got that far.
+    console.log(`  no ${metaPath} -- integrity --runtime wrote no listings, so lowering the modules here`);
+    FROM = undefined;
+  }
+}
+if (FROM) {
+  const metaPath = join(FROM, "meta.json");
+  const meta = JSON.parse(readFileSync(metaPath, "utf8"));
+  const mine = createHash("sha256").update(readFileSync(NTS)).digest("hex");
+  if (meta.sha256 !== mine) {
+    console.log(`  NOT MEASURED: the listings in ${FROM} were written by ${meta.nts} (${meta.sha256?.slice(0, 12)}), not ${NTS} (${mine.slice(0, 12)})`);
+    process.exit(2);
+  }
+  const theirs = new Set(meta.projects ?? []);
+  const missing = modules.filter((m) => !theirs.has(m));
+  if (missing.length > 0) {
+    console.log(`  NOT MEASURED: integrity --runtime did not list ${missing.join(" ")}`);
+    process.exit(2);
+  }
+  console.log(`  read from ${FROM}: the listings integrity --runtime made with this binary`);
+}
+
 const measured = new Map();
 const unmeasured = [];
 let next = 0;
 const started = Date.now();
 await Promise.all(
-  Array.from({ length: Math.min(WORKERS, modules.length) }, async () => {
+  Array.from({ length: Math.min(FROM ? modules.length : WORKERS, modules.length) }, async () => {
     while (next < modules.length) {
       const module = modules[next++];
-      const done = await run(["hir", "--prepared", module]);
+      const done = await listing(module);
       if (done.error || done.signal) {
         unmeasured.push(`${module}: nts hir ${done.signal ?? done.error?.message}`);
         continue;

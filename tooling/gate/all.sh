@@ -337,11 +337,16 @@ profile() {
   work="$root/target/gate-profile"
   rm -rf "$work"
   mkdir -p "$work"
+  sha256sum "${NTS_BIN:-$root/target/release/nts}" | cut -d" " -f1 > "$work/.emitted-by"
   ls -d "$root"/runtime/node/*/tsconfig.json | xargs -P "$jobs" -n 1 sh -c '
     m=$1
     name=$(basename "$(dirname "$m")")
     out=$("'"${NTS_BIN:-$root/target/release/nts}"'" emit-c "$m" \
             --out "'"$work"'/$name" --napi 2>&1)
+    # How the emission ended, for `addons`: build.sh reuses this directory
+    # instead of lowering the module again only when this says 0 and the
+    # binary that wrote it is its own (see build.sh, NTS_ADDON_EMITTED).
+    printf "%s\n" "$?" > "'"$work"'/$name.status"
     printf "%s" "$out" | grep -c "NTS1001" > "'"$work"'/$name.refusals"
     # **The whole diagnostic, not just its position**, because one reader counts
     # it: `tooling/census/node-refusals.ts --from` reads these files and reports
@@ -1753,8 +1758,14 @@ test262() {
     echo "    git -C third_party/test262 checkout --detach $pin"
     return 1
   fi
-  out=$(cargo run -q -p nts-suite --no-default-features \
-    --bin nts-test262-protocol -- inventory third_party/test262 2>&1)
+  # The built protocol binary when the gate names one (see conformance262.ts):
+  # `cargo run` takes cargo's lock and builds a debug copy of it.
+  if [ -n "${NTS_TEST262_PROTOCOL:-}" ]; then
+    out=$("$NTS_TEST262_PROTOCOL" inventory third_party/test262 2>&1)
+  else
+    out=$(cargo run -q -p nts-suite --no-default-features \
+      --bin nts-test262-protocol -- inventory third_party/test262 2>&1)
+  fi
   if [ $? -ne 0 ]; then
     printf '%s\n' "$out" | sed 's/^/    /'
     return 1

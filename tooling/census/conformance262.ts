@@ -260,11 +260,17 @@ const TOOLS = { nts: PINNED, cc: CC, memoryCapKb: MEMORY_CAP_KB, objectCache: OB
 
 // --- the population --------------------------------------------------------
 
+// `NTS_TEST262_PROTOCOL`, when set, is a built `nts-test262-protocol` (the gate
+// passes the one its release build made, beside `nts`). `cargo run` here takes
+// cargo's build-directory lock, so under a gate that runs steps at once it
+// waited behind `cargo test` compiling, and it built a second, debug copy of a
+// binary the release build already has. Same source, no feature gates it.
 let records;
 try {
+  const protocol = process.env.NTS_TEST262_PROTOCOL;
   records = execFileSync(
-    "cargo",
-    [
+    protocol ?? "cargo",
+    protocol ? ["select", SUITE, under] : [
       "run", "-q", "-p", "nts-suite", "--no-default-features",
       "--bin", "nts-test262-protocol", "--", "select", SUITE, under,
     ],

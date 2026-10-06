@@ -122,8 +122,28 @@ if [ -n "${NTS_CONFORMANCE_RC:-}" ]; then
   rc_defines=(-DNTS_PROVIDER_RC -DNTS_POISON=1)
 fi
 
-NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$compiler" \
-  emit-c "$src/tsconfig.json" --out "$work" --napi "${rc_emit[@]}"
+# **The gate's `profile` step has usually just run this exact command** -- the
+# same binary, the same module, `emit-c --napi`, no `--rc` -- and its output is
+# in NTS_ADDON_EMITTED/<module> (run.mjs sets it when both steps are in one run
+# and orders this one after). Lowering the module a second time was 28 full
+# lowerings per gate. It is reused only when all of these hold, and otherwise
+# this emits as it always did:
+#   - no --rc (profile emits without it);
+#   - profile recorded exit 0 for this module;
+#   - the binary that wrote the directory (its sha256, recorded by profile) is
+#     this one.
+reused=""
+emitted=${NTS_ADDON_EMITTED:-}
+if [ -n "$emitted" ] && [ -z "${NTS_CONFORMANCE_RC:-}" ] \
+   && [ "$(cat "$emitted/$module.status" 2>/dev/null)" = 0 ] && [ -d "$emitted/$module" ] \
+   && [ "$(cat "$emitted/.emitted-by" 2>/dev/null)" = "$(sha256sum "$compiler" | cut -d' ' -f1)" ]; then
+  cp -a "$emitted/$module/." "$work/"
+  reused=yes
+fi
+if [ -z "$reused" ]; then
+  NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$compiler" \
+    emit-c "$src/tsconfig.json" --out "$work" --napi "${rc_emit[@]}"
+fi
 
 # The module's own C, plus the C every module shares. Globbed rather than
 # listed: a module owns its bindings, so adding one is adding a file to its own
@@ -176,10 +196,38 @@ mkdir -p "$sibling_dir"
 while IFS= read -r -d '' source; do
   case "$source" in "$src"/*) continue ;; esac
   object="$sibling_dir/$(printf '%s' "$source" | tr '/' '_').o"
-  # Best effort: a sibling whose own headers are not on this module's include
-  # path simply does not join the archive, and the link then fails on the symbol
-  # it would have provided -- which is the honest outcome and the same one as
-  # before this existed.
+  # **Compiled once per build-floor run, not once per module.** Nothing in this
+  # command depends on the module being built -- `binding_header_flags` is not
+  # set yet, so it is empty for every sibling -- and the tree does not change
+  # during a run, so every module compiled the same thirty files to the same
+  # objects (4.6 s of CPU per module). With NTS_ADDON_SIBLING_CACHE (a directory
+  # build-floor.sh makes fresh for each run and removes after) the first module
+  # to need an object compiles it there and the rest copy it. A source that does
+  # not compile is remembered as such, which is what every module would have
+  # found again.
+  cached=""
+  if [ -n "${NTS_ADDON_SIBLING_CACHE:-}" ]; then
+    cached="$NTS_ADDON_SIBLING_CACHE/$(basename "$object")"
+    if [ ! -e "$cached" ] && [ ! -e "$cached.failed" ]; then
+      partial="$cached.$$"
+      # Best effort: a sibling whose own headers are not on this module's include
+      # path simply does not join the archive, and the link then fails on the symbol
+      # it would have provided -- which is the honest outcome and the same one as
+      # before this existed.
+      if clang -std=c11 -O2 -D_GNU_SOURCE -fPIC "${binding_header_flags[@]}" \
+        -I"$napi" -I"$uv_include" -I"$(dirname "$source")" \
+        -I"$root/runtime/node/internal" -I"$root/runtime/c" \
+        "${vendored_includes[@]}" \
+        -c "$source" -o "$partial" > /dev/null 2>&1; then
+        mv -f "$partial" "$cached"
+      else
+        rm -f "$partial"
+        : > "$cached.failed"
+      fi
+    fi
+    if [ -e "$cached" ]; then cp -f "$cached" "$object"; fi
+    continue
+  fi
   clang -std=c11 -O2 -D_GNU_SOURCE -fPIC "${binding_header_flags[@]}" \
     -I"$napi" -I"$uv_include" -I"$(dirname "$source")" \
     -I"$root/runtime/node/internal" -I"$root/runtime/c" \
