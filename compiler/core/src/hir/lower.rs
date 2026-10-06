@@ -12877,7 +12877,17 @@ fn lower_wanted_closures(
                     &lowered.program.funcs,
                     copy_for(true),
                 );
+                // **Pushed before the ordinary body, as they always were.** The
+                // raising entry is built with the body last in `kernels`, and
+                // then they go in front of it: a generator closure's two copies
+                // share one generator class with one resume, and the first copy
+                // `suspend` meets decides which (see the plan's note on giving
+                // each copy its own class). Body first made the shared resume the
+                // ordinary one, and a throw from a generator step inside a `try`
+                // (17 test262 `...-elision-step-err` cases) aborted uncaught.
+                let body = lowered.program.funcs.pop().expect("the body just pushed");
                 lowered.program.funcs.extend(raising);
+                lowered.program.funcs.push(body);
             }
             // **A refused closure had no line of its own.** `uncompiled` is keyed
             // by a *declared* name and an arrow has none, so every cascade ending
