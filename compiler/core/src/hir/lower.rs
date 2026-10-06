@@ -12857,6 +12857,7 @@ fn lower_wanted_closures(
                         &func,
                         shared.hierarchy.erased_call_arity,
                         None,
+                        closure_result_absent(snapshot, closures[index].node, &func.return_type),
                     )
                 {
                     lowered.program.funcs.push(adapter);
@@ -12988,7 +12989,7 @@ fn raising_closure(
     let (raising_body, raising_entry) = raising_closure_names(index);
     let arity = shared.hierarchy.erased_call_arity;
     let abort = |because: String| {
-        erased_call(raising_entry.clone(), func, arity, Some(&because))
+        erased_call(raising_entry.clone(), func, arity, Some(&because), Absent::Impossible)
             .into_iter()
             .collect::<Vec<Func>>()
     };
@@ -13006,7 +13007,8 @@ fn raising_closure(
         )),
         Ok(mut raising) => {
             raising.name = raising_body;
-            let mut produced = erased_call(raising_entry, &raising, arity, None)
+            let result_absent = closure_result_absent(snapshot, closures[index].node, &raising.return_type);
+            let mut produced = erased_call(raising_entry, &raising, arity, None, result_absent)
                 .into_iter()
                 .collect::<Vec<Func>>();
             produced.push(raising);
@@ -14165,6 +14167,39 @@ fn record_unimplemented_interfaces(hierarchy: &Hierarchy, program: &mut Program)
     program.uncompiled.sort();
 }
 
+/// What a null pointer a closure returns means, read from the closure's own
+/// signature: `null` where its result's absences are `null` alone,
+/// `undefined` where `undefined` alone, and `Impossible` otherwise -- a
+/// result that is not a reference, a closure with no signature of its own (one
+/// the compiler makes), or both absences at once, which one pointer cannot
+/// tell apart (see `FuncBuilder::absence_at_excluding`).
+fn closure_result_absent(snapshot: &SemanticSnapshot, closure: NodeId, returns: &HirType) -> Absent {
+    if !super::tags::payload_is_a_reference(returns) {
+        return Absent::Impossible;
+    }
+    let signature = snapshot
+        .node_types
+        .get(&closure)
+        .and_then(|ty| snapshot.types.get(ty.0 as usize))
+        .and_then(|record| match record.kind {
+            TypeKind::Function(signature) => snapshot.signatures.get(signature.0 as usize),
+            _ => None,
+        });
+    let Some(result) = signature.map(|signature| signature.return_type) else {
+        return Absent::Impossible;
+    };
+    let members = match snapshot.types.get(result.0 as usize).map(|record| &record.kind) {
+        Some(TypeKind::Union(members)) => members.clone(),
+        _ => vec![result],
+    };
+    let absences: Vec<Absence> = members.iter().filter_map(|member| absence_of_member(snapshot, *member)).collect();
+    match (absences.contains(&Absence::Null), absences.contains(&Absence::Undefined)) {
+        (true, false) => Absent::Null,
+        (false, true) => Absent::Undefined,
+        _ => Absent::Impossible,
+    }
+}
+
 /// Whether a closure's result crosses an erased call as itself: already
 /// erased, nothing at all, or something with an erased form.
 fn result_crosses(returns: &HirType) -> bool {
@@ -14196,7 +14231,13 @@ fn result_crosses(returns: &HirType) -> bool {
 /// missing ones, so a closure written at one arity and called at another is
 /// correct, and `erased-fn-arity-only` agrees on both arms. Reading "arity is free"
 /// as "parameters are free" is the mistake this function exists downstream of.
-fn erased_call(name: String, call: &Func, width: usize, refusing: Option<&str>) -> Option<Func> {
+fn erased_call(
+    name: String,
+    call: &Func,
+    width: usize,
+    refusing: Option<&str>,
+    result_absent: Absent,
+) -> Option<Func> {
     let origin = Origin::generated(
         call.origin.location,
         nts_semantic_schema::GeneratedReason::ClosureLowering,
@@ -14337,10 +14378,12 @@ fn erased_call(name: String, call: &Func, width: usize, refusing: Option<&str>) 
             values.push(Op {
                 kind: OpKind::Erase {
                     value: answered,
-                    // A returned value is present: the closure produced it. An
-                    // absence would be the closure's own `null`, which is already
-                    // in `call.return_type` and erases with it.
-                    absent: Absent::Impossible,
+                    // What a null pointer the closure returns means, from its
+                    // own signature (`closure_result_absent`): a `string |
+                    // null` result's absence is `null`. The `HirType` cannot
+                    // say -- the two share a pointer -- and assuming none made
+                    // a null result a string tag over a null pointer.
+                    absent: result_absent,
                 },
                 ty: HirType::Erased,
                 origin: origin.clone(),

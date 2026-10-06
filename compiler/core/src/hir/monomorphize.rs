@@ -116,6 +116,7 @@ pub fn monomorphize(program: &mut Program) -> usize {
             .iter()
             .find(|func| func.name == target)
             .map(|func| (target, func.params.len(), func.return_type.clone()));
+        let result_absent = super::erased_entry_absent(program, request.concrete);
         if let Some(written) = written {
             retype_parameter(
                 &mut clone,
@@ -123,6 +124,7 @@ pub fn monomorphize(program: &mut Program) -> usize {
                 request.concrete,
                 program.erased_call_slot,
                 written,
+                result_absent,
             );
         }
         program.funcs.push(clone);
@@ -252,6 +254,7 @@ fn retype_parameter(
     concrete: TypeId,
     erased_slot: Option<u32>,
     written: (String, usize, HirType),
+    result_absent: super::Absent,
 ) {
     let param = ValueId(slot);
     let ty = HirType::Managed(ManagedType::Object(concrete));
@@ -298,7 +301,8 @@ fn retype_parameter(
         })
         .collect();
     for (index, uniform) in sites {
-        super::call_directly(clone, index, name.clone(), arity, &returns, uniform, None);
+        let written = super::Written { name: name.clone(), arity, returns: &returns, result_absent };
+        super::call_directly(clone, index, written, uniform, None);
     }
 }
 

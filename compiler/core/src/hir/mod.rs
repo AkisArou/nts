@@ -3958,15 +3958,24 @@ pub fn bridged_through_table(program: &Program, layout: &Layout) -> Option<u32> 
 /// class); it is pushed and sequenced here so no caller has to guess an id.
 /// `false` when the op is not a call or its block cannot be found, which cannot
 /// happen for a site a caller resolved and is not worth a panic.
+/// The written entry a uniform-slot call is pointed at by [`call_directly`]:
+/// its name and arity, what it returns, and what a null result means
+/// ([`erased_entry_absent`]).
+pub(super) struct Written<'a> {
+    pub name: String,
+    pub arity: usize,
+    pub returns: &'a HirType,
+    pub result_absent: Absent,
+}
+
 pub(super) fn call_directly(
     func: &mut Func,
     index: usize,
-    name: String,
-    arity: usize,
-    returns: &HirType,
+    written: Written<'_>,
     uniform: bool,
     receiver: Option<Op>,
 ) -> bool {
+    let Written { name, arity, returns, result_absent } = written;
     let id = |at: usize| ValueId(u32::try_from(at).unwrap_or(u32::MAX));
     let OpKind::Call { args, .. } = &func.values[index].kind else {
         return false;
@@ -4070,15 +4079,47 @@ pub(super) fn call_directly(
         func.blocks[block].ops.insert(at, moved);
         func.values[target].kind = OpKind::Erase {
             value: moved,
-            // The closure produced it. An absence would be the body's own `null`,
-            // which is in `returns` and erases with it.
-            absent: Absent::Impossible,
+            // What the class's own erased entry said a null result means
+            // ([`erased_entry_absent`]): `returns` cannot, since `string |
+            // null` and `string` share a pointer, and assuming no absence made
+            // a null result a string tag over a null pointer.
+            absent: result_absent,
         };
         return true;
     }
     func.values[target].kind = call;
     func.values[target].ty = returns.clone();
     true
+}
+
+/// What a null result means for a closure class's calls through the uniform
+/// slot: the absence its erased entry erases its body's answer with (see
+/// `lower::closure_result_absent`), read from that entry so a direct call
+/// made in its place ([`call_directly`]) erases the same way.
+pub(super) fn erased_entry_absent(program: &Program, class: TypeId) -> Absent {
+    let Some(slot) = program.erased_call_slot else {
+        return Absent::Impossible;
+    };
+    let entry = program
+        .layouts
+        .iter()
+        .find(|layout| layout.types.contains(&class))
+        .and_then(|layout| layout.methods.get(slot as usize).cloned().flatten())
+        .and_then(|name| program.funcs.iter().find(|func| func.name == name));
+    let Some(entry) = entry else {
+        return Absent::Impossible;
+    };
+    entry
+        .blocks
+        .iter()
+        .find_map(|block| match block.terminator {
+            Terminator::Return(Some(value)) => match entry.values[value.0 as usize].kind {
+                OpKind::Erase { absent, .. } => Some(absent),
+                _ => None,
+            },
+            _ => None,
+        })
+        .unwrap_or(Absent::Impossible)
 }
 
 /// Values carried through boxing and control-flow joins. These operations

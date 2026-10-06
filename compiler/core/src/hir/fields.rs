@@ -989,6 +989,7 @@ pub fn devirtualize(program: &mut Program, known: &FieldClosures) -> usize {
     let mut count = 0;
     for (func, index, name, erased, class, uniform, (arity, returns)) in rewrites {
         let origin = program.funcs[func].values[index].origin.clone();
+        let result_absent = super::erased_entry_absent(program, class);
         // The receiver read back at the class, which is the cast this pass is
         // entitled to make and the reason it carries `class` at all.
         let receiver = super::Op {
@@ -999,9 +1000,7 @@ pub fn devirtualize(program: &mut Program, known: &FieldClosures) -> usize {
         if super::call_directly(
             &mut program.funcs[func],
             index,
-            name,
-            arity,
-            &returns,
+            super::Written { name, arity, returns: &returns, result_absent },
             uniform,
             Some(receiver),
         ) {
