@@ -102,11 +102,18 @@ fn proven_identity_and_satisfies_controls_have_no_assertion_cost() {
             .iter()
             .find(|func| func.name == name)
             .expect(name);
-        assert!(!func.values.iter().any(|op| matches!(&op.kind,
-            OpKind::Call { callee: Callee::External(name), .. } if name == "nts_raise" || name == "nts_uncaught"
-        )), "{name} must not retain a runtime assertion guard");
         // The arena retains dead values for stable IDs. Only scheduled block
-        // operations reach a backend and constitute an erasure cost.
+        // operations reach a backend and constitute a cost. A failed check
+        // raises where a handler can catch it and otherwise ends the program
+        // through `nts_assertion_failed`, so all three are a retained guard.
+        assert!(
+            !func.blocks.iter().flat_map(|block| &block.ops).any(|value| matches!(
+                &func.values[value.0 as usize].kind,
+                OpKind::Call { callee: Callee::External(name), .. }
+                    if ["nts_raise", "nts_uncaught", "nts_assertion_failed"].contains(&name.as_str())
+            )),
+            "{name} must not retain a runtime assertion guard"
+        );
         assert!(
             !func
                 .blocks
