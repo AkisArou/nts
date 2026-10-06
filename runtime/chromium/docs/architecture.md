@@ -156,6 +156,17 @@ a node (`nts_dom_listener_retain` / `_release`). Measured: an event round trip
 C++'s own native listener at 557 and page script's 795 (0.67x V8; ScriptC
 measured 1.07x for the same reused-listener shape).
 
+**A closure goes back only once its own run returns.** The compiled bridge
+calls a closure without a reference of its own, so whatever detaches a
+listener, handler or timer from inside that listener's own run (`el.onclick =
+null` in the handler, `listener.remove()`, `clearInterval` in the interval)
+must not release the closure then: it may be the only reference to what the
+run still reads. Measured before the rule: a self-clearing handler's closure
+was at count 1 when released mid-run. Each of `NtsListener` and `NtsTimer`
+counts its runs; a detach during one is recorded, and the closure goes back
+when the outermost run returns. `tests/timer-vectors.ts` exercises both, from
+a later entry, so nothing else holds the closure.
+
 **Designed: collecting what nobody removes.** The rest of this section is the
 design for listeners a program drops without removing.
 
@@ -183,6 +194,16 @@ a far larger change for the same answer.
 
 ## 6. Scheduling
 
+- Timers: `setTimeout`/`setInterval` (`nts_dom_set_timeout`, `NtsTimer` on
+  Blink's `TimerBase`) follow HTML's timer steps as `DOMTimer` does: WebIDL
+  `long` timeout (ToInt32, negative is 0), the 4 ms clamp past nesting level
+  5, intervals at least 1 ms, the same timer task queues. `DOMTimer`'s
+  coordinator is private to it, so the program's timers are their own id
+  space and nest among themselves, as its event handlers are their own world.
+  `clearTimeout` and `clearInterval` clear either kind; the document's end
+  gives every waiting closure back. Differential vectors: delay order, 0 /
+  negative / NaN, clear before due, an interval clearing itself, ten levels
+  of nesting -- identical to page script's on C and LLVM.
 - Microtasks: native jobs join the agent's queue (`EventLoop::EnqueueMicrotask`),
   so promise jobs, Blink's internal microtasks and the program's drain together
   at the outermost entry's checkpoint.

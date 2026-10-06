@@ -58,7 +58,7 @@ if (hash(nts) !== compilerSha256) throw new Error("The NTS compiler binary chang
 writeFileSync(resolve(output, "check-result.json"), `${JSON.stringify({
   observedAt: new Date().toISOString(), repositoryHeadAtCheck: gitRevision(root),
   compiler: { path: nts, sha256: compilerSha256, mtime: compilerMtime },
-  inputs: Object.fromEntries(["embedder/program/main.ts", "embedder/program/tsconfig.json", "embedder/program/nts.config.ts", "tests/boundary.ts", "tests/dom-witness.ts", "tests/idl-vectors.ts", "benchmarks/workloads/binding.ts", "benchmarks/workloads/rows.ts", "benchmarks/workloads/kernels.ts", "dom/types/dom-testing.d.ts", "dom/types/dom-abi.d.ts", "dom/types/dom-idl.d.ts", "dom/abi/dom_testing.h", "dom/abi/dom_abi.h", "dom/abi/dom_idl.h"].map(path => [path, hash(resolve(lane, path))])),
+  inputs: Object.fromEntries(["embedder/program/main.ts", "embedder/program/tsconfig.json", "embedder/program/nts.config.ts", "tests/boundary.ts", "tests/dom-witness.ts", "tests/idl-vectors.ts", "tests/timer-vectors.ts", "benchmarks/workloads/binding.ts", "benchmarks/workloads/rows.ts", "benchmarks/workloads/kernels.ts", "dom/types/dom-testing.d.ts", "dom/types/dom-abi.d.ts", "dom/types/dom-idl.d.ts", "dom/abi/dom_testing.h", "dom/abi/dom_abi.h", "dom/abi/dom_idl.h"].map(path => [path, hash(resolve(lane, path))])),
   chromiumRevision: gitRevision(source), clangVersion: execFileSync(clang, ["--version"], { encoding: "utf8" }).trim(),
   sysroot, checks, scope: "Standalone embedding; does not establish sandboxed renderer execution.",
 }, null, 2)}\n`);

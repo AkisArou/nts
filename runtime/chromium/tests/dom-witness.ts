@@ -5,6 +5,7 @@ import * as testing from "nts:dom-testing";
 import { asHTMLElement, cancelAnimationFrame, document, requestAnimationFrame } from "nts:dom";
 import type { Document, Element, Event, Node } from "nts:dom";
 import { idlTranscript } from "./idl-vectors.ts";
+import { startTimerVectors } from "./timer-vectors.ts";
 import type { VectorHost } from "./idl-vectors.ts";
 
 function element(d: Document, tag: string, id: string): Element {
@@ -114,6 +115,11 @@ export function ntsChromiumDomProgram(): number {
   const pre = element(d, "pre", "native-idl");
   pre.textContent = transcript;
   container.appendChild(pre);
+
+  // The timer vectors (timer-vectors.ts): they run after this returns and
+  // fill this transcript as they fire; the smoke waits for its data-done.
+  container.appendChild(element(d, "pre", "native-timers"));
+  startTimerVectors();
 
   // A frame callback runs before the next frame, with its time; a cancelled
   // one never runs. The smoke reads both after its frames have passed. The

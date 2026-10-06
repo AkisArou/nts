@@ -242,7 +242,28 @@ try {
       pre.textContent = transcript;
       container.appendChild(pre);
     })()`);
+    // The timer vectors (tests/timer-vectors.ts), the same source with the
+    // browser's own timers: `document()` is the program's spelling of the
+    // global.
+    const timerSource = await readFile(resolve(root, "runtime/chromium/tests/timer-vectors.ts"), "utf8");
+    const timerVectors = stripTypeScriptTypes(timerSource).replace(/^\s*import\s[^;]*;\s*$/gm, "").replace(/^export /gm, "");
+    const timerNarrowings = [...(/import \{([^}]*)\} from "nts:dom"/.exec(timerSource)?.[1] ?? "").matchAll(/\bas(\w+)/g)]
+      .map(([, name]) => `const as${name} = (node) => node instanceof ${name} ? node : null;`).join("\n");
+    await evaluate(`(() => {
+      const pre = window.document.createElement('pre');
+      pre.id = 'native-timers';
+      window.document.querySelector('#native-dom').appendChild(pre);
+      const document = () => window.document;
+      ${timerNarrowings}
+      ${timerVectors}
+      startTimerVectors();
+    })()`);
   }
+  // The timer vectors (tests/timer-vectors.ts) run after the page loads and
+  // finish in their own time. Wait for them before the counter's input
+  // events, whose check counts the program's live objects, which pending
+  // timers hold.
+  if (nativeDom) await until(async () => await evaluate<string | null>("document.querySelector('#native-timers')?.getAttribute('data-done') ?? null") === "1", "timer vectors");
   const before = await evaluate<Layout>(`(() => {
     const r = document.querySelector('${inputSelector}').getBoundingClientRect();
     return {title: document.title, count: ${readCount},

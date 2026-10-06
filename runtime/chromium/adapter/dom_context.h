@@ -61,10 +61,12 @@ inline constinit thread_local NtsDomContext *entered = nullptr;
 
 class ListenerSet;
 class NativeJob;
+class NtsTimer;
 using NtsDomCallback = void (*)(NtsDomEvent *, void *);
 using NtsDomCancelCallback = bool (*)(NtsDomEvent *, void *);
 using NtsDomDestroy = void (*)(void *);
 using NtsDomFrameCallback = void (*)(double, void *);
+using NtsDomTimerCallback = void (*)(void *);
 
 // Whether an event handler attribute write by the program is in progress
 // (HandlerWrite). The program's handlers are their own world, as an isolated
@@ -159,6 +161,7 @@ using nts_dom::NtsDomCallback;
 using nts_dom::NtsDomCancelCallback;
 using nts_dom::NtsDomDestroy;
 using nts_dom::NtsDomFrameCallback;
+using nts_dom::NtsDomTimerCallback;
 
 
 struct NtsDomContext : public base::RefCounted<NtsDomContext> {
@@ -183,6 +186,15 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
   // closure goes back once it has run.
   void RunFrame(NtsDomFrameCallback callback, double time, void *closure,
                 NtsDomDestroy destroy);
+  // `setTimeout`/`setInterval` for a compiled closure, as HTML's timer
+  // initialization steps run them (dom_bridge.cc); the id clearTimer takes.
+  int32_t SetTimer(NtsDomTimerCallback callback, void *closure,
+                   NtsDomDestroy destroy, double timeout, bool repeat);
+  // `clearTimeout`/`clearInterval`: the timer stops and its closure goes
+  // back -- after its own run, when it is the one running.
+  void ClearTimer(int32_t id);
+  // A timer's run: its own entry, like a frame callback's.
+  void RunTimer(nts_dom::NtsTimer *timer);
   // Gives a closure back where the program's environment is entered.
   void GiveBack(NtsDomDestroy destroy, void *closure);
   // A job queued by native code, run as a microtask or at the end of the
@@ -261,6 +273,11 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
   bool closed = false;
   const raw_ptr<v8::Isolate> v8_isolate;
   uint32_t job_sequence = 0;
+  // The program's timers are their own id space, apart from page script's,
+  // and nest among themselves: the nesting level of the timer running now,
+  // 0 outside one (HTML's timer nesting level).
+  int32_t timer_sequence = 0;
+  int timer_nesting = 0;
   blink::Vector<scoped_refptr<NativeJob>> jobs;
   base::WeakPtrFactory<NtsDomContext> weak_factory{this};
 

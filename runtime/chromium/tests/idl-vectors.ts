@@ -336,6 +336,25 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   anchor.hash = "#" + low + "x";
   log("usvHash", anchor.hash + "|" + units(shown(anchor.getAttribute("href"))));
 
+  // A listener that removes itself while it runs: it runs once, a listener
+  // after it still runs, and what it captured is still there after the
+  // removal (the closure goes back only once its own run returns).
+  const selfRemoving = { count: 0, note: "" };
+  const remover = asHTMLElement(d.createElement("button"))!;
+  root.appendChild(remover);
+  function onlyOnce(event: Event): void {
+    remover.removeEventListener("click", onlyOnce);
+    selfRemoving.count += 1;
+    selfRemoving.note = selfRemoving.note + "ran;";
+  }
+  const afterIt = (event: Event): void => { selfRemoving.note = selfRemoving.note + "after;"; };
+  remover.addEventListener("click", onlyOnce);
+  remover.addEventListener("click", afterIt);
+  remover.click();
+  remover.click();
+  remover.removeEventListener("click", afterIt);
+  log("selfRemoval", selfRemoving.count + "|" + selfRemoving.note);
+
   // What the members raise: each exception's name and Blink's message.
   thrown("syntax", () => { d.querySelector("["); });
   thrown("hierarchy", () => { div.appendChild(div); });

@@ -1,13 +1,21 @@
 #include "nts/dom_context.h"
 
+#include <algorithm>
 #include <cstdlib>
+#include <limits>
 #include <string>
 
 #include "base/check.h"
+#include "base/message_loop/message_pump.h"
+#include "base/numerics/clamped_math.h"
 #include "base/logging.h"
+#include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/scheduler/web_scheduler_tracked_feature.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/bindings/wrapper_type_info.h"
+#include "third_party/blink/renderer/platform/heap/prefinalizer.h"
+#include "third_party/blink/renderer/platform/timer.h"
 
 namespace nts_dom {
 // The objects the program keeps off the stack -- nodes, events, token lists
@@ -73,7 +81,10 @@ public:
   // closure back; the caller runs it where the program's environment is
   // entered. Nothing the second time. A handler stays where Blink keeps
   // it, stopped: a later write replaces it there, and page script's never
-  // finds it.
+  // finds it. Detached during its own run -- `el.onclick = null` inside the
+  // handler, a listener removing itself -- it hands back nothing: the
+  // closure may be the only reference to what that run still reads, so it
+  // goes back when the outermost run returns (Invoke).
   NtsDomDestroy Detach(void *&closure) {
     if (!callback_ && !cancel_)
       return nullptr;
@@ -81,6 +92,10 @@ public:
       target_->removeEventListener(type_, this, capture_);
     callback_ = nullptr;
     cancel_ = nullptr;
+    if (running_) {
+      detached_while_running_ = true;
+      return nullptr;
+    }
     context_ = nullptr;
     closure = closure_.ExtractAsDangling();
     return std::exchange(destroy_, nullptr);
@@ -99,6 +114,10 @@ private:
   bool handler_ = false;
   NtsDomCallback callback_;
   NtsDomCancelCallback cancel_ = nullptr;
+  // Runs of this listener under way (a dispatch can nest), and whether it
+  // was detached from inside one.
+  int running_ = 0;
+  bool detached_while_running_ = false;
   raw_ptr<void> closure_;
   NtsDomDestroy destroy_;
 };
@@ -133,6 +152,81 @@ private:
   NtsDomDestroy destroy_;
 };
 
+// A compiled closure to run after a delay, once or every interval: HTML's
+// timer initialization steps as DOMTimer runs them (core/scheduler/
+// dom_timer.cc), whose coordinator is private to it -- so the program's
+// timers are their own id space and nest among themselves, as its event
+// handlers are their own world. Blink's TimerBase posts on the timer task
+// queues page script's timers use. A timer stays in the context's map while
+// it can still run; its closure goes back when it has run once (a timeout),
+// when it is cleared, or when the document ends -- and a timer cleared from
+// inside its own run gives the closure back only once that run returns.
+class NtsTimer final : public blink::GarbageCollected<NtsTimer>,
+                       public blink::TimerBase {
+  USING_PRE_FINALIZER(NtsTimer, Dispose);
+
+public:
+  // HTML's "nesting level greater than 5", counted from 1 as DOMTimer does.
+  static constexpr int kMaxNesting = 6;
+  static constexpr base::TimeDelta kMinimumInterval = base::Milliseconds(4);
+
+  NtsTimer(NtsDomContext *context, int32_t id, int nesting,
+           NtsDomTimerCallback callback, void *closure, NtsDomDestroy destroy)
+      : TimerBase(nullptr), context_(context), id_(id), nesting_(nesting),
+        callback_(callback), closure_(closure), destroy_(destroy) {}
+
+  int32_t id() const { return id_; }
+  int nesting() const { return nesting_; }
+
+  // Each run, once the context has entered the program's environment.
+  void Run() {
+    running_ = true;
+    callback_(closure_.get());
+    running_ = false;
+    if (!RepeatInterval() || cleared_)
+      GiveBackNow();
+  }
+
+  // Stops the timer and hands back what gives the closure back, for the
+  // caller to run where the program's environment is entered; nothing the
+  // second time, or while the timer's own run is under way (that run gives
+  // it back when it returns).
+  NtsDomDestroy Take(void *&closure) {
+    Stop();
+    if (!callback_ || cleared_)
+      return nullptr;
+    if (running_) {
+      cleared_ = true;
+      return nullptr;
+    }
+    callback_ = nullptr;
+    context_ = nullptr;
+    closure = closure_.ExtractAsDangling();
+    return std::exchange(destroy_, nullptr);
+  }
+
+  void Dispose() { Stop(); }
+  void Trace(blink::Visitor *) const {}
+
+private:
+  void Fired() override;
+  void GiveBackNow() {
+    callback_ = nullptr;
+    context_ = nullptr;
+    if (auto destroy = std::exchange(destroy_, nullptr))
+      destroy(closure_.ExtractAsDangling());
+  }
+
+  raw_ptr<NtsDomContext> context_;
+  const int32_t id_;
+  int nesting_;
+  NtsDomTimerCallback callback_;
+  raw_ptr<void> closure_;
+  NtsDomDestroy destroy_;
+  bool running_ = false;
+  bool cleared_ = false;
+};
+
 // What a context's program has asked Blink to call -- listeners until each is
 // removed, frames until each runs -- and so what gives every closure back
 // when the document goes.
@@ -151,6 +245,7 @@ public:
     visitor->Trace(frames);
     visitor->Trace(by_target);
     visitor->Trace(handlers);
+    visitor->Trace(timers);
   }
   // The listener added for (type, closure, capture) on `target`, or null.
   NtsListener *Find(blink::EventTarget *target, const blink::AtomicString &type,
@@ -186,6 +281,8 @@ public:
   blink::HeapHashMap<blink::Member<blink::EventListener>,
                      blink::Member<NtsListener>>
       handlers;
+  // Timers that can still run, by id.
+  blink::HeapHashMap<int32_t, blink::Member<NtsTimer>> timers;
 };
 
 // Listener handles the program keeps off the stack, as Roots for objects.
@@ -276,7 +373,38 @@ namespace nts_dom {
 void NtsListener::Invoke(blink::ExecutionContext *, blink::Event *event) {
   if (!callback_ && !cancel_)
     return;
-  context_->Dispatch(callback_, cancel_, event, closure_.get());
+  // The context outlives this run even if the run ends the document.
+  scoped_refptr<NtsDomContext> context(context_.get());
+  ++running_;
+  context->Dispatch(callback_, cancel_, event, closure_.get());
+  if (--running_ || !detached_while_running_)
+    return;
+  detached_while_running_ = false;
+  context_ = nullptr;
+  context->GiveBack(std::exchange(destroy_, nullptr),
+                    closure_.ExtractAsDangling());
+}
+
+void NtsTimer::Fired() {
+  NtsDomContext *context = context_;
+  if (!context || !callback_)
+    return;
+  if (RepeatInterval()) {
+    // An interval's every run nests one deeper; past the limit it runs no
+    // more often than every 4 ms, on the queue for deeply nested timers.
+    nesting_ = base::ClampAdd(nesting_, 1);
+    if (nesting_ == kMaxNesting + 1) {
+      if (*RepeatInterval() < kMinimumInterval)
+        AugmentRepeatInterval(kMinimumInterval - *RepeatInterval());
+      MoveToNewTaskRunner(context->document->GetTaskRunner(
+          blink::TaskType::kJavascriptTimerDelayedHighNesting));
+    }
+  } else {
+    // A timeout leaves the map before it runs, as DOMTimer leaves its
+    // coordinator: clearing its own id from inside does nothing more.
+    context->listeners->timers.erase(id_);
+  }
+  context->RunTimer(this);
 }
 
 void NtsFrame::Invoke(double time) {
@@ -388,6 +516,88 @@ void NtsDomContext::RunFrame(NtsDomFrameCallback callback, double time,
           call->destroy(call->closure.get());
       },
       &call);
+}
+
+int32_t NtsDomContext::SetTimer(NtsDomTimerCallback callback, void *closure,
+                                NtsDomDestroy destroy, double timeout,
+                                bool repeat) {
+  CHECK(invoke);
+  // WebIDL's `long timeout`: ToInt32, as page script's binding converts it.
+  blink::DummyExceptionStateForTesting conversion;
+  int32_t milliseconds = blink::NativeValueTraits<blink::IDLLong>::NativeValue(
+      v8_isolate.get(), v8::Number::New(v8_isolate.get(), timeout),
+      conversion);
+  // HTML's timer initialization steps, in DOMTimer's order: a negative
+  // timeout is 0; the nesting level grows before it is read; past level 5 a
+  // timeout under 4 ms is 4 ms.
+  base::TimeDelta delay = base::Milliseconds(std::max(milliseconds, 0));
+  const int nesting = base::ClampAdd(timer_nesting, 1);
+  if (nesting > nts_dom::NtsTimer::kMaxNesting &&
+      delay < nts_dom::NtsTimer::kMinimumInterval)
+    delay = nts_dom::NtsTimer::kMinimumInterval;
+  blink::TaskType task_type =
+      nesting > nts_dom::NtsTimer::kMaxNesting
+          ? blink::TaskType::kJavascriptTimerDelayedHighNesting
+      : delay.is_zero() ? blink::TaskType::kJavascriptTimerImmediate
+                        : blink::TaskType::kJavascriptTimerDelayedLowNesting;
+  // An interval runs at most once a millisecond, as DOMTimer clamps one.
+  if (repeat && !blink::features::IsSetIntervalWithoutClampEnabled())
+    delay = std::max(delay, base::Milliseconds(1));
+  // A short timeout runs as close to on time as it can; a long one may be
+  // aligned with other wake-ups, as DOMTimer's are.
+  const base::TimeDelta high_resolution =
+      base::MessagePump::GetAlignWakeUpsEnabled() &&
+              base::FeatureList::IsEnabled(
+                  blink::features::kLowerHighResolutionTimerThreshold)
+          ? base::Milliseconds(4)
+          : base::Milliseconds(32);
+  const bool precise = delay < high_resolution ||
+                       blink::scheduler::IsAlignWakeUpsDisabledForProcess();
+  // The next id the program's timers do not use, from 1, wrapping.
+  int32_t id;
+  do {
+    timer_sequence = timer_sequence == std::numeric_limits<int32_t>::max()
+                         ? 1
+                         : timer_sequence + 1;
+    id = timer_sequence;
+  } while (listeners->timers.Contains(id));
+  auto *timer = blink::MakeGarbageCollected<nts_dom::NtsTimer>(
+      this, id, nesting, callback, closure, destroy);
+  timer->MoveToNewTaskRunner(document->GetTaskRunner(task_type));
+  listeners->timers.insert(id, timer);
+  if (repeat)
+    timer->StartRepeating(delay, FROM_HERE, precise);
+  else
+    timer->StartOneShot(delay, FROM_HERE, precise);
+  return id;
+}
+
+void NtsDomContext::ClearTimer(int32_t id) {
+  const auto found = listeners->timers.find(id);
+  if (found == listeners->timers.end())
+    return;
+  nts_dom::NtsTimer *timer = found->value.Get();
+  listeners->timers.erase(found);
+  void *closure = nullptr;
+  // Inside the program's call: its environment is entered already.
+  if (auto destroy = timer->Take(closure))
+    destroy(closure);
+}
+
+void NtsDomContext::RunTimer(nts_dom::NtsTimer *timer) {
+  if (closed || !invoke)
+    return;
+  Entry entry(this);
+  v8::HandleScope handles(v8_isolate);
+  v8::MicrotasksScope microtasks(v8_isolate, event_loop->microtask_queue(),
+                                 v8::MicrotasksScope::kRunMicrotasks);
+  // The timer is on this stack for the run, where Oilpan's scan finds it.
+  timer_nesting = timer->nesting();
+  invoke(
+      invoke_host.get(),
+      [](void *state) { static_cast<nts_dom::NtsTimer *>(state)->Run(); },
+      timer);
+  timer_nesting = 0;
 }
 
 // Gives a closure back where the program's environment is entered.
@@ -522,6 +732,15 @@ void NtsDomContext::Close() {
     if (auto destroy = listener->Detach(closure))
       GiveBack(destroy, closure);
   }
+  blink::HeapVector<blink::Member<nts_dom::NtsTimer>> timers;
+  for (auto &entry : listeners->timers)
+    timers.push_back(entry.value);
+  listeners->timers.clear();
+  for (auto &timer : timers) {
+    void *closure = nullptr;
+    if (auto destroy = timer->Take(closure))
+      GiveBack(destroy, closure);
+  }
   blink::HeapVector<blink::Member<NtsFrame>> frames(listeners->frames);
   listeners->frames.clear();
   for (auto &frame : frames) {
@@ -623,7 +842,8 @@ NtsDomNode *nts_blink_dom_element_by_id(NtsDomContext *context,
       context->document->getElementById(blink::AtomicString(id)));
 }
 size_t nts_blink_dom_held_closures(NtsDomContext *context) {
-  return context->listeners->set.size() + context->listeners->frames.size();
+  return context->listeners->set.size() + context->listeners->frames.size() +
+         context->listeners->timers.size();
 }
 size_t nts_blink_dom_roots(void) { return HeldObjects().counts.size(); }
 // Logs each root left, as "Interface xcount": what a handle the program
@@ -809,6 +1029,29 @@ int32_t nts_dom_request_animation_frame(NtsDomFrameCallback callback,
   return context.document->RequestAnimationFrame(
       frame, blink::FrameCallbackType::kWebExposed);
 }
+int32_t nts_dom_set_timeout(NtsDomTimerCallback callback, void *closure,
+                            NtsDomDestroy destroy, double timeout) {
+  return nts_dom::Current().SetTimer(callback, closure, destroy, timeout,
+                                     /*repeat=*/false);
+}
+int32_t nts_dom_set_interval(NtsDomTimerCallback callback, void *closure,
+                             NtsDomDestroy destroy, double timeout) {
+  return nts_dom::Current().SetTimer(callback, closure, destroy, timeout,
+                                     /*repeat=*/true);
+}
+int32_t nts_dom_set_timeout_default(NtsDomTimerCallback callback,
+                                    void *closure, NtsDomDestroy destroy) {
+  return nts_dom_set_timeout(callback, closure, destroy, 0);
+}
+int32_t nts_dom_set_interval_default(NtsDomTimerCallback callback,
+                                     void *closure, NtsDomDestroy destroy) {
+  return nts_dom_set_interval(callback, closure, destroy, 0);
+}
+// HTML's clearTimeout and clearInterval clear from one list: either clears
+// either kind.
+void nts_dom_clear_timeout(int32_t id) { nts_dom::Current().ClearTimer(id); }
+void nts_dom_clear_interval(int32_t id) { nts_dom::Current().ClearTimer(id); }
+
 void nts_dom_cancel_animation_frame(int32_t id) {
   NtsDomContext &context = nts_dom::Current();
   for (auto &frame : context.listeners->frames) {

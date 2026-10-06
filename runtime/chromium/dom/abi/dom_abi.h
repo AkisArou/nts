@@ -106,6 +106,36 @@ int32_t nts_dom_request_animation_frame(void (*callback)(double time,
                                         void (*destroy)(void* closure));
 void nts_dom_cancel_animation_frame(int32_t id);
 
+/* `setTimeout(callback, timeout)` and `setInterval` for a compiled closure,
+ * as HTML's timer initialization steps run them: the timeout is WebIDL's
+ * `long` (ToInt32; a negative one is 0), past nesting level 5 one under 4 ms
+ * is 4 ms, and an interval is at least 1 ms, on the timer task queues page
+ * script's timers use. A timeout runs once and gives its closure back; an
+ * interval runs until cleared. Answers the id the clear functions take: the
+ * program's timers are their own id space, apart from page script's. */
+int32_t nts_dom_set_timeout(void (*callback)(void* closure),
+                            void* closure,
+                            void (*destroy)(void* closure),
+                            double timeout);
+int32_t nts_dom_set_interval(void (*callback)(void* closure),
+                             void* closure,
+                             void (*destroy)(void* closure),
+                             double timeout);
+/* The same with the timeout left out, which is 0: an `@ntsDefault` takes
+ * only an integer, and the timeout is a double so that ToInt32 is applied
+ * here, as page script's binding applies it. */
+int32_t nts_dom_set_timeout_default(void (*callback)(void* closure),
+                                    void* closure,
+                                    void (*destroy)(void* closure));
+int32_t nts_dom_set_interval_default(void (*callback)(void* closure),
+                                     void* closure,
+                                     void (*destroy)(void* closure));
+/* `clearTimeout(id)` / `clearInterval(id)`, either for either kind, as in
+ * HTML: the timer stops and its closure goes back -- once its own run
+ * returns, when cleared from inside it. An unknown id does nothing. */
+void nts_dom_clear_timeout(int32_t id);
+void nts_dom_clear_interval(int32_t id);
+
 #ifdef __cplusplus
 }
 #endif

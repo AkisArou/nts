@@ -13,6 +13,31 @@ declare module "nts:dom" {
   export function requestAnimationFrame(callback: Closure<(time: CNumber<"double">) => void>): CNumber<"int32">;
   /** @ntsSymbol nts_dom_cancel_animation_frame */
   export function cancelAnimationFrame(id: CNumber<"int32">): void;
+  /**
+   * `setTimeout(handler, timeout)`: once, after the timeout, as HTML's timer
+   * steps schedule it. Answers the id clearTimeout takes.
+   * @ntsSymbol nts_dom_set_timeout
+   */
+  export function setTimeout(handler: Closure<() => void>, timeout: CNumber<"double">): CNumber<"int32">;
+  /**
+   * `setTimeout(handler)`: the timeout is 0.
+   * @ntsSymbol nts_dom_set_timeout_default
+   */
+  export function setTimeout(handler: Closure<() => void>): CNumber<"int32">;
+  /**
+   * `setInterval(handler, timeout)`: every timeout until cleared.
+   * @ntsSymbol nts_dom_set_interval
+   */
+  export function setInterval(handler: Closure<() => void>, timeout: CNumber<"double">): CNumber<"int32">;
+  /**
+   * `setInterval(handler)`: the timeout is 0, so at least 1 ms.
+   * @ntsSymbol nts_dom_set_interval_default
+   */
+  export function setInterval(handler: Closure<() => void>): CNumber<"int32">;
+  /** @ntsSymbol nts_dom_clear_timeout */
+  export function clearTimeout(id: CNumber<"int32">): void;
+  /** @ntsSymbol nts_dom_clear_interval */
+  export function clearInterval(id: CNumber<"int32">): void;
   /** The document the running code is part of. */
   /** @ntsSymbol nts_dom_document */
   export function document(): Document;
