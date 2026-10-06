@@ -377,6 +377,7 @@ judge() {
   module=$1
   out=$(NTS_COMPILER="$compiler" NTS_BIN="$compiler" \
     timeout 1800 bash tooling/conformance/build.sh "$module" 2>&1)
+  case $out in *"reused the emission in "*) : > "$verdicts/$module.reused" ;; esac
   if printf '%s' "$out" | grep -q 'bytes$'; then
     # Compiling is not loading, and the difference is not academic. `dgram`
     # compiled, linked, and failed at `require()` with
@@ -530,6 +531,11 @@ for module in $FLOOR; do
       failures=$((failures + 1)) ;;
   esac
 done
+# Counted, so a reuse that silently stopped happening -- or started where it
+# should not -- shows on the step's own output rather than only in its time.
+if [ -n "${NTS_ADDON_EMITTED:-}" ]; then
+  echo "  $(ls "$verdicts"/*.reused 2>/dev/null | wc -l | tr -d ' ') of $(printf '%s\n' $FLOOR | wc -l | tr -d ' ') module(s) reused profile's emit-c output ($NTS_ADDON_EMITTED)"
+fi
 rm -rf "$verdicts"
 
 joined=0

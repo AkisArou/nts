@@ -139,6 +139,7 @@ if [ -n "$emitted" ] && [ -z "${NTS_CONFORMANCE_RC:-}" ] \
    && [ "$(cat "$emitted/.emitted-by" 2>/dev/null)" = "$(sha256sum "$compiler" | cut -d' ' -f1)" ]; then
   cp -a "$emitted/$module/." "$work/"
   reused=yes
+  echo "reused the emission in $emitted/$module"
 fi
 if [ -z "$reused" ]; then
   NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$compiler" \
