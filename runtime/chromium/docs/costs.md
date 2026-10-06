@@ -457,6 +457,80 @@ policies clean -- no memory error, no undefined behaviour, and no leak once
 the mini-DOM's deliberately never-freed nodes are suppressed -- and ends at
 999 rows, 2000 roots while the app lives, 0 after destroy.
 
+## Generated bindings, an application, and a profile (2026-10-06)
+
+Optimized perf engine, now with symbols (`symbol_level = 1`, no code change).
+Renderer pinned to CPU 4, a P-core of an i9-14900K. CPUs 16 to 31 are
+E-cores, a different microarchitecture: never compare runs across them. The
+machine was shared with four to five peer compiles, so absolute numbers
+move between sessions. Ratios within one run do not, and are what is
+reported.
+
+**Kernels on the generated bindings**: compiled over Blink's own C++, and
+over V8, in one run (`perf/kernels-c-noraw`, 6 runs):
+
+| kernel | shape | compiled/C++ | compiled/V8 | hand-written ABI, compiled/C++ |
+|---|---|---|---|---|
+| create-element | loop | 0.98 | 0.50 | 0.99 |
+| create-element | per call | 1.61 | 0.66 | 1.36 |
+| counter tree | loop | 0.75 | 0.51 | 0.74 |
+| counter tree | per call | 0.97 | 0.70 | 1.24 |
+| event round trip | loop | 0.85 | 0.43 | 0.96 |
+| event round trip | per call | 0.97 | 0.51 | 1.40 |
+
+So Blink-exact semantics through generated code cost nothing over the
+hand-written ABI they replaced. That holds only after one fix the
+symbolized profile found. `raw_ptr` is BackupRefPtr on pointers into
+PartitionAlloc memory, which includes the program's heap because malloc is
+shimmed, so each one made and dropped is an atomic count. The generated
+call's stack-only helpers made three or more per call. They are
+`STACK_ALLOCATED` and now hold plain pointers. Before the fix, compiled/C++
+was 1.18 (create-element), 0.93 (counter tree) and 1.07 (event round trip).
+The per-call shape still pays the entry (~24 ns: the environment, the
+`HandleScope`, the `MicrotasksScope` and the active-document check). The
+rest of the main thread's profile is Blink's own: event dispatch, garbage-
+collected allocation, write barriers.
+
+**TodoMVC** (`perf/todo-c`, 6 runs, 58 real input interactions each):
+
+| event the app handles | compiled | V8 | compiled/V8 |
+|---|---|---|---|
+| `change` (add, toggle) | 55 us | 115 us | 0.48 |
+| `click` (destroy, filter, clear) | 65 us | 130 us | 0.50 |
+| `keydown` (no listener: control) | 9.6 us | 10.7 us | 0.90 |
+| `input` (no listener: control) | 2.2 us | 2.3 us | 0.93 |
+
+These are mean `EventDispatch` slices from the trace: listeners plus
+default handling. The two events the app does not listen to stay near
+parity, which shows the slices measure the listeners. End to end, each
+interaction waits for its frame in both engines (~880 to 905 ms per run),
+so at human pace both are frame-bound, and the compiled app leaves half the
+frame's script budget unused.
+
+**Rows** (`perf/rows-c-generated`, 6 runs) are preliminary. Ratios ranged
+from 0.72 (create10k) to 1.45 (swap+layout). The swap case is
+layout-dominated, and its layout time alone differed between engines
+(1.9 against 1.3 ms) on identical DOMs, which only noise explains. What
+held every run: both engines build identical DOMs (asserted), two roots per
+row, and 4662 program allocations per create1k, as before. A quiet-machine
+rerun is owed.
+
+**Correctness in the browser.** The DOM witness passes on C and LLVM.
+compare.ts has C and LLVM, DOM and microtasks, each agreeing with the
+independently run V8 oracle, including the 82-line differential transcript
+of `tests/idl-vectors.ts`. That transcript covers values, node shapes,
+token lists at each variadic arity, an inline style and its layout read
+back, and every exception's name and Blink's message.
+
+Three compiler defects surfaced here, each reported with a reduction:
+
+- `===` across related handle types is invalid C (section 7).
+- A handle-returning closure called as `() => void` aborts at run time
+  (blocker `a-handle-returning-closure-called-as-void`).
+- A narrowed accessor read loses its null check, a SEGV (section 9).
+
+All three are fixed or scheduled by the compiler lane.
+
 ## RC defects found by this lane and fixed in the compiler
 
 Measured with `tooling/memory`'s harness on the unmodified compiler (main
