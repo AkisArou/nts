@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 9b707d7e81e2a94b, commit caf82c58d4e5873b383be0bc17c0f1c8542811a6, harness d6442dbc09f91ad0; machine at start: 20.8 GB available, swap 7.4/20 GB, load 1.4/2.9 (1m/5m), 32 cores; 8 worker(s)
+# compiler 510b0341f1aafc60, commit 791dca8fa354bc93e7bcc200e7ab30e443c5e284, harness d6442dbc09f91ad0; machine at start: 25.9 GB available, swap 8.9/20 GB, load 2.5/4 (1m/5m), 32 cores; 6 worker(s)
 test/language/arguments-object/10.5-1gs.js	pass	
 test/language/asi/S7.9.2_A1_T1.js	pass	
 test/language/asi/S7.9.2_A1_T2.js	pass	
@@ -3118,7 +3118,7 @@ test/language/expressions/greater-than-or-equal/S11.8.4_A4.7.js	pass
 test/language/expressions/greater-than-or-equal/S11.8.4_A4.8.js	pass	
 test/language/expressions/greater-than-or-equal/S11.8.4_A4.9.js	pass	
 test/language/expressions/greater-than-or-equal/bigint-and-bigint.js	pass	
-test/language/expressions/greater-than-or-equal/bigint-and-incomparable-string.js	fail	nts: uncaught Test262Error: The result of (1n >= "0.") is false
+test/language/expressions/greater-than-or-equal/bigint-and-incomparable-string.js	pass	
 test/language/expressions/greater-than-or-equal/bigint-and-non-finite.js	pass	
 test/language/expressions/greater-than-or-equal/bigint-and-number.js	pass	
 test/language/expressions/greater-than-or-equal/bigint-and-string.js	pass	
@@ -3138,10 +3138,10 @@ test/language/expressions/greater-than/S11.8.2_A4.8.js	pass
 test/language/expressions/greater-than/S11.8.2_A4.9.js	pass	
 test/language/expressions/greater-than/bigint-and-bigint.js	pass	
 test/language/expressions/greater-than/bigint-and-boolean.js	pass	
-test/language/expressions/greater-than/bigint-and-incomparable-string.js	fail	nts: uncaught Test262Error: The result of (1n > "0.") is false
+test/language/expressions/greater-than/bigint-and-incomparable-string.js	pass	
 test/language/expressions/greater-than/bigint-and-non-finite.js	pass	
 test/language/expressions/greater-than/bigint-and-number.js	pass	
-test/language/expressions/greater-than/bigint-and-string.js	fail	nts: uncaught Test262Error: The result of (9007199254740993n > "9007199254740992") is true
+test/language/expressions/greater-than/bigint-and-string.js	pass	
 test/language/expressions/greater-than/bigint-and-symbol.js	fail	nts: uncaught Test262Error: 3n > Symbol("2") throws TypeError
 test/language/expressions/grouping/S11.1.6_A3_T4.js	pass	
 test/language/expressions/import.meta/syntax/escape-sequence-import.js	pass	
@@ -3194,10 +3194,10 @@ test/language/expressions/less-than-or-equal/S11.8.3_A4.7.js	pass
 test/language/expressions/less-than-or-equal/S11.8.3_A4.8.js	pass	
 test/language/expressions/less-than-or-equal/S11.8.3_A4.9.js	pass	
 test/language/expressions/less-than-or-equal/bigint-and-bigint.js	pass	
-test/language/expressions/less-than-or-equal/bigint-and-incomparable-string.js	fail	nts: uncaught Test262Error: The result of ("0." <= 1n) is false
+test/language/expressions/less-than-or-equal/bigint-and-incomparable-string.js	pass	
 test/language/expressions/less-than-or-equal/bigint-and-non-finite.js	pass	
 test/language/expressions/less-than-or-equal/bigint-and-number.js	pass	
-test/language/expressions/less-than-or-equal/bigint-and-string.js	fail	nts: uncaught Test262Error: The result of (9007199254740993n <= "9007199254740992") is false
+test/language/expressions/less-than-or-equal/bigint-and-string.js	pass	
 test/language/expressions/less-than/S11.8.1_A2.4_T1.js	pass	
 test/language/expressions/less-than/S11.8.1_A4.1.js	pass	
 test/language/expressions/less-than/S11.8.1_A4.10.js	pass	
@@ -3214,7 +3214,7 @@ test/language/expressions/less-than/S11.8.1_A4.8.js	pass
 test/language/expressions/less-than/S11.8.1_A4.9.js	pass	
 test/language/expressions/less-than/bigint-and-bigint.js	pass	
 test/language/expressions/less-than/bigint-and-boolean.js	pass	
-test/language/expressions/less-than/bigint-and-incomparable-string.js	fail	nts: uncaught Test262Error: The result of ("0." < 1n) is false
+test/language/expressions/less-than/bigint-and-incomparable-string.js	pass	
 test/language/expressions/less-than/bigint-and-non-finite.js	pass	
 test/language/expressions/less-than/bigint-and-number.js	pass	
 test/language/expressions/less-than/bigint-and-string.js	pass	
@@ -3889,7 +3889,7 @@ test/language/expressions/unary-plus/11.4.6-2-1.js	pass
 test/language/expressions/unary-plus/S9.3_A3_T2.js	pass	
 test/language/expressions/unary-plus/S9.3_A4.1_T2.js	pass	
 test/language/expressions/unary-plus/S9.3_A4.2_T2.js	pass	
-test/language/expressions/unary-plus/bigint-throws.js	fail	nts: uncaught Test262Error: +0n throws TypeError
+test/language/expressions/unary-plus/bigint-throws.js	pass	
 test/language/expressions/unsigned-right-shift/S11.7.3_A2.4_T1.js	pass	
 test/language/expressions/unsigned-right-shift/S11.7.3_A4_T1.js	pass	
 test/language/expressions/unsigned-right-shift/S11.7.3_A4_T2.js	pass	
@@ -6356,7 +6356,7 @@ test/language/statements/class/static-init-invalid-undefined-break-target.js	pas
 test/language/statements/class/static-init-invalid-undefined-continue-target.js	pass	
 test/language/statements/class/static-init-invalid-yield.js	fail	accepted: was refused later (lowering)
 test/language/statements/class/static-init-scope-lex-close.js	pass	
-test/language/statements/class/static-init-scope-lex-derived.js	fail	nts: uncaught Test262Error: sameValue
+test/language/statements/class/static-init-scope-lex-derived.js	pass	
 test/language/statements/class/static-init-scope-lex-open.js	pass	
 test/language/statements/class/static-init-scope-private.js	pass	
 test/language/statements/class/static-init-scope-var-close.js	pass	

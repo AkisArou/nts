@@ -1,6 +1,6 @@
 # Test262 test/built-ins cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 313fc08cf70df398, commit 583894c1cfca1578d531e99b2979cf8ec2aecee0, harness d6442dbc09f91ad0; machine at start: 18.6 GB available, swap 7.8/20 GB, load 17.8/18.9 (1m/5m), 32 cores; 8 worker(s)
+# compiler 510b0341f1aafc60, commit 791dca8fa354bc93e7bcc200e7ab30e443c5e284, harness d6442dbc09f91ad0; machine at start: 25.7 GB available, swap 8.9/20 GB, load 14.2/7.8 (1m/5m), 32 cores; 6 worker(s)
 test/built-ins/AggregateError/errors-iterabletolist-failures.js	fail	nts: uncaught Test262Error: get Symbol.iterator
 test/built-ins/Array/S15.4.2.1_A1.3_T1.js	pass	
 test/built-ins/Array/from/from-array.js	pass	
