@@ -8658,8 +8658,8 @@ impl StructuralPlanner<'_, '_> {
                 spelled.push(format!("{at}{spelling}"));
             } else if positional
                 && probe.represent(*declared) == Some(HirType::Erased)
-                && self.erased.contains(callee, position)
                 && let Some(ty) = producer(*argument)
+                && self.erased.admits(callee, position, &ty)
             {
                 spelled.push(format!("{at}e{}", super::generics::spell(&ty)));
                 retyped.insert(position, ty);
@@ -48379,6 +48379,20 @@ impl<'a> FuncBuilder<'a> {
             self.values[array.0 as usize].ty,
             HirType::Managed(ManagedType::Array(ref element)) if **element == HirType::Erased
         );
+        // **And an `any` read of a typed array is one too**, which is what a
+        // copy re-typed from `any` reads: `xs[i]` is still `any` to the
+        // checker, and `any` admits `undefined` -- JavaScript's answer past
+        // the end, which the copy must give as its erased original would. So
+        // it reads through `nts_array_element` like the rest. A copy takes an
+        // array only where every such read feeds a number
+        // (`ClosedParameters::admits`), and there `ToNumber` makes the absent
+        // read NaN, as `undefined` is to every one of those consumers.
+        let checked_any = self
+            .snapshot
+            .node_types
+            .get(&id)
+            .and_then(|ty| self.snapshot.types.get(ty.0 as usize))
+            .is_some_and(|record| matches!(record.kind, TypeKind::Any));
         if !asserted
             && !slot_holds_the_absence
             && matches!(
@@ -48388,13 +48402,21 @@ impl<'a> FuncBuilder<'a> {
             && self.type_of(id) == Some(HirType::Erased)
         {
             let origin = self.origin(id);
+            let numbers = matches!(
+                self.values[array.0 as usize].ty,
+                HirType::Managed(ManagedType::Array(ref element)) if **element == HirType::NUMBER
+            );
             let erased = self.push(OpKind::Erase { value: array , absent: Absent::Impossible }, HirType::Erased, origin.clone());
-            return Ok(self.runtime_call(
+            let read = self.runtime_call(
                 "nts_array_element",
                 vec![erased, index],
                 HirType::Erased,
-                origin,
-            ));
+                origin.clone(),
+            );
+            if checked_any && numbers {
+                return Ok(self.runtime_call("nts_value_to_number", vec![read], HirType::NUMBER, origin));
+            }
+            return Ok(read);
         }
         let ty = match self.values[array.0 as usize].ty.clone() {
             HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)) => *element,
@@ -50697,6 +50719,24 @@ impl<'a> FuncBuilder<'a> {
     /// operator needs its coercions and `+=` on strings is concatenation. The
     /// target goes through [`Self::place_of`], which is what makes
     /// `xs[next()] += 1` call `next` once rather than twice.
+    /// What `a + b` is when the checker typed it `any`: decided by what the
+    /// operands are, as JavaScript decides it. Two numbers add, a string on
+    /// either side concatenates, two bigints add; anything else stays erased.
+    /// One rule for `+` and `+=`.
+    fn plus_from_operands(&self, lhs: ValueId, rhs: ValueId) -> Option<HirType> {
+        let (left, right) = (&self.values[lhs.0 as usize].ty, &self.values[rhs.0 as usize].ty);
+        let string = HirType::Managed(ManagedType::String);
+        if *left == HirType::NUMBER && *right == HirType::NUMBER {
+            Some(HirType::NUMBER)
+        } else if *left == string || *right == string {
+            Some(string)
+        } else if *left == HirType::BigInt && *right == HirType::BigInt {
+            Some(HirType::BigInt)
+        } else {
+            None
+        }
+    }
+
     fn lower_compound(
         &mut self,
         id: NodeId,
@@ -50707,9 +50747,12 @@ impl<'a> FuncBuilder<'a> {
         let place = self.place_of(lhs_node)?;
         let current = self.read_place(lhs_node, &place)?;
         let addend = self.lower_expression(rhs_node)?;
-        let ty = self
+        let mut ty = self
             .type_of(id)
             .ok_or_else(|| self.unrepresentable(id, "a compound assignment"))?;
+        if matches!(compound, Compound::Op(BinOp::Add)) && ty == HirType::Erased {
+            ty = self.plus_from_operands(current, addend).unwrap_or(ty);
+        }
         let updated = match compound {
             Compound::Exponentiate => self.exponentiate(id, ty, current, addend),
             Compound::Op(op) => {
@@ -66778,19 +66821,7 @@ impl<'a> FuncBuilder<'a> {
         // where the shared AST still says any. Derive + from those produced
         // values; a use's demanded result type is not operand evidence.
         if token == syntax::PLUS_TOKEN && ty == HirType::Erased {
-            let (left, right) = (
-                &self.values[lhs.0 as usize].ty,
-                &self.values[rhs.0 as usize].ty,
-            );
-            if *left == HirType::NUMBER && *right == HirType::NUMBER {
-                ty = HirType::NUMBER;
-            } else if *left == HirType::Managed(ManagedType::String)
-                || *right == HirType::Managed(ManagedType::String)
-            {
-                ty = HirType::Managed(ManagedType::String);
-            } else if *left == HirType::BigInt && *right == HirType::BigInt {
-                ty = HirType::BigInt;
-            }
+            ty = self.plus_from_operands(lhs, rhs).unwrap_or(ty);
         }
 
         // A bitwise operator is `ToInt32`, the machine operation, and back. The

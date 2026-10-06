@@ -19,6 +19,25 @@ pub(super) const COPY_CAP: usize = 8;
 pub(super) struct ClosedParameters {
     positions: FxHashMap<(NodeId, u32), SymbolId>,
     closed: FxHashSet<SymbolId>,
+    /// What each closed binding's element reads (`xs[i]`) feed. See
+    /// [`ClosedParameters::admits`].
+    element_reads: FxHashMap<SymbolId, ElementReads>,
+}
+
+/// How a parameter's element reads are consumed, which decides whether an
+/// array may be recovered for it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum ElementReads {
+    /// None at all.
+    #[default]
+    None,
+    /// Each feeds a number: arithmetic, a numeric comparison or shift, a
+    /// number's compound assignment, a unary sign, or the return of a function
+    /// declared to return `number`. There an out-of-range read's `undefined`
+    /// and NaN agree, so the copy reads through `ToNumber`.
+    Numeric,
+    /// Some other consumer, where `undefined` is observable.
+    Other,
 }
 
 impl ClosedParameters {
@@ -103,6 +122,7 @@ impl ClosedParameters {
         positions.sort_by_key(|((declaration, position), _)| (declaration.0, *position));
         for ((declaration, _), binding) in positions {
             let mut forwarded = Vec::new();
+            let mut reads = ElementReads::None;
             if !uses_are_closed(
                 probe,
                 *declaration,
@@ -110,9 +130,11 @@ impl ClosedParameters {
                 &references,
                 &out.positions,
                 &mut forwarded,
+                &mut reads,
             ) {
                 invalid.push(*binding);
             }
+            out.element_reads.insert(*binding, reads);
             for target in forwarded {
                 consumers.entry(target).or_default().push(*binding);
             }
@@ -127,10 +149,33 @@ impl ClosedParameters {
         out
     }
 
-    pub(super) fn contains(&self, declaration: NodeId, position: u32) -> bool {
-        self.positions
-            .get(&(declaration, position))
-            .is_some_and(|binding| self.closed.contains(binding))
+    /// Whether a copy may take `ty` at this closed position.
+    ///
+    /// **An array only where its element reads cannot see an absence.** The
+    /// copy reads the same array the caller made, and JavaScript answers
+    /// `undefined` for a read past its end; the checker typed that read `any`,
+    /// so nothing promised it was in range. Where every read feeds a number,
+    /// `undefined` and NaN are the same answer, and the copy reads through
+    /// `ToNumber` (`FuncBuilder::lower_element_access`): so a `number[]` is
+    /// recovered there. Anything else -- a read compared with `===`,
+    /// concatenated, passed on -- would see the difference, and keeps the
+    /// erased original. An array whose elements are never read by index is
+    /// recovered whatever they are.
+    pub(super) fn admits(&self, declaration: NodeId, position: u32, ty: &HirType) -> bool {
+        let Some(binding) = self.positions.get(&(declaration, position)) else {
+            return false;
+        };
+        if !self.closed.contains(binding) {
+            return false;
+        }
+        let HirType::Managed(super::ManagedType::Array(element)) = ty else {
+            return true;
+        };
+        match self.element_reads.get(binding).copied().unwrap_or_default() {
+            ElementReads::None => true,
+            ElementReads::Numeric => **element == HirType::NUMBER,
+            ElementReads::Other => false,
+        }
     }
 }
 
@@ -188,6 +233,7 @@ fn uses_are_closed(
     references: &FxHashMap<SymbolId, Vec<NodeId>>,
     positions: &FxHashMap<(NodeId, u32), SymbolId>,
     forwarded: &mut Vec<SymbolId>,
+    reads: &mut ElementReads,
 ) -> bool {
     let mut pending = vec![binding];
     let mut seen = FxHashSet::default();
@@ -280,6 +326,13 @@ fn uses_are_closed(
                     if access_is_written(probe, parent) {
                         return false;
                     }
+                    if probe.kind_of(parent) == Some(syntax::ELEMENT_ACCESS_EXPRESSION) {
+                        let numeric = feeds_a_number(probe, declaration, parent);
+                        *reads = match (*reads, numeric) {
+                            (ElementReads::Other, _) | (_, false) => ElementReads::Other,
+                            _ => ElementReads::Numeric,
+                        };
+                    }
                 }
                 // No statement about storage, returned identities or casts
                 // is inferred from the strongest use classification.
@@ -334,6 +387,83 @@ fn access_is_written(probe: &FuncBuilder<'_>, access: NodeId) -> bool {
     }
 }
 
+/// Whether the value of `read` -- an element read in `declaration` -- feeds
+/// a number, so that `undefined` and NaN are the same answer there. See
+/// [`ElementReads::Numeric`].
+fn feeds_a_number(probe: &FuncBuilder<'_>, declaration: NodeId, read: NodeId) -> bool {
+    let mut at = read;
+    let parent = loop {
+        let Some(parent) = walk::parent(probe.snapshot, at) else {
+            return false;
+        };
+        if probe.kind_of(parent) != Some(syntax::PARENTHESIZED_EXPRESSION) {
+            break parent;
+        }
+        at = parent;
+    };
+    let number = |node: &NodeId| probe.type_of(*node) == Some(HirType::NUMBER);
+    match probe.kind_of(parent) {
+        Some(syntax::BINARY_EXPRESSION) => {
+            let [lhs, operator, rhs] = probe.children(parent)[..] else {
+                return false;
+            };
+            let other = if lhs == at { rhs } else { lhs };
+            match probe.kind_of(operator) {
+                // `undefined + 1` is NaN; `undefined + "a"` is not "NaNa".
+                Some(syntax::PLUS_TOKEN) => number(&other),
+                Some(
+                    syntax::MINUS_TOKEN
+                    | syntax::ASTERISK_TOKEN
+                    | syntax::ASTERISK_ASTERISK_TOKEN
+                    | syntax::SLASH_TOKEN
+                    | syntax::PERCENT_TOKEN
+                    | syntax::LESS_THAN_TOKEN
+                    | syntax::LESS_THAN_EQUALS_TOKEN
+                    | syntax::GREATER_THAN_TOKEN
+                    | syntax::GREATER_THAN_EQUALS_TOKEN
+                    | syntax::LESS_THAN_LESS_THAN_TOKEN
+                    | syntax::GREATER_THAN_GREATER_THAN_TOKEN
+                    | syntax::GREATER_THAN_GREATER_THAN_GREATER_THAN_TOKEN
+                    | syntax::AMPERSAND_TOKEN
+                    | syntax::BAR_TOKEN
+                    | syntax::CARET_TOKEN,
+                ) => true,
+                // The read on the right of a number's compound assignment.
+                Some(
+                    syntax::PLUS_EQUALS_TOKEN
+                    | syntax::MINUS_EQUALS_TOKEN
+                    | syntax::ASTERISK_EQUALS_TOKEN
+                    | syntax::ASTERISK_ASTERISK_EQUALS_TOKEN
+                    | syntax::SLASH_EQUALS_TOKEN
+                    | syntax::PERCENT_EQUALS_TOKEN
+                    | syntax::LESS_THAN_LESS_THAN_EQUALS_TOKEN
+                    | syntax::GREATER_THAN_GREATER_THAN_EQUALS_TOKEN
+                    | syntax::GREATER_THAN_GREATER_THAN_GREATER_THAN_EQUALS_TOKEN
+                    | syntax::AMPERSAND_EQUALS_TOKEN
+                    | syntax::BAR_EQUALS_TOKEN
+                    | syntax::CARET_EQUALS_TOKEN,
+                ) => rhs == at && number(&lhs),
+                _ => false,
+            }
+        }
+        Some(syntax::PREFIX_UNARY_EXPRESSION) => matches!(
+            probe.node(parent).data,
+            nts_semantic_schema::NodeData::Children { small, .. }
+                if matches!(small & syntax::prefix_operator::MASK,
+                    syntax::prefix_operator::PLUS | syntax::prefix_operator::MINUS | syntax::prefix_operator::TILDE)
+        ),
+        // Converted to the declared `number` on the way out, by the erased
+        // original as by the copy.
+        Some(syntax::RETURN_STATEMENT) => {
+            enclosing_function(probe, parent) == Some(declaration)
+                && super::super::generics::declared_signature(probe.snapshot, declaration)
+                    .and_then(|signature| probe.represent(signature.return_type))
+                    == Some(HirType::NUMBER)
+        }
+        _ => false,
+    }
+}
+
 fn binary_use_is_closed(probe: &FuncBuilder<'_>, children: &[NodeId]) -> bool {
     let [lhs, operator, rhs] = children else {
         return false;
@@ -376,8 +506,8 @@ fn consumes_both_operands(operator: u16) -> bool {
 }
 
 /// A producer's representation, rather than a type demanded by a use or an
-/// assertion: a literal, a `new`, a `const` alias, a parameter or a declared
-/// function's result, at what [`recoverable`] admits.
+/// assertion: a literal, a `new`, an array literal, a `const` alias, a
+/// parameter or a declared function's result, at what [`recoverable`] admits.
 pub(super) fn produced(
     probe: &FuncBuilder<'_>,
     argument: NodeId,
@@ -437,27 +567,25 @@ pub(super) fn produced(
             | syntax::PREFIX_UNARY_EXPRESSION
             | syntax::BINARY_EXPRESSION
             | syntax::NEW_EXPRESSION
+            | syntax::ARRAY_LITERAL_EXPRESSION
     ) {
         return None;
     }
     recoverable(probe, &represented).then_some(represented)
 }
 
-/// A representation a producer can hand a copy's parameter. An instance of a
-/// nominal class is the same object either way, so its identity and every
-/// mutation through it are shared with the caller, and its layout is its own,
-/// with any subclass's fields laid out after it. An interface or a structural
-/// type is not: a value of it can have another layout, which only dispatch can
-/// read.
-///
-/// Not yet an array: an element read through one is still `any` to the
-/// checker, and the paths that store such a read (`s += xs[i]`) coerce through
-/// that `any` rather than the element's own type.
+/// A representation a producer can hand a copy's parameter. A managed value
+/// is the same object either way, so its identity and every mutation through
+/// it are shared with the caller: an instance of a nominal class, whose layout
+/// is its own and whose subclasses lay their fields out after it, and an array
+/// of what is itself recoverable. An interface or a structural type is not: a
+/// value of it can have another layout, which only dispatch can read.
 fn recoverable(probe: &FuncBuilder<'_>, ty: &HirType) -> bool {
     match ty {
         HirType::Managed(super::ManagedType::Object(class)) => {
             !super::super::is_closure_type(*class) && super::assertions::is_nominal_class(probe, *class)
         }
+        HirType::Managed(super::ManagedType::Array(element)) => recoverable(probe, element),
         _ => primitive(ty),
     }
 }

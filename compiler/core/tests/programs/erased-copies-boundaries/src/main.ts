@@ -26,6 +26,12 @@ function againstBigIntAlias(value: any): number { const big = 9007199254740993n;
 function forwardsToBigInt(value: any): number { return againstBigInt(value); }
 function hasThis(this: void, value: any, other: any): number { return value.toString().length; }
 function uncarried(value: any, callback: () => void): number { callback(); return value.toFixed(1).length; }
+function readCompared(value: any): number { return value[5] === undefined ? 1 : 0; }
+function readConcatenated(value: any): string { return "at " + value[0]; }
+function readOfStrings(value: any): number { return value[0] - 1; }
+export function elementReads(n: number): number {
+  return readCompared([n, 2]) + readConcatenated([n]).length + readOfStrings(["1"]);
+}
 
 export function boundaries(n: number): void {
   returned(n); stored(n); forwardedToStorage(n); mutable(n); mutableAlias(n);

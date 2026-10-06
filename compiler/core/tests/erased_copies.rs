@@ -121,6 +121,9 @@ fn escape_mutation_unknown_edges_casts_and_spreads_do_not_prove_a_copy() {
         "againstBigInt",
         "againstBigIntAlias",
         "forwardsToBigInt",
+        "readCompared",
+        "readConcatenated",
+        "readOfStrings",
     ] {
         assert!(
             !lowered
@@ -171,4 +174,41 @@ fn escape_mutation_unknown_edges_casts_and_spreads_do_not_prove_a_copy() {
         "one source copy per representation, capped before the ninth"
     );
     assert!(copies.iter().all(|func| !func.exported));
+}
+
+/// A copy that took an array reads an element through `nts_array_element`
+/// and `ToNumber`, never a trapping load: the checker typed the read `any`,
+/// past the end it is `undefined`, and every consumer the copy was admitted
+/// for reads that as NaN. The example's answers cannot show a trap -- the
+/// checker counts an abort as a declined case -- so this asserts the read.
+#[test]
+fn a_recovered_array_reads_past_its_end_as_nan() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
+    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/a-closed-call-recovers-an-erased-object-parameter/tsconfig.json");
+    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).expect("snapshot");
+    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+    let prepared = hir::prepare(&snapshot).expect("valid HIR");
+    let copy = prepared
+        .program
+        .funcs
+        .iter()
+        .find(|func| func.name.starts_with("pastTheEnd@"))
+        .expect("an array copy of pastTheEnd");
+    assert!(
+        matches!(&copy.params[0].ty, HirType::Managed(ManagedType::Array(element)) if **element == HirType::NUMBER),
+        "{:?}",
+        copy.params[0].ty
+    );
+    let scheduled = || copy.blocks.iter().flat_map(|block| &block.ops).map(|value| &copy.values[value.0 as usize].kind);
+    let calls = |helper: &str| {
+        scheduled().any(|kind| matches!(kind, hir::OpKind::Call { callee: hir::Callee::External(name), .. } if name == helper))
+    };
+    assert!(calls("nts_array_element") && calls("nts_value_to_number"), "the read is not answered");
+    assert!(
+        !scheduled().any(|kind| matches!(kind, hir::OpKind::ArrayGet { checked: true, .. })),
+        "a checked load traps where node answers undefined"
+    );
 }
