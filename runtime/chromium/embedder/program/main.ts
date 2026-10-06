@@ -8,3 +8,4 @@ export { ntsChromiumDomProgram, ntsChromiumDomCounter } from "../../tests/dom-wi
 export { ntsChromiumPrepareBenchmark, ntsChromiumBenchmarkLoop } from "../../benchmarks/workloads/binding.ts";
 export { ntsRowsCreate, ntsRowsOperate, ntsRowsDestroy } from "../../benchmarks/workloads/rows.ts";
 export { ntsKernelCreateElements, ntsKernelCounterTrees, ntsKernelEventRoundTrips } from "../../benchmarks/workloads/kernels.ts";
+export { ntsTodoCreate, ntsTodoDestroy } from "../../benchmarks/workloads/todo.ts";

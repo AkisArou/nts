@@ -94,6 +94,16 @@ NtsChromiumRowsResult nts_chromium_rows_operate(NtsChromiumRows* rows,
                                                 uint32_t count);
 void nts_chromium_rows_destroy(NtsChromiumRows* rows);
 
+/* The TodoMVC-shaped app (src/todo.ts), created on `root` in one native
+   callback. After that every interaction is a Blink event dispatched to the
+   app's compiled listeners: nothing of the app's runs here. Destroying it
+   removes them. */
+typedef struct NtsChromiumTodo NtsChromiumTodo;
+NtsChromiumTodo* nts_chromium_todo_create(NtsChromiumProbe* probe,
+                                          NtsDomContext* context,
+                                          NtsDomNode* root);
+void nts_chromium_todo_destroy(NtsChromiumTodo* todo);
+
 /* The binding kernels (src/kernels.ts): kernel 0 creates detached divs,
    kernel 1 detached counter trees, kernel 2 event round trips on the body. One call is one native callback that runs
    `iterations` of the kernel; returns the checksum, aborts on a raised

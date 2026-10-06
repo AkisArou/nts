@@ -1,0 +1,178 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>NTS TodoMVC benchmark</title>
+<style>
+body { font: 16px system-ui; background: #f5f5f5; color: #111; margin: 0; padding: 24px; }
+#benchmark-result::after { content: attr(data-state); }
+.todoapp { background: #fff; width: 550px; margin: 24px auto; box-shadow: 0 2px 4px rgb(0 0 0 / 20%); }
+.todoapp h1 { font-size: 64px; font-weight: 200; text-align: center; color: #b83f45; margin: 0; }
+.new-todo { width: 100%; box-sizing: border-box; font-size: 24px; padding: 16px 16px 16px 60px; border: none; }
+.main { position: relative; border-top: 1px solid #e6e6e6; }
+.toggle-all { position: absolute; top: -40px; left: 12px; }
+.todo-list { margin: 0; padding: 0; list-style: none; }
+.todo-list li { position: relative; font-size: 24px; border-bottom: 1px solid #ededed; }
+.todo-list li .view { display: flex; align-items: center; padding: 12px; gap: 12px; }
+.todo-list li label { flex: 1; word-break: break-all; transition: color 0.4s; }
+.todo-list li.completed label { color: #949494; text-decoration: line-through; }
+.todo-list li .destroy { width: 32px; height: 32px; border: none; background: none; color: #949494; }
+.todo-list li .destroy::after { content: "\00d7"; }
+.footer { display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; color: #111; border-top: 1px solid #e6e6e6; }
+.filters { display: flex; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.filters button { border: 1px solid transparent; border-radius: 3px; background: none; padding: 3px 7px; }
+.filters button.selected { border-color: #ce4646; }
+[hidden] { display: none !important; }
+</style>
+<h1>TodoMVC: vanilla JavaScript on V8</h1>
+<p>Driven by real input events. The same algorithm as src/todo.ts.</p>
+<output id="benchmark-result" data-state="initializing"></output>
+<section class="todoapp" id="v8-todo"></section>
+<script>
+function element(tag, className) {
+  const node = document.createElement(tag);
+  if (className.length > 0) node.className = className;
+  return node;
+}
+function input(className, type) {
+  const node = document.createElement('input');
+  node.className = className;
+  node.type = type;
+  return node;
+}
+function shown(app, todo) {
+  return app.filter === 0 || (app.filter === 1) !== todo.completed;
+}
+function refresh(app) {
+  let active = 0;
+  for (const todo of app.todos) {
+    if (!todo.completed) active += 1;
+    if (shown(app, todo)) todo.li.removeAttribute('hidden');
+    else todo.li.setAttribute('hidden', '');
+  }
+  app.count.nodeValue = active + (active === 1 ? ' item left' : ' items left');
+  if (app.todos.length - active > 0) app.clear.removeAttribute('hidden');
+  else app.clear.setAttribute('hidden', '');
+  app.toggleAll.checked = app.todos.length > 0 && active === 0;
+  for (let i = 0; i < app.filters.length; i += 1) {
+    app.filters[i].className = i === app.filter ? 'selected' : '';
+  }
+}
+function add(app, title) {
+  const id = app.nextId++;
+  const li = element('li', '');
+  li.setAttribute('data-id', '' + id);
+  const view = element('div', 'view');
+  const toggle = input('toggle', 'checkbox');
+  const label = document.createElement('label');
+  label.appendChild(document.createTextNode(title));
+  const destroy = element('button', 'destroy');
+  view.appendChild(toggle);
+  view.appendChild(label);
+  view.appendChild(destroy);
+  li.appendChild(view);
+  app.list.appendChild(li);
+  app.todos.push({ id, title, completed: false, li, toggle });
+}
+function find(app, target) {
+  const element = target instanceof Element ? target : null;
+  const li = element === null ? null : element.closest('li');
+  if (li === null) return -1;
+  const id = Number(li.getAttribute('data-id'));
+  for (let i = 0; i < app.todos.length; i += 1) {
+    if (app.todos[i].id === id) return i;
+  }
+  return -1;
+}
+function setCompleted(todo, completed) {
+  todo.completed = completed;
+  todo.toggle.checked = completed;
+  todo.li.className = completed ? 'completed' : '';
+}
+function create(root) {
+  const header = element('header', 'header');
+  const title = document.createElement('h1');
+  title.appendChild(document.createTextNode('todos'));
+  const entry = input('new-todo', 'text');
+  entry.placeholder = 'What needs to be done?';
+  header.appendChild(title);
+  header.appendChild(entry);
+  const main = element('section', 'main');
+  const toggleAll = input('toggle-all', 'checkbox');
+  const list = element('ul', 'todo-list');
+  main.appendChild(toggleAll);
+  main.appendChild(list);
+  const footer = element('footer', 'footer');
+  const countLabel = element('span', 'todo-count');
+  const count = document.createTextNode('0 items left');
+  countLabel.appendChild(count);
+  const filterList = element('ul', 'filters');
+  const filters = [];
+  const names = ['All', 'Active', 'Completed'];
+  for (let i = 0; i < names.length; i += 1) {
+    const item = document.createElement('li');
+    const button = element('button', '');
+    button.setAttribute('data-filter', '' + i);
+    button.appendChild(document.createTextNode(names[i]));
+    item.appendChild(button);
+    filterList.appendChild(item);
+    filters.push(button);
+  }
+  const clear = element('button', 'clear-completed');
+  clear.appendChild(document.createTextNode('Clear completed'));
+  footer.appendChild(countLabel);
+  footer.appendChild(filterList);
+  footer.appendChild(clear);
+  root.appendChild(header);
+  root.appendChild(main);
+  root.appendChild(footer);
+  const app = { todos: [], nextId: 1, filter: 0, list, count, clear, toggleAll, filters };
+  entry.addEventListener('change', () => {
+    const text = entry.value.trim();
+    if (text.length > 0) {
+      add(app, text);
+      refresh(app);
+    }
+    entry.value = '';
+  });
+  list.addEventListener('change', (event) => {
+    const at = find(app, event.target);
+    if (at < 0) return;
+    const todo = app.todos[at];
+    setCompleted(todo, todo.toggle.checked);
+    refresh(app);
+  });
+  list.addEventListener('click', (event) => {
+    const button = event.target instanceof Element ? event.target : null;
+    if (button === null || button.className !== 'destroy') return;
+    const at = find(app, event.target);
+    if (at < 0) return;
+    app.todos[at].li.remove();
+    app.todos.splice(at, 1);
+    refresh(app);
+  });
+  toggleAll.addEventListener('change', () => {
+    const completed = toggleAll.checked;
+    for (const todo of app.todos) setCompleted(todo, completed);
+    refresh(app);
+  });
+  filterList.addEventListener('click', (event) => {
+    const button = event.target instanceof Element ? event.target : null;
+    const filter = button === null ? null : button.getAttribute('data-filter');
+    if (filter === null) return;
+    app.filter = Number(filter);
+    refresh(app);
+  });
+  clear.addEventListener('click', () => {
+    const kept = [];
+    for (const todo of app.todos) {
+      if (todo.completed) todo.li.remove();
+      else kept.push(todo);
+    }
+    app.todos = kept;
+    refresh(app);
+  });
+  refresh(app);
+  return app;
+}
+create(document.querySelector('#v8-todo'));
+document.querySelector('#benchmark-result').setAttribute('data-state', 'ready');
+</script>

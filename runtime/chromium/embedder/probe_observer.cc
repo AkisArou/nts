@@ -69,6 +69,25 @@ class ProbeObserver final : public content::RenderFrameObserver {
     // A bounded public-API input witness, not a general DOM binding surface.
     // The ordinary E1 fixture has neither of these native-counter elements.
     const auto document = frame->GetDocument();
+    // The TodoMVC-shaped app: created once here, then driven by real input
+    // events, each dispatched by Blink to one of its compiled listeners.
+    auto todo = document.GetElementById(
+        blink::WebString::FromAscii("native-todo"));
+    if (!todo.IsNull()) {
+      dom_.reset(CreateDomContext(document));
+      nts_chromium_probe_attach(probe_.get(), dom_.get());
+      if (command.GetSwitchValueASCII("nts-collection") != "checkpoint")
+        nts_chromium_probe_install_host(probe_.get(), dom_.get());
+      todo_ = nts_chromium_todo_create(
+          probe_.get(), dom_.get(),
+          nts_blink_dom_element_by_id(dom_.get(), "native-todo"));
+      counter_output_ = document.GetElementById(
+          blink::WebString::FromAscii("benchmark-result"));
+      CHECK(!counter_output_.IsNull());
+      counter_output_.SetAttribute(blink::WebString::FromAscii("data-state"),
+                                   blink::WebString::FromAscii("ready"));
+      return;
+    }
     auto rows = document.GetElementById(
         blink::WebString::FromAscii("native-rows-run"));
     if (!rows.IsNull()) {
@@ -237,6 +256,8 @@ class ProbeObserver final : public content::RenderFrameObserver {
       // environment closes. Generated await tasks still lack drop callbacks.
       if (microtasks_)
         nts_chromium_probe_teardown_witness(probe_.get());
+      if (todo_)
+        nts_chromium_todo_destroy(std::exchange(todo_, nullptr));
       dom_.reset();
       microtasks_ = false;
       probe_.reset();
@@ -251,6 +272,7 @@ class ProbeObserver final : public content::RenderFrameObserver {
       nullptr, &nts_blink_dom_destroy};
   base::ScopedClosureRunner counter_listener_;
   bool microtasks_ = false;
+  raw_ptr<NtsChromiumTodo> todo_ = nullptr;
   base::WeakPtrFactory<ProbeObserver> weak_factory_{this};
 };
 

@@ -561,6 +561,49 @@ void nts_chromium_rows_destroy(NtsChromiumRows* rows) {
   free(rows);
 }
 
+struct NtsChromiumTodo {
+  NtsChromiumProbe* probe;
+  NtsDomContext* context;
+  ntsTodoCreate_return_t* app;
+  NtsDomNode* root;
+};
+static void create_todo(void* state) {
+  NtsChromiumTodo* todo = state;
+  todo->app = ntsTodoCreate((struct NtsDomElement*)todo->root);
+}
+NtsChromiumTodo* nts_chromium_todo_create(NtsChromiumProbe* probe,
+                                          NtsDomContext* context,
+                                          NtsDomNode* root) {
+  NtsChromiumTodo* todo = calloc(1, sizeof(*todo));
+  if (!todo)
+    PROBE_FAIL();
+  todo->probe = probe;
+  todo->context = context;
+  todo->root = root;
+  ProbeScope scope = enter(probe);
+  if (nts_blink_dom_entry(context, create_todo, todo) || nts_raising() ||
+      !todo->app)
+    PROBE_FAIL();
+  leave(&scope);
+  return todo;
+}
+static void destroy_todo(void* state) {
+  ntsTodoDestroy(((NtsChromiumTodo*)state)->app);
+}
+void nts_chromium_todo_destroy(NtsChromiumTodo* todo) {
+  ProbeScope scope = enter(todo->probe);
+  /* Removing a listener is a DOM call, so it needs the entry; a closed
+     document refuses it, and its close gave every closure back already.
+     Either way the app's own release below drops the listener handles. */
+  nts_blink_dom_entry(todo->context, destroy_todo, todo);
+  nts_release((NtsHeader*)todo->app);
+  nts_collect_cycles();
+  if (nts_raising())
+    PROBE_FAIL();
+  leave(&scope);
+  free(todo);
+}
+
 typedef struct KernelRun {
   NtsDomContext* context;
   uint32_t kernel;
