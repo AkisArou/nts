@@ -14192,6 +14192,12 @@ fn record_unimplemented_interfaces(hierarchy: &Hierarchy, program: &mut Program)
 /// missing ones, so a closure written at one arity and called at another is
 /// correct, and `erased-fn-arity-only` agrees on both arms. Reading "arity is free"
 /// as "parameters are free" is the mistake this function exists downstream of.
+/// Whether a closure's result crosses an erased call as itself: already
+/// erased, nothing at all, or something with an erased form.
+fn result_crosses(returns: &HirType) -> bool {
+    matches!(returns, HirType::Erased | HirType::Void | HirType::Never) || erasable(returns)
+}
+
 fn erased_call(name: String, call: &Func, width: usize, refusing: Option<&str>) -> Option<Func> {
     let origin = Origin::generated(
         call.origin.location,
@@ -14249,11 +14255,7 @@ fn erased_call(name: String, call: &Func, width: usize, refusing: Option<&str>) 
         && written.len() <= width
         && written
             .iter()
-            .all(|param| param.ty == HirType::Erased || erasable(&param.ty))
-        && (matches!(
-            call.return_type,
-            HirType::Erased | HirType::Void | HirType::Never
-        ) || erasable(&call.return_type));
+            .all(|param| param.ty == HirType::Erased || erasable(&param.ty));
 
     // The parameters first, in order, because a `Param` op *is* the signature in
     // this IR, and a value id has to be its index.
@@ -14312,9 +14314,16 @@ fn erased_call(name: String, call: &Func, width: usize, refusing: Option<&str>) 
     // And the answer, in the ABI the site spelled.
     let answer = match &call.return_type {
         HirType::Erased => answered,
+        // **A result with no erased form is dropped, as a `void` one is.** Only
+        // a signature returning `void` admits such a closure:
+        // `FuncBuilder::result_without_an_erased_form` refuses every other
+        // admission where it is written. So a call reaching this entry discards
+        // the answer, and `() => document().body` passed as a listener runs --
+        // it had aborted here by name, at run time, behind a clean compile.
+        //
         // Nothing to erase: a `void` body has no value, and `undefined` is what
         // JavaScript says such a call answers.
-        HirType::Void | HirType::Never => {
+        returns if matches!(returns, HirType::Void | HirType::Never) || !result_crosses(returns) => {
             let id = ValueId(u32::try_from(values.len()).ok()?);
             values.push(Op {
                 kind: OpKind::ConstUndefined,
@@ -23385,6 +23394,37 @@ impl<'a> FuncBuilder<'a> {
     /// name: this is the only place in the compiler where "this closure was let
     /// into that slot" is visible, and the arm it sits in returns the pointer
     /// unchanged a line later.
+    /// A closure whose result has no erased form -- a host handle, today --
+    /// admitted where a signature *reads* its result. A call through a
+    /// signature goes through the closure's erased entry, which answers its
+    /// result erased; such a closure's entry drops the result instead
+    /// ([`erased_call`]), which is exactly right where the signature returns
+    /// `void` and a wrong answer anywhere else. So that admission is refused
+    /// here, where it is written, rather than reaching the entry at run time.
+    fn result_without_an_erased_form(&self, have: &HirType, want: &HirType) -> Option<String> {
+        let (HirType::Managed(ManagedType::Object(from)), HirType::Managed(ManagedType::Object(to))) = (have, want) else {
+            return None;
+        };
+        if from == to || !super::is_closure_type(*from) {
+            return None;
+        }
+        let (_, read) = signature_key(self.snapshot, *to)?;
+        if matches!(self.represent(read)?, HirType::Void | HirType::Never) {
+            return None;
+        }
+        let node = self.closures.get(closure_index(*from))?.node;
+        let ty = *self.snapshot.node_types.get(&node)?;
+        let TypeKind::Function(signature) = self.snapshot.types.get(ty.0 as usize)?.kind else {
+            return None;
+        };
+        let returns = self.represent(self.snapshot.signatures.get(signature.0 as usize)?.return_type)?;
+        (!result_crosses(&returns)).then(|| {
+            "a closure whose result has no erased form, passed where a signature reads its result: \
+             a call through the signature could not return it"
+                .to_owned()
+        })
+    }
+
     fn record_arrival(&mut self, have: &HirType, want: &HirType, id: NodeId) {
         let (
             HirType::Managed(ManagedType::Object(from)),
@@ -23607,6 +23647,9 @@ impl<'a> FuncBuilder<'a> {
                 return Err(self.unsupported(id, &why.spell(&from, &to)));
             }
             if let Some(why) = self.crossing_storage(&have, want) {
+                return Err(self.unsupported(id, &why));
+            }
+            if let Some(why) = self.result_without_an_erased_form(&have, want) {
                 return Err(self.unsupported(id, &why));
             }
             self.record_arrival(&have, want, id);

@@ -1110,3 +1110,55 @@ export function u16(x: number): number { return seen_u16(x); }
     let ran = Command::new(dir.join("caller")).output().unwrap();
     assert!(ran.status.success(), "{}", String::from_utf8_lossy(&ran.stdout));
 }
+
+/// A closure answering a host handle, which has no erased form yet: where a
+/// signature returning `void` admits it, a call through the signature drops
+/// the answer and runs; where a signature reads the answer, the admission is
+/// refused where it is written. It had compiled clean and aborted at run time
+/// in the closure's erased entry -- the Chromium lane's
+/// `blockers/a-handle-returning-closure-called-as-void`, found in the browser.
+#[test]
+fn a_closure_answering_a_host_handle_crosses_only_where_its_result_is_dropped() {
+    let prelude = r#"
+import type { HostClass, c_int } from "c:types";
+type Node = HostClass<"HostNode", null, "host_retain", "host_release">;
+declare function node_at(i: c_int): Node;
+declare function node_value(n: Node): c_int;
+"#;
+    let prepare_rc = |name: &str, body: &str| {
+        let (_, snapshot) = snapshot_with_types(name, &format!("{prelude}{body}"), false)?;
+        let options = hir::Options { provider: hir::Provider::ReferenceCounting, ..hir::Options::default() };
+        Some(hir::prepare_with(&snapshot, &options))
+    };
+    let Some(dropped) = prepare_rc("handle-result-dropped", r"
+let calls = 0;
+function invoke(f: () => void): void { f(); calls += 1; }
+export function discarded(): number {
+  invoke(() => node_at(1 as c_int));
+  invoke(() => node_at(2 as c_int));
+  return calls;
+}
+") else {
+        return;
+    };
+    let dropped = dropped.unwrap();
+    assert!(dropped.program.funcs.iter().any(|func| func.name == "discarded"), "{:?}", dropped.diagnostics);
+    let emitted = nts_codegen_c::emit(&dropped.program, nts_core::hir::native::NativeAbi::SysV);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    assert!(
+        !emitted.writer.text().contains("nts_refused("),
+        "a void-typed call reached an entry that refuses the handle result"
+    );
+
+    let Some(read) = prepare_rc("handle-result-read", r"
+function read(f: () => Node): number { return node_value(f()); }
+export function reads(): number { return read(() => node_at(1 as c_int)); }
+") else {
+        return;
+    };
+    let diagnostics = read.expect("a refused admission leaves valid HIR").diagnostics;
+    assert!(
+        diagnostics.iter().any(|d| d.message.contains("no erased form, passed where a signature reads its result")),
+        "{diagnostics:?}"
+    );
+}
