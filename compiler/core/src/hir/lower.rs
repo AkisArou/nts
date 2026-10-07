@@ -23762,6 +23762,18 @@ impl<'a> FuncBuilder<'a> {
         let Some(ty) = self.snapshot.node_types.get(&id) else {
             return Absent::Impossible;
         };
+        // **An explicit absence is its own answer.** A `null` lowered at a
+        // reference's type -- the first argument of `new Error(null as any)`,
+        // typed `string` by its context -- is a null pointer whose node says
+        // exactly which absence it is; asking only unions erased it as a
+        // present string, and reading it crashed. (The repair rode in with
+        // 86528f0c4 and was dropped with it; it does not depend on that
+        // commit's array storage.)
+        match absence_of_member(self.snapshot, *ty) {
+            Some(Absence::Null) => return Absent::Null,
+            Some(Absence::Undefined) => return Absent::Undefined,
+            None => {}
+        }
         let Some(TypeKind::Union(members)) = self.snapshot.types.get(ty.0 as usize).map(|r| &r.kind)
         else {
             return Absent::Impossible;
@@ -44749,6 +44761,69 @@ impl<'a> FuncBuilder<'a> {
         None
     }
 
+    /// The `message` an `Error` stores for the argument it was given:
+    /// the specification's `ToString(message)`, except that an `undefined`
+    /// message leaves the empty one.
+    ///
+    /// The argument was stored as lowered, which a string-typed field cannot
+    /// hold for anything else: `new Error(12345678901234567890n)` -- legal
+    /// JavaScript, a type error TypeScript lets through with
+    /// `@ts-expect-error` -- stored a bigint in a string field, and the
+    /// verifier refused the whole program. A string that cannot be absent is
+    /// itself; anything else is erased with its absence and spelled by its
+    /// tag, `undefined` as the empty message.
+    fn error_message(&mut self, argument: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
+        let text = HirType::Managed(ManagedType::String);
+        let origin = self.origin(argument);
+        // Through `as any`: the assertion's type says nothing about absence,
+        // and the expression under it does -- `(s as any)` with `s: string |
+        // null` is a null pointer the checker knows is `null`.
+        let absences = self.absences_of(self.through_assertions(argument)).unwrap_or_default();
+        let ty = self.values[value.0 as usize].ty.clone();
+        if ty == text && absences.is_empty() {
+            return Ok(value);
+        }
+        // Which absence a null pointer is, from the checker: a string and its
+        // `undefined` share a representation with its `null`, and `coerce`
+        // would erase every null pointer as `null` -- "null" where the message
+        // is empty.
+        let erased = if ty == HirType::Erased {
+            value
+        } else {
+            let absent = match (
+                absences.contains(&super::tags::NULL),
+                absences.contains(&super::tags::UNDEFINED),
+            ) {
+                (false, false) => Absent::Impossible,
+                (true, false) => Absent::Null,
+                (false, true) => Absent::Undefined,
+                (true, true) => {
+                    return Err(self.unsupported(
+                        argument,
+                        "an `Error` message that can be `null` or `undefined` in one pointer, \
+                         which spell different messages",
+                    ));
+                }
+            };
+            self.push(OpKind::Erase { value, absent }, HirType::Erased, origin.clone())
+        };
+        let unsigned = HirType::Int { bits: 32, signed: false };
+        let tag = self.push(OpKind::TagOf { value: erased }, unsigned.clone(), origin.clone());
+        let undefined = self.push(
+            OpKind::ConstInt(i128::from(super::tags::UNDEFINED)),
+            unsigned,
+            origin.clone(),
+        );
+        let is_undefined = self.push(
+            OpKind::Binary { op: BinOp::Eq, lhs: tag, rhs: undefined },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let empty = self.push(OpKind::ConstString(String::new()), text.clone(), origin.clone());
+        let spelled = self.runtime_call("nts_value_to_string", vec![erased], text.clone(), origin);
+        self.lower_branching_value_at(argument, text, is_undefined, Branch::Value(empty), Branch::Value(spelled))
+    }
+
     /// `Error`'s constructor, inline.
     ///
     /// This compiler provides the class, so there is no function to call and
@@ -44799,7 +44874,10 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(id);
         let text = HirType::Managed(ManagedType::String);
         let message = match arguments.get(usize::from(aggregate)) {
-            Some(argument) => self.lower_expression(*argument)?,
+            Some(argument) => {
+                let value = self.lower_expression(*argument)?;
+                self.error_message(*argument, value)?
+            }
             // `new Error()` has an empty message, not an absent one, and
             // `new AggregateError(errors)` is the same for the same reason.
             None => self.push(
