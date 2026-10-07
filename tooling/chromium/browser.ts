@@ -7,13 +7,17 @@
  */
 import { spawn } from "node:child_process";
 import type { WriteStream } from "node:fs";
+import { rmSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 
 export interface Target { type: string; url: string; webSocketDebuggerUrl: string }
 
 export interface LaunchOptions {
-  /** A directory to make the profile in; or `profile`, the profile itself. */
+  /**
+   * A directory to make a fresh profile in, removed when the page ends; or
+   * `profile`, a profile of the caller's, which is kept.
+   */
   temporary?: string;
   profile?: string;
   /** The shell's flags, before the URL. */
@@ -85,7 +89,12 @@ export async function openPage(executable: string, url: string, options: LaunchO
       }
     });
   }
-  const kill = () => { if (child.pid && !exited) { try { process.kill(-child.pid, "SIGKILL"); } catch { /* gone */ } } };
+  // Ends the shell's process group, and removes the profile if it was made
+  // here: every harness ends a page this way, closed or not.
+  const kill = () => {
+    if (child.pid && !exited) { try { process.kill(-child.pid, "SIGKILL"); } catch { /* gone */ } }
+    if (options.profile === undefined) rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  };
 
   async function until<T>(predicate: () => T | Promise<T>, label: string, timeout = waitTimeout): Promise<NonNullable<T>> {
     const deadline = performance.now() + timeout;

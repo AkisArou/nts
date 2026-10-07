@@ -5,7 +5,7 @@ import { openPage } from "./browser.ts";
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { sha256File } from "./hash.ts";
-import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { stripTypeScriptTypes } from "node:module";
 import { pathToFileURL } from "node:url";
@@ -271,7 +271,6 @@ async function rendererDescendants(parentPid: number, engine: string): Promise<n
 }
 
 async function measure(run: number, mode: Mode): Promise<LaunchResult> {
-  const profile = await mkdtemp(resolve(output, `profile-${run}-${mode}-`));
   const engine = mode === "native" ? executable : v8Executable;
   const url = pathToFileURL(mode === "native" ? fixturePath : v8FixturePath);
   url.searchParams.set("order", String(run % 3));
@@ -285,7 +284,7 @@ async function measure(run: number, mode: Mode): Promise<LaunchResult> {
   const jsFlags = [...(traceGc ? ["--trace-gc"] : []), ...(diagnosticJsFlags ? [diagnosticJsFlags] : [])];
   if (jsFlags.length) args.push(`--js-flags=${jsFlags.join(" ")}`);
   const page = await openPage(engine, fixture, {
-    profile, args, target: target => target.url === fixture,
+    temporary: output, args, target: target => target.url === fixture,
     failure: /FATAL:|Check failed|nts host: check failed|NTS_.*unexpectedly ran/,
     callTimeout: 60_000, waitTimeout: 60_000,
   });

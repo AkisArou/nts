@@ -197,6 +197,17 @@ try {
       pre.textContent = transcript;
       container.appendChild(pre);
     })()`);
+    // The lib.dom vectors (tests/lib-dom-vectors.ts): typed by lib.dom
+    // alone, so page script is the source with its types stripped and
+    // nothing defined in its place.
+    const libDomSource = await readFile(resolve(root, "runtime/chromium/tests/lib-dom-vectors.ts"), "utf8");
+    await evaluate(`(() => {
+      ${stripTypeScriptTypes(libDomSource).replace(/^export /gm, "")}
+      const pre = document.createElement('pre');
+      pre.id = 'native-lib-dom';
+      pre.textContent = libDomTranscript();
+      document.querySelector('#native-dom').appendChild(pre);
+    })()`);
     // The timer vectors (tests/timer-vectors.ts), the same source with the
     // browser's own timers: `document()` is the program's spelling of the
     // global.
