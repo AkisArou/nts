@@ -47749,20 +47749,75 @@ impl<'a> FuncBuilder<'a> {
         let HirType::Managed(ManagedType::Object(type_id)) = ty else {
             return Err(self.unsupported(id, "a `new` that does not produce an object"));
         };
+        self.require_an_implemented_constructor(id, type_id)?;
+        self.lower_new_object(id, ty, type_id, callee, class)
+    }
+
+    /// Allocate a class instance and run what constructs it.
+    fn lower_new_object(
+        &mut self,
+        id: NodeId,
+        ty: HirType,
+        type_id: TypeId,
+        callee: NodeId,
+        class: String,
+    ) -> Result<ValueId, Diagnostic> {
         // Laying the class out here is what makes its fields addressable; the
         // constructor is about to write every one of them.
         self.layout_of(id, type_id)?;
 
         let origin = self.origin(id);
-        let object = self.push(
-            OpKind::ObjectNew { frame: false },
-            ty.clone(),
-            origin.clone(),
-        );
+        let object = self.push(OpKind::ObjectNew { frame: false }, ty, origin);
 
         let owed = self.initialisers_this_site_owes(type_id);
 
         self.run_the_constructor(id, object, type_id, callee, class, &owed)
+    }
+
+    /// Whether a `new` producing `type_id` has something to run: a class the program
+    /// implements, or an `Error` this compiler builds.
+    ///
+    /// **Not every object type a `new` can produce.** `declare class Missing { value:
+    /// number }` and `declare const Missing: { new(): { value: number } }` both
+    /// typecheck at `new Missing()`, and neither has a body anywhere. Both compiled
+    /// to an object no constructor wrote -- a stack frame whose `value` was never
+    /// stored -- and answered with it, where node throws a `ReferenceError` because
+    /// `Missing` does not exist. Re-derived from Codex 1218798d5.
+    fn require_an_implemented_constructor(&self, id: NodeId, type_id: TypeId) -> Result<(), Diagnostic> {
+        // **Not "a type the hierarchy knows".** That holds interfaces too:
+        // `declare const TextEncoder: { new (): StreamTextEncoder }` constructs an
+        // interface no constructor writes, and dispatch then runs web-platform's
+        // `encode` -- which implements it structurally -- on that unwritten object.
+        let implemented = if let Some(symbol) = class_symbol(self.snapshot, type_id) {
+            self.an_implemented_class(symbol)
+        } else {
+            named(self.snapshot, type_id).is_some_and(super::builtin::is_error)
+                || self.provided_error_base(type_id).is_some()
+        };
+        if implemented {
+            return Ok(());
+        }
+        Err(self.unsupported(
+            id,
+            "a `new` of something this program declares but does not implement: a \
+             `declare class`, or a value typed with a construct signature",
+        ))
+    }
+
+    /// Whether some declaration of this class symbol is a body the program wrote:
+    /// not `declare`d, not bound to native code, not in a declaration file.
+    fn an_implemented_class(&self, symbol: u32) -> bool {
+        self.snapshot.symbols.get(symbol as usize).is_some_and(|record| {
+            record.declarations.iter().any(|declaration| {
+                let node = self.node(*declaration);
+                self.kind_of(*declaration).is_some_and(declares_a_class)
+                    && node.native.is_none()
+                    && !node.modifiers.contains(nts_semantic_schema::DeclarationModifiers::DECLARE)
+                    && !self.snapshot.sources.get(node.origin.location.file.0 as usize).is_some_and(|source| {
+                        [".d.ts", ".d.mts", ".d.cts"].iter().any(|suffix| source.uri.as_str().ends_with(suffix))
+                    })
+            })
+        })
     }
 
     /// Call the constructor that runs for this type, and then the field

@@ -11,7 +11,7 @@
 runtime/node/assert 2092
 runtime/node/async_hooks 367
 runtime/node/buffer 465
-runtime/node/child_process 2637
+runtime/node/child_process 2636
 runtime/node/cluster 2820
 runtime/node/console 2194
 runtime/node/crypto 3083
@@ -29,11 +29,11 @@ runtime/node/process 3327
 runtime/node/punycode 27
 runtime/node/querystring 489
 runtime/node/readline 2372
-runtime/node/stream 2671
+runtime/node/stream 2659
 runtime/node/string_decoder 475
 runtime/node/timers 449
 runtime/node/tty 2
 runtime/node/url 691
 runtime/node/util 2118
-runtime/node/zlib 2685
+runtime/node/zlib 2673
 runtime/web-platform 2382
