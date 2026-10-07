@@ -17,12 +17,12 @@ fn pattern_parameters_keep_narrowing_guards_and_ownership_on_actual_inputs() {
     assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
     let program = result.program;
     let combine = program.funcs.iter().find(|func| func.name == "combine").expect("actual helper");
-    let parameters = combine.parameter_values().expect("complete positional definitions");
+    let parameters = combine.complete_parameter_values().expect("complete positional definitions");
     assert_eq!(parameters, vec![hir::ValueId(0), hir::ValueId(3), hir::ValueId(4)]);
     assert!(matches!(combine.values[1].kind, OpKind::ConstFloat(_)), "the binding index is not an argument");
     for func in &program.funcs {
         if func.abstract_declaration { continue; }
-        for (param, value) in func.params.iter().zip(func.parameter_values().expect("complete actual ABI")) {
+        for (param, value) in func.params.iter().zip(func.complete_parameter_values().expect("complete actual ABI")) {
             assert_eq!(param.ty, func.value(value).ty, "{} parameter definition", func.name);
         }
     }

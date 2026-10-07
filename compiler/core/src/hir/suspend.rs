@@ -1087,7 +1087,7 @@ fn resume_function(
     mode: Mode,
 ) -> Func {
     let shift = |value: ValueId| ValueId(value.0 + 1);
-    let values = shifted_arena(func, frame_ty);
+    let values = shifted_arena(func, frame_ty, mode.fixed());
     let moved: rustc_hash::FxHashMap<ValueId, u32> = slot_of
         .iter()
         .map(|(value, slot)| (shift(*value), *slot))
@@ -1457,15 +1457,31 @@ fn segment_layout(
 /// The frame has to be value zero, because the C parameter for `params[i]` is
 /// named after `ValueId(i)` -- a parameter is not a computed value, it is the
 /// signature. So every original value shifts up by one, operands included.
-fn shifted_arena(func: &Func, frame_ty: &HirType) -> Vec<Op> {
+///
+/// **And an original parameter is no longer a parameter.** The resume
+/// function's one parameter is the frame; the original ones are frame fields
+/// from `fixed` on, which every use reloads. A copied `Param(k)` beside the
+/// frame's `Param(0)` is a second definition of parameter 0 -- or of a
+/// parameter the resume does not have -- and `Func::parameter_values` rightly
+/// refused every generator under `--rc` for it ("a parameter has no unique
+/// value definition"). So the copy says what it now is: the read of its field.
+/// Nothing places it in a block; the reloads are what run.
+fn shifted_arena(func: &Func, frame_ty: &HirType, fixed: u32) -> Vec<Op> {
     let mut values = vec![Op {
         kind: OpKind::Param(0),
         ty: frame_ty.clone(),
         origin: func.origin.clone(),
     }];
     for op in &func.values {
-        let mut kind = op.kind.clone();
-        super::simplify::substitute(&mut kind, |value| ValueId(value.0 + 1));
+        let kind = match op.kind {
+            // Already in the shifted arena's terms: the frame is value zero.
+            OpKind::Param(at) => OpKind::FieldGet { object: ValueId(0), field: fixed + at },
+            ref kind => {
+                let mut kind = kind.clone();
+                super::simplify::substitute(&mut kind, |value| ValueId(value.0 + 1));
+                kind
+            }
+        };
         values.push(Op {
             kind,
             ty: op.ty.clone(),

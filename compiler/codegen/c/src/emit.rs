@@ -4256,9 +4256,9 @@ fn signature(program: &Program, func: &Func) -> Result<String, Diagnostic> {
     let returns = return_c_type(program, &func.return_type, &func.origin)?;
     let public = nts_codegen_common::symbols::is_public(program, func);
     let mut params = Vec::new();
-    for (param, value) in func.params.iter().zip(parameter_values(func)?) {
+    for (index, (param, value)) in func.params.iter().zip(parameter_values(func)?).enumerate() {
         let ty = c_type_of(program, &param.ty, &param.origin)?;
-        params.push(format!("{ty} {}", value_name(value)));
+        params.push(format!("{ty} {}", parameter_name(index, value)));
     }
     Ok(format_signature(&func.name, &returns, &params, public))
 }
@@ -4266,9 +4266,15 @@ fn signature(program: &Program, func: &Func) -> Result<String, Diagnostic> {
 /// Argument positions locate actual parameter definitions, not arena indices.
 /// A binding pattern can emit extraction operations before the next argument.
 /// Dead definitions remain in the arena, so unused arguments keep their names.
-fn parameter_values(func: &Func) -> Result<Vec<ValueId>, Diagnostic> {
+fn parameter_values(func: &Func) -> Result<Vec<Option<ValueId>>, Diagnostic> {
     func.parameter_values().ok_or_else(|| Diagnostic::error(
         "NTS2006", "a parameter has no unique value definition", func.origin.location))
+}
+
+/// A parameter's C name: its definition's, or -- for one nothing reads, which
+/// has no `Param` op -- a name of its own that no value can take.
+fn parameter_name(index: usize, value: Option<ValueId>) -> String {
+    value.map_or_else(|| format!("unread{index}"), value_name)
 }
 
 fn format_signature(name: &str, returns: &str, params: &[String], public: bool) -> String {
@@ -4345,11 +4351,11 @@ fn emit_body(
     // to `64` and stops looking at its argument. The signature still has to
     // match, so the parameter stays and is discarded explicitly.
     writer.indent();
-    for (param, id) in func.params.iter().zip(parameter_values(func)?) {
-        if !read.contains(&id) {
+    for (index, (param, id)) in func.params.iter().zip(parameter_values(func)?).enumerate() {
+        if id.is_none_or(|id| !read.contains(&id)) {
             writer.line(
                 &param.origin,
-                format!("(void){};", value_name(id)),
+                format!("(void){};", parameter_name(index, id)),
             );
         }
     }

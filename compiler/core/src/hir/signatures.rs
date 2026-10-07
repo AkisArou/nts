@@ -63,6 +63,7 @@ pub fn specialize(
         }
         let Some(parameters) = func.parameter_values() else { continue };
         for (slot, value) in parameters.into_iter().enumerate() {
+            let Some(value) = value else { continue };
             if !matches!(func.params[slot].ty, HirType::Float { .. }) {
                 continue;
             }

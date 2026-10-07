@@ -637,7 +637,7 @@ impl Func {
     /// position is not a value-arena index. Missing or repeated definitions
     /// cannot supply a parameter mapping.
     #[must_use]
-    pub fn parameter_values(&self) -> Option<Vec<ValueId>> {
+    pub fn parameter_values(&self) -> Option<Vec<Option<ValueId>>> {
         let mut values = vec![None; self.params.len()];
         for (index, op) in self.values.iter().enumerate() {
             if let OpKind::Param(at) = op.kind {
@@ -646,7 +646,19 @@ impl Func {
                 if slot.replace(value).is_some() { return None; }
             }
         }
-        values.into_iter().collect()
+        Some(values)
+    }
+
+    /// [`Self::parameter_values`] where every parameter has its definition, for
+    /// a pass that must forward each one.
+    ///
+    /// A parameter with no `Param` op is one nothing reads -- a generator's step
+    /// declares its frame and may not touch it -- and is `None` above, so that
+    /// asking about the other parameters still works; demanding every
+    /// definition there refused both generator header tests in codegen-c.
+    #[must_use]
+    pub fn complete_parameter_values(&self) -> Option<Vec<ValueId>> {
+        self.parameter_values()?.into_iter().collect()
     }
 
     /// The op defining a value.

@@ -221,7 +221,7 @@ fn find_request(
 /// or handed on is one whose new type would have to travel with it, and the
 /// profit is in the call rather than in the type.
 fn only_called(func: &Func, slot: u32) -> bool {
-    let Some(param) = func.parameter_values().and_then(|values| values.get(slot as usize).copied()) else {
+    let Some(param) = func.parameter_values().and_then(|values| values.get(slot as usize).copied().flatten()) else {
         return false;
     };
     for block in &func.blocks {
@@ -258,7 +258,7 @@ fn retype_parameter(
     written: (String, usize, HirType),
     result_absent: super::Absent,
 ) {
-    let Some(param) = clone.parameter_values().and_then(|values| values.get(slot as usize).copied()) else {
+    let Some(param) = clone.parameter_values().and_then(|values| values.get(slot as usize).copied().flatten()) else {
         return;
     };
     let ty = HirType::Managed(ManagedType::Object(concrete));

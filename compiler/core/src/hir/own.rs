@@ -604,7 +604,7 @@ pub fn analyze(
         .get(&func.name)
         .into_iter()
         .flatten()
-        .filter_map(|slot| parameters.get(*slot as usize).copied())
+        .filter_map(|slot| parameters.get(*slot as usize).copied().flatten())
         .collect();
     let held = entry_owned(func, layouts);
     let vouched = summaries
@@ -2677,7 +2677,9 @@ fn zeroed_parameters(
             if !direct_only.contains(func.name.as_str()) {
                 return (func.name.clone(), slots);
             }
-            for (slot, parameter) in func.parameter_values().unwrap_or_default().into_iter().enumerate() {
+            for (slot, parameter) in func.parameter_values().unwrap_or_default().into_iter().enumerate()
+                .filter_map(|(slot, parameter)| parameter.map(|parameter| (slot, parameter)))
+            {
                 let Ok(slot) = u32::try_from(slot) else {
                     continue;
                 };
@@ -2832,7 +2834,9 @@ fn consuming(func: &Func, layouts: &[Layout]) -> rustc_hash::FxHashSet<u32> {
         false
     };
 
-    for (slot, parameter) in func.parameter_values().unwrap_or_default().into_iter().enumerate() {
+    for (slot, parameter) in func.parameter_values().unwrap_or_default().into_iter().enumerate()
+                .filter_map(|(slot, parameter)| parameter.map(|parameter| (slot, parameter)))
+            {
         let Ok(slot) = u32::try_from(slot) else { continue };
         if !counted(func, layouts, parameter) {
             continue;
@@ -3342,7 +3346,7 @@ impl Fresh {
         if block == BlockId(0) {
             let parameters = func.parameter_values().unwrap_or_default();
             for (slot, _) in zeroed {
-                let Some(parameter) = parameters.get(*slot as usize).copied() else { continue };
+                let Some(parameter) = parameters.get(*slot as usize).copied().flatten() else { continue };
                 fresh.bases.insert(parameter);
                 for field in reference_fields(func, layouts, parameter) {
                     if !zeroed.contains(&(*slot, field)) {
@@ -3355,7 +3359,7 @@ impl Fresh {
         // block: a later block may be reached by a path that already wrote.
         if func.initializes_receiver
             && block == BlockId(0)
-            && let Some(receiver) = func.parameter_values().and_then(|values| values.first().copied())
+            && let Some(receiver) = func.parameter_values().and_then(|values| values.first().copied().flatten())
         {
             fresh.bases.insert(receiver);
         }

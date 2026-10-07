@@ -73,7 +73,7 @@ pub fn install(program: &mut super::Program, roots: &super::reachable::RootNames
 
     let mut made = 0;
     for index in candidates {
-        let Some(arguments) = program.funcs[index].parameter_values() else { continue };
+        let Some(arguments) = program.funcs[index].complete_parameter_values() else { continue };
         // Which parameters need the extra `!= 0`: the ones whose zero's sign
         // something downstream can distinguish.
         let observed = zero_sign::observed(&program.funcs[index]);
