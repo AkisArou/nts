@@ -136,7 +136,7 @@ const STEPS = [
   // race a timer against a callback, and contention is what makes that race
   // lose (see the comment above its step line in all.sh); it ran alone, last,
   // for that reason. Lanes inside it: apple VM, windows VM, six local.
-  { name: "interop", slots: 6, min: 3, mem: 3, nts: true, fe: true, favoured: true, doc: "interop projects build and run" },
+  { name: "interop", slots: 6, min: 6, mem: 3, nts: true, fe: true, favoured: true, doc: "interop projects build and run" },
 ];
 const BY_NAME = new Map(STEPS.map((s) => [s.name, s]));
 
@@ -336,16 +336,17 @@ function report(name) {
 // Scheduling.
 // ---------------------------------------------------------------------------
 function used() {
-  let slots = 0, mem = 0, fe = 0;
+  let slots = 0, mem = 0, fe = 0, riding = 0;
   const locks = new Set();
   for (const [name, r] of running) {
     const s = BY_NAME.get(name);
-    slots += r.slots;
+    if (r.rider) riding += r.slots;
+    else slots += r.slots;
     mem += s.mem;
     if (s.fe) fe += r.slots;
     if (s.lock) locks.add(s.lock);
   }
-  return { slots, mem, fe, locks };
+  return { slots, mem, fe, locks, riding };
 }
 
 function blockedBy(step) {
@@ -402,20 +403,20 @@ function admit(step, u) {
   const least = Math.min(step.min ?? Math.max(1, Math.ceil(step.slots / 2)), want);
   if (step.lock && u.locks.has(step.lock)) return 0;
   if (running.size === 0) return want; // always make progress
-  if (tiny(step)) {
-    const ride = Math.max(1, Math.min(step.min ?? 1, want));
-    return u.slots + ride <= Math.ceil(SLOTS * 1.25) ? ride : 0;
-  }
-  if (free < least) return 0;
-  let slots = Math.min(want, free);
-  if (step.fe) {
-    const feFree = FRONTENDS - u.fe;
-    if (feFree < least) return 0;
-    slots = Math.min(slots, feFree);
-  }
   if (u.mem + step.mem > MEM) return 0;
   if (memAvailableGB() < step.mem + 1) return 0;
-  return slots;
+  const feFree = step.fe ? FRONTENDS - u.fe : Infinity;
+  if (free >= least && feFree >= least) return Math.min(want, free, feFree);
+  // Riders: a step of a minute or so that finds the budget full starts anyway
+  // at its minimum, on a quarter of the budget kept for them and counted
+  // apart, so the run's first verdicts arrive in its first minutes and a long
+  // step waiting for its slots is not squeezed out by them (integrity-runtime
+  // waited 814 s behind riders counted in the budget).
+  if (tiny(step)) {
+    const ride = Math.max(1, Math.min(step.min ?? 1, want));
+    if (u.riding + ride <= Math.max(1, Math.ceil(SLOTS * 0.25))) return -ride;
+  }
+  return 0;
 }
 
 // Only lower the others when a favoured step is in this run at all.
@@ -451,10 +452,10 @@ function schedule() {
         progressed = true;
         break;
       }
-      const slots = admit(step, used());
-      if (slots === 0) continue;
+      const granted = admit(step, used());
+      if (granted === 0) continue;
       pending = pending.filter((n) => n !== name);
-      start(step, slots);
+      start(step, Math.abs(granted), granted < 0);
       progressed = true;
       break;
     }
@@ -462,7 +463,7 @@ function schedule() {
   if (pending.length === 0 && running.size === 0) done();
 }
 
-function start(step, slots) {
+function start(step, slots, rider = false) {
   const log = join(RUN_DIR, `${step.name}.log`);
   const timeFile = join(RUN_DIR, `${step.name}.time`);
   const fd = openSync(log, "w");
@@ -478,7 +479,7 @@ function start(step, slots) {
   });
   closeSync(fd);
   const started = Date.now();
-  running.set(step.name, { child, slots, started });
+  running.set(step.name, { child, slots, started, rider });
   process.stderr.write(`-- ${step.name} started (${slots} slot${slots === 1 ? "" : "s"}; ${running.size} running)\n`);
   child.on("exit", (code, signal) => {
     running.delete(step.name);
