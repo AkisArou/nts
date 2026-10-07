@@ -23430,12 +23430,20 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// A closure whose result has no erased form -- a host handle, today --
-    /// admitted where a signature *reads* its result. A call through a
-    /// signature goes through the closure's erased entry, which answers its
-    /// result erased; such a closure's entry drops the result instead
-    /// ([`erased_call`]), which is exactly right where the signature returns
-    /// `void` and a wrong answer anywhere else. So that admission is refused
-    /// here, where it is written, rather than reaching the entry at run time.
+    /// admitted where a signature reads its result *as something else*.
+    ///
+    /// Where the signature's result is the closure's own representation, a
+    /// call through it takes the closure's typed entry (or, specialized, the
+    /// closure itself) and the handle passes unchanged: `const pick = ():
+    /// Node => pool[0]; pick()` and `read(f: () => Node)` both compile to a
+    /// direct typed call. Where the representations differ, the call adapts
+    /// through the closure's erased entry, which answers its result erased;
+    /// such a closure's entry drops the result instead ([`erased_call`]),
+    /// exactly right where the signature returns `void` and a wrong answer
+    /// anywhere else. So only that admission is refused, here, where it is
+    /// written, rather than reaching the entry at run time. Refusing every
+    /// reading signature refused the local case too
+    /// (`blockers/a-closure-returning-a-host-handle-is-refused-since-a2`).
     fn result_without_an_erased_form(&self, have: &HirType, want: &HirType) -> Option<String> {
         let (HirType::Managed(ManagedType::Object(from)), HirType::Managed(ManagedType::Object(to))) = (have, want) else {
             return None;
@@ -23444,7 +23452,8 @@ impl<'a> FuncBuilder<'a> {
             return None;
         }
         let (_, read) = signature_key(self.snapshot, *to)?;
-        if matches!(self.represent(read)?, HirType::Void | HirType::Never) {
+        let read = self.represent(read)?;
+        if matches!(read, HirType::Void | HirType::Never) {
             return None;
         }
         let node = self.closures.get(closure_index(*from))?.node;
@@ -23453,7 +23462,7 @@ impl<'a> FuncBuilder<'a> {
             return None;
         };
         let returns = self.represent(self.snapshot.signatures.get(signature.0 as usize)?.return_type)?;
-        (!result_crosses(&returns)).then(|| {
+        (!result_crosses(&returns) && returns != read).then(|| {
             "a closure whose result has no erased form, passed where a signature reads its result: \
              a call through the signature could not return it"
                 .to_owned()

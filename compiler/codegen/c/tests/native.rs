@@ -1121,16 +1121,24 @@ export function storeNaN(p: Ptr<c_int>): void { p[1] = NaN as c_int; }
 
 /// A closure answering a host handle, which has no erased form yet: where a
 /// signature returning `void` admits it, a call through the signature drops
-/// the answer and runs; where a signature reads the answer, the admission is
-/// refused where it is written. It had compiled clean and aborted at run time
-/// in the closure's erased entry -- the Chromium lane's
-/// `blockers/a-handle-returning-closure-called-as-void`, found in the browser.
+/// the answer and runs; where a signature reads the answer *as the closure
+/// answers it*, the call takes the closure's typed entry and the handle passes
+/// unchanged; only where the signature reads it as another representation --
+/// which would take the erased entry as an adapter -- is the admission refused,
+/// where it is written. The void case had compiled clean and aborted at run
+/// time in the closure's erased entry (the Chromium lane's
+/// `blockers/a-handle-returning-closure-called-as-void`); the first fix refused
+/// every reading signature, which refused a local `const pick = (): Node =>
+/// ...; pick()` too (`blockers/a-closure-returning-a-host-handle-is-refused-
+/// since-a2`).
 #[test]
 fn a_closure_answering_a_host_handle_crosses_only_where_its_result_is_dropped() {
     let prelude = r#"
 import type { HostClass, c_int } from "c:types";
 type Node = HostClass<"HostNode", null, "host_retain", "host_release">;
+type Leaf = HostClass<"HostLeaf", Node, "host_retain", "host_release">;
 declare function node_at(i: c_int): Node;
+declare function leaf_at(i: c_int): Leaf;
 declare function node_value(n: Node): c_int;
 "#;
     let prepare_rc = |name: &str, body: &str| {
@@ -1164,7 +1172,23 @@ export function reads(): number { return read(() => node_at(1 as c_int)); }
 ") else {
         return;
     };
-    let diagnostics = read.expect("a refused admission leaves valid HIR").diagnostics;
+    let read = read.unwrap();
+    assert!(
+        !read.diagnostics.iter().any(|d| d.message.contains("no erased form")),
+        "a signature reading the handle as the closure answers it was refused: {:?}",
+        read.diagnostics
+    );
+    let emitted = nts_codegen_c::emit(&read.program, nts_core::hir::native::NativeAbi::SysV);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    assert!(!emitted.writer.text().contains("nts_refused("), "a reading call reached a refusing entry");
+
+    let Some(adapted) = prepare_rc("handle-result-read-as-a-base", r"
+function read(f: () => Node): number { return node_value(f()); }
+export function reads(): number { return read(() => leaf_at(1 as c_int)); }
+") else {
+        return;
+    };
+    let diagnostics = adapted.expect("a refused admission leaves valid HIR").diagnostics;
     assert!(
         diagnostics.iter().any(|d| d.message.contains("no erased form, passed where a signature reads its result")),
         "{diagnostics:?}"

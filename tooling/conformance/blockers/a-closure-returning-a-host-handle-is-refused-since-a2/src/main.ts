@@ -1,4 +1,12 @@
-// expect: emit-c --rc -> a closure whose result has no erased form, passed where a signature reads its result
+// expect: emit-c --rc -> emits-c nts_dom_Node_get_childNodes(
+//
+// **FIXED 2026-10-07, and kept as a guard**: the refusal is asked only where a
+// signature reads the handle as another representation, which takes the
+// closure's erased entry as an adapter; `pick()` reads it as `Node`, as the
+// closure answers it, and calls the closure's typed entry. The guard reads the
+// property access after the call, which `go` reaches only when it lowers. The
+// record follows unchanged.
+//
 //
 // A local closure answering a host handle, called directly --
 // `const pick = (): Node => pool[i]; pick().childNodes` -- is refused since a2
