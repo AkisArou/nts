@@ -24,6 +24,28 @@
 // the moment. A list of rules is read by nobody, so this takes the change as
 // its input: the paths `git` says were touched, and whether they are new.
 //
+// # What a path owes, when no rule names it
+//
+// **A path no rule matches owes the full gate**: a list of rules is a claim
+// about what each path reaches, and a path nobody thought about is exactly the
+// one whose reach nobody knows. Three maps derived from the tree narrow that
+// before the default applies, so a rule does not have to be written for every
+// file:
+//
+//   - **the crate graph** (`cargo metadata`): a change in a crate is a change
+//     in every crate that depends on it, so `compiler/semantic-schema` owes
+//     what `compiler/core` and every backend owe, through them;
+//   - **the corpora's tsconfigs**: a file a gated program's tsconfig includes
+//     (`files`, `include`, `extends`, `paths`) is an input to the steps that
+//     compile that corpus -- runtime/chromium/dom/types/*.d.ts is part of
+//     three blockers fixtures, so it owes `blockers`;
+//   - **what each step runs**: the files all.sh's step bodies name, and what
+//     those scripts name and import in turn, owe that step.
+//
+// The runner itself (all.sh, run.mjs, the tokens, pinned.sh) owes the full gate.
+// A program's imports beyond its tsconfig are not followed: such a file is
+// matched by a rule or by nothing, and nothing is the full gate.
+//
 // # Two kinds of arm
 //
 // **Gate steps**, by the name `all.sh` gives them. `--run` runs exactly those,
@@ -46,6 +68,9 @@
 // what the binary is built from.
 
 import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, normalize, relative, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 /**
  * The tree whose change is asked about: the one the command is run from, not
@@ -102,6 +127,20 @@ export const ASKS = {
   // lowering change owed pointed at it until another lane found it red.
   "benches": ["answers", "does every benches/cases program still emit C that compiles and runs"],
   addons: ["valid", "does each runtime module build, load and publish something"],
+  "compile-time": ["hygiene", "did lowering any runtime module get twice as slow (instructions, perf-counted)"],
+  profile: ["whether", "does runtime/node emit without a panic, under the refusal ceiling, above the definition floor"],
+  interop: ["answers", "does every interop project build the way its README says and run"],
+  divergence: ["valid", "do node's divergence instruments still hold"],
+  sweep: ["answers", "does the value-kind cross-product agree on C"],
+  corpus: ["valid", "invalid HIR 0, uncompilable C 0, unverifiable class 0 over the suite"],
+  "on-device": ["answers", "do the bench cases agree on java and dalvikvm, on a device"],
+  test262: ["valid", "is the test262 pin reachable, the inventory and the features audit current"],
+  config: ["valid", "are the nts.config.ts files coherent"],
+  "react-sources": ["valid", "do the vendored React sources match their manifest"],
+  primitives: ["valid", "does every name docs/primitives.md cites exist"],
+  records: ["hygiene", "is every record number used once"],
+  reformat: ["hygiene", "no whitespace-only diffs"],
+  tooling: ["valid", "do the gate's own tools pass their tests (tokens, owed)"],
 };
 
 /** The comparisons a lowering change owes, each with the question only it answers. */
@@ -264,11 +303,14 @@ export const RULES = [
     ],
   },
   {
-    name: "the gate script",
-    when: (p) => p === "tooling/gate/all.sh",
+    // The runner decides what every step is given and how a verdict is read:
+    // a change to it can change any step's answer.
+    name: "the gate's runner",
+    when: (p) => /^tooling\/gate\/(all\.sh|run\.mjs|token\.sh|tokens\.mjs|tokenpool\.mjs|pinned\.sh)$/.test(p),
+    full: true,
     steps: [],
     arms: [
-      { kind: "valid", asks: "does it parse, and do the touched steps run", run: "sh -n tooling/gate/all.sh, then those steps with NTS_GATE_STEPS, from a worktree" },
+      { kind: "valid", asks: "does it parse, and do the touched steps run", run: "sh -n tooling/gate/all.sh; node --test tooling/gate/*.test.mjs; then the steps, from a worktree" },
       { kind: "hygiene", asks: "do the lanes know", run: "announce it; never edit it while a run from this tree is executing" },
     ],
   },
@@ -295,6 +337,27 @@ export const RULES = [
       { kind: "hygiene", asks: "will it fail for the gap being fixed", run: "when the refusal is only a means, pick a documented permanent gap (a RegExp field, a stack read), not whatever refuses today" },
     ],
   },
+  {
+    // Read by two steps and by people; no program compiles a page of it.
+    name: "documentation",
+    when: (p) => /\.md$/.test(p) && !/^(examples|benches|tooling\/(conformance|memory)|runtime)\//.test(p),
+    steps: ["records", "primitives"],
+    arms: [],
+  },
+  {
+    // What each step cost on a healthy run: it orders the next run and warns
+    // when a step is much slower. No step's verdict reads it.
+    name: "the gate's step times",
+    when: (p) => p === "tooling/gate/times.tsv",
+    steps: [],
+    arms: [{ kind: "hygiene", asks: "were they taken on a healthy run", run: "NTS_GATE_RECORD_TIMES=1 on a full gate whose summary you have read" }],
+  },
+  {
+    name: "the gate's own tests",
+    when: (p) => /^tooling\/gate\/([^/]+\.test\.mjs|owed\.mjs)$/.test(p),
+    steps: ["tooling"],
+    arms: [],
+  },
 ];
 
 /** Every change, whatever it touched: the gate's first two steps. */
@@ -316,12 +379,276 @@ function changedPaths(argv) {
   return [...tracked, ...untracked];
 }
 
-/** The rules a change matches, each with the paths that matched it. */
+// ---------------------------------------------------------------------------
+// The maps derived from the tree. Each is read once per process, from TREE.
+// ---------------------------------------------------------------------------
+const memo = new Map();
+const once = (key, f) => (memo.has(key) ? memo.get(key) : (memo.set(key, f()), memo.get(key)));
+const rel = (abs) => relative(TREE, abs).split("\\").join("/");
+
+/** Every step all.sh defines, in its order: what "the full gate" means. */
+export function allSteps() {
+  return once("steps", () => {
+    const r = spawnSync("sh", [join(TREE, "tooling/gate/all.sh"), "--list"], { cwd: TREE, encoding: "utf8" });
+    if (r.status !== 0) throw new Error(`all.sh --list exited ${r.status}`);
+    return r.stdout.split("\n").filter(Boolean);
+  });
+}
+
+/** crate dir -> { name, deps: [dir], users: [dir] } for the workspace's crates. */
+export function crates() {
+  return once("crates", () => {
+    let meta;
+    try {
+      meta = JSON.parse(execFileSync("cargo", ["metadata", "--format-version", "1", "--no-deps", "--offline"], { cwd: TREE, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 1 << 28 }));
+    } catch {
+      return null; // no cargo: crate paths fall to their rules, or to the full gate
+    }
+    const byName = new Map(meta.packages.map((p) => [p.name, rel(dirname(p.manifest_path))]));
+    const out = new Map();
+    for (const p of meta.packages) {
+      const dir = rel(dirname(p.manifest_path));
+      out.set(dir, { name: p.name, deps: [...new Set(p.dependencies.filter((d) => d.path && byName.has(d.name)).map((d) => byName.get(d.name)))], users: [] });
+    }
+    for (const [dir, c] of out) for (const d of c.deps) out.get(d)?.users.push(dir);
+    return out;
+  });
+}
+
+/** The crate a path is in (the longest crate directory above it), or null. */
+export function crateOf(path) {
+  const all = crates();
+  if (!all) return null;
+  let best = null;
+  for (const dir of all.keys()) if ((path === dir || path.startsWith(`${dir}/`)) && (!best || dir.length > best.length)) best = dir;
+  return best;
+}
+
+/** `dir` and every crate that depends on it, directly or not. */
+export function dependents(dir) {
+  const all = crates();
+  const seen = new Set([dir]);
+  const queue = [dir];
+  while (queue.length) for (const u of all.get(queue.shift())?.users ?? []) if (!seen.has(u)) { seen.add(u); queue.push(u); }
+  return [...seen];
+}
+
+/**
+ * The gated corpora: which programs each compiles, and the steps that do.
+ * `dirs` lists program directories; a program without a tsconfig.json is
+ * compiled under tsconfig.fixtures.json (dexes.sh, bench cases).
+ */
+const CORPORA = [
+  { name: "the examples", dirs: () => kids("examples").filter((d) => d !== "examples/interop"), steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "integrity", "example-refusals", "dex", "snapshot-cache"] },
+  { name: "the interop projects", dirs: () => kids("examples/interop"), steps: ["interop"] },
+  { name: "the blockers", dirs: () => kids("tooling/conformance/blockers"), steps: ["blockers", "integrity"] },
+  { name: "the outcomes", dirs: () => kids("tooling/conformance/outcomes"), steps: ["outcomes", "integrity", "jvm-verifies"] },
+  { name: "the runtime modules", dirs: () => [...kids("runtime/node"), "runtime/web-platform"], steps: ["definitions", "integrity-runtime", "compile-time", "assembles", "addons", "profile", "snapshot-cache", "types", "jvm-verifies", "divergence"] },
+  { name: "the bench cases", dirs: () => kids("benches/cases"), steps: ["benches", "bench-agree", "dex"] },
+  { name: "the memory cases", dirs: () => kids("tooling/memory/cases"), steps: ["memory"] },
+];
+function kids(dir) {
+  try {
+    return readdirSync(join(TREE, dir), { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => `${dir}/${e.name}`);
+  } catch {
+    return [];
+  }
+}
+
+/** A tsconfig's JSON: comments and trailing commas allowed, as tsc allows them. */
+function readJsonc(path) {
+  const text = readFileSync(path, "utf8");
+  let out = "";
+  for (let i = 0, str = false; i < text.length; i++) {
+    const c = text[i];
+    if (str) { out += c; if (c === "\\") out += text[++i] ?? ""; else if (c === '"') str = false; continue; }
+    if (c === '"') { str = true; out += c; continue; }
+    if (c === "/" && text[i + 1] === "/") { while (i < text.length && text[i] !== "\n") i++; out += "\n"; continue; }
+    if (c === "/" && text[i + 1] === "*") { i = text.indexOf("*/", i + 2); if (i < 0) break; i++; continue; }
+    out += c;
+  }
+  return JSON.parse(out.replace(/,(\s*[}\]])/g, "$1"));
+}
+
+/** The files and directories a tsconfig takes its program from, repo-relative. */
+export function tsconfigInputs(config, seen = new Set()) {
+  const abs = resolve(TREE, config);
+  if (seen.has(abs) || !existsSync(abs)) return [];
+  seen.add(abs);
+  const at = dirname(abs);
+  const out = [rel(abs)];
+  let json;
+  try { json = readJsonc(abs); } catch { return out; }
+  // The part of a glob before its first wildcard is the directory it reads.
+  const root = (pattern) => rel(resolve(at, pattern.split(/[*?{[]/)[0] || ".")).replace(/\/$/, "");
+  for (const f of json.files ?? []) out.push(rel(resolve(at, f)));
+  for (const g of json.include ?? ["**/*"]) out.push(root(g));
+  const ext = Array.isArray(json.extends) ? json.extends : json.extends ? [json.extends] : [];
+  for (const e of ext) if (e.startsWith(".")) out.push(...tsconfigInputs(rel(resolve(at, e.endsWith(".json") ? e : `${e}.json`)), seen));
+  const opts = json.compilerOptions ?? {};
+  for (const targets of Object.values(opts.paths ?? {})) for (const t of targets) out.push(root(resolve(at, opts.baseUrl ?? ".", t)));
+  for (const t of opts.typeRoots ?? []) out.push(root(t));
+  return out;
+}
+
+/** input (file or directory, repo-relative) -> Set of corpus names. */
+export function corpusInputs() {
+  return once("corpora", () => {
+    const map = new Map();
+    const add = (input, corpus) => { if (!map.has(input)) map.set(input, new Set()); map.get(input).add(corpus); };
+    for (const c of CORPORA) {
+      for (const dir of c.dirs()) {
+        const config = existsSync(join(TREE, dir, "tsconfig.json")) ? `${dir}/tsconfig.json` : null;
+        add(dir, c.name);
+        for (const input of config ? tsconfigInputs(config) : tsconfigInputs("tsconfig.fixtures.json")) {
+          // A config's `include` of its own directory, or of the whole tree for
+          // the shared fixtures config, says nothing a directory rule does not.
+          if (input === "" || input === "." || (!config && input === "")) continue;
+          add(input, c.name);
+        }
+      }
+    }
+    return map;
+  });
+}
+
+/**
+ * file or directory (repo-relative) -> Set of steps whose run reads it: the
+ * paths a step's body in all.sh names, and what each named script names and
+ * imports in turn.
+ */
+export function stepInputs() {
+  return once("stepInputs", () => {
+    const text = readFileSync(join(TREE, "tooling/gate/all.sh"), "utf8");
+    const bodies = new Map();
+    // A function's body runs to the next definition or step line: some are
+    // one-liners (`llvm() { ( ...; backend_examples ... ); }`), and the
+    // comments in between are dropped below.
+    const starts = [...text.matchAll(/^([a-z_][a-z0-9_]*)\(\) \{/gm)];
+    for (const [k, m] of starts.entries()) {
+      const from = m.index + m[0].length;
+      const rest = text.slice(from, k + 1 < starts.length ? starts[k + 1].index : text.length);
+      const stop = rest.search(/^step "/m);
+      bodies.set(m[1], stop < 0 ? rest : rest.slice(0, stop));
+    }
+    const PATH = /(?:^|[\s"'=(/$])((?:tooling|runtime|examples|benches|compiler|build|docs)\/[A-Za-z0-9_.@+-]+(?:\/[A-Za-z0-9_.@+*-]+)*)/g;
+    // Code, not prose: a comment that mentions a path does not read it. A
+    // directory of two segments (`tooling/conformance`, from a path built
+    // with a variable) is too wide to mean anything and is dropped.
+    const code = (body) => body.split("\n").filter((l) => !/^\s*(#|\/\/|\*|\/\*)/.test(l)).join("\n");
+    const named = (body) => [...code(body).matchAll(PATH)]
+      .map((m) => m[1].replace(/\/\*.*$/, "").replace(/\/$/, ""))
+      .filter((p) => p.split("/").length > 2 || /\.[a-z]+$/.test(p));
+    const imports = (file, body) => [...body.matchAll(/(?:from\s+|import\s*\(\s*|require\(\s*)["'](\.{1,2}\/[^"']+)["']/g)].map((m) => rel(resolve(TREE, dirname(file), m[1])));
+    const map = new Map();
+    const add = (input, step) => { if (!map.has(input)) map.set(input, new Set()); map.get(input).add(step); };
+    for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
+      const step = m[1];
+      const command = m[2].trim();
+      const queue = [];
+      // The step's function, and every all.sh function it calls (llvm calls
+      // backend_examples, which runs agree.mjs).
+      const fns = [command.split(/\s+/)[0]];
+      for (let k = 0; k < fns.length; k++) {
+        const body = bodies.get(fns[k]);
+        if (body === undefined) continue;
+        queue.push(...named(body));
+        // Called: a function name where a command starts, not any word.
+        for (const m of code(body).matchAll(/(?:^|[;&|(]|\$\(|then|do|else)\s*([a-z_][a-z0-9_]*)\b/gm)) {
+          if (bodies.has(m[1]) && !fns.includes(m[1])) fns.push(m[1]);
+        }
+      }
+      queue.push(...named(` ${command.replace(/^\.\//, "")}`));
+      const seen = new Set();
+      while (queue.length) {
+        const input = normalize(queue.shift()).split("\\").join("/");
+        if (seen.has(input)) continue;
+        seen.add(input);
+        add(input, step);
+        const abs = join(TREE, input);
+        let st;
+        try { st = statSync(abs); } catch { continue; }
+        // The runner names every step's tools; reading it would make each step
+        // an input to all of them. It owes the full gate by its own rule.
+        // owed.mjs and the tests name paths as cases, not as inputs.
+        if (/^tooling\/gate\/(all\.sh|run\.mjs|owed\.mjs|[^/]+\.test\.mjs)$/.test(input)) continue;
+        if (!st.isFile() || !/\.(sh|mjs|js|ts|py)$/.test(input) || st.size > 1 << 20) continue;
+        const body = readFileSync(abs, "utf8");
+        // A data file the script reads beside itself, `join(HERE, "x.tsv")`:
+        // a bare name in quotes that exists in the script's directory.
+        const beside = [...code(body).matchAll(/["']([A-Za-z0-9_.-]+\.(?:tsv|json|known|txt|csv))["']/g)]
+          .map((m) => `${dirname(input)}/${m[1]}`).filter((f) => existsSync(join(TREE, f)));
+        queue.push(...named(body), ...imports(input, body), ...beside);
+      }
+    }
+    return map;
+  });
+}
+
+/** The entries of `map` (input -> Set) that cover `path`: the path itself, or a directory above it. */
+function covering(map, path) {
+  const out = new Set();
+  for (const [input, names] of map) if (path === input || path.startsWith(`${input}/`)) for (const n of names) out.add(n);
+  return out;
+}
+
+/**
+ * The rules a change matches, each with the paths that matched it, then what
+ * the derived maps add, then -- for any path still unmatched -- the full gate.
+ */
 export function owed(changes) {
   const out = [];
+  const matched = new Set();
+  const direct = (path, added) => RULES.filter((rule) => rule.when(path, added));
   for (const rule of RULES) {
     const paths = changes.filter(({ path, added }) => rule.when(path, added)).map((c) => c.path);
     if (paths.length > 0) out.push({ ...rule, paths });
+  }
+  for (const { path, added } of changes) if (direct(path, added).length) matched.add(path);
+
+  // Through the crate graph, for a crate no rule names: what each crate that
+  // depends on it owes, by their rules. A crate with a rule of its own has had
+  // its reach decided by hand (the LLVM backend owes the LLVM steps, not
+  // everything the CLI that links it owes), and that decision stands.
+  const through = new Map(); // rule name -> { rule, paths }
+  for (const { path } of changes) {
+    if (matched.has(path)) continue;
+    const crate = crateOf(path);
+    if (!crate || !/\.(rs|toml)$|\/(src|tests|benches)\//.test(path)) continue;
+    for (const dir of dependents(crate)) {
+      if (dir === crate) continue;
+      for (const rule of direct(`${dir}/src/lib.rs`, false)) {
+        if (!through.has(rule.name)) through.set(rule.name, { rule, paths: new Set() });
+        through.get(rule.name).paths.add(`${path} (through ${crates().get(dir).name})`);
+        matched.add(path);
+      }
+    }
+  }
+  for (const { rule, paths } of through.values()) {
+    if (out.some((r) => r.name === rule.name)) continue;
+    out.push({ ...rule, name: `${rule.name}, through the crates that depend on it`, paths: [...paths], arms: [] });
+  }
+
+  // Inputs to a gated corpus, and to what a step runs.
+  const corpora = new Map();
+  const steps = new Map();
+  for (const { path } of changes) {
+    for (const c of covering(corpusInputs(), path)) { if (!corpora.has(c)) corpora.set(c, []); corpora.get(c).push(path); matched.add(path); }
+    for (const st of covering(stepInputs(), path)) { if (!steps.has(st)) steps.set(st, []); steps.get(st).push(path); matched.add(path); }
+  }
+  for (const [name, paths] of corpora) {
+    const c = CORPORA.find((x) => x.name === name);
+    out.push({ name: `an input to ${name}`, paths: [...new Set(paths)], steps: c.steps, arms: [] });
+  }
+  if (steps.size) {
+    out.push({ name: "an input to what a gate step runs", paths: [...new Set([...steps.values()].flat())], steps: [...steps.keys()], arms: [] });
+  }
+
+  const unmatched = changes.map((c) => c.path).filter((p) => !matched.has(p));
+  if (unmatched.length) {
+    out.push({ name: "matched by nothing: the full gate", full: true, paths: unmatched, steps: [], arms: [
+      { kind: "hygiene", asks: "what does this path reach", run: "a rule in tooling/gate/owed.mjs, so the next change to it owes what it reaches and not everything" },
+    ] });
   }
   if (changes.length > 0) out.push({ ...ALWAYS, paths: [] });
   return out;
@@ -329,13 +656,17 @@ export function owed(changes) {
 
 /**
  * The gate steps a set of rules owes, deduplicated, `build` first and the
- * cheap always-owed ones next: `all.sh` stops at the first failing step, so
- * clippy failing in a minute beats it failing after an hour of backends.
+ * cheap always-owed ones next. A rule marked `full` owes every step.
  */
 export function gateSteps(rules) {
+  if (rules.length === 0) return [];
+  if (rules.some((r) => r.full)) {
+    const all = allSteps();
+    return ["build", ...ALWAYS.steps, ...all.filter((s) => s !== "build" && !ALWAYS.steps.includes(s))];
+  }
   const always = new Set(ALWAYS.steps);
-  const rest = rules.flatMap((r) => r.steps).filter((s) => !always.has(s));
-  return rules.length === 0 ? [] : ["build", ...ALWAYS.steps, ...new Set(rest)];
+  const rest = rules.flatMap((r) => r.steps).filter((s) => !always.has(s) && s !== "build");
+  return ["build", ...ALWAYS.steps, ...new Set(rest)];
 }
 
 // **Seen to select before it is trusted**, on the three changes that motivated it.
@@ -365,6 +696,7 @@ function selfTest() {
   // A step without its question could not say what it asks.
   for (const r of [...RULES, ALWAYS]) for (const st of r.steps) if (!ASKS[st]) return `rule "${r.name}" names gate step "${st}", which ASKS does not describe`;
   for (const st of ["build"]) if (!ASKS[st]) return `ASKS lacks "${st}"`;
+  for (const st of allSteps()) if (!ASKS[st]) return `all.sh defines step "${st}", which ASKS does not describe`;
   const lowering = owed([{ path: "compiler/core/src/hir/lower.rs", added: false }]).find((r) => r.name === "lowering");
   const asked = new Set(lowering.arms.filter((a) => !a.if).map((a) => a.kind));
   if (!asked.has("answers") || !asked.has("whether")) return `a lowering change owes only ${[...asked].join(", ")}`;
@@ -372,53 +704,58 @@ function selfTest() {
   return null;
 }
 
-const argv = process.argv.slice(2);
-const broken = selfTest();
-if (broken) {
-  console.log(`  NOT MEASURED: self-test failed -- ${broken}`);
-  process.exit(2);
-}
-if (argv.includes("--self-test")) {
-  console.log("  self-test: each change selects its arms; every gate step says what it asks; lowering owes answers, counts and the emitted-C diff; a .ts tool is an instrument and a blockers fixture owes integrity");
-  process.exit(0);
+function main() {
+  const argv = process.argv.slice(2);
+  const broken = selfTest();
+  if (broken) {
+    console.log(`  NOT MEASURED: self-test failed -- ${broken}`);
+    process.exit(2);
+  }
+  if (argv.includes("--self-test")) {
+    console.log("  self-test: each change selects its arms; every gate step says what it asks; lowering owes answers, counts and the emitted-C diff; a .ts tool is an instrument and a blockers fixture owes integrity");
+    process.exit(0);
+  }
+
+  // The gate runs the tree as it stands, which is not the tree of a past commit.
+  if (argv.includes("--run") && argv.includes("--commit")) {
+    console.log("  --run with --commit would gate today's tree for another commit's change; check that commit out in a worktree and run from there");
+    process.exit(2);
+  }
+  const changes = changedPaths(argv);
+  if (changes.length === 0) {
+    console.log(`  no change in ${TREE}: nothing owed`);
+    process.exit(0);
+  }
+  const rules = owed(changes);
+  const steps = gateSteps(rules);
+  const gate = rules.some((r) => r.full) ? "sh tooling/gate/all.sh   # the full gate" : `NTS_GATE_STEPS="${steps.join(" ")}" sh tooling/gate/all.sh`;
+  const arm = (a) => `${a.if ? `if ${a.if}: ` : ""}${a.asks}\n        ${a.run}`;
+  console.log(`  ${changes.length} path(s) changed in ${TREE}`);
+  for (const r of rules) {
+    console.log(`\n  ${r.name}${r.paths.length ? ` (${r.paths.slice(0, 3).join(", ")}${r.paths.length > 3 ? `, +${r.paths.length - 3}` : ""})` : ""}`);
+    for (const a of r.arms) console.log(`    [ ] [${a.kind}] ${arm(a)}`);
+    if (r.steps.length > 0) console.log(`    gate: ${r.steps.join(" ")}`);
+  }
+  console.log("\n  the gate steps owed, and what each asks:");
+  for (const step of steps) console.log(`    ${step.padEnd(18)} [${(ASKS[step] ?? ["?"])[0]}] ${(ASKS[step] ?? ["", "(not described in ASKS)"])[1]}`);
+  console.log(`  in one run:\n    ${gate}`);
+  // Which questions the change owes, by kind: four instruments asking one
+  // question is the failure this prints against.
+  const kinds = new Map();
+  for (const k of [...steps.map((st) => (ASKS[st] ?? ["?"])[0]), ...rules.flatMap((r) => r.arms.filter((a) => !a.if).map((a) => a.kind))]) kinds.set(k, (kinds.get(k) ?? 0) + 1);
+  console.log(`\n  owed, by what they ask: ${[...kinds].map(([k, n]) => `${n} ${k}`).join(", ")}`);
+  const compiler = rules.some((r) => ["lowering", "the C backend", "the LLVM backend", "the JVM backend", "the frontend or the snapshot schema", "the C runtime"].includes(r.name));
+  if (compiler && !rules.some((r) => r.arms.some((a) => a.kind === "answers" && !a.if && /<before> <after>/.test(a.run)))) {
+    console.log("  NOTE: nothing owed here compares what programs answer across the change; counts rise with unsoundness too");
+  }
+  if (argv.includes("--run")) {
+    console.log(`\n  running them in ${TREE}\n`);
+    const run = spawnSync("sh", ["tooling/gate/all.sh"], { cwd: TREE, stdio: "inherit", env: { ...process.env, NTS_GATE_STEPS: steps.join(" ") } });
+    const left = rules.flatMap((r) => r.arms).length;
+    console.log(`\n  gate steps: ${run.status === 0 ? "green" : `FAILED (exit ${run.status ?? run.signal})`}; ${left} arm(s) above are still yours`);
+    process.exit(run.status === 0 ? 0 : 1);
+  }
 }
 
-// The gate runs the tree as it stands, which is not the tree of a past commit.
-if (argv.includes("--run") && argv.includes("--commit")) {
-  console.log("  --run with --commit would gate today's tree for another commit's change; check that commit out in a worktree and run from there");
-  process.exit(2);
-}
-const changes = changedPaths(argv);
-if (changes.length === 0) {
-  console.log(`  no change in ${TREE}: nothing owed`);
-  process.exit(0);
-}
-const rules = owed(changes);
-const steps = gateSteps(rules);
-const gate = `NTS_GATE_STEPS="${steps.join(" ")}" sh tooling/gate/all.sh`;
-const arm = (a) => `${a.if ? `if ${a.if}: ` : ""}${a.asks}\n        ${a.run}`;
-console.log(`  ${changes.length} path(s) changed in ${TREE}`);
-for (const r of rules) {
-  console.log(`\n  ${r.name}${r.paths.length ? ` (${r.paths.slice(0, 3).join(", ")}${r.paths.length > 3 ? `, +${r.paths.length - 3}` : ""})` : ""}`);
-  for (const a of r.arms) console.log(`    [ ] [${a.kind}] ${arm(a)}`);
-  if (r.steps.length > 0) console.log(`    gate: ${r.steps.join(" ")}`);
-}
-console.log("\n  the gate steps owed, and what each asks:");
-for (const step of steps) console.log(`    ${step.padEnd(18)} [${ASKS[step][0]}] ${ASKS[step][1]}`);
-console.log(`  in one run:\n    ${gate}`);
-// Which questions the change owes, by kind: four instruments asking one
-// question is the failure this prints against.
-const kinds = new Map();
-for (const k of [...steps.map((st) => ASKS[st][0]), ...rules.flatMap((r) => r.arms.filter((a) => !a.if).map((a) => a.kind))]) kinds.set(k, (kinds.get(k) ?? 0) + 1);
-console.log(`\n  owed, by what they ask: ${[...kinds].map(([k, n]) => `${n} ${k}`).join(", ")}`);
-const compiler = rules.some((r) => ["lowering", "the C backend", "the LLVM backend", "the JVM backend", "the frontend or the snapshot schema", "the C runtime"].includes(r.name));
-if (compiler && !rules.some((r) => r.arms.some((a) => a.kind === "answers" && !a.if && /<before> <after>/.test(a.run)))) {
-  console.log("  NOTE: nothing owed here compares what programs answer across the change; counts rise with unsoundness too");
-}
-if (argv.includes("--run")) {
-  console.log(`\n  running them in ${TREE}\n`);
-  const run = spawnSync("sh", ["tooling/gate/all.sh"], { cwd: TREE, stdio: "inherit", env: { ...process.env, NTS_GATE_STEPS: steps.join(" ") } });
-  const left = rules.flatMap((r) => r.arms).length;
-  console.log(`\n  gate steps: ${run.status === 0 ? "green" : `FAILED (exit ${run.status ?? run.signal})`}; ${left} arm(s) above are still yours`);
-  process.exit(run.status === 0 ? 0 : 1);
-}
+// Run as a command; imported (owed.test.mjs), it only exports.
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main();

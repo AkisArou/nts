@@ -127,6 +127,7 @@ const STEPS = [
   { name: "assembles", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "runtime LLVM IR assembles" },
   { name: "types", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "snapshot type tables consistent" },
   { name: "jvm-verifies", elastic: true, slots: 8, min: 2, mem: 6, nts: true, fe: true, doc: "runtime and outcomes JVM output verifies" },
+  { name: "tooling", slots: 1, mem: 0.5, doc: "the gate's own tools pass their tests" },
   { name: "primitives", slots: 1, mem: 0.1, doc: "docs/primitives.md names exist" },
   { name: "tests", slots: 8, min: 4, mem: 8, lock: "cargo", after: ["build"], doc: "cargo test --workspace" },
   { name: "corpus", slots: 8, min: 4, mem: 6, nts: true, fe: true, doc: "invalid HIR 0, uncompilable C 0, unverifiable class 0" },
