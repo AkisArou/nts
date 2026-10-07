@@ -9,6 +9,18 @@ the tools are in [`third_party/chromium`](../../third_party/chromium/README.md)
 and [`tooling/chromium`](../../tooling/chromium). Linux x86-64, opt-in, and
 independent of the ordinary compiler build.
 
+## What a program can use
+
+`nts:dom` is generated from Blink's IDL ([docs/lib-dom.md](docs/lib-dom.md)
+lists how lib.dom.d.ts spellings map): the DOM and its events, forms and
+validation, ranges and the selection, stylesheets, shadow DOM and slots,
+the window (computed style, media queries, history, location, navigator,
+performance), URL, AbortController, parsing and serializing, drag data,
+the 2D canvas, and IDL enums as literal unions. About 4,500 members bind;
+what does not yet is listed with its reason in
+`tooling/chromium/bindgen/report.json`, and every workaround in
+[contracts/workarounds.md](contracts/workarounds.md).
+
 ## Writing an app
 
 An app is a directory with an `index.html` that opts in with
@@ -29,8 +41,8 @@ export function main(document: Document): void {
 ```
 
 `main` runs once the page has loaded (DOMContentLoaded). From then on, Blink
-calls the closures it registered: listeners, handlers, frame callbacks and
-timers. `unload()` runs when the document ends in a renderer that goes on
+calls the closures it registered: listeners, handlers, frame, idle and
+timer callbacks, and observers (mutation, resize, intersection). `unload()` runs when the document ends in a renderer that goes on
 (reload, navigation); closing the window may end the process without it, as
 with page script's `unload`. Keep the app's state in what `main` creates.
 Module-level state is not per document yet, and the build refuses it
