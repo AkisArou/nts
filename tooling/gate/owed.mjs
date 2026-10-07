@@ -512,6 +512,17 @@ export function crateOf(path) {
   return best;
 }
 
+/**
+ * The nearest directory above `path` with a Cargo.toml, the workspace root's
+ * aside: a crate found without asking cargo, for when cargo cannot answer.
+ */
+export function cargoDirOf(path) {
+  for (let d = dirname(path); d !== "." && d !== "" && d !== "/"; d = dirname(d)) {
+    if (existsSync(join(TREE, d, "Cargo.toml"))) return d;
+  }
+  return null;
+}
+
 /** `dir` and every crate that depends on it, directly or not. */
 export function dependents(dir) {
   const all = crates();
@@ -627,9 +638,16 @@ export function stepInputs() {
     // directory of two segments (`tooling/conformance`, from a path built
     // with a variable) is too wide to mean anything and is dropped.
     const code = (body) => body.split("\n").filter((l) => !/^\s*(#|\/\/|\*|\/\*)/.test(l)).join("\n");
-    const named = (body) => [...code(body).matchAll(PATH)]
-      .map((m) => m[1].replace(/\/\*.*$/, "").replace(/\/$/, ""))
-      .filter((p) => p.split("/").length > 2 || /\.[a-z]+$/.test(p));
+    // A data tree is named wide on purpose -- `join(repo, "examples")` walks
+    // every example for its nts.config.ts -- so a bare quoted top directory of
+    // programs, or a short path into one, is kept.
+    const DATA = /^(examples|benches|runtime|docs)(\/|$)/;
+    const named = (body) => [
+      ...[...code(body).matchAll(PATH)]
+        .map((m) => m[1].replace(/\/\*.*$/, "").replace(/\/$/, ""))
+        .filter((p) => p.split("/").length > 2 || /\.[a-z]+$/.test(p) || DATA.test(p)),
+      ...[...code(body).matchAll(/["'](examples|benches)["']/g)].map((m) => m[1]),
+    ];
     const imports = (file, body) => [...body.matchAll(/(?:from\s+|import\s*\(\s*|require\(\s*)["'](\.{1,2}\/[^"']+)["']/g)].map((m) => rel(resolve(TREE, dirname(file), m[1])));
     const map = new Map();
     const add = (input, step) => { if (!map.has(input)) map.set(input, new Set()); map.get(input).add(step); };
@@ -673,6 +691,16 @@ export function stepInputs() {
         queue.push(...named(body), ...imports(input, body), ...beside);
       }
     }
+    // **Hand-overs through the runner.** run.mjs gives one step another's
+    // output (`if (step.name === "definitions" && plan.includes("integrity-
+    // runtime")) e.NTS_DEFINITIONS_FROM = ...`): definitions and compile-time
+    // read what integrity --runtime kept, and addons what profile emitted. So
+    // whatever the giving step runs, the taking step runs too.
+    const runner = readFileSync(join(TREE, "tooling/gate/run.mjs"), "utf8");
+    for (const m of runner.matchAll(/step\.name === "([a-z0-9-]+)" && plan\.includes\("([a-z0-9-]+)"\)\)\s*e\.NTS_[A-Z_]+\s*=/g)) {
+      const [, taker, giver] = m;
+      for (const steps of map.values()) if (steps.has(giver)) steps.add(taker);
+    }
     return map;
   });
 }
@@ -695,8 +723,6 @@ function covering(map, path) {
 export function embedded() {
   return once("embedded", () => {
     const map = new Map();
-    const all = crates();
-    if (!all) return map;
     let text = "";
     try {
       text = execFileSync("git", ["grep", "-nE", "include(_str|_bytes)?!|CARGO_MANIFEST_DIR\"\\),", "--", "*.rs"], { cwd: TREE, encoding: "utf8", maxBuffer: 1 << 26 });
@@ -707,7 +733,9 @@ export function embedded() {
       const m = /^([^:]+):\d+:(.*)$/.exec(line);
       if (!m) continue;
       const [, file, src] = m;
-      const crate = crateOf(file);
+      // By Cargo.toml when cargo cannot be asked: the directory still has to be
+      // known to be compiled in, so owed() can send it to the full gate.
+      const crate = crateOf(file) ?? cargoDirOf(file);
       if (!crate) continue;
       const targets = [
         ...[...src.matchAll(/include(?:_str|_bytes)?!\(\s*"([^"]+)"/g)].map((x) => resolve(TREE, dirname(file), x[1])),
@@ -759,13 +787,13 @@ export function owed(changes) {
   for (const { path, added = false } of changes) {
     let gave = 0;
     let settled = false;
-    let unplaced = false;
+    let unplaced = null; // why the path owes the full gate, when it does
     for (const rule of rulesFor(path, added)) {
       add(rule.name, path, rule.steps, { arms: rule.arms, full: rule.full });
       gave += rule.steps.length;
       if (rule.full) gave += 1;
       if (rule.settled) settled = true;
-      if (rule.placedBy === "stepInputs" && covering(stepInputs(), path).size === 0) unplaced = true;
+      if (rule.placedBy === "stepInputs" && covering(stepInputs(), path).size === 0) unplaced = "an instrument no step's scripts were found to run";
     }
 
     // The crate graph.
@@ -773,8 +801,10 @@ export function owed(changes) {
     const own = crateOf(path);
     if (own) roots.add(own);
     for (const c of covering(embedded(), path)) roots.add(c);
-    if (!all && /\.rs$|(^|\/)Cargo\.toml$/.test(path)) unplaced = true; // no cargo here to ask
-    for (const root of roots) {
+    // No cargo to ask for the graph: any path in a crate, or in a directory a
+    // crate compiles in, owes the full gate.
+    if (!all && (/\.rs$|(^|\/)Cargo\.toml$/.test(path) || cargoDirOf(path) || roots.size)) unplaced = "compiled into a crate, and cargo metadata could not say which crates depend on it";
+    for (const root of all ? roots : []) {
       for (const dir of dependents(root)) {
         const rules = rulesFor(`${dir}/src/lib.rs`, false).filter((r) => r.steps.length || r.full);
         const via = dir === root ? path : `${path} (through ${all.get(dir).name})`;
@@ -805,7 +835,7 @@ export function owed(changes) {
       gave += steps.length;
     }
 
-    if (unplaced) full.push(`${path} (an instrument no step's scripts were found to run)`);
+    if (unplaced) full.push(`${path} (${unplaced})`);
     else if (gave === 0 && !settled) full.push(path);
   }
 

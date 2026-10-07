@@ -7,6 +7,7 @@
 // silently, which is the failure owed.mjs exists to prevent.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { allSteps, gateSteps, owed, parseNameStatus } from "./owed.mjs";
 
 const stepsFor = (...paths) => gateSteps(owed(paths.map((path) => ({ path, added: false }))));
@@ -141,4 +142,39 @@ test("an instrument no step is found to run owes the full gate", () => {
 
 test("integrity.ts, which blockers-check.mjs spawns, owes blockers", () => {
   owes("tooling/conformance/integrity.ts", ["integrity", "integrity-runtime", "blockers"]);
+});
+
+// ---------------------------------------------------------------------------
+// Second round of the review.
+// ---------------------------------------------------------------------------
+
+test("a step that reads another's output through the runner owes what that step runs", () => {
+  // integrity --runtime keeps its listings for definitions and compile-time
+  // (run.mjs's NTS_DEFINITIONS_FROM, NTS_COMPILE_TIMES_FROM); profile's
+  // emission goes to addons (NTS_ADDON_EMITTED).
+  owes("tooling/conformance/integrity.ts", ["integrity-runtime", "definitions", "compile-time"]);
+  owes("tooling/census/node-refusals.ts", ["profile", "addons"]);
+});
+
+test("an example's nts.config.ts owes config, new or changed, interop's too", () => {
+  owes("examples/strings/nts.config.ts", ["config"]);
+  superset(changeOwes([{ path: "examples/a-new-one/nts.config.ts", added: true }, { path: "examples/a-new-one/tsconfig.json", added: true }]), ["config"], "a new example with a config");
+  owes("examples/interop/gtk-async/nts.config.ts", ["config", "interop"]);
+});
+
+test("without cargo, a path in a crate or compiled into one owes the full gate", () => {
+  const script = `
+    const { allSteps, gateSteps, owed } = await import(${JSON.stringify(new URL("./owed.mjs", import.meta.url).href)});
+    const n = (p) => gateSteps(owed([{ path: p, added: false }])).length;
+    console.log(JSON.stringify({ all: allSteps().length, rs: n("compiler/core/src/lib.rs"), c: n("runtime/c/nts_runtime.c"), toml: n("compiler/codegen/c/Cargo.toml"), docs: n("docs/primitives.md") }));`;
+  const r = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
+    encoding: "utf8",
+    env: { ...process.env, RUSTUP_TOOLCHAIN: "no-such-toolchain-for-this-test" },
+  });
+  assert.equal(r.status, 0, r.stderr);
+  const got = JSON.parse(r.stdout);
+  assert.equal(got.rs, got.all);
+  assert.equal(got.c, got.all);
+  assert.equal(got.toml, got.all);
+  assert.ok(got.docs < got.all, "a path no crate holds is not escalated");
 });
