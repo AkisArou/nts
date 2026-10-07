@@ -18260,6 +18260,9 @@ enum Lent {
     /// A `Uint8Array` whose bytes C reads in place: nothing to free, and the
     /// view must outlive the call.
     View { view: ValueId },
+    /// A string a C struct's `StringView` field points at: nothing to free,
+    /// and the string must outlive the call, which reads only the struct.
+    Borrowed { string: ValueId },
     /// A `CHandles` array whose element block C was lent: given back after
     /// the call (`nts_array_unlend`), which is its last use, so the array
     /// outlives C's read of the block. Defensive under today's placement,
@@ -58143,6 +58146,9 @@ impl<'a> FuncBuilder<'a> {
                 Lent::View { view } => {
                     self.runtime_call("nts_view_unlend", vec![view], HirType::Void, origin.clone());
                 }
+                Lent::Borrowed { string } => {
+                    self.runtime_call("nts_string_unlend", vec![string], HirType::Void, origin.clone());
+                }
                 Lent::Array { array } => {
                     self.runtime_call("nts_array_unlend", vec![array], HirType::Void, origin.clone());
                 }
@@ -58721,7 +58727,12 @@ impl<'a> FuncBuilder<'a> {
             use super::native::Role;
             let argument = fed.and_then(|ts| args.get(ts).copied());
             match role {
-                Role::Plain => c_args.extend(argument.map(|value| self.unboxed_argument(value, &target.parameters[at], &origin))),
+                Role::Plain => {
+                    let Some(value) = argument else { continue };
+                    // A record literal's lent strings, for the call it is passed to.
+                    lent.extend(self.copied_lent.remove(&value).unwrap_or_default());
+                    c_args.push(self.unboxed_argument(value, &target.parameters[at], &origin));
+                }
                 Role::Receiver => c_args.extend(receiver_value),
                 // An object as itself; a string, number or boolean boxed by
                 // the runtime (`nts_winrt_box`, from the value erased) into

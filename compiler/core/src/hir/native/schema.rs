@@ -801,6 +801,11 @@ fn structure(
             // A Windows Runtime string, `HSTRING` -- `struct HSTRING__ *`, as
             // Windows spells it.
             Pointee::Pointer(Box::new(Pointee::Opaque(super::Handle::hstring())))
+        } else if super::string_encoding(snapshot, property.ty) == Some(super::Encoding::View) {
+            // A `StringView` member: the string itself, lent, as a parameter
+            // of that type is. Written only where a call is made with the
+            // record (`write_native_field`), which lends it for that call.
+            Pointee::Pointer(Box::new(Pointee::Const(Box::new(Pointee::Opaque(super::Handle::borrowed_string())))))
         } else if let Some(signature) = super::fn_pointer(snapshot, property.ty) {
             // A member written as an ordinary TypeScript function type, which
             // at a C boundary can mean one thing -- `struct sigaction` and

@@ -5235,6 +5235,7 @@ char **nts_strings_to_cstrings(const NtsArray *array) {
 void nts_cstrings_release(char **c) { free((void *)c); }
 
 void nts_view_unlend(const NtsView *view) { (void)view; }
+void nts_string_unlend(const NtsString *string) { (void)string; }
 
 void *nts_array_handles(const NtsArray *array) {
   if (array == NULL) {

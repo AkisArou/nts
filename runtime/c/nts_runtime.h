@@ -2254,6 +2254,12 @@ NtsArray *nts_strings_from_cstrings(const char *const *c, bool required);
  * and C does not allow that of a `void` function, which the LLVM table
  * mirrors. */
 void nts_view_unlend(const NtsView *view);
+/* The end of a string's loan through a C struct: a `StringView` field of a
+ * record passed by value (`Fields<T>`) points at the string itself, so the
+ * string must outlive the call -- and the call reads only the struct, so this
+ * is the string's last use, as `nts_view_unlend` is a view's. Nothing at run
+ * time. */
+void nts_string_unlend(const NtsString *string);
 /* An array of handles as C's array of pointers to them, for a parameter
  * declared `CHandles`: the array's own element block, which already holds the
  * pointers -- lent in place, with no copy. NULL is NULL, for `CHandles |

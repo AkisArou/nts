@@ -354,12 +354,7 @@ impl Encoding {
             return Type::Pointer(Pointee::Void);
         }
         if self == Self::View {
-            return Type::Pointer(Pointee::Const(Box::new(Pointee::Opaque(Handle {
-                tag: "NtsBorrowedString".to_owned(),
-                ancestors: Vec::new(),
-                family: Family::C,
-                interface: false,
-            }))));
+            return Type::Pointer(Pointee::Const(Box::new(Pointee::Opaque(Handle::borrowed_string()))));
         }
         let unit = match self {
             Self::Utf8 => Scalar::Char,
@@ -1476,6 +1471,13 @@ impl Handle {
     #[must_use]
     pub fn hstring() -> Self {
         Self { tag: "HSTRING__".to_owned(), ancestors: Vec::new(), family: Family::C, interface: false }
+    }
+
+    /// The opaque string a `StringView` lends: `const NtsBorrowedString *`, which
+    /// C reads with `nts_string_view`.
+    #[must_use]
+    pub fn borrowed_string() -> Self {
+        Self { tag: "NtsBorrowedString".to_owned(), ancestors: Vec::new(), family: Family::C, interface: false }
     }
 
     /// A Foundation class a bridge makes or reads -- `NSString`, `NSArray` --

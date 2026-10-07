@@ -259,6 +259,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_string_to_cstring", &[None], None),
     ("nts_string_to_utf16", &[None], None),
     ("nts_string_truthy", &[None], Some(HirType::Bool)),
+    ("nts_string_unlend", &[None], None),
     ("nts_strings_from_cstrings", &[None, Some(HirType::Bool)], None),
     ("nts_strings_to_cstrings", &[None], None),
     ("nts_strings_to_hstrings", &[None], None),

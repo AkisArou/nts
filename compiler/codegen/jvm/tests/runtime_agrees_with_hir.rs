@@ -327,4 +327,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 /// the test the day `hir::runtime` declared them. `ops::inline` is now the
 /// list, read by the renderer and here; the floor drops to the exact count
 /// rather than leaving nine refusals' room.
-const REFUSED_FLOOR: usize = 123;
+///
+/// 124 for `nts_string_unlend`, which ends a string's loan through a C
+/// struct's `StringView` field: native calls again.
+const REFUSED_FLOOR: usize = 124;

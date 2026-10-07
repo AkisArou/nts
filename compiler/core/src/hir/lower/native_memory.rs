@@ -129,9 +129,17 @@ impl FuncBuilder<'_> {
     /// `NSRect(origin:size:)`. The literal is storage in the frame, a zeroed
     /// `NativeLocal` with a local's rules, and `ty` is the pointer to it.
     /// Nothing is allocated: it is C's compound literal.
+    ///
+    /// A `StringView` field is lent for the call the literal is written for,
+    /// as a `StringView` parameter is: what was lent waits beside the storage
+    /// (`copied_lent`) for that call to take, as a `Copied<T>`'s strings do.
     pub(super) fn native_record_literal(&mut self, id: NodeId, ty: HirType) -> Result<ValueId, Diagnostic> {
         let storage = self.push(OpKind::NativeLocal { count: 1 }, ty, self.origin(id));
-        self.fill_native_record(id, storage, None)?;
+        let mut lent = Vec::new();
+        self.fill_native_record(id, storage, Some(&mut lent))?;
+        if !lent.is_empty() {
+            self.copied_lent.insert(storage, lent);
+        }
         Ok(storage)
     }
 
@@ -512,6 +520,19 @@ impl FuncBuilder<'_> {
         let HirType::NativePointer(slot) = self.values[field.0 as usize].ty.clone() else {
             return self.write_place(id, &place, value);
         };
+        if is_view_field(&slot) {
+            let Some(lent) = lent else {
+                return Err(self.unsupported(id, "a `StringView` written into a struct the program holds; it is lent only for a call, so write the struct as that call's argument"));
+            };
+            let origin = self.origin(id);
+            let string = self.coerce(value, &HirType::Managed(ManagedType::String), id)?;
+            let view = self.lend_string(string, Encoding::View, Encoding::View.c_type().representation(), lent, origin.clone());
+            lent.push(Lent::Borrowed { string });
+            let element = self.native_element_type(id, field)?;
+            let stored = self.push(OpKind::Convert(view), element, origin.clone());
+            self.push(OpKind::NativeStore { pointer: field, index, value: stored }, HirType::Void, origin);
+            return Ok(());
+        }
         if !is_hstring_field(&slot) {
             return self.write_place(id, &place, value);
         }
@@ -924,6 +945,11 @@ impl FuncBuilder<'_> {
 
 /// Whether a record field is a Windows Runtime string: `struct HSTRING__ *`,
 /// which only a `Copied<T>` record holds (`schema::structure`).
+fn is_view_field(field: &Pointee) -> bool {
+    matches!(field, Pointee::Pointer(held)
+        if matches!(&**held, Pointee::Const(inner) if matches!(&**inner, Pointee::Opaque(handle) if *handle == Handle::borrowed_string())))
+}
+
 fn is_hstring_field(field: &Pointee) -> bool {
     matches!(field, Pointee::Pointer(held) if matches!(&**held, Pointee::Opaque(handle) if *handle == Handle::hstring()))
 }
