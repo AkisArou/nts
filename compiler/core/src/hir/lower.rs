@@ -56385,6 +56385,9 @@ impl<'a> FuncBuilder<'a> {
         {
             return provided;
         }
+        if let Some(function) = self.delegated_function(callee_node) {
+            return self.lower_delegated_call(id, function, &arguments);
+        }
         if target.callee.is_none() {
             // Three different failures wore one sentence. A name the checker
             // resolved to no declaration is either a builtin this compiler has
@@ -57023,6 +57026,44 @@ impl<'a> FuncBuilder<'a> {
         let tagged = self.node(declaration).native.as_ref().is_some_and(|n| n.symbol.is_some() || n.listener.is_some());
         let record = &self.snapshot.signatures[signature.0 as usize];
         (tagged && self.is_native_instance_method(declaration, record)).then_some(((declaration, signature), property.ty))
+    }
+
+    /// The function implementing a call's callee, where a binding implements
+    /// it: lib.dom.d.ts's `requestAnimationFrame`, `@ntsBoundBy "nts:dom"
+    /// requestAnimationFrame` on the overlay's declaration of the same name,
+    /// is `nts:dom`'s. Asked of the name's symbol rather than the checker's
+    /// callee, which may be lib.dom's own declaration and is then never decoded.
+    fn delegated_function(&self, callee_node: NodeId) -> Option<(NodeId, TypeId)> {
+        if self.kind_of(callee_node) != Some(syntax::IDENTIFIER) {
+            return None;
+        }
+        let symbol = self.denoted_symbol(self.node(callee_node).symbol?);
+        let record = self.snapshot.symbols.get(symbol.0 as usize)?;
+        let binding = record.declarations.iter().find_map(|declaration| {
+            (self.kind_of(*declaration) == Some(syntax::FUNCTION_DECLARATION))
+                .then(|| self.node(*declaration).native.as_deref()?.bound_by.as_deref())
+                .flatten()
+        })?;
+        let (module, name) = nts_semantic_schema::binding::parse(binding)?;
+        let function = nts_semantic_schema::binding::declared_in(self.snapshot, module, name, syntax::FUNCTION_DECLARATION)?;
+        Some((function, *self.snapshot.node_types.get(&function)?))
+    }
+
+    /// A call of a function a binding implements, as a call of that function,
+    /// at its parameters: `@ntsDefault`s and ABI types are the bound
+    /// declaration's (`callee_signature`), as for [`Self::delegated_method`].
+    fn lower_delegated_call(&mut self, id: NodeId, (function, ty): (NodeId, TypeId), arguments: &[NodeId]) -> Result<ValueId, Diagnostic> {
+        let Some(TypeKind::Function(signature)) = self.snapshot.types.get(ty.0 as usize).map(|record| &record.kind) else {
+            return Err(self.unsupported(id, "a function a binding names, whose signature is unknown"));
+        };
+        let record = self.snapshot.signatures[signature.0 as usize].clone();
+        let name = nts_semantic_schema::binding::declared_name(self.snapshot, function).unwrap_or_default().to_owned();
+        let callee = self.native_callee(id, Some(function), name, &record)?;
+        let outer = self.callee_signature.replace((id, ty));
+        let lowered = self.lower_call_arguments(id, &callee, arguments, None);
+        self.callee_signature = outer;
+        let (args, lent) = lowered?;
+        self.finish_call(id, callee, args, lent, Some(function))
     }
 
     /// The type implementing `ty`, where a binding implements it -- through a
