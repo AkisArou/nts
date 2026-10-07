@@ -223,6 +223,12 @@ declare module "c:types" {
   // of one key are, and optional so that an implementing class, which has
   // none, is assignable too.
   export type GObjectInterface<Tag extends string, Prerequisite extends ClassChain, Implements extends string = never> =
+    Interface<Tag, Prerequisite, Implements>;
+  // The same shape for any family: what makes it one is the prerequisite's
+  // own marker (`__gobject`, `__c_host`, ...), which it carries. A DOM mixin
+  // is one -- `ParentNode`, whose members every `Element`, `Document` and
+  // `DocumentFragment` has, is an interface over `Node` in Blink's binding.
+  export type Interface<Tag extends string, Prerequisite extends ClassChain, Implements extends string = never> =
     Prerequisite & { readonly [K in `__c_interface${Tag}`]?: true } & {
       readonly __c_implements: { readonly [K in Tag | Implements]: true };
     };
