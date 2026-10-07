@@ -57432,7 +57432,7 @@ impl<'a> FuncBuilder<'a> {
         };
         let candidates: Vec<_> = overloads.into_iter().filter_map(method).collect();
         if candidates.len() > 1
-            && let Some(at) = candidates.iter().position(|(_, record)| self.call_fits(record, arguments))
+            && let Some(at) = self.shortest_fit(&candidates, arguments)
         {
             return candidates.into_iter().nth(at);
         }
@@ -57545,23 +57545,85 @@ impl<'a> FuncBuilder<'a> {
             .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
             .map_or_else(|| vec![first], |record| record.declarations.clone());
         let candidates: Vec<_> = overloads.into_iter().map(|declaration| (declaration, self.overload_signature(declaration, merged))).collect();
-        let at = candidates.iter().position(|(_, record)| self.call_fits(record, arguments)).unwrap_or(0);
+        let at = self.shortest_fit(&candidates, arguments).unwrap_or(0);
         candidates.into_iter().nth(at).unwrap_or_else(|| (first, merged.clone()))
+    }
+
+    /// An overload's signature as a call writes it: without the parameter its
+    /// `@ntsThrows` names, which the binding passes itself and no argument
+    /// supplies. Left in, `observe(target, error?)` -- the binding's own out
+    /// pointer for a `DOMException` -- fitted `observe(target, { childList:
+    /// true })`, the literal landing in `error`, and being shorter was chosen
+    /// over `observe(target, options)`.
+    fn as_written(&self, declaration: NodeId, record: &nts_semantic_schema::SignatureRecord) -> nts_semantic_schema::SignatureRecord {
+        let thrown = self.node(declaration).native.as_deref().and_then(|native| native.throws.as_deref()).and_then(|text| text.split_whitespace().next());
+        let Some(thrown) = thrown else { return record.clone() };
+        let mut written = record.clone();
+        written.parameters.retain(|parameter| parameter.name != thrown);
+        written
+    }
+
+    /// Which overload a call takes: of those its arguments fit
+    /// ([`Self::call_fits`]), the one with the fewest parameters, the first
+    /// declared among equals. The shortest, because an overload's extra
+    /// parameters are what the call does not say: `addEventListener(t, f,
+    /// { once: true })` fits both nts:dom's `(.., capture?, once?, signal?)` and
+    /// the one that adds `passive?`, and leaving `passive` unset is the first's
+    /// whole point -- Blink's default for touch and wheel listeners needs it
+    /// unset, not false.
+    fn shortest_fit(&self, candidates: &[(NodeId, nts_semantic_schema::SignatureRecord)], arguments: &[NodeId]) -> Option<usize> {
+        candidates
+            .iter()
+            .enumerate()
+            .filter(|(_, (declaration, record))| self.call_fits(&self.as_written(*declaration, record), arguments))
+            .min_by_key(|(at, (_, record))| (record.parameters.len(), *at))
+            .map(|(at, _)| at)
     }
 
     /// Whether a call's arguments fit `record`, a dictionary literal last
     /// taken as its members where the binding takes them so
     /// ([`Self::dictionary_spread`]).
+    ///
+    /// **A dictionary fits only where it is taken whole or as members.** A
+    /// literal no member of which names a parameter is one object, which no
+    /// boolean, number or string parameter takes -- `arguments_fit` lets a
+    /// parameter of a type it does not check take anything, and so
+    /// `{ passive: true }` fitted `addEventListener`'s `capture?: boolean` of
+    /// the overload without `passive`. And spread, a member left out is a gap
+    /// only where its parameter is optional, as is every parameter after the
+    /// last member: the overload with a required `passive` does not fit a
+    /// literal without one.
     fn call_fits(&self, record: &nts_semantic_schema::SignatureRecord, arguments: &[NodeId]) -> bool {
         let Some((_, slots)) = self.dictionary_spread(record, arguments) else {
-            return self.arguments_fit(record, arguments);
+            let whole = arguments.split_last().is_some_and(|(literal, before)| {
+                self.kind_of(*literal) == Some(syntax::OBJECT_LITERAL_EXPRESSION)
+                    && record.parameters.get(before.len()).is_some_and(|parameter| self.is_scalar_type(parameter.ty))
+            });
+            return !whole && self.arguments_fit(record, arguments);
         };
-        slots.iter().zip(&record.parameters).all(|(slot, parameter)| {
-            slot.is_none_or(|argument| {
-                let one = nts_semantic_schema::SignatureRecord { parameters: vec![parameter.clone()], ..record.clone() };
-                self.arguments_fit(&one, &[argument])
+        record.parameters.iter().skip(slots.len()).all(|parameter| parameter.optional || parameter.rest)
+            && slots.iter().zip(&record.parameters).all(|(slot, parameter)| match slot {
+                None => parameter.optional,
+                Some(argument) => {
+                    let one = nts_semantic_schema::SignatureRecord { parameters: vec![parameter.clone()], ..record.clone() };
+                    self.arguments_fit(&one, &[*argument])
+                }
             })
-        })
+    }
+
+    /// Whether `ty` is a boolean, a number or a string, or one of them or
+    /// `null` or `undefined`: a type no object is.
+    fn is_scalar_type(&self, ty: TypeId) -> bool {
+        let scalar = |kind: &TypeKind| matches!(kind, TypeKind::Boolean | TypeKind::Number | TypeKind::String | TypeKind::Literal(_));
+        match self.snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
+            Some(TypeKind::Union(parts)) => {
+                let kinds: Vec<&TypeKind> = parts.iter().filter_map(|part| self.snapshot.types.get(part.0 as usize).map(|record| &record.kind)).collect();
+                kinds.iter().any(|kind| scalar(kind))
+                    && kinds.iter().all(|kind| scalar(kind) || matches!(kind, TypeKind::Null | TypeKind::Undefined))
+            }
+            Some(kind) => scalar(kind),
+            None => false,
+        }
     }
 
     /// A dictionary argument a binding takes as its members: lib.dom's
@@ -57642,7 +57704,7 @@ impl<'a> FuncBuilder<'a> {
             .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
             .map_or_else(|| vec![first], |record| record.declarations.clone());
         let candidates: Vec<_> = overloads.into_iter().map(|declaration| (declaration, self.overload_signature(declaration, merged))).collect();
-        let at = candidates.iter().position(|(_, record)| self.call_fits(record, arguments)).unwrap_or(0);
+        let at = self.shortest_fit(&candidates, arguments).unwrap_or(0);
         candidates.into_iter().nth(at)
     }
 
