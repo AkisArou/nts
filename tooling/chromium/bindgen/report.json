@@ -1,5 +1,5 @@
 {
-  "bound": 4869,
+  "bound": 4891,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -2134,22 +2134,22 @@
     {
       "interface": "Document",
       "member": "parseHTML/2",
-      "why": "static"
+      "why": "dictionary SetHTMLOptions has no member a C struct can carry"
     },
     {
-      "interface": "Document",
-      "member": "parseHTMLUnsafe/1",
-      "why": "static"
-    },
-    {
-      "interface": "Document",
-      "member": "parseHTMLUnsafe/2",
-      "why": "static"
+      "interface": "ParseHTMLUnsafeOptions",
+      "member": "sanitizer",
+      "why": "dictionary member of type optional (Sanitizer or SanitizerConfig or SanitizerPresets)"
     },
     {
       "interface": "Document",
       "member": "parseHTMLUnsafe/2",
-      "why": "static"
+      "why": "dictionary ParseHTMLUnsafeOptions has no member a C struct can carry"
+    },
+    {
+      "interface": "Document",
+      "member": "parseHTMLUnsafe/2",
+      "why": "[RuntimeEnabled=TrustedTypesCreateParserOptions] overridable"
     },
     {
       "interface": "HTMLElement",
@@ -3560,16 +3560,6 @@
       "interface": "DOMRectReadOnly",
       "member": "toJSON/0",
       "why": "result type object"
-    },
-    {
-      "interface": "DOMRectReadOnly",
-      "member": "fromRect/1",
-      "why": "static"
-    },
-    {
-      "interface": "DOMRect",
-      "member": "fromRect/1",
-      "why": "static"
     },
     {
       "interface": "HTMLDivElement",
@@ -6009,42 +5999,17 @@
     {
       "interface": "AbortSignal",
       "member": "abort/1",
-      "why": "static"
+      "why": "parameter type optional any"
     },
     {
       "interface": "AbortSignal",
       "member": "any/1",
-      "why": "static"
-    },
-    {
-      "interface": "AbortSignal",
-      "member": "timeout/1",
-      "why": "static"
-    },
-    {
-      "interface": "URL",
-      "member": "canParse/2",
-      "why": "static"
+      "why": "parameter type sequence<AbortSignal>"
     },
     {
       "interface": "URL",
       "member": "createObjectURL/1",
-      "why": "static"
-    },
-    {
-      "interface": "URL",
-      "member": "createObjectURL/1",
-      "why": "static"
-    },
-    {
-      "interface": "URL",
-      "member": "parse/2",
-      "why": "static"
-    },
-    {
-      "interface": "URL",
-      "member": "revokeObjectURL/1",
-      "why": "static"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "URLSearchParams",
@@ -6872,16 +6837,6 @@
       "why": "result type object"
     },
     {
-      "interface": "DOMPointReadOnly",
-      "member": "fromPoint/1",
-      "why": "static"
-    },
-    {
-      "interface": "DOMPoint",
-      "member": "fromPoint/1",
-      "why": "static"
-    },
-    {
       "interface": "DOMQuad",
       "member": "toJSON/0",
       "why": "result type object"
@@ -6889,12 +6844,7 @@
     {
       "interface": "DOMQuad",
       "member": "fromQuad/1",
-      "why": "static"
-    },
-    {
-      "interface": "DOMQuad",
-      "member": "fromRect/1",
-      "why": "static"
+      "why": "dictionary DOMQuadInit has no member a C struct can carry"
     },
     {
       "interface": "HTMLFieldSetElement",
@@ -7370,11 +7320,6 @@
       "interface": "HTMLScriptElement",
       "member": "set signature",
       "why": "[RuntimeEnabled=SignatureBasedInlineIntegrity] experimental"
-    },
-    {
-      "interface": "HTMLScriptElement",
-      "member": "supports/1",
-      "why": "static"
     },
     {
       "interface": "TreeWalker",

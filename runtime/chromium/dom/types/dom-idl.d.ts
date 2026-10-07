@@ -39,6 +39,7 @@ declare module "nts:dom" {
   export type DOMMatrix2DInit = Struct<{ a: c_double; b: c_double; c: c_double; d: c_double; e: c_double; f: c_double; m11: c_double; m12: c_double; m21: c_double; m22: c_double; m41: c_double; m42: c_double }, "NtsDomDOMMatrix2DInit">;
   export type DOMMatrixInit = Struct<{ a: c_double; b: c_double; c: c_double; d: c_double; e: c_double; f: c_double; m11: c_double; m12: c_double; m21: c_double; m22: c_double; m41: c_double; m42: c_double; is2D: CBool<c_uint8>; m13: c_double; m14: c_double; m23: c_double; m24: c_double; m31: c_double; m32: c_double; m34: c_double; m43: c_double }, "NtsDomDOMMatrixInit">;
   export type DOMPointInit = Struct<{ x: c_double; y: c_double; z: c_double }, "NtsDomDOMPointInit">;
+  export type DOMRectInit = Struct<{ height: c_double; width: c_double; x: c_double; y: c_double }, "NtsDomDOMRectInit">;
   export type DocumentTimelineOptions = Struct<{ originTime: c_double }, "NtsDomDocumentTimelineOptions">;
   export type DragEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8>; button: c_double; buttons: c_double; clientX: c_double; clientY: c_double; movementX: c_double; movementY: c_double; screenX: c_double; screenY: c_double }, "NtsDomDragEventInit">;
   export type ErrorEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; colno: c_double; filename: StringView; lineno: c_double; message: StringView }, "NtsDomErrorEventInit">;
@@ -5420,6 +5421,18 @@ declare module "nts:dom" {
   export type Document = HostClass<"NtsDomDocument", Node> & DocumentMethods;
   /** @ntsSymbol nts_dom_as_Document */
   export function asDocument(node: Node): Document | null;
+  /**
+   * @ntsSymbol nts_dom_Document_parseHTML_1
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function Document_parseHTML(html: StringView, error?: Ptr<DOMException | null>): Document;
+  /**
+   * @ntsSymbol nts_dom_Document_parseHTMLUnsafe_1
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function Document_parseHTMLUnsafe(html: StringView, error?: Ptr<DOMException | null>): Document;
   /**
    * @ntsSymbol nts_dom_new_Document
    */
@@ -17590,6 +17603,14 @@ declare module "nts:dom" {
   export type DOMRectReadOnlyMethods = DOMRectReadOnlyOwnMethods;
   export type DOMRectReadOnly = HostClass<"NtsDomDOMRectReadOnly", null, "nts_dom_retain", "nts_dom_release"> & DOMRectReadOnlyMethods;
   /**
+   * @ntsSymbol nts_dom_DOMRectReadOnly_fromRect_1
+   */
+  export function DOMRectReadOnly_fromRect(other: ByValue<DOMRectInit> | Fields<DOMRectInit>): DOMRectReadOnly;
+  /**
+   * @ntsSymbol nts_dom_DOMRectReadOnly_fromRect_0
+   */
+  export function DOMRectReadOnly_fromRect(): DOMRectReadOnly;
+  /**
    * @ntsSymbol nts_dom_new_DOMRectReadOnly_4
    */
   export function newDOMRectReadOnly(x: CNumber<"double">, y: CNumber<"double">, width: CNumber<"double">, height: CNumber<"double">): DOMRectReadOnly;
@@ -17667,6 +17688,14 @@ declare module "nts:dom" {
   export type DOMRect = HostClass<"NtsDomDOMRect", DOMRectReadOnly> & DOMRectMethods;
   /** @ntsSymbol nts_dom_as_DOMRect */
   export function asDOMRect(object: DOMRectReadOnly): DOMRect | null;
+  /**
+   * @ntsSymbol nts_dom_DOMRect_fromRect_1
+   */
+  export function DOMRect_fromRect(other: ByValue<DOMRectInit> | Fields<DOMRectInit>): DOMRect;
+  /**
+   * @ntsSymbol nts_dom_DOMRect_fromRect_0
+   */
+  export function DOMRect_fromRect(): DOMRect;
   /**
    * @ntsSymbol nts_dom_new_DOMRect_4
    */
@@ -22656,6 +22685,16 @@ declare module "nts:dom" {
   export type AbortSignal = HostClass<"NtsDomAbortSignal", EventTarget> & AbortSignalMethods;
   /** @ntsSymbol nts_dom_as_AbortSignal */
   export function asAbortSignal(target: EventTarget): AbortSignal | null;
+  /**
+   * @ntsSymbol nts_dom_AbortSignal_abort_0
+   */
+  export function AbortSignal_abort(): AbortSignal;
+  /**
+   * @ntsSymbol nts_dom_AbortSignal_timeout
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function AbortSignal_timeout(milliseconds: CNumber<"double">, error?: Ptr<DOMException | null>): AbortSignal;
   export interface URLOwnMethods {
     /**
      * @ntsSymbol nts_dom_URL_get_origin
@@ -22812,6 +22851,32 @@ declare module "nts:dom" {
   }
   export type URLMethods = URLOwnMethods;
   export type URL = HostClass<"NtsDomURL", null, "nts_dom_retain", "nts_dom_release"> & URLMethods;
+  /**
+   * @ntsSymbol nts_dom_URL_canParse_2
+   */
+  export function URL_canParse(url: StringView, base: StringView): boolean;
+  /**
+   * @ntsSymbol nts_dom_URL_canParse_1
+   */
+  export function URL_canParse(url: StringView): boolean;
+  /**
+   * @ntsSymbol nts_dom_URL_createObjectURL_1
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function URL_createObjectURL(blob: Blob, error?: Ptr<DOMException | null>): StringView;
+  /**
+   * @ntsSymbol nts_dom_URL_parse_2
+   */
+  export function URL_parse(url: StringView, base: StringView): URL | null;
+  /**
+   * @ntsSymbol nts_dom_URL_parse_1
+   */
+  export function URL_parse(url: StringView): URL | null;
+  /**
+   * @ntsSymbol nts_dom_URL_revokeObjectURL
+   */
+  export function URL_revokeObjectURL(url: StringView): void;
   /**
    * @ntsSymbol nts_dom_new_URL_2
    * @ntsThrows error nts_dom_exception_take_message
@@ -25454,6 +25519,14 @@ declare module "nts:dom" {
   export type DOMPointReadOnlyMethods = DOMPointReadOnlyOwnMethods;
   export type DOMPointReadOnly = HostClass<"NtsDomDOMPointReadOnly", null, "nts_dom_retain", "nts_dom_release"> & DOMPointReadOnlyMethods;
   /**
+   * @ntsSymbol nts_dom_DOMPointReadOnly_fromPoint_1
+   */
+  export function DOMPointReadOnly_fromPoint(other: ByValue<DOMPointInit> | Fields<DOMPointInit>): DOMPointReadOnly;
+  /**
+   * @ntsSymbol nts_dom_DOMPointReadOnly_fromPoint_0
+   */
+  export function DOMPointReadOnly_fromPoint(): DOMPointReadOnly;
+  /**
    * @ntsSymbol nts_dom_new_DOMPointReadOnly_4
    */
   export function newDOMPointReadOnly(x: CNumber<"double">, y: CNumber<"double">, z: CNumber<"double">, w: CNumber<"double">): DOMPointReadOnly;
@@ -25532,6 +25605,14 @@ declare module "nts:dom" {
   /** @ntsSymbol nts_dom_as_DOMPoint */
   export function asDOMPoint(object: DOMPointReadOnly): DOMPoint | null;
   /**
+   * @ntsSymbol nts_dom_DOMPoint_fromPoint_1
+   */
+  export function DOMPoint_fromPoint(other: ByValue<DOMPointInit> | Fields<DOMPointInit>): DOMPoint;
+  /**
+   * @ntsSymbol nts_dom_DOMPoint_fromPoint_0
+   */
+  export function DOMPoint_fromPoint(): DOMPoint;
+  /**
    * @ntsSymbol nts_dom_new_DOMPoint_4
    */
   export function newDOMPoint(x: CNumber<"double">, y: CNumber<"double">, z: CNumber<"double">, w: CNumber<"double">): DOMPoint;
@@ -25591,6 +25672,18 @@ declare module "nts:dom" {
   }
   export type DOMQuadMethods = DOMQuadOwnMethods;
   export type DOMQuad = HostClass<"NtsDomDOMQuad", null, "nts_dom_retain", "nts_dom_release"> & DOMQuadMethods;
+  /**
+   * @ntsSymbol nts_dom_DOMQuad_fromQuad_0
+   */
+  export function DOMQuad_fromQuad(): DOMQuad;
+  /**
+   * @ntsSymbol nts_dom_DOMQuad_fromRect_1
+   */
+  export function DOMQuad_fromRect(other: ByValue<DOMRectInit> | Fields<DOMRectInit>): DOMQuad;
+  /**
+   * @ntsSymbol nts_dom_DOMQuad_fromRect_0
+   */
+  export function DOMQuad_fromRect(): DOMQuad;
   /**
    * @ntsSymbol nts_dom_new_DOMQuad_4
    */
@@ -28251,6 +28344,10 @@ declare module "nts:dom" {
   export type HTMLScriptElement = HostClass<"NtsDomHTMLScriptElement", HTMLElement> & HTMLScriptElementMethods;
   /** @ntsSymbol nts_dom_as_HTMLScriptElement */
   export function asHTMLScriptElement(node: Node): HTMLScriptElement | null;
+  /**
+   * @ntsSymbol nts_dom_HTMLScriptElement_supports
+   */
+  export function HTMLScriptElement_supports(type: StringView): boolean;
   export interface DOMParserOwnMethods {
     /**
      * @ntsSymbol nts_dom_DOMParser_parseFromString

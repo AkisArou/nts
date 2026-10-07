@@ -734,8 +734,6 @@ class Generator:
 
     def check_member(self, member):
         ext = member.extended_attributes
-        if getattr(member, "is_static", False):
-            raise Skip("static")
         unshipped = self.unshipped(ext)
         if unshipped:
             raise Skip(unshipped)
@@ -1026,6 +1024,12 @@ class Generator:
                 function = self.bind(interface, operation, symbol, params, result, context, truncate, filled, tail)
             except Skip as why:
                 self.skip(interface, f"{name}/{len(params)}", str(why))
+                continue
+            if getattr(operation, "is_static", False):
+                # `URL.canParse(url)`: no receiver; declared at module level as
+                # `URL_canParse`, beside the constructor `newURL`.
+                function.receiver = False
+                function.static_of = (interface, name)
                 continue
             lines.append(self.method_line(interface, name, function))
 
@@ -1646,6 +1650,11 @@ bool nts_dom_is(const void* object, uint32_t interface_id) {{
             if downcast is not None:
                 types.append(f"  /** @ntsSymbol nts_dom_as_{identifier} */")
                 types.append(f"  export function as{identifier}({downcast.params[0].ts}): {identifier} | null;")
+            for static in (f for f in self.functions if getattr(f, "static_of", (None,))[0] is interface):
+                notes = [f"@ntsSymbol {static.symbol}"] + (list(THROWS) if static.throws else [])
+                params = [p.ts for p in static.params] + ([ERROR_TS] if static.throws else [])
+                types.append("  /**\n" + "".join(f"   * {note}\n" for note in notes) + "   */")
+                types.append(f"  export function {identifier}_{static.static_of[1]}({', '.join(params)}): {static.result.ts};")
             for made in (f for f in self.functions if getattr(f, "constructs", None) is interface):
                 notes = [f"@ntsSymbol {made.symbol}"] + (list(THROWS) if made.throws else [])
                 params = [p.ts for p in made.params] + ([ERROR_TS] if made.throws else [])

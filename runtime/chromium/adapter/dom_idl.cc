@@ -165,7 +165,9 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_dom_point_init.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_dom_point_read_only.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_dom_quad.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dom_quad_init.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_dom_rect.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dom_rect_init.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_dom_rect_list.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_dom_rect_read_only.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_dom_string_list.h"
@@ -5446,6 +5448,15 @@ const blink::AtomicString& CssName_zoom() {
 const blink::String& CssProperty_zoom() {
   DEFINE_STATIC_LOCAL(const blink::String, name, ("zoom"));
   return name;
+}
+blink::DOMRectInit* NtsDomToDOMRectInit(NtsDomContext& context, const NtsDomDOMRectInit& from, blink::ExceptionState& exception_state) {
+  v8::Isolate* isolate = context.v8_isolate.get();
+  auto* to = blink::DOMRectInit::Create(isolate);
+  if (from.height != 0) to->setHeight(from.height);
+  if (from.width != 0) to->setWidth(from.width);
+  if (from.x != 0) to->setX(from.x);
+  if (from.y != 0) to->setY(from.y);
+  return to;
 }
 blink::FocusEventInit* NtsDomToFocusEventInit(NtsDomContext& context, const NtsDomFocusEventInit& from, blink::ExceptionState& exception_state) {
   v8::Isolate* isolate = context.v8_isolate.get();
@@ -14412,6 +14423,19 @@ void nts_dom_Document_writeln_0(NtsDomDocument* self, NtsDomException** error) {
   auto* receiver = ObjectOf<blink::Document>(self);
   auto text_values = blink::Vector<blink::String>({});
   receiver->writeln(context.v8_isolate.get(), text_values, exception_state);
+}
+
+NtsDomDocument* nts_dom_Document_parseHTML_1(const NtsBorrowedString* html, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  return HandleOf<NtsDomDocument>(Document::parseHTML(context.document->GetExecutionContext(), NtsText(context, html), blink::SetHTMLOptions::Create(context.v8_isolate.get()), exception_state));
+}
+
+NtsDomDocument* nts_dom_Document_parseHTMLUnsafe_1(const NtsBorrowedString* html, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  return HandleOf<NtsDomDocument>(Document::parseHTMLUnsafe(context.document->GetExecutionContext(), blink::MakeGarbageCollected<blink::V8UnionStringOrTrustedHTML>(NtsText(context, html).Text()), exception_state));
 }
 
 NtsDomDocumentFragment* nts_dom_as_DocumentFragment(NtsDomNode* node) {
@@ -27872,6 +27896,18 @@ double nts_dom_DOMRectReadOnly_get_left(NtsDomDOMRectReadOnly* self) {
   return static_cast<double>(receiver->left());
 }
 
+NtsDomDOMRectReadOnly* nts_dom_DOMRectReadOnly_fromRect_1(NtsDomDOMRectInit other) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  auto* other_converted = NtsDomToDOMRectInit(context, other, conversion);
+  return HandleOf<NtsDomDOMRectReadOnly>(DOMRectReadOnly::fromRect(other_converted));
+}
+
+NtsDomDOMRectReadOnly* nts_dom_DOMRectReadOnly_fromRect_0() {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomDOMRectReadOnly>(DOMRectReadOnly::fromRect(blink::DOMRectInit::Create(context.v8_isolate.get())));
+}
+
 NtsDomDOMRect* nts_dom_as_DOMRect(NtsDomDOMRectReadOnly* object) {
   nts_dom::AssertEntered();
   return HandleOf<NtsDomDOMRect>(nts_dom_is(object, NTS_DOM_DOMRect) ? WrappableOf(object) : nullptr);
@@ -27948,6 +27984,18 @@ void nts_dom_DOMRect_set_height(NtsDomDOMRect* self, double value) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::DOMRect>(self);
   receiver->setHeight(value);
+}
+
+NtsDomDOMRect* nts_dom_DOMRect_fromRect_1(NtsDomDOMRectInit other) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  auto* other_converted = NtsDomToDOMRectInit(context, other, conversion);
+  return HandleOf<NtsDomDOMRect>(DOMRect::fromRect(other_converted));
+}
+
+NtsDomDOMRect* nts_dom_DOMRect_fromRect_0() {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomDOMRect>(DOMRect::fromRect(blink::DOMRectInit::Create(context.v8_isolate.get())));
 }
 
 NtsDomHTMLDivElement* nts_dom_as_HTMLDivElement(NtsDomNode* node) {
@@ -34805,6 +34853,23 @@ void nts_dom_AbortSignal_throwIfAborted(NtsDomAbortSignal* self) {
   receiver->throwIfAborted(context.v8_isolate.get());
 }
 
+NtsDomAbortSignal* nts_dom_AbortSignal_abort_0() {
+  NtsDomContext& context = nts_dom::Current();
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomAbortSignal>(AbortSignal::abort(script_state));
+}
+
+NtsDomAbortSignal* nts_dom_AbortSignal_timeout(double milliseconds, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  const auto milliseconds_converted = blink::NativeValueTraits<blink::IDLUnsignedLongLongEnforceRange>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), milliseconds), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomAbortSignal>(AbortSignal::timeout(script_state, milliseconds_converted));
+}
+
 NtsDomURL* nts_dom_new_URL_2(const NtsBorrowedString* url, const NtsBorrowedString* base, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
@@ -34954,6 +35019,41 @@ const NtsStringView* nts_dom_URL_toJSON(NtsDomURL* self) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::URL>(self);
   return context.Lend(nts_dom::AsString(receiver->toJSON()), false);
+}
+
+bool nts_dom_URL_canParse_2(const NtsBorrowedString* url, const NtsBorrowedString* base) {
+  NtsDomContext& context = nts_dom::Current();
+  return static_cast<bool>(URL::canParse(NtsText(context, url, /*scalar_values=*/true), NtsText(context, base, /*scalar_values=*/true)));
+}
+
+bool nts_dom_URL_canParse_1(const NtsBorrowedString* url) {
+  NtsDomContext& context = nts_dom::Current();
+  return static_cast<bool>(URL::canParse(NtsText(context, url, /*scalar_values=*/true)));
+}
+
+const NtsStringView* nts_dom_URL_createObjectURL_1(NtsDomBlob* blob, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return context.Lend(nts_dom::AsString(URLFileAPI::createObjectURL(script_state, ObjectOf<blink::Blob>(blob), exception_state)), false);
+}
+
+NtsDomURL* nts_dom_URL_parse_2(const NtsBorrowedString* url, const NtsBorrowedString* base) {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomURL>(URL::parse(NtsText(context, url, /*scalar_values=*/true), NtsText(context, base, /*scalar_values=*/true)));
+}
+
+NtsDomURL* nts_dom_URL_parse_1(const NtsBorrowedString* url) {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomURL>(URL::parse(NtsText(context, url, /*scalar_values=*/true)));
+}
+
+void nts_dom_URL_revokeObjectURL(const NtsBorrowedString* url) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  URLFileAPI::revokeObjectURL(script_state, NtsText(context, url));
 }
 
 NtsDomURLSearchParams* nts_dom_new_URLSearchParams_0(NtsDomException** error) {
@@ -37748,6 +37848,18 @@ NtsDomDOMPoint* nts_dom_DOMPointReadOnly_matrixTransform_0(NtsDomDOMPointReadOnl
   return HandleOf<NtsDomDOMPoint>(receiver->matrixTransform(blink::DOMMatrixInit::Create(context.v8_isolate.get()), exception_state));
 }
 
+NtsDomDOMPointReadOnly* nts_dom_DOMPointReadOnly_fromPoint_1(NtsDomDOMPointInit other) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  auto* other_converted = NtsDomToDOMPointInit(context, other, conversion);
+  return HandleOf<NtsDomDOMPointReadOnly>(DOMPointReadOnly::fromPoint(other_converted));
+}
+
+NtsDomDOMPointReadOnly* nts_dom_DOMPointReadOnly_fromPoint_0() {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomDOMPointReadOnly>(DOMPointReadOnly::fromPoint(blink::DOMPointInit::Create(context.v8_isolate.get())));
+}
+
 NtsDomDOMPoint* nts_dom_as_DOMPoint(NtsDomDOMPointReadOnly* object) {
   nts_dom::AssertEntered();
   return HandleOf<NtsDomDOMPoint>(nts_dom_is(object, NTS_DOM_DOMPoint) ? WrappableOf(object) : nullptr);
@@ -37826,6 +37938,18 @@ void nts_dom_DOMPoint_set_w(NtsDomDOMPoint* self, double value) {
   receiver->setW(value);
 }
 
+NtsDomDOMPoint* nts_dom_DOMPoint_fromPoint_1(NtsDomDOMPointInit other) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  auto* other_converted = NtsDomToDOMPointInit(context, other, conversion);
+  return HandleOf<NtsDomDOMPoint>(DOMPoint::fromPoint(other_converted));
+}
+
+NtsDomDOMPoint* nts_dom_DOMPoint_fromPoint_0() {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomDOMPoint>(DOMPoint::fromPoint(blink::DOMPointInit::Create(context.v8_isolate.get())));
+}
+
 NtsDomDOMQuad* nts_dom_new_DOMQuad_4(NtsDomDOMPointInit p1, NtsDomDOMPointInit p2, NtsDomDOMPointInit p3, NtsDomDOMPointInit p4) {
   NtsDomContext& context = nts_dom::Current();
   blink::DummyExceptionStateForTesting conversion;
@@ -37893,6 +38017,23 @@ NtsDomDOMRect* nts_dom_DOMQuad_getBounds(NtsDomDOMQuad* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::DOMQuad>(self);
   return HandleOf<NtsDomDOMRect>(receiver->getBounds());
+}
+
+NtsDomDOMQuad* nts_dom_DOMQuad_fromQuad_0() {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomDOMQuad>(DOMQuad::fromQuad(blink::DOMQuadInit::Create(context.v8_isolate.get())));
+}
+
+NtsDomDOMQuad* nts_dom_DOMQuad_fromRect_1(NtsDomDOMRectInit other) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  auto* other_converted = NtsDomToDOMRectInit(context, other, conversion);
+  return HandleOf<NtsDomDOMQuad>(DOMQuad::fromRect(other_converted));
+}
+
+NtsDomDOMQuad* nts_dom_DOMQuad_fromRect_0() {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomDOMQuad>(DOMQuad::fromRect(blink::DOMRectInit::Create(context.v8_isolate.get())));
 }
 
 double nts_dom_DOMRectList_get_length(NtsDomDOMRectList* self) {
@@ -40420,6 +40561,11 @@ void nts_dom_HTMLScriptElement_set_attributionSrc(NtsDomHTMLScriptElement* self,
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::HTMLScriptElement>(self);
   receiver->setAttribute(html_names::kAttributionsrcAttr, NtsText(context, value, /*scalar_values=*/true));
+}
+
+bool nts_dom_HTMLScriptElement_supports(const NtsBorrowedString* type) {
+  NtsDomContext& context = nts_dom::Current();
+  return static_cast<bool>(HTMLScriptElement::supports(NtsText(context, type)));
 }
 
 NtsDomDOMParser* nts_dom_new_DOMParser() {

@@ -145,6 +145,7 @@ try {
     // global.
     const imported = [...source.matchAll(/import \{([^}]*)\} from "nts:dom"/g)].flatMap(match => match[1].split(",").map(name => name.trim()));
     const narrowings = imported.map(name => /^as(\w+)$/.test(name) ? `const ${name} = (node) => node instanceof ${name.slice(2)} ? node : null;`
+      : /^([A-Z]\w*?)_(\w+)$/.test(name) ? `const ${name} = (...args) => ${name.replace("_", ".")}(...args);`
       : /^new(\w+)$/.test(name) ? `const ${name} = (...args) => new ${name.slice(3)}(...args);`
       : name === "window" ? "const window = () => globalThis;" : "").join("\n");
     const vectors = stripTypeScriptTypes(source).replace(/^\s*import\s[^;]*;\s*$/gm, "").replace(/^export /gm, "");

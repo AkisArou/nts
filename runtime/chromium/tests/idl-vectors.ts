@@ -12,6 +12,7 @@
 // Page script has no `asText`/`asHTMLElement`/`asHTMLInputElement`; the
 // oracle defines them (`instanceof`) where the import stood. What a caught
 // error reads as is passed in.
+import { AbortSignal_abort, AbortSignal_timeout, DOMRect_fromRect, Document_parseHTMLUnsafe, URL_canParse, URL_parse } from "nts:dom";
 import { newBlob, newDataTransfer, newDOMParser, newDOMPoint, newDragEvent, newFormData, newMutationObserver, newProgressEvent, newXMLSerializer, newAbortController, newCustomEvent, newEvent, newKeyboardEvent, newMouseEvent, newURL, newURLSearchParams, window } from "nts:dom";
 import { asCSSStyleSheet, asElement, asHTMLFormElement, asHTMLVideoElement, asHTMLAnchorElement, asHTMLCanvasElement, asHTMLDetailsElement, asHTMLDialogElement, asHTMLProgressElement, asHTMLSlotElement, asHTMLElement, asHTMLImageElement, asHTMLOListElement, asHTMLTableCellElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
 import type { CanvasFillRule, ChildNode, Document, Element, Event, EventTarget, MutationObserver, MutationRecordSequence, Node, ParentNode, ScrollRestoration, SelectionMode, Text } from "nts:dom";
@@ -811,6 +812,15 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   log("runtimeFeatures", shown(featured.ariaRowIndexText) + "|" + shown(featured.getAttribute("aria-rowindextext")) + "|" +
     (featured.autocorrect ? "on" : "off") + "|" + shown(featured.getAttribute("autocorrect")) + "|" +
     (featuredMetrics.alphabeticBaseline === 0 ? "baseline 0" : "baseline " + featuredMetrics.alphabeticBaseline));
+
+  // Static operations, nts:dom's `X_m` for page script's `X.m`.
+  const parsedURL = URL_parse("../c", "https://x.test/a/b");
+  const fromRect = DOMRect_fromRect({ x: 1, y: 2, width: 3, height: 4 });
+  const parsedDocument = Document_parseHTMLUnsafe("<p id=q>static</p>");
+  log("statics", (URL_canParse("https://x.test/") ? "can" : "cannot") + "|" + (URL_canParse("no scheme") ? "can" : "cannot") + "|" +
+    (parsedURL === null ? "null" : parsedURL.href) + "|" + (URL_parse("no scheme") === null ? "null" : "url") + "|" +
+    (AbortSignal_abort().aborted ? "aborted" : "live") + "|" + (AbortSignal_timeout(60000).aborted ? "aborted" : "live") + "|" +
+    fromRect.right + "," + fromRect.bottom + "|" + shown(parsedDocument.querySelector("#q")!.textContent));
   const pointed = newMouseEvent("click", { clientX: 12.5, clientY: -3, button: 2, ctrlKey: true, detail: 7 });
   log("mouseInit", pointed.clientX + "|" + pointed.clientY + "|" + pointed.button + "|" + (pointed.ctrlKey ? "ctrl" : "-") + (pointed.shiftKey ? "shift" : "-") + "|" + pointed.detail);
 
