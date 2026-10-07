@@ -648,6 +648,25 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   log("canvasState", ctx.textAlign + "|" + ctx.lineWidth + "|" + ctx.lineCap + "|" + ctx.font + "|" + (metrics.width > 0 ? "measured" : "zero"));
   thrown("canvasArc", () => { ctx.arc(0, 0, -1, 0, 1, false); });
   thrown("canvasFillRule", () => { ctx.fill(("inside" + "") as CanvasFillRule); });
+  // Image sources (a union of interfaces): a small canvas drawn onto the
+  // surface, and as a repeating pattern's tile.
+  const stamp = asHTMLCanvasElement(d.createElement("canvas"))!;
+  stamp.width = 6;
+  stamp.height = 6;
+  const stampContext = stamp.getContext("2d")!;
+  stampContext.fillStyle = "purple";
+  stampContext.fillRect(0, 0, 3, 3);
+  stampContext.fillStyle = "orange";
+  stampContext.fillRect(3, 3, 3, 3);
+  ctx.drawImage(stamp, 100, 2);
+  ctx.drawImage(stamp, 100, 10, 12, 12);
+  const pattern = ctx.createPattern(stamp, "repeat");
+  log("canvasPattern", pattern === null ? "none" : "made");
+  if (pattern !== null) {
+    ctx._set_fillStyle_pattern(pattern);
+    ctx.fillRect(100, 26, 18, 18);
+  }
+  thrown("canvasPatternRepetition", () => { ctx.createPattern(stamp, "sideways"); });
   const png = surface.toDataURL();
   let hash = 2166136261;
   for (let i = 0; i < png.length; i += 1) hash = Math.imul(hash ^ png.charCodeAt(i), 16777619) >>> 0;

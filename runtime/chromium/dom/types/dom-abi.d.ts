@@ -129,6 +129,20 @@ declare module "nts:dom" {
      * @ntsSet _set_strokeStyle_string
      */
     set strokeStyle(value: StringView);
+    /**
+     * `ctx.fillStyle = pattern`.
+     * @ntsSymbol nts_dom_CanvasRenderingContext2D_set_fillStyle_pattern
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fillStyle_pattern(this: CanvasRenderingContext2D, value: CanvasPattern, error?: Ptr<DOMException | null>): void;
+    /**
+     * `ctx.strokeStyle = pattern`.
+     * @ntsSymbol nts_dom_CanvasRenderingContext2D_set_strokeStyle_pattern
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_strokeStyle_pattern(this: CanvasRenderingContext2D, value: CanvasPattern, error?: Ptr<DOMException | null>): void;
   }
   export interface EventTargetOwnMethods {
     /**

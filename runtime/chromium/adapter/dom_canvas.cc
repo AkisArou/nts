@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_gradient.h"
+#include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_pattern.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d.h"
 #include "third_party/blink/renderer/platform/bindings/dom_wrapper_world.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding.h"
@@ -35,16 +36,16 @@ void SetStyleText(NtsDomCanvasRenderingContext2D *self,
                       exception_state);
 }
 
-void SetStyleGradient(NtsDomCanvasRenderingContext2D *self,
-                      NtsDomCanvasGradient *value, StyleSetter setter,
-                      NtsDomException **error) {
+// A gradient or a pattern: its main-world wrapper, as page script's value.
+void SetStyleObject(NtsDomCanvasRenderingContext2D *self,
+                    blink::ScriptWrappable *value, StyleSetter setter,
+                    NtsDomException **error) {
   NtsDomContext &context = nts_dom::Current();
   Throws exception_state(error);
   blink::ScriptState *script_state = context.MainWorld();
   blink::ScriptState::Scope script_scope(script_state);
   auto *receiver = ObjectOf<blink::CanvasRenderingContext2D>(self);
-  (receiver->*setter)(context.v8_isolate.get(),
-                      ObjectOf<blink::CanvasGradient>(value)->ToV8(script_state),
+  (receiver->*setter)(context.v8_isolate.get(), value->ToV8(script_state),
                       exception_state);
 }
 
@@ -95,14 +96,26 @@ void nts_dom_CanvasRenderingContext2D_set_strokeStyle_string(
 void nts_dom_CanvasRenderingContext2D_set_fillStyle_gradient(
     NtsDomCanvasRenderingContext2D *self, NtsDomCanvasGradient *value,
     NtsDomException **error) {
-  SetStyleGradient(self, value, &blink::Canvas2DRecorderContext::setFillStyle,
-                   error);
+  SetStyleObject(self, ObjectOf<blink::CanvasGradient>(value),
+                 &blink::Canvas2DRecorderContext::setFillStyle, error);
 }
 void nts_dom_CanvasRenderingContext2D_set_strokeStyle_gradient(
     NtsDomCanvasRenderingContext2D *self, NtsDomCanvasGradient *value,
     NtsDomException **error) {
-  SetStyleGradient(self, value,
-                   &blink::Canvas2DRecorderContext::setStrokeStyle, error);
+  SetStyleObject(self, ObjectOf<blink::CanvasGradient>(value),
+                 &blink::Canvas2DRecorderContext::setStrokeStyle, error);
+}
+void nts_dom_CanvasRenderingContext2D_set_fillStyle_pattern(
+    NtsDomCanvasRenderingContext2D *self, NtsDomCanvasPattern *value,
+    NtsDomException **error) {
+  SetStyleObject(self, ObjectOf<blink::CanvasPattern>(value),
+                 &blink::Canvas2DRecorderContext::setFillStyle, error);
+}
+void nts_dom_CanvasRenderingContext2D_set_strokeStyle_pattern(
+    NtsDomCanvasRenderingContext2D *self, NtsDomCanvasPattern *value,
+    NtsDomException **error) {
+  SetStyleObject(self, ObjectOf<blink::CanvasPattern>(value),
+                 &blink::Canvas2DRecorderContext::setStrokeStyle, error);
 }
 
 } // extern "C"

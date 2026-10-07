@@ -1,5 +1,5 @@
 {
-  "bound": 4719,
+  "bound": 4770,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -332,16 +332,6 @@
       "why": "dictionary member whose default 1 is not zero"
     },
     {
-      "interface": "Element",
-      "member": "convertPointFromNode/3",
-      "why": "parameter type GeometryNode"
-    },
-    {
-      "interface": "Element",
-      "member": "convertPointFromNode/2",
-      "why": "parameter type GeometryNode"
-    },
-    {
       "interface": "DOMQuadInit",
       "member": "p1",
       "why": "dictionary member of type optional DOMPointInit"
@@ -370,16 +360,6 @@
       "interface": "Element",
       "member": "convertQuadFromNode/2",
       "why": "dictionary DOMQuadInit has no member a C struct can carry"
-    },
-    {
-      "interface": "Element",
-      "member": "convertRectFromNode/3",
-      "why": "parameter type GeometryNode"
-    },
-    {
-      "interface": "Element",
-      "member": "convertRectFromNode/2",
-      "why": "parameter type GeometryNode"
     },
     {
       "interface": "Element",
@@ -474,12 +454,12 @@
     {
       "interface": "Element",
       "member": "setAttribute/2",
-      "why": "parameter type TrustedType"
+      "why": "parameter type TrustedType: no member is bound"
     },
     {
       "interface": "Element",
       "member": "setAttributeNS/3",
-      "why": "parameter type TrustedType"
+      "why": "parameter type TrustedType: no member is bound"
     },
     {
       "interface": "Element",
@@ -638,16 +618,6 @@
     },
     {
       "interface": "Text",
-      "member": "convertPointFromNode/3",
-      "why": "parameter type GeometryNode"
-    },
-    {
-      "interface": "Text",
-      "member": "convertPointFromNode/2",
-      "why": "parameter type GeometryNode"
-    },
-    {
-      "interface": "Text",
       "member": "convertQuadFromNode/3",
       "why": "dictionary DOMQuadInit has no member a C struct can carry"
     },
@@ -655,16 +625,6 @@
       "interface": "Text",
       "member": "convertQuadFromNode/2",
       "why": "dictionary DOMQuadInit has no member a C struct can carry"
-    },
-    {
-      "interface": "Text",
-      "member": "convertRectFromNode/3",
-      "why": "parameter type GeometryNode"
-    },
-    {
-      "interface": "Text",
-      "member": "convertRectFromNode/2",
-      "why": "parameter type GeometryNode"
     },
     {
       "interface": "Document",
@@ -2108,16 +2068,6 @@
     },
     {
       "interface": "Document",
-      "member": "convertPointFromNode/3",
-      "why": "parameter type GeometryNode"
-    },
-    {
-      "interface": "Document",
-      "member": "convertPointFromNode/2",
-      "why": "parameter type GeometryNode"
-    },
-    {
-      "interface": "Document",
       "member": "convertQuadFromNode/3",
       "why": "dictionary DOMQuadInit has no member a C struct can carry"
     },
@@ -2125,16 +2075,6 @@
       "interface": "Document",
       "member": "convertQuadFromNode/2",
       "why": "dictionary DOMQuadInit has no member a C struct can carry"
-    },
-    {
-      "interface": "Document",
-      "member": "convertRectFromNode/3",
-      "why": "parameter type GeometryNode"
-    },
-    {
-      "interface": "Document",
-      "member": "convertRectFromNode/2",
-      "why": "parameter type GeometryNode"
     },
     {
       "interface": "Document",
@@ -3824,12 +3764,7 @@
     {
       "interface": "HTMLSelectElement",
       "member": "add/2",
-      "why": "parameter type (HTMLOptionElement or HTMLOptGroupElement)"
-    },
-    {
-      "interface": "HTMLSelectElement",
-      "member": "add/1",
-      "why": "parameter type (HTMLOptionElement or HTMLOptGroupElement)"
+      "why": "parameter type optional (HTMLElement or long)?"
     },
     {
       "interface": "HTMLOptionElement",
@@ -5969,7 +5904,7 @@
     {
       "interface": "Window",
       "member": "postMessage/2",
-      "why": "parameter type any"
+      "why": "default `[]` of argument transfer"
     },
     {
       "interface": "Window",
@@ -6428,11 +6363,6 @@
     },
     {
       "interface": "CanvasRenderingContext2D",
-      "member": "createPattern/2",
-      "why": "interface CanvasPattern is not bound"
-    },
-    {
-      "interface": "CanvasRenderingContext2D",
       "member": "drawElementImage/4",
       "why": "[RuntimeEnabled]"
     },
@@ -6450,21 +6380,6 @@
       "interface": "CanvasRenderingContext2D",
       "member": "drawElementImage/10",
       "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "CanvasRenderingContext2D",
-      "member": "drawImage/3",
-      "why": "parameter type CanvasImageSource"
-    },
-    {
-      "interface": "CanvasRenderingContext2D",
-      "member": "drawImage/5",
-      "why": "parameter type CanvasImageSource"
-    },
-    {
-      "interface": "CanvasRenderingContext2D",
-      "member": "drawImage/9",
-      "why": "parameter type CanvasImageSource"
     },
     {
       "interface": "CanvasRenderingContext2D",

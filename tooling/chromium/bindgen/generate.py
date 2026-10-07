@@ -130,6 +130,7 @@ class Param:
         # ExceptionState it reports to; and whether that can fail.
         self.prelude, self.may_throw = prelude, may_throw
         self.enum = None  # (Blink's enum class, IDL name) for an IDL enum
+        self.arm = None  # the interface a union-of-interfaces argument is bound as
 
 
 class Result:
@@ -439,6 +440,36 @@ class Generator:
         param.prelude = (f"const auto {param.name}_value = nts_dom::EnumFrom<{cls}>({param.name}); "
                          f"if (!{param.name}_value) {{ nts_dom::WarnInvalidEnum(context, {param.name}, "
                          f"\"{identifier}\"); {{return}}; }}")
+
+    def union_arms(self, idl_type):
+        """The bound interfaces of a union whose members are all interfaces,
+        or None: `(HTMLImageElement or HTMLCanvasElement or ...)`. Members
+        not bound are left out, so their arm is not offered."""
+        if idl_type.does_include_nullable_type:
+            return None
+        unwrapped = idl_type.unwrap(typedef=True)
+        if not unwrapped.is_union:
+            return None
+        members = [t.unwrap(typedef=True) for t in unwrapped.flattened_member_types]
+        if not all(t.is_interface for t in members):
+            return None
+        arms = sorted({t.type_definition_object.identifier for t in members} & self.bound)
+        if not arms:
+            raise Skip(f"parameter type {idl_type.syntactic_form}: no member is bound")
+        return arms
+
+    def arm_parameter(self, idl_type, identifier, arm):
+        """One arm of a union-of-interfaces argument: the handle, made into
+        Blink's union as V8's binding makes it from that member."""
+        name = self.safe(identifier)
+        unwrapped = idl_type.unwrap(typedef=True)
+        self.headers.add(PathManager(unwrapped.union_definition_object).api_path(ext="h"))
+        union = blink_type_info(unwrapped).typename
+        interface = self.database.find(arm)
+        param = Param(name, f"{self.handle_tag(arm)}* {name}", f"{name}: {arm}",
+                      f"blink::MakeGarbageCollected<blink::{union}>({self.node(interface, name)})", False)
+        param.arm = arm
+        return param
 
     @staticmethod
     def text(idl_type, name):
@@ -812,16 +843,22 @@ class Generator:
             required = sum(1 for argument in arguments if not argument.is_optional)
             for count in range(len(arguments), required - 1, -1):
                 try:
-                    params = []
-                    for argument in arguments[:count]:
-                        param = self.parameter(argument.idl_type, argument.identifier)
-                        param.idl_name = argument.identifier
-                        params.append(param)
+                    # A union of interfaces (`CanvasImageSource`) is one
+                    # variant per bound member: the arm is the argument's
+                    # type, so a caller's static type picks it.
+                    choices = [self.union_arms(argument.idl_type) or [None] for argument in arguments[:count]]
                     truncate = next((index for index in range(count, len(arguments))
                                      if arguments[index].default_value is None), None)
                     filled = [(argument.identifier, self.default_value(argument))
                               for argument in arguments[count:truncate]]
-                    variants.append((overload, params, result, truncate, filled, None))
+                    for arms in itertools.product(*choices):
+                        params = []
+                        for argument, arm in zip(arguments[:count], arms):
+                            param = (self.arm_parameter(argument.idl_type, argument.identifier, arm) if arm
+                                     else self.parameter(argument.idl_type, argument.identifier))
+                            param.idl_name = argument.identifier
+                            params.append(param)
+                        variants.append((overload, params, result, truncate, filled, None))
                 except Skip as why:
                     self.skip(interface, f"{label}/{count}", str(why))
         return variants
@@ -838,12 +875,15 @@ class Generator:
     @staticmethod
     def symbol_for(base, several, tail, params, used):
         """One C symbol per variant: an overload set's are told apart by
-        arity, or by a variadic tail's arms."""
+        arity, or by a variadic tail's arms; a union argument's arm is named
+        after it (`drawImage_3_HTMLCanvasElement`)."""
         symbol = base
         if tail is not None and tail[3] is not None:
             symbol += f"_{tail[3]}"
         elif several:
             symbol += f"_{len(params)}"
+        symbol += "".join(f"_{param.arm}" for param in params if param.arm)
+        if tail is None or tail[3] is None:
             while symbol in used:
                 symbol += "x"
         used.add(symbol)

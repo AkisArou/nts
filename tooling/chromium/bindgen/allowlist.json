@@ -147,7 +147,8 @@
     "AnimationTimeline",
     "DocumentTimeline",
     "CaretPosition",
-    "Storage"
+    "Storage",
+    "CanvasPattern"
   ],
   "sequences": [
     "MutationRecord",
@@ -162,7 +163,8 @@
     "Path2D",
     "Storage",
     "Window.localStorage",
-    "Window.sessionStorage"
+    "Window.sessionStorage",
+    "CanvasPattern"
   ],
   "mixins": {
     "ParentNode": {

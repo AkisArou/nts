@@ -216,6 +216,15 @@ void nts_dom_CanvasRenderingContext2D_set_strokeStyle_gradient(
     NtsDomCanvasRenderingContext2D* self,
     NtsDomCanvasGradient* value,
     NtsDomException** error);
+/* ... or a pattern. */
+void nts_dom_CanvasRenderingContext2D_set_fillStyle_pattern(
+    NtsDomCanvasRenderingContext2D* self,
+    NtsDomCanvasPattern* value,
+    NtsDomException** error);
+void nts_dom_CanvasRenderingContext2D_set_strokeStyle_pattern(
+    NtsDomCanvasRenderingContext2D* self,
+    NtsDomCanvasPattern* value,
+    NtsDomException** error);
 
 #ifdef __cplusplus
 }

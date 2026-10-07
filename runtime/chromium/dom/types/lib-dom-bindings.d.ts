@@ -2063,18 +2063,23 @@ interface XSLTProcessor {}
  */
 interface CanvasGradient {}
 /**
- * @ntsBoundBy "nts:dom" CanvasRenderingContext2D
+ * @ntsBoundBy "nts:dom" CanvasPattern
  * @ntsIs nts_dom_is 604
+ */
+interface CanvasPattern {}
+/**
+ * @ntsBoundBy "nts:dom" CanvasRenderingContext2D
+ * @ntsIs nts_dom_is 605
  */
 interface CanvasRenderingContext2D {}
 /**
  * @ntsBoundBy "nts:dom" Path2D
- * @ntsIs nts_dom_is 605
+ * @ntsIs nts_dom_is 606
  */
 interface Path2D {}
 /**
  * @ntsBoundBy "nts:dom" Storage
- * @ntsIs nts_dom_is 606
+ * @ntsIs nts_dom_is 607
  */
 interface Storage {}
 /** @ntsBoundBy "nts:dom" ChildNode */
