@@ -38,7 +38,7 @@ if [ ! -f "$sdk/SDKSettings.json" ]; then
   echo "SKIP ios-list: no iOS simulator SDK at $sdk (tooling/apple/sync-sdk.sh iphonesimulator)"
   exit 0
 fi
-symbols="$apple/symbolgraph/$(sed -n 's/.*"CanonicalName":"\([^"]*\)".*/\1/p' "$sdk/SDKSettings.json")"
+symbols="$apple/symbolgraph/private/$(sed -n 's/.*"CanonicalName":"\([^"]*\)".*/\1/p' "$sdk/SDKSettings.json")"
 if [ ! -f "$symbols/UIKit.symbols.json" ]; then
   echo "SKIP ios-list: no iOS symbol graphs at $symbols (NTS_APPLE_PLATFORM=iphonesimulator tooling/apple/symbolgraph.sh UIKit Foundation ObjectiveC)"
   exit 0

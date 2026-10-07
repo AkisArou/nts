@@ -47,7 +47,7 @@ if [ ! -d "$sdk/System/Library/Frameworks/AppKit.framework" ]; then
   exit 0
 fi
 version=$(sed -n 's/.*"Version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$sdk/SDKSettings.json" | head -1)
-if [ ! -f "$apple/symbolgraph/$version/AppKit.symbols.json" ] || [ ! -f "$apple/symbolgraph/$version/QuartzCore.symbols.json" ]; then
+if [ ! -f "$apple/symbolgraph/private/$version/AppKit.symbols.json" ] || [ ! -f "$apple/symbolgraph/private/$version/QuartzCore.symbols.json" ]; then
   echo "SKIP macos-notes: no Swift symbol graphs for SDK $version (tooling/apple/symbolgraph.sh AppKit Foundation ObjectiveC QuartzCore)"
   exit 0
 fi
