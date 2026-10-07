@@ -15,19 +15,15 @@ shared tooling.
 | # | Workaround | Where | Cause | Remove when | Owner |
 |---|---|---|---|---|---|
 | 5 | Lone surrogates are built with `String.fromCharCode`, not written as literals. | `tests/idl-vectors.ts` (USVString vectors) | blocker `a-lone-surrogate-in-a-string-literal` (Windows lane's): `"\uD800"` becomes three U+FFFD | the blocker reads FIXED | C |
-| 6 | Closures passed to `thrown()` have block bodies (`() => { d.querySelector("["); }`), never an expression answering a handle. | `tests/dom-witness.ts`, `tests/idl-vectors.ts` | blocker `a-raising-handle-returning-closure-called-as-void`: a raising handle-returning closure passed as `() => void` still compiles to an `nts_refused` stub (a2 fixed only the non-raising case) | the blocker reads FIXED | C |
 | 7 | `setTimeout(handler)` and `setInterval(handler)` are separate `_default` C entry points, not an `@ntsDefault timeout=0`. | `dom/types/dom-abi.d.ts`, `dom/abi/dom_abi.h`, `adapter/dom_bridge.cc` | `@ntsDefault` takes only an integer, and the timeout is a `double` so ToInt32 is applied in the adapter | `@ntsDefault` accepts a floating-point default | C |
 | 8 | A listener that removes itself is a `function` declaration, not a `const` arrow. | `tests/idl-vectors.ts`, `tests/timer-vectors.ts` | a closure capturing its own `const` ("captured above its own declaration") is refused | that capture compiles | C |
 | 9 | Apps may not have module-level state; `app.ts build` refuses a program declaring `module__init`. | `tooling/chromium/app.ts` (`appEntry`) | request 10: module state is process-wide, environments are per document | request 10 delivered | C |
 | 10 | Constructors are factory functions, `newURL(url, base)`, not `new URL(url, base)`. | generated `dom/types/dom-idl.d.ts` | `@ntsConstruct` has no positional form (it is GObject's object-literal construction); `new X(...)` is not in the lib.dom delegation table yet | `new X(args)` lowers to a bound constructor | C |
 | 11 | The `onclick` getter (and every event handler attribute's) is not bound; only the setters are. | `tooling/chromium/bindgen/generate.py` (`event_handler`) | a foreign function cannot return a closure the program lent it | closure results from C | C |
 | 12 | The `hidden` getter is not bound. | generator (`report.json`) | its Blink side builds a V8 value from a ScriptState; it needs a union result | a union result type, or a hand-written getter | L |
-
 | 17 | Members taking `any` are not bound (`history.pushState(data, ...)`, `CustomEvent.detail`, `AbortController.abort(reason)` beyond its no-argument form). | generator (`report.json`) | a host function cannot take or return `any` | `any` crosses to C (an erased value with its tag) | C |
-
-| 19 | The fuzz's `pick` closure answers an index into the pool, not the node. | `tests/idl-vectors.ts` (`fuzz`) | blocker `a-closure-returning-a-host-handle-is-refused-since-a2`: a local closure answering a host handle is refused since 7a5964d71 | the blocker reads FIXED | C |
-
 | 20 | An uncaught throw in a listener, a timer or an app's `main` ends the renderer (Chromium's crash page), and `console.*` writes to the process's stdout/stderr, not DevTools. The app examples and vectors throw nothing uncaught. | runtime, every callback | request 11: no host hook for console output or uncaught throws (`nts_uncaught` calls `exit(1)` inside a callback) | request 11 delivered, and the lane wires both into Blink | C |
+| 21 | An IDL enum attribute reads as `StringView`, not its literal union (`ctx.textAlign`, `document.readyState`); only a parameter is typed (`ctx.fill("evenodd")`). | generated `dom/types/dom-idl.d.ts` | blocker `a-literal-union-returned-by-a-foreign-function`: a foreign function cannot return a string-literal union | the blocker reads FIXED | C |
 
 ## Waiting on shared tooling
 

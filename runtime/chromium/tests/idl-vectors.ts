@@ -228,7 +228,7 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   const head = table.insertRow(0);
   head.insertCell().textContent = "start";
   log("table", table.rows.length + "|" + describe(table.rows.item(0)) + "|" + shown(table.textContent));
-  thrown("insertRowRange", () => { table.insertRow(9); });
+  thrown("insertRowRange", () => table.insertRow(9));
 
   // The variadic tree edits, at each arity and with nodes and text mixed;
   // replaceChildren() with nothing clears.
@@ -247,7 +247,7 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   log("replaceChildrenNone", edits.childNodes.length + "|" + edits.innerHTML);
   edits.replaceChildren("only");
   log("replaceChildrenText", edits.innerHTML);
-  thrown("appendAncestor", () => { edits.append(root); });
+  thrown("appendAncestor", () => edits.append(root));
 
   // dataset: DOMStringMap's named properties, camel-cased to data-*
   // attributes and back; an absent name; deletion; a name the setter
@@ -378,7 +378,7 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   log("url", url.href + "|" + url.host + "|" + url.pathname + "|" + shown(url.searchParams.get("y")));
   const relative = newURL("../d?q=%20s", "https://example.com/a/b/c");
   log("urlBase", relative.href + "|" + shown(relative.searchParams.get("q")));
-  thrown("urlInvalid", () => { newURL("not a url"); });
+  thrown("urlInvalid", () => newURL("not a url"));
   const params = newURLSearchParams();
   params.append("a", "1");
   params.append("b", "x y");
@@ -477,12 +477,12 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   log("abort", (wasAborted ? "aborted" : "live") + "|" + (signal.aborted ? "aborted" : "live"));
 
   // What the members raise: each exception's name and Blink's message.
-  thrown("syntax", () => { d.querySelector("["); });
-  thrown("hierarchy", () => { div.appendChild(div); });
-  thrown("notFound", () => { root.removeChild(words); });
-  thrown("badName", () => { d.createElement("bad name"); });
+  thrown("syntax", () => d.querySelector("["));
+  thrown("hierarchy", () => div.appendChild(div));
+  thrown("notFound", () => root.removeChild(words));
+  thrown("badName", () => d.createElement("bad name"));
   thrown("badAttr", () => { div.setAttribute("1bad", "x"); });
-  thrown("insertNotChild", () => { div.insertBefore(d.createElement("i"), root); });
+  thrown("insertNotChild", () => div.insertBefore(d.createElement("i"), root));
   thrown("indexSize", () => { text.substringData(99, 1); });
   thrown("negativeMaxLength", () => {
     input.type = "text";
@@ -642,9 +642,7 @@ function fuzz(d: Document, root: Element, start: number, log: (label: string, va
   const arena = d.createElement("div");
   root.appendChild(arena);
   const pool: Node[] = [arena];
-  // An index, not the node: a closure answering a host handle is refused
-  // since a2 (contracts/workarounds.md, 19).
-  const pick = (): number => next(pool.length);
+  const pick = (): Node => pool[next(pool.length)];
   for (let step = 0; step < 400; step += 1) {
     const op = next(14);
     const label = "f" + start + "." + step + "." + op;
@@ -655,20 +653,20 @@ function fuzz(d: Document, root: Element, start: number, log: (label: string, va
       pool.push(d.createTextNode(words[next(words.length)]));
       log(label, "text");
     } else if (op === 2) {
-      const parent = pool[pick()];
-      const child = pool[pick()];
+      const parent = pick();
+      const child = pick();
       thrown(label, () => { parent.appendChild(child); });
     } else if (op === 3) {
-      const parent = pool[pick()];
-      const child = pool[pick()];
-      const reference = next(4) === 0 ? null : pool[pick()];
+      const parent = pick();
+      const child = pick();
+      const reference = next(4) === 0 ? null : pick();
       thrown(label, () => { parent.insertBefore(child, reference); });
     } else if (op === 4) {
-      const parent = pool[pick()];
-      const child = pool[pick()];
+      const parent = pick();
+      const child = pick();
       thrown(label, () => { parent.removeChild(child); });
     } else if (op === 5 || op === 6 || op === 7 || op === 9 || op === 10 || op === 13) {
-      const element = asElement(pool[pick()]);
+      const element = asElement(pick());
       if (element === null) {
         log(label, "-");
         continue;
@@ -683,7 +681,7 @@ function fuzz(d: Document, root: Element, start: number, log: (label: string, va
       } else if (op === 7) {
         thrown(label, () => { element.classList.toggle(word); });
       } else if (op === 9) {
-        const other = pool[pick()];
+        const other = pick();
         thrown(label, () => { element.append(other, word); });
       } else if (op === 10) {
         element.replaceChildren();
@@ -693,16 +691,16 @@ function fuzz(d: Document, root: Element, start: number, log: (label: string, va
         thrown(label, () => { element.insertAdjacentText(place, word); });
       }
     } else if (op === 8) {
-      const node = pool[pick()];
+      const node = pick();
       node.textContent = words[next(words.length)];
       log(label, describe(node));
     } else if (op === 11) {
-      const parent = pool[pick()];
-      const replacement = pool[pick()];
-      const old = pool[pick()];
+      const parent = pick();
+      const replacement = pick();
+      const old = pick();
       thrown(label, () => { parent.replaceChild(replacement, old); });
     } else {
-      const node = pool[pick()];
+      const node = pick();
       pool.push(node.cloneNode(next(2) === 0));
       log(label, "clone");
     }

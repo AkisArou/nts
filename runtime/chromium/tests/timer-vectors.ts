@@ -182,6 +182,18 @@ function finish(): void {
 // Three phases, each started by the one before, so no ordering in the
 // transcript rests on how two timers due at nearby times race.
 export function startTimerVectors(): void {
+  // Every attribute a timer or an observer writes later exists from here, in
+  // this order: which of them fires first depends on the machine's load, and
+  // the transcript must not (an element's attributes serialize in the order
+  // they were added).
+  const pre = document().querySelector("#native-timers");
+  if (pre !== null) {
+    pre.setAttribute("data-resize", "");
+    pre.setAttribute("data-intersection", "");
+  }
+  remember("data-ticks", 0);
+  remember("data-interval", 0);
+  remember("data-depth", 0);
   armSelfRemoval();
   armSelfClearingHandler();
   // Order by delay, then by when they were set: a negative or NaN timeout

@@ -1,0 +1,5 @@
+{
+  "//": "A foreign module's declarations (src/canvas.d.ts) beside the program; libc.d.ts for c:types.",
+  "extends": "../../../../tsconfig.fixtures.json",
+  "files": ["src/main.ts", "src/canvas.d.ts", "../../../../runtime/native/libc.d.ts"]
+}
