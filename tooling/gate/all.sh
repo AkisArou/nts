@@ -2185,6 +2185,20 @@ interop() {
   # lanes the step was 1,832 s of a 1,843 s gate (2026-10-07, 12 slots). A timer
   # race lost to contention fails the step loudly; it cannot make it pass. If
   # that starts happening, `NTS_INTEROP_LOCAL_LANES=1` is the old order.
+  # **One gate's interop at a time on this machine.** The GTK projects share
+  # fixed paths (gtk-journal seeds and deletes /tmp/nts-gtk-journal.txt) and
+  # every gate shares the two VMs, so two gates' interop at once failed one of
+  # them for the other's files (2026-10-07). The lock is a file under $HOME,
+  # not the XDG cache, which gates set differently; the kernel drops it however
+  # this ends. Waiting counts in this step's time, and says for whom.
+  interop_lock=${NTS_INTEROP_LOCK:-$HOME/.cache/nts-gate-interop.lock}
+  mkdir -p "$(dirname "$interop_lock")"
+  exec 8>>"$interop_lock"
+  if ! flock -n 8; then
+    echo "  waiting for another gate's interop: $(cat "$interop_lock.who" 2>/dev/null || echo unknown)"
+    flock 8
+  fi
+  printf '%s, pid %s, since %s\n' "$root" "$$" "$(date +%H:%M:%S)" > "$interop_lock.who"
   lanes=$(mktemp -d)
   local_lanes=${NTS_INTEROP_LOCAL_LANES:-${NTS_GATE_JOBS:-6}}
   i=0
@@ -2203,7 +2217,7 @@ interop() {
         project=$(basename "$(dirname "$script")")
         out="$PWD/target/interop-$project"
         rm -rf "$out"
-        if output=$(NTS_BIN="${NTS_BIN:-$PWD/target/release/nts}" sh "$script" "$out" 2>&1); then
+        if output=$(NTS_BIN="${NTS_BIN:-$PWD/target/release/nts}" sh "$script" "$out" 2>&1 8>&-); then
           printf 'ok\n' > "$lanes/$project.status"
         else
           printf 'failed\n' > "$lanes/$project.status"
