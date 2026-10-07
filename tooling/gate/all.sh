@@ -2128,6 +2128,18 @@ definitions() {
   return $status
 }
 
+# Each runtime module's lowering against tooling/gate/compile-times.tsv: fails
+# when one takes twice its recorded CPU time and 3 s more. A 7x regression in
+# one compiler pass (Program::cycles, 2026-10-04) left every verdict green for
+# two days. Times are read from integrity --runtime's lowering when both run;
+# see tooling/gate/compile-time.mjs.
+compile_time() {
+  out=$(node tooling/gate/compile-time.mjs 2>&1)
+  status=$?
+  printf '%s\n' "$out" | awk '!/^$/'
+  return $status
+}
+
 step "build"   cargo build --release
 step "clippy"  lint
 # Every interop project, built the way its README says and then run.
@@ -2384,6 +2396,7 @@ step "test262-rest-cases" test262_rest_cases
 step "outcomes" outcomes
 step "integrity" integrity
 step "definitions" definitions
+step "compile-time" compile_time
 step "integrity-runtime" integrity_runtime
 step "snapshot-cache" snapshot_cache
 step "assembles" assembles

@@ -119,6 +119,9 @@ const STEPS = [
   // Reads integrity-runtime's `hir --prepared` listings when both are in the
   // run (NTS_DEFINITIONS_FROM), rather than lowering the corpus again.
   { name: "definitions", elastic: true, slots: 4, min: 2, mem: 2, nts: true, fe: true, after: ["integrity-runtime"], doc: "no runtime module emits fewer functions" },
+  // Reads the CPU time integrity-runtime measured on that same lowering
+  // (NTS_COMPILE_TIMES_FROM); lowers the modules itself when it runs alone.
+  { name: "compile-time", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, after: ["integrity-runtime"], doc: "no runtime module lowers 2x slower than recorded" },
   { name: "integrity-runtime", elastic: true, slots: 12, min: 4, mem: 4, nts: true, fe: true, doc: "listing rules over the runtime corpus" },
   { name: "snapshot-cache", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "a cached snapshot gives the same program" },
   { name: "assembles", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "runtime LLVM IR assembles" },
@@ -373,6 +376,7 @@ function stepEnv(step, slots) {
   const shared = join(RUN_DIR, "share", "hir-prepared");
   if (step.name === "integrity-runtime") e.NTS_INTEGRITY_KEEP = shared;
   if (step.name === "definitions" && plan.includes("integrity-runtime")) e.NTS_DEFINITIONS_FROM = shared;
+  if (step.name === "compile-time" && plan.includes("integrity-runtime")) e.NTS_COMPILE_TIMES_FROM = shared;
   if (step.name === "addons" && plan.includes("profile")) e.NTS_ADDON_EMITTED = join(ROOT, "target", "gate-profile");
   e.NTS_GATE_COSTS_DIR = join(target, "gate-costs");
   // The release build's own test262 protocol binary, so the test262 steps do

@@ -159,6 +159,7 @@ import { OUTCOMES, materialise, outcomeFixtures, runMode } from "./outcomes-proj
 import { frontendFor } from "./pin.ts";
 import { limiter, longestFirst, recordCosts } from "../gate/costs.mjs";
 import { withToken } from "../gate/tokens.mjs";
+import { followCpu, followInstructions } from "../gate/cputime.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -935,13 +936,23 @@ const slot = limiter(WORKERS);
 const run = (args) => slot(() => withToken(() =>
   new Promise((resolve) => {
     const child = spawn(NTS, args, { cwd: ROOT, env });
+    // The lowering's own work -- instructions retired, and CPU seconds -- kept
+    // for the compile-time step (tooling/gate/compile-time.mjs): measured on
+    // the listing it would otherwise make itself, so the corpus is lowered
+    // once for three steps. perf attaches to the process; nothing stands
+    // between this and it.
+    const timed = KEEP && args[0] === "hir" && args[1] === "--prepared";
+    const cpu = timed ? Promise.all([followCpu(child), followInstructions(child)]) : Promise.resolve([null, null]);
     let stdout = "";
     let stderr = "";
     const timer = setTimeout(() => child.kill("SIGTERM"), 900_000);
     child.stdout.on("data", (c) => (stdout += c));
     child.stderr.on("data", (c) => (stderr += c));
     child.on("error", (error) => { clearTimeout(timer); resolve({ error, stdout, stderr }); });
-    child.on("close", (status, signal) => { clearTimeout(timer); resolve({ status, signal, stdout, stderr }); });
+    child.on("close", (status, signal) => {
+      clearTimeout(timer);
+      cpu.then(([cpu_s, instructions]) => resolve({ status, signal, stdout, stderr, cpu_s, instructions }));
+    });
   })));
 
 const found = [];
@@ -968,7 +979,7 @@ function keep(project, done) {
   if (!KEEP || !ADDON.test(project)) return;
   const name = project.replaceAll("/", "_");
   writeFileSync(join(KEEP, `${name}.txt`), `${done.stdout}${done.stderr}`);
-  writeFileSync(join(KEEP, `${name}.json`), JSON.stringify({ status: done.status ?? null, signal: done.signal ?? null, error: done.error?.message ?? null }));
+  writeFileSync(join(KEEP, `${name}.json`), JSON.stringify({ status: done.status ?? null, signal: done.signal ?? null, error: done.error?.message ?? null, cpu_s: done.cpu_s ?? null, instructions: done.instructions ?? null }));
 }
 
 const cost = {};

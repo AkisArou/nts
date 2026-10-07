@@ -1,0 +1,36 @@
+# Per runtime module: the billions of user-space instructions `nts hir
+# --prepared <module>` retires -- the compiler process itself, not the
+# frontend it starts -- and, for the reader only, its CPU seconds then. Read
+# by tooling/gate/compile-time.mjs, which fails a module at 2x its count and
+# 20 G more. Rewrite with `node tooling/gate/compile-time.mjs --record` on a
+# binary you have checked is not slower, and say why in the commit.
+# module	G instructions	cpu s
+runtime/node/assert	286.8	35.1
+runtime/node/async_hooks	10.5	0.6
+runtime/node/buffer	18.3	2.4
+runtime/node/child_process	541.6	70.7
+runtime/node/cluster	611.6	85.7
+runtime/node/console	302.3	40.9
+runtime/node/crypto	489.4	87.4
+runtime/node/dgram	453.5	82.5
+runtime/node/diagnostics_channel	4.8	0.4
+runtime/node/dns	65.2	8.1
+runtime/node/events	275.7	37.8
+runtime/node/fs	698.1	120.6
+runtime/node/http	693.4	109.5
+runtime/node/net	451.5	76.1
+runtime/node/os	21.8	1.4
+runtime/node/path	87.0	3.2
+runtime/node/perf_hooks	281.9	33.3
+runtime/node/process	715.9	101.4
+runtime/node/punycode	1.9	0.0
+runtime/node/querystring	106.9	11.4
+runtime/node/readline	334.8	50.7
+runtime/node/stream	380.5	48.7
+runtime/node/string_decoder	17.8	1.8
+runtime/node/timers	46.8	4.2
+runtime/node/tty	0.0	0.0
+runtime/node/url	297.5	28.3
+runtime/node/util	293.1	30.9
+runtime/node/zlib	398.9	52.7
+runtime/web-platform	367.2	41.4
