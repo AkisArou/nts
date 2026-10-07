@@ -12,8 +12,8 @@
 // Page script has no `asText`/`asHTMLElement`/`asHTMLInputElement`; the
 // oracle defines them (`instanceof`) where the import stood. What a caught
 // error reads as is passed in.
-import { newMutationObserver, newAbortController, newCustomEvent, newEvent, newKeyboardEvent, newMouseEvent, newURL, newURLSearchParams, window } from "nts:dom";
-import { asElement, asHTMLAnchorElement, asHTMLCanvasElement, asHTMLSlotElement, asHTMLElement, asHTMLImageElement, asHTMLOListElement, asHTMLTableCellElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
+import { newDOMPoint, newMutationObserver, newAbortController, newCustomEvent, newEvent, newKeyboardEvent, newMouseEvent, newURL, newURLSearchParams, window } from "nts:dom";
+import { asCSSStyleSheet, asElement, asHTMLAnchorElement, asHTMLCanvasElement, asHTMLDetailsElement, asHTMLDialogElement, asHTMLProgressElement, asHTMLSlotElement, asHTMLElement, asHTMLImageElement, asHTMLOListElement, asHTMLTableCellElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
 import type { CanvasFillRule, Document, Element, Event, MutationObserver, MutationRecordSequence, Node, ScrollRestoration, SelectionMode, Text } from "nts:dom";
 
 export interface VectorHost {
@@ -437,6 +437,76 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   shadowHost.removeEventListener("pong", onPong);
   log("composed", crossing.target + "|" + crossing.path + "|" + crossing.phase);
   log("notComposed", crossing.seen);
+
+  // Forms, ranges and the selection, attributes as nodes, stylesheets, the
+  // navigator, dialog, details, progress and geometry.
+  const form = d.createElement("form");
+  root.appendChild(form);
+  const required = asHTMLInputElement(d.createElement("input"))!;
+  required.required = true;
+  form.appendChild(required);
+  const missing = required.validity.valueMissing + "|" + required.checkValidity();
+  required.value = "x";
+  log("validity", missing + "|" + required.validity.valueMissing + "|" + required.checkValidity() + "|" + required.validity.valid);
+  const email = asHTMLInputElement(d.createElement("input"))!;
+  email.type = "email";
+  email.value = "not an address";
+  form.appendChild(email);
+  log("typeMismatch", email.validity.typeMismatch + "|" + (email.validationMessage.length > 0 ? "message" : "none"));
+  const prose = d.createElement("p");
+  prose.textContent = "hello world";
+  root.appendChild(prose);
+  const range = d.createRange();
+  range.setStart(prose.firstChild!, 0);
+  range.setEnd(prose.firstChild!, 5);
+  const piece = range.cloneContents();
+  log("range", range.toString() + "|" + range.collapsed + "|" + range.startOffset + "-" + range.endOffset + "|" + shown(piece.textContent));
+  range.deleteContents();
+  log("rangeDeleted", shown(prose.textContent) + "|" + range.collapsed);
+  const selection = w.getSelection()!;
+  selection.removeAllRanges();
+  const whole = d.createRange();
+  whole.selectNodeContents(prose);
+  selection.addRange(whole);
+  log("selection", selection.toString() + "|" + selection.rangeCount + "|" + selection.type);
+  selection.removeAllRanges();
+  log("selectionCleared", selection.rangeCount + "|" + selection.type);
+  prose.setAttribute("data-a", "1");
+  const attr = prose.getAttributeNode("data-a")!;
+  attr.value = "2";
+  log("attr", attr.name + "|" + attr.value + "|" + shown(prose.getAttribute("data-a")) + "|" + (attr.ownerElement === prose ? "owned" : "loose") + "|" + prose.attributes.length);
+  const style = d.createElement("style");
+  style.textContent = ".nts-x { color: red; }";
+  root.appendChild(style);
+  const sheet = asCSSStyleSheet(d.styleSheets.item(d.styleSheets.length - 1)!)!;
+  sheet.insertRule(".nts-y { color: blue; }", 1);
+  log("stylesheet", sheet.cssRules.length + "|" + sheet.cssRules.item(0)!.cssText + "|" + sheet.cssRules.item(1)!.cssText);
+  thrown("insertRuleSyntax", () => { sheet.insertRule("{{", 0); });
+  log("navigator", w.navigator.language + "|" + w.navigator.onLine + "|" + (w.navigator.userAgent.length > 0 ? "agent" : "none"));
+  const dialog = asHTMLDialogElement(d.createElement("dialog"))!;
+  root.appendChild(dialog);
+  // open, not show(): a dialog shown and closed moves focus, which the
+  // smoke's later clicks on the page would feel.
+  dialog.open = true;
+  const opened = dialog.open;
+  dialog.close("done");
+  log("dialog", opened + "|" + dialog.open + "|" + dialog.returnValue);
+  const details = asHTMLDetailsElement(d.createElement("details"))!;
+  root.appendChild(details);
+  details.open = true;
+  log("details", details.open + "|" + shown(details.getAttribute("open")));
+  const progress = asHTMLProgressElement(d.createElement("progress"))!;
+  root.appendChild(progress);
+  progress.max = 8;
+  progress.value = 2;
+  log("progress", progress.value + "|" + progress.max + "|" + progress.position);
+  const point = newDOMPoint(1, 2);
+  point.x = 5;
+  log("point", point.x + "|" + point.y + "|" + point.z + "|" + point.w);
+  // Gone again: the page keeps its layout, whose input the smoke clicks.
+  const scratch = [form, prose, style, dialog, details, progress];
+  log("cleanup", scratch.map((node: Element): string => node.parentNode === root ? "root" : node.parentNode === null ? "detached" : describe(node.parentNode)).join(","));
+  for (const node of scratch) node.remove();
 
   // Canvas 2D: a drawing, then its pixels as PNG (toDataURL), hashed. The
   // same Skia draws for both, so the hashes agree only if every call drew

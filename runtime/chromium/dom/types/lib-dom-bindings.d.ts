@@ -16,6 +16,7 @@ interface AbortController {}
  */
 interface AbortSignal {}
 /**
+ * @ntsBoundBy "nts:dom" AbstractRange
  * @ntsIs nts_dom_is 2
  */
 interface AbstractRange {}
@@ -43,7 +44,7 @@ interface AnimationPlaybackEvent {}
  */
 interface AnimationTimeline {}
 /**
- * @ntsBoundBy "nts:dom" Node
+ * @ntsBoundBy "nts:dom" Attr
  * @ntsIs nts_dom_is 9
  */
 interface Attr {}
@@ -75,30 +76,37 @@ interface CDATASection {}
  */
 interface CSSAnimation {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 23
  */
 interface CSSConditionRule {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 24
  */
 interface CSSContainerRule {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 26
  */
 interface CSSCounterStyleRule {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 28
  */
 interface CSSFontFaceRule {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 30
  */
 interface CSSFontFeatureValuesRule {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 31
  */
 interface CSSFontPaletteValuesRule {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 35
  */
 interface CSSGroupingRule {}
@@ -107,14 +115,17 @@ interface CSSGroupingRule {}
  */
 interface CSSImageValue {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 39
  */
 interface CSSImportRule {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 40
  */
 interface CSSKeyframeRule {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 41
  */
 interface CSSKeyframesRule {}
@@ -123,10 +134,12 @@ interface CSSKeyframesRule {}
  */
 interface CSSKeywordValue {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 43
  */
 interface CSSLayerBlockRule {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 44
  */
 interface CSSLayerStatementRule {}
@@ -167,14 +180,17 @@ interface CSSMathValue {}
  */
 interface CSSMatrixComponent {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 57
  */
 interface CSSMediaRule {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 59
  */
 interface CSSNamespaceRule {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 61
  */
 interface CSSNestedDeclarations {}
@@ -187,6 +203,7 @@ interface CSSNumericArray {}
  */
 interface CSSNumericValue {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 64
  */
 interface CSSPageRule {}
@@ -200,10 +217,12 @@ interface CSSPerspective {}
  */
 interface CSSPositionTryDescriptors {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 67
  */
 interface CSSPositionTryRule {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 70
  */
 interface CSSPropertyRule {}
@@ -212,10 +231,12 @@ interface CSSPropertyRule {}
  */
 interface CSSRotate {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 75
  */
 interface CSSRule {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRuleList
  * @ntsIs nts_dom_is 76
  */
 interface CSSRuleList {}
@@ -224,6 +245,7 @@ interface CSSRuleList {}
  */
 interface CSSScale {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 78
  */
 interface CSSScopeRule {}
@@ -240,6 +262,7 @@ interface CSSSkewX {}
  */
 interface CSSSkewY {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 82
  */
 interface CSSStartingStyleRule {}
@@ -249,10 +272,12 @@ interface CSSStartingStyleRule {}
  */
 interface CSSStyleDeclaration {}
 /**
+ * @ntsBoundBy "nts:dom" CSSStyleRule
  * @ntsIs nts_dom_is 84
  */
 interface CSSStyleRule {}
 /**
+ * @ntsBoundBy "nts:dom" CSSStyleSheet
  * @ntsIs nts_dom_is 85
  */
 interface CSSStyleSheet {}
@@ -261,6 +286,7 @@ interface CSSStyleSheet {}
  */
 interface CSSStyleValue {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 87
  */
 interface CSSSupportsRule {}
@@ -294,6 +320,7 @@ interface CSSUnparsedValue {}
  */
 interface CSSVariableReferenceValue {}
 /**
+ * @ntsBoundBy "nts:dom" CSSRule
  * @ntsIs nts_dom_is 95
  */
 interface CSSViewTransitionRule {}
@@ -369,14 +396,17 @@ interface DOMMatrixReadOnly {}
  */
 interface DOMParser {}
 /**
+ * @ntsBoundBy "nts:dom" DOMPoint
  * @ntsIs nts_dom_is 121
  */
 interface DOMPoint {}
 /**
+ * @ntsBoundBy "nts:dom" DOMPointReadOnly
  * @ntsIs nts_dom_is 122
  */
 interface DOMPointReadOnly {}
 /**
+ * @ntsBoundBy "nts:dom" DOMQuad
  * @ntsIs nts_dom_is 123
  */
 interface DOMQuad {}
@@ -386,6 +416,7 @@ interface DOMQuad {}
  */
 interface DOMRect {}
 /**
+ * @ntsBoundBy "nts:dom" DOMRectList
  * @ntsIs nts_dom_is 125
  */
 interface DOMRectList {}
@@ -597,17 +628,17 @@ interface HTMLDListElement {}
  */
 interface HTMLDataElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLDataListElement
  * @ntsIs nts_dom_is 189
  */
 interface HTMLDataListElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLDetailsElement
  * @ntsIs nts_dom_is 190
  */
 interface HTMLDetailsElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLDialogElement
  * @ntsIs nts_dom_is 191
  */
 interface HTMLDialogElement {}
@@ -637,7 +668,7 @@ interface HTMLElement {}
  */
 interface HTMLEmbedElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLFieldSetElement
  * @ntsIs nts_dom_is 198
  */
 interface HTMLFieldSetElement {}
@@ -712,7 +743,7 @@ interface HTMLLIElement {}
  */
 interface HTMLLabelElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLLegendElement
  * @ntsIs nts_dom_is 215
  */
 interface HTMLLegendElement {}
@@ -747,7 +778,7 @@ interface HTMLMenuElement {}
  */
 interface HTMLMetaElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLMeterElement
  * @ntsIs nts_dom_is 226
  */
 interface HTMLMeterElement {}
@@ -782,7 +813,7 @@ interface HTMLOptionElement {}
  */
 interface HTMLOptionsCollection {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLOutputElement
  * @ntsIs nts_dom_is 234
  */
 interface HTMLOutputElement {}
@@ -807,7 +838,7 @@ interface HTMLPictureElement {}
  */
 interface HTMLPreElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLProgressElement
  * @ntsIs nts_dom_is 239
  */
 interface HTMLProgressElement {}
@@ -847,7 +878,7 @@ interface HTMLSpanElement {}
  */
 interface HTMLStyleElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLTableCaptionElement
  * @ntsIs nts_dom_is 250
  */
 interface HTMLTableCaptionElement {}
@@ -1036,6 +1067,7 @@ interface MutationObserver {}
  */
 interface MutationRecord {}
 /**
+ * @ntsBoundBy "nts:dom" NamedNodeMap
  * @ntsIs nts_dom_is 322
  */
 interface NamedNodeMap {}
@@ -1076,6 +1108,7 @@ interface NavigationPrecommitController {}
  */
 interface NavigationTransition {}
 /**
+ * @ntsBoundBy "nts:dom" Navigator
  * @ntsIs nts_dom_is 332
  */
 interface Navigator {}
@@ -1197,6 +1230,7 @@ interface PromiseRejectionEvent {}
  */
 interface RadioNodeList {}
 /**
+ * @ntsBoundBy "nts:dom" Range
  * @ntsIs nts_dom_is 387
  */
 interface Range {}
@@ -1729,6 +1763,7 @@ interface ScrollTimeline {}
  */
 interface SecurityPolicyViolationEvent {}
 /**
+ * @ntsBoundBy "nts:dom" Selection
  * @ntsIs nts_dom_is 507
  */
 interface Selection {}
@@ -1743,6 +1778,7 @@ interface ShadowRoot {}
  */
 interface SharedWorker {}
 /**
+ * @ntsBoundBy "nts:dom" StaticRange
  * @ntsIs nts_dom_is 517
  */
 interface StaticRange {}
@@ -1755,10 +1791,12 @@ interface StylePropertyMap {}
  */
 interface StylePropertyMapReadOnly {}
 /**
+ * @ntsBoundBy "nts:dom" StyleSheet
  * @ntsIs nts_dom_is 522
  */
 interface StyleSheet {}
 /**
+ * @ntsBoundBy "nts:dom" StyleSheetList
  * @ntsIs nts_dom_is 523
  */
 interface StyleSheetList {}
@@ -1893,6 +1931,7 @@ interface VTTCue {}
  */
 interface VTTRegion {}
 /**
+ * @ntsBoundBy "nts:dom" ValidityState
  * @ntsIs nts_dom_is 571
  */
 interface ValidityState {}

@@ -17,10 +17,12 @@ declare module "nts:dom" {
   export type ScrollRestoration = "auto" | "manual";
   export type SelectionMode = "select" | "start" | "end" | "preserve";
   export type AssignedNodesOptions = Struct<{ flatten: CBool<c_uint8> }, "NtsDomAssignedNodesOptions">;
+  export type CSSStyleSheetInit = Struct<{ alternate: CBool<c_uint8>; disabled: CBool<c_uint8> }, "NtsDomCSSStyleSheetInit">;
   export type CheckVisibilityOptions = Struct<{ checkOpacity: CBool<c_uint8>; checkVisibilityCSS: CBool<c_uint8> }, "NtsDomCheckVisibilityOptions">;
   export type CustomEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8> }, "NtsDomCustomEventInit">;
   export type DOMMatrix2DInit = Struct<{ a: c_double; b: c_double; c: c_double; d: c_double; e: c_double; f: c_double; m11: c_double; m12: c_double; m21: c_double; m22: c_double; m41: c_double; m42: c_double }, "NtsDomDOMMatrix2DInit">;
   export type DOMMatrixInit = Struct<{ a: c_double; b: c_double; c: c_double; d: c_double; e: c_double; f: c_double; m11: c_double; m12: c_double; m21: c_double; m22: c_double; m41: c_double; m42: c_double; is2D: CBool<c_uint8>; m13: c_double; m14: c_double; m23: c_double; m24: c_double; m31: c_double; m32: c_double; m34: c_double; m43: c_double }, "NtsDomDOMMatrixInit">;
+  export type DOMPointInit = Struct<{ x: c_double; y: c_double; z: c_double }, "NtsDomDOMPointInit">;
   export type EventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8> }, "NtsDomEventInit">;
   export type FocusEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double }, "NtsDomFocusEventInit">;
   export type FocusOptions = Struct<{ focusVisible: CBool<c_uint8>; preventScroll: CBool<c_uint8> }, "NtsDomFocusOptions">;
@@ -33,6 +35,15 @@ declare module "nts:dom" {
   export type PointerEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8>; button: c_double; buttons: c_double; clientX: c_double; clientY: c_double; movementX: c_double; movementY: c_double; screenX: c_double; screenY: c_double; altitudeAngle: c_double; azimuthAngle: c_double; isPrimary: CBool<c_uint8>; persistentDeviceId: c_double; pointerId: c_double; pressure: c_double; tangentialPressure: c_double; tiltX: c_double; tiltY: c_double; twist: c_double }, "NtsDomPointerEventInit">;
   export type UIEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double }, "NtsDomUIEventInit">;
   export type WheelEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8>; button: c_double; buttons: c_double; clientX: c_double; clientY: c_double; movementX: c_double; movementY: c_double; screenX: c_double; screenY: c_double; deltaMode: c_double; deltaX: c_double; deltaY: c_double; deltaZ: c_double; wheelDeltaX: c_double; wheelDeltaY: c_double }, "NtsDomWheelEventInit">;
+  export type DOMQuadSequence = HostClass<"NtsDomDOMQuadSequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & DOMQuadSequenceMethods;
+  export interface DOMQuadSequenceMethods {
+    /** @ntsSymbol nts_dom_DOMQuadSequence_get_length */
+    _get_length(this: DOMQuadSequence): CNumber<"double">;
+    /** @ntsGet _get_length */
+    readonly length: CNumber<"double">;
+    /** @ntsSymbol nts_dom_DOMQuadSequence_item */
+    item(this: DOMQuadSequence, index: CNumber<"double">): DOMQuad | null;
+  }
   export type ElementSequence = HostClass<"NtsDomElementSequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & ElementSequenceMethods;
   export interface ElementSequenceMethods {
     /** @ntsSymbol nts_dom_ElementSequence_get_length */
@@ -104,6 +115,15 @@ declare module "nts:dom" {
     readonly length: CNumber<"double">;
     /** @ntsSymbol nts_dom_ResizeObserverSizeSequence_item */
     item(this: ResizeObserverSizeSequence, index: CNumber<"double">): ResizeObserverSize | null;
+  }
+  export type StaticRangeSequence = HostClass<"NtsDomStaticRangeSequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & StaticRangeSequenceMethods;
+  export interface StaticRangeSequenceMethods {
+    /** @ntsSymbol nts_dom_StaticRangeSequence_get_length */
+    _get_length(this: StaticRangeSequence): CNumber<"double">;
+    /** @ntsGet _get_length */
+    readonly length: CNumber<"double">;
+    /** @ntsSymbol nts_dom_StaticRangeSequence_item */
+    item(this: StaticRangeSequence, index: CNumber<"double">): StaticRange | null;
   }
   export interface EventTargetOwnMethods {
     /**
@@ -411,6 +431,14 @@ declare module "nts:dom" {
      * @ntsSet _set_slot
      */
     slot: StringView;
+    /**
+     * @ntsSymbol nts_dom_Element_get_attributes
+     */
+    _get_attributes(this: Element): NamedNodeMap;
+    /**
+     * @ntsGet _get_attributes
+     */
+    readonly attributes: NamedNodeMap;
     /**
      * @ntsSymbol nts_dom_Element_get_shadowRoot
      */
@@ -1548,9 +1576,27 @@ declare module "nts:dom" {
      */
     getAttributeNS(this: Element, namespaceURI: StringView | null, localName: StringView): StringView | null;
     /**
+     * @ntsSymbol nts_dom_Element_getAttributeNode
+     */
+    getAttributeNode(this: Element, name: StringView): Attr | null;
+    /**
+     * @ntsSymbol nts_dom_Element_getAttributeNodeNS
+     */
+    getAttributeNodeNS(this: Element, namespaceURI: StringView | null, localName: StringView): Attr | null;
+    /**
      * @ntsSymbol nts_dom_Element_getBoundingClientRect
      */
     getBoundingClientRect(this: Element): DOMRect;
+    /**
+     * @ntsSymbol nts_dom_Element_getBoxQuads_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    getBoxQuads(this: Element, error?: Ptr<DOMException | null>): DOMQuadSequence;
+    /**
+     * @ntsSymbol nts_dom_Element_getClientRects
+     */
+    getClientRects(this: Element): DOMRectList;
     /**
      * @ntsSymbol nts_dom_Element_getElementsByClassName
      */
@@ -1743,6 +1789,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Element_removeAttributeNS
      */
     removeAttributeNS(this: Element, namespaceURI: StringView | null, localName: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_Element_removeAttributeNode
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    removeAttributeNode(this: Element, attr: Attr, error?: Ptr<DOMException | null>): Attr;
     /**
      * @ntsSymbol nts_dom_Element_replaceChildren_sss
      * @ntsThrows error nts_dom_exception_take_message
@@ -1943,6 +1995,18 @@ declare module "nts:dom" {
      * @ntsNoEscape error
      */
     setAttributeNS(this: Element, namespaceURI: StringView | null, name: StringView, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_setAttributeNode
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setAttributeNode(this: Element, attr: Attr, error?: Ptr<DOMException | null>): Attr | null;
+    /**
+     * @ntsSymbol nts_dom_Element_setAttributeNodeNS
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setAttributeNodeNS(this: Element, attr: Attr, error?: Ptr<DOMException | null>): Attr | null;
     /**
      * @ntsSymbol nts_dom_Element_setHTMLUnsafe_1
      * @ntsThrows error nts_dom_exception_take_message
@@ -2350,6 +2414,12 @@ declare module "nts:dom" {
      * @ntsGet _get_assignedSlot
      */
     readonly assignedSlot: HTMLSlotElement | null;
+    /**
+     * @ntsSymbol nts_dom_Text_getBoxQuads_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    getBoxQuads(this: Text, error?: Ptr<DOMException | null>): DOMQuadSequence;
     /**
      * @ntsSymbol nts_dom_Text_splitText
      * @ntsThrows error nts_dom_exception_take_message
@@ -4228,6 +4298,14 @@ declare module "nts:dom" {
      */
     readonly activeElement: Element | null;
     /**
+     * @ntsSymbol nts_dom_Document_get_styleSheets
+     */
+    _get_styleSheets(this: Document): StyleSheetList;
+    /**
+     * @ntsGet _get_styleSheets
+     */
+    readonly styleSheets: StyleSheetList;
+    /**
      * @ntsSymbol nts_dom_Document_get_pointerLockElement
      */
     _get_pointerLockElement(this: Document): Element | null;
@@ -4352,6 +4430,18 @@ declare module "nts:dom" {
      */
     captureEvents(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_caretRangeFromPoint_2
+     */
+    caretRangeFromPoint(this: Document, x: CNumber<"double">, y: CNumber<"double">): Range;
+    /**
+     * @ntsSymbol nts_dom_Document_caretRangeFromPoint_1
+     */
+    caretRangeFromPoint(this: Document, x: CNumber<"double">): Range;
+    /**
+     * @ntsSymbol nts_dom_Document_caretRangeFromPoint_0
+     */
+    caretRangeFromPoint(this: Document): Range;
+    /**
      * @ntsSymbol nts_dom_Document_clear
      */
     clear(this: Document): void;
@@ -4361,6 +4451,18 @@ declare module "nts:dom" {
      * @ntsNoEscape error
      */
     close(this: Document, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_createAttribute
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    createAttribute(this: Document, localName: StringView, error?: Ptr<DOMException | null>): Attr;
+    /**
+     * @ntsSymbol nts_dom_Document_createAttributeNS
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    createAttributeNS(this: Document, namespaceURI: StringView | null, qualifiedName: StringView, error?: Ptr<DOMException | null>): Attr;
     /**
      * @ntsSymbol nts_dom_Document_createComment
      */
@@ -4391,6 +4493,10 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_createNSResolver
      */
     createNSResolver(this: Document, nodeResolver: Node): Node;
+    /**
+     * @ntsSymbol nts_dom_Document_createRange
+     */
+    createRange(this: Document): Range;
     /**
      * @ntsSymbol nts_dom_Document_createTextNode
      */
@@ -4430,6 +4536,12 @@ declare module "nts:dom" {
      */
     exitPointerLock(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_getBoxQuads_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    getBoxQuads(this: Document, error?: Ptr<DOMException | null>): DOMQuadSequence;
+    /**
      * @ntsSymbol nts_dom_Document_getElementById
      */
     getElementById(this: Document, elementId: StringView): Element | null;
@@ -4449,6 +4561,10 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_getElementsByTagNameNS
      */
     getElementsByTagNameNS(this: Document, namespaceURI: StringView | null, localName: StringView): HTMLCollection;
+    /**
+     * @ntsSymbol nts_dom_Document_getSelection
+     */
+    getSelection(this: Document): Selection | null;
     /**
      * @ntsSymbol nts_dom_Document_hasFocus
      */
@@ -7137,6 +7253,14 @@ declare module "nts:dom" {
      */
     readonly willValidate: boolean;
     /**
+     * @ntsSymbol nts_dom_HTMLInputElement_get_validity
+     */
+    _get_validity(this: HTMLInputElement): ValidityState;
+    /**
+     * @ntsGet _get_validity
+     */
+    readonly validity: ValidityState;
+    /**
      * @ntsSymbol nts_dom_HTMLInputElement_get_validationMessage
      */
     _get_validationMessage(this: HTMLInputElement): StringView;
@@ -7462,6 +7586,14 @@ declare module "nts:dom" {
      * @ntsGet _get_willValidate
      */
     readonly willValidate: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLButtonElement_get_validity
+     */
+    _get_validity(this: HTMLButtonElement): ValidityState;
+    /**
+     * @ntsGet _get_validity
+     */
+    readonly validity: ValidityState;
     /**
      * @ntsSymbol nts_dom_HTMLButtonElement_get_validationMessage
      */
@@ -8680,6 +8812,14 @@ declare module "nts:dom" {
      * @ntsGet _get_length
      */
     readonly length: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleDeclaration_get_parentRule
+     */
+    _get_parentRule(this: CSSStyleDeclaration): CSSRule | null;
+    /**
+     * @ntsGet _get_parentRule
+     */
+    readonly parentRule: CSSRule | null;
     /**
      * @ntsSymbol nts_dom_CSSStyleDeclaration_get_cssFloat
      */
@@ -17462,6 +17602,14 @@ declare module "nts:dom" {
      */
     readonly willValidate: boolean;
     /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_get_validity
+     */
+    _get_validity(this: HTMLSelectElement): ValidityState;
+    /**
+     * @ntsGet _get_validity
+     */
+    readonly validity: ValidityState;
+    /**
      * @ntsSymbol nts_dom_HTMLSelectElement_get_validationMessage
      */
     _get_validationMessage(this: HTMLSelectElement): StringView;
@@ -17837,6 +17985,14 @@ declare module "nts:dom" {
      * @ntsGet _get_willValidate
      */
     readonly willValidate: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLTextAreaElement_get_validity
+     */
+    _get_validity(this: HTMLTextAreaElement): ValidityState;
+    /**
+     * @ntsGet _get_validity
+     */
+    readonly validity: ValidityState;
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_get_validationMessage
      */
@@ -18316,6 +18472,21 @@ declare module "nts:dom" {
   export function asHTMLCanvasElement(node: Node): HTMLCanvasElement | null;
   export interface HTMLTableElementOwnMethods {
     /**
+     * @ntsSymbol nts_dom_HTMLTableElement_get_caption
+     */
+    _get_caption(this: HTMLTableElement): HTMLTableCaptionElement | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_set_caption
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_caption(this: HTMLTableElement, value: HTMLTableCaptionElement | null, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_caption
+     * @ntsSet _set_caption
+     */
+    caption: HTMLTableCaptionElement | null;
+    /**
      * @ntsSymbol nts_dom_HTMLTableElement_get_tHead
      */
     _get_tHead(this: HTMLTableElement): HTMLTableSectionElement | null;
@@ -18478,6 +18649,10 @@ declare module "nts:dom" {
      * @ntsSet _set_cellSpacing
      */
     cellSpacing: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableElement_createCaption
+     */
+    createCaption(this: HTMLTableElement): HTMLTableCaptionElement;
     /**
      * @ntsSymbol nts_dom_HTMLTableElement_createTBody
      */
@@ -19060,6 +19235,10 @@ declare module "nts:dom" {
      * @ntsGet _get_isTrusted
      */
     readonly isTrusted: boolean;
+    /**
+     * @ntsSymbol nts_dom_InputEvent_getTargetRanges
+     */
+    getTargetRanges(this: InputEvent): StaticRangeSequence;
   }
   export type InputEventMethods = InputEventOwnMethods & UIEventMethods;
   export type InputEvent = HostClass<"NtsDomInputEvent", UIEvent> & InputEventMethods;
@@ -19457,6 +19636,14 @@ declare module "nts:dom" {
      */
     readonly frameElement: Element | null;
     /**
+     * @ntsSymbol nts_dom_Window_get_navigator
+     */
+    _get_navigator(this: Window): Navigator;
+    /**
+     * @ntsGet _get_navigator
+     */
+    readonly navigator: Navigator;
+    /**
      * @ntsSymbol nts_dom_Window_get_origin
      */
     _get_origin(this: Window): StringView;
@@ -19572,6 +19759,14 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onpagereveal_null
      */
     _set_onpagereveal_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_clientInformation
+     */
+    _get_clientInformation(this: Window): Navigator;
+    /**
+     * @ntsGet _get_clientInformation
+     */
+    readonly clientInformation: Navigator;
     /**
      * @ntsSymbol nts_dom_Window_get_offscreenBuffering
      */
@@ -21069,6 +21264,10 @@ declare module "nts:dom" {
      */
     getComputedStyle(this: Window, elt: Element): CSSStyleDeclaration;
     /**
+     * @ntsSymbol nts_dom_Window_getSelection
+     */
+    getSelection(this: Window): Selection | null;
+    /**
      * @ntsSymbol nts_dom_Window_matchMedia
      */
     matchMedia(this: Window, query: StringView): MediaQueryList;
@@ -21798,6 +21997,10 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_URLSearchParams_sort
      */
     sort(this: URLSearchParams): void;
+    /**
+     * @ntsSymbol nts_dom_URLSearchParams_toString
+     */
+    toString(this: URLSearchParams): StringView;
   }
   export type URLSearchParamsMethods = URLSearchParamsOwnMethods;
   export type URLSearchParams = HostClass<"NtsDomURLSearchParams", null, "nts_dom_retain", "nts_dom_release"> & URLSearchParamsMethods;
@@ -22991,6 +23194,14 @@ declare module "nts:dom" {
      */
     readonly activeElement: Element | null;
     /**
+     * @ntsSymbol nts_dom_ShadowRoot_get_styleSheets
+     */
+    _get_styleSheets(this: ShadowRoot): StyleSheetList;
+    /**
+     * @ntsGet _get_styleSheets
+     */
+    readonly styleSheets: StyleSheetList;
+    /**
      * @ntsSymbol nts_dom_ShadowRoot_get_pointerLockElement
      */
     _get_pointerLockElement(this: ShadowRoot): Element | null;
@@ -23038,6 +23249,10 @@ declare module "nts:dom" {
      * @ntsNoEscape error
      */
     getHTML(this: ShadowRoot, error?: Ptr<DOMException | null>): StringView;
+    /**
+     * @ntsSymbol nts_dom_ShadowRoot_getSelection
+     */
+    getSelection(this: ShadowRoot): Selection | null;
     /**
      * @ntsSymbol nts_dom_ShadowRoot_setHTMLUnsafe_1
      * @ntsThrows error nts_dom_exception_take_message
@@ -23174,4 +23389,1822 @@ declare module "nts:dom" {
   export type HTMLSlotElement = HostClass<"NtsDomHTMLSlotElement", HTMLElement> & HTMLSlotElementMethods;
   /** @ntsSymbol nts_dom_as_HTMLSlotElement */
   export function asHTMLSlotElement(node: Node): HTMLSlotElement | null;
+  export interface ValidityStateOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_ValidityState_get_valueMissing
+     */
+    _get_valueMissing(this: ValidityState): boolean;
+    /**
+     * @ntsGet _get_valueMissing
+     */
+    readonly valueMissing: boolean;
+    /**
+     * @ntsSymbol nts_dom_ValidityState_get_typeMismatch
+     */
+    _get_typeMismatch(this: ValidityState): boolean;
+    /**
+     * @ntsGet _get_typeMismatch
+     */
+    readonly typeMismatch: boolean;
+    /**
+     * @ntsSymbol nts_dom_ValidityState_get_patternMismatch
+     */
+    _get_patternMismatch(this: ValidityState): boolean;
+    /**
+     * @ntsGet _get_patternMismatch
+     */
+    readonly patternMismatch: boolean;
+    /**
+     * @ntsSymbol nts_dom_ValidityState_get_tooLong
+     */
+    _get_tooLong(this: ValidityState): boolean;
+    /**
+     * @ntsGet _get_tooLong
+     */
+    readonly tooLong: boolean;
+    /**
+     * @ntsSymbol nts_dom_ValidityState_get_tooShort
+     */
+    _get_tooShort(this: ValidityState): boolean;
+    /**
+     * @ntsGet _get_tooShort
+     */
+    readonly tooShort: boolean;
+    /**
+     * @ntsSymbol nts_dom_ValidityState_get_rangeUnderflow
+     */
+    _get_rangeUnderflow(this: ValidityState): boolean;
+    /**
+     * @ntsGet _get_rangeUnderflow
+     */
+    readonly rangeUnderflow: boolean;
+    /**
+     * @ntsSymbol nts_dom_ValidityState_get_rangeOverflow
+     */
+    _get_rangeOverflow(this: ValidityState): boolean;
+    /**
+     * @ntsGet _get_rangeOverflow
+     */
+    readonly rangeOverflow: boolean;
+    /**
+     * @ntsSymbol nts_dom_ValidityState_get_stepMismatch
+     */
+    _get_stepMismatch(this: ValidityState): boolean;
+    /**
+     * @ntsGet _get_stepMismatch
+     */
+    readonly stepMismatch: boolean;
+    /**
+     * @ntsSymbol nts_dom_ValidityState_get_badInput
+     */
+    _get_badInput(this: ValidityState): boolean;
+    /**
+     * @ntsGet _get_badInput
+     */
+    readonly badInput: boolean;
+    /**
+     * @ntsSymbol nts_dom_ValidityState_get_customError
+     */
+    _get_customError(this: ValidityState): boolean;
+    /**
+     * @ntsGet _get_customError
+     */
+    readonly customError: boolean;
+    /**
+     * @ntsSymbol nts_dom_ValidityState_get_valid
+     */
+    _get_valid(this: ValidityState): boolean;
+    /**
+     * @ntsGet _get_valid
+     */
+    readonly valid: boolean;
+  }
+  export type ValidityStateMethods = ValidityStateOwnMethods;
+  export type ValidityState = HostClass<"NtsDomValidityState", null, "nts_dom_retain", "nts_dom_release"> & ValidityStateMethods;
+  export interface AttrOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_Attr_get_namespaceURI
+     */
+    _get_namespaceURI(this: Attr): StringView | null;
+    /**
+     * @ntsGet _get_namespaceURI
+     */
+    readonly namespaceURI: StringView | null;
+    /**
+     * @ntsSymbol nts_dom_Attr_get_prefix
+     */
+    _get_prefix(this: Attr): StringView | null;
+    /**
+     * @ntsGet _get_prefix
+     */
+    readonly prefix: StringView | null;
+    /**
+     * @ntsSymbol nts_dom_Attr_get_localName
+     */
+    _get_localName(this: Attr): StringView;
+    /**
+     * @ntsGet _get_localName
+     */
+    readonly localName: StringView;
+    /**
+     * @ntsSymbol nts_dom_Attr_get_name
+     */
+    _get_name(this: Attr): StringView;
+    /**
+     * @ntsGet _get_name
+     */
+    readonly name: StringView;
+    /**
+     * @ntsSymbol nts_dom_Attr_get_value
+     */
+    _get_value(this: Attr): StringView;
+    /**
+     * @ntsSymbol nts_dom_Attr_set_value
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_value(this: Attr, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_value
+     * @ntsSet _set_value
+     */
+    value: StringView;
+    /**
+     * @ntsSymbol nts_dom_Attr_get_ownerElement
+     */
+    _get_ownerElement(this: Attr): Element | null;
+    /**
+     * @ntsGet _get_ownerElement
+     */
+    readonly ownerElement: Element | null;
+    /**
+     * @ntsSymbol nts_dom_Attr_get_specified
+     */
+    _get_specified(this: Attr): boolean;
+    /**
+     * @ntsGet _get_specified
+     */
+    readonly specified: boolean;
+  }
+  export type AttrMethods = AttrOwnMethods & NodeMethods;
+  export type Attr = HostClass<"NtsDomAttr", Node> & AttrMethods;
+  /** @ntsSymbol nts_dom_as_Attr */
+  export function asAttr(node: Node): Attr | null;
+  export interface RangeOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_Range_get_commonAncestorContainer
+     */
+    _get_commonAncestorContainer(this: Range): Node;
+    /**
+     * @ntsGet _get_commonAncestorContainer
+     */
+    readonly commonAncestorContainer: Node;
+    /**
+     * @ntsSymbol nts_dom_Range_cloneContents
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    cloneContents(this: Range, error?: Ptr<DOMException | null>): DocumentFragment;
+    /**
+     * @ntsSymbol nts_dom_Range_cloneRange
+     */
+    cloneRange(this: Range): Range;
+    /**
+     * @ntsSymbol nts_dom_Range_collapse_1
+     */
+    collapse(this: Range, toStart: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_Range_collapse_0
+     */
+    collapse(this: Range): void;
+    /**
+     * @ntsSymbol nts_dom_Range_compareBoundaryPoints
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    compareBoundaryPoints(this: Range, how: CNumber<"double">, sourceRange: Range, error?: Ptr<DOMException | null>): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Range_comparePoint
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    comparePoint(this: Range, node: Node, offset: CNumber<"double">, error?: Ptr<DOMException | null>): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Range_createContextualFragment
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    createContextualFragment(this: Range, fragment: StringView, error?: Ptr<DOMException | null>): DocumentFragment;
+    /**
+     * @ntsSymbol nts_dom_Range_deleteContents
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    deleteContents(this: Range, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Range_detach
+     */
+    detach(this: Range): void;
+    /**
+     * @ntsSymbol nts_dom_Range_expand_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    expand(this: Range, unit: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Range_expand_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    expand(this: Range, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Range_extractContents
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    extractContents(this: Range, error?: Ptr<DOMException | null>): DocumentFragment;
+    /**
+     * @ntsSymbol nts_dom_Range_getBoundingClientRect
+     */
+    getBoundingClientRect(this: Range): DOMRect;
+    /**
+     * @ntsSymbol nts_dom_Range_getClientRects
+     */
+    getClientRects(this: Range): DOMRectList;
+    /**
+     * @ntsSymbol nts_dom_Range_insertNode
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    insertNode(this: Range, node: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Range_intersectsNode
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    intersectsNode(this: Range, node: Node, error?: Ptr<DOMException | null>): boolean;
+    /**
+     * @ntsSymbol nts_dom_Range_isPointInRange
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    isPointInRange(this: Range, node: Node, offset: CNumber<"double">, error?: Ptr<DOMException | null>): boolean;
+    /**
+     * @ntsSymbol nts_dom_Range_selectNode
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    selectNode(this: Range, node: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Range_selectNodeContents
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    selectNodeContents(this: Range, node: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Range_setEnd
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setEnd(this: Range, node: Node, offset: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Range_setEndAfter
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setEndAfter(this: Range, node: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Range_setEndBefore
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setEndBefore(this: Range, node: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Range_setStart
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setStart(this: Range, node: Node, offset: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Range_setStartAfter
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setStartAfter(this: Range, node: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Range_setStartBefore
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setStartBefore(this: Range, node: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Range_surroundContents
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    surroundContents(this: Range, newParent: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Range_toString
+     */
+    toString(this: Range): StringView;
+  }
+  export type RangeMethods = RangeOwnMethods & AbstractRangeMethods;
+  export type Range = HostClass<"NtsDomRange", AbstractRange> & RangeMethods;
+  /** @ntsSymbol nts_dom_as_Range */
+  export function asRange(object: AbstractRange): Range | null;
+  /**
+   * @ntsSymbol nts_dom_new_Range
+   */
+  export function newRange(): Range;
+  export interface AbstractRangeOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_AbstractRange_get_startOffset
+     */
+    _get_startOffset(this: AbstractRange): CNumber<"double">;
+    /**
+     * @ntsGet _get_startOffset
+     */
+    readonly startOffset: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_AbstractRange_get_endOffset
+     */
+    _get_endOffset(this: AbstractRange): CNumber<"double">;
+    /**
+     * @ntsGet _get_endOffset
+     */
+    readonly endOffset: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_AbstractRange_get_collapsed
+     */
+    _get_collapsed(this: AbstractRange): boolean;
+    /**
+     * @ntsGet _get_collapsed
+     */
+    readonly collapsed: boolean;
+  }
+  export type AbstractRangeMethods = AbstractRangeOwnMethods;
+  export type AbstractRange = HostClass<"NtsDomAbstractRange", null, "nts_dom_retain", "nts_dom_release"> & AbstractRangeMethods;
+  export interface StaticRangeOwnMethods {
+  }
+  export type StaticRangeMethods = StaticRangeOwnMethods & AbstractRangeMethods;
+  export type StaticRange = HostClass<"NtsDomStaticRange", AbstractRange> & StaticRangeMethods;
+  /** @ntsSymbol nts_dom_as_StaticRange */
+  export function asStaticRange(object: AbstractRange): StaticRange | null;
+  export interface SelectionOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_Selection_get_anchorNode
+     */
+    _get_anchorNode(this: Selection): Node | null;
+    /**
+     * @ntsGet _get_anchorNode
+     */
+    readonly anchorNode: Node | null;
+    /**
+     * @ntsSymbol nts_dom_Selection_get_anchorOffset
+     */
+    _get_anchorOffset(this: Selection): CNumber<"double">;
+    /**
+     * @ntsGet _get_anchorOffset
+     */
+    readonly anchorOffset: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Selection_get_focusNode
+     */
+    _get_focusNode(this: Selection): Node | null;
+    /**
+     * @ntsGet _get_focusNode
+     */
+    readonly focusNode: Node | null;
+    /**
+     * @ntsSymbol nts_dom_Selection_get_focusOffset
+     */
+    _get_focusOffset(this: Selection): CNumber<"double">;
+    /**
+     * @ntsGet _get_focusOffset
+     */
+    readonly focusOffset: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Selection_get_isCollapsed
+     */
+    _get_isCollapsed(this: Selection): boolean;
+    /**
+     * @ntsGet _get_isCollapsed
+     */
+    readonly isCollapsed: boolean;
+    /**
+     * @ntsSymbol nts_dom_Selection_get_rangeCount
+     */
+    _get_rangeCount(this: Selection): CNumber<"double">;
+    /**
+     * @ntsGet _get_rangeCount
+     */
+    readonly rangeCount: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Selection_get_type
+     */
+    _get_type(this: Selection): StringView;
+    /**
+     * @ntsGet _get_type
+     */
+    readonly type: StringView;
+    /**
+     * @ntsSymbol nts_dom_Selection_get_direction
+     */
+    _get_direction(this: Selection): StringView;
+    /**
+     * @ntsGet _get_direction
+     */
+    readonly direction: StringView;
+    /**
+     * @ntsSymbol nts_dom_Selection_get_baseNode
+     */
+    _get_baseNode(this: Selection): Node | null;
+    /**
+     * @ntsGet _get_baseNode
+     */
+    readonly baseNode: Node | null;
+    /**
+     * @ntsSymbol nts_dom_Selection_get_baseOffset
+     */
+    _get_baseOffset(this: Selection): CNumber<"double">;
+    /**
+     * @ntsGet _get_baseOffset
+     */
+    readonly baseOffset: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Selection_get_extentNode
+     */
+    _get_extentNode(this: Selection): Node | null;
+    /**
+     * @ntsGet _get_extentNode
+     */
+    readonly extentNode: Node | null;
+    /**
+     * @ntsSymbol nts_dom_Selection_get_extentOffset
+     */
+    _get_extentOffset(this: Selection): CNumber<"double">;
+    /**
+     * @ntsGet _get_extentOffset
+     */
+    readonly extentOffset: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Selection_addRange
+     */
+    addRange(this: Selection, range: Range): void;
+    /**
+     * @ntsSymbol nts_dom_Selection_collapse_2
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    collapse(this: Selection, node: Node | null, offset: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Selection_collapse_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    collapse(this: Selection, node: Node | null, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Selection_collapseToEnd
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    collapseToEnd(this: Selection, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Selection_collapseToStart
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    collapseToStart(this: Selection, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Selection_containsNode_2
+     */
+    containsNode(this: Selection, node: Node, allowPartialContainment: boolean): boolean;
+    /**
+     * @ntsSymbol nts_dom_Selection_containsNode_1
+     */
+    containsNode(this: Selection, node: Node): boolean;
+    /**
+     * @ntsSymbol nts_dom_Selection_deleteFromDocument
+     */
+    deleteFromDocument(this: Selection): void;
+    /**
+     * @ntsSymbol nts_dom_Selection_empty
+     */
+    empty(this: Selection): void;
+    /**
+     * @ntsSymbol nts_dom_Selection_extend_2
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    extend(this: Selection, node: Node, offset: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Selection_extend_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    extend(this: Selection, node: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Selection_getComposedRanges_0
+     */
+    getComposedRanges(this: Selection): StaticRangeSequence;
+    /**
+     * @ntsSymbol nts_dom_Selection_getRangeAt
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    getRangeAt(this: Selection, index: CNumber<"double">, error?: Ptr<DOMException | null>): Range;
+    /**
+     * @ntsSymbol nts_dom_Selection_modify_3
+     */
+    modify(this: Selection, alter: StringView, direction: StringView, granularity: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_Selection_modify_2
+     */
+    modify(this: Selection, alter: StringView, direction: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_Selection_modify_1
+     */
+    modify(this: Selection, alter: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_Selection_modify_0
+     */
+    modify(this: Selection): void;
+    /**
+     * @ntsSymbol nts_dom_Selection_removeAllRanges
+     */
+    removeAllRanges(this: Selection): void;
+    /**
+     * @ntsSymbol nts_dom_Selection_removeRange
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    removeRange(this: Selection, range: Range, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Selection_selectAllChildren
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    selectAllChildren(this: Selection, node: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Selection_setBaseAndExtent
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setBaseAndExtent(this: Selection, baseNode: Node | null, baseOffset: CNumber<"double">, extentNode: Node | null, extentOffset: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Selection_setPosition_2
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setPosition(this: Selection, node: Node | null, offset: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Selection_setPosition_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setPosition(this: Selection, node: Node | null, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Selection_toString
+     */
+    toString(this: Selection): StringView;
+  }
+  export type SelectionMethods = SelectionOwnMethods;
+  export type Selection = HostClass<"NtsDomSelection", null, "nts_dom_retain", "nts_dom_release"> & SelectionMethods;
+  export interface NavigatorOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_Navigator_get_vendorSub
+     */
+    _get_vendorSub(this: Navigator): StringView;
+    /**
+     * @ntsGet _get_vendorSub
+     */
+    readonly vendorSub: StringView;
+    /**
+     * @ntsSymbol nts_dom_Navigator_get_productSub
+     */
+    _get_productSub(this: Navigator): StringView;
+    /**
+     * @ntsGet _get_productSub
+     */
+    readonly productSub: StringView;
+    /**
+     * @ntsSymbol nts_dom_Navigator_get_vendor
+     */
+    _get_vendor(this: Navigator): StringView;
+    /**
+     * @ntsGet _get_vendor
+     */
+    readonly vendor: StringView;
+    /**
+     * @ntsSymbol nts_dom_Navigator_get_maxTouchPoints
+     */
+    _get_maxTouchPoints(this: Navigator): CNumber<"double">;
+    /**
+     * @ntsGet _get_maxTouchPoints
+     */
+    readonly maxTouchPoints: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Navigator_get_cpuPerformance
+     */
+    _get_cpuPerformance(this: Navigator): CNumber<"double">;
+    /**
+     * @ntsGet _get_cpuPerformance
+     */
+    readonly cpuPerformance: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Navigator_get_hardwareConcurrency
+     */
+    _get_hardwareConcurrency(this: Navigator): CNumber<"double">;
+    /**
+     * @ntsGet _get_hardwareConcurrency
+     */
+    readonly hardwareConcurrency: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Navigator_get_cookieEnabled
+     */
+    _get_cookieEnabled(this: Navigator): boolean;
+    /**
+     * @ntsGet _get_cookieEnabled
+     */
+    readonly cookieEnabled: boolean;
+    /**
+     * @ntsSymbol nts_dom_Navigator_get_deviceMemory
+     */
+    _get_deviceMemory(this: Navigator): CNumber<"double">;
+    /**
+     * @ntsGet _get_deviceMemory
+     */
+    readonly deviceMemory: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Navigator_get_appCodeName
+     */
+    _get_appCodeName(this: Navigator): StringView;
+    /**
+     * @ntsGet _get_appCodeName
+     */
+    readonly appCodeName: StringView;
+    /**
+     * @ntsSymbol nts_dom_Navigator_get_appName
+     */
+    _get_appName(this: Navigator): StringView;
+    /**
+     * @ntsGet _get_appName
+     */
+    readonly appName: StringView;
+    /**
+     * @ntsSymbol nts_dom_Navigator_get_appVersion
+     */
+    _get_appVersion(this: Navigator): StringView;
+    /**
+     * @ntsGet _get_appVersion
+     */
+    readonly appVersion: StringView;
+    /**
+     * @ntsSymbol nts_dom_Navigator_get_platform
+     */
+    _get_platform(this: Navigator): StringView;
+    /**
+     * @ntsGet _get_platform
+     */
+    readonly platform: StringView;
+    /**
+     * @ntsSymbol nts_dom_Navigator_get_product
+     */
+    _get_product(this: Navigator): StringView;
+    /**
+     * @ntsGet _get_product
+     */
+    readonly product: StringView;
+    /**
+     * @ntsSymbol nts_dom_Navigator_get_userAgent
+     */
+    _get_userAgent(this: Navigator): StringView;
+    /**
+     * @ntsGet _get_userAgent
+     */
+    readonly userAgent: StringView;
+    /**
+     * @ntsSymbol nts_dom_Navigator_get_language
+     */
+    _get_language(this: Navigator): StringView;
+    /**
+     * @ntsGet _get_language
+     */
+    readonly language: StringView;
+    /**
+     * @ntsSymbol nts_dom_Navigator_get_onLine
+     */
+    _get_onLine(this: Navigator): boolean;
+    /**
+     * @ntsGet _get_onLine
+     */
+    readonly onLine: boolean;
+    /**
+     * @ntsSymbol nts_dom_Navigator_get_webdriver
+     */
+    _get_webdriver(this: Navigator): boolean;
+    /**
+     * @ntsGet _get_webdriver
+     */
+    readonly webdriver: boolean;
+  }
+  export type NavigatorMethods = NavigatorOwnMethods;
+  export type Navigator = HostClass<"NtsDomNavigator", null, "nts_dom_retain", "nts_dom_release"> & NavigatorMethods;
+  export interface HTMLTableCaptionElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCaptionElement_get_align
+     */
+    _get_align(this: HTMLTableCaptionElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTableCaptionElement_set_align
+     */
+    _set_align(this: HTMLTableCaptionElement, value: StringView): void;
+    /**
+     * @ntsGet _get_align
+     * @ntsSet _set_align
+     */
+    align: StringView;
+  }
+  export type HTMLTableCaptionElementMethods = HTMLTableCaptionElementOwnMethods & HTMLElementMethods;
+  export type HTMLTableCaptionElement = HostClass<"NtsDomHTMLTableCaptionElement", HTMLElement> & HTMLTableCaptionElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLTableCaptionElement */
+  export function asHTMLTableCaptionElement(node: Node): HTMLTableCaptionElement | null;
+  export interface StyleSheetListOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_StyleSheetList_get_length
+     */
+    _get_length(this: StyleSheetList): CNumber<"double">;
+    /**
+     * @ntsGet _get_length
+     */
+    readonly length: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_StyleSheetList_item
+     */
+    item(this: StyleSheetList, index: CNumber<"double">): StyleSheet | null;
+    /**
+     * @ntsSymbol nts_dom_StyleSheetList_named_get
+     */
+    _named_get(this: StyleSheetList, name: StringView): CSSStyleSheet | null;
+  }
+  export type StyleSheetListMethods = StyleSheetListOwnMethods;
+  export type StyleSheetList = HostClass<"NtsDomStyleSheetList", null, "nts_dom_retain", "nts_dom_release"> & StyleSheetListMethods;
+  export interface StyleSheetOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_StyleSheet_get_type
+     */
+    _get_type(this: StyleSheet): StringView;
+    /**
+     * @ntsGet _get_type
+     */
+    readonly type: StringView;
+    /**
+     * @ntsSymbol nts_dom_StyleSheet_get_href
+     */
+    _get_href(this: StyleSheet): StringView | null;
+    /**
+     * @ntsGet _get_href
+     */
+    readonly href: StringView | null;
+    /**
+     * @ntsSymbol nts_dom_StyleSheet_get_ownerNode
+     */
+    _get_ownerNode(this: StyleSheet): Node | null;
+    /**
+     * @ntsGet _get_ownerNode
+     */
+    readonly ownerNode: Node | null;
+    /**
+     * @ntsSymbol nts_dom_StyleSheet_get_parentStyleSheet
+     */
+    _get_parentStyleSheet(this: StyleSheet): StyleSheet | null;
+    /**
+     * @ntsGet _get_parentStyleSheet
+     */
+    readonly parentStyleSheet: StyleSheet | null;
+    /**
+     * @ntsSymbol nts_dom_StyleSheet_get_title
+     */
+    _get_title(this: StyleSheet): StringView | null;
+    /**
+     * @ntsGet _get_title
+     */
+    readonly title: StringView | null;
+    /**
+     * @ntsSymbol nts_dom_StyleSheet_get_disabled
+     */
+    _get_disabled(this: StyleSheet): boolean;
+    /**
+     * @ntsSymbol nts_dom_StyleSheet_set_disabled
+     */
+    _set_disabled(this: StyleSheet, value: boolean): void;
+    /**
+     * @ntsGet _get_disabled
+     * @ntsSet _set_disabled
+     */
+    disabled: boolean;
+  }
+  export type StyleSheetMethods = StyleSheetOwnMethods;
+  export type StyleSheet = HostClass<"NtsDomStyleSheet", null, "nts_dom_retain", "nts_dom_release"> & StyleSheetMethods;
+  export interface CSSStyleSheetOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_CSSStyleSheet_get_ownerRule
+     */
+    _get_ownerRule(this: CSSStyleSheet): CSSRule | null;
+    /**
+     * @ntsGet _get_ownerRule
+     */
+    readonly ownerRule: CSSRule | null;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleSheet_get_cssRules
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _get_cssRules(this: CSSStyleSheet, error?: Ptr<DOMException | null>): CSSRuleList;
+    /**
+     * @ntsGet _get_cssRules
+     */
+    readonly cssRules: CSSRuleList;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleSheet_get_rules
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _get_rules(this: CSSStyleSheet, error?: Ptr<DOMException | null>): CSSRuleList;
+    /**
+     * @ntsGet _get_rules
+     */
+    readonly rules: CSSRuleList;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleSheet_addRule_3
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    addRule(this: CSSStyleSheet, selector: StringView, style: StringView, index: CNumber<"double">, error?: Ptr<DOMException | null>): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleSheet_addRule_2
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    addRule(this: CSSStyleSheet, selector: StringView, style: StringView, error?: Ptr<DOMException | null>): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleSheet_addRule_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    addRule(this: CSSStyleSheet, selector: StringView, error?: Ptr<DOMException | null>): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleSheet_addRule_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    addRule(this: CSSStyleSheet, error?: Ptr<DOMException | null>): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleSheet_deleteRule
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    deleteRule(this: CSSStyleSheet, index: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleSheet_insertRule_2
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    insertRule(this: CSSStyleSheet, rule: StringView, index: CNumber<"double">, error?: Ptr<DOMException | null>): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleSheet_insertRule_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    insertRule(this: CSSStyleSheet, rule: StringView, error?: Ptr<DOMException | null>): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleSheet_removeRule_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    removeRule(this: CSSStyleSheet, index: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleSheet_removeRule_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    removeRule(this: CSSStyleSheet, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleSheet_replaceSync
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceSync(this: CSSStyleSheet, text: StringView, error?: Ptr<DOMException | null>): void;
+  }
+  export type CSSStyleSheetMethods = CSSStyleSheetOwnMethods & StyleSheetMethods;
+  export type CSSStyleSheet = HostClass<"NtsDomCSSStyleSheet", StyleSheet> & CSSStyleSheetMethods;
+  /** @ntsSymbol nts_dom_as_CSSStyleSheet */
+  export function asCSSStyleSheet(object: StyleSheet): CSSStyleSheet | null;
+  /**
+   * @ntsSymbol nts_dom_new_CSSStyleSheet_1
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newCSSStyleSheet(options: ByValue<CSSStyleSheetInit> | Fields<CSSStyleSheetInit>, error?: Ptr<DOMException | null>): CSSStyleSheet;
+  /**
+   * @ntsSymbol nts_dom_new_CSSStyleSheet_0
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newCSSStyleSheet(error?: Ptr<DOMException | null>): CSSStyleSheet;
+  export interface CSSRuleListOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_CSSRuleList_get_length
+     */
+    _get_length(this: CSSRuleList): CNumber<"double">;
+    /**
+     * @ntsGet _get_length
+     */
+    readonly length: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_CSSRuleList_item
+     */
+    item(this: CSSRuleList, index: CNumber<"double">): CSSRule | null;
+  }
+  export type CSSRuleListMethods = CSSRuleListOwnMethods;
+  export type CSSRuleList = HostClass<"NtsDomCSSRuleList", null, "nts_dom_retain", "nts_dom_release"> & CSSRuleListMethods;
+  export interface CSSRuleOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_CSSRule_get_type
+     */
+    _get_type(this: CSSRule): CNumber<"double">;
+    /**
+     * @ntsGet _get_type
+     */
+    readonly type: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_CSSRule_get_cssText
+     */
+    _get_cssText(this: CSSRule): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSRule_set_cssText
+     */
+    _set_cssText(this: CSSRule, value: StringView): void;
+    /**
+     * @ntsGet _get_cssText
+     * @ntsSet _set_cssText
+     */
+    cssText: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSRule_get_parentRule
+     */
+    _get_parentRule(this: CSSRule): CSSRule | null;
+    /**
+     * @ntsGet _get_parentRule
+     */
+    readonly parentRule: CSSRule | null;
+    /**
+     * @ntsSymbol nts_dom_CSSRule_get_parentStyleSheet
+     */
+    _get_parentStyleSheet(this: CSSRule): CSSStyleSheet | null;
+    /**
+     * @ntsGet _get_parentStyleSheet
+     */
+    readonly parentStyleSheet: CSSStyleSheet | null;
+  }
+  export type CSSRuleMethods = CSSRuleOwnMethods;
+  export type CSSRule = HostClass<"NtsDomCSSRule", null, "nts_dom_retain", "nts_dom_release"> & CSSRuleMethods;
+  export interface CSSStyleRuleOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_CSSStyleRule_get_selectorText
+     */
+    _get_selectorText(this: CSSStyleRule): StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleRule_set_selectorText
+     */
+    _set_selectorText(this: CSSStyleRule, value: StringView): void;
+    /**
+     * @ntsGet _get_selectorText
+     * @ntsSet _set_selectorText
+     */
+    selectorText: StringView;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleRule_get_style
+     */
+    _get_style(this: CSSStyleRule): CSSStyleDeclaration;
+    /**
+     * @ntsGet _get_style
+     */
+    readonly style: CSSStyleDeclaration;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleRule_get_cssRules
+     */
+    _get_cssRules(this: CSSStyleRule): CSSRuleList;
+    /**
+     * @ntsGet _get_cssRules
+     */
+    readonly cssRules: CSSRuleList;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleRule_deleteRule
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    deleteRule(this: CSSStyleRule, index: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleRule_insertRule_2
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    insertRule(this: CSSStyleRule, rule: StringView, index: CNumber<"double">, error?: Ptr<DOMException | null>): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_CSSStyleRule_insertRule_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    insertRule(this: CSSStyleRule, rule: StringView, error?: Ptr<DOMException | null>): CNumber<"double">;
+  }
+  export type CSSStyleRuleMethods = CSSStyleRuleOwnMethods & CSSRuleMethods;
+  export type CSSStyleRule = HostClass<"NtsDomCSSStyleRule", CSSRule> & CSSStyleRuleMethods;
+  /** @ntsSymbol nts_dom_as_CSSStyleRule */
+  export function asCSSStyleRule(object: CSSRule): CSSStyleRule | null;
+  export interface DOMPointReadOnlyOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_DOMPointReadOnly_get_x
+     */
+    _get_x(this: DOMPointReadOnly): CNumber<"double">;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_DOMPointReadOnly_get_y
+     */
+    _get_y(this: DOMPointReadOnly): CNumber<"double">;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_DOMPointReadOnly_get_z
+     */
+    _get_z(this: DOMPointReadOnly): CNumber<"double">;
+    /**
+     * @ntsGet _get_z
+     */
+    readonly z: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_DOMPointReadOnly_get_w
+     */
+    _get_w(this: DOMPointReadOnly): CNumber<"double">;
+    /**
+     * @ntsGet _get_w
+     */
+    readonly w: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_DOMPointReadOnly_matrixTransform_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    matrixTransform(this: DOMPointReadOnly, matrix: ByValue<DOMMatrixInit> | Fields<DOMMatrixInit>, error?: Ptr<DOMException | null>): DOMPoint;
+    /**
+     * @ntsSymbol nts_dom_DOMPointReadOnly_matrixTransform_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    matrixTransform(this: DOMPointReadOnly, error?: Ptr<DOMException | null>): DOMPoint;
+  }
+  export type DOMPointReadOnlyMethods = DOMPointReadOnlyOwnMethods;
+  export type DOMPointReadOnly = HostClass<"NtsDomDOMPointReadOnly", null, "nts_dom_retain", "nts_dom_release"> & DOMPointReadOnlyMethods;
+  /**
+   * @ntsSymbol nts_dom_new_DOMPointReadOnly_4
+   */
+  export function newDOMPointReadOnly(x: CNumber<"double">, y: CNumber<"double">, z: CNumber<"double">, w: CNumber<"double">): DOMPointReadOnly;
+  /**
+   * @ntsSymbol nts_dom_new_DOMPointReadOnly_3
+   */
+  export function newDOMPointReadOnly(x: CNumber<"double">, y: CNumber<"double">, z: CNumber<"double">): DOMPointReadOnly;
+  /**
+   * @ntsSymbol nts_dom_new_DOMPointReadOnly_2
+   */
+  export function newDOMPointReadOnly(x: CNumber<"double">, y: CNumber<"double">): DOMPointReadOnly;
+  /**
+   * @ntsSymbol nts_dom_new_DOMPointReadOnly_1
+   */
+  export function newDOMPointReadOnly(x: CNumber<"double">): DOMPointReadOnly;
+  /**
+   * @ntsSymbol nts_dom_new_DOMPointReadOnly_0
+   */
+  export function newDOMPointReadOnly(): DOMPointReadOnly;
+  export interface DOMPointOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_DOMPoint_get_x
+     */
+    _get_x(this: DOMPoint): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_DOMPoint_set_x
+     */
+    _set_x(this: DOMPoint, value: CNumber<"double">): void;
+    /**
+     * @ntsGet _get_x
+     * @ntsSet _set_x
+     */
+    x: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_DOMPoint_get_y
+     */
+    _get_y(this: DOMPoint): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_DOMPoint_set_y
+     */
+    _set_y(this: DOMPoint, value: CNumber<"double">): void;
+    /**
+     * @ntsGet _get_y
+     * @ntsSet _set_y
+     */
+    y: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_DOMPoint_get_z
+     */
+    _get_z(this: DOMPoint): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_DOMPoint_set_z
+     */
+    _set_z(this: DOMPoint, value: CNumber<"double">): void;
+    /**
+     * @ntsGet _get_z
+     * @ntsSet _set_z
+     */
+    z: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_DOMPoint_get_w
+     */
+    _get_w(this: DOMPoint): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_DOMPoint_set_w
+     */
+    _set_w(this: DOMPoint, value: CNumber<"double">): void;
+    /**
+     * @ntsGet _get_w
+     * @ntsSet _set_w
+     */
+    w: CNumber<"double">;
+  }
+  export type DOMPointMethods = DOMPointOwnMethods & DOMPointReadOnlyMethods;
+  export type DOMPoint = HostClass<"NtsDomDOMPoint", DOMPointReadOnly> & DOMPointMethods;
+  /** @ntsSymbol nts_dom_as_DOMPoint */
+  export function asDOMPoint(object: DOMPointReadOnly): DOMPoint | null;
+  /**
+   * @ntsSymbol nts_dom_new_DOMPoint_4
+   */
+  export function newDOMPoint(x: CNumber<"double">, y: CNumber<"double">, z: CNumber<"double">, w: CNumber<"double">): DOMPoint;
+  /**
+   * @ntsSymbol nts_dom_new_DOMPoint_3
+   */
+  export function newDOMPoint(x: CNumber<"double">, y: CNumber<"double">, z: CNumber<"double">): DOMPoint;
+  /**
+   * @ntsSymbol nts_dom_new_DOMPoint_2
+   */
+  export function newDOMPoint(x: CNumber<"double">, y: CNumber<"double">): DOMPoint;
+  /**
+   * @ntsSymbol nts_dom_new_DOMPoint_1
+   */
+  export function newDOMPoint(x: CNumber<"double">): DOMPoint;
+  /**
+   * @ntsSymbol nts_dom_new_DOMPoint_0
+   */
+  export function newDOMPoint(): DOMPoint;
+  export interface DOMQuadOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_DOMQuad_get_p1
+     */
+    _get_p1(this: DOMQuad): DOMPoint;
+    /**
+     * @ntsGet _get_p1
+     */
+    readonly p1: DOMPoint;
+    /**
+     * @ntsSymbol nts_dom_DOMQuad_get_p2
+     */
+    _get_p2(this: DOMQuad): DOMPoint;
+    /**
+     * @ntsGet _get_p2
+     */
+    readonly p2: DOMPoint;
+    /**
+     * @ntsSymbol nts_dom_DOMQuad_get_p3
+     */
+    _get_p3(this: DOMQuad): DOMPoint;
+    /**
+     * @ntsGet _get_p3
+     */
+    readonly p3: DOMPoint;
+    /**
+     * @ntsSymbol nts_dom_DOMQuad_get_p4
+     */
+    _get_p4(this: DOMQuad): DOMPoint;
+    /**
+     * @ntsGet _get_p4
+     */
+    readonly p4: DOMPoint;
+    /**
+     * @ntsSymbol nts_dom_DOMQuad_getBounds
+     */
+    getBounds(this: DOMQuad): DOMRect;
+  }
+  export type DOMQuadMethods = DOMQuadOwnMethods;
+  export type DOMQuad = HostClass<"NtsDomDOMQuad", null, "nts_dom_retain", "nts_dom_release"> & DOMQuadMethods;
+  /**
+   * @ntsSymbol nts_dom_new_DOMQuad_4
+   */
+  export function newDOMQuad(p1: ByValue<DOMPointInit> | Fields<DOMPointInit>, p2: ByValue<DOMPointInit> | Fields<DOMPointInit>, p3: ByValue<DOMPointInit> | Fields<DOMPointInit>, p4: ByValue<DOMPointInit> | Fields<DOMPointInit>): DOMQuad;
+  /**
+   * @ntsSymbol nts_dom_new_DOMQuad_3
+   */
+  export function newDOMQuad(p1: ByValue<DOMPointInit> | Fields<DOMPointInit>, p2: ByValue<DOMPointInit> | Fields<DOMPointInit>, p3: ByValue<DOMPointInit> | Fields<DOMPointInit>): DOMQuad;
+  /**
+   * @ntsSymbol nts_dom_new_DOMQuad_2
+   */
+  export function newDOMQuad(p1: ByValue<DOMPointInit> | Fields<DOMPointInit>, p2: ByValue<DOMPointInit> | Fields<DOMPointInit>): DOMQuad;
+  /**
+   * @ntsSymbol nts_dom_new_DOMQuad_1
+   */
+  export function newDOMQuad(p1: ByValue<DOMPointInit> | Fields<DOMPointInit>): DOMQuad;
+  /**
+   * @ntsSymbol nts_dom_new_DOMQuad_0
+   */
+  export function newDOMQuad(): DOMQuad;
+  export interface DOMRectListOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_DOMRectList_get_length
+     */
+    _get_length(this: DOMRectList): CNumber<"double">;
+    /**
+     * @ntsGet _get_length
+     */
+    readonly length: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_DOMRectList_item
+     */
+    item(this: DOMRectList, index: CNumber<"double">): DOMRect | null;
+  }
+  export type DOMRectListMethods = DOMRectListOwnMethods;
+  export type DOMRectList = HostClass<"NtsDomDOMRectList", null, "nts_dom_retain", "nts_dom_release"> & DOMRectListMethods;
+  export interface NamedNodeMapOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_NamedNodeMap_get_length
+     */
+    _get_length(this: NamedNodeMap): CNumber<"double">;
+    /**
+     * @ntsGet _get_length
+     */
+    readonly length: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_NamedNodeMap_getNamedItem
+     */
+    getNamedItem(this: NamedNodeMap, name: StringView): Attr | null;
+    /**
+     * @ntsSymbol nts_dom_NamedNodeMap_getNamedItemNS
+     */
+    getNamedItemNS(this: NamedNodeMap, namespaceURI: StringView | null, localName: StringView): Attr | null;
+    /**
+     * @ntsSymbol nts_dom_NamedNodeMap_item
+     */
+    item(this: NamedNodeMap, index: CNumber<"double">): Attr | null;
+    /**
+     * @ntsSymbol nts_dom_NamedNodeMap_removeNamedItem
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    removeNamedItem(this: NamedNodeMap, name: StringView, error?: Ptr<DOMException | null>): Attr;
+    /**
+     * @ntsSymbol nts_dom_NamedNodeMap_removeNamedItemNS
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    removeNamedItemNS(this: NamedNodeMap, namespaceURI: StringView | null, localName: StringView, error?: Ptr<DOMException | null>): Attr;
+    /**
+     * @ntsSymbol nts_dom_NamedNodeMap_setNamedItem
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setNamedItem(this: NamedNodeMap, attr: Attr, error?: Ptr<DOMException | null>): Attr | null;
+    /**
+     * @ntsSymbol nts_dom_NamedNodeMap_setNamedItemNS
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setNamedItemNS(this: NamedNodeMap, attr: Attr, error?: Ptr<DOMException | null>): Attr | null;
+    /**
+     * @ntsSymbol nts_dom_NamedNodeMap_named_get
+     */
+    _named_get(this: NamedNodeMap, name: StringView): Attr | null;
+  }
+  export type NamedNodeMapMethods = NamedNodeMapOwnMethods;
+  export type NamedNodeMap = HostClass<"NtsDomNamedNodeMap", null, "nts_dom_retain", "nts_dom_release"> & NamedNodeMapMethods;
+  export interface HTMLFieldSetElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLFieldSetElement_get_disabled
+     */
+    _get_disabled(this: HTMLFieldSetElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLFieldSetElement_set_disabled
+     */
+    _set_disabled(this: HTMLFieldSetElement, value: boolean): void;
+    /**
+     * @ntsGet _get_disabled
+     * @ntsSet _set_disabled
+     */
+    disabled: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLFieldSetElement_get_form
+     */
+    _get_form(this: HTMLFieldSetElement): HTMLElement | null;
+    /**
+     * @ntsGet _get_form
+     */
+    readonly form: HTMLElement | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLFieldSetElement_get_name
+     */
+    _get_name(this: HTMLFieldSetElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLFieldSetElement_set_name
+     */
+    _set_name(this: HTMLFieldSetElement, value: StringView): void;
+    /**
+     * @ntsGet _get_name
+     * @ntsSet _set_name
+     */
+    name: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLFieldSetElement_get_type
+     */
+    _get_type(this: HTMLFieldSetElement): StringView;
+    /**
+     * @ntsGet _get_type
+     */
+    readonly type: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLFieldSetElement_get_elements
+     */
+    _get_elements(this: HTMLFieldSetElement): HTMLCollection;
+    /**
+     * @ntsGet _get_elements
+     */
+    readonly elements: HTMLCollection;
+    /**
+     * @ntsSymbol nts_dom_HTMLFieldSetElement_get_willValidate
+     */
+    _get_willValidate(this: HTMLFieldSetElement): boolean;
+    /**
+     * @ntsGet _get_willValidate
+     */
+    readonly willValidate: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLFieldSetElement_get_validity
+     */
+    _get_validity(this: HTMLFieldSetElement): ValidityState;
+    /**
+     * @ntsGet _get_validity
+     */
+    readonly validity: ValidityState;
+    /**
+     * @ntsSymbol nts_dom_HTMLFieldSetElement_get_validationMessage
+     */
+    _get_validationMessage(this: HTMLFieldSetElement): StringView;
+    /**
+     * @ntsGet _get_validationMessage
+     */
+    readonly validationMessage: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLFieldSetElement_checkValidity
+     */
+    checkValidity(this: HTMLFieldSetElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLFieldSetElement_reportValidity
+     */
+    reportValidity(this: HTMLFieldSetElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLFieldSetElement_setCustomValidity
+     */
+    setCustomValidity(this: HTMLFieldSetElement, error_: StringView): void;
+  }
+  export type HTMLFieldSetElementMethods = HTMLFieldSetElementOwnMethods & HTMLElementMethods;
+  export type HTMLFieldSetElement = HostClass<"NtsDomHTMLFieldSetElement", HTMLElement> & HTMLFieldSetElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLFieldSetElement */
+  export function asHTMLFieldSetElement(node: Node): HTMLFieldSetElement | null;
+  export interface HTMLProgressElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLProgressElement_get_value
+     */
+    _get_value(this: HTMLProgressElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLProgressElement_set_value
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_value(this: HTMLProgressElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_value
+     * @ntsSet _set_value
+     */
+    value: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLProgressElement_get_max
+     */
+    _get_max(this: HTMLProgressElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLProgressElement_set_max
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_max(this: HTMLProgressElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_max
+     * @ntsSet _set_max
+     */
+    max: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLProgressElement_get_position
+     */
+    _get_position(this: HTMLProgressElement): CNumber<"double">;
+    /**
+     * @ntsGet _get_position
+     */
+    readonly position: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLProgressElement_get_labels
+     */
+    _get_labels(this: HTMLProgressElement): NodeList;
+    /**
+     * @ntsGet _get_labels
+     */
+    readonly labels: NodeList;
+  }
+  export type HTMLProgressElementMethods = HTMLProgressElementOwnMethods & HTMLElementMethods;
+  export type HTMLProgressElement = HostClass<"NtsDomHTMLProgressElement", HTMLElement> & HTMLProgressElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLProgressElement */
+  export function asHTMLProgressElement(node: Node): HTMLProgressElement | null;
+  export interface HTMLMeterElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLMeterElement_get_value
+     */
+    _get_value(this: HTMLMeterElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMeterElement_set_value
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_value(this: HTMLMeterElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_value
+     * @ntsSet _set_value
+     */
+    value: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMeterElement_get_min
+     */
+    _get_min(this: HTMLMeterElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMeterElement_set_min
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_min(this: HTMLMeterElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_min
+     * @ntsSet _set_min
+     */
+    min: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMeterElement_get_max
+     */
+    _get_max(this: HTMLMeterElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMeterElement_set_max
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_max(this: HTMLMeterElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_max
+     * @ntsSet _set_max
+     */
+    max: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMeterElement_get_low
+     */
+    _get_low(this: HTMLMeterElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMeterElement_set_low
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_low(this: HTMLMeterElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_low
+     * @ntsSet _set_low
+     */
+    low: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMeterElement_get_high
+     */
+    _get_high(this: HTMLMeterElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMeterElement_set_high
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_high(this: HTMLMeterElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_high
+     * @ntsSet _set_high
+     */
+    high: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMeterElement_get_optimum
+     */
+    _get_optimum(this: HTMLMeterElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMeterElement_set_optimum
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_optimum(this: HTMLMeterElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_optimum
+     * @ntsSet _set_optimum
+     */
+    optimum: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMeterElement_get_labels
+     */
+    _get_labels(this: HTMLMeterElement): NodeList;
+    /**
+     * @ntsGet _get_labels
+     */
+    readonly labels: NodeList;
+  }
+  export type HTMLMeterElementMethods = HTMLMeterElementOwnMethods & HTMLElementMethods;
+  export type HTMLMeterElement = HostClass<"NtsDomHTMLMeterElement", HTMLElement> & HTMLMeterElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLMeterElement */
+  export function asHTMLMeterElement(node: Node): HTMLMeterElement | null;
+  export interface HTMLDialogElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLDialogElement_get_open
+     */
+    _get_open(this: HTMLDialogElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLDialogElement_set_open
+     */
+    _set_open(this: HTMLDialogElement, value: boolean): void;
+    /**
+     * @ntsGet _get_open
+     * @ntsSet _set_open
+     */
+    open: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLDialogElement_get_returnValue
+     */
+    _get_returnValue(this: HTMLDialogElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLDialogElement_set_returnValue
+     */
+    _set_returnValue(this: HTMLDialogElement, value: StringView): void;
+    /**
+     * @ntsGet _get_returnValue
+     * @ntsSet _set_returnValue
+     */
+    returnValue: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLDialogElement_get_closedBy
+     */
+    _get_closedBy(this: HTMLDialogElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLDialogElement_set_closedBy
+     */
+    _set_closedBy(this: HTMLDialogElement, value: StringView): void;
+    /**
+     * @ntsGet _get_closedBy
+     * @ntsSet _set_closedBy
+     */
+    closedBy: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLDialogElement_close_1
+     */
+    close(this: HTMLDialogElement, returnValue: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLDialogElement_close_0
+     */
+    close(this: HTMLDialogElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLDialogElement_requestClose_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    requestClose(this: HTMLDialogElement, returnValue: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLDialogElement_requestClose_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    requestClose(this: HTMLDialogElement, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLDialogElement_show
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    show(this: HTMLDialogElement, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLDialogElement_showModal
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    showModal(this: HTMLDialogElement, error?: Ptr<DOMException | null>): void;
+  }
+  export type HTMLDialogElementMethods = HTMLDialogElementOwnMethods & HTMLElementMethods;
+  export type HTMLDialogElement = HostClass<"NtsDomHTMLDialogElement", HTMLElement> & HTMLDialogElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLDialogElement */
+  export function asHTMLDialogElement(node: Node): HTMLDialogElement | null;
+  export interface HTMLDetailsElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLDetailsElement_get_open
+     */
+    _get_open(this: HTMLDetailsElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLDetailsElement_set_open
+     */
+    _set_open(this: HTMLDetailsElement, value: boolean): void;
+    /**
+     * @ntsGet _get_open
+     * @ntsSet _set_open
+     */
+    open: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLDetailsElement_get_name
+     */
+    _get_name(this: HTMLDetailsElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLDetailsElement_set_name
+     */
+    _set_name(this: HTMLDetailsElement, value: StringView): void;
+    /**
+     * @ntsGet _get_name
+     * @ntsSet _set_name
+     */
+    name: StringView;
+  }
+  export type HTMLDetailsElementMethods = HTMLDetailsElementOwnMethods & HTMLElementMethods;
+  export type HTMLDetailsElement = HostClass<"NtsDomHTMLDetailsElement", HTMLElement> & HTMLDetailsElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLDetailsElement */
+  export function asHTMLDetailsElement(node: Node): HTMLDetailsElement | null;
+  export interface HTMLDataListElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLDataListElement_get_options
+     */
+    _get_options(this: HTMLDataListElement): HTMLCollection;
+    /**
+     * @ntsGet _get_options
+     */
+    readonly options: HTMLCollection;
+  }
+  export type HTMLDataListElementMethods = HTMLDataListElementOwnMethods & HTMLElementMethods;
+  export type HTMLDataListElement = HostClass<"NtsDomHTMLDataListElement", HTMLElement> & HTMLDataListElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLDataListElement */
+  export function asHTMLDataListElement(node: Node): HTMLDataListElement | null;
+  export interface HTMLOutputElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLOutputElement_get_htmlFor
+     */
+    _get_htmlFor(this: HTMLOutputElement): DOMTokenList;
+    /**
+     * @ntsGet _get_htmlFor
+     */
+    readonly htmlFor: DOMTokenList;
+    /**
+     * @ntsSymbol nts_dom_HTMLOutputElement_get_form
+     */
+    _get_form(this: HTMLOutputElement): HTMLElement | null;
+    /**
+     * @ntsGet _get_form
+     */
+    readonly form: HTMLElement | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLOutputElement_get_name
+     */
+    _get_name(this: HTMLOutputElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLOutputElement_set_name
+     */
+    _set_name(this: HTMLOutputElement, value: StringView): void;
+    /**
+     * @ntsGet _get_name
+     * @ntsSet _set_name
+     */
+    name: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLOutputElement_get_type
+     */
+    _get_type(this: HTMLOutputElement): StringView;
+    /**
+     * @ntsGet _get_type
+     */
+    readonly type: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLOutputElement_get_defaultValue
+     */
+    _get_defaultValue(this: HTMLOutputElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLOutputElement_set_defaultValue
+     */
+    _set_defaultValue(this: HTMLOutputElement, value: StringView): void;
+    /**
+     * @ntsGet _get_defaultValue
+     * @ntsSet _set_defaultValue
+     */
+    defaultValue: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLOutputElement_get_value
+     */
+    _get_value(this: HTMLOutputElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLOutputElement_set_value
+     */
+    _set_value(this: HTMLOutputElement, value: StringView): void;
+    /**
+     * @ntsGet _get_value
+     * @ntsSet _set_value
+     */
+    value: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLOutputElement_get_willValidate
+     */
+    _get_willValidate(this: HTMLOutputElement): boolean;
+    /**
+     * @ntsGet _get_willValidate
+     */
+    readonly willValidate: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLOutputElement_get_validity
+     */
+    _get_validity(this: HTMLOutputElement): ValidityState;
+    /**
+     * @ntsGet _get_validity
+     */
+    readonly validity: ValidityState;
+    /**
+     * @ntsSymbol nts_dom_HTMLOutputElement_get_validationMessage
+     */
+    _get_validationMessage(this: HTMLOutputElement): StringView;
+    /**
+     * @ntsGet _get_validationMessage
+     */
+    readonly validationMessage: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLOutputElement_get_labels
+     */
+    _get_labels(this: HTMLOutputElement): NodeList;
+    /**
+     * @ntsGet _get_labels
+     */
+    readonly labels: NodeList;
+    /**
+     * @ntsSymbol nts_dom_HTMLOutputElement_checkValidity
+     */
+    checkValidity(this: HTMLOutputElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLOutputElement_reportValidity
+     */
+    reportValidity(this: HTMLOutputElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLOutputElement_setCustomValidity
+     */
+    setCustomValidity(this: HTMLOutputElement, error_: StringView): void;
+  }
+  export type HTMLOutputElementMethods = HTMLOutputElementOwnMethods & HTMLElementMethods;
+  export type HTMLOutputElement = HostClass<"NtsDomHTMLOutputElement", HTMLElement> & HTMLOutputElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLOutputElement */
+  export function asHTMLOutputElement(node: Node): HTMLOutputElement | null;
+  export interface HTMLLegendElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLLegendElement_get_form
+     */
+    _get_form(this: HTMLLegendElement): HTMLElement | null;
+    /**
+     * @ntsGet _get_form
+     */
+    readonly form: HTMLElement | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLLegendElement_get_align
+     */
+    _get_align(this: HTMLLegendElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLegendElement_set_align
+     */
+    _set_align(this: HTMLLegendElement, value: StringView): void;
+    /**
+     * @ntsGet _get_align
+     * @ntsSet _set_align
+     */
+    align: StringView;
+  }
+  export type HTMLLegendElementMethods = HTMLLegendElementOwnMethods & HTMLElementMethods;
+  export type HTMLLegendElement = HostClass<"NtsDomHTMLLegendElement", HTMLElement> & HTMLLegendElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLLegendElement */
+  export function asHTMLLegendElement(node: Node): HTMLLegendElement | null;
 }

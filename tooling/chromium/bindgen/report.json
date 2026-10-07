@@ -1,5 +1,5 @@
 {
-  "bound": 3806,
+  "bound": 4112,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -25,11 +25,6 @@
       "interface": "EventTarget",
       "member": "when/2",
       "why": "interface Observable is not bound"
-    },
-    {
-      "interface": "Element",
-      "member": "get attributes",
-      "why": "interface NamedNodeMap is not bound"
     },
     {
       "interface": "Element",
@@ -332,19 +327,59 @@
       "why": "interface StylePropertyMapReadOnly is not bound"
     },
     {
+      "interface": "DOMPointInit",
+      "member": "w",
+      "why": "dictionary member whose default 1 is not zero"
+    },
+    {
       "interface": "Element",
       "member": "convertPointFromNode/3",
-      "why": "interface DOMPoint is not bound"
+      "why": "parameter type GeometryNode"
+    },
+    {
+      "interface": "Element",
+      "member": "convertPointFromNode/2",
+      "why": "parameter type GeometryNode"
+    },
+    {
+      "interface": "DOMQuadInit",
+      "member": "p1",
+      "why": "dictionary member of type optional DOMPointInit"
+    },
+    {
+      "interface": "DOMQuadInit",
+      "member": "p2",
+      "why": "dictionary member of type optional DOMPointInit"
+    },
+    {
+      "interface": "DOMQuadInit",
+      "member": "p3",
+      "why": "dictionary member of type optional DOMPointInit"
+    },
+    {
+      "interface": "DOMQuadInit",
+      "member": "p4",
+      "why": "dictionary member of type optional DOMPointInit"
     },
     {
       "interface": "Element",
       "member": "convertQuadFromNode/3",
-      "why": "interface DOMQuad is not bound"
+      "why": "dictionary DOMQuadInit has no member a C struct can carry"
+    },
+    {
+      "interface": "Element",
+      "member": "convertQuadFromNode/2",
+      "why": "dictionary DOMQuadInit has no member a C struct can carry"
     },
     {
       "interface": "Element",
       "member": "convertRectFromNode/3",
-      "why": "interface DOMQuad is not bound"
+      "why": "parameter type GeometryNode"
+    },
+    {
+      "interface": "Element",
+      "member": "convertRectFromNode/2",
+      "why": "parameter type GeometryNode"
     },
     {
       "interface": "Element",
@@ -357,24 +392,19 @@
       "why": "result type sequence<DOMString>"
     },
     {
-      "interface": "Element",
-      "member": "getAttributeNode/1",
-      "why": "interface Attr is not bound"
+      "interface": "BoxQuadOptions",
+      "member": "box",
+      "why": "dictionary member of type optional CSSBoxType"
     },
     {
-      "interface": "Element",
-      "member": "getAttributeNodeNS/2",
-      "why": "interface Attr is not bound"
+      "interface": "BoxQuadOptions",
+      "member": "relativeTo",
+      "why": "dictionary member of type optional GeometryNode"
     },
     {
       "interface": "Element",
       "member": "getBoxQuads/1",
-      "why": "interface DOMQuad is not bound"
-    },
-    {
-      "interface": "Element",
-      "member": "getClientRects/0",
-      "why": "interface DOMRectList is not bound"
+      "why": "dictionary BoxQuadOptions has no member a C struct can carry"
     },
     {
       "interface": "GetHTMLOptions",
@@ -400,11 +430,6 @@
       "interface": "Element",
       "member": "pseudo/1",
       "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "Element",
-      "member": "removeAttributeNode/1",
-      "why": "interface Attr is not bound"
     },
     {
       "interface": "Element",
@@ -470,16 +495,6 @@
       "interface": "Element",
       "member": "setAttributeNS/3",
       "why": "parameter type TrustedType"
-    },
-    {
-      "interface": "Element",
-      "member": "setAttributeNode/1",
-      "why": "interface Attr is not bound"
-    },
-    {
-      "interface": "Element",
-      "member": "setAttributeNodeNS/1",
-      "why": "interface Attr is not bound"
     },
     {
       "interface": "Element",
@@ -654,22 +669,37 @@
     {
       "interface": "Text",
       "member": "convertPointFromNode/3",
-      "why": "interface DOMPoint is not bound"
+      "why": "parameter type GeometryNode"
+    },
+    {
+      "interface": "Text",
+      "member": "convertPointFromNode/2",
+      "why": "parameter type GeometryNode"
     },
     {
       "interface": "Text",
       "member": "convertQuadFromNode/3",
-      "why": "interface DOMQuad is not bound"
+      "why": "dictionary DOMQuadInit has no member a C struct can carry"
+    },
+    {
+      "interface": "Text",
+      "member": "convertQuadFromNode/2",
+      "why": "dictionary DOMQuadInit has no member a C struct can carry"
     },
     {
       "interface": "Text",
       "member": "convertRectFromNode/3",
-      "why": "interface DOMQuad is not bound"
+      "why": "parameter type GeometryNode"
+    },
+    {
+      "interface": "Text",
+      "member": "convertRectFromNode/2",
+      "why": "parameter type GeometryNode"
     },
     {
       "interface": "Text",
       "member": "getBoxQuads/1",
-      "why": "interface DOMQuad is not bound"
+      "why": "dictionary BoxQuadOptions has no member a C struct can carry"
     },
     {
       "interface": "Document",
@@ -2093,11 +2123,6 @@
     },
     {
       "interface": "Document",
-      "member": "get styleSheets",
-      "why": "interface StyleSheetList is not bound"
-    },
-    {
-      "interface": "Document",
       "member": "get adoptedStyleSheets",
       "why": "result type ObservableArray<CSSStyleSheet>"
     },
@@ -2133,33 +2158,33 @@
     },
     {
       "interface": "Document",
-      "member": "caretRangeFromPoint/2",
-      "why": "interface Range is not bound"
+      "member": "convertPointFromNode/3",
+      "why": "parameter type GeometryNode"
     },
     {
       "interface": "Document",
-      "member": "convertPointFromNode/3",
-      "why": "interface DOMPoint is not bound"
+      "member": "convertPointFromNode/2",
+      "why": "parameter type GeometryNode"
     },
     {
       "interface": "Document",
       "member": "convertQuadFromNode/3",
-      "why": "interface DOMQuad is not bound"
+      "why": "dictionary DOMQuadInit has no member a C struct can carry"
+    },
+    {
+      "interface": "Document",
+      "member": "convertQuadFromNode/2",
+      "why": "dictionary DOMQuadInit has no member a C struct can carry"
     },
     {
       "interface": "Document",
       "member": "convertRectFromNode/3",
-      "why": "interface DOMQuad is not bound"
+      "why": "parameter type GeometryNode"
     },
     {
       "interface": "Document",
-      "member": "createAttribute/1",
-      "why": "interface Attr is not bound"
-    },
-    {
-      "interface": "Document",
-      "member": "createAttributeNS/2",
-      "why": "interface Attr is not bound"
+      "member": "convertRectFromNode/2",
+      "why": "parameter type GeometryNode"
     },
     {
       "interface": "Document",
@@ -2193,11 +2218,6 @@
     },
     {
       "interface": "Document",
-      "member": "createRange/0",
-      "why": "interface Range is not bound"
-    },
-    {
-      "interface": "Document",
       "member": "createTreeWalker/3",
       "why": "interface TreeWalker is not bound"
     },
@@ -2224,12 +2244,7 @@
     {
       "interface": "Document",
       "member": "getBoxQuads/1",
-      "why": "interface DOMQuad is not bound"
-    },
-    {
-      "interface": "Document",
-      "member": "getSelection/0",
-      "why": "interface Selection is not bound"
+      "why": "dictionary BoxQuadOptions has no member a C struct can carry"
     },
     {
       "interface": "Document",
@@ -3683,11 +3698,6 @@
     },
     {
       "interface": "HTMLInputElement",
-      "member": "get validity",
-      "why": "interface ValidityState is not bound"
-    },
-    {
-      "interface": "HTMLInputElement",
       "member": "get selectionStart",
       "why": "result type unsigned long?"
     },
@@ -3730,11 +3740,6 @@
       "interface": "HTMLButtonElement",
       "member": "constructor",
       "why": "[HTMLConstructor]: a custom element's constructor"
-    },
-    {
-      "interface": "HTMLButtonElement",
-      "member": "get validity",
-      "why": "interface ValidityState is not bound"
     },
     {
       "interface": "HTMLAnchorElement",
@@ -3810,11 +3815,6 @@
       "interface": "KeyboardEventInit",
       "member": "key",
       "why": "dictionary member of type optional DOMString"
-    },
-    {
-      "interface": "CSSStyleDeclaration",
-      "member": "get parentRule",
-      "why": "interface CSSRule is not bound"
     },
     {
       "interface": "DOMRectReadOnly",
@@ -3893,11 +3893,6 @@
     },
     {
       "interface": "HTMLSelectElement",
-      "member": "get validity",
-      "why": "interface ValidityState is not bound"
-    },
-    {
-      "interface": "HTMLSelectElement",
       "member": "get selectedContentElement",
       "why": "[RuntimeEnabled]"
     },
@@ -3925,11 +3920,6 @@
       "interface": "HTMLTextAreaElement",
       "member": "constructor",
       "why": "[HTMLConstructor]: a custom element's constructor"
-    },
-    {
-      "interface": "HTMLTextAreaElement",
-      "member": "get validity",
-      "why": "interface ValidityState is not bound"
     },
     {
       "interface": "HTMLTextAreaElement",
@@ -4095,21 +4085,6 @@
       "interface": "HTMLTableElement",
       "member": "constructor",
       "why": "[HTMLConstructor]: a custom element's constructor"
-    },
-    {
-      "interface": "HTMLTableElement",
-      "member": "get caption",
-      "why": "interface HTMLTableCaptionElement is not bound"
-    },
-    {
-      "interface": "HTMLTableElement",
-      "member": "set caption",
-      "why": "interface HTMLTableCaptionElement is not bound"
-    },
-    {
-      "interface": "HTMLTableElement",
-      "member": "createCaption/0",
-      "why": "interface HTMLTableCaptionElement is not bound"
     },
     {
       "interface": "HTMLTableSectionElement",
@@ -4282,11 +4257,6 @@
       "why": "interface DataTransfer is not bound"
     },
     {
-      "interface": "InputEvent",
-      "member": "getTargetRanges/0",
-      "why": "interface StaticRange is not bound"
-    },
-    {
       "interface": "PointerEventInit",
       "member": "sourceCapabilities",
       "why": "dictionary member of type optional InputDeviceCapabilities?"
@@ -4428,11 +4398,6 @@
     },
     {
       "interface": "Window",
-      "member": "get navigator",
-      "why": "interface Navigator is not bound"
-    },
-    {
-      "interface": "Window",
       "member": "get originAgentCluster",
       "why": "[RuntimeEnabled]"
     },
@@ -4500,11 +4465,6 @@
       "interface": "Window",
       "member": "get event",
       "why": "result type any"
-    },
-    {
-      "interface": "Window",
-      "member": "get clientInformation",
-      "why": "interface Navigator is not bound"
     },
     {
       "interface": "Window",
@@ -6128,11 +6088,6 @@
     },
     {
       "interface": "Window",
-      "member": "getSelection/0",
-      "why": "interface Selection is not bound"
-    },
-    {
-      "interface": "Window",
       "member": "maximize/0",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
@@ -6873,11 +6828,6 @@
     },
     {
       "interface": "ShadowRoot",
-      "member": "get styleSheets",
-      "why": "interface StyleSheetList is not bound"
-    },
-    {
-      "interface": "ShadowRoot",
       "member": "get adoptedStyleSheets",
       "why": "result type ObservableArray<CSSStyleSheet>"
     },
@@ -6905,11 +6855,6 @@
       "interface": "ShadowRoot",
       "member": "getAnimations/0",
       "why": "interface Animation is not bound"
-    },
-    {
-      "interface": "ShadowRoot",
-      "member": "getSelection/0",
-      "why": "interface Selection is not bound"
     },
     {
       "interface": "ShadowRoot",
@@ -6968,6 +6913,541 @@
     },
     {
       "interface": "HTMLSlotElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "AbstractRange",
+      "member": "get startContainer",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "AbstractRange",
+      "member": "get endContainer",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "StaticRange",
+      "member": "constructor/1",
+      "why": "dictionary StaticRangeInit's required member endContainer (dictionary member of type Node)"
+    },
+    {
+      "interface": "GetComposedRangesOptions",
+      "member": "shadowRoots",
+      "why": "dictionary member of type optional sequence<ShadowRoot>"
+    },
+    {
+      "interface": "Selection",
+      "member": "getComposedRanges/1",
+      "why": "dictionary GetComposedRangesOptions has no member a C struct can carry"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get scheduling",
+      "why": "interface Scheduling is not bound"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get userActivation",
+      "why": "interface UserActivation is not bound"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get geolocation",
+      "why": "interface Geolocation is not bound"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get preferences",
+      "why": "interface PreferenceManager is not bound"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get deprecatedRunAdAuctionEnforcesKAnonymity",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get protectedAudience",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get bluetooth",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get clipboard",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get contacts",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get credentials",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get login",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get ink",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get devicePosture",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get doNotTrack",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get hid",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get keyboard",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get lockedMode",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get managed",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get mediaCapabilities",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get mediaSession",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get mediaDevices",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get permissions",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get presentation",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get webkitTemporaryStorage",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get webkitPersistentStorage",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get rtc",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get serial",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get serviceWorker",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get virtualKeyboard",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get wakeLock",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get usb",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get windowControlsOverlay",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get xr",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get smartCard",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get languages",
+      "why": "result type FrozenArray<DOMString>"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get userAgentData",
+      "why": "interface NavigatorUAData is not bound"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get plugins",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get mimeTypes",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get pdfViewerEnabled",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get storageBuckets",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get globalPrivacyControl",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get locks",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get ml",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get connection",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get storage",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "get gpu",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "adAuctionComponents/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Navigator",
+      "member": "canLoadAdAuctionFencedFrame/0",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Navigator",
+      "member": "canShare/1",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "clearAppBadge/0",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "clearOriginJoinedAdInterestGroups/2",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "createAdRequest/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Navigator",
+      "member": "createAuctionNonce/0",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "createHandwritingRecognizer/1",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "deprecatedReplaceInURN/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Navigator",
+      "member": "deprecatedURNToURL/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Navigator",
+      "member": "finalizeAd/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Navigator",
+      "member": "getBattery/0",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "getGamepads/0",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "getInstalledRelatedApps/0",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "getInterestGroupAdAuctionData/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Navigator",
+      "member": "getUserMedia/3",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "install/0",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "install/1",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "javaEnabled/0",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "joinAdInterestGroup/2",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "leaveAdInterestGroup/1",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "playHaptics/2",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "queryHandwritingRecognizer/1",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "registerProtocolHandler/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Navigator",
+      "member": "requestMIDIAccess/1",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "requestMediaKeySystemAccess/2",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "runAdAuction/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Navigator",
+      "member": "sendBeacon/2",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "setAppBadge/1",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "share/1",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "unregisterProtocolHandler/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Navigator",
+      "member": "updateAdInterestGroups/0",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "vibrate/1",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "vibrate/1",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "Navigator",
+      "member": "webkitGetUserMedia/3",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLTableCaptionElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "StyleSheet",
+      "member": "get media",
+      "why": "interface MediaList is not bound"
+    },
+    {
+      "interface": "CSSStyleSheetInit",
+      "member": "media",
+      "why": "dictionary member of type optional (MediaList or DOMString)"
+    },
+    {
+      "interface": "CSSStyleSheet",
+      "member": "replace/1",
+      "why": "result type Promise<CSSStyleSheet>"
+    },
+    {
+      "interface": "CSSStyleRule",
+      "member": "get styleMap",
+      "why": "interface StylePropertyMap is not bound"
+    },
+    {
+      "interface": "DOMPointReadOnly",
+      "member": "toJSON/0",
+      "why": "result type object"
+    },
+    {
+      "interface": "DOMPointReadOnly",
+      "member": "fromPoint/1",
+      "why": "static"
+    },
+    {
+      "interface": "DOMPoint",
+      "member": "fromPoint/1",
+      "why": "static"
+    },
+    {
+      "interface": "DOMQuad",
+      "member": "toJSON/0",
+      "why": "result type object"
+    },
+    {
+      "interface": "DOMQuad",
+      "member": "fromQuad/1",
+      "why": "static"
+    },
+    {
+      "interface": "DOMQuad",
+      "member": "fromRect/1",
+      "why": "static"
+    },
+    {
+      "interface": "HTMLFieldSetElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLFieldSetElement",
+      "member": "get checkable",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLFieldSetElement",
+      "member": "set checkable",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLProgressElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLMeterElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLDialogElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLDetailsElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLDataListElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLOutputElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLLegendElement",
       "member": "constructor",
       "why": "[HTMLConstructor]: a custom element's constructor"
     }

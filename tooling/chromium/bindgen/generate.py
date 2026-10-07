@@ -909,6 +909,33 @@ class Generator:
                 self.css_properties(interface)
             else:
                 self.named_properties(interface)
+            self.stringifier(interface)
+
+    def stringifier(self, interface):
+        """`range.toString()`: an anonymous `stringifier;` (Range, Selection)
+        is a `toString` operation calling the implementation's own, as V8's
+        binding does. A stringifier attribute (`stringifier attribute href`)
+        is bound as its attribute, and an operation named toString as one."""
+        stringifier = getattr(interface, "stringifier", None)
+        if stringifier is None or stringifier.attribute is not None:
+            return
+        operation = stringifier.operation
+        # web_idl names the stringifier's operation toString; an interface
+        # declaring a toString operation of its own (Location) binds that.
+        if operation is None or any(group.identifier == "toString" for group in interface.operation_groups):
+            return
+        try:
+            self.check_member(operation)
+        except Skip as why:
+            self.skip(interface, "stringifier", str(why))
+            return
+        method = operation.code_generator_info.property_implemented_as or "toString"
+        function = Function(interface, f"nts_dom_{interface.identifier}_toString", [],
+                            Result("const NtsStringView*", "StringView", "string"),
+                            f"receiver->{method}()", False, False)
+        self.include(operation)
+        self.functions.append(function)
+        self.members.setdefault(interface.identifier, []).append(self.method_line(interface, "toString", function))
 
     def named_properties(self, interface):
         """`dataset.userId`: an interface's named getter, setter and deleter,
