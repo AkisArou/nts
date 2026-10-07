@@ -3551,37 +3551,6 @@ fn raising_closure_names(index: usize) -> (String, String) {
 ///
 /// Origins are excluded deliberately: they carry a span, and two bodies that run the
 /// same ops in the same order are interchangeable whatever they point at.
-/// Whether a raising copy of a body returning this could not leave by a `Return`.
-///
-/// [`FuncBuilder::raised_return`] makes a zero of the function's own return type,
-/// so the raising path keeps the signature every other caller sees. It answers
-/// `None` for four types and only **two** of them are a hole:
-///
-///   `void`     correct -- a `Return` with no operand is what `void` wants.
-///   `never`    correct too, and this predicate got it wrong. `verify`'s return
-///              rule is `(HirType::Never, _) => true` in those words, because
-///              "a function that does not come back may carry a value or not:
-///              a `throw` lowers to either shape".
-///   `bigint`   a hole: `(wanted, None) => false`, so `Invalid::ReturnType` and
-///   pointer    the whole program stops emitting rather than one function.
-///
-/// **Naming `never` here cost the one fixture written to guard this feature.**
-/// `outcomes/a-throw-through-a-try-with-only-a-finally` is a closure whose body
-/// is only a `throw`, whose return lowers to `Never`, and its record went
-/// `refused` to `aborted` -- a compile-time refusal traded for a run-time abort,
-/// which is the direction this work must not move in. Its header had said what
-/// the two outcomes mean: *"a re-land that gets it right shows FIXED (a pass,
-/// loudly); one that escapes again shows CHANGED and fails"*. It showed CHANGED,
-/// and the guard was mine rather than the mechanism's.
-///
-/// **One predicate rather than the arm reading `raised_return`'s `Option`**,
-/// because the decision is taken before the body's blocks are walked and the
-/// answer has to be the same one that function gives -- which is exactly why it
-/// must read `verify`'s rule and not `raised_return`'s `None` alone.
-fn a_raise_cannot_return(returns: &HirType) -> bool {
-    matches!(returns, HirType::BigInt | HirType::NativePointer(_))
-}
-
 fn the_same_program(left: &Func, right: &Func) -> bool {
     left.values.len() == right.values.len()
         && left.blocks.len() == right.blocks.len()
@@ -12959,11 +12928,17 @@ fn closure_aliases(
 ///   the same program      nothing. `declare_raising_entries` then names the
 ///                         *ordinary* entry in the raising slot, because a body with
 ///                         nothing to raise cannot end anything.
-///   refused, or a return  the entry that aborts by name.
-///   with no zero          `FuncBuilder::a_raising_body_carries_this_call` is what
+///   refused               the entry that aborts by name.
+///                         `FuncBuilder::a_raising_body_carries_this_call` is what
 ///                         refuses -- a body calling something whose own `throw`
-///                         cannot be carried -- and `a_raise_cannot_return` the
-///                         second.
+///                         cannot be carried.
+///
+/// There was a fourth, "a return with no zero", for a body answering a `bigint`
+/// or a native pointer: its raising path had nothing to return. It does --
+/// [`FuncBuilder::raised_return`] gained both arms on 2026-10-03 -- and the
+/// predicate that refused them kept refusing, so a handle-returning closure
+/// called inside a `try` compiled to an aborting entry
+/// (`blockers/a-raising-handle-returning-closure-called-as-void`).
 ///
 /// **The abort rather than an unfilled slot**, because the slot is filled in
 /// `declare_raising_entries` and the body is produced here: a hole would leave a
@@ -13000,11 +12975,6 @@ fn raising_closure(
         .or_else(|| second.lower_made_closure(index, &closures[index]));
     match made.unwrap_or_else(|| second.lower_closure(index, &closures[index])) {
         Ok(raising) if the_same_program(func, &raising) => Vec::new(),
-        Ok(raising) if a_raise_cannot_return(&raising.return_type) => abort(format!(
-            "calling `{}` from inside a `try`, whose raising copy would have to return a \
-             value of a type that has none to return",
-            func.name
-        )),
         Ok(mut raising) => {
             raising.name = raising_body;
             let result_absent = closure_result_absent(snapshot, closures[index].node, &raising.return_type);

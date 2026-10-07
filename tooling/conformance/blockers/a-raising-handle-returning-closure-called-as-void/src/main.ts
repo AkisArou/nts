@@ -1,4 +1,10 @@
-// expect: emit-c --rc -> emits-c nts_refused(
+// expect: emit-c --rc -> lacks-c nts_refused(
+//
+// **FIXED 2026-10-07, and kept as a guard**: the predicate that refused a
+// raising copy returning a native pointer (or a `bigint`) predated
+// `raised_return`'s placeholder for both, and is gone; the copy returns a null
+// handle on its raising path, which no caller reads. The record follows
+// unchanged.
 //
 // The case a2 (7a5964d71) left: a closure answering a host handle, passed
 // where `() => void` is taken, whose body can raise --
