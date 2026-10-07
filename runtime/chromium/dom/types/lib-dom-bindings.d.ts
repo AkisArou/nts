@@ -330,1756 +330,1756 @@ interface CSSVariableReferenceValue {}
 interface CSSViewTransitionRule {}
 /**
  * @ntsBoundBy "nts:dom" CaretPosition
- * @ntsIs nts_dom_is 98
+ * @ntsIs nts_dom_is 97
  */
 interface CaretPosition {}
 /**
  * @ntsBoundBy "nts:dom" CharacterData
- * @ntsIs nts_dom_is 100
+ * @ntsIs nts_dom_is 99
  */
 interface CharacterData {}
 /**
  * @ntsBoundBy "nts:dom" ClipboardEvent
- * @ntsIs nts_dom_is 101
+ * @ntsIs nts_dom_is 100
  */
 interface ClipboardEvent {}
 /**
  * @ntsBoundBy "nts:dom" Event
- * @ntsIs nts_dom_is 104
+ * @ntsIs nts_dom_is 103
  */
 interface CommandEvent {}
 /**
  * @ntsBoundBy "nts:dom" Comment
- * @ntsIs nts_dom_is 105
+ * @ntsIs nts_dom_is 104
  */
 interface Comment {}
 /**
  * @ntsBoundBy "nts:dom" CompositionEvent
- * @ntsIs nts_dom_is 106
+ * @ntsIs nts_dom_is 105
  */
 interface CompositionEvent {}
 /**
  * @ntsBoundBy "nts:dom" Event
- * @ntsIs nts_dom_is 109
+ * @ntsIs nts_dom_is 108
  */
 interface ContentVisibilityAutoStateChangeEvent {}
 /**
- * @ntsIs nts_dom_is 111
+ * @ntsIs nts_dom_is 110
  */
 interface CountQueuingStrategy {}
 /**
- * @ntsIs nts_dom_is 113
+ * @ntsIs nts_dom_is 112
  */
 interface CustomElementRegistry {}
 /**
  * @ntsBoundBy "nts:dom" CustomEvent
- * @ntsIs nts_dom_is 114
+ * @ntsIs nts_dom_is 113
  */
 interface CustomEvent {}
 /**
- * @ntsIs nts_dom_is 115
+ * @ntsIs nts_dom_is 114
  */
 interface CustomStateSet {}
 /**
- * @ntsIs nts_dom_is 116
+ * @ntsIs nts_dom_is 115
  */
 interface DOMException {}
 /**
  * @ntsBoundBy "nts:dom" DOMImplementation
- * @ntsIs nts_dom_is 117
+ * @ntsIs nts_dom_is 116
  */
 interface DOMImplementation {}
 /**
- * @ntsIs nts_dom_is 118
+ * @ntsIs nts_dom_is 117
  */
 interface DOMMatrix {}
 /**
- * @ntsIs nts_dom_is 119
+ * @ntsIs nts_dom_is 118
  */
 interface DOMMatrixReadOnly {}
 /**
  * @ntsBoundBy "nts:dom" DOMParser
- * @ntsIs nts_dom_is 120
+ * @ntsIs nts_dom_is 119
  */
 interface DOMParser {}
 /**
  * @ntsBoundBy "nts:dom" DOMPoint
- * @ntsIs nts_dom_is 121
+ * @ntsIs nts_dom_is 120
  */
 interface DOMPoint {}
 /**
  * @ntsBoundBy "nts:dom" DOMPointReadOnly
- * @ntsIs nts_dom_is 122
+ * @ntsIs nts_dom_is 121
  */
 interface DOMPointReadOnly {}
 /**
  * @ntsBoundBy "nts:dom" DOMQuad
- * @ntsIs nts_dom_is 123
+ * @ntsIs nts_dom_is 122
  */
 interface DOMQuad {}
 /**
  * @ntsBoundBy "nts:dom" DOMRect
- * @ntsIs nts_dom_is 124
+ * @ntsIs nts_dom_is 123
  */
 interface DOMRect {}
 /**
  * @ntsBoundBy "nts:dom" DOMRectList
- * @ntsIs nts_dom_is 125
+ * @ntsIs nts_dom_is 124
  */
 interface DOMRectList {}
 /**
  * @ntsBoundBy "nts:dom" DOMRectReadOnly
- * @ntsIs nts_dom_is 126
+ * @ntsIs nts_dom_is 125
  */
 interface DOMRectReadOnly {}
 /**
- * @ntsIs nts_dom_is 127
+ * @ntsIs nts_dom_is 126
  */
 interface DOMStringList {}
 /**
  * @ntsBoundBy "nts:dom" DOMStringMap
- * @ntsIs nts_dom_is 128
+ * @ntsIs nts_dom_is 127
  */
 interface DOMStringMap {}
 /**
  * @ntsBoundBy "nts:dom" DOMTokenList
- * @ntsIs nts_dom_is 129
+ * @ntsIs nts_dom_is 128
  */
 interface DOMTokenList {}
 /**
  * @ntsBoundBy "nts:dom" DataTransfer
- * @ntsIs nts_dom_is 130
+ * @ntsIs nts_dom_is 129
  */
 interface DataTransfer {}
 /**
  * @ntsBoundBy "nts:dom" DataTransferItem
- * @ntsIs nts_dom_is 131
+ * @ntsIs nts_dom_is 130
  */
 interface DataTransferItem {}
 /**
  * @ntsBoundBy "nts:dom" DataTransferItemList
- * @ntsIs nts_dom_is 132
+ * @ntsIs nts_dom_is 131
  */
 interface DataTransferItemList {}
 /**
  * @ntsBoundBy "nts:dom" Document
- * @ntsIs nts_dom_is 138
+ * @ntsIs nts_dom_is 136
  */
 interface Document {}
 /**
  * @ntsBoundBy "nts:dom" DocumentFragment
- * @ntsIs nts_dom_is 139
+ * @ntsIs nts_dom_is 137
  */
 interface DocumentFragment {}
 /**
  * @ntsBoundBy "nts:dom" DocumentTimeline
- * @ntsIs nts_dom_is 141
+ * @ntsIs nts_dom_is 139
  */
 interface DocumentTimeline {}
 /**
  * @ntsBoundBy "nts:dom" DocumentType
- * @ntsIs nts_dom_is 142
+ * @ntsIs nts_dom_is 140
  */
 interface DocumentType {}
 /**
  * @ntsBoundBy "nts:dom" DragEvent
- * @ntsIs nts_dom_is 143
+ * @ntsIs nts_dom_is 141
  */
 interface DragEvent {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 145
+ * @ntsIs nts_dom_is 143
  */
 interface Element {}
 /**
- * @ntsIs nts_dom_is 148
+ * @ntsIs nts_dom_is 146
  */
 interface ElementInternals {}
 /**
  * @ntsBoundBy "nts:dom" ErrorEvent
- * @ntsIs nts_dom_is 149
+ * @ntsIs nts_dom_is 147
  */
 interface ErrorEvent {}
 /**
  * @ntsBoundBy "nts:dom" Event
- * @ntsIs nts_dom_is 150
+ * @ntsIs nts_dom_is 148
  */
 interface Event {}
 /**
- * @ntsIs nts_dom_is 151
+ * @ntsIs nts_dom_is 149
  */
 interface EventCounts {}
 /**
  * @ntsBoundBy "nts:dom" EventTarget
- * @ntsIs nts_dom_is 152
+ * @ntsIs nts_dom_is 150
  */
 interface EventTarget {}
 /**
- * @ntsIs nts_dom_is 154
+ * @ntsIs nts_dom_is 152
  */
 interface External {}
 /**
  * @ntsBoundBy "nts:dom" File
- * @ntsIs nts_dom_is 158
+ * @ntsIs nts_dom_is 156
  */
 interface File {}
 /**
  * @ntsBoundBy "nts:dom" FileList
- * @ntsIs nts_dom_is 159
+ * @ntsIs nts_dom_is 157
  */
 interface FileList {}
 /**
  * @ntsBoundBy "nts:dom" EventTarget
- * @ntsIs nts_dom_is 160
+ * @ntsIs nts_dom_is 158
  */
 interface FileReader {}
 /**
  * @ntsBoundBy "nts:dom" FocusEvent
- * @ntsIs nts_dom_is 162
+ * @ntsIs nts_dom_is 160
  */
 interface FocusEvent {}
 /**
- * @ntsIs nts_dom_is 163
+ * @ntsIs nts_dom_is 161
  */
 interface FontFace {}
 /**
  * @ntsBoundBy "nts:dom" EventTarget
- * @ntsIs nts_dom_is 164
+ * @ntsIs nts_dom_is 162
  */
 interface FontFaceSet {}
 /**
  * @ntsBoundBy "nts:dom" Event
- * @ntsIs nts_dom_is 165
+ * @ntsIs nts_dom_is 163
  */
 interface FontFaceSetLoadEvent {}
 /**
  * @ntsBoundBy "nts:dom" FormData
- * @ntsIs nts_dom_is 166
+ * @ntsIs nts_dom_is 164
  */
 interface FormData {}
 /**
  * @ntsBoundBy "nts:dom" Event
- * @ntsIs nts_dom_is 167
+ * @ntsIs nts_dom_is 165
  */
 interface FormDataEvent {}
 /**
- * @ntsIs nts_dom_is 168
+ * @ntsIs nts_dom_is 166
  */
 interface FragmentDirective {}
 /**
- * @ntsIs nts_dom_is 171
+ * @ntsIs nts_dom_is 167
  */
 interface Geolocation {}
 /**
- * @ntsIs nts_dom_is 172
+ * @ntsIs nts_dom_is 168
  */
 interface GeolocationCoordinates {}
 /**
- * @ntsIs nts_dom_is 173
+ * @ntsIs nts_dom_is 169
  */
 interface GeolocationPosition {}
 /**
- * @ntsIs nts_dom_is 174
+ * @ntsIs nts_dom_is 170
  */
 interface GeolocationPositionError {}
 /**
- * @ntsIs nts_dom_is 175
+ * @ntsIs nts_dom_is 171
  */
 interface HTMLAllCollection {}
 /**
  * @ntsBoundBy "nts:dom" HTMLAnchorElement
- * @ntsIs nts_dom_is 176
+ * @ntsIs nts_dom_is 172
  */
 interface HTMLAnchorElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 177
+ * @ntsIs nts_dom_is 173
  */
 interface HTMLAreaElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLAudioElement
- * @ntsIs nts_dom_is 178
+ * @ntsIs nts_dom_is 174
  */
 interface HTMLAudioElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 179
+ * @ntsIs nts_dom_is 175
  */
 interface HTMLBRElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 180
+ * @ntsIs nts_dom_is 176
  */
 interface HTMLBaseElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 181
+ * @ntsIs nts_dom_is 177
  */
 interface HTMLBodyElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLButtonElement
- * @ntsIs nts_dom_is 182
+ * @ntsIs nts_dom_is 178
  */
 interface HTMLButtonElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLCanvasElement
- * @ntsIs nts_dom_is 184
+ * @ntsIs nts_dom_is 180
  */
 interface HTMLCanvasElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLCollection
- * @ntsIs nts_dom_is 185
+ * @ntsIs nts_dom_is 181
  */
 interface HTMLCollection {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 187
+ * @ntsIs nts_dom_is 183
  */
 interface HTMLDListElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 188
+ * @ntsIs nts_dom_is 184
  */
 interface HTMLDataElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLDataListElement
- * @ntsIs nts_dom_is 189
+ * @ntsIs nts_dom_is 185
  */
 interface HTMLDataListElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLDetailsElement
- * @ntsIs nts_dom_is 190
+ * @ntsIs nts_dom_is 186
  */
 interface HTMLDetailsElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLDialogElement
- * @ntsIs nts_dom_is 191
+ * @ntsIs nts_dom_is 187
  */
 interface HTMLDialogElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 192
+ * @ntsIs nts_dom_is 188
  */
 interface HTMLDirectoryElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLDivElement
- * @ntsIs nts_dom_is 193
+ * @ntsIs nts_dom_is 189
  */
 interface HTMLDivElement {}
 /**
  * @ntsBoundBy "nts:dom" Document
- * @ntsIs nts_dom_is 194
+ * @ntsIs nts_dom_is 190
  */
 interface HTMLDocument {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 195
+ * @ntsIs nts_dom_is 191
  */
 interface HTMLElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 196
+ * @ntsIs nts_dom_is 192
  */
 interface HTMLEmbedElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLFieldSetElement
- * @ntsIs nts_dom_is 198
+ * @ntsIs nts_dom_is 194
  */
 interface HTMLFieldSetElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 199
+ * @ntsIs nts_dom_is 195
  */
 interface HTMLFontElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLCollection
- * @ntsIs nts_dom_is 200
+ * @ntsIs nts_dom_is 196
  */
 interface HTMLFormControlsCollection {}
 /**
  * @ntsBoundBy "nts:dom" HTMLFormElement
- * @ntsIs nts_dom_is 201
+ * @ntsIs nts_dom_is 197
  */
 interface HTMLFormElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 202
+ * @ntsIs nts_dom_is 198
  */
 interface HTMLFrameElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 203
+ * @ntsIs nts_dom_is 199
  */
 interface HTMLFrameSetElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 205
+ * @ntsIs nts_dom_is 201
  */
 interface HTMLHRElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLHeadElement
- * @ntsIs nts_dom_is 206
+ * @ntsIs nts_dom_is 202
  */
 interface HTMLHeadElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 207
+ * @ntsIs nts_dom_is 203
  */
 interface HTMLHeadingElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 208
+ * @ntsIs nts_dom_is 204
  */
 interface HTMLHtmlElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLIFrameElement
- * @ntsIs nts_dom_is 209
+ * @ntsIs nts_dom_is 205
  */
 interface HTMLIFrameElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLImageElement
- * @ntsIs nts_dom_is 210
+ * @ntsIs nts_dom_is 206
  */
 interface HTMLImageElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLInputElement
- * @ntsIs nts_dom_is 211
+ * @ntsIs nts_dom_is 207
  */
 interface HTMLInputElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLLIElement
- * @ntsIs nts_dom_is 213
+ * @ntsIs nts_dom_is 209
  */
 interface HTMLLIElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLLabelElement
- * @ntsIs nts_dom_is 214
+ * @ntsIs nts_dom_is 210
  */
 interface HTMLLabelElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLLegendElement
- * @ntsIs nts_dom_is 215
+ * @ntsIs nts_dom_is 211
  */
 interface HTMLLegendElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLLinkElement
- * @ntsIs nts_dom_is 216
+ * @ntsIs nts_dom_is 212
  */
 interface HTMLLinkElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 218
+ * @ntsIs nts_dom_is 214
  */
 interface HTMLMapElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 219
+ * @ntsIs nts_dom_is 215
  */
 interface HTMLMarqueeElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLMediaElement
- * @ntsIs nts_dom_is 220
+ * @ntsIs nts_dom_is 216
  */
 interface HTMLMediaElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 222
+ * @ntsIs nts_dom_is 218
  */
 interface HTMLMenuElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 225
+ * @ntsIs nts_dom_is 221
  */
 interface HTMLMetaElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLMeterElement
- * @ntsIs nts_dom_is 226
+ * @ntsIs nts_dom_is 222
  */
 interface HTMLMeterElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 228
+ * @ntsIs nts_dom_is 224
  */
 interface HTMLModElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLOListElement
- * @ntsIs nts_dom_is 229
+ * @ntsIs nts_dom_is 225
  */
 interface HTMLOListElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 230
+ * @ntsIs nts_dom_is 226
  */
 interface HTMLObjectElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 231
+ * @ntsIs nts_dom_is 227
  */
 interface HTMLOptGroupElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLOptionElement
- * @ntsIs nts_dom_is 232
+ * @ntsIs nts_dom_is 228
  */
 interface HTMLOptionElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLCollection
- * @ntsIs nts_dom_is 233
+ * @ntsIs nts_dom_is 229
  */
 interface HTMLOptionsCollection {}
 /**
  * @ntsBoundBy "nts:dom" HTMLOutputElement
- * @ntsIs nts_dom_is 234
+ * @ntsIs nts_dom_is 230
  */
 interface HTMLOutputElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLParagraphElement
- * @ntsIs nts_dom_is 235
+ * @ntsIs nts_dom_is 231
  */
 interface HTMLParagraphElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 236
+ * @ntsIs nts_dom_is 232
  */
 interface HTMLParamElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 237
+ * @ntsIs nts_dom_is 233
  */
 interface HTMLPictureElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 238
+ * @ntsIs nts_dom_is 234
  */
 interface HTMLPreElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLProgressElement
- * @ntsIs nts_dom_is 239
+ * @ntsIs nts_dom_is 235
  */
 interface HTMLProgressElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 240
+ * @ntsIs nts_dom_is 236
  */
 interface HTMLQuoteElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLScriptElement
- * @ntsIs nts_dom_is 241
+ * @ntsIs nts_dom_is 237
  */
 interface HTMLScriptElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLSelectElement
- * @ntsIs nts_dom_is 242
+ * @ntsIs nts_dom_is 238
  */
 interface HTMLSelectElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLSlotElement
- * @ntsIs nts_dom_is 244
+ * @ntsIs nts_dom_is 240
  */
 interface HTMLSlotElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 245
+ * @ntsIs nts_dom_is 241
  */
 interface HTMLSourceElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLSpanElement
- * @ntsIs nts_dom_is 246
+ * @ntsIs nts_dom_is 242
  */
 interface HTMLSpanElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLStyleElement
- * @ntsIs nts_dom_is 247
+ * @ntsIs nts_dom_is 243
  */
 interface HTMLStyleElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLTableCaptionElement
- * @ntsIs nts_dom_is 250
+ * @ntsIs nts_dom_is 246
  */
 interface HTMLTableCaptionElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLTableCellElement
- * @ntsIs nts_dom_is 251
+ * @ntsIs nts_dom_is 247
  */
 interface HTMLTableCellElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 252
+ * @ntsIs nts_dom_is 248
  */
 interface HTMLTableColElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLTableElement
- * @ntsIs nts_dom_is 253
+ * @ntsIs nts_dom_is 249
  */
 interface HTMLTableElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLTableRowElement
- * @ntsIs nts_dom_is 254
+ * @ntsIs nts_dom_is 250
  */
 interface HTMLTableRowElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLTableSectionElement
- * @ntsIs nts_dom_is 255
+ * @ntsIs nts_dom_is 251
  */
 interface HTMLTableSectionElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLTemplateElement
- * @ntsIs nts_dom_is 256
+ * @ntsIs nts_dom_is 252
  */
 interface HTMLTemplateElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLTextAreaElement
- * @ntsIs nts_dom_is 257
+ * @ntsIs nts_dom_is 253
  */
 interface HTMLTextAreaElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 258
+ * @ntsIs nts_dom_is 254
  */
 interface HTMLTimeElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 259
+ * @ntsIs nts_dom_is 255
  */
 interface HTMLTitleElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 260
+ * @ntsIs nts_dom_is 256
  */
 interface HTMLTrackElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLUListElement
- * @ntsIs nts_dom_is 261
+ * @ntsIs nts_dom_is 257
  */
 interface HTMLUListElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLElement
- * @ntsIs nts_dom_is 262
+ * @ntsIs nts_dom_is 258
  */
 interface HTMLUnknownElement {}
 /**
  * @ntsBoundBy "nts:dom" HTMLVideoElement
- * @ntsIs nts_dom_is 264
+ * @ntsIs nts_dom_is 260
  */
 interface HTMLVideoElement {}
 /**
  * @ntsBoundBy "nts:dom" HashChangeEvent
- * @ntsIs nts_dom_is 265
+ * @ntsIs nts_dom_is 261
  */
 interface HashChangeEvent {}
 /**
- * @ntsIs nts_dom_is 266
+ * @ntsIs nts_dom_is 262
  */
 interface Headers {}
 /**
- * @ntsIs nts_dom_is 267
+ * @ntsIs nts_dom_is 263
  */
 interface Highlight {}
 /**
- * @ntsIs nts_dom_is 268
+ * @ntsIs nts_dom_is 264
  */
 interface HighlightRegistry {}
 /**
  * @ntsBoundBy "nts:dom" History
- * @ntsIs nts_dom_is 269
+ * @ntsIs nts_dom_is 265
  */
 interface History {}
 /**
  * @ntsBoundBy "nts:dom" IdleDeadline
- * @ntsIs nts_dom_is 272
+ * @ntsIs nts_dom_is 266
  */
 interface IdleDeadline {}
 /**
- * @ntsIs nts_dom_is 273
+ * @ntsIs nts_dom_is 267
  */
 interface ImageBitmap {}
 /**
  * @ntsBoundBy "nts:dom" ImageData
- * @ntsIs nts_dom_is 274
+ * @ntsIs nts_dom_is 268
  */
 interface ImageData {}
 /**
  * @ntsBoundBy "nts:dom" InputEvent
- * @ntsIs nts_dom_is 276
+ * @ntsIs nts_dom_is 270
  */
 interface InputEvent {}
 /**
  * @ntsBoundBy "nts:dom" IntersectionObserver
- * @ntsIs nts_dom_is 287
+ * @ntsIs nts_dom_is 276
  */
 interface IntersectionObserver {}
 /**
  * @ntsBoundBy "nts:dom" IntersectionObserverEntry
- * @ntsIs nts_dom_is 288
+ * @ntsIs nts_dom_is 277
  */
 interface IntersectionObserverEntry {}
 /**
  * @ntsBoundBy "nts:dom" KeyboardEvent
- * @ntsIs nts_dom_is 291
+ * @ntsIs nts_dom_is 280
  */
 interface KeyboardEvent {}
 /**
  * @ntsBoundBy "nts:dom" KeyframeEffect
- * @ntsIs nts_dom_is 292
+ * @ntsIs nts_dom_is 281
  */
 interface KeyframeEffect {}
 /**
  * @ntsBoundBy "nts:dom" PerformanceEntry
- * @ntsIs nts_dom_is 293
+ * @ntsIs nts_dom_is 282
  */
 interface LargestContentfulPaint {}
 /**
  * @ntsBoundBy "nts:dom" Location
- * @ntsIs nts_dom_is 301
+ * @ntsIs nts_dom_is 290
  */
 interface Location {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 303
+ * @ntsIs nts_dom_is 292
  */
 interface MathMLElement {}
 /**
  * @ntsBoundBy "nts:dom" MediaError
- * @ntsIs nts_dom_is 304
+ * @ntsIs nts_dom_is 293
  */
 interface MediaError {}
 /**
- * @ntsIs nts_dom_is 305
+ * @ntsIs nts_dom_is 294
  */
 interface MediaList {}
 /**
  * @ntsBoundBy "nts:dom" MediaQueryList
- * @ntsIs nts_dom_is 306
+ * @ntsIs nts_dom_is 295
  */
 interface MediaQueryList {}
 /**
  * @ntsBoundBy "nts:dom" Event
- * @ntsIs nts_dom_is 307
+ * @ntsIs nts_dom_is 296
  */
 interface MediaQueryListEvent {}
 /**
- * @ntsIs nts_dom_is 309
+ * @ntsIs nts_dom_is 298
  */
 interface MessageChannel {}
 /**
  * @ntsBoundBy "nts:dom" Event
- * @ntsIs nts_dom_is 310
+ * @ntsIs nts_dom_is 299
  */
 interface MessageEvent {}
 /**
  * @ntsBoundBy "nts:dom" EventTarget
- * @ntsIs nts_dom_is 311
+ * @ntsIs nts_dom_is 300
  */
 interface MessagePort {}
 /**
  * @ntsBoundBy "nts:dom" MouseEvent
- * @ntsIs nts_dom_is 318
+ * @ntsIs nts_dom_is 307
  */
 interface MouseEvent {}
 /**
  * @ntsBoundBy "nts:dom" MutationObserver
- * @ntsIs nts_dom_is 319
+ * @ntsIs nts_dom_is 308
  */
 interface MutationObserver {}
 /**
  * @ntsBoundBy "nts:dom" MutationRecord
- * @ntsIs nts_dom_is 320
+ * @ntsIs nts_dom_is 309
  */
 interface MutationRecord {}
 /**
  * @ntsBoundBy "nts:dom" NamedNodeMap
- * @ntsIs nts_dom_is 322
+ * @ntsIs nts_dom_is 310
  */
 interface NamedNodeMap {}
 /**
  * @ntsBoundBy "nts:dom" Event
- * @ntsIs nts_dom_is 323
+ * @ntsIs nts_dom_is 311
  */
 interface NavigateEvent {}
 /**
  * @ntsBoundBy "nts:dom" EventTarget
- * @ntsIs nts_dom_is 324
+ * @ntsIs nts_dom_is 312
  */
 interface Navigation {}
 /**
- * @ntsIs nts_dom_is 325
+ * @ntsIs nts_dom_is 313
  */
 interface NavigationActivation {}
 /**
  * @ntsBoundBy "nts:dom" Event
- * @ntsIs nts_dom_is 326
+ * @ntsIs nts_dom_is 314
  */
 interface NavigationCurrentEntryChangeEvent {}
 /**
- * @ntsIs nts_dom_is 328
+ * @ntsIs nts_dom_is 316
  */
 interface NavigationDestination {}
 /**
  * @ntsBoundBy "nts:dom" EventTarget
- * @ntsIs nts_dom_is 329
+ * @ntsIs nts_dom_is 317
  */
 interface NavigationHistoryEntry {}
 /**
- * @ntsIs nts_dom_is 330
+ * @ntsIs nts_dom_is 318
  */
 interface NavigationPrecommitController {}
 /**
- * @ntsIs nts_dom_is 331
+ * @ntsIs nts_dom_is 319
  */
 interface NavigationTransition {}
 /**
  * @ntsBoundBy "nts:dom" Navigator
- * @ntsIs nts_dom_is 332
+ * @ntsIs nts_dom_is 320
  */
 interface Navigator {}
 /**
  * @ntsBoundBy "nts:dom" Node
- * @ntsIs nts_dom_is 334
+ * @ntsIs nts_dom_is 322
  */
 interface Node {}
 /**
  * @ntsBoundBy "nts:dom" NodeIterator
- * @ntsIs nts_dom_is 335
+ * @ntsIs nts_dom_is 323
  */
 interface NodeIterator {}
 /**
  * @ntsBoundBy "nts:dom" NodeList
- * @ntsIs nts_dom_is 336
+ * @ntsIs nts_dom_is 324
  */
 interface NodeList {}
 /**
  * @ntsBoundBy "nts:dom" EventTarget
- * @ntsIs nts_dom_is 341
+ * @ntsIs nts_dom_is 329
  */
 interface OffscreenCanvas {}
 /**
  * @ntsBoundBy "nts:dom" Event
- * @ntsIs nts_dom_is 347
+ * @ntsIs nts_dom_is 334
  */
 interface PageRevealEvent {}
 /**
  * @ntsBoundBy "nts:dom" Event
- * @ntsIs nts_dom_is 348
+ * @ntsIs nts_dom_is 335
  */
 interface PageSwapEvent {}
 /**
  * @ntsBoundBy "nts:dom" PageTransitionEvent
- * @ntsIs nts_dom_is 349
+ * @ntsIs nts_dom_is 336
  */
 interface PageTransitionEvent {}
 /**
  * @ntsBoundBy "nts:dom" Performance
- * @ntsIs nts_dom_is 350
+ * @ntsIs nts_dom_is 337
  */
 interface Performance {}
 /**
  * @ntsBoundBy "nts:dom" PerformanceEntry
- * @ntsIs nts_dom_is 353
+ * @ntsIs nts_dom_is 340
  */
 interface PerformanceEntry {}
 /**
  * @ntsBoundBy "nts:dom" PerformanceEntry
- * @ntsIs nts_dom_is 354
+ * @ntsIs nts_dom_is 341
  */
 interface PerformanceEventTiming {}
 /**
  * @ntsBoundBy "nts:dom" PerformanceMark
- * @ntsIs nts_dom_is 357
+ * @ntsIs nts_dom_is 344
  */
 interface PerformanceMark {}
 /**
  * @ntsBoundBy "nts:dom" PerformanceMeasure
- * @ntsIs nts_dom_is 359
+ * @ntsIs nts_dom_is 346
  */
 interface PerformanceMeasure {}
 /**
- * @ntsIs nts_dom_is 361
+ * @ntsIs nts_dom_is 348
  */
 interface PerformanceNavigation {}
 /**
  * @ntsBoundBy "nts:dom" PerformanceEntry
- * @ntsIs nts_dom_is 362
+ * @ntsIs nts_dom_is 349
  */
 interface PerformanceNavigationTiming {}
 /**
- * @ntsIs nts_dom_is 363
+ * @ntsIs nts_dom_is 350
  */
 interface PerformanceObserver {}
 /**
- * @ntsIs nts_dom_is 364
+ * @ntsIs nts_dom_is 351
  */
 interface PerformanceObserverEntryList {}
 /**
  * @ntsBoundBy "nts:dom" PerformanceEntry
- * @ntsIs nts_dom_is 365
+ * @ntsIs nts_dom_is 352
  */
 interface PerformancePaintTiming {}
 /**
  * @ntsBoundBy "nts:dom" PerformanceEntry
- * @ntsIs nts_dom_is 366
+ * @ntsIs nts_dom_is 353
  */
 interface PerformanceResourceTiming {}
 /**
- * @ntsIs nts_dom_is 369
+ * @ntsIs nts_dom_is 356
  */
 interface PerformanceServerTiming {}
 /**
- * @ntsIs nts_dom_is 371
+ * @ntsIs nts_dom_is 358
  */
 interface PerformanceTiming {}
 /**
  * @ntsBoundBy "nts:dom" PointerEvent
- * @ntsIs nts_dom_is 375
+ * @ntsIs nts_dom_is 362
  */
 interface PointerEvent {}
 /**
  * @ntsBoundBy "nts:dom" Event
- * @ntsIs nts_dom_is 376
+ * @ntsIs nts_dom_is 363
  */
 interface PopStateEvent {}
 /**
  * @ntsBoundBy "nts:dom" ProcessingInstruction
- * @ntsIs nts_dom_is 381
+ * @ntsIs nts_dom_is 368
  */
 interface ProcessingInstruction {}
 /**
  * @ntsBoundBy "nts:dom" ProgressEvent
- * @ntsIs nts_dom_is 383
+ * @ntsIs nts_dom_is 370
  */
 interface ProgressEvent {}
 /**
  * @ntsBoundBy "nts:dom" Event
- * @ntsIs nts_dom_is 384
+ * @ntsIs nts_dom_is 371
  */
 interface PromiseRejectionEvent {}
 /**
  * @ntsBoundBy "nts:dom" NodeList
- * @ntsIs nts_dom_is 386
+ * @ntsIs nts_dom_is 373
  */
 interface RadioNodeList {}
 /**
  * @ntsBoundBy "nts:dom" Range
- * @ntsIs nts_dom_is 387
+ * @ntsIs nts_dom_is 374
  */
 interface Range {}
 /**
- * @ntsIs nts_dom_is 388
+ * @ntsIs nts_dom_is 375
  */
 interface ReadableByteStreamController {}
 /**
- * @ntsIs nts_dom_is 389
+ * @ntsIs nts_dom_is 376
  */
 interface ReadableStream {}
 /**
- * @ntsIs nts_dom_is 390
+ * @ntsIs nts_dom_is 377
  */
 interface ReadableStreamBYOBReader {}
 /**
- * @ntsIs nts_dom_is 391
+ * @ntsIs nts_dom_is 378
  */
 interface ReadableStreamBYOBRequest {}
 /**
- * @ntsIs nts_dom_is 392
+ * @ntsIs nts_dom_is 379
  */
 interface ReadableStreamDefaultController {}
 /**
- * @ntsIs nts_dom_is 393
+ * @ntsIs nts_dom_is 380
  */
 interface ReadableStreamDefaultReader {}
 /**
- * @ntsIs nts_dom_is 395
+ * @ntsIs nts_dom_is 381
  */
 interface Report {}
 /**
- * @ntsIs nts_dom_is 396
+ * @ntsIs nts_dom_is 382
  */
 interface ReportBody {}
 /**
- * @ntsIs nts_dom_is 397
+ * @ntsIs nts_dom_is 383
  */
 interface ReportingObserver {}
 /**
- * @ntsIs nts_dom_is 398
+ * @ntsIs nts_dom_is 384
  */
 interface Request {}
 /**
  * @ntsBoundBy "nts:dom" ResizeObserver
- * @ntsIs nts_dom_is 399
+ * @ntsIs nts_dom_is 385
  */
 interface ResizeObserver {}
 /**
  * @ntsBoundBy "nts:dom" ResizeObserverEntry
- * @ntsIs nts_dom_is 400
+ * @ntsIs nts_dom_is 386
  */
 interface ResizeObserverEntry {}
 /**
  * @ntsBoundBy "nts:dom" ResizeObserverSize
- * @ntsIs nts_dom_is 401
+ * @ntsIs nts_dom_is 387
  */
 interface ResizeObserverSize {}
 /**
- * @ntsIs nts_dom_is 403
+ * @ntsIs nts_dom_is 389
  */
 interface Response {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 404
+ * @ntsIs nts_dom_is 390
  */
 interface SVGAElement {}
 /**
- * @ntsIs nts_dom_is 405
+ * @ntsIs nts_dom_is 391
  */
 interface SVGAngle {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 406
+ * @ntsIs nts_dom_is 392
  */
 interface SVGAnimateElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 407
+ * @ntsIs nts_dom_is 393
  */
 interface SVGAnimateMotionElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 408
+ * @ntsIs nts_dom_is 394
  */
 interface SVGAnimateTransformElement {}
 /**
- * @ntsIs nts_dom_is 409
+ * @ntsIs nts_dom_is 395
  */
 interface SVGAnimatedAngle {}
 /**
- * @ntsIs nts_dom_is 410
+ * @ntsIs nts_dom_is 396
  */
 interface SVGAnimatedBoolean {}
 /**
- * @ntsIs nts_dom_is 411
+ * @ntsIs nts_dom_is 397
  */
 interface SVGAnimatedEnumeration {}
 /**
- * @ntsIs nts_dom_is 412
+ * @ntsIs nts_dom_is 398
  */
 interface SVGAnimatedInteger {}
 /**
- * @ntsIs nts_dom_is 413
+ * @ntsIs nts_dom_is 399
  */
 interface SVGAnimatedLength {}
 /**
- * @ntsIs nts_dom_is 414
+ * @ntsIs nts_dom_is 400
  */
 interface SVGAnimatedLengthList {}
 /**
- * @ntsIs nts_dom_is 415
+ * @ntsIs nts_dom_is 401
  */
 interface SVGAnimatedNumber {}
 /**
- * @ntsIs nts_dom_is 416
+ * @ntsIs nts_dom_is 402
  */
 interface SVGAnimatedNumberList {}
 /**
- * @ntsIs nts_dom_is 417
+ * @ntsIs nts_dom_is 403
  */
 interface SVGAnimatedPreserveAspectRatio {}
 /**
- * @ntsIs nts_dom_is 418
+ * @ntsIs nts_dom_is 404
  */
 interface SVGAnimatedRect {}
 /**
- * @ntsIs nts_dom_is 419
+ * @ntsIs nts_dom_is 405
  */
 interface SVGAnimatedString {}
 /**
- * @ntsIs nts_dom_is 420
+ * @ntsIs nts_dom_is 406
  */
 interface SVGAnimatedTransformList {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 421
+ * @ntsIs nts_dom_is 407
  */
 interface SVGAnimationElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 422
+ * @ntsIs nts_dom_is 408
  */
 interface SVGCircleElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 423
+ * @ntsIs nts_dom_is 409
  */
 interface SVGClipPathElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 424
+ * @ntsIs nts_dom_is 410
  */
 interface SVGComponentTransferFunctionElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 425
+ * @ntsIs nts_dom_is 411
  */
 interface SVGDefsElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 426
+ * @ntsIs nts_dom_is 412
  */
 interface SVGDescElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 427
+ * @ntsIs nts_dom_is 413
  */
 interface SVGElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 428
+ * @ntsIs nts_dom_is 414
  */
 interface SVGEllipseElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 429
+ * @ntsIs nts_dom_is 415
  */
 interface SVGFEBlendElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 430
+ * @ntsIs nts_dom_is 416
  */
 interface SVGFEColorMatrixElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 431
+ * @ntsIs nts_dom_is 417
  */
 interface SVGFEComponentTransferElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 432
+ * @ntsIs nts_dom_is 418
  */
 interface SVGFECompositeElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 433
+ * @ntsIs nts_dom_is 419
  */
 interface SVGFEConvolveMatrixElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 434
+ * @ntsIs nts_dom_is 420
  */
 interface SVGFEDiffuseLightingElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 435
+ * @ntsIs nts_dom_is 421
  */
 interface SVGFEDisplacementMapElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 436
+ * @ntsIs nts_dom_is 422
  */
 interface SVGFEDistantLightElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 437
+ * @ntsIs nts_dom_is 423
  */
 interface SVGFEDropShadowElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 438
+ * @ntsIs nts_dom_is 424
  */
 interface SVGFEFloodElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 439
+ * @ntsIs nts_dom_is 425
  */
 interface SVGFEFuncAElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 440
+ * @ntsIs nts_dom_is 426
  */
 interface SVGFEFuncBElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 441
+ * @ntsIs nts_dom_is 427
  */
 interface SVGFEFuncGElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 442
+ * @ntsIs nts_dom_is 428
  */
 interface SVGFEFuncRElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 443
+ * @ntsIs nts_dom_is 429
  */
 interface SVGFEGaussianBlurElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 444
+ * @ntsIs nts_dom_is 430
  */
 interface SVGFEImageElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 445
+ * @ntsIs nts_dom_is 431
  */
 interface SVGFEMergeElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 446
+ * @ntsIs nts_dom_is 432
  */
 interface SVGFEMergeNodeElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 447
+ * @ntsIs nts_dom_is 433
  */
 interface SVGFEMorphologyElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 448
+ * @ntsIs nts_dom_is 434
  */
 interface SVGFEOffsetElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 449
+ * @ntsIs nts_dom_is 435
  */
 interface SVGFEPointLightElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 450
+ * @ntsIs nts_dom_is 436
  */
 interface SVGFESpecularLightingElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 451
+ * @ntsIs nts_dom_is 437
  */
 interface SVGFESpotLightElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 452
+ * @ntsIs nts_dom_is 438
  */
 interface SVGFETileElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 453
+ * @ntsIs nts_dom_is 439
  */
 interface SVGFETurbulenceElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 454
+ * @ntsIs nts_dom_is 440
  */
 interface SVGFilterElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 455
+ * @ntsIs nts_dom_is 441
  */
 interface SVGForeignObjectElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 456
+ * @ntsIs nts_dom_is 442
  */
 interface SVGGElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 457
+ * @ntsIs nts_dom_is 443
  */
 interface SVGGeometryElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 458
+ * @ntsIs nts_dom_is 444
  */
 interface SVGGradientElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 459
+ * @ntsIs nts_dom_is 445
  */
 interface SVGGraphicsElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 460
+ * @ntsIs nts_dom_is 446
  */
 interface SVGImageElement {}
 /**
- * @ntsIs nts_dom_is 461
+ * @ntsIs nts_dom_is 447
  */
 interface SVGLength {}
 /**
- * @ntsIs nts_dom_is 462
+ * @ntsIs nts_dom_is 448
  */
 interface SVGLengthList {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 463
+ * @ntsIs nts_dom_is 449
  */
 interface SVGLineElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 464
+ * @ntsIs nts_dom_is 450
  */
 interface SVGLinearGradientElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 465
+ * @ntsIs nts_dom_is 451
  */
 interface SVGMPathElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 466
+ * @ntsIs nts_dom_is 452
  */
 interface SVGMarkerElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 467
+ * @ntsIs nts_dom_is 453
  */
 interface SVGMaskElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 469
+ * @ntsIs nts_dom_is 455
  */
 interface SVGMetadataElement {}
 /**
- * @ntsIs nts_dom_is 470
+ * @ntsIs nts_dom_is 456
  */
 interface SVGNumber {}
 /**
- * @ntsIs nts_dom_is 471
+ * @ntsIs nts_dom_is 457
  */
 interface SVGNumberList {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 472
+ * @ntsIs nts_dom_is 458
  */
 interface SVGPathElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 473
+ * @ntsIs nts_dom_is 459
  */
 interface SVGPatternElement {}
 /**
- * @ntsIs nts_dom_is 475
+ * @ntsIs nts_dom_is 461
  */
 interface SVGPointList {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 476
+ * @ntsIs nts_dom_is 462
  */
 interface SVGPolygonElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 477
+ * @ntsIs nts_dom_is 463
  */
 interface SVGPolylineElement {}
 /**
- * @ntsIs nts_dom_is 478
+ * @ntsIs nts_dom_is 464
  */
 interface SVGPreserveAspectRatio {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 479
+ * @ntsIs nts_dom_is 465
  */
 interface SVGRadialGradientElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 481
+ * @ntsIs nts_dom_is 467
  */
 interface SVGRectElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 482
+ * @ntsIs nts_dom_is 468
  */
 interface SVGSVGElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 483
+ * @ntsIs nts_dom_is 469
  */
 interface SVGScriptElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 484
+ * @ntsIs nts_dom_is 470
  */
 interface SVGSetElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 485
+ * @ntsIs nts_dom_is 471
  */
 interface SVGStopElement {}
 /**
- * @ntsIs nts_dom_is 486
+ * @ntsIs nts_dom_is 472
  */
 interface SVGStringList {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 487
+ * @ntsIs nts_dom_is 473
  */
 interface SVGStyleElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 488
+ * @ntsIs nts_dom_is 474
  */
 interface SVGSwitchElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 489
+ * @ntsIs nts_dom_is 475
  */
 interface SVGSymbolElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 490
+ * @ntsIs nts_dom_is 476
  */
 interface SVGTSpanElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 491
+ * @ntsIs nts_dom_is 477
  */
 interface SVGTextContentElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 492
+ * @ntsIs nts_dom_is 478
  */
 interface SVGTextElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 493
+ * @ntsIs nts_dom_is 479
  */
 interface SVGTextPathElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 494
+ * @ntsIs nts_dom_is 480
  */
 interface SVGTextPositioningElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 495
+ * @ntsIs nts_dom_is 481
  */
 interface SVGTitleElement {}
 /**
- * @ntsIs nts_dom_is 496
+ * @ntsIs nts_dom_is 482
  */
 interface SVGTransform {}
 /**
- * @ntsIs nts_dom_is 497
+ * @ntsIs nts_dom_is 483
  */
 interface SVGTransformList {}
 /**
- * @ntsIs nts_dom_is 498
+ * @ntsIs nts_dom_is 484
  */
 interface SVGUnitTypes {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 499
+ * @ntsIs nts_dom_is 485
  */
 interface SVGUseElement {}
 /**
  * @ntsBoundBy "nts:dom" Element
- * @ntsIs nts_dom_is 500
+ * @ntsIs nts_dom_is 486
  */
 interface SVGViewElement {}
 /**
- * @ntsIs nts_dom_is 501
+ * @ntsIs nts_dom_is 487
  */
 interface Sanitizer {}
 /**
- * @ntsIs nts_dom_is 502
+ * @ntsIs nts_dom_is 488
  */
 interface Scheduler {}
 /**
  * @ntsBoundBy "nts:dom" Screen
- * @ntsIs nts_dom_is 504
+ * @ntsIs nts_dom_is 490
  */
 interface Screen {}
 /**
  * @ntsBoundBy "nts:dom" AnimationTimeline
- * @ntsIs nts_dom_is 505
+ * @ntsIs nts_dom_is 491
  */
 interface ScrollTimeline {}
 /**
  * @ntsBoundBy "nts:dom" Event
- * @ntsIs nts_dom_is 506
+ * @ntsIs nts_dom_is 492
  */
 interface SecurityPolicyViolationEvent {}
 /**
  * @ntsBoundBy "nts:dom" Selection
- * @ntsIs nts_dom_is 507
+ * @ntsIs nts_dom_is 493
  */
 interface Selection {}
 /**
  * @ntsBoundBy "nts:dom" ShadowRoot
- * @ntsIs nts_dom_is 511
+ * @ntsIs nts_dom_is 496
  */
 interface ShadowRoot {}
 /**
  * @ntsBoundBy "nts:dom" EventTarget
- * @ntsIs nts_dom_is 512
+ * @ntsIs nts_dom_is 497
  */
 interface SharedWorker {}
 /**
  * @ntsBoundBy "nts:dom" StaticRange
- * @ntsIs nts_dom_is 517
+ * @ntsIs nts_dom_is 502
  */
 interface StaticRange {}
 /**
- * @ntsIs nts_dom_is 520
+ * @ntsIs nts_dom_is 504
  */
 interface StylePropertyMap {}
 /**
- * @ntsIs nts_dom_is 521
+ * @ntsIs nts_dom_is 505
  */
 interface StylePropertyMapReadOnly {}
 /**
  * @ntsBoundBy "nts:dom" StyleSheet
- * @ntsIs nts_dom_is 522
+ * @ntsIs nts_dom_is 506
  */
 interface StyleSheet {}
 /**
  * @ntsBoundBy "nts:dom" StyleSheetList
- * @ntsIs nts_dom_is 523
+ * @ntsIs nts_dom_is 507
  */
 interface StyleSheetList {}
 /**
  * @ntsBoundBy "nts:dom" SubmitEvent
- * @ntsIs nts_dom_is 524
+ * @ntsIs nts_dom_is 508
  */
 interface SubmitEvent {}
 /**
  * @ntsBoundBy "nts:dom" AbortController
- * @ntsIs nts_dom_is 527
+ * @ntsIs nts_dom_is 511
  */
 interface TaskController {}
 /**
  * @ntsBoundBy "nts:dom" Event
- * @ntsIs nts_dom_is 528
+ * @ntsIs nts_dom_is 512
  */
 interface TaskPriorityChangeEvent {}
 /**
  * @ntsBoundBy "nts:dom" AbortSignal
- * @ntsIs nts_dom_is 529
+ * @ntsIs nts_dom_is 513
  */
 interface TaskSignal {}
 /**
  * @ntsBoundBy "nts:dom" Text
- * @ntsIs nts_dom_is 531
+ * @ntsIs nts_dom_is 515
  */
 interface Text {}
 /**
  * @ntsBoundBy "nts:dom" UIEvent
- * @ntsIs nts_dom_is 534
+ * @ntsIs nts_dom_is 518
  */
 interface TextEvent {}
 /**
  * @ntsBoundBy "nts:dom" TextMetrics
- * @ntsIs nts_dom_is 537
+ * @ntsIs nts_dom_is 521
  */
 interface TextMetrics {}
 /**
  * @ntsBoundBy "nts:dom" EventTarget
- * @ntsIs nts_dom_is 538
+ * @ntsIs nts_dom_is 522
  */
 interface TextTrack {}
 /**
  * @ntsBoundBy "nts:dom" EventTarget
- * @ntsIs nts_dom_is 539
+ * @ntsIs nts_dom_is 523
  */
 interface TextTrackCue {}
 /**
- * @ntsIs nts_dom_is 540
+ * @ntsIs nts_dom_is 524
  */
 interface TextTrackCueList {}
 /**
  * @ntsBoundBy "nts:dom" EventTarget
- * @ntsIs nts_dom_is 541
+ * @ntsIs nts_dom_is 525
  */
 interface TextTrackList {}
 /**
  * @ntsBoundBy "nts:dom" TimeRanges
- * @ntsIs nts_dom_is 543
+ * @ntsIs nts_dom_is 527
  */
 interface TimeRanges {}
 /**
  * @ntsBoundBy "nts:dom" Event
- * @ntsIs nts_dom_is 547
+ * @ntsIs nts_dom_is 531
  */
 interface ToggleEvent {}
 /**
  * @ntsBoundBy "nts:dom" Touch
- * @ntsIs nts_dom_is 548
+ * @ntsIs nts_dom_is 532
  */
 interface Touch {}
 /**
  * @ntsBoundBy "nts:dom" TouchEvent
- * @ntsIs nts_dom_is 549
+ * @ntsIs nts_dom_is 533
  */
 interface TouchEvent {}
 /**
  * @ntsBoundBy "nts:dom" TouchList
- * @ntsIs nts_dom_is 550
+ * @ntsIs nts_dom_is 534
  */
 interface TouchList {}
 /**
  * @ntsBoundBy "nts:dom" Event
- * @ntsIs nts_dom_is 551
+ * @ntsIs nts_dom_is 535
  */
 interface TrackEvent {}
 /**
- * @ntsIs nts_dom_is 552
+ * @ntsIs nts_dom_is 536
  */
 interface TransformStream {}
 /**
- * @ntsIs nts_dom_is 553
+ * @ntsIs nts_dom_is 537
  */
 interface TransformStreamDefaultController {}
 /**
  * @ntsBoundBy "nts:dom" TransitionEvent
- * @ntsIs nts_dom_is 554
+ * @ntsIs nts_dom_is 538
  */
 interface TransitionEvent {}
 /**
  * @ntsBoundBy "nts:dom" TreeWalker
- * @ntsIs nts_dom_is 555
+ * @ntsIs nts_dom_is 539
  */
 interface TreeWalker {}
 /**
  * @ntsBoundBy "nts:dom" UIEvent
- * @ntsIs nts_dom_is 563
+ * @ntsIs nts_dom_is 546
  */
 interface UIEvent {}
 /**
  * @ntsBoundBy "nts:dom" URL
- * @ntsIs nts_dom_is 564
+ * @ntsIs nts_dom_is 547
  */
 interface URL {}
 /**
- * @ntsIs nts_dom_is 565
+ * @ntsIs nts_dom_is 548
  */
 interface URLPattern {}
 /**
  * @ntsBoundBy "nts:dom" URLSearchParams
- * @ntsIs nts_dom_is 566
+ * @ntsIs nts_dom_is 549
  */
 interface URLSearchParams {}
 /**
- * @ntsIs nts_dom_is 568
+ * @ntsIs nts_dom_is 550
  */
 interface UserActivation {}
 /**
  * @ntsBoundBy "nts:dom" EventTarget
- * @ntsIs nts_dom_is 569
+ * @ntsIs nts_dom_is 551
  */
 interface VTTCue {}
 /**
- * @ntsIs nts_dom_is 570
+ * @ntsIs nts_dom_is 552
  */
 interface VTTRegion {}
 /**
  * @ntsBoundBy "nts:dom" ValidityState
- * @ntsIs nts_dom_is 571
+ * @ntsIs nts_dom_is 553
  */
 interface ValidityState {}
 /**
  * @ntsBoundBy "nts:dom" AnimationTimeline
- * @ntsIs nts_dom_is 574
+ * @ntsIs nts_dom_is 556
  */
 interface ViewTimeline {}
 /**
- * @ntsIs nts_dom_is 575
+ * @ntsIs nts_dom_is 557
  */
 interface ViewTransition {}
 /**
- * @ntsIs nts_dom_is 576
+ * @ntsIs nts_dom_is 558
  */
 interface ViewTransitionTypeSet {}
 /**
  * @ntsBoundBy "nts:dom" EventTarget
- * @ntsIs nts_dom_is 579
+ * @ntsIs nts_dom_is 561
  */
 interface VisualViewport {}
 /**
  * @ntsBoundBy "nts:dom" WheelEvent
- * @ntsIs nts_dom_is 581
+ * @ntsIs nts_dom_is 563
  */
 interface WheelEvent {}
 /**
  * @ntsBoundBy "nts:dom" Window
- * @ntsIs nts_dom_is 582
+ * @ntsIs nts_dom_is 564
  */
 interface Window {}
 /**
  * @ntsBoundBy "nts:dom" EventTarget
- * @ntsIs nts_dom_is 584
+ * @ntsIs nts_dom_is 566
  */
 interface Worker {}
 /**
- * @ntsIs nts_dom_is 589
+ * @ntsIs nts_dom_is 570
  */
 interface Worklet {}
 /**
- * @ntsIs nts_dom_is 591
+ * @ntsIs nts_dom_is 572
  */
 interface WritableStream {}
 /**
- * @ntsIs nts_dom_is 592
+ * @ntsIs nts_dom_is 573
  */
 interface WritableStreamDefaultController {}
 /**
- * @ntsIs nts_dom_is 593
+ * @ntsIs nts_dom_is 574
  */
 interface WritableStreamDefaultWriter {}
 /**
  * @ntsBoundBy "nts:dom" Document
- * @ntsIs nts_dom_is 594
+ * @ntsIs nts_dom_is 575
  */
 interface XMLDocument {}
 /**
  * @ntsBoundBy "nts:dom" EventTarget
- * @ntsIs nts_dom_is 595
+ * @ntsIs nts_dom_is 576
  */
 interface XMLHttpRequest {}
 /**
  * @ntsBoundBy "nts:dom" EventTarget
- * @ntsIs nts_dom_is 596
+ * @ntsIs nts_dom_is 577
  */
 interface XMLHttpRequestEventTarget {}
 /**
  * @ntsBoundBy "nts:dom" EventTarget
- * @ntsIs nts_dom_is 597
+ * @ntsIs nts_dom_is 578
  */
 interface XMLHttpRequestUpload {}
 /**
  * @ntsBoundBy "nts:dom" XMLSerializer
- * @ntsIs nts_dom_is 598
+ * @ntsIs nts_dom_is 579
  */
 interface XMLSerializer {}
 /**
- * @ntsIs nts_dom_is 599
+ * @ntsIs nts_dom_is 580
  */
 interface XPathEvaluator {}
 /**
- * @ntsIs nts_dom_is 600
+ * @ntsIs nts_dom_is 581
  */
 interface XPathExpression {}
 /**
- * @ntsIs nts_dom_is 601
+ * @ntsIs nts_dom_is 582
  */
 interface XPathResult {}
 /**
- * @ntsIs nts_dom_is 602
+ * @ntsIs nts_dom_is 583
  */
 interface XSLTProcessor {}
 /**
  * @ntsBoundBy "nts:dom" CanvasGradient
- * @ntsIs nts_dom_is 603
+ * @ntsIs nts_dom_is 584
  */
 interface CanvasGradient {}
 /**
  * @ntsBoundBy "nts:dom" CanvasPattern
- * @ntsIs nts_dom_is 604
+ * @ntsIs nts_dom_is 585
  */
 interface CanvasPattern {}
 /**
  * @ntsBoundBy "nts:dom" CanvasRenderingContext2D
- * @ntsIs nts_dom_is 605
+ * @ntsIs nts_dom_is 586
  */
 interface CanvasRenderingContext2D {}
 /**
  * @ntsBoundBy "nts:dom" Path2D
- * @ntsIs nts_dom_is 606
+ * @ntsIs nts_dom_is 587
  */
 interface Path2D {}
 /**
  * @ntsBoundBy "nts:dom" Storage
- * @ntsIs nts_dom_is 607
+ * @ntsIs nts_dom_is 588
  */
 interface Storage {}
 /** @ntsBoundBy "nts:dom" HTMLCollection */

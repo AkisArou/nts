@@ -141,7 +141,7 @@ function build(jobs: number): void {
   const resultFile = resolve(evidence, "build-result.json");
   writeFileSync(resultFile, `${JSON.stringify({ state: "running", pid: process.pid, startedAt, jobs, target: target.name })}\n`);
   try {
-    const targets = target.name === "nts_shell" ? ["nts_shell", "content_shell", ...(target.app ? ["nts_app"] : [])] : [target.name];
+    const targets = target.name === "nts_shell" ? ["nts_shell", "content_shell", ...(target.app ? ["nts_app", "nts_app_shell"] : [])] : [target.name];
     run([resolve(depot, "autoninja"), "-C", relative(source, buildDir), "-j", String(jobs), ...targets], source, environment());
     const resources = execFileSync(resolve(depot, "gn"), ["desc", relative(source, buildDir), target.label, "runtime_deps"], { cwd: source, env: environment(), encoding: "utf8" });
     writeFileSync(resolve(evidence, "runtime-deps.txt"), resources);
@@ -149,7 +149,7 @@ function build(jobs: number): void {
     writeFileSync(resultFile, `${JSON.stringify({ state: "passed", startedAt, finishedAt: new Date().toISOString(), jobs, profile: profile.name, target: target.name, chromiumRevision: revision(source),
       gnArgsSha256: hash(resolve(buildDir, "args.gn")), executableSha256: hash(resolve(buildDir, target.name)), nativeManifestSha256: target.name === "nts_shell" ? hash(manifest) : undefined,
       v8ControlExecutableSha256: hash(resolve(buildDir, "content_shell")),
-      appExecutableSha256: target.app ? hash(resolve(buildDir, "nts_app")) : undefined, targets })}\n`);
+      appExecutableSha256: target.app ? hash(resolve(buildDir, "nts_app_shell")) : undefined, targets })}\n`);
   } catch (error) {
     writeFileSync(resultFile, `${JSON.stringify({ state: "failed", startedAt, finishedAt: new Date().toISOString(), target: target.name, error: String(error) })}\n`);
     throw error;

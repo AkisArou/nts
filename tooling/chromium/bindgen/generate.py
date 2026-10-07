@@ -206,6 +206,15 @@ class Function:
                 or "context." in self.expression or any("context." in s for s in self.statements))
 
 
+def from_testing(definition):
+    """Whether Blink defines it for web tests (core/testing, modules'
+    testing): window.internals and the like, which a content embedder
+    without test support does not link."""
+    # Where it is declared: an interface with a testing partial (Window has
+    # origin_trials_test_window.idl) is not itself one.
+    return "/testing/" in definition.debug_info.location.filepath
+
+
 def runtime_feature_status():
     """Each Blink runtime feature's status as page script meets it: "stable"
     only where Blink's default is what a renderer runs with. A feature the
@@ -260,7 +269,8 @@ class Generator:
         # Every interface Blink's core component defines, in a fixed order:
         # what `instanceof` can be asked of (nts_dom_is), bound or not.
         self.checkable = sorted((i for i in database.interfaces
-                                 if web_idl.Component("core") in i.components and not i.is_mixin),
+                                 if web_idl.Component("core") in i.components and not i.is_mixin
+                                 and not from_testing(i)),
                                 key=lambda i: i.identifier) + [database.find(name) for name in sorted(self.modules)
                                                                if "." not in name]
         self.interface_id = {i.identifier: index for index, i in enumerate(self.checkable)}
@@ -733,6 +743,8 @@ class Generator:
         return "[RuntimeEnabled=" + "|".join(features) + "] " + " ".join(statuses)
 
     def check_member(self, member):
+        if from_testing(member):
+            raise Skip("defined in Blink's testing IDL (web tests' internals)")
         ext = member.extended_attributes
         unshipped = self.unshipped(ext)
         if unshipped:

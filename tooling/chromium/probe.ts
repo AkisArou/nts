@@ -61,7 +61,7 @@ if (existsSync(blinkStaging)) {
 const argsFile = resolve(source, selectedProfile.directory, "args.gn");
 const profile = readFileSync(resolve(import.meta.dirname, selectedProfile.argumentsFile), "utf8");
 const probeProfile = (variant: string, app = false): string => app
-  ? `${profile}\nroot_extra_deps = [ "//nts:nts_shell", "//nts:nts_app" ]\nnts_probe_backend = "${variant}"\nnts_app_backend = "${variant}"\n`
+  ? `${profile}\nroot_extra_deps = [ "//nts:nts_shell", "//nts:nts_app", "//nts:nts_app_shell" ]\nnts_probe_backend = "${variant}"\nnts_app_backend = "${variant}"\n`
   : `${profile}\nroot_extra_deps = [ "//nts:nts_shell" ]\nnts_probe_backend = "${variant}"\n`;
 const oldArgs = existsSync(argsFile) ? readFileSync(argsFile, "utf8") : profile;
 if (![profile, probeProfile("c"), probeProfile("llvm"), probeProfile("c", true), probeProfile("llvm", true)].includes(oldArgs)) {
@@ -93,7 +93,7 @@ for (const [directory, names] of Object.entries(sources)) {
 // StringView, the same for both backends.
 stage(resolve(root, "runtime/c/nts_string_view.h"), "nts_string_view.h");
 if (appArchive !== undefined) {
-  for (const name of ["app.h", "app_observer.cc", "app_observer.h", "app_main.cc"]) stage(resolve(lane, "host", name), name);
+  for (const name of ["app.h", "app_observer.cc", "app_observer.h", "app_main.cc", "app_scheme.cc", "app_scheme.h", "shell_main.cc"]) stage(resolve(lane, "host", name), name);
   stage(resolve(appArchive), `generated/app/${backend}/program.a`);
 }
 for (const variant of ["c", "llvm"] as const) {

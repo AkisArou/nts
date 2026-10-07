@@ -1,8 +1,13 @@
-# Owned experimental bridge, staged inside Blink's GN visibility boundary.
-# No internal headers propagate to the content embedder.
+# Staged inside Blink's GN visibility boundary. No internal headers propagate
+# to the content embedder.
+
+# The DOM adapter every program links: the bridge, the generated bindings and
+# the hand-written members. Not test-only: the release shell links it.
 source_set("dom_bridge") {
-  testonly = true
-  visibility = [ "//nts:*" ]
+  visibility = [
+    "//nts:*",
+    ":*",
+  ]
   sources = [
     "//nts/dom_bridge.cc",
     "//nts/dom_canvas.cc",
@@ -13,6 +18,24 @@ source_set("dom_bridge") {
     "//nts/nts_string_view.h",
     "//nts/dom_bridge.h",
     "//nts/dom_bridge_bindings.h",
+  ]
+  configs += [ "//third_party/blink/renderer:config" ]
+  deps = [
+    "//base",
+    "//third_party/blink/public:blink_headers",
+    "//third_party/blink/renderer/core",
+    # Canvas 2D (dom_canvas.cc and the allowlist's "modules" interfaces).
+    "//third_party/blink/renderer/modules",
+    "//third_party/blink/renderer/platform",
+    "//v8",
+  ]
+}
+
+# The benchmark harnesses the test embedder runs beside the compiled program.
+source_set("dom_benchmarks") {
+  testonly = true
+  visibility = [ "//nts:*" ]
+  sources = [
     "//nts/binding_benchmark.cc",
     "//nts/binding_benchmark.h",
     "//nts/kernels_benchmark.cc",
@@ -22,12 +45,11 @@ source_set("dom_bridge") {
   ]
   configs += [ "//third_party/blink/renderer:config" ]
   deps = [
+    ":dom_bridge",
     "//nts:probe_abi",
     "//base",
     "//third_party/blink/public:blink_headers",
     "//third_party/blink/renderer/core",
-    # Canvas 2D (dom_canvas.cc and the allowlist's "modules" interfaces).
-    "//third_party/blink/renderer/modules",
     "//third_party/blink/renderer/platform",
     "//v8",
   ]

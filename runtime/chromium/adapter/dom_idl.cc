@@ -29,7 +29,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_blob_property_bag.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_box_quad_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_byte_length_queuing_strategy.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_callback_function_test.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_can_play_type_result.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_canvas_paint_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_canvas_text_align.h"
@@ -145,7 +144,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_dedicated_worker_global_scope.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_deprecation_report_body.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_dev_tools_host.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_dictionary_test.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_directive.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_document.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_document_fragment.h"
@@ -208,8 +206,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_fragment_directive.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_fullscreen_navigation_ui.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_fullscreen_options.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_garbage_collected_script_wrappable.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_gc_observation.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_geolocation.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_geolocation_coordinates.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_geolocation_position.h"
@@ -224,8 +220,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_highlight.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_highlight_registry.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_history.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_hit_test_layer_rect.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_hit_test_layer_rect_list.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_html_all_collection.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_html_anchor_element.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_html_area_element.h"
@@ -331,11 +325,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_integrity_violation_report_body.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_interaction_contentful_paint.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_interest_event.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_internal_runtime_flags.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_internal_settings.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_internal_settings_generated.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_internals.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_internals_ukm_recorder.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_intersection_observer.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_intersection_observer_entry.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_intersection_observer_init.h"
@@ -374,7 +363,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_mutation_observer.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_mutation_observer_init.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_mutation_record.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_nadc_attribute_test.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_named_node_map.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_navigate_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_navigation.h"
@@ -398,7 +386,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_opaque_range.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_optional_effect_timing.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_origin.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_origin_trials_test.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_overscroll_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_page_popup_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_page_reveal_event.h"
@@ -456,7 +443,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_readable_stream_byob_request.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_readable_stream_default_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_readable_stream_default_reader.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_record_test.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_replace_state.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_report.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_report_body.h"
@@ -484,7 +470,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_selection.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_selection_mode.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_selector_directive.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_sequence_test.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_set_html_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_set_html_unsafe_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_shadow_realm_global_scope.h"
@@ -498,7 +483,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_speculation_data.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_speculation_navigation_data.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_static_range.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_static_selection.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_style_media.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_style_property_map.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_style_property_map_read_only.h"
@@ -644,7 +628,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_trusted_script_url.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_trusted_type_policy.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_trusted_type_policy_factory.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_type_conversions.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_ui_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_ui_event_init.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_boolean_importnodeoptions.h"
@@ -662,7 +645,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_stringlegacynulltoemptystring_trustedhtml.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_stringlegacynulltoemptystring_trustedscript.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_trustedscripturl_usvstring.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_union_types_test.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_usvstring_usvstringsequencesequence_usvstringusvstringrecord.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_url.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_url_pattern.h"
@@ -688,7 +670,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_window_properties.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_worker.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_worker_global_scope.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_worker_internals.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_worker_location.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_worker_navigator.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_worklet.h"
@@ -5856,7 +5837,7 @@ blink::DocumentTimelineOptions* NtsDomToDocumentTimelineOptions(NtsDomContext& c
 // Blink's own (`html_names::kClassAttr`). The symbols are C's either way.
 // What `instanceof` checks against, by NtsDomInterface id: each interface's
 // wrapper type, which knows its parent's.
-constexpr std::array<const blink::WrapperTypeInfo*, 608> kInterfaces = {
+constexpr std::array<const blink::WrapperTypeInfo*, 589> kInterfaces = {
     blink::V8AbortController::GetWrapperTypeInfo(),
     blink::V8AbortSignal::GetWrapperTypeInfo(),
     blink::V8AbstractRange::GetWrapperTypeInfo(),
@@ -5953,7 +5934,6 @@ constexpr std::array<const blink::WrapperTypeInfo*, 608> kInterfaces = {
     blink::V8CSSUnparsedValue::GetWrapperTypeInfo(),
     blink::V8CSSVariableReferenceValue::GetWrapperTypeInfo(),
     blink::V8CSSViewTransitionRule::GetWrapperTypeInfo(),
-    blink::V8CallbackFunctionTest::GetWrapperTypeInfo(),
     blink::V8CanvasPaintEvent::GetWrapperTypeInfo(),
     blink::V8CaretPosition::GetWrapperTypeInfo(),
     blink::V8CharacterBoundsUpdateEvent::GetWrapperTypeInfo(),
@@ -5993,7 +5973,6 @@ constexpr std::array<const blink::WrapperTypeInfo*, 608> kInterfaces = {
     blink::V8DedicatedWorkerGlobalScope::GetWrapperTypeInfo(),
     blink::V8DeprecationReportBody::GetWrapperTypeInfo(),
     blink::V8DevToolsHost::GetWrapperTypeInfo(),
-    blink::V8DictionaryTest::GetWrapperTypeInfo(),
     blink::V8Directive::GetWrapperTypeInfo(),
     blink::V8Document::GetWrapperTypeInfo(),
     blink::V8DocumentFragment::GetWrapperTypeInfo(),
@@ -6026,8 +6005,6 @@ constexpr std::array<const blink::WrapperTypeInfo*, 608> kInterfaces = {
     blink::V8FormData::GetWrapperTypeInfo(),
     blink::V8FormDataEvent::GetWrapperTypeInfo(),
     blink::V8FragmentDirective::GetWrapperTypeInfo(),
-    blink::V8GCObservation::GetWrapperTypeInfo(),
-    blink::V8GarbageCollectedScriptWrappable::GetWrapperTypeInfo(),
     blink::V8Geolocation::GetWrapperTypeInfo(),
     blink::V8GeolocationCoordinates::GetWrapperTypeInfo(),
     blink::V8GeolocationPosition::GetWrapperTypeInfo(),
@@ -6127,8 +6104,6 @@ constexpr std::array<const blink::WrapperTypeInfo*, 608> kInterfaces = {
     blink::V8Highlight::GetWrapperTypeInfo(),
     blink::V8HighlightRegistry::GetWrapperTypeInfo(),
     blink::V8History::GetWrapperTypeInfo(),
-    blink::V8HitTestLayerRect::GetWrapperTypeInfo(),
-    blink::V8HitTestLayerRectList::GetWrapperTypeInfo(),
     blink::V8IdleDeadline::GetWrapperTypeInfo(),
     blink::V8ImageBitmap::GetWrapperTypeInfo(),
     blink::V8ImageData::GetWrapperTypeInfo(),
@@ -6139,11 +6114,6 @@ constexpr std::array<const blink::WrapperTypeInfo*, 608> kInterfaces = {
     blink::V8IntegrityViolationReportBody::GetWrapperTypeInfo(),
     blink::V8InteractionContentfulPaint::GetWrapperTypeInfo(),
     blink::V8InterestEvent::GetWrapperTypeInfo(),
-    blink::V8InternalRuntimeFlags::GetWrapperTypeInfo(),
-    blink::V8InternalSettings::GetWrapperTypeInfo(),
-    blink::V8InternalSettingsGenerated::GetWrapperTypeInfo(),
-    blink::V8Internals::GetWrapperTypeInfo(),
-    blink::V8InternalsUkmRecorder::GetWrapperTypeInfo(),
     blink::V8IntersectionObserver::GetWrapperTypeInfo(),
     blink::V8IntersectionObserverEntry::GetWrapperTypeInfo(),
     blink::V8InterventionReportBody::GetWrapperTypeInfo(),
@@ -6178,7 +6148,6 @@ constexpr std::array<const blink::WrapperTypeInfo*, 608> kInterfaces = {
     blink::V8MouseEvent::GetWrapperTypeInfo(),
     blink::V8MutationObserver::GetWrapperTypeInfo(),
     blink::V8MutationRecord::GetWrapperTypeInfo(),
-    blink::V8NADCAttributeTest::GetWrapperTypeInfo(),
     blink::V8NamedNodeMap::GetWrapperTypeInfo(),
     blink::V8NavigateEvent::GetWrapperTypeInfo(),
     blink::V8Navigation::GetWrapperTypeInfo(),
@@ -6201,7 +6170,6 @@ constexpr std::array<const blink::WrapperTypeInfo*, 608> kInterfaces = {
     blink::V8OffscreenCanvas::GetWrapperTypeInfo(),
     blink::V8OpaqueRange::GetWrapperTypeInfo(),
     blink::V8Origin::GetWrapperTypeInfo(),
-    blink::V8OriginTrialsTest::GetWrapperTypeInfo(),
     blink::V8OverscrollEvent::GetWrapperTypeInfo(),
     blink::V8PagePopupController::GetWrapperTypeInfo(),
     blink::V8PageRevealEvent::GetWrapperTypeInfo(),
@@ -6251,7 +6219,6 @@ constexpr std::array<const blink::WrapperTypeInfo*, 608> kInterfaces = {
     blink::V8ReadableStreamBYOBRequest::GetWrapperTypeInfo(),
     blink::V8ReadableStreamDefaultController::GetWrapperTypeInfo(),
     blink::V8ReadableStreamDefaultReader::GetWrapperTypeInfo(),
-    blink::V8RecordTest::GetWrapperTypeInfo(),
     blink::V8Report::GetWrapperTypeInfo(),
     blink::V8ReportBody::GetWrapperTypeInfo(),
     blink::V8ReportingObserver::GetWrapperTypeInfo(),
@@ -6366,7 +6333,6 @@ constexpr std::array<const blink::WrapperTypeInfo*, 608> kInterfaces = {
     blink::V8SecurityPolicyViolationEvent::GetWrapperTypeInfo(),
     blink::V8Selection::GetWrapperTypeInfo(),
     blink::V8SelectorDirective::GetWrapperTypeInfo(),
-    blink::V8SequenceTest::GetWrapperTypeInfo(),
     blink::V8ShadowRealmGlobalScope::GetWrapperTypeInfo(),
     blink::V8ShadowRoot::GetWrapperTypeInfo(),
     blink::V8SharedWorker::GetWrapperTypeInfo(),
@@ -6375,7 +6341,6 @@ constexpr std::array<const blink::WrapperTypeInfo*, 608> kInterfaces = {
     blink::V8SpeculationData::GetWrapperTypeInfo(),
     blink::V8SpeculationNavigationData::GetWrapperTypeInfo(),
     blink::V8StaticRange::GetWrapperTypeInfo(),
-    blink::V8StaticSelection::GetWrapperTypeInfo(),
     blink::V8StyleMedia::GetWrapperTypeInfo(),
     blink::V8StylePropertyMap::GetWrapperTypeInfo(),
     blink::V8StylePropertyMapReadOnly::GetWrapperTypeInfo(),
@@ -6419,12 +6384,10 @@ constexpr std::array<const blink::WrapperTypeInfo*, 608> kInterfaces = {
     blink::V8TrustedScriptURL::GetWrapperTypeInfo(),
     blink::V8TrustedTypePolicy::GetWrapperTypeInfo(),
     blink::V8TrustedTypePolicyFactory::GetWrapperTypeInfo(),
-    blink::V8TypeConversions::GetWrapperTypeInfo(),
     blink::V8UIEvent::GetWrapperTypeInfo(),
     blink::V8URL::GetWrapperTypeInfo(),
     blink::V8URLPattern::GetWrapperTypeInfo(),
     blink::V8URLSearchParams::GetWrapperTypeInfo(),
-    blink::V8UnionTypesTest::GetWrapperTypeInfo(),
     blink::V8UserActivation::GetWrapperTypeInfo(),
     blink::V8VTTCue::GetWrapperTypeInfo(),
     blink::V8VTTRegion::GetWrapperTypeInfo(),
@@ -6443,7 +6406,6 @@ constexpr std::array<const blink::WrapperTypeInfo*, 608> kInterfaces = {
     blink::V8WindowProperties::GetWrapperTypeInfo(),
     blink::V8Worker::GetWrapperTypeInfo(),
     blink::V8WorkerGlobalScope::GetWrapperTypeInfo(),
-    blink::V8WorkerInternals::GetWrapperTypeInfo(),
     blink::V8WorkerLocation::GetWrapperTypeInfo(),
     blink::V8WorkerNavigator::GetWrapperTypeInfo(),
     blink::V8Worklet::GetWrapperTypeInfo(),
@@ -30860,12 +30822,6 @@ bool nts_dom_Window_get_credentialless(NtsDomWindow* self) {
   nts_dom::AssertEntered();
   auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
   return static_cast<bool>(receiver->credentialless());
-}
-
-bool nts_dom_Window_get_testOriginTrialGlobalAttribute(NtsDomWindow* self) {
-  nts_dom::AssertEntered();
-  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
-  return static_cast<bool>(OriginTrialsTestGlobal::testOriginTrialGlobalAttribute(*receiver));
 }
 
 void nts_dom_Window_set_onabort_void(NtsDomWindow* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {

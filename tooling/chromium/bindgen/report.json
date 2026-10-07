@@ -1,5 +1,5 @@
 {
-  "bound": 4891,
+  "bound": 4890,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -4155,6 +4155,11 @@
       "interface": "Window",
       "member": "get crashReport",
       "why": "[RuntimeEnabled=CrashReportingStorageAPI] overridable"
+    },
+    {
+      "interface": "Window",
+      "member": "get testOriginTrialGlobalAttribute",
+      "why": "defined in Blink's testing IDL (web tests' internals)"
     },
     {
       "interface": "Window",

@@ -1,4 +1,5 @@
 import("//nts/probe.gni")
+import("//tools/grit/repack.gni")
 
 assert(is_linux && current_cpu == "x64")
 assert(nts_probe_backend != "")
@@ -37,6 +38,7 @@ source_set("renderer_probe") {
     "//base",
     "//content/public/renderer",
     "//third_party/blink/public:blink",
+    "//third_party/blink/renderer/nts:dom_benchmarks",
     "//third_party/blink/renderer/nts:dom_bridge",
     "//url",
   ]
@@ -70,11 +72,30 @@ executable("nts_shell") {
 
 # An app (host/app.h): the program tooling/chromium/app.ts staged, run in
 # every main-frame document that opts in with <meta name="nts-app">, in its
-# own executable so that it links only its own program. testonly because
-# content_shell, which it derives from, is.
+# own executable so that it links only its own program: nts_app_shell, the
+# release shell (host/shell_main.cc), and nts_app, the test shell derived
+# from content_shell (testonly, as content_shell is) that the harnesses drive.
 if (nts_app_backend != "") {
+  # The nts-app:// scheme both shells serve the app from (host/app_scheme.h).
+  source_set("app_scheme") {
+    sources = [
+      "app_scheme.cc",
+      "app_scheme.h",
+    ]
+    deps = [
+      "//base",
+      "//content/public/browser",
+      "//content/public/common",
+      "//mojo/public/cpp/bindings",
+      "//net",
+      "//services/network/public/cpp",
+      "//services/network/public/mojom",
+      "//third_party/blink/public:blink",
+      "//url",
+    ]
+  }
+
   source_set("renderer_app") {
-    testonly = true
     sources = [
       "app.h",
       "app_observer.cc",
@@ -99,6 +120,7 @@ if (nts_app_backend != "") {
     testonly = true
     sources = [ "app_main.cc" ]
     deps = [
+      ":app_scheme",
       ":renderer_app",
       "//base",
       "//content/public/app",
@@ -124,5 +146,77 @@ if (nts_app_backend != "") {
     if (!is_component_build) {
       configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
     }
+  }
+
+  # The release shell: its own content embedder, no test-only code.
+  executable("nts_app_shell") {
+    sources = [ "shell_main.cc" ]
+    deps = [
+      ":app_scheme",
+      ":nts_app_pak",
+      ":renderer_app",
+      "//base",
+      "//content/public/app",
+      "//content/public/browser",
+      "//content/public/common",
+      "//content/public/renderer",
+      "//net",
+      "//sandbox",
+      "//ui/base",
+      "//ui/display",
+      "//ui/gfx",
+      "//ui/linux:linux_ui_factory",
+      "//ui/views",
+      "//ui/views/controls/webview",
+      "//ui/wm",
+      "//url",
+    ]
+    data_deps = [
+      ":nts_app_pak",
+      "//components/crash/core/app:chrome_crashpad_handler",
+      "//tools/v8_context_snapshot",
+    ]
+    write_runtime_deps = "$root_out_dir/nts_app_shell.runtime_deps"
+    if (!is_component_build) {
+      configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
+    }
+  }
+
+  # The release shell's resources: content's, Blink's and the UI's, without
+  # content_shell's or any test's.
+  repack("nts_app_pak") {
+    sources = [
+      "$root_gen_dir/content/content_resources.pak",
+      "$root_gen_dir/content/gpu_resources.pak",
+      "$root_gen_dir/content/process_resources.pak",
+      "$root_gen_dir/content/service_worker_resources.pak",
+      "$root_gen_dir/mojo/public/js/mojo_bindings_resources.pak",
+      "$root_gen_dir/net/net_resources.pak",
+      "$root_gen_dir/third_party/blink/public/resources/blink_resources.pak",
+      "$root_gen_dir/third_party/blink/public/resources/blink_scaled_resources_100_percent.pak",
+      "$root_gen_dir/third_party/blink/public/resources/inspector_overlay_resources.pak",
+      "$root_gen_dir/third_party/blink/public/strings/blink_strings_en-US.pak",
+      "$root_gen_dir/third_party/blink/public/strings/permission_element_generated_strings.pak",
+      "$root_gen_dir/third_party/blink/public/strings/permission_element_strings_en-US.pak",
+      "$root_gen_dir/ui/resources/ui_resources_100_percent.pak",
+      "$root_gen_dir/ui/strings/app_locale_settings_en-US.pak",
+      "$root_gen_dir/ui/strings/ax_strings_en-US.pak",
+      "$root_gen_dir/ui/strings/ui_strings_en-US.pak",
+    ]
+    deps = [
+      "//content:content_resources",
+      "//content/browser/resources",
+      "//mojo/public/js:resources",
+      "//net:net_resources",
+      "//third_party/blink/public:devtools_inspector_resources",
+      "//third_party/blink/public:resources",
+      "//third_party/blink/public:scaled_resources_100_percent",
+      "//third_party/blink/public/strings",
+      "//third_party/blink/public/strings:permission_element_generated_strings",
+      "//third_party/blink/public/strings:permission_element_strings",
+      "//ui/resources",
+      "//ui/strings",
+    ]
+    output = "$root_out_dir/nts_app.pak"
   }
 }

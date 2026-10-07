@@ -20572,14 +20572,6 @@ declare module "nts:dom" {
      */
     readonly credentialless: boolean;
     /**
-     * @ntsSymbol nts_dom_Window_get_testOriginTrialGlobalAttribute
-     */
-    _get_testOriginTrialGlobalAttribute(this: Window): boolean;
-    /**
-     * @ntsGet _get_testOriginTrialGlobalAttribute
-     */
-    readonly testOriginTrialGlobalAttribute: boolean;
-    /**
      * @ntsSymbol nts_dom_Window_set_onabort_void
      */
     _set_onabort_void(this: Window, handler: Closure<(event: Event) => void>): void;

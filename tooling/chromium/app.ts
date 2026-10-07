@@ -14,7 +14,9 @@
  *
  * `build` compiles the program, archives it with the app host
  * (runtime/chromium/host) by Chromium's toolchain, stages it beside the test
- * probe, and builds `nts_app`. `run` opens the app's page in it, served from
+ * probe, and builds `nts_app_shell`, the release shell (host/shell_main.cc:
+ * a content embedder of its own, nothing of the test-only content_shell; its
+ * resources are nts_app.pak). `run` opens the app's page in it, served from
  * the app's own origin, nts-app://app/ (the directory is --nts-app-dir).
  * `check` runs the built app headless through its lifecycle: it is served as
  * that origin, a secure context, with its stylesheets; it starts, renders what
@@ -64,7 +66,7 @@ const appUrl = "nts-app://app/index.html";
 const appArgs = [`--nts-app-dir=${app}`];
 const work = resolve(root, "target/chromium/apps", name);
 const source = resolve(root, "third_party/chromium/src");
-const shell = resolve(source, profile.directory, "nts_app");
+const shell = resolve(source, profile.directory, "nts_app_shell");
 
 if (command === "build") build();
 else if (command === "run") run();
@@ -105,7 +107,8 @@ export default defineConfig({
   archiveProgram({ root, toolchain: chromiumToolchain(root), backend, generated, archive,
     sources: [resolve(lane, "host/host.c"), resolve(lane, "host/app.c")], includes: [entryHeader] });
   // Stage beside the test probe (its own program is rebuilt and checked too)
-  // and build nts_app with it.
+  // and build the shells with it: nts_app_shell, which run and check use, and
+  // the test shell nts_app.
   execFileSync(process.execPath, [resolve(root, "tooling/chromium/probe.ts"), backend, "--profile", profile.name, "--app", archive],
     { cwd: root, stdio: "inherit" });
   execFileSync(process.execPath, [resolve(root, "tooling/chromium/chromium.ts"), "build", "--profile", profile.name],
