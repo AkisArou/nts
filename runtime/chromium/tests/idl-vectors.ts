@@ -569,6 +569,25 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   log("head", d.head === null ? "none" : d.head.nodeName);
   log("animations", "" + root.getAnimations().length);
 
+  // Web storage: localStorage through its methods and as named properties,
+  // key order, a missing key, and sessionStorage as a separate area.
+  const local = w.localStorage;
+  local.clear();
+  local.setItem("nts-a", "1");
+  local._named_set("nts-b", "two");
+  log("storage", local.length + "|" + shown(local.getItem("nts-a")) + "|" + shown(local._named_get("nts-b")) + "|" + shown(local.getItem("nts-missing")));
+  const keys: string[] = [];
+  for (let i = 0; i < local.length; i += 1) keys.push(shown(local.key(i)));
+  keys.sort();
+  log("storageKeys", keys.join(",") + "|" + shown(local.key(9)));
+  local.removeItem("nts-a");
+  local._named_delete("nts-b");
+  const session = w.sessionStorage;
+  session.setItem("nts-a", "session");
+  log("storageAreas", local.length + "|" + shown(local.getItem("nts-a")) + "|" + shown(session.getItem("nts-a")));
+  session.clear();
+  local.clear();
+
   // Canvas 2D: a drawing, then its pixels as PNG (toDataURL), hashed. The
   // same Skia draws for both, so the hashes agree only if every call drew
   // the same thing.

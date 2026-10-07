@@ -160,6 +160,7 @@ typedef struct NtsDomKeyframeEffect NtsDomKeyframeEffect;
 typedef struct NtsDomAnimationTimeline NtsDomAnimationTimeline;
 typedef struct NtsDomDocumentTimeline NtsDomDocumentTimeline;
 typedef struct NtsDomCaretPosition NtsDomCaretPosition;
+typedef struct NtsDomStorage NtsDomStorage;
 typedef struct NtsDomAnimationSequence NtsDomAnimationSequence;
 typedef struct NtsDomDOMQuadSequence NtsDomDOMQuadSequence;
 typedef struct NtsDomElementSequence NtsDomElementSequence;
@@ -1099,6 +1100,7 @@ enum NtsDomInterface {
   NTS_DOM_CanvasGradient = 603,
   NTS_DOM_CanvasRenderingContext2D = 604,
   NTS_DOM_Path2D = 605,
+  NTS_DOM_Storage = 606,
 };
 /* `object instanceof <interface>`, as V8's binding answers it: whether the
  * object's wrapper type is the interface's or derives from it. NULL is no. */
@@ -4603,6 +4605,8 @@ void nts_dom_Window_set_onunload_null(NtsDomWindow* self);
 bool nts_dom_Window_get_isSecureContext(NtsDomWindow* self);
 bool nts_dom_Window_get_crossOriginIsolated(NtsDomWindow* self);
 NtsDomPerformance* nts_dom_Window_get_performance(NtsDomWindow* self);
+NtsDomStorage* nts_dom_Window_get_localStorage(NtsDomWindow* self, NtsDomException** error);
+NtsDomStorage* nts_dom_Window_get_sessionStorage(NtsDomWindow* self, NtsDomException** error);
 void nts_dom_Window_alert_0(NtsDomWindow* self);
 void nts_dom_Window_alert_1(NtsDomWindow* self, const NtsBorrowedString* message);
 const NtsStringView* nts_dom_Window_atob(NtsDomWindow* self, const NtsBorrowedString* atob, NtsDomException** error);
@@ -5702,6 +5706,15 @@ NtsDomDocumentTimeline* nts_dom_new_DocumentTimeline_0();
 NtsDomNode* nts_dom_CaretPosition_get_offsetNode(NtsDomCaretPosition* self);
 double nts_dom_CaretPosition_get_offset(NtsDomCaretPosition* self);
 NtsDomDOMRect* nts_dom_CaretPosition_getClientRect(NtsDomCaretPosition* self);
+double nts_dom_Storage_get_length(NtsDomStorage* self, NtsDomException** error);
+void nts_dom_Storage_clear(NtsDomStorage* self, NtsDomException** error);
+const NtsStringView* nts_dom_Storage_getItem(NtsDomStorage* self, const NtsBorrowedString* key, NtsDomException** error);
+const NtsStringView* nts_dom_Storage_key(NtsDomStorage* self, double index, NtsDomException** error);
+void nts_dom_Storage_removeItem(NtsDomStorage* self, const NtsBorrowedString* key, NtsDomException** error);
+void nts_dom_Storage_setItem(NtsDomStorage* self, const NtsBorrowedString* key, const NtsBorrowedString* value, NtsDomException** error);
+const NtsStringView* nts_dom_Storage_named_get(NtsDomStorage* self, const NtsBorrowedString* name, NtsDomException** error);
+void nts_dom_Storage_named_set(NtsDomStorage* self, const NtsBorrowedString* name, const NtsBorrowedString* value, NtsDomException** error);
+void nts_dom_Storage_named_delete(NtsDomStorage* self, const NtsBorrowedString* name, NtsDomException** error);
 double nts_dom_AnimationSequence_get_length(NtsDomAnimationSequence* self);
 NtsDomAnimation* nts_dom_AnimationSequence_item(NtsDomAnimationSequence* self, double index);
 double nts_dom_DOMQuadSequence_get_length(NtsDomDOMQuadSequence* self);

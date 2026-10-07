@@ -146,7 +146,8 @@
     "KeyframeEffect",
     "AnimationTimeline",
     "DocumentTimeline",
-    "CaretPosition"
+    "CaretPosition",
+    "Storage"
   ],
   "sequences": [
     "MutationRecord",
@@ -158,6 +159,9 @@
   "modules": [
     "CanvasRenderingContext2D",
     "CanvasGradient",
-    "Path2D"
+    "Path2D",
+    "Storage",
+    "Window.localStorage",
+    "Window.sessionStorage"
   ]
 }

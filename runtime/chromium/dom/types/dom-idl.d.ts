@@ -21330,6 +21330,26 @@ declare module "nts:dom" {
      */
     readonly performance: Performance;
     /**
+     * @ntsSymbol nts_dom_Window_get_localStorage
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _get_localStorage(this: Window, error?: Ptr<DOMException | null>): Storage;
+    /**
+     * @ntsGet _get_localStorage
+     */
+    readonly localStorage: Storage;
+    /**
+     * @ntsSymbol nts_dom_Window_get_sessionStorage
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _get_sessionStorage(this: Window, error?: Ptr<DOMException | null>): Storage;
+    /**
+     * @ntsGet _get_sessionStorage
+     */
+    readonly sessionStorage: Storage;
+    /**
      * @ntsSymbol nts_dom_Window_alert_0
      */
     alert(this: Window): void;
@@ -28440,4 +28460,66 @@ declare module "nts:dom" {
   }
   export type CaretPositionMethods = CaretPositionOwnMethods;
   export type CaretPosition = HostClass<"NtsDomCaretPosition", null, "nts_dom_retain", "nts_dom_release"> & CaretPositionMethods;
+  export interface StorageOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_Storage_get_length
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _get_length(this: Storage, error?: Ptr<DOMException | null>): CNumber<"double">;
+    /**
+     * @ntsGet _get_length
+     */
+    readonly length: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Storage_clear
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    clear(this: Storage, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Storage_getItem
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    getItem(this: Storage, key: StringView, error?: Ptr<DOMException | null>): StringView | null;
+    /**
+     * @ntsSymbol nts_dom_Storage_key
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    key(this: Storage, index: CNumber<"double">, error?: Ptr<DOMException | null>): StringView | null;
+    /**
+     * @ntsSymbol nts_dom_Storage_removeItem
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    removeItem(this: Storage, key: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Storage_setItem
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setItem(this: Storage, key: StringView, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Storage_named_get
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _named_get(this: Storage, name: StringView, error?: Ptr<DOMException | null>): StringView | null;
+    /**
+     * @ntsSymbol nts_dom_Storage_named_set
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _named_set(this: Storage, name: StringView, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Storage_named_delete
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _named_delete(this: Storage, name: StringView, error?: Ptr<DOMException | null>): void;
+  }
+  export type StorageMethods = StorageOwnMethods;
+  export type Storage = HostClass<"NtsDomStorage", null, "nts_dom_retain", "nts_dom_release"> & StorageMethods;
 }

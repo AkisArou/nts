@@ -2072,6 +2072,11 @@ interface CanvasRenderingContext2D {}
  * @ntsIs nts_dom_is 605
  */
 interface Path2D {}
+/**
+ * @ntsBoundBy "nts:dom" Storage
+ * @ntsIs nts_dom_is 606
+ */
+interface Storage {}
 /** @ntsBoundBy "nts:dom" document */
 declare var document: Document;
 /** @ntsBoundBy "nts:dom" requestAnimationFrame */

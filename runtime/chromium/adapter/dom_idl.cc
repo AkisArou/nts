@@ -681,6 +681,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_canvas_text_rendering.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_image_smoothing_quality.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_path_2d.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_storage.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_union_canvasfilter_string.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_union_path2d_string.h"
 #include "third_party/blink/renderer/core/animation/animation.h"
@@ -850,9 +851,33 @@
 #include "third_party/blink/renderer/core/xml/document_xpath_evaluator.h"
 #include "third_party/blink/renderer/core/xml/dom_parser.h"
 #include "third_party/blink/renderer/core/xml/xml_serializer.h"
+#include "third_party/blink/renderer/modules/app_banner/dom_window_installation.h"
+#include "third_party/blink/renderer/modules/awc/additional_windowing_controls.h"
+#include "third_party/blink/renderer/modules/cache_storage/global_cache_storage.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_gradient.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/path_2d.h"
+#include "third_party/blink/renderer/modules/canvas/imagebitmap/image_bitmap_factories.h"
+#include "third_party/blink/renderer/modules/cookie_store/global_cookie_store.h"
+#include "third_party/blink/renderer/modules/crypto/global_crypto.h"
+#include "third_party/blink/renderer/modules/device_orientation/dom_window_device_motion.h"
+#include "third_party/blink/renderer/modules/device_orientation/dom_window_device_orientation.h"
+#include "third_party/blink/renderer/modules/document_picture_in_picture/document_picture_in_picture.h"
+#include "third_party/blink/renderer/modules/file_system_access/global_file_system_access.h"
+#include "third_party/blink/renderer/modules/filesystem/dom_window_file_system.h"
+#include "third_party/blink/renderer/modules/font_access/font_access.h"
+#include "third_party/blink/renderer/modules/gamepad/dom_window_gamepad.h"
+#include "third_party/blink/renderer/modules/indexeddb/global_indexed_db.h"
+#include "third_party/blink/renderer/modules/launch/launch_queue.h"
+#include "third_party/blink/renderer/modules/payments/goods/dom_window_digital_goods.h"
+#include "third_party/blink/renderer/modules/printing/web_printing_manager.h"
+#include "third_party/blink/renderer/modules/screen_details/window_screen_details.h"
+#include "third_party/blink/renderer/modules/shared_storage/window_shared_storage.h"
+#include "third_party/blink/renderer/modules/speech/speech_synthesis.h"
+#include "third_party/blink/renderer/modules/storage/dom_window_storage.h"
+#include "third_party/blink/renderer/modules/storage/storage_area.h"
+#include "third_party/blink/renderer/modules/subapps/sub_apps.h"
+#include "third_party/blink/renderer/modules/xr/global_event_handlers_xr.h"
 
 
 namespace {
@@ -5522,7 +5547,7 @@ blink::DocumentTimelineOptions* NtsDomToDocumentTimelineOptions(v8::Isolate* iso
 // Blink's own (`html_names::kClassAttr`). The symbols are C's either way.
 // What `instanceof` checks against, by NtsDomInterface id: each interface's
 // wrapper type, which knows its parent's.
-constexpr std::array<const blink::WrapperTypeInfo*, 606> kInterfaces = {
+constexpr std::array<const blink::WrapperTypeInfo*, 607> kInterfaces = {
     blink::V8AbortController::GetWrapperTypeInfo(),
     blink::V8AbortSignal::GetWrapperTypeInfo(),
     blink::V8AbstractRange::GetWrapperTypeInfo(),
@@ -6129,6 +6154,7 @@ constexpr std::array<const blink::WrapperTypeInfo*, 606> kInterfaces = {
     blink::V8CanvasGradient::GetWrapperTypeInfo(),
     blink::V8CanvasRenderingContext2D::GetWrapperTypeInfo(),
     blink::V8Path2D::GetWrapperTypeInfo(),
+    blink::V8Storage::GetWrapperTypeInfo(),
 };
 
 // In Blink's namespace, as the bindings are: bind_gen's expressions name
@@ -32604,6 +32630,20 @@ NtsDomPerformance* nts_dom_Window_get_performance(NtsDomWindow* self) {
   return HandleOf<NtsDomPerformance>(GlobalPerformance::performance(*receiver));
 }
 
+NtsDomStorage* nts_dom_Window_get_localStorage(NtsDomWindow* self, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return HandleOf<NtsDomStorage>(DOMWindowStorage::localStorage(*receiver, exception_state));
+}
+
+NtsDomStorage* nts_dom_Window_get_sessionStorage(NtsDomWindow* self, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return HandleOf<NtsDomStorage>(DOMWindowStorage::sessionStorage(*receiver, exception_state));
+}
+
 void nts_dom_Window_alert_0(NtsDomWindow* self) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
@@ -39888,6 +39928,71 @@ NtsDomDOMRect* nts_dom_CaretPosition_getClientRect(NtsDomCaretPosition* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::CaretPosition>(self);
   return HandleOf<NtsDomDOMRect>(receiver->getClientRect());
+}
+
+double nts_dom_Storage_get_length(NtsDomStorage* self, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::StorageArea>(self);
+  return static_cast<double>(receiver->length(exception_state));
+}
+
+void nts_dom_Storage_clear(NtsDomStorage* self, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::StorageArea>(self);
+  receiver->clear(exception_state);
+}
+
+const NtsStringView* nts_dom_Storage_getItem(NtsDomStorage* self, const NtsBorrowedString* key, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::StorageArea>(self);
+  return context.Lend(nts_dom::AsString(receiver->getItem(NtsText(context, key), exception_state)), true);
+}
+
+const NtsStringView* nts_dom_Storage_key(NtsDomStorage* self, double index, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::StorageArea>(self);
+  const auto index_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), index), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return context.Lend(nts_dom::AsString(receiver->key(index_converted, exception_state)), true);
+}
+
+void nts_dom_Storage_removeItem(NtsDomStorage* self, const NtsBorrowedString* key, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::StorageArea>(self);
+  receiver->removeItem(NtsText(context, key), exception_state);
+}
+
+void nts_dom_Storage_setItem(NtsDomStorage* self, const NtsBorrowedString* key, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::StorageArea>(self);
+  receiver->setItem(NtsText(context, key), NtsText(context, value), exception_state);
+}
+
+const NtsStringView* nts_dom_Storage_named_get(NtsDomStorage* self, const NtsBorrowedString* name, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::StorageArea>(self);
+  return context.Lend(nts_dom::AsString(receiver->getItem(NtsText(context, name), exception_state)), true);
+}
+
+void nts_dom_Storage_named_set(NtsDomStorage* self, const NtsBorrowedString* name, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::StorageArea>(self);
+  receiver->setItem(NtsText(context, name), NtsText(context, value), exception_state);
+}
+
+void nts_dom_Storage_named_delete(NtsDomStorage* self, const NtsBorrowedString* name, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::StorageArea>(self);
+  receiver->removeItem(NtsText(context, name), exception_state);
 }
 
 double nts_dom_AnimationSequence_get_length(NtsDomAnimationSequence* self) {

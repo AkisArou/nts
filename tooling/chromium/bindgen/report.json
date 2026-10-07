@@ -1,5 +1,5 @@
 {
-  "bound": 4598,
+  "bound": 4609,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -5979,16 +5979,6 @@
     {
       "interface": "Window",
       "member": "get printing",
-      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "Window",
-      "member": "get localStorage",
-      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "Window",
-      "member": "get sessionStorage",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {

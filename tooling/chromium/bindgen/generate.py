@@ -178,7 +178,8 @@ class Generator:
         # what `instanceof` can be asked of (nts_dom_is), bound or not.
         self.checkable = sorted((i for i in database.interfaces
                                  if web_idl.Component("core") in i.components and not i.is_mixin),
-                                key=lambda i: i.identifier) + [database.find(name) for name in sorted(self.modules)]
+                                key=lambda i: i.identifier) + [database.find(name) for name in sorted(self.modules)
+                                                               if "." not in name]
         self.interface_id = {i.identifier: index for index, i in enumerate(self.checkable)}
 
     # -- types -----------------------------------------------------------
@@ -504,10 +505,14 @@ class Generator:
                                     or not path.startswith("third_party/blink/renderer/modules/"))
 
     def from_modules(self, member):
-        """Whether a member belongs to a modules interface the allowlist
-        binds (`"modules"`): the canvas context's own and its mixins'."""
+        """Whether a member is one the allowlist takes from Blink's modules
+        component (`"modules"`): every member of a modules interface named
+        there (the canvas context's own and its mixins'), or one member a
+        modules partial adds to another interface (`"Window.localStorage"`)."""
         owner = getattr(member, "owner", None)
-        return owner is not None and owner.identifier in self.modules
+        if owner is None:
+            return False
+        return owner.identifier in self.modules or f"{owner.identifier}.{member.identifier}" in self.modules
 
     def check_member(self, member):
         ext = member.extended_attributes
@@ -990,8 +995,12 @@ class Generator:
                     result = Result(result.c, result.ts + " | null", result.kind)
                 method = (getter.extended_attributes.value_of("ImplementedAs") or getter.identifier
                           or "AnonymousNamedGetter")
+                # A named getter that is an ordinary operation (Storage's
+                # getItem) is called as one, with its ExceptionState.
+                throws = "RaisesException" in getter.extended_attributes
+                arguments = [param.expr] + (["exception_state"] if throws else [])
                 return Function(interface, f"nts_dom_{interface.identifier}_named_get", [param], result,
-                                f"receiver->{method}({param.expr})", False, False)
+                                f"receiver->{method}({', '.join(arguments)})", throws, False)
             named("get", getter, build_getter)
         setter = properties.named_setter
         if setter is not None:
@@ -1000,19 +1009,30 @@ class Generator:
                 value = self.parameter(setter.arguments[1].idl_type, "value")
                 throws = "RaisesException" in setter.extended_attributes
                 arguments = [param.expr, value.expr] + (["exception_state"] if throws else [])
+                method = (setter.extended_attributes.value_of("ImplementedAs") or setter.identifier
+                          or "AnonymousNamedSetter")
                 return Function(interface, f"nts_dom_{interface.identifier}_named_set", [param, value],
                                 Result("void", "void", "void"),
-                                f"receiver->AnonymousNamedSetter({', '.join(arguments)})",
+                                f"receiver->{method}({', '.join(arguments)})",
                                 throws or value.may_throw, "CEReactions" in setter.extended_attributes)
             named("set", setter, build_setter)
         deleter = properties.named_deleter
         if deleter is not None:
             def build_deleter():
                 param = name_param(deleter)
+                reactions = "CEReactions" in deleter.extended_attributes
+                if deleter.identifier:
+                    # An ordinary operation (Storage's removeItem), called as one.
+                    throws = "RaisesException" in deleter.extended_attributes
+                    method = deleter.extended_attributes.value_of("ImplementedAs") or deleter.identifier
+                    arguments = [param.expr] + (["exception_state"] if throws else [])
+                    return Function(interface, f"nts_dom_{interface.identifier}_named_delete", [param],
+                                    Result("void", "void", "void"),
+                                    f"receiver->{method}({', '.join(arguments)})", throws, reactions)
                 return Function(interface, f"nts_dom_{interface.identifier}_named_delete", [param],
                                 Result("void", "void", "void"),
                                 f"receiver->AnonymousNamedDeleter(blink::AtomicString({param.expr}.Text()))",
-                                False, "CEReactions" in deleter.extended_attributes)
+                                False, reactions)
             named("delete", deleter, build_deleter)
 
     @staticmethod

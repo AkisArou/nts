@@ -155,7 +155,7 @@ try {
         value(index) { const value = this[Math.trunc(index)]; return value === undefined ? null : value; } });
       // \`_named_get\` and its siblings are the bindings' names for an
       // interface's named properties: here, page script's property access.
-      for (const named of [DOMStringMap, HTMLCollection]) {
+      for (const named of [DOMStringMap, HTMLCollection, Storage]) {
         named.prototype._named_get = function (name) { const value = this[name]; return value === undefined ? null : value; };
         named.prototype._named_set = function (name, value) { this[name] = value; };
         named.prototype._named_delete = function (name) { delete this[name]; };

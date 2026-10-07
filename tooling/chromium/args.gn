@@ -1,8 +1,13 @@
 # Baseline content_shell: full Web platform, no NTS or feature-removal patches.
-# Keep assertions, use a component build, and limit debug data on the first
-# 32 GiB build host. This configuration is for bring-up, not performance claims.
+# Keep assertions, and limit debug data on the 32 GiB build host. This
+# configuration is for bring-up, not performance claims.
+#
+# A static build, as perf is: the adapter links Blink's modules component,
+# whose classes are mostly not MODULES_EXPORTed (StorageArea,
+# DOMWindowStorage). A component build would link them in one profile and not
+# the other. The two profiles differ only in assertions and optimization.
 is_debug = true
-is_component_build = true
+is_component_build = false
 symbol_level = 1
 blink_symbol_level = 0
 v8_symbol_level = 0

@@ -298,12 +298,15 @@ one string member takes the string, and `asX` narrows with Blink's
 arguments. An IDL enum is its literal union, matched against Blink's
 enum class before the call. A member whose types do not map yet (`any`,
 callbacks other than closures, unbound interfaces, `[RuntimeEnabled]`) is
-skipped and listed in `bindgen/report.json`, never guessed: 4598 functions
-bound, 1661 members listed.
+skipped and listed in `bindgen/report.json`, never guessed: 4609 functions
+bound, 1659 members listed.
 
-Blink's modules component is linked for the interfaces the allowlist names
-under `"modules"` (CanvasRenderingContext2D, CanvasGradient, Path2D); a
-modules member of any other interface stays skipped. What their IDL cannot
+Blink's modules component is linked for what the allowlist names under
+`"modules"`: whole interfaces (CanvasRenderingContext2D, CanvasGradient,
+Path2D, Storage), or one member a modules partial adds to a core interface
+(`Window.localStorage`); a modules member of anything else stays skipped.
+Most modules classes are not exported from the component, so both build
+profiles are static. What their IDL cannot
 say is hand-written in `adapter/dom_canvas.cc`: `getContext("2d")`, and the
 color and gradient arms of `fillStyle`/`strokeStyle`, which Blink types
 `any`.
