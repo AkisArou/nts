@@ -37,8 +37,26 @@ pub(super) fn analyze(program: &Program, outward: &FxHashSet<&str>) -> Exposure 
             }
         }
     }
+    let mut reachable = reachable_types(program, &layouts, pending.iter().copied());
+    // **An erased value the outside supplies can be anything the program later
+    // takes it for.** Reachability follows typed structure, so an `unknown[]`
+    // parameter reached `Erased` and stopped -- and `items[0] as Payload` read a
+    // `Payload` a native caller built, whose `x` the field facts had settled
+    // from the program's own writes: 0 where the caller wrote 0.125. Without a
+    // flow from each erased source to each `Unerase`, every type the program
+    // unerases into is exposed once anything erased is.
+    if reachable.contains(&HirType::Erased) {
+        let unerased = program.funcs.iter().flat_map(|func| {
+            func.values
+                .iter()
+                .filter(|op| matches!(op.kind, OpKind::Unerase { .. }))
+                .map(|op| &op.ty)
+        });
+        pending.extend(unerased);
+        reachable = reachable_types(program, &layouts, pending);
+    }
     let mut exposed = Exposure::default();
-    for ty in reachable_types(program, &layouts, pending) {
+    for ty in reachable {
         match ty {
             HirType::Managed(ManagedType::Object(_)) => {
                 let Some(at) = layouts.of(ty) else {
