@@ -92,11 +92,10 @@ public final class NtsArrayZ {
     }
 
     public static void set(NtsArrayZ a, double at, boolean value) {
-        int i = (int) at;
-        if (i >= a.length) {
-            int wanted = NtsArrays.checkedLength((long) i + 1);
-            reserve(a, wanted);
-            a.length = wanted;
+        int i = NtsArrays.writableSlot(at, a.length);
+        if (i == a.length) {
+            reserve(a, NtsArrays.checkedLength((long) i + 1));
+            a.length = i + 1;
         }
         a.items[i] = value;
     }

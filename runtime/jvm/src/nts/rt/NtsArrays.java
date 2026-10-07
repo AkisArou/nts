@@ -12,6 +12,26 @@ final class NtsArrays {
 
     // For an int-sized container, d2i saturation has exactly the required bounds
     // behavior. Truncate BEFORE applying a relative offset: -0.5 becomes 0.
+    /**
+     * The slot a checked store into a growable array writes, which is C's
+     * `nts_slot_or_grow` rule exactly: an integral index already in range, or
+     * an integral index equal to `length` -- an append by one, the only growth.
+     * Anything else refuses with the bounds refusal a read gives: past the end
+     * (a hole has no representation in a dense array, and filling it with the
+     * element's zero -- `0.0` in a `double[]` -- is a silent wrong answer),
+     * negative, fractional or NaN (each a property write in JavaScript, never
+     * an element). The three `set`s did `(int) at`, so `1.5` wrote slot 1,
+     * `NaN` slot 0, a negative index threw a bare
+     * `ArrayIndexOutOfBoundsException`, and `xs[length + 4]` grew four holes.
+     * The caller appends when the answer is `length`.
+     */
+    static int writableSlot(double at, int length) {
+        if (at >= 0 && at <= length && at == (double) (int) at) {
+            return (int) at;
+        }
+        return (int) NtsRuntime.outOfRange(at, length);
+    }
+
     static int clamp(double index, int length) {
         int at = (int) index;
         if (at < 0) { at += length; }

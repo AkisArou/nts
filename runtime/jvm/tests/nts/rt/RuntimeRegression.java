@@ -91,6 +91,41 @@ public final class RuntimeRegression {
         check(lengthRefuses("not an array") && lengthRefuses(new Object()) && lengthRefuses(null), "a non-array refuses");
     }
 
+    private static boolean setRefuses(Runnable store) {
+        try {
+            store.run();
+            return false;
+        } catch (NtsRefusal expected) {
+            return true;
+        }
+    }
+
+    /**
+     * A checked store into a growable array is C's `nts_slot_or_grow`: a slot
+     * it has, or exactly `length` (an append by one); anything else refuses as
+     * a bounds refusal -- never a hole, never a truncated slot, never a bare
+     * `ArrayIndexOutOfBoundsException`.
+     */
+    private static void testCheckedSet() {
+        final NtsArrayD d = NtsArrayD.of(2);
+        final NtsArrayL l = NtsArrayL.of(2);
+        final NtsArrayZ z = NtsArrayZ.of(2);
+        final NtsValue v = NtsValue.ofNumber(9);
+        NtsArrayD.set(d, 1, 5);
+        NtsArrayD.set(d, 2, 6);
+        NtsArrayD.set(d, -0.0, 4);
+        check(NtsArrayD.length(d) == 3 && NtsArrayD.get(d, 0) == 4 && NtsArrayD.get(d, 2) == 6, "in range, -0, and an append at length");
+        NtsArrayL.set(l, 2, v);
+        NtsArrayZ.set(z, 2, true);
+        check(NtsArrayL.length(l) == 3 && NtsArrayZ.length(z) == 3, "each wrapper appends exactly at length");
+        for (final double bad : new double[] {4, -1, 1.5, Double.NaN, Double.POSITIVE_INFINITY}) {
+            check(setRefuses(() -> NtsArrayD.set(d, bad, 1)), "NtsArrayD refuses " + bad);
+            check(setRefuses(() -> NtsArrayL.set(l, bad, v)), "NtsArrayL refuses " + bad);
+            check(setRefuses(() -> NtsArrayZ.set(z, bad, true)), "NtsArrayZ refuses " + bad);
+        }
+        check(NtsArrayD.length(d) == 3 && NtsArrayL.length(l) == 3 && NtsArrayZ.length(z) == 3, "and a refused store changed nothing");
+    }
+
     private static void testErasedBigInt() {
         NtsBigInt five = NtsBigInt.fromLong(5);
         NtsValue a = NtsValue.ofBigInt(NtsBigInt.add(NtsBigInt.fromLong(2), NtsBigInt.fromLong(3)));
@@ -403,10 +438,20 @@ public final class RuntimeRegression {
             else if (operation == 3 && !model.isEmpty()) { number(NtsArrayD.shift(a), model.remove(0), "shift"); }
             else if (operation == 4) { NtsArrayD.reverse(a); Collections.reverse(model); }
             else if (operation == 5) {
+                // A checked store writes a slot it has or appends exactly at
+                // `length`; past the end it refuses and changes nothing. The
+                // model used to zero-fill the gap, which pinned the silent
+                // wrong answer `set` gave (a hole read 0 where node says
+                // undefined); `nts_append_slot` aborts there.
                 int at = random.nextInt(60);
-                NtsArrayD.set(a, at, value);
-                while (model.size() <= at) { model.add(0.0); }
-                model.set(at, value);
+                if (at <= model.size()) {
+                    NtsArrayD.set(a, at, value);
+                    if (at == model.size()) { model.add(value); } else { model.set(at, value); }
+                } else {
+                    boolean refused = false;
+                    try { NtsArrayD.set(a, at, value); } catch (NtsRefusal expected) { refused = true; }
+                    check(refused && a.length == model.size(), "a store past the end refuses and changes nothing");
+                }
             } else if (operation == 6) {
                 int at = random.nextInt(80) - 40, count = random.nextInt(30);
                 int start = oldClamp(at, model.size()), n = Math.min(count, model.size() - start);
@@ -947,6 +992,7 @@ public final class RuntimeRegression {
         testMapAsJavaMap(); System.out.println("NtsMap as java.util.Map passed");
         testForeignCallbacks(); System.out.println("foreign-thread callbacks passed");
         testSetLength(); System.out.println("array setLength passed");
+        testCheckedSet(); System.out.println("checked growable store passed");
         testNumbersAndIndices(); System.out.println("numeric and index tests passed");
         testArraysAndStrings(); System.out.println("array and string tests passed");
         testPromises(); System.out.println("promise and queue tests passed");
