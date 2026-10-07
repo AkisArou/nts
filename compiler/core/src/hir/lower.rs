@@ -22631,8 +22631,16 @@ impl<'a> FuncBuilder<'a> {
             // -- after `w instanceof GtkLabel`, which asked the type system
             // (`lower_gobject_instanceof`). Only a narrowing: an `as` asserts
             // unchecked, and stays refused (`a_class_downcast_by_assertion_is_refused`).
+            //
+            // And a host's handle on the same ground: `el instanceof
+            // HTMLElement` against a class a binding implements asked Blink's
+            // own wrapper-type test (`lower_bound_instanceof`).
             let handle = |ty: &HirType| match ty {
-                HirType::NativePointer(super::native::Pointee::Opaque(handle)) if handle.family == super::native::Family::GObject => Some(handle.clone()),
+                HirType::NativePointer(super::native::Pointee::Opaque(handle))
+                    if matches!(handle.family, super::native::Family::GObject | super::native::Family::Host(_)) =>
+                {
+                    Some(handle.clone())
+                }
                 _ => None,
             };
             if !matches!(self.kind_of(id), Some(syntax::AS_EXPRESSION | syntax::NON_NULL_EXPRESSION))
@@ -37640,6 +37648,9 @@ impl<'a> FuncBuilder<'a> {
             return Ok(sent);
         }
         if let Some(asked) = self.lower_gobject_instanceof(id, lhs, symbol)? {
+            return Ok(asked);
+        }
+        if let Some(asked) = self.lower_bound_instanceof(id, lhs, symbol)? {
             return Ok(asked);
         }
         if let Some(asked) = self.lower_com_instanceof(id, lhs, symbol)? {
@@ -60148,6 +60159,72 @@ impl<'a> FuncBuilder<'a> {
     /// this `GType`);
     /// of one already held as the box, it is whether it is there. `None` for
     /// any other class.
+    /// `x instanceof HTMLElement` against a class a binding implements: the
+    /// test its overlay's `@ntsIs` names, `nts_dom_is(x, 5)` -- Blink's own
+    /// wrapper-type test, which is how page script's `instanceof` answers, for
+    /// every interface and not only those with a downcast. A null handle is no
+    /// instance of anything, and is not asked.
+    ///
+    /// The function is synthesized from the tag, `bool f(const void *,
+    /// uint32_t)`, and declared by the header the binding's module names: the
+    /// tag is the whole contract, with no TypeScript declaration to keep beside it.
+    fn lower_bound_instanceof(&mut self, id: NodeId, lhs: NodeId, symbol: nts_semantic_schema::SymbolId) -> Result<Option<ValueId>, Diagnostic> {
+        let Some((function, test, module)) = self.bound_instance_test(symbol) else {
+            return Ok(None);
+        };
+        let object = self.lower_expression(lhs)?;
+        let object_ty = self.values[object.0 as usize].ty.clone();
+        if !matches!(object_ty, HirType::NativePointer(_)) {
+            return Err(self.unsupported(id, "an `instanceof` of a class a binding implements, on something that is not a handle"));
+        }
+        let origin = self.origin(id);
+        let null = self.push(OpKind::ConstNull, object_ty, origin.clone());
+        let absent = self.push(OpKind::Binary { op: BinOp::Eq, lhs: object, rhs: null }, HirType::Bool, origin.clone());
+        let (asked, answered) = (self.new_block(), self.new_block());
+        let answer = self.push_block_param(answered, HirType::Bool, origin.clone());
+        let no = self.push(OpKind::ConstBool(false), HirType::Bool, origin.clone());
+        self.terminate(Terminator::Branch { cond: absent, then_target: answered, then_args: vec![no], else_target: asked, else_args: Vec::new() });
+        self.switch_to(asked);
+        let object_pointer = super::native::Pointee::Const(Box::new(super::native::Pointee::Void));
+        let erased = self.push(OpKind::Convert(object), HirType::NativePointer(object_pointer.clone()), origin.clone());
+        let unsigned = HirType::Int { bits: 32, signed: false };
+        let interface = self.push(OpKind::ConstInt(i128::from(test)), unsigned, origin.clone());
+        let mut is = synthesized(
+            &function,
+            vec![super::native::Type::Pointer(object_pointer), super::native::Type::Scalar(super::native::Scalar::UInt32)],
+            super::native::Type::Bool,
+            None,
+            Vec::new(),
+        );
+        is.declared_at = module;
+        let is_a = self.push(
+            OpKind::Call { callee: Callee::Native(std::sync::Arc::new(is)), args: vec![erased, interface], frame: None },
+            HirType::Bool,
+            origin,
+        );
+        self.terminate(Terminator::Jump { target: answered, args: vec![is_a] });
+        self.switch_to(answered);
+        Ok(Some(answer))
+    }
+
+    /// The `@ntsIs <function> <id>` on a class's declarations, and the module
+    /// whose header declares that function: the one its binding names.
+    fn bound_instance_test(&self, symbol: nts_semantic_schema::SymbolId) -> Option<(String, u32, Option<NodeId>)> {
+        let record = self.snapshot.symbols.get(symbol.0 as usize)?;
+        let (tag, binding) = record.declarations.iter().find_map(|declaration| {
+            let native = self.node(*declaration).native.as_deref()?;
+            Some((native.is.clone()?, native.bound_by.clone()))
+        })?;
+        let [function, test] = tag.split_whitespace().collect::<Vec<_>>()[..] else { return None };
+        let test = test.parse().ok()?;
+        let module = binding
+            .as_deref()
+            .and_then(nts_semantic_schema::binding::parse)
+            .and_then(|(module, name)| nts_semantic_schema::binding::declared_in(self.snapshot, module, name, syntax::TYPE_ALIAS_DECLARATION))
+            .and_then(|alias| self.declaring_module(alias));
+        Some((function.to_owned(), test, module))
+    }
+
     fn lower_boxed_instanceof(&mut self, id: NodeId, lhs: NodeId, symbol: nts_semantic_schema::SymbolId) -> Result<Option<ValueId>, Diagnostic> {
         let Some(record) = self.boxed_asked(symbol) else { return Ok(None) };
         let value = self.lower_expression(lhs)?;
