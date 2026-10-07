@@ -52,7 +52,10 @@ impl Layouts {
                 }
                 self.structs.insert(layout.name.clone(), layout.clone());
                 for field in &layout.fields {
-                    if !super::symbols::is_native_c_identifier(&field.name) {
+                    // A reserved word is spelled with a trailing `_`
+                    // (`native_member`); anything else that is no identifier
+                    // stays refused.
+                    if !super::symbols::is_native_c_identifier(&super::symbols::native_member(&field.name)) {
                         return Err(format!("native field `{}` is not a C member identifier", field.name));
                     }
                     self.visit(&field.ty)?;

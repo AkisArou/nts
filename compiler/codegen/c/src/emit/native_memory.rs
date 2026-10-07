@@ -1,5 +1,6 @@
 //! Native payloads have no managed header. C independently checks the shared
 //! layout calculator on every emitted definition.
+use nts_codegen_common::symbols::native_member;
 use super::{CodeWriter, Diagnostic, Origin, Program, Func, OpKind, HirType, ManagedType, value_name, native_prototype, native_function_type, layout_of, c_type_of, c_identifier, return_c_type, static_closure_name, virtual_signature, Spelling};
 use std::fmt::Write as _;
 
@@ -156,7 +157,7 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program,
                 Pointee::Flexible(_) => "[]".to_owned(),
                 _ => String::new(),
             };
-            writer.line(origin, format!("    {} {}{suffix};", field.ty.c_type(), field.name));
+            writer.line(origin, format!("    {} {}{suffix};", field.ty.c_type(), native_member(&field.name)));
         }
         // The attribute goes after the closing brace, where it applies to the
         // type being defined. `__attribute__((packed))` is not ISO C, and there
@@ -188,7 +189,7 @@ fn layout_asserts(
         if matches!(field.ty, nts_core::hir::native::Pointee::Bits { .. }) {
             continue;
         }
-        writer.line(origin, format!("_Static_assert(offsetof({tag}, {}) == {offset}u, \"native field offset\");", field.name));
+        writer.line(origin, format!("_Static_assert(offsetof({tag}, {}) == {offset}u, \"native field offset\");", native_member(&field.name)));
     }
 }
 
@@ -299,15 +300,15 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str
                 // pointer to its first element, and `&p->name` is `T (*)[]`,
                 // which C will not assign to a `T *`.
                 Pointee::Array { .. } | Pointee::Flexible(_) => {
-                    format!("{name} = {}->{};", value_name(pointer), field.name)
+                    format!("{name} = {}->{};", value_name(pointer), native_member(&field.name))
                 }
                 // A member whose *type* is anonymous: the member has a name,
                 // so `&p->member` is written as C writes it, and the result is
                 // held as `char *` because nothing can name what it points at.
                 Pointee::Record(inner) if inner.untagged() => {
-                    format!("{name} = (char *)&{}->{};", value_name(pointer), field.name)
+                    format!("{name} = (char *)&{}->{};", value_name(pointer), native_member(&field.name))
                 }
-                _ => format!("{name} = &{}->{};", value_name(pointer), field.name),
+                _ => format!("{name} = &{}->{};", value_name(pointer), native_member(&field.name)),
             }
         }
         _ => unreachable!("only native memory operations are routed here"),
@@ -409,7 +410,7 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             }
             writer.line(origin, format!(
                 "_Static_assert(offsetof({tag}, {}) == {offset}u, \"{}.{} offset\");",
-                field.name, layout.name, field.name));
+                native_member(&field.name), layout.name, field.name));
             // The address of a member, spelled as its own type. An array's is
             // `T (*)[N]` -- a pointer to the array, not to an element -- and
             // writing `T *` there would assert something true of a decayed
@@ -441,7 +442,7 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             };
             writer.line(origin, format!(
                 "_Static_assert(_Generic(&((({tag} *)0)->{}), {address}: 1, default: 0), \"{}.{} type\");",
-                field.name, layout.name, field.name));
+                native_member(&field.name), layout.name, field.name));
         }
         wrote = true;
     }

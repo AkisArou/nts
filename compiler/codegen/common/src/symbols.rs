@@ -101,6 +101,17 @@ pub fn is_native_c_identifier(name: &str) -> bool {
         && !RESERVED.contains(&name)
 }
 
+/// The C spelling of a native record's member: its name, or its name with a
+/// trailing `_` where that is a C reserved word -- lib.dom's
+/// `ScrollIntoViewOptions.inline` is `inline_` -- which is the rule
+/// [`c_identifier`] applies to a linkage name, and the one a header generator
+/// binding the record follows too. The program writes `inline`; C reads
+/// `inline_`.
+#[must_use]
+pub fn native_member(name: &str) -> String {
+    if RESERVED.contains(&name) { format!("{name}_") } else { name.to_owned() }
+}
+
 /// Names the headers a generated file includes already use.
 ///
 /// A generated file includes `nts_runtime.h` and nothing else, and that header
