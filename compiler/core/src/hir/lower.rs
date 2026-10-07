@@ -57833,6 +57833,43 @@ impl<'a> FuncBuilder<'a> {
         candidates.into_iter().nth(at).unwrap_or_else(|| (first, merged.clone()))
     }
 
+    /// Refuse a call that passes an argument the bound function it lowers to has no
+    /// parameter for.
+    ///
+    /// **A binding's overloads are a subset of lib.dom's**, and when none fits,
+    /// the first is taken so that argument coercion can say which argument does
+    /// not fit (`method_of_bound`). That covers an argument of the wrong type and
+    /// not one *too many*: an argument past the last parameter is dropped, as
+    /// JavaScript drops one -- and silently. `new Blob(["héllo"])`, with nts:dom
+    /// binding only `newBlob()` because the parts constructor takes a
+    /// `sequence<BlobPart>`, built an empty Blob where V8 had the text
+    /// (`blockers/lib-dom-new-that-fits-no-constructor`, the Chromium lane's).
+    fn refuse_dropped_arguments(
+        &self,
+        declaration: NodeId,
+        record: &nts_semantic_schema::SignatureRecord,
+        arguments: &[NodeId],
+    ) -> Result<(), Diagnostic> {
+        // Every parameter, the `@ntsThrows` one included: `as_written` leaves it
+        // out for choosing an overload, but a program may pass its own out slot
+        // (`parser.parse("q", mine)`), and that argument is not dropped.
+        if record.parameters.iter().any(|parameter| parameter.rest) {
+            return Ok(());
+        }
+        let Some(&dropped) = arguments.get(record.parameters.len()) else {
+            return Ok(());
+        };
+        let name = nts_semantic_schema::binding::declared_name(self.snapshot, declaration).unwrap_or("the bound function");
+        Err(self.unsupported(
+            dropped,
+            &format!(
+                "an argument `{name}` has no parameter for: no overload the binding declares \
+                 takes {} argument(s), and the call would drop it",
+                arguments.len()
+            ),
+        ))
+    }
+
     /// An overload's signature as a call writes it: without the parameter its
     /// `@ntsThrows` names, which the binding passes itself and no argument
     /// supplies. Left in, `observe(target, error?)` -- the binding's own out
@@ -57996,6 +58033,7 @@ impl<'a> FuncBuilder<'a> {
     /// function ([`Self::delegated_constructor`]) at that overload's
     /// parameters.
     fn lower_delegated_construction(&mut self, id: NodeId, (function, record): (NodeId, nts_semantic_schema::SignatureRecord), arguments: &[NodeId]) -> Result<ValueId, Diagnostic> {
+        self.refuse_dropped_arguments(function, &record, arguments)?;
         let name = nts_semantic_schema::binding::declared_name(self.snapshot, function).unwrap_or_default().to_owned();
         let callee = self.native_callee(id, Some(function), name, &record)?;
         let spread = self.spread_for(id, &record, arguments);
@@ -58411,6 +58449,7 @@ impl<'a> FuncBuilder<'a> {
         member: NodeId,
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
+        self.refuse_dropped_arguments(declaration, &record, arguments)?;
         let mut with_this = record;
         let chained = self.without_chain_absence(id, with_this.return_type);
         // A sequence the binding answers where the program reads an array

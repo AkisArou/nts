@@ -1,4 +1,4 @@
-// expect: emit-c --rc -> emits-c nts_dom_new_Blob_0()
+// expect: NTS1001 an argument `newBlob` has no parameter for
 //
 // `new Blob(["héllo"])` compiles to the zero-argument constructor and drops
 // its argument: nts:dom binds only `newBlob()` (Blob's one-argument
@@ -10,8 +10,9 @@
 // where V8 answered the text. A `new` no bound constructor fits should be
 // refused, as a delegated method call that fits no overload is.
 //
-// Fixed, this is refused and the expectation goes red: flip it to a guard
-// that the refusal names Blob's constructor.
+// **A guard since 2026-10-08** (MainClaude, `refuse_dropped_arguments`): an
+// argument past the bound function's last parameter is refused, for a
+// delegated `new`, method or global alike.
 //
 // Control, one difference -- `new Blob()`, which fits newBlob(): the same
 // call, rightly (emit-c --rc, clean, nts_dom_new_Blob_0()).
