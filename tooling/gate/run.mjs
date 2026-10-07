@@ -136,7 +136,7 @@ const STEPS = [
   // race a timer against a callback, and contention is what makes that race
   // lose (see the comment above its step line in all.sh); it ran alone, last,
   // for that reason. Lanes inside it: apple VM, windows VM, six local.
-  { name: "interop", slots: 6, min: 6, mem: 3, nts: true, fe: true, favoured: true, doc: "interop projects build and run" },
+  { name: "interop", slots: 6, min: 3, mem: 3, nts: true, fe: true, favoured: true, doc: "interop projects build and run" },
 ];
 const BY_NAME = new Map(STEPS.map((s) => [s.name, s]));
 
