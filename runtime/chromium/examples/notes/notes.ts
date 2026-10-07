@@ -58,18 +58,6 @@ export function createNotes(document: Document): void {
   const notes = load(storage);
   const state = { chosen: 0, pending: 0, next: Number(storage.getItem("notes:next") ?? "1") };
 
-  // Each helper is declared above its callers: a nested function called
-  // before its declaration is refused (contracts/workarounds.md, 24).
-  // The search box hides the notes whose title and body lack its text.
-  function filter(): void {
-    const wanted = search.value.toLowerCase();
-    for (const item of list.querySelectorAll("li")) {
-      const note = notes[Number(item.dataset.index)];
-      const shown = wanted === "" || note.title.toLowerCase().includes(wanted) || note.body.toLowerCase().includes(wanted);
-      item.classList.toggle("hidden", !shown);
-    }
-  }
-
   function render(): void {
     list.textContent = "";
     for (let i = 0; i < notes.length; i++) {
@@ -80,6 +68,16 @@ export function createNotes(document: Document): void {
       list.appendChild(item);
     }
     filter();
+  }
+
+  // The search box hides the notes whose title and body lack its text.
+  function filter(): void {
+    const wanted = search.value.toLowerCase();
+    for (const item of list.querySelectorAll("li")) {
+      const note = notes[Number(item.dataset.index)];
+      const shown = wanted === "" || note.title.toLowerCase().includes(wanted) || note.body.toLowerCase().includes(wanted);
+      item.classList.toggle("hidden", !shown);
+    }
   }
 
   function choose(index: number): void {

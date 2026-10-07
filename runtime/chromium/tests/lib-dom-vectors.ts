@@ -107,17 +107,16 @@ export function libDomTranscript(): string {
   }
   {
     const ul = list(2);
-    // A captured array, not a `let`: contracts/workarounds.md, 23.
-    const seen: string[] = [];
+    let visited = "";
     ul.childNodes.forEach((child: ChildNode): void => {
-      seen.push("," + child.textContent);
+      visited += "," + child.textContent;
       if (ul.childNodes.length < 5) {
         const li = document.createElement("li");
         li.textContent = "n" + ul.childNodes.length;
         ul.appendChild(li);
       }
     });
-    log("live-forEach-append", seen.join(""));
+    log("live-forEach-append", visited);
   }
 
   // Moving the visited node to the end of its own list: a live list sees it
@@ -145,6 +144,39 @@ export function libDomTranscript(): string {
       values += "," + li.value;
     }
     log("typed-collection", values + " attr " + ul.lastElementChild!.getAttribute("value"));
+  }
+
+  // A MutationObserver typed by lib.dom: takeRecords() is a MutationRecord[],
+  // read as an array.
+  {
+    const ul = list(2);
+    const observer = new MutationObserver((records: MutationRecord[]): void => {});
+    observer.observe(ul, { childList: true, attributes: true, attributeOldValue: true });
+    ul.setAttribute("data-state", "one");
+    ul.appendChild(document.createElement("li"));
+    ul.removeChild(ul.firstChild!);
+    const records = observer.takeRecords();
+    let seen = "" + records.length;
+    for (const record of records) seen += "," + record.type + "/" + record.addedNodes.length + "/" + record.removedNodes.length;
+    observer.disconnect();
+    log("mutation-records", seen + " " + records[0].attributeName + " " + records[0].oldValue);
+  }
+
+  // Its callback is called with the records as an array, after this returns
+  // (a microtask): it writes what it was given on the transcript's element,
+  // which the caller has made by then (#native-lib-dom, data-observed).
+  {
+    const ul = list(1);
+    const delivered = new MutationObserver((records: MutationRecord[], observer: MutationObserver): void => {
+      let text = "" + records.length;
+      for (const record of records) text += "," + record.type;
+      document.querySelector("#native-lib-dom")?.setAttribute("data-observed", text + " last " + records[records.length - 1].type);
+      observer.disconnect();
+    });
+    delivered.observe(ul, { childList: true, characterData: true, subtree: true });
+    ul.appendChild(document.createElement("li"));
+    ul.firstChild!.textContent = "changed";
+    ul.lastChild!.remove();
   }
 
   root.remove();
