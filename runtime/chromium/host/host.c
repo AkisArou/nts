@@ -131,6 +131,14 @@ static void promise_fulfil(void *state, NtsPromise *promise) {
   nts_promise_fulfill_void(promise);
   nts_release((NtsHeader *)promise);
 }
+static void promise_fulfil_string(void *state, NtsPromise *promise,
+                                  const NtsStringView *text) {
+  request_checkpoint_end(state);
+  NtsString *value = nts_string_from_view(text);
+  nts_promise_fulfill_reference(promise, (NtsHeader *)value);
+  nts_release((NtsHeader *)value);
+  nts_release((NtsHeader *)promise);
+}
 static void promise_reject(void *state, NtsPromise *promise, const char *name,
                            const char *message) {
   request_checkpoint_end(state);
@@ -141,8 +149,9 @@ static void promise_drop(void *state, NtsPromise *promise) {
   (void)state;
   nts_release((NtsHeader *)promise);
 }
-static const NtsDomPromiseOps promise_ops = {promise_make, promise_fulfil,
-                                             promise_reject, promise_drop};
+static const NtsDomPromiseOps promise_ops = {
+    promise_make, promise_fulfil, promise_fulfil_string, promise_reject,
+    promise_drop};
 
 void nts_chromium_host_attach(NtsChromiumHost *host, NtsDomContext *context) {
   host->dom = context;

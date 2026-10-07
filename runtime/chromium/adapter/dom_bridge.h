@@ -34,6 +34,9 @@ typedef struct NtsPromise NtsPromise;
 typedef struct NtsDomPromiseOps {
   NtsPromise* (*make)(void* state);
   void (*fulfil)(void* state, NtsPromise* promise);
+  // Fulfilled with text, which the host copies (`blob.text()`).
+  void (*fulfil_string)(void* state, NtsPromise* promise,
+                        const NtsStringView* text);
   void (*reject)(void* state, NtsPromise* promise, const char* name,
                  const char* message);
   void (*drop)(void* state, NtsPromise* promise);

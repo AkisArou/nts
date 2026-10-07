@@ -202,7 +202,7 @@ class Function:
         self.receiver = True  # false for a constructor or a downcast: no `self`
 
     def needs_context(self):
-        return (self.reactions or self.result.kind in ("string", "promise") or any(p.context for p in self.params)
+        return (self.reactions or self.result.kind in ("string", "promise", "promise_string") or any(p.context for p in self.params)
                 or "context." in self.expression or any("context." in s for s in self.statements))
 
 
@@ -553,8 +553,15 @@ class Generator:
         # promise, settled when Blink's is (nts_dom::Answer). The member
         # rejects instead of throwing, as V8's binding of one does.
         if unwrapped.is_promise and not nullable:
-            if unwrapped.result_type.unwrap().is_undefined:
+            settled = unwrapped.result_type.unwrap(typedef=True)
+            if settled.is_undefined:
                 return Result("struct NtsPromise*", "Promise<void>", "promise")
+            # `Promise<USVString>` (`blob.text()`): settled with the program's string.
+            if settled.keyword_typename in STRINGS:
+                return Result("struct NtsPromise*", "Promise<string>", "promise_string")
+            # `Promise<Animation>` (`animation.finished`): a handle the promise
+            # holds has no ownership rule yet (what keeps Blink's object alive
+            # between the fulfil and the program's read).
             raise Skip(f"result type {idl_type.syntactic_form}")
         keyword = unwrapped.keyword_typename
         if keyword in STRINGS:
@@ -720,7 +727,7 @@ class Generator:
             if param.include:
                 self.headers.add(param.include)
         function = Function(interface, symbol, params, result, expression, throws, reactions)
-        if result.kind == "promise":
+        if result.kind.startswith("promise"):
             # Its exceptions reject the promise it answers: no @ntsThrows.
             function.throws = False
         if tail is not None:
@@ -1314,7 +1321,7 @@ class Generator:
             lines.append("  NtsDomContext& context = nts_dom::Current();")
         else:
             lines.append("  nts_dom::AssertEntered();")
-        promise = function.result.kind == "promise"
+        promise = function.result.kind.startswith("promise")
         if function.throws:
             lines.append("  Throws exception_state(error);")
         elif promise:
@@ -1356,7 +1363,7 @@ class Generator:
             lines.append(f"  return context.Lend(nts_dom::AsString({expression}), {nullable});")
         elif kind == "enum":
             lines.append(f"  return nts_dom::EnumText({expression});")
-        elif kind == "promise":
+        elif kind.startswith("promise"):
             lines.append(f"  return nts_dom::Answer(context, context.MainWorld(), exception_state, {expression});")
         else:
             # An enum-typed answer (`eventPhase()` is a PhaseType) is its

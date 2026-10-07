@@ -40650,6 +40650,15 @@ NtsDomBlob* nts_dom_Blob_slice_2(NtsDomBlob* self, double start, double end, Nts
   return HandleOf<NtsDomBlob>(receiver->slice(start_converted, end_converted, blink::AtomicString(""), exception_state));
 }
 
+struct NtsPromise* nts_dom_Blob_text(NtsDomBlob* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::Blob>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->text(script_state));
+}
+
 NtsDomFile* nts_dom_as_File(NtsDomBlob* object) {
   nts_dom::AssertEntered();
   return HandleOf<NtsDomFile>(nts_dom_is(object, NTS_DOM_File) ? WrappableOf(object) : nullptr);

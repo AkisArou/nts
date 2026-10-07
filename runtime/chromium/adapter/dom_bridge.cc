@@ -254,8 +254,9 @@ public:
       : context_(context), promise_(promise) {}
   void Trace(blink::Visitor *) const {}
 
-  // `name` null: fulfilled.
-  void Settle(const char *name, const char *message);
+  // `name` null: fulfilled (with `text`, when it is not null).
+  void Settle(const char *name, const char *message,
+              const NtsStringView *text = nullptr);
   // The promise, unsettled, for the document's end; null after either.
   NtsPromise *Take() {
     context_ = nullptr;
@@ -276,6 +277,30 @@ public:
   void Trace(blink::Visitor *visitor) const override {
     visitor->Trace(pending_);
     ThenCallable::Trace(visitor);
+  }
+
+private:
+  blink::Member<NtsPendingPromise> pending_;
+};
+// Fulfilled with text: the program's own string, copied from Blink's.
+template <typename IDLText>
+class NtsPromiseFulfilledText final
+    : public blink::ThenCallable<IDLText, NtsPromiseFulfilledText<IDLText>> {
+public:
+  explicit NtsPromiseFulfilledText(NtsPendingPromise *pending)
+      : pending_(pending) {}
+  void React(blink::ScriptState *, blink::String text) {
+    NtsStringView view{"", 0, 0};
+    if (!text.empty() && text.Is8Bit())
+      view = {text.Span8().data(), text.length(), 0};
+    else if (!text.empty())
+      view = {text.Span16().data(), text.length(), NTS_STRING_VIEW_WIDE};
+    pending_->Settle(nullptr, nullptr, &view);
+  }
+  void Trace(blink::Visitor *visitor) const override {
+    visitor->Trace(pending_);
+    blink::ThenCallable<IDLText, NtsPromiseFulfilledText<IDLText>>::Trace(
+        visitor);
   }
 
 private:
@@ -664,7 +689,8 @@ private:
 // Settles the program's promise inside its environment, as a callback
 // enters it, and gives the adapter's reference back; nothing once the
 // document has ended (Close dropped it).
-void NtsPendingPromise::Settle(const char *name, const char *message) {
+void NtsPendingPromise::Settle(const char *name, const char *message,
+                               const NtsStringView *text) {
   NtsDomContext *context = context_;
   NtsPromise *promise = Take();
   if (!context || !promise || context->closed)
@@ -677,8 +703,9 @@ void NtsPendingPromise::Settle(const char *name, const char *message) {
     RAW_PTR_EXCLUSION NtsPromise *promise;         // see PlainPointers
     RAW_PTR_EXCLUSION const char *name;            // see PlainPointers
     RAW_PTR_EXCLUSION const char *message;         // see PlainPointers
+    RAW_PTR_EXCLUSION const NtsStringView *text;   // see PlainPointers
   } call{context->promise_ops.get(), context->promise_state.get(), promise,
-         name, message};
+         name, message, text};
   context->invoke(
       context->invoke_host.get(),
       [](void *state) {
@@ -686,6 +713,8 @@ void NtsPendingPromise::Settle(const char *name, const char *message) {
         if (call->name)
           call->ops->reject(call->state, call->promise, call->name,
                             call->message);
+        else if (call->text)
+          call->ops->fulfil_string(call->state, call->promise, call->text);
         else
           call->ops->fulfil(call->state, call->promise);
       },
@@ -1351,19 +1380,42 @@ NtsPromise *Rejected(NtsDomContext &context, const Rejections &rejections) {
                               rejections.Message().Utf8().c_str());
   return answer;
 }
-NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
-                   const Rejections &rejections,
-                   blink::ScriptPromise<blink::IDLUndefined> promise) {
+namespace {
+// Blink's promise with its reactions subscribed: the program's, pending.
+template <typename IDLType, typename Fulfilled>
+NtsPromise *Subscribe(NtsDomContext &context, blink::ScriptState *script_state,
+                      const Rejections &rejections,
+                      blink::ScriptPromise<IDLType> promise) {
   if (rejections.HadException() || promise.IsEmpty())
     return Rejected(context, rejections);
   CHECK(context.promise_ops);
   NtsPromise *answer = context.promise_ops->make(context.promise_state.get());
-  auto *pending = blink::MakeGarbageCollected<NtsPendingPromise>(&context, answer);
+  auto *pending =
+      blink::MakeGarbageCollected<NtsPendingPromise>(&context, answer);
   context.listeners->promises.insert(pending);
-  promise.Then(script_state,
-               blink::MakeGarbageCollected<NtsPromiseFulfilled>(pending),
+  promise.Then(script_state, blink::MakeGarbageCollected<Fulfilled>(pending),
                blink::MakeGarbageCollected<NtsPromiseRejected>(pending));
   return answer;
+}
+} // namespace
+NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
+                   const Rejections &rejections,
+                   blink::ScriptPromise<blink::IDLUndefined> promise) {
+  return Subscribe<blink::IDLUndefined, NtsPromiseFulfilled>(
+      context, script_state, rejections, promise);
+}
+NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
+                   const Rejections &rejections,
+                   blink::ScriptPromise<blink::IDLUSVString> promise) {
+  return Subscribe<blink::IDLUSVString,
+                   NtsPromiseFulfilledText<blink::IDLUSVString>>(
+      context, script_state, rejections, promise);
+}
+NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
+                   const Rejections &rejections,
+                   blink::ScriptPromise<blink::IDLString> promise) {
+  return Subscribe<blink::IDLString, NtsPromiseFulfilledText<blink::IDLString>>(
+      context, script_state, rejections, promise);
 }
 } // namespace nts_dom
 

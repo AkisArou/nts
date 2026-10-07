@@ -28483,6 +28483,10 @@ declare module "nts:dom" {
      * @ntsNoEscape error
      */
     slice(this: Blob, start: CNumber<"double">, end: CNumber<"double">, error?: Ptr<DOMException | null>): Blob;
+    /**
+     * @ntsSymbol nts_dom_Blob_text
+     */
+    text(this: Blob): Promise<string>;
   }
   export type BlobMethods = BlobOwnMethods;
   export type Blob = HostClass<"NtsDomBlob", null, "nts_dom_retain", "nts_dom_release"> & BlobMethods;

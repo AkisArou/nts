@@ -5794,6 +5794,7 @@ double nts_dom_Blob_get_size(NtsDomBlob* self);
 const NtsStringView* nts_dom_Blob_get_type(NtsDomBlob* self);
 NtsDomBlob* nts_dom_Blob_slice_3(NtsDomBlob* self, double start, double end, const NtsBorrowedString* contentType, NtsDomException** error);
 NtsDomBlob* nts_dom_Blob_slice_2(NtsDomBlob* self, double start, double end, NtsDomException** error);
+struct NtsPromise* nts_dom_Blob_text(NtsDomBlob* self);
 NtsDomFile* nts_dom_as_File(NtsDomBlob* object);
 const NtsStringView* nts_dom_File_get_name(NtsDomFile* self);
 double nts_dom_File_get_lastModified(NtsDomFile* self);

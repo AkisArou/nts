@@ -1,5 +1,5 @@
 {
-  "bound": 4805,
+  "bound": 4806,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -7695,11 +7695,6 @@
       "interface": "Blob",
       "member": "stream/0",
       "why": "interface ReadableStream is not bound"
-    },
-    {
-      "interface": "Blob",
-      "member": "text/0",
-      "why": "result type Promise<USVString>"
     },
     {
       "interface": "Blob",

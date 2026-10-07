@@ -526,6 +526,13 @@ private:
 NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
                    const Rejections &rejections,
                    blink::ScriptPromise<blink::IDLUndefined> promise);
+// The same, fulfilled with Blink's text.
+NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
+                   const Rejections &rejections,
+                   blink::ScriptPromise<blink::IDLUSVString> promise);
+NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
+                   const Rejections &rejections,
+                   blink::ScriptPromise<blink::IDLString> promise);
 // A promise already rejected with what `rejections` holds: a member whose
 // arguments failed to convert, before Blink is called.
 NtsPromise *Rejected(NtsDomContext &context, const Rejections &rejections);

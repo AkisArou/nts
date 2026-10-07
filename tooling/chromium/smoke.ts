@@ -236,10 +236,10 @@ try {
   // events, whose check counts the program's live objects, which pending
   // timers hold.
   if (nativeDom) await until(async () => await evaluate<string | null>("document.querySelector('#native-timers')?.getAttribute('data-done') ?? null") === "1", "timer vectors");
-  // So do the lib.dom promise vectors (tests/lib-dom-vectors.ts): five
+  // So do the lib.dom promise vectors (tests/lib-dom-vectors.ts): six
   // outcomes, each an attribute of the transcript's element once settled.
-  if (nativeDom) await until(async () => await evaluate<number>(`["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen"]
-    .filter(name => (document.querySelector('#native-lib-dom')?.getAttribute('data-' + name) ?? 'pending') !== 'pending').length`) === 5, "lib.dom promise vectors");
+  if (nativeDom) await until(async () => await evaluate<number>(`["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text"]
+    .filter(name => (document.querySelector('#native-lib-dom')?.getAttribute('data-' + name) ?? 'pending') !== 'pending').length`) === 6, "lib.dom promise vectors");
   // Where the input steps' log begins: the checkpoints counted below are
   // theirs, not the vectors' (whose promise continuations end checkpoints of
   // their own before the first input).
