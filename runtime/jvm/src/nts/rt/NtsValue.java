@@ -50,6 +50,15 @@ public final class NtsValue {
     public static NtsValue ofTagged(int tag, Object value) {
         return value == null ? NULL_VALUE : new NtsValue(tag, 0.0, value);
     }
+    /**
+     * A tagged reference -- a function, a symbol, a bigint -- whose absence is
+     * `undefined`: {@link #ofTagged} reads a null reference as `null`, which is
+     * right only when the absence is `null`. The sibling of
+     * {@link #ofStringOrUndefined} and {@link #ofObjectOrUndefined}.
+     */
+    public static NtsValue ofTaggedOrUndefined(int tag, Object value) {
+        return value == null ? UNDEFINED_VALUE : new NtsValue(tag, 0.0, value);
+    }
     public static NtsValue ofObject(Object value) {
         return value == null ? NULL_VALUE : new NtsValue(OBJECT, 0.0, value);
     }

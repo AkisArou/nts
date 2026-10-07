@@ -3161,11 +3161,21 @@ impl Emitter<'_> {
                 }
                 code.const_int(origin, pool, i32::try_from(tag).unwrap_or(0));
                 self.load(code, pool, value)?;
+                // A null reference is the value's absence, and which absence it
+                // is was decided by lowering: `ofTagged` reads it as `null`,
+                // which made a `symbol | undefined` (or a function's, or a
+                // bigint's) `undefined` answer `typeof` "object" here while C
+                // and LLVM answered "undefined".
+                let erase = if absent == nts_core::hir::Absent::Undefined {
+                    "ofTaggedOrUndefined"
+                } else {
+                    "ofTagged"
+                };
                 code.invoke_static(
                     origin,
                     pool,
                     types::VALUE,
-                    "ofTagged",
+                    erase,
                     "(ILjava/lang/Object;)Lnts/rt/NtsValue;",
                 );
                 return Ok(Placed::OnStack);
