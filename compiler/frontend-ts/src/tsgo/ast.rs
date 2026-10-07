@@ -495,6 +495,8 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
     let overridable = leading_tag(source, "@ntsOverride");
     let reference = leading_tag(source, "@ntsReference");
     let constant = leading_tag(source, "@ntsConstant");
+    let bound_by = leading_tag(source, "@ntsBoundBy");
+    let is = leading_tag(source, "@ntsIs");
     let attributes = nts_semantic_schema::NativeAttributes {
         abi,
         no_escape,
@@ -530,6 +532,8 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         overridable,
         reference,
         constant,
+        bound_by,
+        is,
     };
     // No tag at all is no attributes, rather than an empty set of them.
     (attributes != nts_semantic_schema::NativeAttributes::default()).then(|| Box::new(attributes))
@@ -1086,6 +1090,16 @@ mod tests {
             decoded.nodes[0].data,
             NodeData::String { index: 0, small: 0 }
         );
+    }
+
+    #[test]
+    fn a_delegated_declaration_carries_its_binding_and_its_test() {
+        let source = "/**\n * @ntsBoundBy \"nts:dom\" Event\n * @ntsIs nts_dom_is 5\n */\ninterface AnimationEvent {}";
+        let attributes = native_attributes(source).expect("tagged");
+        assert_eq!(attributes.bound_by.as_deref(), Some("\"nts:dom\" Event"));
+        assert_eq!(attributes.is.as_deref(), Some("nts_dom_is 5"));
+        // A tag is matched whole: `@ntsIsland` is not `@ntsIs`.
+        assert!(native_attributes("/** @ntsIsland x */\ninterface A {}").is_none());
     }
 
     #[test]

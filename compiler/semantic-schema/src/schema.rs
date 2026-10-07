@@ -53,7 +53,9 @@ use crate::origin::Origin;
 /// -- two facts one variant had been flattening. 41: `vfunc_out`, the out
 /// parameters a `GObject` override answers as a tuple. 42: `intrinsic`, the
 /// compiler-defined declaration a call names (`@ntsIntrinsic gobject.signal`).
-pub const SCHEMA_VERSION: u32 = 42;
+/// 43: `bound_by` and `is`, a declaration bound by delegation and its
+/// `instanceof` test (`@ntsBoundBy`, `@ntsIs`).
+pub const SCHEMA_VERSION: u32 = 43;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -907,6 +909,17 @@ pub struct NativeAttributes {
     /// of it is that number, folded where it is read, and nothing is linked.
     #[serde(default)]
     pub constant: Option<String>,
+    /// `@ntsBoundBy <module> <name>`: a declaration the program does not own --
+    /// lib.dom.d.ts's `interface Element`, `declare var document` -- implemented
+    /// by `name` in `module` (`"nts:dom" Element`). A use of it lowers as the
+    /// same-named member of the bound declaration (runtime/chromium/docs/lib-dom.md,
+    /// "bind by delegation"); the program is still typed by the original.
+    #[serde(default)]
+    pub bound_by: Option<String>,
+    /// `@ntsIs <function> <id>`: how `instanceof` asks whether a handle is of
+    /// this interface -- `nts_dom_is(handle, 5)`, Blink's own wrapper-type test.
+    #[serde(default)]
+    pub is: Option<String>,
 }
 
 /// Why a snapshot was rejected.
