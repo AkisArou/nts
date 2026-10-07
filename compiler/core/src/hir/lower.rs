@@ -32302,6 +32302,77 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.push(OpKind::ConstFloat(0.0), HirType::Void, origin))
     }
 
+    /// `list.forEach(f)` of a collection a binding implements
+    /// ([`Self::delegated_collection`]), inlined as the table's is: the
+    /// callback's body where the walk's bindings would go.
+    ///
+    /// **As `%Array.prototype.forEach%` walks an array-like**: the length read
+    /// once, then `f(item(k), k)` for each `k` below it whose item is still
+    /// there. A `NodeList` or an `HTMLCollection` is missing only its tail, so
+    /// "still there" is `k` below the length read now, and the first missing
+    /// one ends the walk without skipping one that would have been visited.
+    /// Where `for...of` reads the length each turn and sees the list grow,
+    /// this does not, as page script does not.
+    ///
+    /// The element is read as the callback's first parameter's type, on the
+    /// ground [`Self::delegated_walk`] reads a loop variable's. The third
+    /// parameter, the list, is refused as the array's is.
+    fn lower_delegated_for_each(&mut self, id: NodeId, (receiver, receiver_node): (ValueId, NodeId), callback: NodeId) -> Result<ValueId, Diagnostic> {
+        let parameters = self.callback_parameters(callback, "forEach")?;
+        if parameters.is_empty() || parameters.len() > 2 {
+            return Err(self.unsupported(
+                callback,
+                &format!("a `forEach` callback taking {} parameters, where it may take 1 or 2 -- the item and its index", parameters.len()),
+            ));
+        }
+        let body = *self.children(callback).last().ok_or_else(|| self.unsupported(callback, "a `forEach` callback with no body"))?;
+        let Walk::Native(mut native) = self.delegated_walk(receiver_node)? else {
+            return Err(self.unsupported(id, "a `forEach` over a bound collection that is not walked by `item`"));
+        };
+        if let Some(declared) = self.snapshot.symbols.get(parameters[0] as usize).and_then(|symbol| symbol.ty).and_then(|ty| self.represent(ty))
+            && Self::host_downcast(&native.element, &declared)
+        {
+            native.element = declared;
+        }
+        let NativeBy::Vector(methods) = &native.by else {
+            return Err(self.unsupported(id, "a `forEach` over a bound collection that is not walked by `item`"));
+        };
+        let origin = self.origin(id);
+        let length = self.call_native_walk(native.site, &methods.size, receiver, Vec::new())?;
+        let length = self.coerce(length, &HirType::NUMBER, native.site)?;
+        let walk = Walk::Native(native);
+        let (receiver, cursor, _) = self.walk_start(&walk, receiver, &origin)?;
+        let cursor = cursor.ok_or_else(|| self.unsupported(id, "a collection walk with no cursor"))?;
+        let carried = self.carried_across(body, &[cursor], &parameters);
+        let record = self.begin_loop(id, &carried, true, &origin)?;
+
+        let at = self.bindings[&cursor];
+        let within = self.push(OpKind::Binary { op: BinOp::Lt, lhs: at, rhs: length }, HirType::Bool, origin.clone());
+        let there = self.walk_condition(&walk, at, receiver, &origin)?;
+        // Both read before the branch (`bool_join`): a length read changes
+        // nothing and cannot throw.
+        let cond = self.bool_join(within, there, false, &origin);
+        self.test_loop(cond, &record);
+        self.switch_to(record.body);
+
+        let at = self.bindings[&cursor];
+        let read = self.read_element(&walk, receiver, at, &origin)?;
+        let [item] = read.as_slice() else {
+            return Err(self.unsupported(id, "a collection walk that did not read one item"));
+        };
+        self.bindings.insert(parameters[0], *item);
+        if let Some(second) = parameters.get(1) {
+            self.bindings.insert(*second, at);
+        }
+        // A `return` inside the callback is a `continue`, as the array's is.
+        self.callback_returns.push(CallbackReturn { depth: record.depth, result: CallbackResult::Discard });
+        let lowered = if self.kind_of(body) == Some(syntax::BLOCK) { self.lower_statement(body) } else { self.lower_expression(body).map(|_| ()) };
+        self.callback_returns.pop();
+        lowered?;
+        self.end_loop(&record, Step::Walk { cursor, walk, sequence: receiver })?;
+        Ok(self.push(OpKind::ConstFloat(0.0), HirType::Void, origin))
+    }
+
     /// `Object.is(a, b)` — `SameValue`, which is `===` with two corrections.
     ///
     /// `===` says `NaN !== NaN` and `0 === -0`; `SameValue` says the opposite of
@@ -35313,6 +35384,9 @@ impl<'a> FuncBuilder<'a> {
             // A Windows Runtime vector, whose `[Symbol.iterator]` names the
             // two methods it is walked by (`@ntsIterate get_Size GetAt`).
             (HirType::NativePointer(_), None) if self.native_iteration(sequence).is_some() => self.native_walk(sequence),
+            // A collection a binding implements, which lib.dom declares
+            // iterable and the binding spells as `length` and `item`.
+            (HirType::NativePointer(_), None) if self.delegated_collection(sequence).is_some() => self.delegated_walk(sequence),
             (_, Some(method)) => Err(self.unsupported(
                 sequence,
                 &format!("`{method}()` on this type, which needs the iteration protocol"),
@@ -35372,15 +35446,7 @@ impl<'a> FuncBuilder<'a> {
         };
         let words = self.native_iteration(sequence).ok_or_else(|| refuse(self))?;
         let ty = self.snapshot.node_types.get(&sequence).copied().ok_or_else(|| refuse(self))?;
-        let method = |this: &Self, on: TypeId, name: &str| -> Option<NativeMethod> {
-            let property = this.members_of(on, |member| member == name).into_iter().next()?;
-            let declaration = property.declaration?;
-            let TypeKind::Function(signature) = this.snapshot.types.get(property.ty.0 as usize)?.kind else { return None };
-            let mut signature = this.snapshot.signatures.get(signature.0 as usize)?.clone();
-            let this_type = signature.this_type?;
-            signature.parameters.insert(0, nts_semantic_schema::ParameterRecord { name: "this".to_owned(), ty: this_type, optional: false, rest: false });
-            Some((name.to_owned(), declaration, signature))
-        };
+        let method = |this: &Self, on: TypeId, name: &str| this.walk_method(on, name);
         let (by, read) = match words.as_slice() {
             [size, at] => {
                 let size = method(self, ty, size).ok_or_else(|| refuse(self))?;
@@ -35403,7 +35469,74 @@ impl<'a> FuncBuilder<'a> {
         let element = self
             .represent(read)
             .ok_or_else(|| self.unsupported(sequence, "a Windows Runtime sequence whose element has no representation"))?;
-        Ok(Walk::Native(Box::new(NativeWalk { by, element, site: sequence })))
+        Ok(Walk::Native(Box::new(NativeWalk { by, element, site: sequence, narrows: false })))
+    }
+
+    /// A walk whose elements are read as the program's type for them
+    /// (`NativeWalk::narrows`), given the one name the loop binds: that name's
+    /// type, where it is a handle below what the walk reads. Any other head
+    /// keeps the walk's own element, and binding it says what does not fit.
+    fn element_as_declared(&self, mut walk: Walk, head: &Head) -> Walk {
+        if let Walk::Native(native) = &mut walk
+            && native.narrows
+            && let Head::InOrder(names) = head
+            && let [Some(name)] = names.as_slice()
+            && let Some(declared) = self.type_of(*name)
+            && Self::host_downcast(&native.element, &declared)
+        {
+            native.element = declared;
+        }
+        walk
+    }
+
+    /// Whether a host handle of type `from` may be read as `to`, a kind of it
+    /// along its declared chain: the downcast a binding's lib.dom type
+    /// licenses (`narrowed`, `bridges::trusted_downcast`).
+    fn host_downcast(from: &HirType, to: &HirType) -> bool {
+        let handle = |ty: &HirType| match ty {
+            HirType::NativePointer(super::native::Pointee::Opaque(handle)) if matches!(handle.family, super::native::Family::Host(_)) => Some(handle.clone()),
+            _ => None,
+        };
+        matches!((handle(from), handle(to)), (Some(from), Some(to)) if to.upcasts_to(&from))
+    }
+
+    /// A method of `on` a [`Walk::Native`] calls, `this` first among its
+    /// parameters as a native call takes it.
+    fn walk_method(&self, on: TypeId, name: &str) -> Option<NativeMethod> {
+        let property = self.members_of(on, |member| member == name).into_iter().next()?;
+        let declaration = property.declaration?;
+        let TypeKind::Function(signature) = self.snapshot.types.get(property.ty.0 as usize)?.kind else { return None };
+        let mut signature = self.snapshot.signatures.get(signature.0 as usize)?.clone();
+        let this_type = signature.this_type?;
+        signature.parameters.insert(0, nts_semantic_schema::ParameterRecord { name: "this".to_owned(), ty: this_type, optional: false, rest: false });
+        Some((name.to_owned(), declaration, signature))
+    }
+
+    /// The `length` and `item` a collection a binding implements is walked
+    /// by -- `NodeList`'s, `HTMLCollection`'s, `DOMTokenList`'s -- where the
+    /// program's type for it is lib.dom's (`NodeListOf<Element>`, which
+    /// `querySelectorAll` returns): the bound type and the two methods.
+    fn delegated_collection(&self, sequence: NodeId) -> Option<(TypeId, NativeMethod, NativeMethod)> {
+        let bound = self.delegated_type(*self.snapshot.node_types.get(&sequence)?)?;
+        Some((bound, self.walk_method(bound, "_get_length")?, self.walk_method(bound, "item")?))
+    }
+
+    /// [`Walk::Native`] over a collection a binding implements
+    /// ([`Self::delegated_collection`]), as `%Array.prototype.values%` walks an
+    /// array-like: `item(i)` while `i < length`, the length read again each
+    /// turn -- so a live list a loop body changes is seen changed, as page
+    /// script sees it. The element is what `item` answers, read as the loop
+    /// variable's type ([`Self::element_as_declared`]): lib.dom says what a
+    /// `NodeListOf<HTMLLIElement>` holds, as its event maps say what a
+    /// listener is passed, and as `narrowed` reads `item(0)` of one.
+    fn delegated_walk(&mut self, sequence: NodeId) -> Result<Walk, Diagnostic> {
+        let Some((_, size, at)) = self.delegated_collection(sequence) else {
+            return Err(self.unsupported(sequence, "a `for...of` over a bound collection with no `length` and `item`"));
+        };
+        let element = self
+            .represent(at.2.return_type)
+            .ok_or_else(|| self.unsupported(sequence, "a bound collection whose `item` answers a type with no representation"))?;
+        Ok(Walk::Native(Box::new(NativeWalk { by: NativeBy::Vector(Box::new(VectorMethods { size, at })), element, site: sequence, narrows: true })))
     }
 
     /// A call of one of a [`Walk::Native`]'s methods on the vector or the
@@ -35431,7 +35564,10 @@ impl<'a> FuncBuilder<'a> {
             })
             .collect::<Result<Vec<_>, _>>()?;
         let (args, lent) = self.native_arguments(site, &target, arguments, count, Some(vector))?;
-        self.finish_call_typed(site, callee, args, lent, Some(*declaration), None)
+        // The method's own type: the call is not the sequence's node, whose
+        // type the checker gave the whole collection.
+        let returns = self.represent(signature.return_type);
+        self.finish_call_typed(site, callee, args, lent, Some(*declaration), returns)
     }
 
     /// The cursor of a `for...of`, moved on by one element.
@@ -35555,10 +35691,13 @@ impl<'a> FuncBuilder<'a> {
             });
         }
         if let Walk::Native(native) = walk {
-            let element = match &native.by {
+            let mut element = match &native.by {
                 NativeBy::Vector(methods) => self.call_native_walk(native.site, &methods.at, sequence, vec![at])?,
                 NativeBy::Iterator(methods) => self.call_native_walk(native.site, &methods.current, sequence, Vec::new())?,
             };
+            if native.narrows && Self::host_downcast(&self.values[element.0 as usize].ty, &native.element) {
+                element = self.push(OpKind::Convert(element), native.element.clone(), origin.clone());
+            }
             return Ok(vec![element]);
         }
         if let Walk::Entries {
@@ -36014,6 +36153,7 @@ impl<'a> FuncBuilder<'a> {
             Head::Pattern(_) | Head::Assign(_) => 1,
         };
         let walk = self.walk_of(sequence, sequence_value, forced, wanted)?;
+        let walk = self.element_as_declared(walk, &head);
         // **`for await` over a synchronous iterable awaits each element**, and
         // that is observable rather than academic. Walking one as an ordinary
         // `for...of` computes the same elements in the same order and takes no
@@ -54839,6 +54979,15 @@ impl<'a> FuncBuilder<'a> {
         if let Some(method) = self.native_method(id) {
             return self.lower_native_method_call(id, (receiver, receiver_node), method, member, arguments).map(Some);
         }
+        // `forEach` of a collection a binding implements, which spells only
+        // `length` and `item`: lib.dom's `NodeListOf<T>.forEach`.
+        if self.literal_name(member).as_deref() == Some("forEach")
+            && let [callback] = arguments
+            && matches!(self.kind_of(*callback), Some(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION))
+            && self.delegated_collection(receiver_node).is_some()
+        {
+            return self.lower_delegated_for_each(id, (receiver, receiver_node), *callback).map(Some);
+        }
         if let Some((declaration, record)) = self.delegated_method(receiver_node, member, arguments) {
             // The call's arguments are the bound member's -- its optional
             // parameters, its `@ntsDefault`s, its ABI types -- and not the ones
@@ -69083,6 +69232,10 @@ struct NativeWalk {
     element: HirType,
     /// The sequence, for what a call through a slot reports against.
     site: NodeId,
+    /// Whether each element is read as `element` where that is a kind of what
+    /// the binding answers: a collection a binding implements, whose lib.dom
+    /// type says what it holds ([`FuncBuilder::delegated_walk`]).
+    narrows: bool,
 }
 
 /// The two ways a Windows Runtime sequence is walked, as its

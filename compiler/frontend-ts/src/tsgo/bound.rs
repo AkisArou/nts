@@ -38,5 +38,27 @@ pub(crate) fn bound_types(snapshot: &SemanticSnapshot) -> FxHashMap<TypeId, Type
             bound.insert(*used, *target);
         }
     }
+    instantiations(snapshot, &mut bound);
     bound
+}
+
+/// Every instantiation of a bound generic interface, bound as the interface
+/// is: `/** @ntsBoundBy "nts:dom" NodeList */ interface NodeListOf<T> {}`
+/// binds `NodeListOf<Element>`, which `querySelectorAll` returns, and
+/// `NodeListOf<HTMLLIElement>` beside it. The declaration's node has the type
+/// with its own parameters; each instantiation is another type of the same
+/// symbol, so the symbol is what carries the binding to it.
+fn instantiations(snapshot: &SemanticSnapshot, bound: &mut FxHashMap<TypeId, TypeId>) {
+    let by_symbol: FxHashMap<_, TypeId> = bound
+        .iter()
+        .filter_map(|(used, target)| Some((snapshot.types.get(used.0 as usize)?.symbol?, *target)))
+        .collect();
+    for (at, record) in snapshot.types.iter().enumerate() {
+        let (Some(symbol), Ok(at)) = (record.symbol, u32::try_from(at)) else { continue };
+        if let Some(target) = by_symbol.get(&symbol)
+            && TypeId(at) != *target
+        {
+            bound.entry(TypeId(at)).or_insert(*target);
+        }
+    }
 }
