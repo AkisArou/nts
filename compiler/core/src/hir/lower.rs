@@ -61456,6 +61456,16 @@ impl<'a> FuncBuilder<'a> {
     /// ends in `n`.
     fn inspected(&mut self, from: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
         let text = HirType::Managed(ManagedType::String);
+        // `undefined` is spelled by what it is, not by the type it was given:
+        // `void expr` takes its context's type (`lower_void`), so as the first
+        // argument of a `log(message: string, ...)` it is a string-typed
+        // constant, and no arm below would read it as `undefined`.
+        if matches!(self.values[value.0 as usize].kind, OpKind::ConstUndefined)
+            || self.values[value.0 as usize].ty == HirType::Void
+        {
+            let origin = self.origin(from);
+            return Ok(self.push(OpKind::ConstString("undefined".to_owned()), text, origin));
+        }
         match self.values[value.0 as usize].ty {
             HirType::Float { .. } => {
                 let spelled = self.as_string(from, value)?;
@@ -61481,6 +61491,27 @@ impl<'a> FuncBuilder<'a> {
                 let origin = self.origin(from);
                 Ok(self.runtime_call("nts_value_inspect", vec![value], text, origin))
             }
+            // **An `unknown` erased right here from a primitive is that
+            // primitive.** `const value: unknown = n; console.log(value)` is an
+            // `Erase` of a number in this function: what node prints is decided
+            // by the operand, which is known. Only where the erase carries no
+            // absence -- one that can be `null` or `undefined` is the runtime's
+            // question again -- and only for what the arms below spell.
+            HirType::Erased
+                if let OpKind::Erase { value: inner, absent: Absent::Impossible } =
+                    self.values[value.0 as usize].kind
+                    && matches!(
+                        self.values[inner.0 as usize].ty,
+                        HirType::Float { .. }
+                            | HirType::Int { .. }
+                            | HirType::Bool
+                            | HirType::BigInt
+                            | HirType::Managed(ManagedType::String | ManagedType::Symbol)
+                    ) =>
+            {
+                self.inspected(from, inner)
+            }
+
             HirType::Int { .. } | HirType::Bool | HirType::Managed(ManagedType::String | ManagedType::Symbol) => self.as_string(from, value),
             _ => {
                 let named = self.describe_node(from);
