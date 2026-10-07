@@ -203,7 +203,12 @@ export const RULES = [
     // `module#init` stopped refusing, so two module-scope IIFEs compiled for the
     // first time, and the JVM left their `erased_call$raises` abstract. The `jvm`
     // step runs examples only; the runtime corpus is what `jvm-verifies` reads.
-    steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "outcomes", "integrity", "integrity-runtime", "definitions", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "benches", "jvm-verifies"],
+    //
+    // **And the runtime corpus's other readers, and compile-time**, the step
+    // written for a lowering that got slower: a lowering change reaches every
+    // program the gate compiles, so addons, profile, assembles, memory,
+    // bench-agree, corpus and dex read its output as much as examples does.
+    steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "outcomes", "integrity", "integrity-runtime", "definitions", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "benches", "jvm-verifies", "compile-time", "addons", "profile", "assembles", "memory", "bench-agree", "corpus", "dex"],
     arms: [
       ...COMPARE,
       { if: "a type rule", kind: "answers", asks: "a generic class with two live instantiations appears in the corpus, never in a hand-written fixture", run: "the emitted-diff --axis above, and a full census per-case diff (conformance262.ts --rows, both binaries)" },
@@ -294,6 +299,9 @@ export const RULES = [
     // this matched none of them, and no instrument change owed a self-test.
     // The fixture trees are programs, not instruments, and have rules below.
     when: (p) => /^tooling\/(conformance|census|differential|gate)\/.*\.(mjs|ts|sh)$/.test(p) && !/^tooling\/conformance\/(outcomes|blockers)\//.test(p),
+    // Owes what runs it, from the derived map of what each step runs (see
+    // `stepInputs`); an instrument that map cannot place owes the full gate.
+    placedBy: "stepInputs",
     steps: [],
     arms: [
       { kind: "valid", asks: "does it catch what it guards", run: "its --self-test, and a sabotage arm: break the thing it guards and watch it fail, naming the thing" },
@@ -337,6 +345,70 @@ export const RULES = [
       { kind: "hygiene", asks: "will it fail for the gap being fixed", run: "when the refusal is only a means, pick a documented permanent gap (a RegExp field, a stack read), not whatever refuses today" },
     ],
   },
+  // **One rule per workspace crate the rules above do not name**, so that the
+  // crate graph (see `owed`) can add each crate's reach to the crates under
+  // it. A crate the graph reaches that has no rule owes the full gate.
+  {
+    name: "the N-API backend",
+    when: (p) => /^compiler\/codegen\/napi\//.test(p),
+    steps: ["addons", "profile", "divergence"],
+    arms: [],
+  },
+  {
+    name: "the memory lowering",
+    when: (p) => /^compiler\/memory-lowering\//.test(p),
+    steps: ["rc", "llvm-rc", "memory", "examples", "llvm", "addons"],
+    arms: [],
+  },
+  {
+    name: "the debug lowering",
+    when: (p) => /^compiler\/debug-lowering\//.test(p),
+    steps: ["examples", "rc", "llvm"],
+    arms: [],
+  },
+  {
+    name: "the backends' common code",
+    when: (p) => /^compiler\/codegen\/common\//.test(p),
+    steps: ["examples", "llvm", "jvm", "rc", "llvm-rc", "assembles", "jvm-verifies", "dex", "bench-agree", "benches"],
+    arms: [],
+  },
+  {
+    name: "the JVM class writer",
+    when: (p) => /^compiler\/jvm-emitter\//.test(p),
+    steps: ["jvm", "dex", "jvm-verifies", "bench-agree", "on-device"],
+    arms: [],
+  },
+  {
+    // nts.config.ts, targets, `nts build`: what interop and the Android steps build through.
+    name: "the build driver",
+    when: (p) => /^build\//.test(p),
+    steps: ["interop", "config", "dex", "on-device", "bench-agree", "jvm"],
+    arms: [],
+  },
+  {
+    name: "the CLI",
+    when: (p) => /^tooling\/cli\//.test(p),
+    steps: ["interop", "config", "addons", "profile", "dex", "bench-agree", "examples", "llvm", "jvm", "rc"],
+    arms: [],
+  },
+  {
+    name: "the dependency installer, the surfaces and the React compiler",
+    when: (p) => /^(tooling\/deps|tooling\/surfaces|runtime\/react\/compiler)\//.test(p),
+    steps: ["interop", "config", "react-sources", "examples"],
+    arms: [],
+  },
+  {
+    name: "the bench driver",
+    when: (p) => /^tooling\/bench\//.test(p),
+    steps: ["benches", "bench-agree", "on-device"],
+    arms: [],
+  },
+  {
+    name: "the suite and the test262 protocol",
+    when: (p) => /^tooling\/suite\//.test(p),
+    steps: ["corpus", "test262", "test262-cases", "test262-builtins-cases", "test262-rest-cases"],
+    arms: [],
+  },
   {
     // Read by two steps and by people; no program compiles a page of it.
     name: "documentation",
@@ -349,6 +421,7 @@ export const RULES = [
     // when a step is much slower. No step's verdict reads it.
     name: "the gate's step times",
     when: (p) => p === "tooling/gate/times.tsv",
+    settled: true,
     steps: [],
     arms: [{ kind: "hygiene", asks: "were they taken on a healthy run", run: "NTS_GATE_RECORD_TIMES=1 on a full gate whose summary you have read" }],
   },
@@ -363,19 +436,34 @@ export const RULES = [
 /** Every change, whatever it touched: the gate's first two steps. */
 const ALWAYS = { name: "every change", when: () => true, steps: ["clippy", "tests"], arms: [] };
 
-/** `{ path, added }` for the change asked about. */
+/**
+ * `{ path, added, deleted }` for the change asked about. A rename or copy is
+ * both of its paths: the old one deleted (moving a fixture out of blockers/
+ * still owes blockers) and the new one added (moving one into examples/ is a
+ * new example).
+ */
+export function parseNameStatus(text) {
+  const out = [];
+  for (const l of text.split("\n").filter(Boolean)) {
+    const [status, ...rest] = l.split("\t");
+    if (/^[RC]/.test(status) && rest.length >= 2) {
+      if (status.startsWith("R")) out.push({ path: rest[0], added: false, deleted: true });
+      out.push({ path: rest[1], added: true, deleted: false });
+    } else {
+      out.push({ path: rest[rest.length - 1], added: status.startsWith("A"), deleted: status.startsWith("D") });
+    }
+  }
+  return out;
+}
+
 function changedPaths(argv) {
   const git = (...args) => execFileSync("git", args, { cwd: TREE, encoding: "utf8" });
-  const parse = (text) => text.split("\n").filter(Boolean).map((l) => {
-    const [status, ...rest] = l.split("\t");
-    return { path: rest[rest.length - 1], added: status.startsWith("A") };
-  });
   const at = (flag) => (argv.includes(flag) ? argv[argv.indexOf(flag) + 1] : null);
   const commit = at("--commit");
-  if (commit) return parse(git("diff", "--name-status", `${commit}^`, commit));
+  if (commit) return parseNameStatus(git("diff", "--name-status", "-M", `${commit}^`, commit));
   const since = at("--since");
-  const tracked = parse(git("diff", "--name-status", since ?? "HEAD"));
-  const untracked = git("ls-files", "--others", "--exclude-standard").split("\n").filter(Boolean).map((path) => ({ path, added: true }));
+  const tracked = parseNameStatus(git("diff", "--name-status", "-M", since ?? "HEAD"));
+  const untracked = git("ls-files", "--others", "--exclude-standard").split("\n").filter(Boolean).map((path) => ({ path, added: true, deleted: false }));
   return [...tracked, ...untracked];
 }
 
@@ -438,14 +526,16 @@ export function dependents(dir) {
  * `dirs` lists program directories; a program without a tsconfig.json is
  * compiled under tsconfig.fixtures.json (dexes.sh, bench cases).
  */
+// `member` decides membership by the path alone, so a deleted or renamed
+// program still owes its corpus: the tree no longer has it to list.
 const CORPORA = [
-  { name: "the examples", dirs: () => kids("examples").filter((d) => d !== "examples/interop"), steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "integrity", "example-refusals", "dex", "snapshot-cache"] },
-  { name: "the interop projects", dirs: () => kids("examples/interop"), steps: ["interop"] },
-  { name: "the blockers", dirs: () => kids("tooling/conformance/blockers"), steps: ["blockers", "integrity"] },
-  { name: "the outcomes", dirs: () => kids("tooling/conformance/outcomes"), steps: ["outcomes", "integrity", "jvm-verifies"] },
-  { name: "the runtime modules", dirs: () => [...kids("runtime/node"), "runtime/web-platform"], steps: ["definitions", "integrity-runtime", "compile-time", "assembles", "addons", "profile", "snapshot-cache", "types", "jvm-verifies", "divergence"] },
-  { name: "the bench cases", dirs: () => kids("benches/cases"), steps: ["benches", "bench-agree", "dex"] },
-  { name: "the memory cases", dirs: () => kids("tooling/memory/cases"), steps: ["memory"] },
+  { name: "the examples", member: /^examples\/(?!interop\/)[^/]+\//, dirs: () => kids("examples").filter((d) => d !== "examples/interop"), steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "integrity", "example-refusals", "dex", "snapshot-cache"] },
+  { name: "the interop projects", member: /^examples\/interop\/[^/]+\//, dirs: () => kids("examples/interop"), steps: ["interop"] },
+  { name: "the blockers", member: /^tooling\/conformance\/blockers\/[^/]+\//, dirs: () => kids("tooling/conformance/blockers"), steps: ["blockers", "integrity"] },
+  { name: "the outcomes", member: /^tooling\/conformance\/outcomes\/[^/]+\//, dirs: () => kids("tooling/conformance/outcomes"), steps: ["outcomes", "integrity", "jvm-verifies"] },
+  { name: "the runtime modules", member: /^runtime\/(node\/[^/]+|web-platform)\//, dirs: () => [...kids("runtime/node"), "runtime/web-platform"], steps: ["definitions", "integrity-runtime", "compile-time", "assembles", "addons", "profile", "snapshot-cache", "types", "jvm-verifies", "divergence"] },
+  { name: "the bench cases", member: /^benches\/cases\/[^/]+\//, dirs: () => kids("benches/cases"), steps: ["benches", "bench-agree", "dex"] },
+  { name: "the memory cases", member: /^tooling\/memory\/cases\/[^/]+\//, dirs: () => kids("tooling/memory/cases"), steps: ["memory"] },
 ];
 function kids(dir) {
   try {
@@ -531,7 +621,8 @@ export function stepInputs() {
       const stop = rest.search(/^step "/m);
       bodies.set(m[1], stop < 0 ? rest : rest.slice(0, stop));
     }
-    const PATH = /(?:^|[\s"'=(/$])((?:tooling|runtime|examples|benches|compiler|build|docs)\/[A-Za-z0-9_.@+-]+(?:\/[A-Za-z0-9_.@+*-]+)*)/g;
+    // A segment never ends in `.`: "... in tooling/x.ts." is the file, not "x.ts.".
+    const PATH = /(?:^|[\s"'=(/$])((?:tooling|runtime|examples|benches|compiler|build|docs)(?:\/[A-Za-z0-9_.@+*-]*[A-Za-z0-9_@+*-])+)/g;
     // Code, not prose: a comment that mentions a path does not read it. A
     // directory of two segments (`tooling/conformance`, from a path built
     // with a variable) is too wide to mean anything and is dropped.
@@ -574,9 +665,10 @@ export function stepInputs() {
         if (/^tooling\/gate\/(all\.sh|run\.mjs|owed\.mjs|[^/]+\.test\.mjs)$/.test(input)) continue;
         if (!st.isFile() || !/\.(sh|mjs|js|ts|py)$/.test(input) || st.size > 1 << 20) continue;
         const body = readFileSync(abs, "utf8");
-        // A data file the script reads beside itself, `join(HERE, "x.tsv")`:
-        // a bare name in quotes that exists in the script's directory.
-        const beside = [...code(body).matchAll(/["']([A-Za-z0-9_.-]+\.(?:tsv|json|known|txt|csv))["']/g)]
+        // A file the script reads or runs beside itself, `join(HERE, "x.tsv")`,
+        // `join(HERE, "attempt262-worker.ts")`: a bare name in quotes that
+        // exists in the script's directory.
+        const beside = [...code(body).matchAll(/["']([A-Za-z0-9_.-]+\.(?:tsv|json|known|txt|csv|ts|mjs|js|sh|py))["']/g)]
           .map((m) => `${dirname(input)}/${m[1]}`).filter((f) => existsSync(join(TREE, f)));
         queue.push(...named(body), ...imports(input, body), ...beside);
       }
@@ -593,60 +685,132 @@ function covering(map, path) {
 }
 
 /**
- * The rules a change matches, each with the paths that matched it, then what
- * the derived maps add, then -- for any path still unmatched -- the full gate.
+ * Directory (repo-relative) -> Set of crate directories that compile files
+ * from it in: `include_str!`, `include_bytes!` and `include!`, with a literal
+ * path or `concat!(env!("CARGO_MANIFEST_DIR"), "...")`. runtime/c is compiled
+ * into the C backend this way, so a change there is a change to that crate --
+ * and a new file beside the included ones is owed the same, which is why the
+ * key is the directory.
+ */
+export function embedded() {
+  return once("embedded", () => {
+    const map = new Map();
+    const all = crates();
+    if (!all) return map;
+    let text = "";
+    try {
+      text = execFileSync("git", ["grep", "-nE", "include(_str|_bytes)?!|CARGO_MANIFEST_DIR\"\\),", "--", "*.rs"], { cwd: TREE, encoding: "utf8", maxBuffer: 1 << 26 });
+    } catch {
+      return map;
+    }
+    for (const line of text.split("\n")) {
+      const m = /^([^:]+):\d+:(.*)$/.exec(line);
+      if (!m) continue;
+      const [, file, src] = m;
+      const crate = crateOf(file);
+      if (!crate) continue;
+      const targets = [
+        ...[...src.matchAll(/include(?:_str|_bytes)?!\(\s*"([^"]+)"/g)].map((x) => resolve(TREE, dirname(file), x[1])),
+        ...[...src.matchAll(/env!\("CARGO_MANIFEST_DIR"\),\s*"([^"]+)"/g)].map((x) => resolve(TREE, crate, x[1].replace(/^\//, ""))),
+      ];
+      for (const t of targets) {
+        const dir = dirname(rel(t));
+        if (dir === crate || dir.startsWith(`${crate}/`) || dir.startsWith("..")) continue;
+        if (!map.has(dir)) map.set(dir, new Set());
+        map.get(dir).add(crate);
+      }
+    }
+    return map;
+  });
+}
+
+/**
+ * What a change owes. **When unsure, owe more**: the one failure that is not
+ * acceptable is a change that needs a step being judged not to owe it. So
+ * every source below adds to what a path owes and none replaces another:
+ *
+ *   - the hand-written rules a path matches;
+ *   - the crate graph: a path in a crate (or in a directory a crate compiles
+ *     in, see `embedded`) owes the rules of that crate and of every crate that
+ *     depends on it -- a crate's own rule adds to its dependents', never
+ *     stands in for them -- and a crate in that closure with no rule owes the
+ *     full gate;
+ *   - the corpora: a path inside a gated program's directory (by its path, so
+ *     a deleted or renamed one counts) or named by its tsconfig owes the steps
+ *     that compile that corpus;
+ *   - what each step runs (`stepInputs`).
+ *
+ * A path owes the full gate when a rule says so, when none of these gave it a
+ * step, or when it is an instrument the step map cannot place.
  */
 export function owed(changes) {
   const out = [];
-  const matched = new Set();
-  const direct = (path, added) => RULES.filter((rule) => rule.when(path, added));
-  for (const rule of RULES) {
-    const paths = changes.filter(({ path, added }) => rule.when(path, added)).map((c) => c.path);
-    if (paths.length > 0) out.push({ ...rule, paths });
-  }
-  for (const { path, added } of changes) if (direct(path, added).length) matched.add(path);
+  const add = (name, path, steps, extra = {}) => {
+    let r = out.find((x) => x.name === name);
+    if (!r) { r = { name, paths: [], steps: [], arms: [], ...extra }; out.push(r); }
+    if (!r.paths.includes(path)) r.paths.push(path);
+    for (const st of steps) if (!r.steps.includes(st)) r.steps.push(st);
+    return r;
+  };
+  const full = [];
+  const rulesFor = (path, added) => RULES.filter((rule) => rule.when(path, added));
+  const all = crates();
 
-  // Through the crate graph, for a crate no rule names: what each crate that
-  // depends on it owes, by their rules. A crate with a rule of its own has had
-  // its reach decided by hand (the LLVM backend owes the LLVM steps, not
-  // everything the CLI that links it owes), and that decision stands.
-  const through = new Map(); // rule name -> { rule, paths }
-  for (const { path } of changes) {
-    if (matched.has(path)) continue;
-    const crate = crateOf(path);
-    if (!crate || !/\.(rs|toml)$|\/(src|tests|benches)\//.test(path)) continue;
-    for (const dir of dependents(crate)) {
-      if (dir === crate) continue;
-      for (const rule of direct(`${dir}/src/lib.rs`, false)) {
-        if (!through.has(rule.name)) through.set(rule.name, { rule, paths: new Set() });
-        through.get(rule.name).paths.add(`${path} (through ${crates().get(dir).name})`);
-        matched.add(path);
+  for (const { path, added = false } of changes) {
+    let gave = 0;
+    let settled = false;
+    let unplaced = false;
+    for (const rule of rulesFor(path, added)) {
+      add(rule.name, path, rule.steps, { arms: rule.arms, full: rule.full });
+      gave += rule.steps.length;
+      if (rule.full) gave += 1;
+      if (rule.settled) settled = true;
+      if (rule.placedBy === "stepInputs" && covering(stepInputs(), path).size === 0) unplaced = true;
+    }
+
+    // The crate graph.
+    const roots = new Set();
+    const own = crateOf(path);
+    if (own) roots.add(own);
+    for (const c of covering(embedded(), path)) roots.add(c);
+    if (!all && /\.rs$|(^|\/)Cargo\.toml$/.test(path)) unplaced = true; // no cargo here to ask
+    for (const root of roots) {
+      for (const dir of dependents(root)) {
+        const rules = rulesFor(`${dir}/src/lib.rs`, false).filter((r) => r.steps.length || r.full);
+        const via = dir === root ? path : `${path} (through ${all.get(dir).name})`;
+        if (rules.length === 0) {
+          full.push(`${path} (${all.get(dir).name} has no rule in owed.mjs)`);
+          continue;
+        }
+        for (const rule of rules) {
+          add(dir === root && rulesFor(path, added).includes(rule) ? rule.name : `${rule.name}, through the crate graph`, via, rule.steps, { full: rule.full });
+          gave += rule.steps.length + (rule.full ? 1 : 0);
+        }
       }
     }
-  }
-  for (const { rule, paths } of through.values()) {
-    if (out.some((r) => r.name === rule.name)) continue;
-    out.push({ ...rule, name: `${rule.name}, through the crates that depend on it`, paths: [...paths], arms: [] });
+
+    // The corpora, by membership and by their tsconfigs.
+    const corpora = new Set(CORPORA.filter((c) => c.member.test(path)).map((c) => c.name));
+    for (const c of covering(corpusInputs(), path)) corpora.add(c);
+    for (const name of corpora) {
+      const c = CORPORA.find((x) => x.name === name);
+      add(`an input to ${name}`, path, c.steps);
+      gave += c.steps.length;
+    }
+
+    // What the steps run.
+    const steps = [...covering(stepInputs(), path)];
+    if (steps.length) {
+      add("an input to what a gate step runs", path, steps);
+      gave += steps.length;
+    }
+
+    if (unplaced) full.push(`${path} (an instrument no step's scripts were found to run)`);
+    else if (gave === 0 && !settled) full.push(path);
   }
 
-  // Inputs to a gated corpus, and to what a step runs.
-  const corpora = new Map();
-  const steps = new Map();
-  for (const { path } of changes) {
-    for (const c of covering(corpusInputs(), path)) { if (!corpora.has(c)) corpora.set(c, []); corpora.get(c).push(path); matched.add(path); }
-    for (const st of covering(stepInputs(), path)) { if (!steps.has(st)) steps.set(st, []); steps.get(st).push(path); matched.add(path); }
-  }
-  for (const [name, paths] of corpora) {
-    const c = CORPORA.find((x) => x.name === name);
-    out.push({ name: `an input to ${name}`, paths: [...new Set(paths)], steps: c.steps, arms: [] });
-  }
-  if (steps.size) {
-    out.push({ name: "an input to what a gate step runs", paths: [...new Set([...steps.values()].flat())], steps: [...steps.keys()], arms: [] });
-  }
-
-  const unmatched = changes.map((c) => c.path).filter((p) => !matched.has(p));
-  if (unmatched.length) {
-    out.push({ name: "matched by nothing: the full gate", full: true, paths: unmatched, steps: [], arms: [
+  if (full.length) {
+    out.push({ name: "owes the full gate", full: true, paths: full, steps: [], arms: [
       { kind: "hygiene", asks: "what does this path reach", run: "a rule in tooling/gate/owed.mjs, so the next change to it owes what it reaches and not everything" },
     ] });
   }
@@ -691,8 +855,10 @@ function selfTest() {
   const lowered = owed([{ path: "compiler/core/src/hir/lower.rs", added: false }]).find((r) => r.name === "lowering");
   if (!["test262-cases", "test262-builtins-cases", "test262-rest-cases"].every((st) => lowered.steps.includes(st))) return "a lowering change does not owe the recorded test262 sets";
   if (!lowered.steps.includes("benches")) return "a lowering change does not owe the benches corpus";
+  // Its own steps first, then what the crates that link it add (the CLI, the
+  // suite, the bench driver): a crate's own rule never stands in for theirs.
   const order = gateSteps(owed([{ path: "compiler/codegen/llvm/src/lib.rs", added: false }]));
-  if (order.join(" ") !== "build clippy tests llvm llvm-rc assembles") return `the LLVM backend's steps: ${order.join(" ")}`;
+  if (order.slice(0, 6).join(" ") !== "build clippy tests llvm llvm-rc assembles" || !order.includes("corpus") || !order.includes("bench-agree")) return `the LLVM backend's steps: ${order.join(" ")}`;
   // A step without its question could not say what it asks.
   for (const r of [...RULES, ALWAYS]) for (const st of r.steps) if (!ASKS[st]) return `rule "${r.name}" names gate step "${st}", which ASKS does not describe`;
   for (const st of ["build"]) if (!ASKS[st]) return `ASKS lacks "${st}"`;

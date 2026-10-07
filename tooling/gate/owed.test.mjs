@@ -7,9 +7,13 @@
 // silently, which is the failure owed.mjs exists to prevent.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { allSteps, gateSteps, owed } from "./owed.mjs";
+import { allSteps, gateSteps, owed, parseNameStatus } from "./owed.mjs";
 
 const stepsFor = (...paths) => gateSteps(owed(paths.map((path) => ({ path, added: false }))));
+const changeOwes = (changes) => gateSteps(owed(changes));
+const superset = (got, want, what) => {
+  for (const s of want) assert.ok(got.includes(s), `${what} should owe ${s}; owes ${got.join(" ")}`);
+};
 const full = () => stepsFor("no/rule/matches/this.txt");
 
 function owes(path, want, { not = [] } = {}) {
@@ -43,11 +47,9 @@ test("an input of a corpus's tsconfig owes that corpus's steps", () => {
 test("a crate no rule names owes what the crates that use it owe", () => {
   // memory-lowering has no rule; codegen-c and codegen-llvm depend on it.
   owes("compiler/memory-lowering/src/lib.rs", ["examples", "rc", "llvm", "llvm-rc"]);
-  // A crate with a rule keeps its rule's reach: the LLVM backend owes the
-  // LLVM steps, not everything the CLI linking it owes.
-  assert.deepEqual(stepsFor("compiler/codegen/llvm/src/lib.rs"), ["build", "clippy", "tests", "llvm", "llvm-rc", "assembles"]);
-  // semantic-schema has its own rule (the frontend and the snapshot schema).
-  owes("compiler/semantic-schema/src/lib.rs", ["snapshot-cache", "types", "test262-cases"]);
+  // A crate's own rule adds to what the crates linking it owe; it never
+  // stands in for them.
+  owes("compiler/codegen/llvm/src/lib.rs", ["llvm", "llvm-rc", "assembles", "corpus", "bench-agree"]);
 });
 
 test("what a step runs owes that step", () => {
@@ -83,4 +85,60 @@ test("every step the rules can owe exists", () => {
   for (const p of ["compiler/core/src/lib.rs", "runtime/node/fs/index.ts", "tsconfig.fixtures.json", "tooling/gate/costs.mjs"]) {
     for (const s of stepsFor(p)) assert.ok(all.has(s), `${p} owes ${s}, which all.sh does not define`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// The review of 2026-10-07: each case is a change that owed too little.
+// ---------------------------------------------------------------------------
+
+test("the N-API backend owes the addon steps", () => {
+  owes("compiler/codegen/napi/src/lib.rs", ["addons", "profile", "divergence"]);
+});
+
+test("runtime/c is compiled into the C backend, so it owes at least what the C backend owes", () => {
+  const backend = stepsFor("compiler/codegen/c/src/lib.rs");
+  superset(stepsFor("runtime/c/nts_runtime.c"), backend, "runtime/c/nts_runtime.c");
+  // A new file there, which nothing includes yet, owes the same.
+  superset(stepsFor("runtime/c/a-file-nobody-includes-yet.c"), backend, "a new runtime/c file");
+});
+
+test("a crate owes its own rule and every rule of the crates that depend on it", () => {
+  superset(stepsFor("compiler/semantic-schema/src/lib.rs"), stepsFor("compiler/core/src/lib.rs"), "semantic-schema");
+  superset(stepsFor("compiler/core/src/lib.rs"), stepsFor("compiler/codegen/c/src/lib.rs"), "core");
+  superset(stepsFor("compiler/memory-lowering/src/lib.rs"), [...stepsFor("compiler/codegen/c/src/lib.rs"), "corpus", "benches", "addons"], "memory-lowering");
+  for (const crate of ["compiler/codegen/common", "compiler/debug-lowering", "compiler/jvm-emitter", "build"]) {
+    superset(stepsFor(`${crate}/src/lib.rs`), ["corpus", "benches", "bench-agree"], crate);
+  }
+});
+
+test("a deleted example still owes every step that compiles the examples", () => {
+  const got = changeOwes([{ path: "examples/an-example-that-was-removed/src/main.ts", added: false, deleted: true }]);
+  superset(got, ["examples", "llvm", "llvm-rc", "jvm", "rc", "integrity", "example-refusals", "dex", "snapshot-cache"], "a deleted example");
+});
+
+test("a rename is both paths: a blocker moved out still owes blockers, and moved into examples is a new example", () => {
+  const changes = parseNameStatus("R100\ttooling/conformance/blockers/old-fixture/src/main.ts\texamples/old-fixture/src/main.ts\nR100\ttooling/conformance/blockers/old-fixture/tsconfig.json\texamples/old-fixture/tsconfig.json\n");
+  assert.deepEqual(changes.map((c) => [c.path, c.added, c.deleted]), [
+    ["tooling/conformance/blockers/old-fixture/src/main.ts", false, true],
+    ["examples/old-fixture/src/main.ts", true, false],
+    ["tooling/conformance/blockers/old-fixture/tsconfig.json", false, true],
+    ["examples/old-fixture/tsconfig.json", true, false],
+  ]);
+  const rules = owed(changes).map((r) => r.name);
+  assert.ok(rules.includes("a new example"), rules.join(", "));
+  superset(changeOwes(changes), ["blockers", "integrity", "examples", "llvm", "jvm", "rc"], "a renamed blocker");
+});
+
+test("the census files a tool runs or reads beside itself owe the test262 steps", () => {
+  for (const file of ["tooling/census/attempt262-worker.ts", "tooling/census/harness.ts", "tooling/census/harness-done.ts"]) {
+    owes(file, ["test262-cases", "test262-builtins-cases", "test262-rest-cases"]);
+  }
+});
+
+test("an instrument no step is found to run owes the full gate", () => {
+  assert.equal(stepsFor("tooling/conformance/an-instrument-nobody-runs.ts").length, allSteps().length);
+});
+
+test("integrity.ts, which blockers-check.mjs spawns, owes blockers", () => {
+  owes("tooling/conformance/integrity.ts", ["integrity", "integrity-runtime", "blockers"]);
 });
