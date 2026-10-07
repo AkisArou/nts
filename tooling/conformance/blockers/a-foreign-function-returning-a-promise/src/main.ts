@@ -1,4 +1,10 @@
-// expect: NTS1001 foreign function `host_later`'s return
+// expect: nothing refused -- FIXED, kept as a guard
+//
+// **Fixed 2026-10-07** (MainClaude): a `Promise<T>` result crosses as the
+// runtime's `NtsPromise *`, answered owned (`native::promised`).
+// examples/interop/native-promise runs the shape end to end -- a host that
+// makes promises, keeps a reference, and settles them later -- through both
+// backends, under reference counting too. The report as filed:
 //
 // A foreign function cannot answer a promise. The runtime already has the
 // host's half -- nts_promise_new, nts_promise_fulfill_*, nts_promise_reject

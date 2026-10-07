@@ -3124,6 +3124,23 @@ fn array_slots(
     })
 }
 
+/// A `Promise<T>` a foreign function answers under the plain ABI: the
+/// runtime's `NtsPromise *`, made by the host (`nts_promise_new`) and answered
+/// owned -- one reference, the program's -- which the host settles later from
+/// its own event loop, inside the program's environment, with the fulfil call
+/// for `T`'s representation or `nts_promise_reject`. `await` and `.then` need
+/// nothing more than a promise the runtime made. The Chromium lane's request
+/// 12: Blink's promise-returning members, `requestFullscreen()` among them.
+///
+/// A result only. A promise *passed* to a foreign function is a value C
+/// would have to hold and count, which nothing here asks for.
+fn promised(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
+    match super::lower::representation(snapshot, ty)? {
+        HirType::Managed(promise @ ManagedType::Promise(_)) => Some(Type::Managed(promise)),
+        _ => None,
+    }
+}
+
 /// A type under `@ntsAbi managed`, which passes the managed value itself.
 fn managed_abi_type(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
     match super::lower::representation(snapshot, ty)? {
@@ -3452,7 +3469,7 @@ fn returned(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option<&st
     let result = match (returned_text(array.is_some(), string.as_ref()), &declared) {
         (Some(text), _) => text,
         (None, Some((c, _))) => c.clone(),
-        (None, None) => if abi == Some("managed") { managed_abi_type(snapshot, ty) } else { abi_type(snapshot, ty) }
+        (None, None) => if abi == Some("managed") { managed_abi_type(snapshot, ty) } else { abi_type(snapshot, ty).or_else(|| promised(snapshot, ty)) }
             .ok_or_else(|| no_abi_type(snapshot, ty, name, None))?,
     };
     Ok(Returned {

@@ -27,6 +27,7 @@
     "native-inet/nts.config.ts",
     "native-open/nts.config.ts",
     "native-poll/nts.config.ts",
+    "native-promise/nts.config.ts",
     "native-rusage/nts.config.ts",
     "native-stat/nts.config.ts",
     "native-uname/nts.config.ts",
