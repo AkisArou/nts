@@ -6355,7 +6355,14 @@ fn functions_used_as_values(
         if excluded.contains(&id) {
             continue;
         }
-        let Some(symbol) = node.symbol.and_then(|it| snapshot.symbols.get(it.0 as usize)) else {
+        // **Through an import to what it names**, as every other reader of a callee
+        // does: `import { literalFirst }` binds an alias whose only declaration is the
+        // specifier, so an imported function used as a value seeded nothing, got no
+        // copy, and its wrapper's raising entry aborted by name inside every `try`.
+        let Some(symbol) = node
+            .symbol
+            .and_then(|it| snapshot.symbols.get(probe.denoted_symbol(it).0 as usize))
+        else {
             continue;
         };
         found.extend(
@@ -26016,8 +26023,18 @@ impl<'a> FuncBuilder<'a> {
         self.this = Some(receiver);
         self.bind_own_name(id, receiver);
         self.in_closure = true;
+        // A wrapper accepts the implementation's parameters. An overload
+        // describes a particular source call; its literal parameter is no
+        // proof about every value arriving through the uniform callable slot.
+        // Keep the wrapper's identity and layout at `id`, while deriving the
+        // forwarded values and their facts from the body it actually calls.
+        let parameters_of = if info.source.wraps() {
+            self.implementation_of(id)
+        } else {
+            id
+        };
         let (params, forwarded) = self.closure_parameters(
-            id,
+            parameters_of,
             receiver_ty,
             &origin,
             if matches!(info.source, ClosureSource::Authored) {
@@ -27065,8 +27082,13 @@ impl<'a> FuncBuilder<'a> {
         if !can_raise {
             return Ok(callee);
         }
+        // **The implementation's copy, which is the one that exists.** For an
+        // overloaded function `info.node` is the first signature -- what the name
+        // resolves to -- while copies are keyed by the body built
+        // (`eligible_declarations` goes through `implementation_of`), so the lookup
+        // missed and every `try` reaching the wrapper aborted by name.
         if info.source == ClosureSource::Function
-            && self.raising.contains(&info.node)
+            && self.raising.contains(&self.implementation_of(info.node))
             && let Callee::Direct(name) = callee
         {
             return Ok(Callee::Direct(format!("{name}{RAISING_SUFFIX}")));
