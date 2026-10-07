@@ -452,6 +452,9 @@ typedef struct NtsDomPointerEventInit {
   double tiltY;
   double twist;
 } NtsDomPointerEventInit;
+typedef struct NtsDomPointerLockOptions {
+  uint8_t unadjustedMovement;
+} NtsDomPointerLockOptions;
 typedef struct NtsDomProgressEventInit {
   uint8_t bubbles;
   uint8_t cancelable;
@@ -466,6 +469,7 @@ typedef struct NtsDomResizeObserverOptions {
 typedef struct NtsDomScrollIntoViewOptions {
   const NtsBorrowedString* behavior;
   const NtsBorrowedString* block;
+  const NtsBorrowedString* inline_;
 } NtsDomScrollIntoViewOptions;
 typedef struct NtsDomScrollToOptions {
   const NtsBorrowedString* behavior;
@@ -1486,6 +1490,10 @@ void nts_dom_Element_replaceWith_nn(NtsDomElement* self, NtsDomNode* nodes1, Nts
 void nts_dom_Element_replaceWith_s(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomException** error);
 void nts_dom_Element_replaceWith_n(NtsDomElement* self, NtsDomNode* nodes1, NtsDomException** error);
 void nts_dom_Element_replaceWith_0(NtsDomElement* self, NtsDomException** error);
+struct NtsPromise* nts_dom_Element_requestFullscreen_1(NtsDomElement* self, NtsDomFullscreenOptions options);
+struct NtsPromise* nts_dom_Element_requestFullscreen_0(NtsDomElement* self);
+struct NtsPromise* nts_dom_Element_requestPointerLock_1(NtsDomElement* self, NtsDomPointerLockOptions options);
+struct NtsPromise* nts_dom_Element_requestPointerLock_0(NtsDomElement* self);
 void nts_dom_Element_scroll_1(NtsDomElement* self, NtsDomScrollToOptions options, NtsDomException** error);
 void nts_dom_Element_scroll_0(NtsDomElement* self);
 void nts_dom_Element_scroll_2(NtsDomElement* self, double x, double y);
@@ -2059,6 +2067,7 @@ NtsDomElementSequence* nts_dom_Document_elementsFromPoint(NtsDomDocument* self, 
 bool nts_dom_Document_execCommand_3(NtsDomDocument* self, const NtsBorrowedString* commandId, bool showUI, const NtsBorrowedString* value, NtsDomException** error);
 bool nts_dom_Document_execCommand_2(NtsDomDocument* self, const NtsBorrowedString* commandId, bool showUI, NtsDomException** error);
 bool nts_dom_Document_execCommand_1(NtsDomDocument* self, const NtsBorrowedString* commandId, NtsDomException** error);
+struct NtsPromise* nts_dom_Document_exitFullscreen(NtsDomDocument* self);
 void nts_dom_Document_exitPointerLock(NtsDomDocument* self);
 NtsDomAnimationSequence* nts_dom_Document_getAnimations(NtsDomDocument* self);
 NtsDomDOMQuadSequence* nts_dom_Document_getBoxQuads_1(NtsDomDocument* self, NtsDomBoxQuadOptions options, NtsDomException** error);
@@ -2534,7 +2543,9 @@ void nts_dom_HTMLElement_click(NtsDomHTMLElement* self);
 void nts_dom_HTMLElement_focus_1(NtsDomHTMLElement* self, NtsDomFocusOptions options);
 void nts_dom_HTMLElement_focus_0(NtsDomHTMLElement* self);
 void nts_dom_HTMLElement_hidePopover(NtsDomHTMLElement* self, NtsDomException** error);
+struct NtsPromise* nts_dom_HTMLElement_hideUnboundedElement(NtsDomHTMLElement* self);
 void nts_dom_HTMLElement_showPopover_0(NtsDomHTMLElement* self, NtsDomException** error);
+struct NtsPromise* nts_dom_HTMLElement_showUnboundedElement(NtsDomHTMLElement* self);
 bool nts_dom_HTMLElement_togglePopover_1_TogglePopoverOptions(NtsDomHTMLElement* self, NtsDomTogglePopoverOptions options, NtsDomException** error);
 bool nts_dom_HTMLElement_togglePopover_1_boolean(NtsDomHTMLElement* self, bool options, NtsDomException** error);
 bool nts_dom_HTMLElement_togglePopover_0(NtsDomHTMLElement* self, NtsDomException** error);
@@ -4173,6 +4184,7 @@ double nts_dom_HTMLImageElement_get_x(NtsDomHTMLImageElement* self);
 double nts_dom_HTMLImageElement_get_y(NtsDomHTMLImageElement* self);
 const NtsStringView* nts_dom_HTMLImageElement_get_attributionSrc(NtsDomHTMLImageElement* self);
 void nts_dom_HTMLImageElement_set_attributionSrc(NtsDomHTMLImageElement* self, const NtsBorrowedString* value);
+struct NtsPromise* nts_dom_HTMLImageElement_decode(NtsDomHTMLImageElement* self);
 NtsDomHTMLCanvasElement* nts_dom_as_HTMLCanvasElement(NtsDomNode* node);
 double nts_dom_HTMLCanvasElement_get_width(NtsDomHTMLCanvasElement* self);
 void nts_dom_HTMLCanvasElement_set_width(NtsDomHTMLCanvasElement* self, double value, NtsDomException** error);
@@ -5560,6 +5572,7 @@ double nts_dom_HTMLMediaElement_get_webkitVideoDecodedByteCount(NtsDomHTMLMediaE
 const char* nts_dom_HTMLMediaElement_canPlayType(NtsDomHTMLMediaElement* self, const NtsBorrowedString* type);
 void nts_dom_HTMLMediaElement_load(NtsDomHTMLMediaElement* self);
 void nts_dom_HTMLMediaElement_pause(NtsDomHTMLMediaElement* self);
+struct NtsPromise* nts_dom_HTMLMediaElement_play(NtsDomHTMLMediaElement* self);
 NtsDomHTMLVideoElement* nts_dom_as_HTMLVideoElement(NtsDomNode* node);
 double nts_dom_HTMLVideoElement_get_width(NtsDomHTMLVideoElement* self);
 void nts_dom_HTMLVideoElement_set_width(NtsDomHTMLVideoElement* self, double value);

@@ -23,7 +23,6 @@ shared tooling.
 | 12 | The `hidden` getter is not bound. | generator (`report.json`) | its Blink side builds a V8 value from a ScriptState; it needs a union result | a union result type, or a hand-written getter | L |
 | 17 | Members taking `any` are not bound (`history.pushState(data, ...)`, `CustomEvent.detail`, `AbortController.abort(reason)` beyond its no-argument form). | generator (`report.json`) | a host function cannot take or return `any` | `any` crosses to C (an erased value with its tag) | C |
 | 20 | An uncaught throw in a listener, a timer or an app's `main` ends the renderer (Chromium's crash page), and `console.*` writes to the process's stdout/stderr, not DevTools. The app examples and vectors throw nothing uncaught. | runtime, every callback | request 11: no host hook for console output or uncaught throws (`nts_uncaught` calls `exit(1)` inside a callback) | request 11 delivered, and the lane wires both into Blink | C |
-| 25 | A dictionary member named by a C keyword (`ScrollIntoViewOptions.inline`) is not bound. | `tooling/chromium/bindgen/generate.py` (`dictionary`, `C_KEYWORDS`) | a native struct field named by a C keyword is refused ("not a C member identifier"); agreed with MainClaude 2026-10-07: the compiler will escape it as `inline_` (`symbols::c_identifier`) | the compiler escapes it: name the struct field `inline_` too | C |
 
 ## Waiting on shared tooling
 

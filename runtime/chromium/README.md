@@ -16,7 +16,9 @@ lists how lib.dom.d.ts spellings map): the DOM and its events, forms and
 validation, ranges and the selection, stylesheets, shadow DOM and slots,
 the window (computed style, media queries, history, location, navigator,
 performance), URL, AbortController, parsing and serializing, drag data,
-the 2D canvas, and IDL enums as literal unions. About 4,500 members bind;
+the 2D canvas, scrolling, promise results (`await video.play()`,
+`image.decode()`, fullscreen), and IDL enums as literal unions. About 4,800
+members bind;
 what does not yet is listed with its reason in
 `tooling/chromium/bindgen/report.json`, and every workaround in
 [contracts/workarounds.md](contracts/workarounds.md).

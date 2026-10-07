@@ -59,9 +59,10 @@ declare module "nts:dom" {
   export type PageTransitionEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; persisted: CBool<c_uint8> }, "NtsDomPageTransitionEventInit">;
   export type PerformanceMarkOptions = Struct<{ startTime: c_double }, "NtsDomPerformanceMarkOptions">;
   export type PointerEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8>; button: c_double; buttons: c_double; clientX: c_double; clientY: c_double; movementX: c_double; movementY: c_double; screenX: c_double; screenY: c_double; altitudeAngle: c_double; azimuthAngle: c_double; isPrimary: CBool<c_uint8>; persistentDeviceId: c_double; pointerId: c_double; pointerType: StringView; pressure: c_double; tangentialPressure: c_double; tiltX: c_double; tiltY: c_double; twist: c_double }, "NtsDomPointerEventInit">;
+  export type PointerLockOptions = Struct<{ unadjustedMovement: CBool<c_uint8> }, "NtsDomPointerLockOptions">;
   export type ProgressEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; lengthComputable: CBool<c_uint8>; loaded: c_double; total: c_double }, "NtsDomProgressEventInit">;
   export type ResizeObserverOptions = Struct<{ box: StringView }, "NtsDomResizeObserverOptions">;
-  export type ScrollIntoViewOptions = Struct<{ behavior: StringView; block: StringView }, "NtsDomScrollIntoViewOptions">;
+  export type ScrollIntoViewOptions = Struct<{ behavior: StringView; block: StringView; inline: StringView }, "NtsDomScrollIntoViewOptions">;
   export type ScrollToOptions = Struct<{ behavior: StringView; left: c_double; top: c_double }, "NtsDomScrollToOptions">;
   export type ShadowRootInit = Struct<{ clonable: CBool<c_uint8>; delegatesFocus: CBool<c_uint8>; mode: StringView; serializable: CBool<c_uint8>; slotAssignment: StringView }, "NtsDomShadowRootInit">;
   export type SubmitEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8> }, "NtsDomSubmitEventInit">;
@@ -2120,6 +2121,22 @@ declare module "nts:dom" {
      * @ntsNoEscape error
      */
     replaceWith(this: Element, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_requestFullscreen_1
+     */
+    requestFullscreen(this: Element, options: ByValue<FullscreenOptions> | Fields<FullscreenOptions>): Promise<void>;
+    /**
+     * @ntsSymbol nts_dom_Element_requestFullscreen_0
+     */
+    requestFullscreen(this: Element): Promise<void>;
+    /**
+     * @ntsSymbol nts_dom_Element_requestPointerLock_1
+     */
+    requestPointerLock(this: Element, options: ByValue<PointerLockOptions> | Fields<PointerLockOptions>): Promise<void>;
+    /**
+     * @ntsSymbol nts_dom_Element_requestPointerLock_0
+     */
+    requestPointerLock(this: Element): Promise<void>;
     /**
      * @ntsSymbol nts_dom_Element_scroll_1
      * @ntsThrows error nts_dom_exception_take_message
@@ -4953,6 +4970,10 @@ declare module "nts:dom" {
      */
     execCommand(this: Document, commandId: StringView, error?: Ptr<DOMException | null>): boolean;
     /**
+     * @ntsSymbol nts_dom_Document_exitFullscreen
+     */
+    exitFullscreen(this: Document): Promise<void>;
+    /**
      * @ntsSymbol nts_dom_Document_exitPointerLock
      */
     exitPointerLock(this: Document): void;
@@ -7228,11 +7249,19 @@ declare module "nts:dom" {
      */
     hidePopover(this: HTMLElement, error?: Ptr<DOMException | null>): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_hideUnboundedElement
+     */
+    hideUnboundedElement(this: HTMLElement): Promise<void>;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_showPopover_0
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     showPopover(this: HTMLElement, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_showUnboundedElement
+     */
+    showUnboundedElement(this: HTMLElement): Promise<void>;
     /**
      * @ntsSymbol nts_dom_HTMLElement_togglePopover_1_TogglePopoverOptions
      * @ntsThrows error nts_dom_exception_take_message
@@ -18891,6 +18920,10 @@ declare module "nts:dom" {
      * @ntsSet _set_attributionSrc
      */
     attributionSrc: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLImageElement_decode
+     */
+    decode(this: HTMLImageElement): Promise<void>;
   }
   export type HTMLImageElementMethods = HTMLImageElementOwnMethods & HTMLElementMethods;
   export type HTMLImageElement = HostClass<"NtsDomHTMLImageElement", HTMLElement> & HTMLImageElementMethods;
@@ -26983,6 +27016,10 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLMediaElement_pause
      */
     pause(this: HTMLMediaElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_play
+     */
+    play(this: HTMLMediaElement): Promise<void>;
   }
   export type HTMLMediaElementMethods = HTMLMediaElementOwnMethods & HTMLElementMethods;
   export type HTMLMediaElement = HostClass<"NtsDomHTMLMediaElement", HTMLElement> & HTMLMediaElementMethods;

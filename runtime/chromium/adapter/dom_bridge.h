@@ -23,6 +23,24 @@ typedef void (*NtsDomInvoke)(void* host, void (*call)(void*), void* state);
 void nts_blink_dom_set_invoker(NtsDomContext* context,
                                NtsDomInvoke invoke,
                                void* host);
+// The program's promises, which a member answering one hands it (`await
+// video.play()`): made inside the program's call, settled later through the
+// invoker. `make` answers a promise holding two references, the program's
+// and the adapter's; `fulfil`, `reject` (with an Error of that name and
+// message) and `drop` (unsettled: the document is gone) each give the
+// adapter's back. Installed once per context, beside the invoker; each is
+// given the state installed with it.
+typedef struct NtsPromise NtsPromise;
+typedef struct NtsDomPromiseOps {
+  NtsPromise* (*make)(void* state);
+  void (*fulfil)(void* state, NtsPromise* promise);
+  void (*reject)(void* state, NtsPromise* promise, const char* name,
+                 const char* message);
+  void (*drop)(void* state, NtsPromise* promise);
+} NtsDomPromiseOps;
+void nts_blink_dom_set_promise_ops(NtsDomContext* context,
+                                   const NtsDomPromiseOps* ops,
+                                   void* state);
 // Runs program code: `run(state)` as an entry. One entry per native callback
 // supplies what V8ScriptRunner::CallFunction supplies a JS callback -- the
 // agent's microtask scope, so nested script cannot checkpoint mid-callback
@@ -37,6 +55,9 @@ int32_t nts_blink_dom_entry(NtsDomContext* context,
 // The closures the context holds for the program -- listeners not yet
 // removed, frames not yet run -- each given back when it is done with.
 size_t nts_blink_dom_held_closures(NtsDomContext* context);
+// The program's promises Blink has not settled yet, each keeping alive what
+// awaits it until it does.
+size_t nts_blink_dom_pending_promises(NtsDomContext* context);
 // The document's element with this id, or NULL: how native code outside
 // Blink's boundary hands the program a node to start from.
 NtsDomNode* nts_blink_dom_element_by_id(NtsDomContext* context,

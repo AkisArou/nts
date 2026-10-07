@@ -790,7 +790,7 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   offsets.push("" + scroller.scrollTop);
   mark.scrollIntoView(true);
   offsets.push("" + scroller.scrollTop);
-  mark.scrollIntoView({ block: "center" });
+  mark.scrollIntoView({ block: "center", inline: "nearest" });
   offsets.push("" + scroller.scrollTop);
   mark.scrollIntoView(false);
   offsets.push("" + scroller.scrollTop);

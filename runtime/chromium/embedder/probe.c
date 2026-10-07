@@ -181,12 +181,23 @@ static void end_checkpoint(void* state) {
   NtsChromiumProbe* probe = state;
   ProbeScope scope = enter(probe);
   probe->collector_queued = false;
-  nts_collect_cycles();
+  /* The runtime's end of checkpoint: cycles collected, rejections still
+     unhandled reported, the rest released. */
+  nts_host_checkpoint_end();
+  /* While Blink has a promise of the program's unsettled, what awaits it is
+     alive and uncounted: the exact count waits for a checkpoint with none. */
+  if (nts_blink_dom_pending_promises(probe->dom)) {
+    leave(&scope);
+    return;
+  }
   /* The counter's state, beside the closures Blink holds for the program
      (the witness's observers and listeners): nothing else survives. */
   const size_t held = nts_blink_dom_held_closures(probe->dom);
-  if (probe->pending || nts_live_count() != 1 + held)
+  if (probe->pending || nts_live_count() != 1 + held) {
+    fprintf(stderr, "nts probe: at a checkpoint's end %zu objects live, %zu held, %d pending\n",
+            nts_live_count(), held, (int)probe->pending);
     PROBE_FAIL();
+  }
   fprintf(stderr, "NTS_CHECKPOINT live=%zu\n", nts_live_count() - held);
   leave(&scope);
 }

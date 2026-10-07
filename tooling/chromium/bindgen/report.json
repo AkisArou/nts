@@ -1,5 +1,5 @@
 {
-  "bound": 4796,
+  "bound": 4805,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -407,19 +407,9 @@
       "why": "[RuntimeEnabled]"
     },
     {
-      "interface": "Element",
-      "member": "requestFullscreen/1",
-      "why": "result type Promise<undefined>"
-    },
-    {
-      "interface": "Element",
-      "member": "requestPointerLock/1",
-      "why": "result type Promise<undefined>"
-    },
-    {
-      "interface": "ScrollIntoViewOptions",
-      "member": "inline",
-      "why": "dictionary member named by the C keyword `inline`"
+      "interface": "FullscreenOptions",
+      "member": "screen",
+      "why": "dictionary member of type optional Screen"
     },
     {
       "interface": "Element",
@@ -520,11 +510,6 @@
       "interface": "Element",
       "member": "streamReplaceWithHTMLUnsafe/1",
       "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "FullscreenOptions",
-      "member": "screen",
-      "why": "dictionary member of type optional Screen"
     },
     {
       "interface": "CharacterData",
@@ -2088,11 +2073,6 @@
     },
     {
       "interface": "Document",
-      "member": "exitFullscreen/0",
-      "why": "result type Promise<undefined>"
-    },
-    {
-      "interface": "Document",
       "member": "exitPictureInPicture/0",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
@@ -3463,11 +3443,6 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "hideUnboundedElement/0",
-      "why": "result type Promise<undefined>"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "scrollParent/0",
       "why": "[RuntimeEnabled]"
     },
@@ -3480,11 +3455,6 @@
       "interface": "HTMLElement",
       "member": "showPopover/1",
       "why": "dictionary ShowPopoverOptions has no member a C struct can carry"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "showUnboundedElement/0",
-      "why": "result type Promise<undefined>"
     },
     {
       "interface": "TogglePopoverOptions",
@@ -3800,11 +3770,6 @@
       "interface": "HTMLImageElement",
       "member": "set onuareplaceend",
       "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "HTMLImageElement",
-      "member": "decode/0",
-      "why": "result type Promise<undefined>"
     },
     {
       "interface": "HTMLCanvasElement",
@@ -7370,11 +7335,6 @@
       "interface": "HTMLMediaElement",
       "member": "captureStream/0",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "HTMLMediaElement",
-      "member": "play/0",
-      "why": "result type Promise<undefined>"
     },
     {
       "interface": "HTMLMediaElement",

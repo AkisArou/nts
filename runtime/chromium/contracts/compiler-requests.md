@@ -387,6 +387,13 @@ The lane's side, once these exist:
 
 ## 12. A foreign function answers a promise
 
+**Delivered 2026-10-07** (main 1bcac3153, with nts_promise_reject_error,
+4971bf1fc, and nts_host_checkpoint_end, b62243224): a `Promise<T>` result
+crosses as an owned `NtsPromise *`; a host rejects with the program's Error;
+a host that owns checkpointing ends each one, so rejections are reported and
+released. Bound in the adapter as nts_dom::Answer (dom_bridge.cc). The
+request as written:
+
 **Requested 2026-10-07. Blocks: Blink's promise-returning members, 20 in
 `tooling/chromium/bindgen/report.json` (`requestFullscreen()`, `play()`,
 `Animation.finished`, `scrollIntoView`'s `Promise<ScrollResult>`, ...).

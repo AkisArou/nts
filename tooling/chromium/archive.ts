@@ -7,7 +7,7 @@
  * (app.ts).
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 
 export interface Toolchain {
@@ -70,6 +70,9 @@ export function archiveProgram(request: ArchiveRequest): void {
     ...units.map(unit => compile(resolve(generated, unit), basename(unit, ".c"), flags)),
     ...request.sources.map(source => compile(source, basename(source, ".c"), flags)),
   ];
+  // A new archive each time: `ar rcs` replaces members but keeps the rest, so
+  // an object a previous recipe archived (a renamed unit) would stay and link.
+  rmSync(archive, { force: true });
   execFileSync(toolchain.archiver, ["rcs", archive, ...objects], { cwd: root, stdio: "inherit" });
 }
 

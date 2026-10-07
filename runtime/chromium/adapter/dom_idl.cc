@@ -432,6 +432,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_playback_direction.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_pointer_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_pointer_event_init.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_pointer_lock_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_pop_state_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_preconnect_data.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_predefined_color_space.h"
@@ -1008,6 +1009,26 @@ blink::GetHTMLOptions* NtsDomToGetHTMLOptions(NtsDomContext& context, const NtsD
   if (from.serializableShadowRoots) to->setSerializableShadowRoots(true);
   return to;
 }
+blink::FullscreenOptions* NtsDomToFullscreenOptions(NtsDomContext& context, const NtsDomFullscreenOptions& from, blink::ExceptionState& exception_state) {
+  v8::Isolate* isolate = context.v8_isolate.get();
+  auto* to = blink::FullscreenOptions::Create(isolate);
+  if (from.navigationUI) {
+    const blink::String text = NtsText(context, from.navigationUI).Text();
+    const auto value = blink::V8FullscreenNavigationUI::Create(text);
+    if (!value) {
+      exception_state.ThrowTypeError(blink::StrCat({"The provided value '", text, "' is not a valid enum value of type FullscreenNavigationUI."}));
+      return nullptr;
+    }
+    to->setNavigationUI(*value);
+  }
+  return to;
+}
+blink::PointerLockOptions* NtsDomToPointerLockOptions(NtsDomContext& context, const NtsDomPointerLockOptions& from, blink::ExceptionState& exception_state) {
+  v8::Isolate* isolate = context.v8_isolate.get();
+  auto* to = blink::PointerLockOptions::Create(isolate);
+  if (from.unadjustedMovement) to->setUnadjustedMovement(true);
+  return to;
+}
 blink::ScrollToOptions* NtsDomToScrollToOptions(NtsDomContext& context, const NtsDomScrollToOptions& from, blink::ExceptionState& exception_state) {
   v8::Isolate* isolate = context.v8_isolate.get();
   auto* to = blink::ScrollToOptions::Create(isolate);
@@ -1045,19 +1066,14 @@ blink::ScrollIntoViewOptions* NtsDomToScrollIntoViewOptions(NtsDomContext& conte
     }
     to->setBlock(*value);
   }
-  return to;
-}
-blink::FullscreenOptions* NtsDomToFullscreenOptions(NtsDomContext& context, const NtsDomFullscreenOptions& from, blink::ExceptionState& exception_state) {
-  v8::Isolate* isolate = context.v8_isolate.get();
-  auto* to = blink::FullscreenOptions::Create(isolate);
-  if (from.navigationUI) {
-    const blink::String text = NtsText(context, from.navigationUI).Text();
-    const auto value = blink::V8FullscreenNavigationUI::Create(text);
+  if (from.inline_) {
+    const blink::String text = NtsText(context, from.inline_).Text();
+    const auto value = blink::V8ScrollLogicalPosition::Create(text);
     if (!value) {
-      exception_state.ThrowTypeError(blink::StrCat({"The provided value '", text, "' is not a valid enum value of type FullscreenNavigationUI."}));
+      exception_state.ThrowTypeError(blink::StrCat({"The provided value '", text, "' is not a valid enum value of type ScrollLogicalPosition."}));
       return nullptr;
     }
-    to->setNavigationUI(*value);
+    to->setInlinePosition(*value);
   }
   return to;
 }
@@ -8829,6 +8845,46 @@ void nts_dom_Element_replaceWith_0(NtsDomElement* self, NtsDomException** error)
   receiver->replaceWith(nodes_values, exception_state);
 }
 
+struct NtsPromise* nts_dom_Element_requestFullscreen_1(NtsDomElement* self, NtsDomFullscreenOptions options) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::Element>(self);
+  auto* options_converted = NtsDomToFullscreenOptions(context, options, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return nts_dom::Rejected(context, exception_state);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, ElementFullscreen::requestFullscreen(script_state, *receiver, options_converted, exception_state));
+}
+
+struct NtsPromise* nts_dom_Element_requestFullscreen_0(NtsDomElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::Element>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, ElementFullscreen::requestFullscreen(script_state, *receiver, blink::FullscreenOptions::Create(context.v8_isolate.get()), exception_state));
+}
+
+struct NtsPromise* nts_dom_Element_requestPointerLock_1(NtsDomElement* self, NtsDomPointerLockOptions options) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::Element>(self);
+  auto* options_converted = NtsDomToPointerLockOptions(context, options, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return nts_dom::Rejected(context, exception_state);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->requestPointerLock(script_state, options_converted, exception_state));
+}
+
+struct NtsPromise* nts_dom_Element_requestPointerLock_0(NtsDomElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::Element>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->requestPointerLock(script_state, blink::PointerLockOptions::Create(context.v8_isolate.get()), exception_state));
+}
+
 void nts_dom_Element_scroll_1(NtsDomElement* self, NtsDomScrollToOptions options, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
@@ -13675,6 +13731,15 @@ bool nts_dom_Document_execCommand_1(NtsDomDocument* self, const NtsBorrowedStrin
   return static_cast<bool>(receiver->execCommand(NtsText(context, commandId), false, blink::MakeGarbageCollected<blink::V8UnionStringOrTrustedHTML>(blink::String("")), exception_state));
 }
 
+struct NtsPromise* nts_dom_Document_exitFullscreen(NtsDomDocument* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::Document>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, DocumentFullscreen::exitFullscreen(script_state, *receiver, exception_state));
+}
+
 void nts_dom_Document_exitPointerLock(NtsDomDocument* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::Document>(self);
@@ -17716,11 +17781,29 @@ void nts_dom_HTMLElement_hidePopover(NtsDomHTMLElement* self, NtsDomException** 
   receiver->hidePopover(exception_state);
 }
 
+struct NtsPromise* nts_dom_HTMLElement_hideUnboundedElement(NtsDomHTMLElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::HTMLElement>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->hideUnboundedElement(script_state));
+}
+
 void nts_dom_HTMLElement_showPopover_0(NtsDomHTMLElement* self, NtsDomException** error) {
   nts_dom::AssertEntered();
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::HTMLElement>(self);
   receiver->showPopover(exception_state);
+}
+
+struct NtsPromise* nts_dom_HTMLElement_showUnboundedElement(NtsDomHTMLElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::HTMLElement>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->showUnboundedElement(script_state));
 }
 
 bool nts_dom_HTMLElement_togglePopover_1_TogglePopoverOptions(NtsDomHTMLElement* self, NtsDomTogglePopoverOptions options, NtsDomException** error) {
@@ -29032,6 +29115,15 @@ void nts_dom_HTMLImageElement_set_attributionSrc(NtsDomHTMLImageElement* self, c
   receiver->setAttribute(html_names::kAttributionsrcAttr, NtsText(context, value, /*scalar_values=*/true));
 }
 
+struct NtsPromise* nts_dom_HTMLImageElement_decode(NtsDomHTMLImageElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::HTMLImageElement>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->decode(script_state, exception_state));
+}
+
 NtsDomHTMLCanvasElement* nts_dom_as_HTMLCanvasElement(NtsDomNode* node) {
   nts_dom::AssertEntered();
   return HandleOf<NtsDomHTMLCanvasElement>(nts_dom_is(node, NTS_DOM_HTMLCanvasElement) ? WrappableOf(node) : nullptr);
@@ -39008,6 +39100,15 @@ void nts_dom_HTMLMediaElement_pause(NtsDomHTMLMediaElement* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::HTMLMediaElement>(self);
   receiver->pause();
+}
+
+struct NtsPromise* nts_dom_HTMLMediaElement_play(NtsDomHTMLMediaElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::HTMLMediaElement>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->playForBindings(script_state));
 }
 
 NtsDomHTMLVideoElement* nts_dom_as_HTMLVideoElement(NtsDomNode* node) {

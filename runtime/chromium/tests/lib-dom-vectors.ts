@@ -12,6 +12,20 @@
 // visited node skips its successor, and a static list (querySelectorAll)
 // visits every node it was made with.
 
+async function settle(label: string, run: () => Promise<void>): Promise<void> {
+  let outcome = "fulfilled";
+  try {
+    await run();
+  } catch (error) {
+    // V8's binding prefixes an exception it turns into a rejection with its
+    // context ("Failed to execute 'x' on 'Y': "); the program's has none.
+    let message = (error as Error).message;
+    if (message.startsWith("Failed to ")) message = message.slice(message.indexOf("': ") + 3);
+    outcome = "rejected " + (error as Error).name + ": " + message;
+  }
+  document.querySelector("#native-lib-dom")?.setAttribute("data-" + label, outcome);
+}
+
 export function libDomTranscript(): string {
   const lines: string[] = [];
   const log = (label: string, value: string): void => {
@@ -181,4 +195,27 @@ export function libDomTranscript(): string {
 
   root.remove();
   return lines.join("\n");
+}
+
+// Promises Blink answers, started from a timer once the transcript is done
+// (so the probe's count of what outlives its synchronous run sees one timer,
+// not five pending chains). Each outcome is written on the transcript's
+// element as its own attribute, whatever order they settle in -- fulfilled,
+// or the rejection's name and message; the smoke waits for all five.
+export function startLibDomPromises(): void {
+  setTimeout((): void => {
+    // Each attribute set now, in this order, so the element's attributes are
+    // in one order however the promises settle.
+    const out = document.querySelector("#native-lib-dom");
+    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen"]) out?.setAttribute("data-" + label, "pending");
+    settle("decoded", (): Promise<void> => {
+      const image = document.createElement("img");
+      image.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+      return image.decode();
+    });
+    settle("undecodable", (): Promise<void> => document.createElement("img").decode());
+    settle("unplayable", (): Promise<void> => document.createElement("video").play());
+    settle("unfullscreen", (): Promise<void> => document.exitFullscreen());
+    settle("fullscreen", (): Promise<void> => document.createElement("div").requestFullscreen());
+  }, 0);
 }

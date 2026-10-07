@@ -207,6 +207,7 @@ try {
       pre.id = 'native-lib-dom';
       pre.textContent = libDomTranscript();
       document.querySelector('#native-dom').appendChild(pre);
+      startLibDomPromises();
     })()`);
     // The timer vectors (tests/timer-vectors.ts), the same source with the
     // browser's own timers: `document()` is the program's spelling of the
@@ -235,6 +236,14 @@ try {
   // events, whose check counts the program's live objects, which pending
   // timers hold.
   if (nativeDom) await until(async () => await evaluate<string | null>("document.querySelector('#native-timers')?.getAttribute('data-done') ?? null") === "1", "timer vectors");
+  // So do the lib.dom promise vectors (tests/lib-dom-vectors.ts): five
+  // outcomes, each an attribute of the transcript's element once settled.
+  if (nativeDom) await until(async () => await evaluate<number>(`["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen"]
+    .filter(name => (document.querySelector('#native-lib-dom')?.getAttribute('data-' + name) ?? 'pending') !== 'pending').length`) === 5, "lib.dom promise vectors");
+  // Where the input steps' log begins: the checkpoints counted below are
+  // theirs, not the vectors' (whose promise continuations end checkpoints of
+  // their own before the first input).
+  const inputLogStart = page.log().length;
   const before = await evaluate<Layout>(`(() => {
     const r = document.querySelector('${inputSelector}').getBoundingClientRect();
     return {title: document.title, count: ${readCount},
@@ -250,9 +259,18 @@ try {
     }
   }
   const mixedTraces: Array<{ order: string; source: string; jobs: string; reactions: string[] }> = [];
+  // The program's microtasks are numbered as they run, from the page's start:
+  // jobs the witness queued before the first step (the lib.dom promise
+  // vectors' continuations) take the first numbers, so the steps' numbering
+  // starts where the first step's does, and runs on contiguously from there.
+  let jobOffset: number | undefined;
   async function captureMixed(step: number) {
     const jobs = await evaluate<string>("document.querySelector('#native-jobs').getAttribute('data-jobs')");
-    const first = 3 * (step - 1) + 1;
+    if (jobOffset === undefined) {
+      const numbers = jobs.split(",").filter(job => job.startsWith("native-")).map(job => Number(job.slice("native-".length)));
+      jobOffset = Math.min(...numbers) - 1;
+    }
+    const first = jobOffset + 3 * (step - 1) + 1;
     const order = step <= 5 ? "native-first" : "v8-first";
     const scriptDispatch = step % 2 === 0;
     const nativeJobs = [`native-${first}`, `native-${first+1}`, `native-${first+2}`];
@@ -261,7 +279,10 @@ try {
     const reactions = await evaluate<string[]>("window.mixedTrace");
     assert.equal(reactions.filter(trace => trace.startsWith('ce:')).length, 5);
     assert(reactions.some(trace => trace.startsWith('mo:')), "MutationObserver must run on the same checkpoint");
-    mixedTraces.push({order, source: scriptDispatch ? "script-dispatch" : "user-input", jobs, reactions});
+    // Recorded as numbered from the first step, so traces compare across
+    // engines whatever ran before it.
+    const renumber = (text: string) => text.replace(/native-(\d+)/g, (_, number) => `native-${Number(number) - jobOffset!}`);
+    mixedTraces.push({order, source: scriptDispatch ? "script-dispatch" : "user-input", jobs: renumber(jobs), reactions: reactions.map(renumber)});
   }
   if (mixedMicrotasks) {
     await evaluate(mixedObserver);
@@ -310,6 +331,9 @@ try {
     assert(!/(?:^|\s)--(?:no-sandbox|disable-seccomp-filter-sandbox|disable-namespace-sandbox)(?:\s|=|$)/.test(renderer.commandLine));
     assert(renderer.status.NSpid.split(/\s+/).length > 1, "renderer must be in a nested PID namespace");
   }
+  // And where it ends: each reload below runs the witness again, whose
+  // promise vectors end checkpoints of their own in the new document.
+  const inputLogEnd = page.log().length;
   let lifecycle;
   if (probeBackend) {
     const attachments = () => (page.log().match(new RegExp(`NTS_PROBE attach backend=${probeBackend} scalar=50 text=native:probe live=0`, "g")) ?? []).length;
@@ -348,7 +372,7 @@ try {
   }
   if (mixedMicrotasks && !domOracle) {
     assert.equal((page.log().match(/NTS_NATIVE_TASK drop live=1/g) ?? []).length, 4, "each document disposal must drop its managed host task");
-    assert.equal((page.log().match(/NTS_CHECKPOINT live=1/g) ?? []).length, 10, "each input must finish with one owned counter and no leaked jobs");
+    assert.equal((page.log().slice(inputLogStart, inputLogEnd).match(/NTS_CHECKPOINT live=1/g) ?? []).length, 10, "each input must finish with one owned counter and no leaked jobs");
     assert(!page.log().includes("NTS_TEARDOWN"), "teardown must neither run canceled work nor leave a pending await");
   }
   const result = {
@@ -359,7 +383,7 @@ try {
     nativeManifestSha256,
     runtimeResources: { targetLabel, manifest: `${output}/runtime-deps.txt`, method: "GN-declared runtime dependencies, including test fixtures; not a minimal distribution or a list of host system libraries." },
     probeBackend, lifecycle, counter, nativeDom, dom,
-    microtasks: mixedMicrotasks ? {traces: mixedTraces, observerSha256: createHash('sha256').update(mixedObserver).digest('hex'), canceledJobs: domOracle ? undefined : (page.log().match(/NTS_NATIVE_TASK drop/g) ?? []).length, endCheckpoints: domOracle ? undefined : (page.log().match(/NTS_CHECKPOINT live=1/g) ?? []).length} : undefined,
+    microtasks: mixedMicrotasks ? {traces: mixedTraces, observerSha256: createHash('sha256').update(mixedObserver).digest('hex'), canceledJobs: domOracle ? undefined : (page.log().match(/NTS_NATIVE_TASK drop/g) ?? []).length, endCheckpoints: domOracle ? undefined : (page.log().slice(inputLogStart, inputLogEnd).match(/NTS_CHECKPOINT live=1/g) ?? []).length} : undefined,
     rssSumKiB: records.reduce((sum, item) => sum + Number(item.status.VmRSS?.split(/\s+/)[0] ?? 0), 0),
     memoryMethod: "Sum of per-process VmRSS; shared pages may be counted more than once.",
     display: "Xvfb 1280x900x24", observedAt: new Date().toISOString(),

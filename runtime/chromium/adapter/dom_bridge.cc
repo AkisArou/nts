@@ -243,6 +243,84 @@ private:
   int32_t id_ = 0;
 };
 
+// A promise the program was answered, until Blink's settles it: the
+// program's NtsPromise, on which the adapter holds one reference. Settling
+// gives that reference back inside the program's environment; so does the
+// document's end, unsettled. Kept in the context's set until then.
+class NtsPendingPromise final
+    : public blink::GarbageCollected<NtsPendingPromise> {
+public:
+  NtsPendingPromise(NtsDomContext *context, NtsPromise *promise)
+      : context_(context), promise_(promise) {}
+  void Trace(blink::Visitor *) const {}
+
+  // `name` null: fulfilled.
+  void Settle(const char *name, const char *message);
+  // The promise, unsettled, for the document's end; null after either.
+  NtsPromise *Take() {
+    context_ = nullptr;
+    return std::exchange(promise_, nullptr);
+  }
+
+private:
+  RAW_PTR_EXCLUSION NtsDomContext *context_; // see PlainPointers
+  RAW_PTR_EXCLUSION NtsPromise *promise_;    // see PlainPointers
+};
+
+// Blink's promise's reactions, each settling the program's.
+class NtsPromiseFulfilled final
+    : public blink::ThenCallable<blink::IDLUndefined, NtsPromiseFulfilled> {
+public:
+  explicit NtsPromiseFulfilled(NtsPendingPromise *pending) : pending_(pending) {}
+  void React(blink::ScriptState *) { pending_->Settle(nullptr, nullptr); }
+  void Trace(blink::Visitor *visitor) const override {
+    visitor->Trace(pending_);
+    ThenCallable::Trace(visitor);
+  }
+
+private:
+  blink::Member<NtsPendingPromise> pending_;
+};
+class NtsPromiseRejected final
+    : public blink::ThenCallable<blink::IDLAny, NtsPromiseRejected> {
+public:
+  explicit NtsPromiseRejected(NtsPendingPromise *pending) : pending_(pending) {}
+  // What page script's `catch (e)` would read as e.name and e.message: a
+  // DOMException's own; an ECMAScript error's `name` and `message`; any
+  // other reason, an Error whose message is its text.
+  void React(blink::ScriptState *script_state, blink::ScriptValue reason) {
+    v8::Isolate *isolate = script_state->GetIsolate();
+    v8::Local<v8::Value> value = reason.V8Value();
+    blink::String name = "Error";
+    blink::String message;
+    if (auto *exception = blink::V8DOMException::ToWrappable(isolate, value)) {
+      name = exception->name();
+      message = exception->message();
+    } else if (value->IsNativeError()) {
+      v8::Local<v8::Context> v8_context = script_state->GetContext();
+      v8::Local<v8::Object> error = value.As<v8::Object>();
+      v8::Local<v8::Value> field;
+      if (error->Get(v8_context, blink::V8AtomicString(isolate, "name")).ToLocal(&field) && field->IsString())
+        name = blink::ToCoreString(isolate, field.As<v8::String>());
+      if (error->Get(v8_context, blink::V8AtomicString(isolate, "message")).ToLocal(&field) && field->IsString())
+        message = blink::ToCoreString(isolate, field.As<v8::String>());
+    } else {
+      v8::TryCatch try_catch(isolate);
+      v8::Local<v8::String> text;
+      if (value->ToString(script_state->GetContext()).ToLocal(&text))
+        message = blink::ToCoreString(isolate, text);
+    }
+    pending_->Settle(name.Utf8().c_str(), message.Utf8().c_str());
+  }
+  void Trace(blink::Visitor *visitor) const override {
+    visitor->Trace(pending_);
+    ThenCallable::Trace(visitor);
+  }
+
+private:
+  blink::Member<NtsPendingPromise> pending_;
+};
+
 // A compiled closure to run after a delay, once or every interval: HTML's
 // timer initialization steps as DOMTimer runs them (core/scheduler/
 // dom_timer.cc), whose coordinator is private to it -- so the program's
@@ -455,6 +533,7 @@ public:
     visitor->Trace(handlers);
     visitor->Trace(timers);
     visitor->Trace(held);
+    visitor->Trace(promises);
   }
   // The listener added for (type, closure, capture) on `target`, or null.
   NtsListener *Find(blink::EventTarget *target, const blink::AtomicString &type,
@@ -496,6 +575,8 @@ public:
   blink::HeapHashMap<int32_t, blink::Member<NtsTimer>> timers;
   // Closures native delegates hold -- observers' -- until the document ends.
   blink::HeapHashSet<blink::Member<NtsHeldClosure>> held;
+  // Promises the program was answered that Blink has not settled yet.
+  blink::HeapHashSet<blink::Member<NtsPendingPromise>> promises;
 };
 
 // Listener handles the program keeps off the stack, as Roots for objects.
@@ -579,6 +660,37 @@ private:
   blink::ScriptState::Scope script_;
   v8::MicrotasksScope microtasks_;
 };
+
+// Settles the program's promise inside its environment, as a callback
+// enters it, and gives the adapter's reference back; nothing once the
+// document has ended (Close dropped it).
+void NtsPendingPromise::Settle(const char *name, const char *message) {
+  NtsDomContext *context = context_;
+  NtsPromise *promise = Take();
+  if (!context || !promise || context->closed)
+    return;
+  context->listeners->promises.erase(this);
+  ProgramScope scope(context);
+  struct Call {
+    RAW_PTR_EXCLUSION const NtsDomPromiseOps *ops; // see PlainPointers
+    RAW_PTR_EXCLUSION void *state;                 // see PlainPointers
+    RAW_PTR_EXCLUSION NtsPromise *promise;         // see PlainPointers
+    RAW_PTR_EXCLUSION const char *name;            // see PlainPointers
+    RAW_PTR_EXCLUSION const char *message;         // see PlainPointers
+  } call{context->promise_ops.get(), context->promise_state.get(), promise,
+         name, message};
+  context->invoke(
+      context->invoke_host.get(),
+      [](void *state) {
+        auto *call = static_cast<Call *>(state);
+        if (call->name)
+          call->ops->reject(call->state, call->promise, call->name,
+                            call->message);
+        else
+          call->ops->fulfil(call->state, call->promise);
+      },
+      &call);
+}
 
 } // namespace nts_dom
 
@@ -1143,6 +1255,27 @@ void NtsDomContext::Close() {
     if (auto destroy = task->Take(closure))
       GiveBack(destroy, closure);
   }
+  // The program's promises Blink never settled: their adapter references,
+  // given back unsettled while the environment is still there.
+  blink::HeapVector<blink::Member<nts_dom::NtsPendingPromise>> pending(
+      listeners->promises);
+  listeners->promises.clear();
+  for (auto &entry : pending) {
+    if (NtsPromise *promise = entry->Take()) {
+      struct Drop {
+        RAW_PTR_EXCLUSION const NtsDomPromiseOps *ops; // see PlainPointers
+        RAW_PTR_EXCLUSION void *state;                 // see PlainPointers
+        RAW_PTR_EXCLUSION NtsPromise *promise;         // see PlainPointers
+      } drop{promise_ops.get(), promise_state.get(), promise};
+      invoke(
+          invoke_host.get(),
+          [](void *state) {
+            auto *drop = static_cast<Drop *>(state);
+            drop->ops->drop(drop->state, drop->promise);
+          },
+          &drop);
+    }
+  }
   closed = true;
   main_world_.Clear();
   weak_factory.InvalidateWeakPtrs();
@@ -1210,6 +1343,30 @@ blink::String ExceptionName(blink::ExceptionCode code) {
 }
 } // namespace
 
+namespace nts_dom {
+NtsPromise *Rejected(NtsDomContext &context, const Rejections &rejections) {
+  CHECK(context.promise_ops);
+  NtsPromise *answer = context.promise_ops->make(context.promise_state.get());
+  context.promise_ops->reject(context.promise_state.get(), answer, ExceptionName(rejections.Code()).Utf8().c_str(),
+                              rejections.Message().Utf8().c_str());
+  return answer;
+}
+NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
+                   const Rejections &rejections,
+                   blink::ScriptPromise<blink::IDLUndefined> promise) {
+  if (rejections.HadException() || promise.IsEmpty())
+    return Rejected(context, rejections);
+  CHECK(context.promise_ops);
+  NtsPromise *answer = context.promise_ops->make(context.promise_state.get());
+  auto *pending = blink::MakeGarbageCollected<NtsPendingPromise>(&context, answer);
+  context.listeners->promises.insert(pending);
+  promise.Then(script_state,
+               blink::MakeGarbageCollected<NtsPromiseFulfilled>(pending),
+               blink::MakeGarbageCollected<NtsPromiseRejected>(pending));
+  return answer;
+}
+} // namespace nts_dom
+
 extern "C" {
 void nts_blink_dom_destroy(NtsDomContext *context) {
   context->Close();
@@ -1219,6 +1376,11 @@ void nts_blink_dom_set_invoker(NtsDomContext *context, NtsDomInvoke invoke,
                                void *host) {
   context->invoke = invoke;
   context->invoke_host = host;
+}
+void nts_blink_dom_set_promise_ops(NtsDomContext *context,
+                                   const NtsDomPromiseOps *ops, void *state) {
+  context->promise_ops = ops;
+  context->promise_state = state;
 }
 int32_t nts_blink_dom_entry(NtsDomContext *context, NativeJob::Callback run,
                             void *state) {
@@ -1232,6 +1394,9 @@ NtsDomNode *nts_blink_dom_element_by_id(NtsDomContext *context,
                                         const char *id) {
   return HandleOf<NtsDomNode>(
       context->document->getElementById(blink::AtomicString(id)));
+}
+size_t nts_blink_dom_pending_promises(NtsDomContext *context) {
+  return context->listeners->promises.size();
 }
 size_t nts_blink_dom_held_closures(NtsDomContext *context) {
   return context->listeners->set.size() + context->listeners->frames.size() +

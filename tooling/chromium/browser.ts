@@ -72,6 +72,7 @@ export async function openPage(executable: string, url: string, options: LaunchO
   let launchError: Error | undefined;
   let exited = false;
   let failed = false;
+  let failedLine = "";
   const pending = new Map<number, { accept: (value: unknown) => void; reject: (error: Error) => void; timeout: ReturnType<typeof setTimeout> }>();
   const rejectAll = (message: string) => {
     for (const entry of pending.values()) { clearTimeout(entry.timeout); entry.reject(new Error(message)); }
@@ -85,7 +86,10 @@ export async function openPage(executable: string, url: string, options: LaunchO
       options.logTo?.write(chunk);
       if (!failed && failure?.test(log)) {
         failed = true;
-        rejectAll("The renderer failed a check; see the shell's log");
+        // The line itself: the process may end before a log file is flushed.
+        const line = log.split("\n").find(text => failure.test(text))?.trim();
+        failedLine = line ?? "";
+        rejectAll(`The renderer failed a check: ${failedLine}`);
       }
     });
   }
@@ -100,7 +104,7 @@ export async function openPage(executable: string, url: string, options: LaunchO
     const deadline = performance.now() + timeout;
     do {
       if (launchError) throw launchError;
-      if (failed) throw new Error(`The renderer failed a check while waiting for ${label}`);
+      if (failed) throw new Error(`The renderer failed a check while waiting for ${label}: ${failedLine}`);
       if (exited) throw new Error(`The shell exited while waiting for ${label}`);
       const value = await predicate();
       if (value) return value as NonNullable<T>;
@@ -137,7 +141,7 @@ export async function openPage(executable: string, url: string, options: LaunchO
     });
     socket.addEventListener("close", () => rejectAll("The page's DevTools connection closed"));
     const cdp = <T>(method: string, params: Record<string, unknown> = {}): Promise<T> => new Promise((accept, reject) => {
-      if (failed) { reject(new Error("The renderer failed a check; see the shell's log")); return; }
+      if (failed) { reject(new Error(`The renderer failed a check: ${failedLine}`)); return; }
       const next = ++id;
       const timeout = setTimeout(() => { pending.delete(next); reject(new Error(`DevTools call timed out: ${method}`)); }, callTimeout);
       pending.set(next, { accept: value => accept(value as T), reject, timeout });

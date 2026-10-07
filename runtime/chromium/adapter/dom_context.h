@@ -25,6 +25,7 @@
 #include "base/memory/weak_ptr.h"
 #include "third_party/blink/renderer/bindings/core/v8/frozen_array.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_dom_exception.h"
 #include "third_party/blink/renderer/core/dom/container_node.h"
@@ -330,6 +331,10 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
   blink::Persistent<ListenerSet> listeners;
   NtsDomInvoke invoke = nullptr;
   raw_ptr<void> invoke_host;
+  // How the program's promises are made and settled (nts_blink_dom_set_
+  // promise_ops); a member answering a promise CHECKs it is installed.
+  raw_ptr<const NtsDomPromiseOps> promise_ops;
+  raw_ptr<void> promise_state;
   // The document's execution context may already be detached when the
   // observer closes. Capture its actual agent loop while the document lives;
   // queued callbacks still need explicit revocation because that loop is
@@ -498,6 +503,32 @@ private:
   blink::DummyExceptionStateForTesting state_;
   NtsDomException **error_; // STACK_ALLOCATED: no BackupRefPtr per call
 };
+// What a member answering a promise reports instead of throwing, as V8's
+// binding of one turns an exception into a rejected promise: the exception
+// state the call and its argument conversions are given, read by Answer.
+class Rejections {
+  STACK_ALLOCATED();
+
+public:
+  operator blink::ExceptionState &() { return state_; }
+  bool HadException() const { return state_.HadException(); }
+  blink::ExceptionCode Code() const { return state_.Code(); }
+  const blink::String &Message() const { return state_.Message(); }
+
+private:
+  blink::DummyExceptionStateForTesting state_;
+};
+
+// The program's promise for Blink's `promise`, which it settles: fulfilled
+// when Blink's fulfils, rejected with an Error named as page script's `e.name`
+// would read when it rejects. Already rejected if the call, or converting its
+// arguments, reported an exception. Inside the program's call.
+NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
+                   const Rejections &rejections,
+                   blink::ScriptPromise<blink::IDLUndefined> promise);
+// A promise already rejected with what `rejections` holds: a member whose
+// arguments failed to convert, before Blink is called.
+NtsPromise *Rejected(NtsDomContext &context, const Rejections &rejections);
 } // namespace nts_dom
 using nts_dom::Throws;
 using nts_dom::NtsText;

@@ -5,7 +5,7 @@ import * as testing from "nts:dom-testing";
 import { asHTMLElement, cancelAnimationFrame, document, requestAnimationFrame } from "nts:dom";
 import type { Document, Element, Event, Node } from "nts:dom";
 import { idlTranscript } from "./idl-vectors.ts";
-import { libDomTranscript } from "./lib-dom-vectors.ts";
+import { libDomTranscript, startLibDomPromises } from "./lib-dom-vectors.ts";
 import { startTimerVectors } from "./timer-vectors.ts";
 import type { VectorHost } from "./idl-vectors.ts";
 
@@ -120,6 +120,7 @@ export function ntsChromiumDomProgram(): number {
   const libDom = element(d, "pre", "native-lib-dom");
   libDom.textContent = libDomTranscript();
   container.appendChild(libDom);
+  startLibDomPromises();
 
   // The timer vectors (timer-vectors.ts): they run after this returns and
   // fill this transcript as they fire; the smoke waits for its data-done.

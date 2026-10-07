@@ -107,14 +107,24 @@ STRINGS = {"DOMString", "CSSOMString", "USVString"}
 
 # Words a parameter cannot be named in TypeScript or C++, and the one the
 # error slot takes.
-# C's own keywords and those C++ adds, which a struct field the program writes
-# by name cannot take.
-C_KEYWORDS = set("""
-    auto break case char const continue default do double else enum extern
-    float for goto if inline int long register restrict return short signed
-    sizeof static struct switch typedef union unsigned void volatile while
-    _Bool _Complex _Imaginary bool true false
+# The words a native record's member is escaped from, with a trailing `_`
+# (`inline` -> `inline_`): the compiler's own list (compiler/codegen/common/
+# src/symbols.rs, RESERVED, used by `native_member`), which the program writes
+# a dictionary's struct by. The header must spell each member the same way.
+C_RESERVED = set("""
+    _Alignas _Alignof _Atomic _Bool _Complex _Generic _Imaginary _Noreturn
+    _Static_assert _Thread_local alignas alignof auto bool break case char
+    const constexpr continue default do double else enum extern false float
+    for goto if inline int long main nullptr register restrict return short
+    signed sizeof static static_assert struct switch thread_local true typedef
+    typeof union unsigned void volatile while
 """.split())
+
+
+def native_member(name):
+    """A dictionary member's C field, as the compiler names it."""
+    return name + "_" if name in C_RESERVED else name
+
 
 RESERVED = set("""
     break case catch class const continue debugger default delete do else enum
@@ -192,7 +202,7 @@ class Function:
         self.receiver = True  # false for a constructor or a downcast: no `self`
 
     def needs_context(self):
-        return (self.reactions or self.result.kind == "string" or any(p.context for p in self.params)
+        return (self.reactions or self.result.kind in ("string", "promise") or any(p.context for p in self.params)
                 or "context." in self.expression or any("context." in s for s in self.statements))
 
 
@@ -304,11 +314,6 @@ class Generator:
             label = f"{identifier}.{member.identifier}"
             if "RuntimeEnabled" in member.extended_attributes:
                 continue
-            # The program writes the struct's fields by the member's name, so
-            # it must be a C identifier (`ScrollIntoViewOptions.inline` is not).
-            if member.identifier in C_KEYWORDS:
-                unbindable(member, f"dictionary member named by the C keyword `{member.identifier}`")
-                continue
             # `[ImplementedAs=inlinePosition]`: Blink's accessors take that name.
             implemented[member.identifier] = member.extended_attributes.value_of("ImplementedAs") or member.identifier
             idl_type = member.idl_type.unwrap(typedef=True)
@@ -351,7 +356,7 @@ class Generator:
         for name, keyword, idl_type, required in fields:
             blink_name = implemented[name]
             setter = "set" + blink_name[0].upper() + blink_name[1:]
-            field = self.safe(name)
+            field = native_member(name)
             if keyword in ("string", "enum"):
                 if required:
                     body.append(f"  if (!from.{field}) {{ exception_state.ThrowTypeError(\"Required member is undefined.\"); return nullptr; }}")
@@ -544,6 +549,13 @@ class Generator:
             self.enums[enumeration.identifier] = list(enumeration.values)
             self.headers.add(PathManager(enumeration).api_path(ext="h"))
             return Result("const char*", enumeration.identifier, "enum")
+        # `Promise<undefined>` (`play()`, `decode()`): the program's own
+        # promise, settled when Blink's is (nts_dom::Answer). The member
+        # rejects instead of throwing, as V8's binding of one does.
+        if unwrapped.is_promise and not nullable:
+            if unwrapped.result_type.unwrap().is_undefined:
+                return Result("struct NtsPromise*", "Promise<void>", "promise")
+            raise Skip(f"result type {idl_type.syntactic_form}")
         keyword = unwrapped.keyword_typename
         if keyword in STRINGS:
             return Result("const NtsStringView*", "StringView" + or_null, "string", nullable)
@@ -708,6 +720,9 @@ class Generator:
             if param.include:
                 self.headers.add(param.include)
         function = Function(interface, symbol, params, result, expression, throws, reactions)
+        if result.kind == "promise":
+            # Its exceptions reject the promise it answers: no @ntsThrows.
+            function.throws = False
         if tail is not None:
             function.statements.append(f"auto {tail[0]}_values = {tail[2]}")
         # Window is implemented by DOMWindow, and every member but a
@@ -1299,8 +1314,11 @@ class Generator:
             lines.append("  NtsDomContext& context = nts_dom::Current();")
         else:
             lines.append("  nts_dom::AssertEntered();")
+        promise = function.result.kind == "promise"
         if function.throws:
             lines.append("  Throws exception_state(error);")
+        elif promise:
+            lines.append("  nts_dom::Rejections exception_state;")
         if function.reactions:
             lines.append("  blink::CEReactionsScope reactions(context.v8_isolate);")
         if function.receiver and getattr(function, "local_window", False):
@@ -1311,16 +1329,18 @@ class Generator:
         if preludes:
             # Converted before the call, as the binding converts arguments: a
             # conversion that fails is the exception, and Blink is not called.
-            exceptions = "exception_state" if function.throws else "conversion"
-            if not function.throws:
+            reports = function.throws or promise
+            exceptions = "exception_state" if reports else "conversion"
+            if not reports:
                 lines.append("  blink::DummyExceptionStateForTesting conversion;")
             # Each in turn, as the binding converts them: the first that fails
             # is the exception, and the arguments after it are not converted.
-            returned = "return" if function.result.kind == "void" else "return {}"
+            returned = ("return nts_dom::Rejected(context, exception_state)" if promise
+                        else "return" if function.result.kind == "void" else "return {}")
             failed = "static_cast<blink::ExceptionState&>(exception_state).HadException()"
             for prelude in preludes:
                 lines.append("  " + prelude.replace("{exceptions}", exceptions).replace("{return}", returned))
-                if function.throws:
+                if reports:
                     lines.append(f"  if ({failed}) {returned};")
         lines += ["  " + statement + ";" for statement in function.statements]
         expression = function.expression
@@ -1336,6 +1356,8 @@ class Generator:
             lines.append(f"  return context.Lend(nts_dom::AsString({expression}), {nullable});")
         elif kind == "enum":
             lines.append(f"  return nts_dom::EnumText({expression});")
+        elif kind == "promise":
+            lines.append(f"  return nts_dom::Answer(context, context.MainWorld(), exception_state, {expression});")
         else:
             # An enum-typed answer (`eventPhase()` is a PhaseType) is its
             # IDL number.
@@ -1467,7 +1489,7 @@ class Generator:
             if isinstance(entry, str):
                 continue
             c = {"boolean": "uint8_t", "string": "const NtsBorrowedString*", "enum": "const NtsBorrowedString*"}
-            members = "".join(f"  {c.get(keyword, 'double')} {self.safe(name)};\n" for name, keyword, _, _ in entry[0])
+            members = "".join(f"  {c.get(keyword, 'double')} {native_member(name)};\n" for name, keyword, _, _ in entry[0])
             typedefs += f"\ntypedef struct NtsDom{identifier} {{\n{members}}} NtsDom{identifier};"
         prototypes = []
         accessors = self.sequence_functions()
