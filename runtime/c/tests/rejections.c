@@ -11,6 +11,7 @@
  * suite that called it directly would end with it. The parent asserts the
  * child's status, which is the thing under test.
  */
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/wait.h>
@@ -134,6 +135,127 @@ static int status_of_too_late(void) {
   return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
 }
 
+/* --- A host that owns checkpointing ------------------------------------------
+ *
+ * A Blink renderer: it supplies `enqueue_microtask`, so our queues and our
+ * drain stand aside and its checkpoint runs our microtasks. Until 2026-10-07
+ * nothing ran the half of a checkpoint after the drain under such a host -- a
+ * rejection was neither reported nor released -- and the Chromium lane found it
+ * as four objects left live per rejected promise. `nts_host_checkpoint_end` is
+ * the host's call at the end of its checkpoint. Only `enqueue_microtask` is
+ * filled in, so an arm that reached for anything else would crash and read as
+ * a failure. */
+
+static NtsTask held[16];
+static unsigned held_len;
+
+static void hold(void *state, NtsTask task) {
+  (void)state;
+  held[held_len++] = task;
+}
+
+static void host_owned_install(void) {
+  NtsHost host;
+  memset(&host, 0, sizeof host);
+  host.enqueue_microtask = hold;
+  nts_host_install(&host);
+}
+
+/* The host's checkpoint: its queue to a fixpoint, then -- when `end` -- the
+   call this section is about. */
+static void host_checkpoint(bool end) {
+  unsigned at = 0;
+  while (at < held_len) {
+    NtsTask task = held[at++];
+    task.run(task.state);
+  }
+  held_len = 0;
+  if (end) {
+    nts_host_checkpoint_end();
+  }
+}
+
+static int status_under_host(void (*body)(void), bool end) {
+  fflush(stdout);
+  pid_t child = fork();
+  if (child == 0) {
+    host_owned_install();
+    body();
+    host_checkpoint(end);
+    _exit(0);
+  }
+  int status = 0;
+  waitpid(child, &status, 0);
+  return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+}
+
+static NtsPromise *later_subscriber;
+
+static void subscribe_later(void *state) {
+  (void)state;
+  nts_promise_subscribe(later_subscriber, reaction());
+}
+
+/* Rejected with nobody listening, and handled by a microtask the host's
+   checkpoint runs *after* the rejection: still the same checkpoint, so
+   handled -- which is why the runtime cannot report from a microtask of its
+   own and the host has to say when its checkpoint ends. */
+static void handled_later_in_the_checkpoint(void) {
+  later_subscriber = nts_promise_new();
+  nts_promise_reject(later_subscriber, reason());
+  NtsTask task;
+  task.run = subscribe_later;
+  task.drop = 0;
+  task.state = 0;
+  nts_enqueue_microtask(task);
+}
+
+/* The call from a host that does not own checkpointing, which would otherwise
+   be told nothing was wrong: refused, loudly. */
+static int status_of_the_wrong_host(void) {
+  fflush(stdout);
+  pid_t child = fork();
+  if (child == 0) {
+    /* Its message is the refusal, and not this suite's output. */
+    freopen("/dev/null", "w", stderr);
+    nts_test_host_install();
+    nts_host_checkpoint_end();
+    _exit(0);
+  }
+  int status = 0;
+  waitpid(child, &status, 0);
+  return WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT ? -6
+         : WIFEXITED(status) ? WEXITSTATUS(status)
+                             : -1;
+}
+
+#ifdef NTS_PROVIDER_RC
+/* The leak, measured: a rejection handled within the checkpoint, with the
+   program's own reference dropped, leaves nothing live once the host's
+   checkpoint ends -- 0 -- and without the call stays held (2). */
+static int leak_under_host(bool end) {
+  fflush(stdout);
+  pid_t child = fork();
+  if (child == 0) {
+    host_owned_install();
+    size_t before = nts_live_count();
+    NtsPromise *promise = nts_promise_new();
+    /* `reject` retains its reason, so the arm drops its own reference to it
+       as it does the promise's: kept, it alone read as the leak, in both. */
+    NtsHeader *why = reason();
+    nts_promise_reject(promise, why);
+    nts_release(why);
+    nts_promise_subscribe(promise, reaction());
+    nts_release((NtsHeader *)promise);
+    host_checkpoint(end);
+    _exit(nts_live_count() == before ? 0 : 2);
+  }
+  int status = 0;
+  waitpid(child, &status, 0);
+  return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+}
+#endif
+
 int main(void) {
   char saw[64];
 
@@ -159,6 +281,40 @@ int main(void) {
   snprintf(saw, sizeof saw, "status %d, wanted 1", status);
   expect("a reaction subscribed after the checkpoint is too late", status == 1,
          saw);
+
+  status = status_under_host(nobody_listens, true);
+  snprintf(saw, sizeof saw, "status %d, wanted 1", status);
+  expect("under a host that owns checkpointing, its checkpoint's end reports "
+         "a rejection nobody listened to",
+         status == 1, saw);
+
+  status = status_under_host(nobody_listens, false);
+  snprintf(saw, sizeof saw, "status %d, wanted 0", status);
+  expect("control: without the call, nothing reports it -- the defect",
+         status == 0, saw);
+
+  status = status_under_host(handled_later_in_the_checkpoint, true);
+  snprintf(saw, sizeof saw, "status %d, wanted 0", status);
+  expect("a handler a later microtask of the host's checkpoint attaches is in "
+         "time",
+         status == 0, saw);
+
+  status = status_of_the_wrong_host();
+  snprintf(saw, sizeof saw, "status %d, wanted the abort", status);
+  expect("a host that does not own checkpointing is refused the call",
+         status == -6, saw);
+
+#ifdef NTS_PROVIDER_RC
+  status = leak_under_host(true);
+  snprintf(saw, sizeof saw, "status %d, wanted 0 (nothing left live)", status);
+  expect("a handled rejection is released at the host's checkpoint's end",
+         status == 0, saw);
+
+  status = leak_under_host(false);
+  snprintf(saw, sizeof saw, "status %d, wanted 2 (still held)", status);
+  expect("control: without the call, it stays live -- the leak", status == 2,
+         saw);
+#endif
 
   /* The reactions of the handled arms ran in their own children, so this
      process saw none -- which is the check that the arms above were measuring a

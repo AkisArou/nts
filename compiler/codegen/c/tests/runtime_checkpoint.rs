@@ -38,7 +38,10 @@ fn run_suite(name: &str, provider: &[&str]) -> String {
 fn run_suite_with(name: &str, provider: &[&str], sources: &[&str], link: &[&str]) -> String {
     let root = repository();
     let runtime = root.join("runtime/c");
-    let out = std::env::temp_dir().join(format!("nts-{name}-{}", std::process::id()));
+    // Keyed by the provider too: one suite runs under two (`rejections`), and
+    // the tests of one process run concurrently.
+    let flavour: String = provider.concat().chars().filter(char::is_ascii_alphanumeric).collect();
+    let out = std::env::temp_dir().join(format!("nts-{name}{flavour}-{}", std::process::id()));
     std::fs::create_dir_all(&out).expect("a build directory");
     let binary = out.join(name);
 
@@ -156,7 +159,16 @@ fn an_outstanding_operation_holds_the_libuv_loop() {
 #[test]
 fn an_unhandled_rejection_ends_the_process() {
     let report = run_suite("rejections", &[]);
-    assert!(checks(&report) >= 6, "{report}");
+    assert!(checks(&report) >= 10, "{report}");
+}
+
+/// The same suite under reference counting, for the arms that measure a
+/// rejected promise released: under a host that owns checkpointing, nothing
+/// released one until `nts_host_checkpoint_end`.
+#[test]
+fn a_rejection_is_released_at_a_host_checkpoints_end() {
+    let report = run_suite("rejections", &["-DNTS_PROVIDER_RC"]);
+    assert!(checks(&report) >= 12, "{report}");
 }
 
 /// descriptor for an edge otherwise slept with a completion queued. The

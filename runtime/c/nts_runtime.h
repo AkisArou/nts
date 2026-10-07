@@ -3686,6 +3686,30 @@ void nts_leave(void);
  * This is the explicit form, for a caller that means it. */
 void nts_checkpoint(void);
 
+/* The end of a checkpoint a host owns.
+ *
+ * A host that supplied `enqueue_microtask` runs our microtasks in its own
+ * checkpoint, and `nts_leave` and `nts_checkpoint` stand aside for it -- so
+ * the half of a checkpoint that comes *after* the drain never ran: a rejection
+ * nobody handled was neither reported nor released (the promise, its reason,
+ * and whatever the reason held, for every rejection a Blink renderer saw), and
+ * cycles were collected only when the root buffer filled. The runtime cannot
+ * do it on its own, because only the host knows when its checkpoint ends: a
+ * later microtask of the same checkpoint may still attach the handler a
+ * rejection is waiting for, and reporting earlier would call it unhandled.
+ *
+ * So the host calls this once its checkpoint is complete -- Blink at the end
+ * of `PerformCheckpoint`, where the Chromium lane's
+ * `nts_blink_dom_end_checkpoint` already is. It does what our own checkpoint
+ * does after its drain: collects cycles, then reports every rejection still
+ * unhandled (`nts_uncaught`) and releases the rest. Outermost only, as there.
+ * Aborts for a host without `enqueue_microtask`, whose checkpoint is
+ * `nts_checkpoint` and which would otherwise be told nothing was wrong.
+ *
+ * Ticks are not drained: `nts_enqueue_tick` is node's `process.nextTick`,
+ * which a Blink renderer does not have. */
+void nts_host_checkpoint_end(void);
+
 /* Whether either queue has anything left. For an embedder driving its own
  * loop, and for a test asserting quiescence. */
 bool nts_has_pending_work(void);

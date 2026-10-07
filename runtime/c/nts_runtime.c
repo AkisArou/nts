@@ -8855,6 +8855,22 @@ static void nts_report_unhandled_rejections(void) {
   nts_env->rejected_len = 0;
 }
 
+/* What a checkpoint does after its drain, whoever drained: this runtime
+   (`nts_process_ticks_and_rejections`) or a host that owns the queue
+   (`nts_host_checkpoint_end`). `previous` is whether a checkpoint was already
+   running when this one began. */
+static void nts_finish_checkpoint(bool previous) {
+  nts_collect_at_checkpoint();
+  nts_env->checkpoint_active = previous;
+  /* Only the outermost checkpoint reports. A nested one -- a capability that
+     re-enters compiled code and checkpoints inside its own work -- has not
+     finished the turn, so a handler still to be attached would be called
+     unhandled. */
+  if (!previous) {
+    nts_report_unhandled_rejections();
+  }
+}
+
 static void nts_process_ticks_and_rejections(void) {
   bool previous = nts_env->checkpoint_active;
   nts_env->checkpoint_active = true;
@@ -8867,15 +8883,7 @@ static void nts_process_ticks_and_rejections(void) {
       task.run(task.state);
     }
   } while (nts_env->tick_queue.len != 0);
-  nts_collect_at_checkpoint();
-  nts_env->checkpoint_active = previous;
-  /* Only the outermost checkpoint reports. A nested one -- a capability that
-     re-enters compiled code and checkpoints inside its own work -- has not
-     finished the turn, so a handler still to be attached would be called
-     unhandled. */
-  if (!previous) {
-    nts_report_unhandled_rejections();
-  }
+  nts_finish_checkpoint(previous);
 }
 
 void nts_enter(void) { nts_env->depth++; }
@@ -8904,6 +8912,17 @@ void nts_checkpoint(void) {
     return;
   }
   nts_process_ticks_and_rejections();
+}
+
+void nts_host_checkpoint_end(void) {
+  if (!(nts_env->host_installed && nts_env->host.enqueue_microtask)) {
+    fprintf(stderr, "nts: nts_host_checkpoint_end from a host that does not "
+                    "own checkpointing; such a host calls nts_checkpoint\n");
+    abort();
+  }
+  bool previous = nts_env->checkpoint_active;
+  nts_env->checkpoint_active = true;
+  nts_finish_checkpoint(previous);
 }
 
 void nts_task_run(NtsTask task) {
