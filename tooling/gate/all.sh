@@ -2247,7 +2247,7 @@ interop() {
     rm -rf "$out"
     began=$(date +%s)
     # One token per project build (token.sh; see "Tokens" in run.mjs).
-    if output=$(NTS_BIN="${NTS_BIN:-$PWD/target/release/nts}" "$root/tooling/gate/token.sh" sh "$script" "$out" 2>&1); then
+    if output=$(NTS_BIN="${NTS_BIN:-$PWD/target/release/nts}" "$root/tooling/gate/token.sh" sh "$script" "$out" 2>&1 8>&-); then
       printf 'ok\n' > "$lanes/$project.status"
     else
       printf 'failed\n' > "$lanes/$project.status"
