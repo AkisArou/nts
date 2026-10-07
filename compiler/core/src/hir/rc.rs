@@ -223,6 +223,7 @@ fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summari
     let mut live = liveness::analyze(func);
     let map = own::analyze(func, layouts, summaries, &mut live);
     let arriving = arriving(func);
+    let frame_names = frame_names(func);
     let blocks = std::mem::take(&mut func.blocks);
     let mut rebuilt = Vec::with_capacity(blocks.len());
     // Blocks created to hold an edge's releases. Appended after the originals,
@@ -248,7 +249,7 @@ fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summari
         let early = release_at_last_use(
             func,
             &Settled { map: &map, live: &live },
-            &Block { at, terminator: &block.terminator, moved: &moved, arriving: &arriving, layouts },
+            &Block { at, terminator: &block.terminator, moved: &moved, arriving: &arriving, frame_names: &frame_names, layouts },
             &mut ops,
             &mut report,
         );
@@ -426,7 +427,33 @@ struct Block<'a> {
     moved: &'a rustc_hash::FxHashSet<ValueId>,
     /// What every edge hands each block parameter. See [`arriving`].
     arriving: &'a rustc_hash::FxHashMap<ValueId, Vec<ValueId>>,
+    /// The frame objects each value is another name for. See [`frame_names`].
+    frame_names: &'a rustc_hash::FxHashMap<ValueId, Vec<ValueId>>,
     layouts: &'a [Layout],
+}
+
+/// The frame objects each value is another name for -- through a block
+/// parameter, an erasure -- as liveness keeps them live
+/// (`liveness::object_names`).
+///
+/// **A read of a name is a read of the object, inside a block too.** Liveness
+/// keeps a frame object live into every block a name for it reaches, and
+/// [`release_at_last_use`] then found no read of the object itself there and
+/// released it on entry: a cell captured by a `forEach` callback and carried
+/// through a later loop's block parameters had its string released at the
+/// walk's exit, before the read through the parameter that concatenated it
+/// (the Chromium lane's live-list vectors, 2026-10-07).
+fn frame_names(func: &Func) -> rustc_hash::FxHashMap<ValueId, Vec<ValueId>> {
+    liveness::object_names(func)
+        .into_iter()
+        .filter_map(|(name, roots)| {
+            let framed: Vec<ValueId> = roots
+                .into_iter()
+                .filter(|root| matches!(func.values[root.0 as usize].kind, OpKind::ObjectNew { frame: true }))
+                .collect();
+            (!framed.is_empty()).then_some((name, framed))
+        })
+        .collect()
 }
 
 /// Release each value that dies in this block right after its last use, and
@@ -508,6 +535,9 @@ fn release_at_last_use(
     for value in needed {
         for &held in leaning.of(value).iter() {
             pending.remove(&held);
+            for named in block.frame_names.get(&held).into_iter().flatten() {
+                pending.remove(named);
+            }
         }
     }
     // Backward over the block: the first operation met that reads a pending
@@ -526,7 +556,10 @@ fn release_at_last_use(
             read.extend(leaning.definition(*retained).iter().copied());
         }
         for operand in super::operands_of(kind) {
-            read.extend(leaning.of(operand).iter().copied());
+            for leaned in leaning.of(operand).iter().copied() {
+                read.push(leaned);
+                read.extend(block.frame_names.get(&leaned).into_iter().flatten().copied());
+            }
         }
         for value in read {
             if pending.remove(&value) {
@@ -1302,6 +1335,72 @@ mod tests {
             abstract_declaration: false,
         };
         Program { funcs: vec![func], ..Program::default() }
+    }
+
+    /// A frame object read only through another name for it -- a block
+    /// parameter two edges on -- gives its fields back after that read, not on
+    /// entry to the block: `cell = { value: s }; jump b1(cell); b1(c): jump
+    /// b2(c); b2(d): read(d)`.
+    ///
+    /// **A guard, not a witness.** A read of the name itself was already held
+    /// by `Leaning`, which follows what each edge hands a parameter, and this
+    /// passes with `frame_names` emptied. What the fix added is the read of a
+    /// *load* through the name, borrowed -- `d.value` into a concat -- and a
+    /// function built here gets that load retained by `own`, which takes the
+    /// hazard away. The witness is the program that showed it,
+    /// blockers/a-captured-let-read-after-a-bound-for-each, whose run
+    /// against V8 is the Chromium lane's live-list vector.
+    ///
+    /// The Chromium lane's live-list vector, reduced: a `let` captured by a
+    /// `forEach` callback is a frame cell, the inlined walk carries it through
+    /// block parameters, and `visited + " left "` after it read freed bytes
+    /// from another literal (2026-10-07). Liveness kept the cell
+    /// live into the block through its name (`object_names`); the release
+    /// inside the block looked for a read of the cell itself, found none, and
+    /// gave its fields back on entry.
+    #[test]
+    fn a_frame_object_read_through_a_block_parameter_is_released_after_the_read() {
+        let cell = HirType::Managed(ManagedType::Object(nts_semantic_schema::TypeId(1)));
+        let values = vec![
+            op(OpKind::Param(0), number()),                                          // %0
+            call("nts_number_to_string", vec![ValueId(0)], string()),                // %1  owned
+            op(OpKind::ObjectNew { frame: true }, cell.clone()),                     // %2  the cell
+            op(OpKind::FieldSet { object: ValueId(2), field: 0, value: ValueId(1) }, HirType::Void), // %3
+            op(OpKind::BlockParam(0), cell.clone()),                                 // %4  another name
+            op(OpKind::BlockParam(0), cell),                                         // %5  and a third
+            call("read", vec![ValueId(5)], number()),                                // %6  reads it
+        ];
+        let mut program = straight(op(OpKind::Param(0), number()), Vec::new());
+        program.layouts = vec![Layout {
+            types: vec![nts_semantic_schema::TypeId(1)],
+            name: "Cell".to_owned(),
+            interfaces: Vec::new(),
+            fields: vec![crate::hir::Field { name: "value".to_owned(), ty: string(), readonly: false, declared_by: None }],
+            methods: Vec::new(),
+            base: None,
+        }];
+        let func = &mut program.funcs[0];
+        func.values = values;
+        func.blocks = vec![
+            Block {
+                params: Vec::new(),
+                ops: vec![ValueId(0), ValueId(1), ValueId(2), ValueId(3)],
+                terminator: Terminator::Jump { target: crate::hir::BlockId(1), args: vec![ValueId(2)] },
+            },
+            Block { params: vec![ValueId(4)], ops: Vec::new(), terminator: Terminator::Jump { target: crate::hir::BlockId(2), args: vec![ValueId(4)] } },
+            Block { params: vec![ValueId(5)], ops: vec![ValueId(6)], terminator: Terminator::Return(Some(ValueId(6))) },
+        ];
+        insert(&mut program);
+        let func = &program.funcs[0];
+        let gives_back_the_cell = |value: &ValueId| matches!(func.values[value.0 as usize].kind, OpKind::FieldGet { object: ValueId(2), .. });
+        let ops = &func.blocks[2].ops;
+        let read = ops.iter().position(|value| *value == ValueId(6));
+        let released: Vec<usize> = ops.iter().enumerate().filter(|(_, value)| gives_back_the_cell(value)).map(|(at, _)| at).collect();
+        assert!(
+            !released.is_empty() && read.is_some_and(|read| released.iter().all(|at| *at > read)),
+            "the cell's string is given back before `read` reads it: {:?}",
+            ops.iter().map(|value| &func.values[value.0 as usize].kind).collect::<Vec<_>>()
+        );
     }
 
     /// Where each release landed, as the index among the block's operations
