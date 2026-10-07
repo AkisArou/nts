@@ -186,7 +186,13 @@ for (const a of process.argv.slice(2)) {
   }
 }
 if (argSteps.length && (env.NTS_GATE_STEPS ?? "").trim() !== "") {
-  process.stderr.write("run.mjs: steps given both as arguments and in NTS_GATE_STEPS; nothing ran\n");
+  process.stderr.write(
+    `run.mjs: steps given both as arguments (${argSteps.join(" ")}) and in NTS_GATE_STEPS; nothing ran\n` +
+      (argSteps.some((a) => /^[0-9a-f]{7,40}$/.test(a))
+        ? "  an argument looks like a commit: a pinned.sh from before 2026-10-07 passed its commit on to all.sh;\n" +
+          "  update the checkout that pinned.sh runs from (`git pull`), or drop the argument\n"
+        : ""),
+  );
   process.exit(2);
 }
 const target = resolve(env.CARGO_TARGET_DIR ?? join(ROOT, "target"));
@@ -254,6 +260,9 @@ function requested() {
   if (unknown.length) {
     usage(
       `${argSteps.length ? "the arguments name" : "NTS_GATE_STEPS names"} no such step: ${unknown.join(" ")}\n` +
+        (argSteps.length && unknown.some((a) => /^[0-9a-f]{7,40}$/.test(a))
+          ? "  that looks like a commit: a pinned.sh from before 2026-10-07 passed its commit on to all.sh; update its checkout\n"
+          : "") +
         "  nothing ran; the steps are:\n" + STEPS.map((s) => `    ${s.name}`).join("\n"),
     );
   }
