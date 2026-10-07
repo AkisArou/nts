@@ -1,18 +1,18 @@
 // The one program the test embedder links: the witnesses and the benchmark
-// workloads, compiled against the DOM surface in ../../dom. Outside the pnpm
+// workloads. target.chromium() types it against the DOM surface (nts:dom, and
+// lib.dom bound to it) and links the DOM's native half. Outside the pnpm
 // examples workspace, like react/native/gtk.
-import { defineConfig, library, sources, target } from "../../../../tooling/config/src/index.ts";
+import { defineConfig, library, target } from "../../../../tooling/config/src/index.ts";
 
 export default defineConfig({
   products: {
     probe: library.staticNative({
-      targets: [target.linux({ backend: "c" })],
+      targets: [target.chromium({ backend: "c" })],
       entry: "./main.ts",
     }),
     "probe-llvm": library.staticNative({
-      targets: [target.linux({ backend: "llvm" })],
+      targets: [target.chromium({ backend: "llvm" })],
       entry: "./main.ts",
     }),
   },
-  native: [sources({ dir: "../../dom/abi" })],
 });
