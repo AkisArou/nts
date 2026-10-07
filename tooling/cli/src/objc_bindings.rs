@@ -178,7 +178,30 @@ impl Generated for ObjcBindings {
         format!("objc-bindings/2 {GENERATOR:016x} {}", nts_surfaces::fingerprint(&files))
     }
 
-    fn config(&mut self, tsconfig: &Utf8Path, roots: &[String], complaints: &[Complaint]) -> Result<Option<Utf8PathBuf>, String> {
+    fn files(&mut self, tsconfig: &Utf8Path, roots: &[String], complaints: &[Complaint]) -> Result<Option<Vec<Utf8PathBuf>>, String> {
+        let answer = self.answer(tsconfig, roots, complaints)?;
+        // **What the build opened the program with, recorded where the
+        // binding is stored**: `.nts/objc/opened.txt`, one file a line. A
+        // binding is reused from its keyed directory unchanged, so nothing
+        // else says which files this build added -- whether a framework came
+        // from a platform package or was generated from the imports, which
+        // `examples/interop/apple-binding.sh` asserts. The config the program
+        // was opened through said it while it was written to disk; it is
+        // served to tsgo now (`open_adding`).
+        if let Some(files) = &answer {
+            let store = tsconfig.parent().unwrap_or(Utf8Path::new(".")).join(".nts/objc");
+            let listed: String = files.iter().flat_map(|file| [file.as_str(), "\n"]).collect();
+            std::fs::create_dir_all(&store)
+                .and_then(|()| std::fs::write(store.join("opened.txt"), listed))
+                .map_err(|error| format!("recording what the build opened under {store}: {error}"))?;
+        }
+        Ok(answer)
+    }
+}
+
+impl ObjcBindings {
+    /// [`Generated::files`]' answer, before it is recorded.
+    fn answer(&mut self, tsconfig: &Utf8Path, roots: &[String], complaints: &[Complaint]) -> Result<Option<Vec<Utf8PathBuf>>, String> {
         let project = tsconfig.parent().unwrap_or(Utf8Path::new("."));
         let store = project.join(".nts/objc");
         if self.imports.is_none() {
@@ -217,7 +240,7 @@ impl Generated for ObjcBindings {
         if missing.is_empty() {
             // Only the platform's packages, or nothing: a program whose
             // modules the project already has opens as it is.
-            return if platform_files.is_empty() || !first { Ok(None) } else { wrapper(tsconfig, &store.join("platform"), &platform_files).map(Some).map_err(|error| format!("{error:#}")) };
+            return Ok((first && !platform_files.is_empty()).then_some(platform_files));
         }
         let mut grew = false;
         for complaint in complaints.iter().filter(|_| !first) {
@@ -258,18 +281,19 @@ impl Generated for ObjcBindings {
         if modules.is_empty() {
             return Ok(None);
         }
-        let config = self.generate(tsconfig, &store, &modules).map_err(|error| format!("{error:#}"))?;
+        let files = self.generate(tsconfig, &store, &modules).map_err(|error| format!("{error:#}"))?;
         if grew {
             write_reached(&store, &self.reached);
         }
-        Ok(Some(config))
+        Ok(Some(files))
     }
 }
 
 impl ObjcBindings {
-    /// Each module's binding and values module, and the config adding them,
-    /// under a directory keyed by everything that decides them.
-    fn generate(&mut self, tsconfig: &Utf8Path, store: &Utf8Path, modules: &BTreeMap<String, BTreeSet<String>>) -> anyhow::Result<Utf8PathBuf> {
+    /// Each module's binding and values module, under a directory keyed by
+    /// everything that decides them, and the platform's packages' files: what
+    /// the project is opened with.
+    fn generate(&mut self, tsconfig: &Utf8Path, store: &Utf8Path, modules: &BTreeMap<String, BTreeSet<String>>) -> anyhow::Result<Vec<Utf8PathBuf>> {
         let mut requests = Vec::new();
         let project_dir = tsconfig.parent().unwrap_or(Utf8Path::new("."));
         for (module, names) in modules {
@@ -332,9 +356,9 @@ impl ObjcBindings {
             }
         }
         files.extend(self.platform.as_ref().map(|platform| platform.files.clone()).unwrap_or_default());
-        let config = wrapper(tsconfig, &directory, &files)?;
+        std::fs::create_dir_all(&directory)?;
         prune(store, &key);
-        Ok(config)
+        Ok(files)
     }
 
     /// The project's own module `module`, where a `native:` entry of its
@@ -470,17 +494,6 @@ impl ObjcBindings {
 struct Platform {
     sdk: Utf8PathBuf,
     triple: String,
-}
-
-/// The config that opens the project with `files` added, written in
-/// `directory`: it `extends` the project's, whose `include` it keeps.
-fn wrapper(tsconfig: &Utf8Path, directory: &Utf8Path, files: &[Utf8PathBuf]) -> anyhow::Result<Utf8PathBuf> {
-    std::fs::create_dir_all(directory)?;
-    let config = directory.join("tsconfig.json");
-    let listed: Vec<String> = files.iter().map(|file| format!("{:?}", file.as_str())).collect();
-    let text = format!("{{\n  \"extends\": {:?},\n  \"files\": [{}]\n}}\n", tsconfig.as_str(), listed.join(", "));
-    std::fs::write(&config, text)?;
-    Ok(config)
 }
 
 /// The C frameworks, whose headers C includes and whose binding names them
@@ -727,7 +740,7 @@ fn prune(store: &Utf8Path, keep: &str) {
     let Ok(entries) = std::fs::read_dir(store) else { return };
     for entry in entries.flatten() {
         let name = entry.file_name();
-        if entry.path().is_dir() && name.to_str() != Some(keep) && name.to_str() != Some("platform") {
+        if entry.path().is_dir() && name.to_str() != Some(keep) {
             let _ = std::fs::remove_dir_all(entry.path());
         }
     }

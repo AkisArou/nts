@@ -3,9 +3,9 @@
 //! A program that imports `{ NSWindow } from "objc:AppKit"` declares nothing
 //! about `NSWindow`: the declaration is generated from the import, by
 //! something that reads the program first. The project's own config does not
-//! list the generated files and should not have to, so the generator answers a
-//! config of its own -- one that `extends` the project's and adds them under
-//! `files` -- and that config is opened in the project's place.
+//! list the generated files and should not have to, so the generator answers
+//! the files, and the frontend opens the project with them besides its own
+//! (`open_adding`).
 //!
 //! Only the opening changes. Everything else keyed on the project's config --
 //! its directory, the `nts.config.ts` beside it, the snapshot cache -- still
@@ -27,12 +27,12 @@ pub trait Generated: std::fmt::Debug {
     /// snapshot cache, as a source transform's identity does.
     fn identity(&self) -> String;
 
-    /// The config to open in place of `tsconfig`, given the project's own
-    /// files (`roots`) and what the checker said of the config opened last --
+    /// The files to open the project at `tsconfig` with, besides its own
+    /// (`roots`), given what the checker said of the program opened last --
     /// the project's own, the first time. `None` opens the project as it is,
-    /// or keeps the config opened last.
+    /// or keeps what was opened last.
     ///
     /// # Errors
     /// Why the files could not be generated, said to the person building.
-    fn config(&mut self, tsconfig: &Utf8Path, roots: &[String], complaints: &[Complaint]) -> Result<Option<Utf8PathBuf>, String>;
+    fn files(&mut self, tsconfig: &Utf8Path, roots: &[String], complaints: &[Complaint]) -> Result<Option<Vec<Utf8PathBuf>>, String>;
 }

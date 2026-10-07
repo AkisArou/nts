@@ -481,10 +481,11 @@ are.
   program would make its witness ask for `adwaita.h`.
 - **`nts build`** installs them when the checker cannot find a `c:` module
   this machine has GIR for (`gir_surface::GirBindings`), links them into the
-  project's `node_modules/@nts`, and opens the program through
-  `tsconfig.gir.json`: the project's config, extended with the packages'
-  files (`nts_surfaces::wrapper`).
-  - **That file sits beside the project's own config.** TypeScript reads
+  project's `node_modules/@nts`, and opens the program with the packages'
+  files besides its own: through a config that extends the project's and
+  lists both, which the frontend serves to tsgo and never writes
+  (`open_adding` in `compiler/frontend-ts/src/tsgo/mod.rs`).
+  - **That config sits beside the project's own.** TypeScript reads
     `${configDir}` as the directory of the config it opened, and react-gtk
     binds its renderer fork as `${configDir}/src/ReactFiberConfig.ts`. A
     wrapper under `.nts/` sent the reconciler to no host config: nothing

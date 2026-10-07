@@ -182,7 +182,7 @@ impl Generated for WindowsBindings {
         format!("windows-bindings/1 {GENERATOR:016x} {}", nts_surfaces::fingerprint(&metadata))
     }
 
-    fn config(&mut self, tsconfig: &Utf8Path, _roots: &[String], complaints: &[Complaint]) -> Result<Option<Utf8PathBuf>, String> {
+    fn files(&mut self, tsconfig: &Utf8Path, _roots: &[String], complaints: &[Complaint]) -> Result<Option<Vec<Utf8PathBuf>>, String> {
         if std::mem::replace(&mut self.decided, true) {
             return Ok(None);
         }
@@ -197,19 +197,19 @@ impl Generated for WindowsBindings {
 }
 
 /// The platform's packages, from the store and linked into the project, and
-/// the config opening the project with their files.
-fn install(tsconfig: &Utf8Path, platform: &WindowsPlatform) -> Result<Utf8PathBuf> {
+/// their files, which the project is opened with.
+fn install(tsconfig: &Utf8Path, platform: &WindowsPlatform) -> Result<Vec<Utf8PathBuf>> {
     let project = tsconfig.parent().unwrap_or(Utf8Path::new("."));
     let installed = nts_surfaces::Store::new(nts_surfaces::Store::default_root()).ensure(platform)?;
     let linked = nts_surfaces::link(&installed, project)?;
-    // Once, when the platform first arrives: the build sees it through the
-    // config it opens, and an editor only through `types`.
+    // Once, when the platform first arrives: the build opens the project with
+    // its files, and an editor sees it only through `types`.
     if linked.iter().any(|name| name == PLATFORM_PACKAGE) {
         eprintln!(
             "note: linked {PLATFORM_PACKAGE} into {project}/node_modules; for an editor to see it, add \"types\": [\"{PLATFORM_PACKAGE}\"] to tsconfig.json's compilerOptions"
         );
     }
-    nts_surfaces::wrapper(tsconfig, "windows", &installed.files())
+    Ok(installed.files())
 }
 
 /// The module a complaint says cannot be found -- TypeScript's `Cannot find

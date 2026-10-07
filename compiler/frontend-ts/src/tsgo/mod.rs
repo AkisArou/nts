@@ -229,6 +229,12 @@ impl Client {
         })
     }
 
+    /// Whether `path` has been given text with [`Client::set_overlay`].
+    #[must_use]
+    pub fn has_overlay(&self, path: &str) -> bool {
+        self.overlays.as_ref().is_some_and(|overlays| overlays.contains_key(path))
+    }
+
     /// Have tsgo read `text` as the file at `path` from the next snapshot on;
     /// see [`Client::update_files`]. `path` is spelled as tsgo names the file.
     pub fn set_overlay(&mut self, path: &str, text: String) -> Result<(), TsgoError> {
@@ -1043,6 +1049,9 @@ pub struct TsgoApi {
     transform: Option<Box<dyn transform::SourceTransform>>,
     /// Adds files a build generates to the project; see [`generated`].
     generated: Option<Box<dyn generated::Generated>>,
+    /// Files the build adds to the project besides its own: the surface a
+    /// target types the program against (`with_added`).
+    added: Vec<Utf8PathBuf>,
     stats: FrontendStats,
 }
 
@@ -1072,6 +1081,7 @@ impl TsgoApi {
             fold_constants: None,
             transform: None,
             generated: None,
+            added: Vec::new(),
             stats: FrontendStats::default(),
         }
     }
@@ -1088,6 +1098,15 @@ impl TsgoApi {
     #[must_use]
     pub fn with_generated(mut self, generated: Box<dyn generated::Generated>) -> Self {
         self.generated = Some(generated);
+        self
+    }
+
+    /// Open the project with `files` besides its own: declarations a target
+    /// types every program against -- Chromium's DOM surface -- which a
+    /// project's config does not list and should not have to.
+    #[must_use]
+    pub fn with_added(mut self, files: &[Utf8PathBuf]) -> Self {
+        self.added = files.iter().map(|file| absolute(file)).collect();
         self
     }
 
@@ -1311,10 +1330,15 @@ impl TsgoApi {
     /// Start tsgo, open the project, and have the source transform, if there
     /// is one, rewrite it: the client, and the snapshot nts reads.
     fn open(&mut self, tsconfig: &Utf8Path, root: &Utf8Path) -> Result<(Client, UpdateSnapshotResponse, Vec<String>), TsgoError> {
-        let mut client = connect(&self.executable, tsconfig, self.transform.is_some())?;
+        let overlays = self.transform.is_some() || self.generated.is_some() || !self.added.is_empty();
+        let mut client = connect(&self.executable, tsconfig, overlays)?;
         let mut opened = client.open_project(tsconfig)?;
+        let roots: Vec<String> = opened.projects.iter().flat_map(|project| project.root_files.iter().cloned()).collect();
+        if !self.added.is_empty() {
+            opened = open_adding(&mut client, tsconfig, &roots, &self.added)?;
+        }
         if let Some(generated) = self.generated.as_deref_mut() {
-            opened = open_generated(generated, &mut client, tsconfig, opened)?;
+            opened = open_generated(generated, &mut client, tsconfig, (&roots, &self.added), opened)?;
         }
         let Some(transform) = self.transform.as_deref_mut() else {
             return Ok((client, opened, Vec::new()));
@@ -1532,18 +1556,69 @@ impl SemanticSource for TsgoApi {
             self.fold_constants.as_ref().map_or_else(|| "-".to_owned(), |b| format!("k{}", b.per_seed)),
         );
         let transform = self.transform.as_ref().map_or_else(String::new, |transform| transform.identity());
-        let rest = match &self.generated {
+        let mut rest = match &self.generated {
             Some(generated) if transform.is_empty() => generated.identity(),
             Some(generated) => format!("{transform}+{}", generated.identity()),
             None => transform,
         };
+        // Their names: what they say is a source's, which the cache already
+        // reads back (`cache::snapshot`).
+        if !self.added.is_empty() {
+            let added = self.added.iter().map(|file| file.as_str()).collect::<Vec<_>>().join(",");
+            rest = if rest.is_empty() { format!("added[{added}]") } else { format!("{rest}+added[{added}]") };
+        }
         if rest.is_empty() { asked } else { format!("{asked}+{rest}") }
     }
 }
 
-/// The project at `tsconfig`, opened as `generated` answers: in its place, the
-/// config that adds the files generated for it, and again with what the
-/// checker said of that one until the generator has nothing to add.
+/// The project at `tsconfig` opened with `files` besides its own `roots`:
+/// through a config beside it that `extends` it and lists both, which tsgo
+/// reads from `client` (`Client::set_overlay`) and nothing writes to disk.
+///
+/// **Both, because a config's `files` replaces the one it extends'.** The
+/// generators each wrote `{ "extends": project, "files": generated }`, and that
+/// compiled none of the program's own files wherever the project listed them
+/// under `files` or left `include` to its default -- only an explicit
+/// `include` survived. `roots` is what the project's own config resolved to.
+///
+/// **Beside the project's config, and nowhere else**, because TypeScript reads
+/// `${configDir}` as the directory of the config it opened: react-gtk binds
+/// its renderer fork as `${configDir}/src/ReactFiberConfig.ts`.
+///
+/// **Opened again with other files, it is the same path given new text**,
+/// which tsgo reads again only when told (`Client::update_files`): without
+/// that, a generator's second round reopened its first round's program.
+fn open_adding(client: &mut Client, tsconfig: &Utf8Path, roots: &[String], files: &[Utf8PathBuf]) -> Result<UpdateSnapshotResponse, TsgoError> {
+    let tsconfig = absolute(tsconfig);
+    let config = tsconfig.parent().unwrap_or(Utf8Path::new(".")).join("tsconfig.nts-open.json");
+    // The added files first, where the old wrappers put them -- ahead of the
+    // project's `include` -- so a program that compiled through one interns
+    // its types in the same order and compiles to the same bytes.
+    let mut listed: Vec<&str> = files.iter().map(|file| file.as_str()).collect();
+    for root in roots {
+        if !listed.contains(&root.as_str()) {
+            listed.push(root);
+        }
+    }
+    let text = serde_json::json!({ "extends": tsconfig.as_str(), "files": listed }).to_string();
+    let reopened = client.has_overlay(config.as_str());
+    client.set_overlay(config.as_str(), text)?;
+    if reopened {
+        client.update_files(&[config.to_string()])?;
+    }
+    let mut opened = client.open_project(&config)?;
+    // The project opened last is the one whose program is read, where the
+    // answer names it among the others.
+    if opened.projects.iter().any(|project| Utf8Path::new(&project.config_file_name) == config) {
+        opened.projects.retain(|project| Utf8Path::new(&project.config_file_name) == config);
+    }
+    Ok(opened)
+}
+
+/// The project at `tsconfig`, opened as `generated` answers: with the files
+/// generated for it besides its own (`roots`) and the ones the build `added`,
+/// and again with what the checker said of that program until the generator
+/// has nothing to add.
 ///
 /// **What ends this is the generator, not `ROUNDS`.** Each round must add
 /// something the last did not, from a set that only grows and is finite --
@@ -1554,10 +1629,10 @@ fn open_generated(
     generated: &mut dyn generated::Generated,
     client: &mut Client,
     tsconfig: &Utf8Path,
+    (roots, added): (&[String], &[Utf8PathBuf]),
     project: UpdateSnapshotResponse,
 ) -> Result<UpdateSnapshotResponse, TsgoError> {
     const ROUNDS: usize = 4;
-    let roots: Vec<String> = project.projects.iter().flat_map(|opened| opened.root_files.iter().cloned()).collect();
     // What the checker says of the project's own files as they are, before
     // anything is generated: a generator fills in what is missing, and a
     // module the project already has -- an installed platform package -- is
@@ -1572,18 +1647,13 @@ fn open_generated(
         );
     }
     let mut opened = project;
-    let mut current: Option<Utf8PathBuf> = None;
+    let mut current: Option<Vec<Utf8PathBuf>> = None;
     for _ in 0..ROUNDS {
-        let Some(config) = generated.config(tsconfig, &roots, &complaints).map_err(TsgoError::Generated)? else { break };
-        if current.as_deref() == Some(config.as_path()) {
+        let Some(files) = generated.files(tsconfig, roots, &complaints).map_err(TsgoError::Generated)? else { break };
+        if current.as_ref() == Some(&files) {
             break;
         }
-        opened = client.open_project(&config)?;
-        // The project opened last is the one whose program is read, where
-        // the answer names it among the others.
-        if opened.projects.iter().any(|project| Utf8Path::new(&project.config_file_name) == config) {
-            opened.projects.retain(|project| Utf8Path::new(&project.config_file_name) == config);
-        }
+        opened = open_adding(client, tsconfig, roots, &[added, &files].concat())?;
         complaints.clear();
         for project in &opened.projects {
             complaints.extend(
@@ -1593,7 +1663,7 @@ fn open_generated(
                     .map(|d| generated::Complaint { code: d.code, text: d.text }),
             );
         }
-        current = Some(config);
+        current = Some(files);
     }
     Ok(opened)
 }

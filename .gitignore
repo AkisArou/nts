@@ -70,9 +70,10 @@ node_modules/
 # points at it. Both are derived from `node_modules` and rebuilt on demand.
 .nts/
 tsconfig.nts.json
-# Written by `nts build` beside a project that uses a platform's packages:
-# its own config, extended with their files from the store
-# (`nts_surfaces::wrapper`).
+# Written by `nts build` before 2026-10-07 beside a project that used a
+# platform's packages. The config adding their files is served to tsgo now
+# (`open_adding`) and never written; these are ignored for trees that still
+# hold one.
 tsconfig.gir.json
 tsconfig.objc.json
 tsconfig.windows.json

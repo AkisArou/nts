@@ -220,7 +220,7 @@ impl Generated for GirBindings {
         format!("gir-bindings/3 {GENERATOR:016x} {}", nts_surfaces::fingerprint(&files))
     }
 
-    fn config(&mut self, tsconfig: &Utf8Path, _roots: &[String], complaints: &[Complaint]) -> Result<Option<Utf8PathBuf>, String> {
+    fn files(&mut self, tsconfig: &Utf8Path, _roots: &[String], complaints: &[Complaint]) -> Result<Option<Vec<Utf8PathBuf>>, String> {
         if std::mem::replace(&mut self.decided, true) {
             return Ok(None);
         }
@@ -239,28 +239,27 @@ impl Generated for GirBindings {
 }
 
 /// The platform's packages, from the store and linked into the project, and
-/// the config opening the project with their files -- the `gi:` surface's only
+/// their files, which the project is opened with -- the `gi:` surface's only
 /// where the program imports it (`gi`), so a `c:` program typechecks what it
 /// did.
-fn install(tsconfig: &Utf8Path, platform: &GirPlatform, gi: bool) -> Result<Utf8PathBuf> {
+fn install(tsconfig: &Utf8Path, platform: &GirPlatform, gi: bool) -> Result<Vec<Utf8PathBuf>> {
     let project = tsconfig.parent().unwrap_or(Utf8Path::new("."));
     let installed = nts_surfaces::Store::new(nts_surfaces::Store::default_root()).ensure(platform)?;
     let linked = nts_surfaces::link(&installed, project)?;
-    // Once, when the platform first arrives: the build sees it through the
-    // config it opens, and an editor only through `types`.
+    // Once, when the platform first arrives: the build opens the project with
+    // its files, and an editor sees it only through `types`.
     if linked.iter().any(|name| name == PLATFORM_PACKAGE) {
         eprintln!(
             "note: linked {PLATFORM_PACKAGE} into {project}/node_modules; for an editor to see it, add \"types\": [\"{PLATFORM_PACKAGE}\"] to tsconfig.json's compilerOptions"
         );
     }
-    let files: Vec<Utf8PathBuf> = installed
+    Ok(installed
         .packages
         .iter()
         .filter(|(name, _)| gi || !name.starts_with(GI_PACKAGE))
         .map(|(_, dir)| dir.join("index.d.ts"))
         .chain(installed.values.iter().cloned())
-        .collect();
-    nts_surfaces::wrapper(tsconfig, "gir", &files)
+        .collect())
 }
 
 /// The `c:` or `gi:` module a complaint says cannot be found -- TypeScript's
