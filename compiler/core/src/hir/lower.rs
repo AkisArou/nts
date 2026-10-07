@@ -40061,6 +40061,14 @@ impl<'a> FuncBuilder<'a> {
             if let Some(place) = self.super_setter_place(*object_node, *member) {
                 return Ok(place);
             }
+            // A property of a type a binding implements, written through its
+            // bound property's `@ntsSet`, and read through its `@ntsGet` where
+            // the assignment also reads it (`el.scrollTop += 1`).
+            if let Some((bound, setter)) = self.delegated_accessor(*object_node, *member, true) {
+                let getter = self.delegated_accessor(*object_node, *member, false).map(|(_, getter)| getter);
+                let receiver = self.lower_expression(*object_node)?;
+                return Ok(Place::NativeAccessor { receiver, ty: bound, getter, setter });
+            }
             if self.is_accessor_property(*member) {
                 return self.native_accessor_place(target, *object_node, *member);
             }
