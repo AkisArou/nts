@@ -6,6 +6,7 @@
 #include <string>
 
 #include "base/check.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/message_loop/message_pump.h"
 #include "base/numerics/clamped_math.h"
 #include "base/logging.h"
@@ -59,6 +60,17 @@ SequenceRoots &HeldSequences() {
   return *roots;
 }
 
+// PlainPointers: what a listener, frame, timer, held closure or job keeps of
+// the context and of the program's closure is a plain pointer. These are
+// made and dropped per DOM operation, and a raw_ptr in them was a
+// BackupRefPtr acquire and release on each -- 18% of addEventListener plus
+// removeEventListener in the per-call event kernel. Blink's core component
+// is excluded from raw_ptr for the same reason
+// (tools/clang/raw_ptr_plugin/RawPtrManualPathsToIgnore.cpp: "for perf
+// reasons"). Neither can dangle while held: Close() takes every one of them
+// back before the context goes, and the closure is the program's, given back
+// exactly once (the members are cleared as they are handed over).
+
 // A compiled closure listening on a target: Blink's own native listener,
 // which the target holds. It keeps the closure as C keeps one (callback,
 // context, destroy) until it is removed or the document goes, and gives it
@@ -88,7 +100,7 @@ public:
   bool Is(const blink::AtomicString &type, bool capture,
           const void *closure) const {
     return !handler_ && callback_ && type_ == type && capture_ == capture &&
-           closure_.get() == closure;
+           closure_ == closure;
   }
   blink::EventTarget *target() const { return target_.Get(); }
 
@@ -131,7 +143,7 @@ public:
       return nullptr;
     }
     context_ = nullptr;
-    closure = closure_.ExtractAsDangling();
+    closure = std::exchange(closure_, nullptr);
     return std::exchange(destroy_, nullptr);
   }
 
@@ -143,7 +155,7 @@ public:
   }
 
 private:
-  raw_ptr<NtsDomContext> context_;
+  RAW_PTR_EXCLUSION NtsDomContext *context_; // see PlainPointers
   blink::Member<blink::EventTarget> target_;
   blink::AtomicString type_;
   bool capture_;
@@ -157,7 +169,7 @@ private:
   bool once_ = false;
   blink::Member<blink::AbortSignal> signal_;
   blink::Member<blink::AbortSignal::AlgorithmHandle> abort_;
-  raw_ptr<void> closure_;
+  RAW_PTR_EXCLUSION void *closure_; // see PlainPointers
   NtsDomDestroy destroy_;
 };
 
@@ -180,14 +192,14 @@ public:
       return nullptr;
     callback_ = nullptr;
     context_ = nullptr;
-    closure = closure_.ExtractAsDangling();
+    closure = std::exchange(closure_, nullptr);
     return std::exchange(destroy_, nullptr);
   }
 
 private:
-  raw_ptr<NtsDomContext> context_;
+  RAW_PTR_EXCLUSION NtsDomContext *context_; // see PlainPointers
   NtsDomFrameCallback callback_;
-  raw_ptr<void> closure_;
+  RAW_PTR_EXCLUSION void *closure_; // see PlainPointers
   NtsDomDestroy destroy_;
 };
 
@@ -220,7 +232,7 @@ public:
   // Each run, once the context has entered the program's environment.
   void Run() {
     running_ = true;
-    callback_(closure_.get());
+    callback_(closure_);
     running_ = false;
     if (!RepeatInterval() || cleared_)
       GiveBackNow();
@@ -240,7 +252,7 @@ public:
     }
     callback_ = nullptr;
     context_ = nullptr;
-    closure = closure_.ExtractAsDangling();
+    closure = std::exchange(closure_, nullptr);
     return std::exchange(destroy_, nullptr);
   }
 
@@ -253,14 +265,14 @@ private:
     callback_ = nullptr;
     context_ = nullptr;
     if (auto destroy = std::exchange(destroy_, nullptr))
-      destroy(closure_.ExtractAsDangling());
+      destroy(std::exchange(closure_, nullptr));
   }
 
-  raw_ptr<NtsDomContext> context_;
+  RAW_PTR_EXCLUSION NtsDomContext *context_; // see PlainPointers
   const int32_t id_;
   int nesting_;
   NtsDomTimerCallback callback_;
-  raw_ptr<void> closure_;
+  RAW_PTR_EXCLUSION void *closure_; // see PlainPointers
   NtsDomDestroy destroy_;
   bool running_ = false;
   bool cleared_ = false;
@@ -282,7 +294,7 @@ public:
   template <class Callback> Callback callback() const {
     return reinterpret_cast<Callback>(callback_);
   }
-  void *closure() const { return closure_.get(); }
+  void *closure() const { return closure_; }
   bool live() const { return callback_ && context_; }
 
   // `call(state)` as the program's entry (NtsDomContext::RunCallback).
@@ -297,15 +309,15 @@ public:
       return nullptr;
     }
     context_ = nullptr;
-    closure = closure_.ExtractAsDangling();
+    closure = std::exchange(closure_, nullptr);
     return std::exchange(destroy_, nullptr);
   }
   void Trace(blink::Visitor *) const {}
 
 private:
-  raw_ptr<NtsDomContext> context_;
+  RAW_PTR_EXCLUSION NtsDomContext *context_; // see PlainPointers
   AnyCallback callback_;
-  raw_ptr<void> closure_;
+  RAW_PTR_EXCLUSION void *closure_; // see PlainPointers
   NtsDomDestroy destroy_;
   int running_ = 0;
   bool taken_while_running_ = false;
@@ -462,13 +474,13 @@ public:
   NativeJob(Callback run, Callback drop, void *state)
       : run_(run), drop_(drop), state_(state) {}
   void Run() {
-    void *state = state_.get();
+    void *state = state_;
     state_ = nullptr;
     if (state)
       run_(state);
   }
   void Drop() {
-    void *state = state_.get();
+    void *state = state_;
     state_ = nullptr;
     if (state)
       drop_(state);
@@ -479,7 +491,7 @@ private:
   ~NativeJob() { CHECK(!state_); }
   const Callback run_;
   const Callback drop_;
-  raw_ptr<void> state_;
+  RAW_PTR_EXCLUSION void *state_; // see PlainPointers
 };
 
 // A native callback that runs program code: the context is the thread's
@@ -532,7 +544,7 @@ void NtsListener::Invoke(blink::ExecutionContext *, blink::Event *event) {
   if (!callback_ && !cancel_)
     return;
   // The context outlives this run even if the run ends the document.
-  scoped_refptr<NtsDomContext> context(context_.get());
+  scoped_refptr<NtsDomContext> context(context_);
   const NtsDomCallback callback = callback_;
   const NtsDomCancelCallback cancel = cancel_;
   ++running_;
@@ -543,19 +555,19 @@ void NtsListener::Invoke(blink::ExecutionContext *, blink::Event *event) {
     void *ignored = nullptr;
     Detach(ignored);
   }
-  context->Dispatch(callback, cancel, event, closure_.get());
+  context->Dispatch(callback, cancel, event, closure_);
   if (--running_ || !detached_while_running_)
     return;
   detached_while_running_ = false;
   context_ = nullptr;
   context->GiveBack(std::exchange(destroy_, nullptr),
-                    closure_.ExtractAsDangling());
+                    std::exchange(closure_, nullptr));
 }
 
 void NtsHeldClosure::Run(void (*call)(void *), void *state) {
   if (!live())
     return;
-  scoped_refptr<NtsDomContext> context(context_.get());
+  scoped_refptr<NtsDomContext> context(context_);
   ++running_;
   context->RunCallback(call, state);
   if (--running_ || !taken_while_running_)
@@ -563,7 +575,7 @@ void NtsHeldClosure::Run(void (*call)(void *), void *state) {
   taken_while_running_ = false;
   context_ = nullptr;
   context->GiveBack(std::exchange(destroy_, nullptr),
-                    closure_.ExtractAsDangling());
+                    std::exchange(closure_, nullptr));
 }
 
 // An observer's delivery, on this stack for the call, where Oilpan's scan
@@ -651,7 +663,7 @@ void NtsListener::Watch(blink::AbortSignal *signal) {
         // This algorithm is the one running: nothing to withdraw.
         listener->signal_ = nullptr;
         listener->abort_ = nullptr;
-        scoped_refptr<NtsDomContext> context(listener->context_.get());
+        scoped_refptr<NtsDomContext> context(listener->context_);
         context->listeners->Forget(listener);
         void *closure = nullptr;
         if (auto destroy = listener->Detach(closure))
@@ -757,16 +769,16 @@ void NtsDomContext::RunFrame(NtsDomFrameCallback callback, double time,
   struct Call {
     NtsDomFrameCallback callback;
     double time;
-    raw_ptr<void> closure;
+    RAW_PTR_EXCLUSION void *closure; // see PlainPointers
     NtsDomDestroy destroy;
   } call{callback, time, closure, destroy};
   invoke(
       invoke_host.get(),
       [](void *state) {
         auto *call = static_cast<Call *>(state);
-        call->callback(call->time, call->closure.get());
+        call->callback(call->time, call->closure);
         if (call->destroy)
-          call->destroy(call->closure.get());
+          call->destroy(call->closure);
       },
       &call);
 }
@@ -869,13 +881,13 @@ void NtsDomContext::GiveBack(NtsDomDestroy destroy, void *closure) {
     return;
   struct Back {
     NtsDomDestroy destroy;
-    raw_ptr<void> closure;
+    RAW_PTR_EXCLUSION void *closure; // see PlainPointers
   } back{destroy, closure};
   invoke(
       invoke_host.get(),
       [](void *state) {
         auto *back = static_cast<Back *>(state);
-        back->destroy(back->closure.get());
+        back->destroy(back->closure);
       },
       &back);
 }
