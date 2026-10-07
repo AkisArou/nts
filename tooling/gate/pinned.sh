@@ -33,6 +33,8 @@ set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 commit=${1:-HEAD}
+# The rest are passed to all.sh (step names); the commit is not one.
+[ $# -gt 0 ] && shift
 sha=$(git -C "$root" rev-parse --short "$commit")
 tree=${NTS_GATE_TREE:-$HOME/.cache/nts-gate/tree}
 target=${NTS_GATE_TARGET:-$HOME/.cache/nts-gate/target}

@@ -144,6 +144,51 @@ const BY_NAME = new Map(STEPS.map((s) => [s.name, s]));
 // Environment and budgets.
 // ---------------------------------------------------------------------------
 const env = process.env;
+const color = (code, text) => `\x1b[${code}m${text}\x1b[0m`;
+
+// ---------------------------------------------------------------------------
+// Arguments. `--help` used to start a full run: nothing here read argv, so any
+// argument meant "the whole gate". Now a flag this file does not know is an
+// error before anything runs, and a bare word is a step name.
+// ---------------------------------------------------------------------------
+const USAGE = `usage: tooling/gate/all.sh [step ...]        (or: node tooling/gate/run.mjs [step ...])
+       tooling/gate/all.sh --help | --steps
+
+Runs the named steps (default: NTS_GATE_STEPS, else every step) at once where
+they can be, and prints PASS, FAIL, SKIPPED or NOT RUN for each. Exits 0 only
+when every requested step passed.
+
+  --help, -h   this text
+  --steps      the step names, one per line, with what each checks
+
+Environment (see the header of tooling/gate/run.mjs for the rest):
+  NTS_GATE_STEPS        steps to run, space separated (not with step arguments)
+  NTS_GATE_SLOTS        CPU slots for the run (default: NTS_JOBS, else 3/4 of the cores)
+  NTS_GATE_MEM_GB       memory budget in GB
+  NTS_GATE_FAIL_FAST=1  stop at the first FAIL
+  NTS_GATE_ACCEPT_SKIP  step names whose SKIPPED does not make the run red
+  NTS_GATE_TIME_STRICT=1  a step much slower than its baseline is a FAIL
+  NTS_BIN, NTS_SUITE_BIN, NTS_TSGO, CARGO_TARGET_DIR   what is gated
+`;
+const argSteps = [];
+for (const a of process.argv.slice(2)) {
+  if (a === "--help" || a === "-h") {
+    process.stdout.write(USAGE);
+    process.exit(0);
+  } else if (a === "--steps") {
+    for (const s of STEPS) process.stdout.write(`${s.name.padEnd(24)} ${s.doc ?? ""}\n`);
+    process.exit(0);
+  } else if (a.startsWith("-")) {
+    process.stderr.write(`run.mjs: unknown option ${a}; nothing ran\n\n${USAGE}`);
+    process.exit(2);
+  } else {
+    argSteps.push(a);
+  }
+}
+if (argSteps.length && (env.NTS_GATE_STEPS ?? "").trim() !== "") {
+  process.stderr.write("run.mjs: steps given both as arguments and in NTS_GATE_STEPS; nothing ran\n");
+  process.exit(2);
+}
 const target = resolve(env.CARGO_TARGET_DIR ?? join(ROOT, "target"));
 // `NTS_BIN` defaults to the build this run makes, not to `./target/release/nts`:
 // with CARGO_TARGET_DIR elsewhere the old default gated whatever another session
@@ -169,7 +214,6 @@ const RECORD_TIMES = (env.NTS_GATE_RECORD_TIMES ?? "") === "1";
 const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "");
 const RUN_DIR = resolve(env.NTS_GATE_RUN_DIR ?? join(target, "gate-runs", `${stamp}-${process.pid}`));
 const TIMES_FILE = join(HERE, "times.tsv");
-const color = (code, text) => `\x1b[${code}m${text}\x1b[0m`;
 
 function usage(message) {
   process.stderr.write(`${color(31, "FAILED")}: ${message}\n`);
@@ -203,13 +247,13 @@ function checkTable() {
 }
 
 function requested() {
-  const raw = env.NTS_GATE_STEPS;
+  const raw = argSteps.length ? argSteps.join(" ") : env.NTS_GATE_STEPS;
   if (raw === undefined || raw.trim() === "") return STEPS.map((s) => s.name);
   const want = raw.split(/\s+/).filter(Boolean);
   const unknown = want.filter((n) => !BY_NAME.has(n));
   if (unknown.length) {
     usage(
-      `NTS_GATE_STEPS names no such step: ${unknown.join(" ")}\n` +
+      `${argSteps.length ? "the arguments name" : "NTS_GATE_STEPS names"} no such step: ${unknown.join(" ")}\n` +
         "  nothing ran; the steps are:\n" + STEPS.map((s) => `    ${s.name}`).join("\n"),
     );
   }
