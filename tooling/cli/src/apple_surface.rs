@@ -286,6 +286,8 @@ mod tests {
             arch: None,
             backend: "c".to_owned(),
             minimum_version: None,
+            surface: Vec::new(),
+            native: Vec::new(),
         };
         let platform = super::platforms(&[target]).remove(0);
         if !super::available(&platform) {

@@ -1,0 +1,5 @@
+{
+  "//": "The program's own files and the DOM lib, and nothing else: the DOM surface, the nts:dom module and libc come from target.chromium() in nts.config.ts.",
+  "extends": "../../../tsconfig.fixtures.json",
+  "include": ["src"]
+}

@@ -55,6 +55,14 @@ pub struct Target {
     /// The deployment floor, which is not the same number as the id's.
     #[serde(default, rename = "minimumVersion")]
     pub minimum_version: Option<String>,
+    /// Declarations every program for this target is typed against besides
+    /// its own files, absolute: `target.chromium()`'s DOM.
+    #[serde(default)]
+    pub surface: Vec<Utf8PathBuf>,
+    /// Directories of C the artifact links besides its packages', absolute:
+    /// the native half of `surface`.
+    #[serde(default)]
+    pub native: Vec<Utf8PathBuf>,
 }
 
 /// One artifact a build emits.

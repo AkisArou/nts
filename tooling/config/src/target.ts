@@ -27,6 +27,12 @@
  * the first.
  */
 
+// The package is read by node, at build-planning time, and only there: a
+// config is evaluated, never compiled into a program (examples/library's
+// tsconfig.json says why). So node's types are this module's to name.
+/// <reference types="node" />
+import { fileURLToPath } from "node:url";
+
 /** Backends the compiler can lower to (RFC §6.2). */
 export type Backend = "c" | "llvm" | "jvm";
 
@@ -98,6 +104,17 @@ export interface Target {
    * against and this is what it is allowed to assume at run time.
    */
   readonly minimumVersion?: string;
+  /**
+   * Declarations every program for this target is typed against besides its
+   * own files, as absolute paths: what the target brings rather than what a
+   * project's config should have to list. `target.chromium()`'s DOM.
+   */
+  readonly surface?: readonly string[];
+  /**
+   * Directories of C the artifact links besides its packages' `native`
+   * sources, as absolute paths: the native half of `surface`.
+   */
+  readonly native?: readonly string[];
 }
 
 /** `"17.0"` and `"17"` name one SDK. The id takes the major. */
@@ -124,6 +141,13 @@ export interface Target {
 const NATIVE_DEFAULT: NativeBackend = "c";
 
 const major = (version: string): number => Number.parseInt(version, 10);
+
+/**
+ * A file of this repository's runtime, as an absolute path: read from this
+ * module's own location, `tooling/config/src`, which is where the runtime is
+ * found for as long as the two ship together.
+ */
+const runtimeFile = (path: string): string => fileURLToPath(new URL(`../../../runtime/${path}`, import.meta.url));
 
 /**
  * Target constructors.
@@ -190,6 +214,29 @@ export const target = {
     os: "linux",
     arch: o.arch ?? "x86_64",
     backend: o.backend ?? NATIVE_DEFAULT,
+  }),
+
+  /**
+   * A program run in Chromium's renderer by the app host
+   * (`runtime/chromium`): typed against the DOM -- `lib.dom.d.ts`, bound to
+   * `nts:dom` by delegation (`runtime/chromium/docs/lib-dom.md`) -- and libc,
+   * and linking the DOM's native half.
+   *
+   * **A Linux target, id and all**, because the machine is: a package that
+   * claims `linux-gnu` is one this program can use, and an id of its own would
+   * have matched no claim. What Chromium adds is files, not a platform, so it
+   * is `surface` and `native` on a Linux target. It shares that target's
+   * output directory, so a product builds one or the other.
+   */
+  chromium: (o: { readonly arch?: Arch; readonly backend?: NativeBackend } = {}): Target => ({
+    ...target.linux(o),
+    surface: [
+      runtimeFile("chromium/dom/types/dom-idl.d.ts"),
+      runtimeFile("chromium/dom/types/dom-abi.d.ts"),
+      runtimeFile("chromium/dom/types/lib-dom-bindings.d.ts"),
+      runtimeFile("native/libc.d.ts"),
+    ],
+    native: [runtimeFile("chromium/dom/abi")],
   }),
 
   windows: (

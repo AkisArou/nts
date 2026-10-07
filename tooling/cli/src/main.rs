@@ -1257,6 +1257,18 @@ fn for_project(mut source: TsgoApi, tsconfig: &Utf8Path) -> Result<TsgoApi> {
         return Ok(source);
     };
     let resolved = nts_build::config::resolve(&config)?;
+    // What a target types every program against, a project's config not
+    // listing it: `target.chromium()`'s DOM. One program per project, so every
+    // target's -- as one generator serves them all, below.
+    let mut surface: Vec<Utf8PathBuf> = Vec::new();
+    for file in resolved.products.values().flat_map(|product| product.targets.iter()).flat_map(|target| target.surface.iter()) {
+        if !surface.contains(file) {
+            surface.push(file.clone());
+        }
+    }
+    if !surface.is_empty() {
+        source = source.with_added(&surface);
+    }
     // A program for macOS or iOS has its Objective-C binding generated from
     // what it imports (`objc_bindings`).
     let apple: Vec<nts_build::config::Target> = resolved
@@ -3589,20 +3601,35 @@ fn native_sources(
             if !entry.covers(&target.id, target.minimum_version.as_deref()) {
                 continue;
             }
-            let directory = package.join(&entry.dir);
-            let module = directory.file_name().unwrap_or("native").to_owned();
-            let Ok(listing) = std::fs::read_dir(&directory) else { continue };
-            for item in listing.flatten() {
-                let path = Utf8PathBuf::from_path_buf(item.path())
-                    .map_err(|bad| anyhow!("{} is not UTF-8", bad.display()))?;
-                if compiled_here(&path, target, &entry.dir)? {
-                    let object = Utf8PathBuf::from(format!("{}.o", path.file_name().unwrap_or("native")));
-                    found.push(NativeSource { directory: directory.clone(), path, module: module.clone(), include: Vec::new(), headers: Vec::new(), imports: Vec::new(), object });
-                }
-            }
+            found.extend(directory_sources(&package.join(&entry.dir), target, &entry.dir)?);
         }
     }
+    // What the target links besides: the native half of its `surface`, read
+    // as a package's own directory is. Missing is an error here, where a
+    // package's is not: no package can stand in for the target's.
+    for directory in &target.native {
+        if !directory.is_dir() {
+            bail!("target `{}` links the native directory {directory}, which is not there", target.id);
+        }
+        found.extend(directory_sources(directory, target, directory.as_str())?);
+    }
     found.sort();
+    Ok(found)
+}
+
+/// The translation units of one native directory, as `compiled_here` picks
+/// them: none where the directory cannot be read.
+fn directory_sources(directory: &Utf8Path, target: &nts_build::config::Target, owner: &str) -> Result<Vec<NativeSource>> {
+    let module = directory.file_name().unwrap_or("native").to_owned();
+    let Ok(listing) = std::fs::read_dir(directory) else { return Ok(Vec::new()) };
+    let mut found = Vec::new();
+    for item in listing.flatten() {
+        let path = Utf8PathBuf::from_path_buf(item.path()).map_err(|bad| anyhow!("{} is not UTF-8", bad.display()))?;
+        if compiled_here(&path, target, owner)? {
+            let object = Utf8PathBuf::from(format!("{}.o", path.file_name().unwrap_or("native")));
+            found.push(NativeSource { directory: directory.to_owned(), path, module: module.clone(), include: Vec::new(), headers: Vec::new(), imports: Vec::new(), object });
+        }
+    }
     Ok(found)
 }
 
