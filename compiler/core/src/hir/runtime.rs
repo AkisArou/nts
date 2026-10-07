@@ -172,6 +172,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_math_expm1", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
     ("nts_math_fround", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
     ("nts_math_hypot", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
+    ("nts_math_imul", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
     ("nts_math_log", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
     ("nts_math_log10", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
     ("nts_math_log1p", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),

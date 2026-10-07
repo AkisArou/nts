@@ -4384,6 +4384,16 @@ double nts_math_tanh(double x) { return tanh(x); }
 double nts_math_cbrt(double x) { return cbrt(x); }
 double nts_math_atan2(double y, double x) { return atan2(y, x); }
 double nts_math_hypot(double a, double b) { return hypot(a, b); }
+/* `Math.imul`: ToInt32 of each, the low 32 bits of the product, as a signed
+ * integer. Multiplied as `uint32_t`, which wraps by definition -- an `int32_t`
+ * product overflowing is undefined -- and folded back into the signed range by
+ * comparison rather than by a cast whose result C leaves to the
+ * implementation. */
+double nts_math_imul(double a, double b) {
+  uint32_t product = (uint32_t)nts_to_int32(a) * (uint32_t)nts_to_int32(b);
+  return product <= (uint32_t)INT32_MAX ? (double)product
+                                        : (double)product - 4294967296.0;
+}
 
 /* `String(x)`, which is ECMAScript's Number::toString and not `printf`.
  *

@@ -637,6 +637,7 @@ fn math_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         "nts_math_tanh" => (RUNTIME, "mathTanh", D_TO_D),
         "nts_math_cbrt" => (RUNTIME, "mathCbrt", D_TO_D),
         "nts_math_hypot" => (RUNTIME, "mathHypot", "(DD)D"),
+        "nts_math_imul" => (RUNTIME, "mathImul", "(DD)D"),
         "nts_math_sign" => (RUNTIME, "mathSign", D_TO_D),
         "nts_math_fround" => (RUNTIME, "mathFround", D_TO_D),
         "nts_math_expm1" => (RUNTIME, "mathExpm1", D_TO_D),

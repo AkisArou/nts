@@ -264,6 +264,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_math_expm1", returns: "double", params: &["double"], attributes: &[] },
     Signature { name: "nts_math_fround", returns: "double", params: &["double"], attributes: &[] },
     Signature { name: "nts_math_hypot", returns: "double", params: &["double", "double"], attributes: &[] },
+    Signature { name: "nts_math_imul", returns: "double", params: &["double", "double"], attributes: &[] },
     Signature { name: "nts_math_log", returns: "double", params: &["double"], attributes: &[] },
     Signature { name: "nts_math_log10", returns: "double", params: &["double"], attributes: &[] },
     Signature { name: "nts_math_log1p", returns: "double", params: &["double"], attributes: &[] },

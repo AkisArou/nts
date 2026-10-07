@@ -359,6 +359,8 @@ public final class NtsRuntime {
     public static double mathTanh(double x) { return StrictMath.tanh(x); }
     public static double mathCbrt(double x) { return StrictMath.cbrt(x); }
     public static double mathHypot(double x, double y) { return StrictMath.hypot(x, y); }
+    /** `Math.imul`: an `int` product wraps, which is exactly the low 32 bits. */
+    public static double mathImul(double x, double y) { return toInt32(x) * toInt32(y); }
     public static double mathSign(double x) { return Math.signum(x); }
     public static double mathFround(double x) { return (float) x; }
     public static double mathExpm1(double x) { return StrictMath.expm1(x); }

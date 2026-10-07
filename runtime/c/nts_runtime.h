@@ -2598,6 +2598,7 @@ double nts_math_tanh(double x);
 double nts_math_cbrt(double x);
 double nts_math_atan2(double y, double x);
 double nts_math_hypot(double a, double b);
+double nts_math_imul(double a, double b);
 
 /* Array methods, over arrays of numbers.
  *

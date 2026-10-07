@@ -67959,6 +67959,9 @@ fn math_member(member: &str) -> Option<Intrinsic> {
         "pow" => Intrinsic::BinaryCall("nts_math_pow"),
         "atan2" => Intrinsic::BinaryCall("nts_math_atan2"),
         "hypot" => Intrinsic::BinaryCall("nts_math_hypot"),
+        // Exact, so not `APPROXIMATED`: the 32-bit multiply every string hash
+        // (FNV, Murmur) is written with.
+        "imul" => Intrinsic::BinaryCall("nts_math_imul"),
         "sign" => Intrinsic::UnaryCall("nts_math_sign"),
         "fround" => Intrinsic::UnaryCall("nts_math_fround"),
         "cbrt" => Intrinsic::UnaryCall("nts_math_cbrt"),
