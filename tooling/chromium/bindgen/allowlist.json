@@ -131,7 +131,22 @@
     "CDATASection",
     "ProcessingInstruction",
     "DocumentType",
-    "IdleDeadline"
+    "IdleDeadline",
+    "Blob",
+    "File",
+    "FileList",
+    "ImageData",
+    "HTMLHeadElement",
+    "PerformanceEntry",
+    "PerformanceMark",
+    "PerformanceMeasure",
+    "BarProp",
+    "Animation",
+    "AnimationEffect",
+    "KeyframeEffect",
+    "AnimationTimeline",
+    "DocumentTimeline",
+    "CaretPosition"
   ],
   "sequences": [
     "MutationRecord",

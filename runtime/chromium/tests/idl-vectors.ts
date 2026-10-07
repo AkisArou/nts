@@ -12,7 +12,7 @@
 // Page script has no `asText`/`asHTMLElement`/`asHTMLInputElement`; the
 // oracle defines them (`instanceof`) where the import stood. What a caught
 // error reads as is passed in.
-import { newDataTransfer, newDOMParser, newDOMPoint, newDragEvent, newFormData, newMutationObserver, newProgressEvent, newXMLSerializer, newAbortController, newCustomEvent, newEvent, newKeyboardEvent, newMouseEvent, newURL, newURLSearchParams, window } from "nts:dom";
+import { newBlob, newDataTransfer, newDOMParser, newDOMPoint, newDragEvent, newFormData, newMutationObserver, newProgressEvent, newXMLSerializer, newAbortController, newCustomEvent, newEvent, newKeyboardEvent, newMouseEvent, newURL, newURLSearchParams, window } from "nts:dom";
 import { asCSSStyleSheet, asElement, asHTMLFormElement, asHTMLVideoElement, asHTMLAnchorElement, asHTMLCanvasElement, asHTMLDetailsElement, asHTMLDialogElement, asHTMLProgressElement, asHTMLSlotElement, asHTMLElement, asHTMLImageElement, asHTMLOListElement, asHTMLTableCellElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
 import type { CanvasFillRule, Document, Element, Event, MutationObserver, MutationRecordSequence, Node, ScrollRestoration, SelectionMode, Text } from "nts:dom";
 
@@ -548,6 +548,26 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   log("createdDocument", made.title + "|" + (made.body === null ? "no body" : made.body.nodeName));
   const video = asHTMLVideoElement(d.createElement("video"))!;
   log("media", video.paused + "|" + video.currentTime + "|" + video.readyState + "|" + video.networkState);
+
+  // Files, performance marks, image data, the head, animations.
+  const picker = asHTMLInputElement(d.createElement("input"))!;
+  picker.type = "file";
+  log("fileList", picker.files === null ? "none" : "" + picker.files.length + "|" + (picker.files.item(0) === null ? "empty" : "file"));
+  const blob = newBlob();
+  log("blob", blob.size + "|" + shown(blob.type) + "|" + blob.slice(0, 0, "text/plain").type);
+  w.performance.clearMarks("nts-mark");
+  w.performance.mark("nts-mark", {});
+  const marks = w.performance.getEntriesByName("nts-mark", "mark");
+  log("performanceMark", marks.length + "|" + marks.item(0)!.entryType + "|" + marks.item(0)!.name + "|" + (marks.item(0)!.startTime >= 0 ? "timed" : "untimed"));
+  w.performance.clearMarks("nts-mark");
+  log("performanceCleared", "" + w.performance.getEntriesByName("nts-mark", "mark").length);
+  const pixelCanvas = asHTMLCanvasElement(d.createElement("canvas"))!;
+  const pixelContext = pixelCanvas.getContext("2d")!;
+  const pixels = pixelContext.createImageData(3, 2);
+  log("imageData", pixels.width + "x" + pixels.height);
+  thrown("imageDataZero", () => { pixelContext.createImageData(0, 2); });
+  log("head", d.head === null ? "none" : d.head.nodeName);
+  log("animations", "" + root.getAnimations().length);
 
   // Canvas 2D: a drawing, then its pixels as PNG (toDataURL), hashed. The
   // same Skia draws for both, so the hashes agree only if every call drew

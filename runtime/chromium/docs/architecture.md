@@ -298,8 +298,8 @@ one string member takes the string, and `asX` narrows with Blink's
 arguments. An IDL enum is its literal union, matched against Blink's
 enum class before the call. A member whose types do not map yet (`any`,
 callbacks other than closures, unbound interfaces, `[RuntimeEnabled]`) is
-skipped and listed in `bindgen/report.json`, never guessed: 4490 functions
-bound, 1621 members listed.
+skipped and listed in `bindgen/report.json`, never guessed: 4598 functions
+bound, 1661 members listed.
 
 Blink's modules component is linked for the interfaces the allowlist names
 under `"modules"` (CanvasRenderingContext2D, CanvasGradient, Path2D); a

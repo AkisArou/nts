@@ -21,11 +21,12 @@ interface AbortSignal {}
  */
 interface AbstractRange {}
 /**
- * @ntsBoundBy "nts:dom" EventTarget
+ * @ntsBoundBy "nts:dom" Animation
  * @ntsIs nts_dom_is 3
  */
 interface Animation {}
 /**
+ * @ntsBoundBy "nts:dom" AnimationEffect
  * @ntsIs nts_dom_is 4
  */
 interface AnimationEffect {}
@@ -40,6 +41,7 @@ interface AnimationEvent {}
  */
 interface AnimationPlaybackEvent {}
 /**
+ * @ntsBoundBy "nts:dom" AnimationTimeline
  * @ntsIs nts_dom_is 7
  */
 interface AnimationTimeline {}
@@ -49,6 +51,7 @@ interface AnimationTimeline {}
  */
 interface Attr {}
 /**
+ * @ntsBoundBy "nts:dom" BarProp
  * @ntsIs nts_dom_is 14
  */
 interface BarProp {}
@@ -58,6 +61,7 @@ interface BarProp {}
  */
 interface BeforeUnloadEvent {}
 /**
+ * @ntsBoundBy "nts:dom" Blob
  * @ntsIs nts_dom_is 16
  */
 interface Blob {}
@@ -71,7 +75,7 @@ interface ByteLengthQueuingStrategy {}
  */
 interface CDATASection {}
 /**
- * @ntsBoundBy "nts:dom" EventTarget
+ * @ntsBoundBy "nts:dom" Animation
  * @ntsIs nts_dom_is 20
  */
 interface CSSAnimation {}
@@ -299,7 +303,7 @@ interface CSSTransformComponent {}
  */
 interface CSSTransformValue {}
 /**
- * @ntsBoundBy "nts:dom" EventTarget
+ * @ntsBoundBy "nts:dom" Animation
  * @ntsIs nts_dom_is 90
  */
 interface CSSTransition {}
@@ -325,6 +329,7 @@ interface CSSVariableReferenceValue {}
  */
 interface CSSViewTransitionRule {}
 /**
+ * @ntsBoundBy "nts:dom" CaretPosition
  * @ntsIs nts_dom_is 98
  */
 interface CaretPosition {}
@@ -467,6 +472,7 @@ interface Document {}
  */
 interface DocumentFragment {}
 /**
+ * @ntsBoundBy "nts:dom" DocumentTimeline
  * @ntsIs nts_dom_is 141
  */
 interface DocumentTimeline {}
@@ -513,10 +519,12 @@ interface EventTarget {}
  */
 interface External {}
 /**
+ * @ntsBoundBy "nts:dom" File
  * @ntsIs nts_dom_is 158
  */
 interface File {}
 /**
+ * @ntsBoundBy "nts:dom" FileList
  * @ntsIs nts_dom_is 159
  */
 interface FileList {}
@@ -709,7 +717,7 @@ interface HTMLFrameSetElement {}
  */
 interface HTMLHRElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLHeadElement
  * @ntsIs nts_dom_is 206
  */
 interface HTMLHeadElement {}
@@ -985,6 +993,7 @@ interface IdleDeadline {}
  */
 interface ImageBitmap {}
 /**
+ * @ntsBoundBy "nts:dom" ImageData
  * @ntsIs nts_dom_is 274
  */
 interface ImageData {}
@@ -1009,10 +1018,12 @@ interface IntersectionObserverEntry {}
  */
 interface KeyboardEvent {}
 /**
+ * @ntsBoundBy "nts:dom" KeyframeEffect
  * @ntsIs nts_dom_is 292
  */
 interface KeyframeEffect {}
 /**
+ * @ntsBoundBy "nts:dom" PerformanceEntry
  * @ntsIs nts_dom_is 293
  */
 interface LargestContentfulPaint {}
@@ -1161,18 +1172,22 @@ interface PageTransitionEvent {}
  */
 interface Performance {}
 /**
+ * @ntsBoundBy "nts:dom" PerformanceEntry
  * @ntsIs nts_dom_is 353
  */
 interface PerformanceEntry {}
 /**
+ * @ntsBoundBy "nts:dom" PerformanceEntry
  * @ntsIs nts_dom_is 354
  */
 interface PerformanceEventTiming {}
 /**
+ * @ntsBoundBy "nts:dom" PerformanceMark
  * @ntsIs nts_dom_is 357
  */
 interface PerformanceMark {}
 /**
+ * @ntsBoundBy "nts:dom" PerformanceMeasure
  * @ntsIs nts_dom_is 359
  */
 interface PerformanceMeasure {}
@@ -1181,6 +1196,7 @@ interface PerformanceMeasure {}
  */
 interface PerformanceNavigation {}
 /**
+ * @ntsBoundBy "nts:dom" PerformanceEntry
  * @ntsIs nts_dom_is 362
  */
 interface PerformanceNavigationTiming {}
@@ -1193,10 +1209,12 @@ interface PerformanceObserver {}
  */
 interface PerformanceObserverEntryList {}
 /**
+ * @ntsBoundBy "nts:dom" PerformanceEntry
  * @ntsIs nts_dom_is 365
  */
 interface PerformancePaintTiming {}
 /**
+ * @ntsBoundBy "nts:dom" PerformanceEntry
  * @ntsIs nts_dom_is 366
  */
 interface PerformanceResourceTiming {}
@@ -1763,6 +1781,7 @@ interface Scheduler {}
  */
 interface Screen {}
 /**
+ * @ntsBoundBy "nts:dom" AnimationTimeline
  * @ntsIs nts_dom_is 505
  */
 interface ScrollTimeline {}
@@ -1949,6 +1968,7 @@ interface VTTRegion {}
  */
 interface ValidityState {}
 /**
+ * @ntsBoundBy "nts:dom" AnimationTimeline
  * @ntsIs nts_dom_is 574
  */
 interface ViewTimeline {}

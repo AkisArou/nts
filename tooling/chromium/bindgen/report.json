@@ -1,5 +1,5 @@
 {
-  "bound": 4492,
+  "bound": 4598,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -284,7 +284,12 @@
     {
       "interface": "Element",
       "member": "animate/2",
-      "why": "interface Animation is not bound"
+      "why": "parameter type object?"
+    },
+    {
+      "interface": "Element",
+      "member": "animate/1",
+      "why": "parameter type object?"
     },
     {
       "interface": "Element",
@@ -380,11 +385,6 @@
       "interface": "Element",
       "member": "convertRectFromNode/2",
       "why": "parameter type GeometryNode"
-    },
-    {
-      "interface": "Element",
-      "member": "getAnimations/1",
-      "why": "interface Animation is not bound"
     },
     {
       "interface": "Element",
@@ -703,11 +703,6 @@
     },
     {
       "interface": "Document",
-      "member": "get head",
-      "why": "interface HTMLHeadElement is not bound"
-    },
-    {
-      "interface": "Document",
       "member": "get currentScript",
       "why": "result type HTMLOrSVGScriptElement?"
     },
@@ -855,11 +850,6 @@
       "interface": "Document",
       "member": "get onvisibilitychange",
       "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
-      "member": "get timeline",
-      "why": "interface DocumentTimeline is not bound"
     },
     {
       "interface": "Document",
@@ -2142,9 +2132,14 @@
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
+      "interface": "CaretPositionFromPointOptions",
+      "member": "shadowRoots",
+      "why": "dictionary member of type optional sequence<ShadowRoot>"
+    },
+    {
       "interface": "Document",
       "member": "caretPositionFromPoint/3",
-      "why": "interface CaretPosition is not bound"
+      "why": "dictionary CaretPositionFromPointOptions has no member a C struct can carry"
     },
     {
       "interface": "Document",
@@ -2225,11 +2220,6 @@
       "interface": "Document",
       "member": "exitPictureInPicture/0",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "Document",
-      "member": "getAnimations/0",
-      "why": "interface Animation is not bound"
     },
     {
       "interface": "Document",
@@ -3658,16 +3648,6 @@
     },
     {
       "interface": "HTMLInputElement",
-      "member": "get files",
-      "why": "interface FileList is not bound"
-    },
-    {
-      "interface": "HTMLInputElement",
-      "member": "set files",
-      "why": "interface FileList is not bound"
-    },
-    {
-      "interface": "HTMLInputElement",
       "member": "get switch",
       "why": "[RuntimeEnabled]"
     },
@@ -4335,36 +4315,6 @@
       "interface": "Window",
       "member": "get navigation",
       "why": "interface Navigation is not bound"
-    },
-    {
-      "interface": "Window",
-      "member": "get locationbar",
-      "why": "interface BarProp is not bound"
-    },
-    {
-      "interface": "Window",
-      "member": "get menubar",
-      "why": "interface BarProp is not bound"
-    },
-    {
-      "interface": "Window",
-      "member": "get personalbar",
-      "why": "interface BarProp is not bound"
-    },
-    {
-      "interface": "Window",
-      "member": "get scrollbars",
-      "why": "interface BarProp is not bound"
-    },
-    {
-      "interface": "Window",
-      "member": "get statusbar",
-      "why": "interface BarProp is not bound"
-    },
-    {
-      "interface": "Window",
-      "member": "get toolbar",
-      "why": "interface BarProp is not bound"
     },
     {
       "interface": "Window",
@@ -6278,28 +6228,13 @@
     },
     {
       "interface": "Performance",
-      "member": "getEntries/0",
-      "why": "interface PerformanceEntry is not bound"
-    },
-    {
-      "interface": "Performance",
-      "member": "getEntriesByName/2",
-      "why": "interface PerformanceEntry is not bound"
-    },
-    {
-      "interface": "Performance",
-      "member": "getEntriesByType/1",
-      "why": "interface PerformanceEntry is not bound"
-    },
-    {
-      "interface": "Performance",
       "member": "getSpeculations/0",
       "why": "[RuntimeEnabled]"
     },
     {
-      "interface": "Performance",
-      "member": "mark/2",
-      "why": "interface PerformanceMark is not bound"
+      "interface": "PerformanceMarkOptions",
+      "member": "detail",
+      "why": "dictionary member of type optional any"
     },
     {
       "interface": "Performance",
@@ -6309,7 +6244,17 @@
     {
       "interface": "Performance",
       "member": "measure/3",
-      "why": "interface PerformanceMeasure is not bound"
+      "why": "parameter type optional (DOMString or PerformanceMeasureOptions)"
+    },
+    {
+      "interface": "Performance",
+      "member": "measure/2",
+      "why": "parameter type optional (DOMString or PerformanceMeasureOptions)"
+    },
+    {
+      "interface": "Performance",
+      "member": "measure/1",
+      "why": "default `{}` of argument startOrMeasureOptions"
     },
     {
       "interface": "Performance",
@@ -6547,19 +6492,14 @@
       "why": "[RuntimeEnabled]"
     },
     {
-      "interface": "CanvasRenderingContext2D",
-      "member": "createImageData/1",
-      "why": "interface ImageData is not bound"
-    },
-    {
-      "interface": "CanvasRenderingContext2D",
-      "member": "createImageData/2",
-      "why": "interface ImageData is not bound"
+      "interface": "ImageDataSettings",
+      "member": "colorSpace",
+      "why": "dictionary member of type optional PredefinedColorSpace"
     },
     {
       "interface": "CanvasRenderingContext2D",
       "member": "createImageData/3",
-      "why": "interface ImageData is not bound"
+      "why": "dictionary ImageDataSettings has no member a C struct can carry"
     },
     {
       "interface": "CanvasRenderingContext2D",
@@ -6643,13 +6583,8 @@
     },
     {
       "interface": "CanvasRenderingContext2D",
-      "member": "getImageData/4",
-      "why": "interface ImageData is not bound"
-    },
-    {
-      "interface": "CanvasRenderingContext2D",
       "member": "getImageData/5",
-      "why": "interface ImageData is not bound"
+      "why": "dictionary ImageDataSettings has no member a C struct can carry"
     },
     {
       "interface": "CanvasRenderingContext2D",
@@ -6660,16 +6595,6 @@
       "interface": "CanvasRenderingContext2D",
       "member": "getTransform/0",
       "why": "interface DOMMatrix is not bound"
-    },
-    {
-      "interface": "CanvasRenderingContext2D",
-      "member": "putImageData/3",
-      "why": "interface ImageData is not bound"
-    },
-    {
-      "interface": "CanvasRenderingContext2D",
-      "member": "putImageData/7",
-      "why": "interface ImageData is not bound"
     },
     {
       "interface": "CanvasRenderingContext2D",
@@ -6840,11 +6765,6 @@
       "interface": "ShadowRoot",
       "member": "appendHTMLUnsafe/2",
       "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "ShadowRoot",
-      "member": "getAnimations/0",
-      "why": "interface Animation is not bound"
     },
     {
       "interface": "ShadowRoot",
@@ -7447,16 +7367,6 @@
       "why": "result type FrozenArray<DOMString>"
     },
     {
-      "interface": "DataTransfer",
-      "member": "get files",
-      "why": "interface FileList is not bound"
-    },
-    {
-      "interface": "DataTransferItem",
-      "member": "getAsFile/0",
-      "why": "interface File is not bound"
-    },
-    {
       "interface": "DataTransferItem",
       "member": "getAsFileSystemHandle/0",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
@@ -7470,11 +7380,6 @@
       "interface": "DataTransferItem",
       "member": "webkitGetAsEntry/0",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "DataTransferItemList",
-      "member": "add/1",
-      "why": "interface File is not bound"
     },
     {
       "interface": "DragEventInit",
@@ -7638,16 +7543,6 @@
     },
     {
       "interface": "FormData",
-      "member": "append/3",
-      "why": "interface Blob is not bound"
-    },
-    {
-      "interface": "FormData",
-      "member": "append/2",
-      "why": "interface Blob is not bound"
-    },
-    {
-      "interface": "FormData",
       "member": "get/1",
       "why": "result type FormDataEntryValue?"
     },
@@ -7655,16 +7550,6 @@
       "interface": "FormData",
       "member": "getAll/1",
       "why": "result type sequence<FormDataEntryValue>"
-    },
-    {
-      "interface": "FormData",
-      "member": "set/3",
-      "why": "interface Blob is not bound"
-    },
-    {
-      "interface": "FormData",
-      "member": "set/2",
-      "why": "interface Blob is not bound"
     },
     {
       "interface": "HTMLMediaElement",
@@ -8104,6 +7989,321 @@
     {
       "interface": "DocumentType",
       "member": "streamReplaceWithHTMLUnsafe/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Blob",
+      "member": "constructor/2",
+      "why": "parameter type optional sequence<BlobPart>"
+    },
+    {
+      "interface": "Blob",
+      "member": "constructor/1",
+      "why": "parameter type optional sequence<BlobPart>"
+    },
+    {
+      "interface": "Blob",
+      "member": "arrayBuffer/0",
+      "why": "result type Promise<ArrayBuffer>"
+    },
+    {
+      "interface": "Blob",
+      "member": "bytes/0",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Blob",
+      "member": "slice/1",
+      "why": "default `0x7FFFFFFFFFFFFFFF` of argument end"
+    },
+    {
+      "interface": "Blob",
+      "member": "slice/0",
+      "why": "default `0x7FFFFFFFFFFFFFFF` of argument end"
+    },
+    {
+      "interface": "Blob",
+      "member": "stream/0",
+      "why": "interface ReadableStream is not bound"
+    },
+    {
+      "interface": "Blob",
+      "member": "text/0",
+      "why": "result type Promise<USVString>"
+    },
+    {
+      "interface": "Blob",
+      "member": "textStream/0",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "File",
+      "member": "constructor/3",
+      "why": "parameter type sequence<BlobPart>"
+    },
+    {
+      "interface": "File",
+      "member": "constructor/2",
+      "why": "parameter type sequence<BlobPart>"
+    },
+    {
+      "interface": "File",
+      "member": "get lastModifiedDate",
+      "why": "result type object?"
+    },
+    {
+      "interface": "ImageData",
+      "member": "constructor/3",
+      "why": "dictionary ImageDataSettings has no member a C struct can carry"
+    },
+    {
+      "interface": "ImageData",
+      "member": "constructor/4",
+      "why": "parameter type Uint8ClampedArray"
+    },
+    {
+      "interface": "ImageData",
+      "member": "constructor/3",
+      "why": "parameter type Uint8ClampedArray"
+    },
+    {
+      "interface": "ImageData",
+      "member": "constructor/2",
+      "why": "parameter type Uint8ClampedArray"
+    },
+    {
+      "interface": "ImageData",
+      "member": "constructor/4",
+      "why": "parameter type Float16Array"
+    },
+    {
+      "interface": "ImageData",
+      "member": "constructor/3",
+      "why": "parameter type Float16Array"
+    },
+    {
+      "interface": "ImageData",
+      "member": "constructor/2",
+      "why": "parameter type Float16Array"
+    },
+    {
+      "interface": "ImageData",
+      "member": "constructor/4",
+      "why": "parameter type Float32Array"
+    },
+    {
+      "interface": "ImageData",
+      "member": "constructor/3",
+      "why": "parameter type Float32Array"
+    },
+    {
+      "interface": "ImageData",
+      "member": "constructor/2",
+      "why": "parameter type Float32Array"
+    },
+    {
+      "interface": "ImageData",
+      "member": "get pixelFormat",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ImageData",
+      "member": "get data",
+      "why": "result type ImageDataArray"
+    },
+    {
+      "interface": "HTMLHeadElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "PerformanceEntry",
+      "member": "get navigationId",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "PerformanceEntry",
+      "member": "toJSON/0",
+      "why": "result type object"
+    },
+    {
+      "interface": "PerformanceMark",
+      "member": "get detail",
+      "why": "result type any"
+    },
+    {
+      "interface": "PerformanceMeasure",
+      "member": "get detail",
+      "why": "result type any"
+    },
+    {
+      "interface": "Animation",
+      "member": "get startTime",
+      "why": "result type CSSNumberish?"
+    },
+    {
+      "interface": "Animation",
+      "member": "set startTime",
+      "why": "parameter type CSSNumberish?"
+    },
+    {
+      "interface": "Animation",
+      "member": "get currentTime",
+      "why": "result type CSSNumberish?"
+    },
+    {
+      "interface": "Animation",
+      "member": "set currentTime",
+      "why": "parameter type CSSNumberish?"
+    },
+    {
+      "interface": "Animation",
+      "member": "get overallProgress",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Animation",
+      "member": "get rangeStart",
+      "why": "result type (TimelineRangeOffset or DOMString)"
+    },
+    {
+      "interface": "Animation",
+      "member": "set rangeStart",
+      "why": "parameter type (TimelineRangeOffset or DOMString)"
+    },
+    {
+      "interface": "Animation",
+      "member": "get rangeEnd",
+      "why": "result type (TimelineRangeOffset or DOMString)"
+    },
+    {
+      "interface": "Animation",
+      "member": "set rangeEnd",
+      "why": "parameter type (TimelineRangeOffset or DOMString)"
+    },
+    {
+      "interface": "Animation",
+      "member": "get onfinish",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Animation",
+      "member": "get onfinish",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Animation",
+      "member": "get oncancel",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Animation",
+      "member": "get oncancel",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Animation",
+      "member": "get onremove",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Animation",
+      "member": "get onremove",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Animation",
+      "member": "get finished",
+      "why": "result type Promise<Animation>"
+    },
+    {
+      "interface": "Animation",
+      "member": "get ready",
+      "why": "result type Promise<Animation>"
+    },
+    {
+      "interface": "AnimationEffect",
+      "member": "getComputedTiming/0",
+      "why": "result type ComputedEffectTiming"
+    },
+    {
+      "interface": "AnimationEffect",
+      "member": "getTiming/0",
+      "why": "result type EffectTiming"
+    },
+    {
+      "interface": "OptionalEffectTiming",
+      "member": "delay",
+      "why": "dictionary member of type optional (double or CSSNumericValue)"
+    },
+    {
+      "interface": "OptionalEffectTiming",
+      "member": "direction",
+      "why": "dictionary member of type optional PlaybackDirection"
+    },
+    {
+      "interface": "OptionalEffectTiming",
+      "member": "duration",
+      "why": "dictionary member of type optional (unrestricted double or CSSNumericValue or DOMString)"
+    },
+    {
+      "interface": "OptionalEffectTiming",
+      "member": "easing",
+      "why": "dictionary member of type optional DOMString"
+    },
+    {
+      "interface": "OptionalEffectTiming",
+      "member": "endDelay",
+      "why": "dictionary member of type optional (double or CSSNumericValue)"
+    },
+    {
+      "interface": "OptionalEffectTiming",
+      "member": "fill",
+      "why": "dictionary member of type optional FillMode"
+    },
+    {
+      "interface": "KeyframeEffect",
+      "member": "constructor/3",
+      "why": "parameter type object?"
+    },
+    {
+      "interface": "KeyframeEffect",
+      "member": "constructor/2",
+      "why": "parameter type object?"
+    },
+    {
+      "interface": "KeyframeEffect",
+      "member": "get iterationComposite",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "KeyframeEffect",
+      "member": "set iterationComposite",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "KeyframeEffect",
+      "member": "getKeyframes/0",
+      "why": "result type sequence<object>"
+    },
+    {
+      "interface": "KeyframeEffect",
+      "member": "setKeyframes/1",
+      "why": "parameter type object?"
+    },
+    {
+      "interface": "AnimationTimeline",
+      "member": "get currentTime",
+      "why": "result type CSSNumberish?"
+    },
+    {
+      "interface": "AnimationTimeline",
+      "member": "get duration",
+      "why": "result type CSSNumberish?"
+    },
+    {
+      "interface": "AnimationTimeline",
+      "member": "getCurrentTime/1",
       "why": "[RuntimeEnabled]"
     }
   ]
