@@ -1,0 +1,12 @@
+{
+  "//": "The acceptance target for lib.dom by delegation, compiled where it lives: runtime/chromium/benchmarks/workloads/todo-dom.ts, re-exported by src/main.ts, beside the overlay and nts:dom.",
+  "extends": "../../../../tsconfig.fixtures.json",
+  "files": [
+    "src/main.ts",
+    "../../../../runtime/chromium/benchmarks/workloads/todo-dom.ts",
+    "../../../../runtime/chromium/dom/types/dom-idl.d.ts",
+    "../../../../runtime/chromium/dom/types/dom-abi.d.ts",
+    "../../../../runtime/chromium/dom/types/lib-dom-bindings.d.ts",
+    "../../../../runtime/native/libc.d.ts"
+  ]
+}

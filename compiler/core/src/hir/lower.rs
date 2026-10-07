@@ -39421,6 +39421,12 @@ impl<'a> FuncBuilder<'a> {
         if let Some((bound, method)) = self.delegated_accessor(object, member, false) {
             return Some(self.lower_expression(object).and_then(|receiver| self.lower_accessor_on(id, receiver, bound, &method, None)));
         }
+        if let Some((bound, name)) = self.delegated_named(object, member) {
+            return Some(self.lower_expression(object).and_then(|receiver| {
+                let key = self.push(OpKind::ConstString(name), HirType::Managed(ManagedType::String), self.origin(member));
+                self.call_bound_method(id, receiver, bound, "_named_get", vec![key])
+            }));
+        }
         if !self.is_accessor_property(member) {
             return None;
         }
@@ -39442,6 +39448,63 @@ impl<'a> FuncBuilder<'a> {
         let native = self.node(property.declaration?).native.as_deref()?;
         let method = if write { native.set.clone() } else { native.get.clone() }?;
         Some((bound, method))
+    }
+
+    /// A name a type a binding implements reads through its named-property
+    /// methods: `el.dataset.userId` is `DOMStringMap`'s `_named_get("userId")`
+    /// and its write `_named_set`, where lib.dom declares an index signature
+    /// and the bound type declares no property of that name. The bound type
+    /// and the name.
+    fn delegated_named(&self, object: NodeId, member: NodeId) -> Option<(TypeId, String)> {
+        let bound = self.delegated_type(*self.snapshot.node_types.get(&object)?)?;
+        let name = self.literal_name(member)?;
+        if super::native::schema::property(self.snapshot, bound, &name).is_some() {
+            return None;
+        }
+        super::native::schema::property(self.snapshot, bound, "_named_get")?;
+        Some((bound, name))
+    }
+
+    /// The setter of a bound property a binding spells per type of the value
+    /// written -- `_set_hidden_boolean` for `el.hidden = true`, and for
+    /// `el.onclick = f` `_set_onclick_void` or `_boolean` by `f`'s result,
+    /// `_set_onclick_null` for `null` -- where the bound type declares no
+    /// `@ntsSet` for it. The bound type, the method, and whether it takes the
+    /// value.
+    fn delegated_typed_setter(&self, object: NodeId, member: NodeId, assigned: TypeId) -> Option<(TypeId, String, bool)> {
+        let bound = self.delegated_type(*self.snapshot.node_types.get(&object)?)?;
+        let name = self.literal_name(member)?;
+        let kind = match &self.snapshot.types.get(assigned.0 as usize)?.kind {
+            TypeKind::Null => "null",
+            TypeKind::Boolean | TypeKind::Literal(nts_semantic_schema::LiteralValue::Boolean(_)) => "boolean",
+            TypeKind::Number | TypeKind::Literal(nts_semantic_schema::LiteralValue::Number(_)) => "number",
+            TypeKind::String | TypeKind::Literal(nts_semantic_schema::LiteralValue::String(_)) => "string",
+            TypeKind::Function(signature) => {
+                let result = self.snapshot.signatures.get(signature.0 as usize)?.return_type;
+                match self.snapshot.types.get(result.0 as usize)?.kind {
+                    TypeKind::Void | TypeKind::Undefined => "void",
+                    TypeKind::Boolean => "boolean",
+                    _ => return None,
+                }
+            }
+            _ => return None,
+        };
+        let method = format!("_set_{name}_{kind}");
+        super::native::schema::property(self.snapshot, bound, &method)?;
+        Some((bound, method, kind != "null"))
+    }
+
+    /// The static type of what a plain `=` assigns to `target`: the right side
+    /// of `target = value`. `None` for anything else -- a compound assignment
+    /// reads before it writes, and a destructuring target is not one place.
+    fn assigned_type(&self, target: NodeId) -> Option<TypeId> {
+        let assignment = self.node(target).parent?;
+        let [left, operator, right] = self.syntax_children_of(assignment)[..] else { return None };
+        (self.kind_of(assignment) == Some(syntax::BINARY_EXPRESSION)
+            && left == target
+            && self.kind_of(operator) == Some(syntax::EQUALS_TOKEN))
+        .then(|| self.snapshot.node_types.get(&right).copied())
+        .flatten()
     }
 
     fn is_accessor_property(&self, member: NodeId) -> bool {
@@ -39624,6 +39687,21 @@ impl<'a> FuncBuilder<'a> {
         method: &str,
         value: Option<ValueId>,
     ) -> Result<ValueId, Diagnostic> {
+        self.call_bound_method(id, receiver, ty, method, value.into_iter().collect())
+    }
+
+    /// A method of a handle's type called on `receiver` with values already in
+    /// hand: an accessor's (`@ntsGet`/`@ntsSet`), or a binding's syntax method
+    /// -- `_named_get(name)` for `el.dataset.name` -- whose arguments the program
+    /// never wrote as arguments.
+    fn call_bound_method(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        ty: TypeId,
+        method: &str,
+        values: Vec<ValueId>,
+    ) -> Result<ValueId, Diagnostic> {
         let unknown = || format!("a native property whose accessor `{method}` the handle's type does not declare as a method");
         // `this.label` in a method of a class the program writes over a
         // handle's: `this` is the class's polymorphic `this`, and its members
@@ -39646,16 +39724,13 @@ impl<'a> FuncBuilder<'a> {
         };
         // A plain C slot takes its value at its own representation; a
         // string, an array or a closure is converted by its role.
-        let args: Vec<ValueId> = match value {
-            Some(value) => {
-                let value = match target.roles.get(1) {
-                    Some(super::native::Role::Plain) => self.coerce(value, &target.parameters[1].representation(), id)?,
-                    _ => value,
-                };
-                vec![value]
-            }
-            None => Vec::new(),
-        };
+        let mut args = Vec::with_capacity(values.len());
+        for (at, value) in values.into_iter().enumerate() {
+            args.push(match target.roles.get(at + 1) {
+                Some(super::native::Role::Plain) => self.coerce(value, &target.parameters[at + 1].representation(), id)?,
+                _ => value,
+            });
+        }
         let written = args.len();
         let (args, lent) = self.native_arguments(id, &target.clone(), args, written, Some(receiver))?;
         self.finish_call(id, callee, args, lent, Some(declaration))
@@ -40063,6 +40138,32 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// Split out of [`Self::place_of`] for its length; that function is the
     /// dispatch over what kind of target this is, and this is one of them.
+    /// The place a property of a type a binding implements is written at:
+    /// through its bound property's `@ntsSet`, and read through its `@ntsGet`
+    /// where the assignment also reads it (`el.scrollTop += 1`); through the
+    /// setter a plain `=` picks by the value's type where it has none
+    /// (`el.hidden = true`); or through the named-property methods
+    /// (`el.dataset.id = v`). `None` for any other property.
+    fn delegated_place(&mut self, target: NodeId, object: NodeId, member: NodeId) -> Result<Option<Place>, Diagnostic> {
+        if let Some((bound, setter)) = self.delegated_accessor(object, member, true) {
+            let getter = self.delegated_accessor(object, member, false).map(|(_, getter)| getter);
+            let receiver = self.lower_expression(object)?;
+            return Ok(Some(Place::NativeAccessor { receiver, ty: bound, getter, setter, takes_value: true }));
+        }
+        if let Some(assigned) = self.assigned_type(target)
+            && let Some((bound, setter, takes_value)) = self.delegated_typed_setter(object, member, assigned)
+        {
+            let receiver = self.lower_expression(object)?;
+            return Ok(Some(Place::NativeAccessor { receiver, ty: bound, getter: None, setter, takes_value }));
+        }
+        if let Some((bound, name)) = self.delegated_named(object, member) {
+            let receiver = self.lower_expression(object)?;
+            let key = self.push(OpKind::ConstString(name), HirType::Managed(ManagedType::String), self.origin(member));
+            return Ok(Some(Place::NamedProperty { receiver, ty: bound, key }));
+        }
+        Ok(None)
+    }
+
     fn property_place(&mut self, target: NodeId) -> Result<Place, Diagnostic> {
             let children = self.children(target);
             let [object_node, member] = children.as_slice() else {
@@ -40087,13 +40188,8 @@ impl<'a> FuncBuilder<'a> {
             if let Some(place) = self.super_setter_place(*object_node, *member) {
                 return Ok(place);
             }
-            // A property of a type a binding implements, written through its
-            // bound property's `@ntsSet`, and read through its `@ntsGet` where
-            // the assignment also reads it (`el.scrollTop += 1`).
-            if let Some((bound, setter)) = self.delegated_accessor(*object_node, *member, true) {
-                let getter = self.delegated_accessor(*object_node, *member, false).map(|(_, getter)| getter);
-                let receiver = self.lower_expression(*object_node)?;
-                return Ok(Place::NativeAccessor { receiver, ty: bound, getter, setter });
+            if let Some(place) = self.delegated_place(target, *object_node, *member)? {
+                return Ok(place);
             }
             if self.is_accessor_property(*member) {
                 return self.native_accessor_place(target, *object_node, *member);
@@ -40385,7 +40481,7 @@ impl<'a> FuncBuilder<'a> {
             .copied()
             .ok_or_else(|| self.unsupported(target, &format!("a native property whose accessor `{setter}` has no receiver type")))?;
         let receiver = self.lower_expression(object)?;
-        Ok(Place::NativeAccessor { receiver, ty, getter, setter })
+        Ok(Place::NativeAccessor { receiver, ty, getter, setter, takes_value: true })
     }
 
     /// A native property's value through its `@ntsGet` method, for a place
@@ -40514,6 +40610,7 @@ impl<'a> FuncBuilder<'a> {
                 return Err(self.unsupported(id, "a compound assignment through a set-only accessor"));
             }
             Place::NativeAccessor { receiver, ty, ref getter, .. } => self.read_native_accessor(id, receiver, ty, getter.as_deref())?,
+            Place::NamedProperty { receiver, ty, key } => self.call_bound_method(id, receiver, ty, "_named_get", vec![key])?,
             Place::Element { array, index } => {
                 let HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)) =
                     self.values[array.0 as usize].ty.clone()
@@ -41214,7 +41311,7 @@ impl<'a> FuncBuilder<'a> {
             Place::Setter { ref wants, .. } => wants.clone(),
             // The setter's own parameter converts what it is given, as a
             // plain `=` does.
-            Place::NativeAccessor { .. } => None,
+            Place::NativeAccessor { .. } | Place::NamedProperty { .. } => None,
         })
     }
 
@@ -41464,8 +41561,11 @@ impl<'a> FuncBuilder<'a> {
                 let args = object.into_iter().chain([value]).collect();
                 self.push_an_accessor_call(at, callee, args, HirType::Void, origin);
             }
-            Place::NativeAccessor { receiver, ty, ref setter, .. } => {
-                self.lower_accessor_on(id, receiver, ty, setter, Some(value))?;
+            Place::NativeAccessor { receiver, ty, ref setter, takes_value, .. } => {
+                self.lower_accessor_on(id, receiver, ty, setter, takes_value.then_some(value))?;
+            }
+            Place::NamedProperty { receiver, ty, key } => {
+                self.call_bound_method(id, receiver, ty, "_named_set", vec![key, value])?;
             }
             Place::Element { array, index } => {
                 self.push(
@@ -49254,7 +49354,9 @@ impl<'a> FuncBuilder<'a> {
             let accessor = self.kind_of(id) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
                 && children.last().is_some_and(|member| {
                     self.is_accessor_property(*member)
-                        || children.first().is_some_and(|object| self.delegated_accessor(*object, *member, false).is_some())
+                        || children.first().is_some_and(|object| {
+                            self.delegated_accessor(*object, *member, false).is_some() || self.delegated_named(*object, *member).is_some()
+                        })
                 });
             // An Objective-C property, read with its getter -- here only as
             // `a?.b`, whose arm sends it; the plain read is sent before this.
@@ -68840,6 +68942,15 @@ enum Place {
         ty: TypeId,
         getter: Option<String>,
         setter: String,
+        /// `false` for a setter that is the value itself: `_set_onclick_null`.
+        takes_value: bool,
+    },
+    /// A name a bound type reads and writes through its named-property methods
+    /// (`delegated_named`): `el.dataset.userId`, with its name as a constant.
+    NamedProperty {
+        receiver: ValueId,
+        ty: TypeId,
+        key: ValueId,
     },
     Element {
         array: ValueId,
