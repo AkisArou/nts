@@ -142,6 +142,9 @@ function readTable() {
 }
 
 if (RECORD) {
+  // A null count is recorded as 0 only for a module too quick for perf to
+  // attach to; one with more than a second of CPU was missed, not small.
+  for (const [m, t] of times) if (t.g === null && (t.cpu ?? 0) > QUICK_S) unmeasured.push(`${m}: no instruction count, with ${t.cpu.toFixed(1)} s of CPU`);
   if (unmeasured.length) {
     console.log("  not recorded: a table with modules missing would stop checking them");
     for (const u of unmeasured) console.log(`    ${u}`);
@@ -161,17 +164,20 @@ for (const module of modules) {
   const t = times.get(module);
   const was = base.get(module);
   if (t === undefined) continue;
-  // No count: the process ended before perf attached. Under about a second
-  // of CPU that is the smallest modules; above it, perf missed work it should
-  // have counted, and a module that grew from 5 G to 30 G would pass unseen.
-  if (t.g === null) {
-    early += 1;
-    if ((was ?? 0) >= ABS || (t.cpu ?? 0) > QUICK_S) unmeasured.push(`${module}: no instruction count, with ${t.cpu?.toFixed(1) ?? "?"} s of CPU`);
+  // A module with no row is not checked against anything: red until recorded,
+  // whatever it measured.
+  if (was === undefined) {
+    unmeasured.push(`${module}: ${t.g === null ? "no instruction count" : `${t.g.toFixed(1)} G instructions`} and no row in compile-times.tsv -- record it with --record`);
     continue;
   }
-  // A module with no row is not checked against anything: red until recorded.
-  if (was === undefined) {
-    unmeasured.push(`${module}: ${t.g.toFixed(1)} G instructions and no row in compile-times.tsv -- record it with --record`);
+  // No count: the process ended before perf attached. With at most a second
+  // of CPU that is one of the smallest modules, and its row is a few G at
+  // most, under the floor a regression must clear anyway; it is counted as
+  // "with no count" above. Above a second, perf missed work it should have
+  // counted, and a module that grew from 5 G to 30 G would pass unseen.
+  if (t.g === null) {
+    early += 1;
+    if (was >= ABS || (t.cpu ?? 0) > QUICK_S) unmeasured.push(`${module}: no instruction count, with ${t.cpu?.toFixed(1) ?? "?"} s of CPU`);
     continue;
   }
   sumNow += t.g;

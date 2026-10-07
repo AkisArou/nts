@@ -4,8 +4,8 @@
 //
 // A tool's worker pool calls it around each process it spawns for the work, so
 // the gate's whole run holds at most its budget of such processes, whichever
-// steps they belong to. Outside the gate (no NTS_GATE_TOKENS), or when the
-// runner cannot be reached, `fn` simply runs: scheduling is never a verdict.
+// steps they belong to. Outside the gate (no NTS_GATE_TOKENS) `fn` simply
+// runs; inside one, a runner that cannot be reached is an error (below).
 //
 // **What this process spawns does not ask for tokens**: importing this module
 // sets NTS_GATE_TOKEN_HELD=1 in this process's environment, which every child

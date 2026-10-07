@@ -615,12 +615,12 @@ function schedule() {
         // for it as elastic workers give them back, or elastic steps -- which
         // ask again every few seconds -- would take each one as it frees and
         // a fixed step would wait for a gap that never comes.
-        // Only a shortfall of slots: tokens kept back do not make memory or
-        // frontends appear, and would idle the run waiting for them.
+        // Whatever it lacks -- slots, memory or frontends -- elastic workers
+        // give back as they finish (`used` charges each token its share of
+        // its step's memory and frontends), so tokens are kept back for it in
+        // every case but a lock, which tokens do not free.
         const least = Math.min(step.min ?? Math.max(1, Math.ceil(step.slots / 2)), step.slots, SLOTS);
-        const memoryOk = u.mem + step.mem <= MEM && memAvailableGB() >= step.mem + 1;
-        const frontendsOk = !step.fe || FRONTENDS - u.fe >= least;
-        if (!step.elastic && !withhold && !(step.lock && u.locks.has(step.lock)) && memoryOk && frontendsOk) {
+        if (!step.elastic && !withhold && !(step.lock && u.locks.has(step.lock))) {
           withhold = least;
         }
         continue;
