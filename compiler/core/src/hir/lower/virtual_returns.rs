@@ -42,7 +42,9 @@
 //! two object pointers (a covariant `this` is a pointer either way), and a slot
 //! where some answer has no erased form: no bridge can be built there, and the
 //! slot keeps the representation it had.
-use rustc_hash::{FxHashMap, FxHashSet};
+use std::collections::BTreeMap;
+
+use rustc_hash::FxHashMap;
 
 use nts_semantic_schema::{GeneratedReason, Origin, SemanticSnapshot, TypeId, TypeKind};
 
@@ -55,51 +57,58 @@ use crate::hir::{
 const ERASED_SUFFIX: &str = "@erased";
 
 /// Bridge every member slot whose results disagree with an erased one.
+///
+/// **Linear in the program, by construction.** A runtime module has tens of
+/// thousands of functions and hundreds of slots, so every lookup goes through
+/// one of two indexes built once: function by name (`index`, kept current as
+/// bridges are added) and, per slot, each entry with the layouts holding it
+/// (`slot_tables`).
 pub(super) fn bridge(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy, program: &mut Program) {
     let calls = virtual_calls(program);
     let owners = owners_by_name(hierarchy);
+    let tables = slot_tables(program);
+    let mut index: FxHashMap<String, usize> =
+        program.funcs.iter().enumerate().map(|(at, func)| (func.name.clone(), at)).collect();
     // Sorted, so one compiler on one input makes its bridges in one order.
     let mut slots: Vec<(&(TypeId, String), &u32)> = hierarchy.slots.iter().collect();
     slots.sort_by_key(|(_, slot)| **slot);
-    let mut made: FxHashMap<String, String> = FxHashMap::default();
     for ((root, member), &slot) in slots {
         let Some(owner) = hierarchy.name.get(root) else { continue };
         let root_declaration = format!("{owner}#{member}");
         let through = calls.get(&slot).map(Vec::as_slice).unwrap_or_default();
-        if !disagrees_with_an_erased_answer(program, slot, through) {
+        let empty = BTreeMap::new();
+        let table = tables.get(&slot).unwrap_or(&empty);
+        if !disagrees_with_an_erased_answer(program, &index, table, through) {
             continue;
         }
-        let entries = entries_of(program, slot);
         // The declarations first: an abstract one is a signature, and its result
         // is the slot's.
-        for name in &entries {
-            if let Some(func) = program.funcs.iter_mut().find(|func| func.name == *name)
-                && func.abstract_declaration
+        for name in table.keys() {
+            if let Some(&at) = index.get(name)
+                && program.funcs[at].abstract_declaration
             {
-                func.return_type = HirType::Erased;
+                program.funcs[at].return_type = HirType::Erased;
             }
         }
-        for name in entries {
-            let Some(func) = program.funcs.iter().find(|func| func.name == name) else { continue };
+        for (name, holders) in table {
+            let Some(&at) = index.get(name) else { continue };
+            let func = &program.funcs[at];
             if func.abstract_declaration || func.return_type == HirType::Erased {
                 continue;
             }
-            let bridge = made.entry(name.clone()).or_insert_with(|| format!("{name}{ERASED_SUFFIX}")).clone();
-            if !program.funcs.iter().any(|func| func.name == bridge) {
-                let absent = result_absent(snapshot, &owners, &name, &func.return_type);
+            let bridge = format!("{name}{ERASED_SUFFIX}");
+            if !index.contains_key(&bridge) {
+                let absent = result_absent(snapshot, &owners, name, &func.return_type);
                 let made = erasing_bridge(bridge.clone(), func, absent);
+                index.insert(bridge.clone(), program.funcs.len());
                 program.funcs.push(made);
             }
-            for layout in &mut program.layouts {
-                if let Some(entry) = layout.methods.get_mut(slot as usize)
-                    && entry.as_deref() == Some(name.as_str())
-                {
-                    *entry = Some(bridge.clone());
-                }
+            for &layout in holders {
+                program.layouts[layout].methods[slot as usize] = Some(bridge.clone());
             }
         }
         for &(at, value) in through {
-            retarget(program, at, value, &root_declaration);
+            retarget(program, &index, at, value, &root_declaration);
         }
     }
 }
@@ -119,29 +128,31 @@ fn virtual_calls(program: &Program) -> FxHashMap<u32, Vec<(usize, ValueId)>> {
     calls
 }
 
-/// The functions a slot's tables name, each once, in name order.
-fn entries_of(program: &Program, slot: u32) -> Vec<String> {
-    let mut entries: Vec<String> = program
-        .layouts
-        .iter()
-        .filter_map(|layout| layout.methods.get(slot as usize).cloned().flatten())
-        .collect::<FxHashSet<String>>()
-        .into_iter()
-        .collect();
-    entries.sort();
-    entries
+/// Each slot's entries, in name order, each with the layouts whose table holds
+/// it there: one pass over the tables.
+fn slot_tables(program: &Program) -> FxHashMap<u32, BTreeMap<String, Vec<usize>>> {
+    let mut tables: FxHashMap<u32, BTreeMap<String, Vec<usize>>> = FxHashMap::default();
+    for (at, layout) in program.layouts.iter().enumerate() {
+        for (slot, entry) in layout.methods.iter().enumerate() {
+            let (Some(entry), Ok(slot)) = (entry, u32::try_from(slot)) else { continue };
+            tables.entry(slot).or_default().entry(entry.clone()).or_default().push(at);
+        }
+    }
+    tables
 }
 
-/// Whether the answers through `slot` -- what its entries return, what each
+/// Whether the answers through a slot -- what its entries return, what each
 /// call's declaration returns, and what each call's result is typed -- include
 /// an erased one and something else, every one of which can be erased.
-fn disagrees_with_an_erased_answer(program: &Program, slot: u32, calls: &[(usize, ValueId)]) -> bool {
-    let by_name = |name: &str| program.funcs.iter().find(|func| func.name == name);
-    let mut answers: Vec<&HirType> = entries_of(program, slot)
-        .iter()
-        .filter_map(|name| by_name(name))
-        .map(|func| &func.return_type)
-        .collect();
+fn disagrees_with_an_erased_answer(
+    program: &Program,
+    index: &FxHashMap<String, usize>,
+    table: &BTreeMap<String, Vec<usize>>,
+    calls: &[(usize, ValueId)],
+) -> bool {
+    let by_name = |name: &str| index.get(name).map(|&at| &program.funcs[at]);
+    let mut answers: Vec<&HirType> =
+        table.keys().filter_map(|name| by_name(name)).map(|func| &func.return_type).collect();
     for &(at, value) in calls {
         let op = program.funcs[at].value(value);
         answers.push(&op.ty);
@@ -220,14 +231,9 @@ fn erasing_bridge(name: String, target: &Func, absent: Absent) -> Func {
 /// was. The call keeps its value id by moving: the call goes to a fresh id typed
 /// `Erased`, and the old id becomes the `Unerase` of it, so every use of the old
 /// id reads the value it always did.
-fn retarget(program: &mut Program, at: usize, value: ValueId, root: &str) {
-    let erased_declaration = |name: &str| {
-        program
-            .funcs
-            .iter()
-            .find(|func| func.name == name)
-            .filter(|func| func.return_type == HirType::Erased)
-    };
+fn retarget(program: &mut Program, index: &FxHashMap<String, usize>, at: usize, value: ValueId, root: &str) {
+    let by_name = |name: &str| index.get(name).map(|&at| &program.funcs[at]);
+    let erased_declaration = |name: &str| by_name(name).filter(|func| func.return_type == HirType::Erased);
     let OpKind::Call { callee: Callee::Virtual { declared, .. }, .. } = &program.funcs[at].value(value).kind else {
         return;
     };
@@ -235,7 +241,7 @@ fn retarget(program: &mut Program, at: usize, value: ValueId, root: &str) {
         None
     } else {
         let (Some(through), Some(root_func)) =
-            (program.funcs.iter().find(|func| func.name == *declared), erased_declaration(root))
+            (by_name(declared), erased_declaration(root))
         else {
             return;
         };
