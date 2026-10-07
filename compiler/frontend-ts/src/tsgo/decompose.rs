@@ -674,6 +674,19 @@ impl<'a> Decomposer<'a> {
             .signatures_of_type(self.handle, &self.project, ty)?;
         if let Some(signature) = signatures.first() {
             let id = self.record_signature(snapshot, signature, walk)?;
+            // **The other overloads of a foreign member too**, recorded so
+            // their parameter types are decomposed: lowering chooses among a
+            // binding's overloads by each one's own parameters
+            // (`overload_signature`), and `Closure<(event: Event) => void>`
+            // written in two declarations is two function types -- the second
+            // was a placeholder, "a type with no native ABI". Only a foreign
+            // declaration's (a native symbol), so a library type's overloads
+            // -- `Array#reduce`'s -- cost nothing they did not.
+            for other in signatures.iter().skip(1) {
+                if self.declared_foreign(snapshot, other.declaration.as_ref()) {
+                    self.record_signature(snapshot, other, walk)?;
+                }
+            }
             return Ok(Some(TypeKind::Function(id)));
         }
 
@@ -687,6 +700,15 @@ impl<'a> Decomposer<'a> {
         }
 
         Ok(None)
+    }
+
+    /// Whether a signature's declaration is a foreign function's: one a
+    /// binding tags with its native symbol (`@ntsSymbol`).
+    fn declared_foreign(&self, snapshot: &SemanticSnapshot, declaration: Option<&NodeHandle>) -> bool {
+        declaration
+            .and_then(|handle| declaration_node(handle, &self.file_bases))
+            .and_then(|node| snapshot.nodes.get(node.0 as usize))
+            .is_some_and(|node| node.native.as_ref().is_some_and(|native| native.symbol.is_some()))
     }
 
     /// The members and index signatures of a record-like object type.
