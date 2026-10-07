@@ -376,7 +376,7 @@ fi
 judge() {
   module=$1
   out=$(NTS_COMPILER="$compiler" NTS_BIN="$compiler" \
-    timeout 1800 bash tooling/conformance/build.sh "$module" 2>&1)
+    timeout 1800 tooling/gate/token.sh bash tooling/conformance/build.sh "$module" 2>&1)
   case $out in *"reused the emission in "*) : > "$verdicts/$module.reused" ;; esac
   if printf '%s' "$out" | grep -q 'bytes$'; then
     # Compiling is not loading, and the difference is not academic. `dgram`
@@ -561,7 +561,7 @@ for module in $BLOCKED; do
     printf '  %-22s an artifact of a blocked module removed from the addon directory\n' "$module"
   fi
   out=$(NTS_ADDON_OUT="$probe_out" NTS_COMPILER="$compiler" NTS_BIN="$compiler" \
-    timeout 1800 bash tooling/conformance/build.sh "$module" 2>&1)
+    timeout 1800 tooling/gate/token.sh bash tooling/conformance/build.sh "$module" 2>&1)
   if printf '%s' "$out" | grep -q 'bytes$'; then
     # **Compiling is not the standard.** `FLOOR` requires compile, load, and no
     # unpinned undefined symbol; a blocked module that only compiles is not ready

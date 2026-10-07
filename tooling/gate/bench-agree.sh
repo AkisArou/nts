@@ -93,7 +93,8 @@ done > "$work/cases"
 # One line per case, so the counting below reads a fixed vocabulary rather than
 # the differential's prose: a step that greps for a sentence breaks when the
 # sentence is improved, which has happened here twice.
-NTS_BENCH_AGREE_NTS="$nts" xargs -P "$jobs" -n 1 -I{} sh -c '
+# Each worker holds one of the gate's tokens (token.sh; see "Tokens" in run.mjs).
+NTS_BENCH_AGREE_NTS="$nts" xargs -P "$jobs" -n 1 -I{} "$root/tooling/gate/token.sh" sh -c '
   name=${0%%	*}
   project=${0#*	}
   if out=$("$NTS_BENCH_AGREE_NTS" check "$project" 2>&1); then

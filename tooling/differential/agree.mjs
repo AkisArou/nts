@@ -85,6 +85,7 @@ import {
 } from "node:fs";
 import { availableParallelism, freemem, homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
+import { withToken } from "../gate/tokens.mjs";
 import { fileURLToPath } from "node:url";
 import { armLines, oneChange } from "../conformance/pin.ts";
 
@@ -511,7 +512,8 @@ await Promise.all(Array.from({ length: Math.min(JOBS, examples.length) }, async 
     // Both binaries in one worker, one after the other: the frontend's
     // snapshot cache is keyed by project and tsgo, which the two share.
     const records = [];
-    for (const p of pins) records.push(await check(p, example));
+    // One of the gate's tokens per check (tokens.mjs).
+    for (const p of pins) records.push(await withToken(() => check(p, example)));
     runs.set(example, records);
   }
 }));

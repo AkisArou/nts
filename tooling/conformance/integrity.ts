@@ -158,6 +158,7 @@ import { fileURLToPath } from "node:url";
 import { OUTCOMES, materialise, outcomeFixtures, runMode } from "./outcomes-project.ts";
 import { frontendFor } from "./pin.ts";
 import { limiter, longestFirst, recordCosts } from "../gate/costs.mjs";
+import { withToken } from "../gate/tokens.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -930,7 +931,8 @@ if (disorder) {
 // are queued longest first (tooling/gate/costs.mjs), so the expensive ones
 // start while every worker is still free.
 const slot = limiter(WORKERS);
-const run = (args) => slot(() =>
+// Each process holds one of the gate's tokens while it runs (tokens.mjs).
+const run = (args) => slot(() => withToken(() =>
   new Promise((resolve) => {
     const child = spawn(NTS, args, { cwd: ROOT, env });
     let stdout = "";
@@ -940,7 +942,7 @@ const run = (args) => slot(() =>
     child.stderr.on("data", (c) => (stderr += c));
     child.on("error", (error) => { clearTimeout(timer); resolve({ error, stdout, stderr }); });
     child.on("close", (status, signal) => { clearTimeout(timer); resolve({ status, signal, stdout, stderr }); });
-  }));
+  })));
 
 const found = [];
 const unmeasured = [];

@@ -46,6 +46,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { frontendFor } from "./pin.ts";
 import { longestFirst } from "../gate/costs.mjs";
+import { withToken } from "../gate/tokens.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -272,7 +273,7 @@ const queue = longestFirst(argv.includes("--examples") ? "types-examples" : "typ
 await Promise.all(Array.from({ length: Math.min(WORKERS, queue.length) }, async () => {
   while (next < queue.length) {
     const project = queue[next++];
-    const r = await run(["types", project]);
+    const r = await withToken(() => run(["types", project]));
     if (r.error || r.signal || r.status !== 0) {
       unmeasured.push(`${project}: nts types ${r.signal ?? r.error?.message ?? `exit ${r.status}`} -- ${r.err.trim().split("\n").pop()?.slice(0, 100) ?? ""}`);
       continue;

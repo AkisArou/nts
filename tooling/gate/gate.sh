@@ -46,7 +46,8 @@ trap 'rm -f "$results"' EXIT
 
 # Inline in `sh -c` rather than a shell function: `export -f` is a bashism and
 # this runs under whatever /bin/sh is.
-ls examples/*/tsconfig.json | xargs -P "$jobs" -n 1 sh -c '
+# Each worker holds one of the gate's tokens (token.sh; see "Tokens" in run.mjs).
+ls examples/*/tsconfig.json | xargs -P "$jobs" -n 1 "$root/tooling/gate/token.sh" sh -c '
   d=$1
   n=$(basename "$(dirname "$d")")
   case "$n" in

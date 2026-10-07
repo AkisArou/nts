@@ -338,7 +338,9 @@ profile() {
   rm -rf "$work"
   mkdir -p "$work"
   sha256sum "${NTS_BIN:-$root/target/release/nts}" | cut -d" " -f1 > "$work/.emitted-by"
-  ls -d "$root"/runtime/node/*/tsconfig.json | xargs -P "$jobs" -n 1 sh -c '
+  # Each worker holds one of the gate's tokens while it runs (token.sh; see
+  # "Tokens" in run.mjs). Outside the gate it only execs.
+  ls -d "$root"/runtime/node/*/tsconfig.json | xargs -P "$jobs" -n 1 "$root/tooling/gate/token.sh" sh -c '
     m=$1
     name=$(basename "$(dirname "$m")")
     out=$("'"${NTS_BIN:-$root/target/release/nts}"'" emit-c "$m" \
@@ -824,7 +826,7 @@ profile() {
   # Sorted afterwards rather than relying on the order they finish in, because
   # the name list is compared against `known_invalid` and a set written in a
   # different order is a different string.
-  invalid=$(ls -d "$root"/runtime/node/*/tsconfig.json | xargs -P "$jobs" -n 1 sh -c '
+  invalid=$(ls -d "$root"/runtime/node/*/tsconfig.json | xargs -P "$jobs" -n 1 "$root/tooling/gate/token.sh" sh -c '
       m=$1
       # A crash is not valid HIR. `grep -q "does NOT verify"` alone read a
       # panicking `nts hir` -- which prints no verdict at all -- as a module
@@ -924,7 +926,7 @@ jobs=${NTS_GATE_JOBS:-$( [ "$cores" -lt "$crowded" ] && echo "$cores" || echo "$
 example_refusals() {
   table="$root/tooling/gate/example-refusals"
   results=$(mktemp)
-  ls examples/*/tsconfig.json | xargs -P "$jobs" -n 1 sh -c '
+  ls examples/*/tsconfig.json | xargs -P "$jobs" -n 1 "$root/tooling/gate/token.sh" sh -c '
     d=$1
     n=$(basename "$(dirname "$d")")
     case "$n" in invalid|unsupported) exit 0 ;; esac
@@ -2179,8 +2181,9 @@ interop() {
   # returned at its first FAILED, so one red project hid whether every project
   # after it still built.
   #
-  # The local projects are split round-robin over NTS_INTEROP_LOCAL_LANES lanes
-  # (default: the slots run.mjs gave the step, else 6): each is an `nts build` of a GTK or native program -- minutes of
+  # The local projects run in NTS_INTEROP_LOCAL_LANES lanes (default: the
+  # workers run.mjs gave the step, else 6), each taking the next project from
+  # one queue: each is an `nts build` of a GTK or native program -- minutes of
   # lowering each, forty of them -- then a few seconds of running it. At three
   # lanes the step was 1,832 s of a 1,843 s gate (2026-10-07, 12 slots). A timer
   # race lost to contention fails the step loudly; it cannot make it pass. If
@@ -2201,32 +2204,57 @@ interop() {
   printf '%s, pid %s, since %s\n' "$root" "$$" "$(date +%H:%M:%S)" > "$interop_lock.who"
   lanes=$(mktemp -d)
   local_lanes=${NTS_INTEROP_LOCAL_LANES:-${NTS_GATE_JOBS:-6}}
-  i=0
+  locals=""
   for script in examples/interop/*/build.sh; do
     project=$(basename "$(dirname "$script")")
     case $project in
-      macos-*|ios-*) lane=apple ;;
-      windows-*|winui-*) lane=windows ;;
-      *) lane=local$((i % local_lanes)); i=$((i + 1)) ;;
+      macos-*|ios-*) printf '%s\n' "$script" >> "$lanes/apple.list" ;;
+      windows-*|winui-*) printf '%s\n' "$script" >> "$lanes/windows.list" ;;
+      *) locals="$locals $project" ;;
     esac
-    printf '%s\n' "$script" >> "$lanes/$lane.list"
   done
-  for list in "$lanes"/*.list; do
-    (
-      while read -r script; do
-        project=$(basename "$(dirname "$script")")
-        out="$PWD/target/interop-$project"
-        rm -rf "$out"
-        if output=$(NTS_BIN="${NTS_BIN:-$PWD/target/release/nts}" sh "$script" "$out" 2>&1 8>&-); then
-          printf 'ok\n' > "$lanes/$project.status"
-        else
-          printf 'failed\n' > "$lanes/$project.status"
-        fi
-        printf '%s' "$output" > "$lanes/$project.out"
-      done < "$list"
-    ) &
+  # **The local projects are one queue, longest first, that every local lane
+  # takes its next project from** -- by what each took last time
+  # (tooling/gate/costs.mjs). Dealt round-robin, one lane drew the projects
+  # with the most builds in them and ran ten minutes after the others had
+  # finished (2026-10-07). `flock` hands each project to exactly one lane.
+  node --input-type=module -e 'import { longestFirst } from "./tooling/gate/costs.mjs"; console.log(longestFirst("interop", process.argv.slice(1), (p) => `examples/interop/${p}`).join("\n"))' $locals \
+    | sed 's|^\(.*\)$|examples/interop/\1/build.sh|' > "$lanes/local.queue"
+  echo 0 > "$lanes/local.next"
+  take() {
+    flock "$lanes/local.lock" sh -c '
+      n=$(($(cat "$1/local.next") + 1))
+      line=$(sed -n "${n}p" "$1/local.queue")
+      [ -n "$line" ] && echo "$n" > "$1/local.next"
+      printf "%s" "$line"' _ "$lanes"
+  }
+  one() {
+    script=$1
+    project=$(basename "$(dirname "$script")")
+    out="$PWD/target/interop-$project"
+    rm -rf "$out"
+    began=$(date +%s)
+    # One token per project build (token.sh; see "Tokens" in run.mjs).
+    if output=$(NTS_BIN="${NTS_BIN:-$PWD/target/release/nts}" "$root/tooling/gate/token.sh" sh "$script" "$out" 2>&1); then
+      printf 'ok\n' > "$lanes/$project.status"
+    else
+      printf 'failed\n' > "$lanes/$project.status"
+    fi
+    printf '%s' "$output" > "$lanes/$project.out"
+    echo $(($(date +%s) - began)) > "$lanes/$project.secs"
+  }
+  for list in "$lanes"/apple.list "$lanes"/windows.list; do
+    [ -f "$list" ] || continue
+    ( while read -r script; do one "$script"; done < "$list" ) &
+  done
+  lane=0
+  while [ "$lane" -lt "$local_lanes" ]; do
+    ( while script=$(take) && [ -n "$script" ]; do one "$script"; done ) &
+    lane=$((lane + 1))
   done
   wait
+  # What each project took, for the next run's order. Order only.
+  node --input-type=module -e 'import { recordCosts } from "./tooling/gate/costs.mjs"; import { readFileSync } from "node:fs"; const [dir, ...ps] = process.argv.slice(1); const t = {}; for (const p of ps) { try { t[p] = Number(readFileSync(`${dir}/${p}.secs`, "utf8")); } catch {} } recordCosts("interop", t);' "$lanes" $locals 2>/dev/null || true
   failed=0
   for script in examples/interop/*/build.sh; do
     project=$(basename "$(dirname "$script")")

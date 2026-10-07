@@ -38,11 +38,14 @@
 //
 // **Scheduling.** Each step has a row below: the slots (workers) it can use,
 // the memory it needs, whether it starts frontends, and what it needs or must
-// follow. Steps run concurrently while the slot, memory and frontend budgets
-// allow, cheap steps first (a failure in a two-minute step should be on screen
-// at minute two) and then the longest first (they set the wall time). Each
-// step's own parallelism follows the slots it was given: `NTS_GATE_JOBS` and the
-// per-tool knobs are set to it, so the frontend cap is a cap on the whole run.
+// follow. The budget is a pool of NTS_GATE_SLOTS tokens (see "Tokens"). Most
+// steps are *elastic*: started with their whole pool of workers, each of which
+// takes a token around the process it runs, so a step's share of the machine
+// follows its work while it runs. The rest -- cargo, nts-suite, the test
+// binaries, parallel inside one process -- hold a fixed grant of slots from
+// start to end. Steps start longest first (cpu seconds in times.tsv); short
+// fixed steps ride beside the budget so the first verdicts arrive in the
+// first minutes.
 //
 // Environment:
 //   NTS_GATE_STEPS        steps to run, space separated (default: all)
@@ -56,6 +59,12 @@
 //                         (default <target>/gate-runs/<time>-<pid>)
 //   NTS_GATE_TIME_STRICT=1  a step much slower than its baseline is a FAIL
 //   NTS_GATE_RECORD_TIMES=1 write this run's times to tooling/gate/times.tsv
+//
+// Set by this file for each step (a step reads them; nobody sets them by hand):
+//   NTS_GATE_JOBS         the workers it may run
+//   NTS_GATE_TOKENS       127.0.0.1:<port> of the token pool (elastic steps)
+//   NTS_GATE_TOKEN_HELD=1 a fixed step: its tools must not ask for tokens
+//   NTS_GATE_STEP         the step's name, sent with each token request
 
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -66,6 +75,7 @@ import {
 import { cpus, totalmem } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createTokenPool } from "./tokenpool.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");
@@ -76,7 +86,12 @@ process.chdir(ROOT);
 // run if the two disagree in either direction.
 //
 //   slots  workers the step can use; it gets NTS_GATE_JOBS = what it was given
+//          (an elastic step gets all of them, and they wait for tokens: its
+//          `mem / slots` is what one token's process may hold)
 //   min    fewest slots it may start with (default: half of slots)
+//   elastic  its workers take a token per process (token.sh, tokens.mjs), so
+//          it holds a share of the budget that moves with the work instead of
+//          a grant fixed when it starts (see "Tokens")
 //   mem    GB it may hold at peak
 //   fe     true when its workers start frontends (counted against FRONTENDS)
 //   nts    true when it drives the compiler: needs the binary and the frontend
@@ -100,43 +115,44 @@ const STEPS = [
   { name: "test262-builtins-cases", slots: 4, min: 2, mem: 5, nts: true, fe: true, doc: "test/built-ins rows reproduce" },
   { name: "test262-rest-cases", slots: 4, min: 2, mem: 5, nts: true, fe: true, doc: "annexB, staging, harness rows reproduce" },
   { name: "outcomes", slots: 1, mem: 1, nts: true, fe: true, doc: "pinned defects still do what they did" },
-  { name: "integrity", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "listings self-consistent over examples, blockers, outcomes" },
+  { name: "integrity", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "listings self-consistent over examples, blockers, outcomes" },
   // Reads integrity-runtime's `hir --prepared` listings when both are in the
   // run (NTS_DEFINITIONS_FROM), rather than lowering the corpus again.
-  { name: "definitions", slots: 4, min: 2, mem: 2, nts: true, fe: true, after: ["integrity-runtime"], doc: "no runtime module emits fewer functions" },
-  { name: "integrity-runtime", slots: 12, min: 4, mem: 4, nts: true, fe: true, doc: "listing rules over the runtime corpus" },
-  { name: "snapshot-cache", slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "a cached snapshot gives the same program" },
-  { name: "assembles", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "runtime LLVM IR assembles" },
-  { name: "types", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "snapshot type tables consistent" },
-  { name: "jvm-verifies", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "runtime and outcomes JVM output verifies" },
+  { name: "definitions", elastic: true, slots: 4, min: 2, mem: 2, nts: true, fe: true, after: ["integrity-runtime"], doc: "no runtime module emits fewer functions" },
+  { name: "integrity-runtime", elastic: true, slots: 12, min: 4, mem: 4, nts: true, fe: true, doc: "listing rules over the runtime corpus" },
+  { name: "snapshot-cache", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "a cached snapshot gives the same program" },
+  { name: "assembles", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "runtime LLVM IR assembles" },
+  { name: "types", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "snapshot type tables consistent" },
+  { name: "jvm-verifies", elastic: true, slots: 8, min: 2, mem: 6, nts: true, fe: true, doc: "runtime and outcomes JVM output verifies" },
   { name: "primitives", slots: 1, mem: 0.1, doc: "docs/primitives.md names exist" },
   { name: "tests", slots: 8, min: 4, mem: 8, lock: "cargo", after: ["build"], doc: "cargo test --workspace" },
   { name: "corpus", slots: 8, min: 4, mem: 6, nts: true, fe: true, doc: "invalid HIR 0, uncompilable C 0, unverifiable class 0" },
   { name: "benches", slots: 1, mem: 1, nts: true, fe: true, doc: "bench cases emit and compile on C, LLVM, JVM" },
-  { name: "example-refusals", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "per-example refusal counts match the table" },
+  { name: "example-refusals", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "per-example refusal counts match the table" },
   { name: "config", slots: 1, mem: 1, doc: "nts.config.ts files coherent" },
   { name: "react-sources", slots: 1, mem: 0.3, doc: "vendored React sources match the manifest" },
-  { name: "profile", slots: 8, min: 2, mem: 3, nts: true, fe: true, doc: "runtime/node emits without a panic, under the refusal ceiling" },
+  { name: "profile", elastic: true, slots: 8, min: 2, mem: 3, nts: true, fe: true, doc: "runtime/node emits without a panic, under the refusal ceiling" },
   { name: "sweep", slots: 1, mem: 1, nts: true, fe: true, doc: "the value-kind cross-product agrees on C" },
-  { name: "llvm", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "every example agrees with node on LLVM" },
-  { name: "llvm-rc", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "every example agrees with node on LLVM under RC" },
-  { name: "jvm", slots: 4, min: 2, mem: 4, nts: true, fe: true, doc: "every example agrees with node on the JVM" },
-  { name: "dex", slots: 4, min: 2, mem: 3, nts: true, fe: true, host: "an Android SDK with build-tools", doc: "d8 accepts emitted classes" },
+  { name: "llvm", elastic: true, slots: 8, min: 2, mem: 6, nts: true, fe: true, doc: "every example agrees with node on LLVM" },
+  { name: "llvm-rc", elastic: true, slots: 8, min: 2, mem: 6, nts: true, fe: true, doc: "every example agrees with node on LLVM under RC" },
+  { name: "jvm", elastic: true, slots: 8, min: 2, mem: 8, nts: true, fe: true, doc: "every example agrees with node on the JVM" },
+  { name: "dex", elastic: true, slots: 8, min: 2, mem: 6, nts: true, fe: true, host: "an Android SDK with build-tools", doc: "d8 accepts emitted classes" },
   { name: "on-device", slots: 1, mem: 1, nts: true, fe: true, host: "an Android device on adb", doc: "bench cases agree on java and dalvikvm" },
-  { name: "bench-agree", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "bench cases agree with node" },
-  { name: "examples", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "every example agrees with node on C" },
-  { name: "rc", slots: 4, min: 2, mem: 3, nts: true, fe: true, doc: "every example agrees under RC, no leak" },
-  { name: "memory", slots: 6, min: 2, mem: 2, nts: true, fe: true, doc: "RC: no leak, same answer, counts at floors" },
+  { name: "bench-agree", elastic: true, slots: 8, min: 2, mem: 6, nts: true, fe: true, doc: "bench cases agree with node" },
+  { name: "examples", elastic: true, slots: 8, min: 2, mem: 6, nts: true, fe: true, doc: "every example agrees with node on C" },
+  { name: "rc", elastic: true, slots: 8, min: 2, mem: 6, nts: true, fe: true, doc: "every example agrees under RC, no leak" },
+  { name: "memory", elastic: true, slots: 8, min: 2, mem: 3, nts: true, fe: true, doc: "RC: no leak, same answer, counts at floors" },
   // After `profile` when both run: build.sh reuses its `emit-c --napi` output
   // (NTS_ADDON_EMITTED) when profile emitted the module cleanly with this binary.
-  { name: "addons", slots: 8, min: 2, mem: 4, nts: true, fe: true, after: ["profile"], doc: "node modules build, load and publish" },
+  { name: "addons", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, after: ["profile"], doc: "node modules build, load and publish" },
   { name: "blockers", slots: 1, mem: 1, nts: true, fe: true, doc: "blocker fixtures still refuse as they say" },
   { name: "divergence", slots: 1, mem: 1, nts: true, fe: true, after: ["addons"], doc: "node divergence instruments" },
   // Favoured: every other step runs at `nice +5` beside it. Two of its projects
   // race a timer against a callback, and contention is what makes that race
   // lose (see the comment above its step line in all.sh); it ran alone, last,
-  // for that reason. Lanes inside it: apple VM, windows VM, six local.
-  { name: "interop", slots: 6, min: 3, mem: 3, nts: true, fe: true, favoured: true, doc: "interop projects build and run" },
+  // for that reason. Lanes inside it: apple VM, windows VM, and one local lane
+  // per worker, taking projects from one queue, longest first.
+  { name: "interop", elastic: true, slots: 12, min: 3, mem: 3, nts: true, fe: true, favoured: true, doc: "interop projects build and run" },
 ];
 const BY_NAME = new Map(STEPS.map((s) => [s.name, s]));
 
@@ -317,7 +333,7 @@ function memAvailableGB() {
 // ---------------------------------------------------------------------------
 const startedAt = Date.now();
 const results = new Map(); // name -> { verdict, reason, ... }
-const running = new Map(); // name -> { child, slots, started }
+const running = new Map(); // name -> { child, slots, started, rider, elastic }
 let interrupted = null;
 let stopping = false;
 let summaryWritten = false;
@@ -339,6 +355,13 @@ function stepEnv(step, slots) {
   // instead of queueing on their lock. What it lints is unchanged.
   if (step.name === "clippy") e.CARGO_TARGET_DIR = join(target, "clippy");
   e.NTS_GATE_RUN_DIR = RUN_DIR;
+  // An elastic step's workers ask for tokens; any other step already holds
+  // its slots, so whatever token-aware tool it runs must not ask again.
+  delete e.NTS_GATE_TOKENS;
+  delete e.NTS_GATE_TOKEN_HELD;
+  e.NTS_GATE_STEP = step.name;
+  if (step.elastic && tokenAddr) e.NTS_GATE_TOKENS = tokenAddr;
+  else e.NTS_GATE_TOKEN_HELD = "1";
   const s = String(slots);
   e.NTS_GATE_JOBS = s;
   e.CARGO_BUILD_JOBS = s;
@@ -379,7 +402,8 @@ function report(name) {
   const log = r.log && existsSync(r.log) ? readFileSync(r.log, "utf8") : "";
   let block = `\n${color(1, name)}\n`;
   if (log) block += log.endsWith("\n") ? log : `${log}\n`;
-  if (r.wall !== undefined) block += `  ${Math.round(r.wall)}s${r.cpu !== undefined ? ` (cpu ${Math.round(r.cpu)}s, ${r.slots} slot${r.slots === 1 ? "" : "s"})` : ""}\n`;
+  const how = r.elastic ? `up to ${r.peak_tokens} token${r.peak_tokens === 1 ? "" : "s"}` : `${r.slots} slot${r.slots === 1 ? "" : "s"}`;
+  if (r.wall !== undefined) block += `  ${Math.round(r.wall)}s${r.cpu !== undefined ? ` (cpu ${Math.round(r.cpu)}s, ${how})` : ""}\n`;
   if (r.verdict === "FAIL") block += `${color(31, "FAILED")}: ${name}\n`;
   else if (r.verdict === "SKIPPED") block += `${color(33, "SKIPPED")}: ${name} -- ${r.reason}\n`;
   process.stdout.write(block);
@@ -391,15 +415,25 @@ function report(name) {
 function used() {
   let slots = 0, mem = 0, fe = 0, riding = 0;
   const locks = new Set();
+  let elastic = 0;
   for (const [name, r] of running) {
     const s = BY_NAME.get(name);
+    if (s.lock) locks.add(s.lock);
+    if (r.elastic) {
+      // What it holds right now: a token is one process of its workers.
+      const held = tok.held.get(name) ?? 0;
+      elastic += 1;
+      slots += held;
+      mem += (s.mem / s.slots) * held;
+      if (s.fe) fe += held;
+      continue;
+    }
     if (r.rider) riding += r.slots;
     else slots += r.slots;
     mem += s.mem;
     if (s.fe) fe += r.slots;
-    if (s.lock) locks.add(s.lock);
   }
-  return { slots, mem, fe, locks, riding };
+  return { slots, mem, fe, locks, riding, elastic };
 }
 
 function blockedBy(step) {
@@ -455,6 +489,14 @@ function admit(step, u) {
   const want = Math.min(step.slots, SLOTS);
   const least = Math.min(step.min ?? Math.max(1, Math.ceil(step.slots / 2)), want);
   if (step.lock && u.locks.has(step.lock)) return 0;
+  if (step.elastic && tokenAddr) {
+    // Started with its whole pool of workers; they wait for tokens, so
+    // starting it takes no slot. A cap on how many wait at once keeps the
+    // idle workers (a shell or node each) to a few hundred megabytes.
+    if (u.elastic >= ELASTIC_CAP) return 0;
+    if (running.size > 0 && memAvailableGB() < 2) return 0;
+    return step.slots;
+  }
   if (running.size === 0) return want; // always make progress
   if (u.mem + step.mem > MEM) return 0;
   if (memAvailableGB() < step.mem + 1) return 0;
@@ -472,20 +514,70 @@ function admit(step, u) {
   return 0;
 }
 
+// ---------------------------------------------------------------------------
+// Tokens.
+//
+// **The budget is a pool of SLOTS tokens, one per running process of work.**
+// A fixed step (cargo, nts-suite, the test binaries: parallel inside one
+// process) holds the slots it was started with until it ends. An elastic
+// step's workers each take a token around the process they run -- token.sh in
+// shell loops, tokens.mjs in node pools -- and give it back when it exits. So
+// a step's share follows its work: `profile` ran its whole life on the two
+// slots it was granted at second 125 while slots freed elsewhere stood idle,
+// and a fixed grant cannot see that.
+//
+// A token is a TCP connection to this process: the client sends one line,
+// `want <step> <pid>`, gets `go` when granted, and holds the token until the
+// connection closes -- which the kernel does however the holder ends, so a
+// token cannot leak. Waiting costs nothing: a worker blocks on a read.
+//
+// Who gets a freed token: the step with the most estimated work left per token
+// it holds (times.tsv's cpu seconds minus the token-seconds it has used), plus
+// the seconds its oldest worker has waited, so a short step is never starved
+// by a long one; the favoured step's claim counts double. Tokens are kept back
+// for the first fixed step that waits only for slots (`withhold`).
+// ---------------------------------------------------------------------------
+const ELASTIC_CAP = Math.max(6, Math.ceil(SLOTS * 0.75));
+let withhold = 0;
+
+function workEstimate(name) {
+  const b = BASE.get(name);
+  const s = BY_NAME.get(name);
+  return b?.cpu > 0 ? b.cpu : estimate(name) * Math.min(s?.slots ?? 1, SLOTS);
+}
+
+const tok = createTokenPool({
+  // `used()` counts the tokens held in an elastic step's share.
+  free: () => (memAvailableGB() < 1 ? 0 : SLOTS - used().slots - withhold),
+  claim: (step, { held, used: spent, waitedS }) => {
+    const left = Math.max(10, workEstimate(step) - spent);
+    const c = left / (held + 1) + waitedS;
+    return BY_NAME.get(step)?.favoured ? 2 * c : c;
+  },
+  eligible: (step) => !BY_NAME.get(step)?.fe || used().fe < FRONTENDS,
+  known: (step) => BY_NAME.has(step),
+  released: () => { if (!stopping) schedule(); },
+});
+let tokenAddr = null;
+const grant = () => { if (tokenAddr) tok.grant(); };
+const account = () => tok.account();
+
 // Only lower the others when a favoured step is in this run at all.
 const FAVOURED_PLANNED = () => plan.some((n) => BY_NAME.get(n).favoured);
 
 let pending = [];
 // Memory is also used by whatever else runs on this box, so a step held back
 // for it is reconsidered every few seconds, not only when one of ours ends.
-const recheck = setInterval(() => { if (!stopping && pending.length) schedule(); }, 5000);
+const recheck = setInterval(() => { if (!stopping && (pending.length || tok.waiting.length)) schedule(); }, 5000);
 recheck.unref();
 
 function schedule() {
   if (stopping) return;
   let progressed = true;
+  withhold = 0;
   while (progressed) {
     progressed = false;
+    withhold = 0;
     for (const name of pending) {
       const step = BY_NAME.get(name);
       const b = blockedBy(step);
@@ -505,14 +597,25 @@ function schedule() {
         progressed = true;
         break;
       }
-      const granted = admit(step, used());
-      if (granted === 0) continue;
+      const u = used();
+      const granted = admit(step, u);
+      if (granted === 0) {
+        // The first step in order that waits only for slots has tokens kept
+        // for it as elastic workers give them back, or elastic steps -- which
+        // ask again every few seconds -- would take each one as it frees and
+        // a fixed step would wait for a gap that never comes.
+        if (!step.elastic && !withhold && !(step.lock && u.locks.has(step.lock))) {
+          withhold = Math.min(step.min ?? Math.max(1, Math.ceil(step.slots / 2)), step.slots, SLOTS);
+        }
+        continue;
+      }
       pending = pending.filter((n) => n !== name);
       start(step, Math.abs(granted), granted < 0);
       progressed = true;
       break;
     }
   }
+  grant();
   if (pending.length === 0 && running.size === 0) done();
 }
 
@@ -532,8 +635,11 @@ function start(step, slots, rider = false) {
   });
   closeSync(fd);
   const started = Date.now();
-  running.set(step.name, { child, slots, started, rider });
-  process.stderr.write(`-- ${step.name} started (${slots} slot${slots === 1 ? "" : "s"}; ${running.size} running)\n`);
+  const elastic = Boolean(step.elastic && tokenAddr);
+  running.set(step.name, { child, slots, started, rider, elastic });
+  process.stderr.write(elastic
+    ? `-- ${step.name} started (${slots} workers on tokens; ${running.size} running)\n`
+    : `-- ${step.name} started (${slots} slot${slots === 1 ? "" : "s"}; ${running.size} running)\n`);
   child.on("exit", (code, signal) => {
     running.delete(step.name);
     const wall = (Date.now() - started) / 1000;
@@ -546,7 +652,9 @@ function start(step, slots, rider = false) {
       }
     } catch {}
     const text = existsSync(log) ? readFileSync(log, "utf8") : "";
+    account();
     const extra = { exit: code, signal, wall, cpu, user, sys, maxrss_kb: maxrss, slots, log, started_at: new Date(started).toISOString() };
+    if (elastic) Object.assign(extra, { elastic: true, peak_tokens: tok.peak.get(step.name) ?? 0, token_s: Math.round(tok.used.get(step.name) ?? 0) });
     if (stopping && (signal || code !== 0)) {
       finish(step.name, "NOT RUN", interrupted ? `stopped: ${interrupted}` : "stopped by fail-fast", extra);
     } else if (code === 0) {
@@ -832,5 +940,7 @@ process.stdout.write(
     `  nts ${ntsBin}${pinned.nts ? ` (run as ${pinned.nts})` : ""}\n  tsgo ${tsgo}\n` + settings() +
     `  steps: ${plan.join(" ")}\n`,
 );
+tokenAddr = await tok.start();
+if (!tokenAddr) process.stderr.write("run.mjs: no token server; elastic steps run at fixed slot counts\n");
 pending = order(plan);
 schedule();

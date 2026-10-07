@@ -104,6 +104,7 @@ import { fileURLToPath } from "node:url";
 import { materialise, outcomeFixtures, OUTCOMES, runMode } from "./outcomes-project.ts";
 import { describe, provenanceOf, frontendFor } from "./pin.ts";
 import { longestFirst, recordCosts } from "../gate/costs.mjs";
+import { withToken } from "../gate/tokens.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -375,7 +376,8 @@ await Promise.all(Array.from({ length: Math.min(WORKERS, queue.length) }, async 
   while (next < queue.length) {
     const project = queue[next++];
     const began = Date.now();
-    await check(project, slot);
+    // One of the gate's tokens per project (tokens.mjs).
+    await withToken(() => check(project, slot));
     timed[project] = (Date.now() - began) / 1000;
   }
 }));
@@ -402,7 +404,7 @@ for (const { project, lines } of shadowed) {
   for (const l of lines.slice(0, 6)) console.log(`                   ${l.slice(0, 220)}`);
   if (lines.length > 6) console.log(`                   ... ${lines.length - 6} more`);
 }
-if (invalidHir.length > 0) console.log(`  invalid HIR, so nothing to verify (outcomes records it): ${invalidHir.length} -- ${invalidHir.map((p) => p.split("/").pop()).join(", ")}`);
+if (invalidHir.length > 0) console.log(`  invalid HIR, so nothing to verify (outcomes records it): ${invalidHir.length} -- ${invalidHir.map((p) => p.split("/").pop()).sort().join(", ")}`);
 for (const u of unmeasured.sort()) console.log(`  NOT MEASURED     ${u}`);
 // Every NTS4009 is a dispatch C and LLVM perform without checking, so each
 // shape must be classified: the JVM's alone by construction, live on C (with

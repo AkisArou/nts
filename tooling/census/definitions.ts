@@ -47,6 +47,7 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { withToken } from "../gate/tokens.mjs";
 import { fileURLToPath } from "node:url";
 import { frontendFor } from "../conformance/pin.ts";
 
@@ -106,7 +107,7 @@ const run = (args) =>
 // every module has its listing. Anything else is NOT MEASURED, never a guess.
 let FROM = process.env.NTS_DEFINITIONS_FROM;
 async function listing(module) {
-  if (!FROM) return run(["hir", "--prepared", module]);
+  if (!FROM) return withToken(() => run(["hir", "--prepared", module]));
   const name = module.replaceAll("/", "_");
   if (!existsSync(join(FROM, `${name}.txt`)) || !existsSync(join(FROM, `${name}.json`))) {
     return { error: { message: `has no listing in ${FROM} -- integrity --runtime did not write one` }, out: "" };

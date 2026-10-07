@@ -90,6 +90,7 @@ import { homedir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { longestFirst, recordCosts } from "../gate/costs.mjs";
+import { withToken } from "../gate/tokens.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -265,7 +266,8 @@ await Promise.all(Array.from({ length: Math.min(WORKERS, queue.length) }, async 
   while (next < queue.length) {
     const project = queue[next++];
     const began = Date.now();
-    await check(project, slot);
+    // One of the gate's tokens per project (tokens.mjs).
+    await withToken(() => check(project, slot));
     timed[project] = (Date.now() - began) / 1000;
   }
 }));
