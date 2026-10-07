@@ -26,17 +26,17 @@ jar_path=${1:-$root/nts-runtime.jar}
 # runs side by side -- removed each other's classes mid-compile, and one failed
 # with `file not found: runtime/jvm/classes/sources.txt` (2026-10-07).
 out=$(mktemp -d "${TMPDIR:-/tmp}/nts-jvm-classes.XXXXXX")
-trap 'rm -rf "$out"' EXIT
+trap 'rm -rf "$out" "$out.list"' EXIT
 find "$root/src" -name '*.java' | sort > "$out/sources.txt"
 javac --release 8 -Xlint:-options -d "$out" @"$out/sources.txt"
 rm -f "$out/sources.txt"
 (
   cd "$out"
-  find . -name '*.class' | sed 's|^\./||' | sort > /tmp/nts-jvm-classes.$$
+  find . -name '*.class' | sed 's|^\./||' | sort > "$out.list"
   jar --create --file "$jar_path" \
       --date=2020-01-01T00:00:00Z \
-      $(cat /tmp/nts-jvm-classes.$$)
-  rm -f /tmp/nts-jvm-classes.$$
+      $(cat "$out.list")
+  rm -f "$out.list"
 )
 rm -rf "$out"
 echo "built $jar_path"
