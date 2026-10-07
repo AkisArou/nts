@@ -5133,6 +5133,57 @@ fn walk_one_declaration(
         }
 }
 
+/// The symbol a `const` declaration's initializer names: `const alias = apply`,
+/// `const typed: (n: number) => number = apply`, and either through an
+/// assertion. `None` for anything else.
+fn const_alias_of(probe: &FuncBuilder, declaration: NodeId) -> Option<u32> {
+    if probe.kind_of(declaration) != Some(syntax::VARIABLE_DECLARATION)
+        || probe.declaration_kind(declaration) != nts_semantic_schema::VariableKind::Const
+    {
+        return None;
+    }
+    let name = probe.name_node(declaration)?;
+    let initializer = declaration_initializer(&probe.children(declaration), name, |id| probe.kind_of(id))?;
+    let initializer = probe.through_assertions(initializer);
+    if probe.kind_of(initializer) != Some(syntax::IDENTIFIER) {
+        return None;
+    }
+    Some(probe.denoted_symbol(probe.node(initializer).symbol?).0)
+}
+
+/// Every `const` alias in the program, as `(alias, named)` symbols: what
+/// [`with_const_aliases`] reads within one body, read over the whole program
+/// for the throw analysis.
+fn const_function_aliases(probe: &FuncBuilder) -> Vec<(u32, u32)> {
+    (0..probe.snapshot.nodes.len())
+        .filter_map(|at| {
+            let declaration = NodeId(u32::try_from(at).ok()?);
+            let named = const_alias_of(probe, declaration)?;
+            Some((probe.node(probe.name_node(declaration)?).symbol?.0, named))
+        })
+        .collect()
+}
+
+/// The function a chain of `const` aliases ends at, where `symbol` is such an
+/// alias: `apply` for `typed` in `const alias = apply; const typed: F = alias`.
+/// `None` where `symbol` is not a `const` alias, or the chain ends anywhere but
+/// a declaration with a body.
+///
+/// Bounded, as the other alias walks are: a chain is a few hops, and a
+/// precondition that lives in a comment expires without anything failing.
+fn function_behind_const(probe: &FuncBuilder, symbol: u32) -> Option<NodeId> {
+    let record = |symbol: u32| probe.snapshot.symbols.get(symbol as usize);
+    let mut at = const_alias_of(probe, *record(symbol)?.declarations.first()?)?;
+    for _ in 0..8 {
+        let declarations = &record(at)?.declarations;
+        if let Some(function) = declarations.iter().find(|at| names_a_body(probe.kind_of(**at))) {
+            return Some(*function);
+        }
+        at = const_alias_of(probe, *declarations.first()?)?;
+    }
+    None
+}
+
 fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwing {
     let nested = |kind: Option<u16>| names_a_body(kind);
     // What each symbol's declarations write: whether one throws, and which
@@ -5227,14 +5278,29 @@ fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwin
     // An imported name is its own symbol pointing at the declaring module's, and
     // the caller asks about the *local* one. Following the alias here keeps
     // `calls_compiled_code` a single lookup.
-    for (index, record) in snapshot.symbols.iter().enumerate() {
-        let Some(to) = record.aliased else { continue };
-        let index = u32::try_from(index).unwrap_or(u32::MAX);
-        if set.contains(&to.0) {
-            set.insert(index);
+    //
+    // **And a `const` initialised with a function's name is one too.** It was
+    // missing, and a call through it is a call to a body that raises made by a
+    // symbol no set contained -- so `const alias = apply; try { alias(n, cb) }
+    // catch {}` lowered with no handler at all, and a `throw` in `cb` ended the
+    // program where node caught it. Call lowering resolves the alias to `apply`
+    // itself; this is the throw analysis asking the same question. A fixpoint,
+    // because an alias may name an alias.
+    let mut aliases: Vec<(u32, u32)> = snapshot
+        .symbols
+        .iter()
+        .enumerate()
+        .filter_map(|(index, record)| Some((u32::try_from(index).ok()?, record.aliased?.0)))
+        .collect();
+    aliases.extend(const_function_aliases(probe));
+    loop {
+        let mut grew = false;
+        for (alias, to) in &aliases {
+            grew |= set.contains(to) && set.insert(*alias);
+            grew |= bodily.contains(to) && bodily.insert(*alias);
         }
-        if bodily.contains(&to.0) {
-            bodily.insert(index);
+        if !grew {
+            break;
         }
     }
     let copyable = copyable_symbols(snapshot, probe, &set, &calls);
@@ -5495,6 +5561,18 @@ fn a_raising_callee_of(
                     .iter()
                     .find_map(|at| the_constructor_declared_by(probe, *at))
             });
+    }
+    // **A `const` naming a function calls that function**, as call lowering
+    // resolves it -- and the checker's own callee for `typed(x)` with `const
+    // typed: (n: number) => number = apply` is the annotation's signature, a
+    // declaration with no copy, so a `try` around it named the ordinary entry
+    // and lost the `throw`.
+    if let Some(callee) = probe.children(call).first()
+        && probe.kind_of(*callee) == Some(syntax::IDENTIFIER)
+        && let Some(symbol) = probe.node(*callee).symbol
+        && let Some(function) = function_behind_const(probe, probe.denoted_symbol(symbol).0)
+    {
+        return Some(probe.implementation_of(function));
     }
     let callee = snapshot.call_targets.get(&call).and_then(|target| target.callee)?;
     Some(probe.implementation_of(callee))
