@@ -323,7 +323,13 @@ export function readCascades(text) {
   return { calls, reads, initializers, statements, unwritten };
 }
 
-const member = (name) => name.slice(name.indexOf("#") + 1);
+/**
+ * A table entry's method, without the bridge a slot may hold it through:
+ * `Sub#read@erased` is `Sub#read`, erased to the slot's representation
+ * (`lower/virtual_returns.rs`).
+ */
+const unbridged = (name) => name.replace(/@erased$/, "");
+const member = (name) => unbridged(name).slice(name.indexOf("#") + 1);
 /** A generic instance is filed under its generic: `R<3054>#m` is `R#m`. */
 const generic = (name) => name.replace(/<\d+>/g, "");
 /**
@@ -548,7 +554,7 @@ export function judge({ prepared, plain, layouts, refusals, whole = true }, sour
       say("owner-has-layout", `\`${name}\` takes \`this\` of type ${id}, which \`layouts\` does not list`);
       continue;
     }
-    if (dispatchedAbove(cls).has(member(name)) && !cls.methods.includes(name)) {
+    if (dispatchedAbove(cls).has(member(name)) && !cls.methods.some((entry) => unbridged(entry) === unbridged(name))) {
       say("override-in-table", `\`${name}\` overrides a method its ancestors dispatch, and its class \`${cls.name}\`'s table does not hold it`);
     }
   }
@@ -661,6 +667,17 @@ function selfTest() {
   // A table that lost an override, with the owner known.
   const lost = judge({ ...clean, layouts: clean.layouts.replace("  methods Other#value\n", "") });
   if (!lost.violations?.some((v) => v.rule === "override-in-table")) return "an override missing from its table was not caught";
+  // A table holding an override through its bridge -- `Other#value@erased`,
+  // the slot's erased form -- holds the override, and the bridge with it.
+  const bridged = judge({
+    ...clean,
+    prepared: clean.prepared.replace(
+      "export func Other#value(this: managed<obj#11>) -> f64 {\n}\n",
+      "export func Other#value(this: managed<obj#11>) -> f64 {\n}\nfunc Other#value@erased(this: managed<obj#11>) -> erased {\n}\n",
+    ).replace(summary(5), summary(6)),
+    layouts: clean.layouts.replace("  methods Other#value\n", "  methods Other#value@erased\n"),
+  });
+  if (bridged.unmeasured || bridged.violations.length !== 0) return `an override held through its bridge read as missing: ${JSON.stringify(bridged)}`;
   // A refused `main` cut from the top level.
   const cut = clean.prepared.replace("  %2 = call total(%1) : f64\n", "");
   // A refused `total` is also absent from the prepared program -- a fixture
