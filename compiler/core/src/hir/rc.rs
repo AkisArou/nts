@@ -548,19 +548,7 @@ fn release_at_last_use(
             break;
         }
         let op = ops[index];
-        let mut read = vec![op];
-        let kind = &leaning.func.values[op.0 as usize].kind;
-        // Until its retain, a value loaded out of something is still that
-        // thing's: `x = o.f; release o; retain x` retains freed memory.
-        if let OpKind::Retain(retained) = kind {
-            read.extend(leaning.definition(*retained).iter().copied());
-        }
-        for operand in super::operands_of(kind) {
-            for leaned in leaning.of(operand).iter().copied() {
-                read.push(leaned);
-                read.extend(block.frame_names.get(&leaned).into_iter().flatten().copied());
-            }
-        }
+        let read = reads_of(&mut leaning, block.frame_names, op);
         for value in read {
             if pending.remove(&value) {
                 after.entry(index).or_default().push(value);
@@ -587,6 +575,31 @@ fn release_at_last_use(
     }
     *ops = rebuilt;
     released
+}
+
+/// What `op` reads, as `release_at_last_use` asks it: the op itself, what each
+/// operand leans on, a retain's definition -- a value loaded out of something
+/// is still that thing's until its retain, and `x = o.f; release o; retain x`
+/// retains freed memory -- and, for each, the frame objects it is another name
+/// for ([`frame_names`]): `x = c.value; release the cell; retain x` is the same
+/// hazard when `c` is a block parameter naming a frame cell (a captured `let`
+/// passed to a closure after an inlined `forEach`, the Chromium lane's second
+/// live-list vector).
+fn reads_of(leaning: &mut Leaning<'_, '_>, frame_names: &rustc_hash::FxHashMap<ValueId, Vec<ValueId>>, op: ValueId) -> Vec<ValueId> {
+    let mut read = vec![op];
+    let kind = &leaning.func.values[op.0 as usize].kind;
+    let mut held: Vec<ValueId> = Vec::new();
+    if let OpKind::Retain(retained) = kind {
+        held.extend(leaning.definition(*retained).iter().copied());
+    }
+    for operand in super::operands_of(kind) {
+        held.extend(leaning.of(operand).iter().copied());
+    }
+    for value in held {
+        read.push(value);
+        read.extend(frame_names.get(&value).into_iter().flatten().copied());
+    }
+    read
 }
 
 /// What a value leans on: itself, and -- where it holds no count of its own
