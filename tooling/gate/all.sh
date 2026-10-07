@@ -2180,12 +2180,13 @@ interop() {
   # after it still built.
   #
   # The local projects are split round-robin over NTS_INTEROP_LOCAL_LANES lanes
-  # (default 3): each is an `nts build` of a GTK or native program -- minutes of
-  # lowering each, forty of them -- then a few seconds of running it. A timer
+  # (default 6): each is an `nts build` of a GTK or native program -- minutes of
+  # lowering each, forty of them -- then a few seconds of running it. At three
+  # lanes the step was 1,832 s of a 1,843 s gate (2026-10-07, 12 slots). A timer
   # race lost to contention fails the step loudly; it cannot make it pass. If
   # that starts happening, `NTS_INTEROP_LOCAL_LANES=1` is the old order.
   lanes=$(mktemp -d)
-  local_lanes=${NTS_INTEROP_LOCAL_LANES:-3}
+  local_lanes=${NTS_INTEROP_LOCAL_LANES:-6}
   i=0
   for script in examples/interop/*/build.sh; do
     project=$(basename "$(dirname "$script")")

@@ -1,45 +1,46 @@
 # Per-step cost on a healthy run: step, wall s, cpu s (user+sys of the step's
 # process tree), slots it ran with. run.mjs starts the longest first and warns
-# when a step's cpu is 2x this and a minute more. Rewrite with
-# NTS_GATE_RECORD_TIMES=1 on a run you have checked is healthy.
-# Seeded 2026-10-07 from the median wall times of 09-22..10-04 gate logs
-# (pre-regression, 4 workers), cpu unknown (0): ordering only, no warnings.
-build	1	0	8
-clippy	15	0	6
-format	1	0	1
-reformat	1	0	1
-records	1	0	1
-test262	5	0	1
-test262-cases	363	0	8
-test262-builtins-cases	55	0	4
-test262-rest-cases	11	0	4
-outcomes	12	0	1
-integrity	53	0	4
-definitions	10	0	4
-integrity-runtime	403	0	4
-snapshot-cache	269	0	4
-assembles	106	0	4
-types	21	0	4
-jvm-verifies	118	0	4
-primitives	1	0	1
-tests	200	0	8
-corpus	5	0	8
-benches	17	0	1
-example-refusals	2	0	4
-config	1	0	1
-react-sources	1	0	1
-profile	263	0	4
-sweep	47	0	1
-llvm	209	0	4
-llvm-rc	209	0	4
-jvm	111	0	4
-dex	120	0	4
-on-device	1	0	1
-bench-agree	194	0	4
-examples	143	0	4
-rc	143	0	4
-memory	60	0	6
-addons	200	0	6
-blockers	27	0	1
-divergence	132	0	1
-interop	1200	0	3
+# when a step's cpu is 2x this and a minute more (wall when cpu is 0). Rewrite
+# with NTS_GATE_RECORD_TIMES=1 on a run you have checked is healthy.
+# Measured 2026-10-07 at a34559ddd (after the Program::cycles fix), 12 slots,
+# load 20-40 from other sessions. Steps that FAILed there (llvm-rc, rc,
+# bench-agree, divergence: red on main) still ran their whole population.
+build	0.2	0.1	6
+clippy	11.0	31.6	6
+format	2.8	2.4	1
+reformat	0.0	0.0	1
+records	0.0	0.0	1
+test262	2.8	2.2	1
+test262-cases	194.2	1242.8	4
+test262-builtins-cases	33.4	182.8	4
+test262-rest-cases	7.4	19.2	3
+outcomes	38.2	44.1	1
+integrity	68.1	151.6	2
+definitions	0.4	0.4	2
+integrity-runtime	596.2	2375.8	4
+snapshot-cache	747.0	1503.2	2
+assembles	255.3	520.1	2
+types	31.2	136.8	3
+jvm-verifies	178.4	918.0	4
+primitives	0.0	0.0	1
+tests	232.2	1837.3	4
+corpus	2.8	25.1	5
+benches	14.8	17.1	1
+example-refusals	3.5	7.3	2
+config	2.2	5.1	1
+react-sources	0.1	0.1	1
+profile	530.0	1032.0	2
+sweep	11.2	11.2	1
+llvm	128.8	231.8	2
+llvm-rc	127.3	184.1	2
+jvm	59.1	102.2	2
+dex	190.5	940.0	2
+on-device	0.0	0.0	1
+bench-agree	446.9	827.7	2
+examples	156.5	245.0	2
+rc	88.6	189.5	4
+memory	8.3	37.0	4
+addons	92.4	173.1	2
+blockers	40.7	49.7	1
+divergence	65.0	47.2	1
+interop	1831.5	5137.0	4

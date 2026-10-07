@@ -135,8 +135,8 @@ const STEPS = [
   // Favoured: every other step runs at `nice +5` beside it. Two of its projects
   // race a timer against a callback, and contention is what makes that race
   // lose (see the comment above its step line in all.sh); it ran alone, last,
-  // for that reason. Lanes inside it: apple VM, windows VM, three local.
-  { name: "interop", slots: 4, min: 2, mem: 3, nts: true, fe: true, favoured: true, doc: "interop projects build and run" },
+  // for that reason. Lanes inside it: apple VM, windows VM, six local.
+  { name: "interop", slots: 6, min: 3, mem: 3, nts: true, fe: true, favoured: true, doc: "interop projects build and run" },
 ];
 const BY_NAME = new Map(STEPS.map((s) => [s.name, s]));
 
@@ -383,14 +383,18 @@ function preflight(step) {
 }
 
 function order(names) {
-  // The most work first (wall x slots from times.tsv): the long steps decide
+  // The most work first (cpu seconds from times.tsv, else wall x slots): the long steps decide
   // when the run ends, so they start while the most slots are free. Tiny steps
   // (see `admit`) run beside them at once whatever the budget, so a cheap check
   // still answers in its first minute.
-  const work = (n) => estimate(n) * Math.min(BY_NAME.get(n).slots, SLOTS);
+  const work = (n) => (BASE.get(n)?.cpu > 0 ? BASE.get(n).cpu : estimate(n) * Math.min(BY_NAME.get(n).slots, SLOTS));
   return [...names].sort((a, b) => work(b) - work(a));
 }
-const tiny = (step) => step.slots === 1 && estimate(step.name) <= 30 && !step.lock;
+// A step that takes a minute or so rides free beside the budget (up to a
+// quarter over it), at its minimum slots: the run's first verdicts arrive in
+// its first minutes, and the long steps are not cut down to a sliver of the
+// budget at t=0 by checks that would have finished almost at once.
+const tiny = (step) => estimate(step.name) <= 90 && !BY_NAME.get(step.name).favoured;
 
 function admit(step, u) {
   const free = SLOTS - u.slots;
@@ -398,7 +402,10 @@ function admit(step, u) {
   const least = Math.min(step.min ?? Math.max(1, Math.ceil(step.slots / 2)), want);
   if (step.lock && u.locks.has(step.lock)) return 0;
   if (running.size === 0) return want; // always make progress
-  if (tiny(step) && u.slots < SLOTS + 4) return 1; // a free rider: seconds, one process
+  if (tiny(step)) {
+    const ride = Math.max(1, Math.min(step.min ?? 1, want));
+    return u.slots + ride <= Math.ceil(SLOTS * 1.25) ? ride : 0;
+  }
   if (free < least) return 0;
   let slots = Math.min(want, free);
   if (step.fe) {
