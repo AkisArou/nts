@@ -20,9 +20,13 @@ LC_ALL=C
 export LC_ALL
 root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 jar_path=${1:-$root/nts-runtime.jar}
-out="$root/classes"
-rm -rf "$out"
-mkdir -p "$out"
+# **The classes go to a directory of this run's own.** They went to
+# `$root/classes`, removed first and last: two builds at once -- the drift test
+# (runtime_jar.rs) and the sabotage test (jvm_sabotage.rs), which the gate now
+# runs side by side -- removed each other's classes mid-compile, and one failed
+# with `file not found: runtime/jvm/classes/sources.txt` (2026-10-07).
+out=$(mktemp -d "${TMPDIR:-/tmp}/nts-jvm-classes.XXXXXX")
+trap 'rm -rf "$out"' EXIT
 find "$root/src" -name '*.java' | sort > "$out/sources.txt"
 javac --release 8 -Xlint:-options -d "$out" @"$out/sources.txt"
 rm -f "$out/sources.txt"
