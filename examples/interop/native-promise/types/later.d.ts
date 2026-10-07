@@ -10,6 +10,8 @@ declare module "c:later" {
   export function doubled(x: c_double): Promise<number>;
   /** Fulfilled with nothing when `settle` runs. */
   export function ready(): Promise<void>;
+  /** Rejected with a `NotAllowedError` when `settle` runs. */
+  export function refused(): Promise<void>;
   /** Settles every promise made so far, in the order they were made. */
   export function settle(): void;
 }

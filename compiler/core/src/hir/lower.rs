@@ -11866,6 +11866,42 @@ fn lower_sequence_arrays(
     }
 }
 
+/// The C name a host rejects a promise with ([`FuncBuilder::lower_reject_error`]).
+pub(crate) const REJECT_ERROR: &str = "nts_promise_reject_error";
+
+/// `nts_promise_reject_error`, in a program declaring a foreign function that
+/// answers a promise -- declaring, not calling: a host compiled once for every
+/// program (the Chromium lane's adapter) refers to it from every promise
+/// member it binds, so every program typed against that surface defines it,
+/// and no other program does.
+fn lower_reject_error(snapshot: &SemanticSnapshot, shared: &Shared, lowered: &mut Lowered, wanted: &mut std::collections::BTreeSet<usize>) {
+    let Some(site) = declared_promise_function(snapshot) else { return };
+    let mut builder = shared.builder(snapshot, NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default), Copy::default());
+    match builder.lower_reject_error(site) {
+        Ok(func) => lowered.program.funcs.push(func),
+        Err(diagnostic) => lowered.diagnostics.push(diagnostic),
+    }
+    builder.harvest(wanted, &mut lowered.arrivals);
+    collect_layouts(&mut lowered.program, builder.layouts);
+}
+
+/// A foreign function a program declares -- a function or method signature
+/// with a native symbol, or a function a scheme module (`c:`, `nts:dom`)
+/// declares -- whose result is a `Promise`.
+fn declared_promise_function(snapshot: &SemanticSnapshot) -> Option<NodeId> {
+    snapshot.nodes.iter().enumerate().find_map(|(at, node)| {
+        let id = NodeId(u32::try_from(at).ok()?);
+        // A native symbol names one; and a function a scheme module declares
+        // -- `c:later`, `nts:dom` -- is one by its own name.
+        let foreign = matches!(node.kind, NodeKind::Syntax(syntax::FUNCTION_DECLARATION | syntax::METHOD_SIGNATURE))
+            && (node.native.as_ref().is_some_and(|native| native.symbol.is_some())
+                || nts_semantic_schema::binding::enclosing_module(snapshot, id).is_some_and(|module| module.contains(':')));
+        let TypeKind::Function(signature) = snapshot.types.get(snapshot.node_types.get(&id)?.0 as usize)?.kind else { return None };
+        let returned = snapshot.signatures.get(signature.0 as usize)?.return_type;
+        (foreign && matches!(representation(snapshot, returned), Some(HirType::Managed(ManagedType::Promise(_))))).then_some(id)
+    })
+}
+
 /// Keep the module-scope statements that lower, and refuse the rest one by one.
 ///
 /// Each statement is tried alone, and one that cannot lower is dropped and named
@@ -13080,8 +13116,10 @@ fn lower_wanted_closures(
         collect_layouts(&mut lowered.program, builder.layouts);
     }
     // And the functions bridges call to make an array of a sequence, which
-    // a closure lowered just above may have asked for.
+    // a closure lowered just above may have asked for; and what a host
+    // rejects a promise with.
     lower_sequence_arrays(snapshot, shared, lowered, wanted);
+    lower_reject_error(snapshot, shared, lowered, wanted);
 }
 
 /// The `const` aliases a closure's body reads, which both of its builders need.
@@ -44542,6 +44580,20 @@ impl<'a> FuncBuilder<'a> {
         class: &str,
         message: ValueId,
     ) -> Result<(ValueId, HirType), Diagnostic> {
+        let origin = self.origin(id);
+        let name = self.push(OpKind::ConstString(class.to_owned()), HirType::Managed(ManagedType::String), origin);
+        self.provided_error_named(id, class, message, name)
+    }
+
+    /// [`Self::provided_error`], its `name` given: a `DOMException` a host
+    /// rejects with is an `Error` named `NotAllowedError`.
+    fn provided_error_named(
+        &mut self,
+        id: NodeId,
+        class: &str,
+        message: ValueId,
+        name: ValueId,
+    ) -> Result<(ValueId, HirType), Diagnostic> {
         // The snapshot's type where the program named the class, and a
         // synthetic one where it did not.
         //
@@ -44580,8 +44632,6 @@ impl<'a> FuncBuilder<'a> {
             object.clone(),
             origin.clone(),
         );
-        let text = HirType::Managed(ManagedType::String);
-        let name = self.push(OpKind::ConstString(class.to_owned()), text, origin.clone());
         for (field, value) in [("message", message), ("name", name)] {
             let Some(at) = layout.index_of(field) else {
                 continue;
@@ -59156,6 +59206,30 @@ impl<'a> FuncBuilder<'a> {
                 && self.walk_method(*ty, "item").is_some()
                 && self.walk_method(*ty, "_get_length").is_some()
         })
+    }
+
+    /// `nts_promise_reject_error(promise, name, message)`: what a host rejects
+    /// a promise a foreign function answered with (`native::promised`) --
+    /// the program's own `Error`, `name` and `message` copied from the C
+    /// strings the host keeps, as an `@ntsThrows` call surfaces a synchronous
+    /// one. A function of the program's, since only the program has its
+    /// `Error`'s layout; declared by `nts_runtime.h` for the host to call.
+    fn lower_reject_error(&mut self, site: NodeId) -> Result<Func, Diagnostic> {
+        let origin = self.origin(site);
+        let text = HirType::NativePointer(super::native::Pointee::Const(Box::new(super::native::Pointee::Scalar(super::native::Scalar::Char))));
+        let promise_ty = HirType::Managed(ManagedType::Promise(Box::new(HirType::Erased)));
+        let param = |name: &str, ty: &HirType| Param { name: name.to_owned(), shape: ParamShape::Ordinary, ty: ty.clone(), origin: origin.clone(), known: Facts::TOP };
+        let params = vec![param("promise", &promise_ty), param("name", &text), param("message", &text)];
+        let promise = self.push(OpKind::Param(0), promise_ty, origin.clone());
+        let name = self.push(OpKind::Param(1), text.clone(), origin.clone());
+        let message = self.push(OpKind::Param(2), text, origin.clone());
+        let string = HirType::Managed(ManagedType::String);
+        let name = self.runtime_call("nts_string_from_required_cstring", vec![name], string.clone(), origin.clone());
+        let message = self.runtime_call("nts_string_from_required_cstring", vec![message], string, origin.clone());
+        let (error, _) = self.provided_error_named(site, "Error", message, name)?;
+        self.runtime_call("nts_promise_reject", vec![promise, error], HirType::Void, origin.clone());
+        self.terminate(Terminator::Return(None));
+        Ok(self.finish(REJECT_ERROR.to_owned(), params, HirType::Void, origin, true))
     }
 
     /// A function made to turn a sequence into an array for a bridge

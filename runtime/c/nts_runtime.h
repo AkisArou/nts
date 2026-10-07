@@ -3804,6 +3804,13 @@ void nts_promise_fulfill_value(NtsPromise *promise, NtsValue value);
 /* Settle with a C handle, into the promise's own slot for one. */
 void nts_promise_fulfill_pointer(NtsPromise *promise, void *pointer);
 void nts_promise_reject(NtsPromise *promise, NtsHeader *reason);
+/* Reject `promise` with an Error named `name` whose message is `message`, both
+ * copied: what a host that answered a promise rejects it with -- a
+ * DOMException's name and message, as an @ntsThrows call surfaces one.
+ * Defined by the program, which alone has its Error's layout, in every
+ * program that declares a foreign function answering a promise. */
+void nts_promise_reject_error(NtsPromise *promise, const char *name,
+                              const char *message);
 
 /* Run `reaction` when it settles, or on the microtask queue if it already has.
  * Already-settled does *not* run inline: that would change the tick count,

@@ -407,6 +407,9 @@ pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
             }
         }
     }
+    // What a host calls, which nothing in the program does: rejecting a
+    // promise a foreign function answered (`lower::REJECT_ERROR`).
+    names.extend(program.funcs.iter().filter(|func| func.name == super::lower::REJECT_ERROR).map(|func| func.name.as_str()));
     names
 }
 

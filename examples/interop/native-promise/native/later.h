@@ -5,6 +5,7 @@
 
 NtsPromise *doubled(double x);
 NtsPromise *ready(void);
+NtsPromise *refused(void);
 void settle(void);
 
 #endif
