@@ -4740,6 +4740,9 @@ fn drop_readers_of_unwritten_globals(lowered: &mut lower::Lowered) {
         .filter(|(_, global)| global.deferred)
         .map(|(at, _)| u32::try_from(at).unwrap_or(u32::MAX))
         .filter(|at| !written.contains(at))
+        // And every global a skipped statement would have assigned, written
+        // elsewhere or not: see `Lowered::stale_globals`.
+        .chain(lowered.stale_globals.iter().copied())
         .collect();
     if unwritten.is_empty() {
         settle(lowered);
@@ -4752,8 +4755,19 @@ fn drop_readers_of_unwritten_globals(lowered: &mut lower::Lowered) {
     // *calls*, which `drop_callers_of_refused` settles below.
     let mut refused = Vec::new();
     for func in &lowered.program.funcs {
+        // **Not module evaluation itself, for a stale global.** Evaluation goes on
+        // past a skipped statement by design (NTS1005), and refusing it whole for
+        // reading what that statement would have assigned dropped every
+        // statement after it -- the module's whole evaluation -- to protect the
+        // few that read the value; integrity reports exactly that as a
+        // `top-level-cut`. The functions answering from it are what is refused.
+        let evaluation = lower::evaluates_module_scope(&func.name);
         let read = func.values.iter().find_map(|op| match &op.kind {
-            OpKind::GlobalGet(at) if unwritten.contains(at) => Some((*at, op.origin.clone())),
+            OpKind::GlobalGet(at)
+                if unwritten.contains(at) && !(evaluation && lowered.stale_globals.contains(at)) =>
+            {
+                Some((*at, op.origin.clone()))
+            }
             _ => None,
         });
         if let Some((at, origin)) = read {
@@ -4781,22 +4795,20 @@ fn drop_readers_of_unwritten_globals(lowered: &mut lower::Lowered) {
         //
         // Zero occurrences across `runtime/node` and `runtime/web-platform`, so the
         // population is the shape React found and whatever shares it.
+        let why = if lowered.stale_globals.contains(&at) {
+            format!(
+                "it reads `{}`, which a module statement evaluation skips would have assigned",
+                global.name
+            )
+        } else {
+            format!("it reads `{}`, whose initializer was not compiled", global.name)
+        };
         lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
             "NTS1003",
-            format!(
-                "`{name}` cannot be compiled because it reads `{}`, whose initializer was not \
-                 compiled",
-                global.name
-            ),
+            format!("`{name}` cannot be compiled because {why}"),
             origin.location,
         ));
-        lowered.program.uncompiled.push((
-            name.clone(),
-            format!(
-                "it reads `{}`, whose initializer was not compiled",
-                global.name
-            ),
-        ));
+        lowered.program.uncompiled.push((name.clone(), why));
         lowered.program.funcs.retain(|func| func.name != name);
     }
     // A function dropped here may have been the only caller of another, which
@@ -5743,6 +5755,11 @@ fn excise_from_initializer(
     }
 
     for (global, callee, origin) in cuts.globals {
+        // A store cut out of evaluation leaves the global stale, whatever else
+        // still writes it: `try { actual = early(3) } catch { actual = 7 }` keeps
+        // the catch's store and loses the one that runs. See
+        // `Lowered::stale_globals`.
+        lowered.stale_globals.insert(global);
         let name = lowered
             .program
             .globals

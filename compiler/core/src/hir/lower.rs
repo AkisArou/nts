@@ -217,6 +217,13 @@ pub struct Lowered {
     pub refused_at: rustc_hash::FxHashSet<NodeId>,
     /// See [`Arrivals`].
     pub arrivals: Arrivals,
+    /// Globals a module statement that evaluation skips would have assigned
+    /// (`NTS1005`): whatever they hold when read is not what the program
+    /// computes, so [`super::drop_readers_of_unwritten_globals`] refuses their
+    /// readers. A static initializer does not save one -- `export let actual =
+    /// 0` reassigned by a cut `try { actual = early(3) } catch { actual = 7 }`
+    /// answered 0 where node answers 3.
+    pub stale_globals: rustc_hash::FxHashSet<u32>,
 }
 
 impl Lowered {
@@ -11939,6 +11946,7 @@ fn drop_the_unlowerable(
     lowered: &mut Lowered,
 ) {
     let mut lost = Vec::new();
+    let mut stale = Vec::new();
     statements.retain(|statement| {
         let mut probe = shared.builder(snapshot, NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default), Copy::default());
         let attempt = if probe.kind_of(*statement) == Some(syntax::VARIABLE_STATEMENT) {
@@ -11985,10 +11993,16 @@ fn drop_the_unlowerable(
                     .map(|name| format!("`{name}`"))
                     .collect();
                 lost.push((probe.origin(*statement).location, diagnostic, names));
+                // And every global the statement assigns, in any form
+                // (`assigned_symbols`), which keeps its old value now.
+                let mut assigned = Vec::new();
+                probe.assigned_symbols(*statement, &mut assigned);
+                stale.extend(assigned.iter().filter_map(|symbol| probe.module.variables.get(symbol).copied()));
                 false
             }
         }
     });
+    lowered.stale_globals.extend(stale);
     for (statement, diagnostic, names) in lost {
         lowered.diagnostics.push(diagnostic);
         // A *consequence*, and coded as one. The cause is the diagnostic
