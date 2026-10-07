@@ -86,7 +86,7 @@ export function main(document: Document): void {
   newResizeObserver((entries: ResizeObserverEntrySequence, observer: ResizeObserver): void => {
     for (let i = 0; i < entries.length; i += 1) { /* entries.item(i)!.contentRect */ }
   }).observe(canvas);
-  const shadow = document.createElement("div").attachShadow("open");   // the mode, not { mode }
+  const shadow = document.createElement("div").attachShadow({ mode: "open" });
 }
 ```
 

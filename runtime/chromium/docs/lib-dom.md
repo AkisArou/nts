@@ -198,7 +198,6 @@ generated, and checked against page script by the differential vectors.
 | `record.addedNodes`, `observer.takeRecords()`, `event.composedPath()` (a `sequence<T>`) | `TSequence`: `length` and `item(i)` | a sequence result |
 | `ctx.fill("evenodd")`, `history.scrollRestoration = "manual"` (an IDL enum) | the enum is its literal union (`type SelectionMode = "select" \| ...`), crossing as a C string matched against Blink's enum class; outside it, an argument throws the binding's TypeError and an attribute keeps its value with a console warning. A value read (`document.readyState`) is the union too, answered as Blink's own static literal | an enum-typed argument or attribute |
 | `requestIdleCallback(f, { timeout: 500 })` | `requestIdleCallback(f, 500)`; `f(deadline)` gets the IdleDeadline (`timeRemaining()`, `didTimeout`) | an options argument |
-| `el.attachShadow({ mode: "open" })` | `el.attachShadow("open")` (hand-written): ShadowRootInit's `mode` is a required enum, which a dictionary struct cannot carry | the mode literal |
 | `canvas.getContext("2d")` | the same, typed `CanvasRenderingContext2D \| null` for the literal `"2d"` (hand-written) | the literal id |
 | `ctx.fillStyle = gradient` (Blink types it `any`) | `_set_fillStyle_gradient(g)`; `ctx.fillStyle = "red"` is the property, its string arm | the value's static type |
 | `new Event("x", { bubbles: true })` | `newEvent("x", { bubbles: true })`: `Fields<EventInit>`, a C struct written as the literal | a dictionary argument |

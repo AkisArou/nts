@@ -2,6 +2,7 @@
 /** Opt-in Chromium checkout/build; run directly with Node 24. */
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { sha256File } from "./hash.ts";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, statfsSync, writeFileSync } from "node:fs";
 import { delimiter, relative, resolve } from "node:path";
 import { activeChromiumBuild, buildProfile } from "./profiles.ts";
@@ -14,7 +15,7 @@ const profile = buildProfile(process.argv.slice(3));
 const buildDir = resolve(source, profile.directory);
 const evidence = resolve(root, profile.evidence);
 const writerPidFile = resolve(root, "target/chromium/build.pid");
-const hash = (path: string): string => createHash("sha256").update(readFileSync(path)).digest("hex");
+const hash = sha256File;
 
 interface Pin { url: string; revision: string; version?: string }
 interface Lock { chromium: Pin; depot_tools: Pin }

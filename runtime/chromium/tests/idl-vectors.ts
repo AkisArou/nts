@@ -399,7 +399,7 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   // host outside it.
   const shadowHost = d.createElement("div");
   root.appendChild(shadowHost);
-  const shadow = shadowHost.attachShadow("open");
+  const shadow = shadowHost.attachShadow({ mode: "open" });
   const slot = asHTMLSlotElement(d.createElement("slot"))!;
   slot.name = "title";
   shadow.appendChild(slot);
@@ -417,11 +417,12 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
     + "|" + (slotted.assignedSlot === slot ? "assigned" : "unassigned"));
   const closedHost = d.createElement("section");
   root.appendChild(closedHost);
-  const closed = closedHost.attachShadow("closed");
+  const closed = closedHost.attachShadow({ mode: "closed" });
   log("closedShadow", closed.mode + "|" + (closedHost.shadowRoot === null ? "hidden" : "exposed"));
-  thrown("shadowTwice", () => { shadowHost.attachShadow("open"); });
-  thrown("shadowMode", () => { d.createElement("article").attachShadow(("sideways" + "") as "open"); });
-  thrown("shadowOnInput", () => { d.createElement("input").attachShadow("open"); });
+  thrown("shadowTwice", () => { shadowHost.attachShadow({ mode: "open" }); });
+  thrown("shadowMode", () => { d.createElement("article").attachShadow({ mode: "sideways" + "" }); });
+  thrown("shadowNoMode", () => { d.createElement("article").attachShadow({}); });
+  thrown("shadowOnInput", () => { d.createElement("input").attachShadow({ mode: "open" }); });
   const crossing = { target: "", path: 0, phase: 0, seen: "no" };
   const onPing = (event: Event): void => {
     crossing.target = event.target === shadowHost ? "host" : event.target === shadowButton ? "inner" : "other";

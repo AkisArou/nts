@@ -256,10 +256,16 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
   // The document's main-world script state: what a member Blink's IDL marks
   // [CallWith=ScriptState] is given, the one page script's binding passes.
   // The generated call enters it for that call only (dom_idl.cc).
+  // The document's main-world script state, looked up once: it is the
+  // document's for as long as the document is (a navigation makes a new
+  // document and a new context).
   blink::ScriptState *MainWorld() const {
-    auto *script = blink::ToScriptStateForMainWorld(document->GetFrame());
-    CHECK(script && script->ContextIsValid());
-    return script;
+    if (!main_world_) {
+      main_world_ = blink::ToScriptStateForMainWorld(document->GetFrame());
+      CHECK(main_world_);
+    }
+    CHECK(main_world_->ContextIsValid());
+    return main_world_.Get();
   }
   // A job queued by native code, run as a microtask or at the end of the
   // checkpoint; idle work, between frames. Each revoked with the document.
@@ -320,6 +326,7 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
   }
 
   blink::Persistent<blink::Document> document;
+  mutable blink::Persistent<blink::ScriptState> main_world_;
   blink::Persistent<ListenerSet> listeners;
   NtsDomInvoke invoke = nullptr;
   raw_ptr<void> invoke_host;

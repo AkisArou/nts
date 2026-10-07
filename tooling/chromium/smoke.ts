@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { sha256File } from "./hash.ts";
 import { createWriteStream } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
 import { mkdir, readFile, readdir, readlink, writeFile } from "node:fs/promises";
@@ -173,12 +174,6 @@ try {
       for (const style of ["fillStyle", "strokeStyle"])
         for (const arm of ["string", "gradient"])
           CanvasRenderingContext2D.prototype["_set_" + style + "_" + arm] = function (value) { this[style] = value; };
-      // \`attachShadow(mode)\`: nts:dom takes the mode itself, page script
-      // the ShadowRootInit dictionary holding it.
-      const attachShadow = Element.prototype.attachShadow;
-      Element.prototype.attachShadow = function (init) {
-        return attachShadow.call(this, typeof init === "string" ? { mode: init } : init);
-      };
       // nts:dom spells addEventListener's options as trailing arguments
       // (capture, once, signal); page script, as a dictionary.
       const addEventListener = EventTarget.prototype.addEventListener;
@@ -197,7 +192,6 @@ try {
       container.appendChild(section);
       const transcript = idlTranscript(document, section, { failure });
       EventTarget.prototype.addEventListener = addEventListener;
-      Element.prototype.attachShadow = attachShadow;
       const pre = document.createElement('pre');
       pre.id = 'native-idl';
       pre.textContent = transcript;
@@ -349,7 +343,7 @@ try {
   const result = {
     executable, args, fixture, readyMs, before, after, processes: records,
     chromiumRevision, gnArgs, sourceDiffSha256: createHash("sha256").update(sourceDiff).digest("hex"),
-    executableSha256: createHash("sha256").update(await readFile(executable)).digest("hex"),
+    executableSha256: sha256File(executable),
     fixtureSha256: createHash("sha256").update(await readFile(fileURLToPath(fixture))).digest("hex"),
     nativeManifestSha256,
     runtimeResources: { targetLabel, manifest: `${output}/runtime-deps.txt`, method: "GN-declared runtime dependencies, including test fixtures; not a minimal distribution or a list of host system libraries." },

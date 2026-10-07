@@ -47,17 +47,23 @@ worker's thread; nothing here assumes a single thread except the node root set
 ## 2. Entry: one per native callback
 
 Every native callback -- an event, a task, a microtask, an idle period -- is
-one *entry* (`nts_blink_dom_entry`, a listener's dispatch, a queued job): it
-holds a `v8::HandleScope` and a `v8::MicrotasksScope(kRunMicrotasks)` on the
-document agent's own queue (the agent's `EventLoop::microtask_queue()`, not the
+one *entry* (`nts_blink_dom_entry`, a listener's dispatch, a queued job;
+`nts_dom::ProgramScope`): it enters the main world's V8 context, with its
+handle scope (`ScriptState::Scope`), and holds a
+`v8::MicrotasksScope(kRunMicrotasks)` on the document agent's own queue (the agent's `EventLoop::microtask_queue()`, not the
 isolate's default: `core/execution_context/window_agent.cc:15-26`), and
 nothing per operation. It also makes its context the thread's *entered* one
 (`nts_dom::entered`, restored on return), which is how a DOM call finds the
 document and caches it needs: no call carries a context, so a method's
 receiver is its first argument, and a call outside an entry -- an embedder
 error, since program code runs only inside one -- stops the renderer.
-Operations enter no V8 context and create no `TryCatch`: a DOM exception is
-recorded with `DummyExceptionStateForTesting` (section 7).
+Operations enter no V8 context of their own and create no `TryCatch`: a DOM
+exception is recorded with `DummyExceptionStateForTesting` (section 7). The
+entry's context is there because Blink code a DOM call reaches may ask for
+the current world, as it may when page script's bindings call it:
+`Text::splitText` looks up wrappers, and with no context entered a debug
+build stops on `ScriptState::From`'s DCHECK (a release build read an empty
+context). The document's main-world ScriptState is looked up once.
 
 That is what `V8ScriptRunner::CallFunction` supplies a JavaScript callback, and
 for the same reason: nested script (a custom element's reaction, say) cannot
@@ -298,8 +304,8 @@ one string member takes the string, and `asX` narrows with Blink's
 arguments. An IDL enum is its literal union, matched against Blink's
 enum class before the call. A member whose types do not map yet (`any`,
 callbacks other than closures, unbound interfaces, `[RuntimeEnabled]`) is
-skipped and listed in `bindgen/report.json`, never guessed: 4709 functions
-bound, 1671 members listed.
+skipped and listed in `bindgen/report.json`, never guessed: 4719 functions
+bound, 1641 members listed.
 
 Blink's modules component is linked for what the allowlist names under
 `"modules"`: whole interfaces (CanvasRenderingContext2D, CanvasGradient,

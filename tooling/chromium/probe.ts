@@ -2,6 +2,7 @@
 /** Stage the checked native fixture and generate its opt-in renderer build. */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { sha256File } from "./hash.ts";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, resolve } from "node:path";
 import { activeChromiumBuild, buildProfile } from "./profiles.ts";
@@ -29,7 +30,7 @@ const appArchive = options.get("--app");
 const activeBuild = activeChromiumBuild(root);
 if (activeBuild) throw new Error(`Build ${activeBuild} is running; finish it before staging the probe`);
 
-const hash = (file: string): string => createHash("sha256").update(readFileSync(file)).digest("hex");
+const hash = sha256File;
 const revision = (dir: string): string => execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 const lock = JSON.parse(readFileSync(resolve(root, "third_party/chromium/upstream.lock.json"), "utf8")) as { chromium: { revision: string }; depot_tools: { revision: string } };
 if (revision(source) !== lock.chromium.revision || revision(depot) !== lock.depot_tools.revision) throw new Error("Checkout differs from source/tool lock");

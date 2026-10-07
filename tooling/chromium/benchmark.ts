@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { openPage } from "./browser.ts";
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { sha256File } from "./hash.ts";
 import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -95,12 +96,12 @@ const buildRecord = JSON.parse(await readFile(resolve(root, evidenceDirectory, "
 assert.equal(buildRecord.state, "passed", "Require a completed successful build");
 assert.equal(buildRecord.target, "nts_shell");
 assert.equal(buildRecord.gnArgsSha256, hash(argsText), "Build arguments changed after building");
-assert.equal(buildRecord.executableSha256, hash(await readFile(executable)), "Executable changed after building");
+assert.equal(buildRecord.executableSha256, sha256File(executable), "Executable changed after building");
 assert.equal(buildRecord.nativeManifestSha256, hash(await readFile(resolve(source, "nts/manifest.json"))), "Staging changed after building; rebuild first");
 const fixturePath = resolve(root, `runtime/chromium/benchmarks/pages/${workload}/index.html`);
 const v8Executable = resolve(dirname(executable), "content_shell");
 const v8FixturePath = resolve(root, `runtime/chromium/benchmarks/pages/${workload}-v8/index.html`);
-assert.equal(buildRecord.v8ControlExecutableSha256, hash(await readFile(v8Executable)), "Build the unmodified V8 control with the same profile");
+assert.equal(buildRecord.v8ControlExecutableSha256, sha256File(v8Executable), "Build the unmodified V8 control with the same profile");
 await mkdir(output, {recursive:true});
 const measurements: Array<{ run: number; order: Mode[]; native: Measurements; v8: Measurements; launches: Record<Mode, LaunchResult> }> = [];
 
@@ -401,8 +402,8 @@ const gc = traceGc ? await Promise.all(measurements.flatMap(run => (["native", "
 const percentile = (values:number[], fraction:number):number => values[Math.floor((values.length-1)*fraction)];
 const provenance = {observedAt:new Date().toISOString(),workload,gc,diagnosticJsFlags,profiledRenderer:profileRenderer || undefined,traced:trace || undefined,collection:workload === "rows" ? collection : undefined,backend,debugEngine,
   scope:debugEngine?"Diagnostic architecture comparison in debug Chromium; not a production performance claim":"Optimized static Chromium (no DCHECKs) architecture comparison; not an official/PGO distribution or whole-application speedup",
-  argsText,cpu,runs,buildRecord,executable,executableSha256:hash(await readFile(executable)),fixtureSha256:hash(await readFile(fixturePath)),
-  v8Executable,v8ExecutableSha256:hash(await readFile(v8Executable)),v8FixtureSha256:hash(await readFile(v8FixturePath)),
+  argsText,cpu,runs,buildRecord,executable,executableSha256:sha256File(executable),fixtureSha256:hash(await readFile(fixturePath)),
+  v8Executable,v8ExecutableSha256:sha256File(v8Executable),v8FixtureSha256:hash(await readFile(v8FixturePath)),
   chromiumRevision:execFileSync("git",["-C",source,"rev-parse","HEAD"],{encoding:"utf8"}).trim(),nativeManifestSha256:hash(await readFile(resolve(source,"nts/manifest.json"))),
   compilerCheck:JSON.parse(await readFile(resolve(root,"target/chromium/native-bootstrap/check-result.json"),"utf8")),
   cpuInfo:execFileSync("lscpu",[],{encoding:"utf8"})};

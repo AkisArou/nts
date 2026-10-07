@@ -1,5 +1,5 @@
 {
-  "bound": 4709,
+  "bound": 4719,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -313,11 +313,6 @@
     },
     {
       "interface": "Element",
-      "member": "attachShadow/1",
-      "why": "dictionary ShadowRootInit's required member mode (dictionary member of type ShadowRootMode)"
-    },
-    {
-      "interface": "Element",
       "member": "beforeHTML/2",
       "why": "[RuntimeEnabled]"
     },
@@ -393,18 +388,8 @@
     },
     {
       "interface": "BoxQuadOptions",
-      "member": "box",
-      "why": "dictionary member of type optional CSSBoxType"
-    },
-    {
-      "interface": "BoxQuadOptions",
       "member": "relativeTo",
       "why": "dictionary member of type optional GeometryNode"
-    },
-    {
-      "interface": "Element",
-      "member": "getBoxQuads/1",
-      "why": "dictionary BoxQuadOptions has no member a C struct can carry"
     },
     {
       "interface": "GetHTMLOptions",
@@ -588,23 +573,8 @@
     },
     {
       "interface": "FullscreenOptions",
-      "member": "navigationUI",
-      "why": "dictionary member of type optional FullscreenNavigationUI"
-    },
-    {
-      "interface": "FullscreenOptions",
       "member": "screen",
       "why": "dictionary member of type optional Screen"
-    },
-    {
-      "interface": "Element",
-      "member": "webkitRequestFullScreen/1",
-      "why": "dictionary FullscreenOptions has no member a C struct can carry"
-    },
-    {
-      "interface": "Element",
-      "member": "webkitRequestFullscreen/1",
-      "why": "dictionary FullscreenOptions has no member a C struct can carry"
     },
     {
       "interface": "CharacterData",
@@ -695,11 +665,6 @@
       "interface": "Text",
       "member": "convertRectFromNode/2",
       "why": "parameter type GeometryNode"
-    },
-    {
-      "interface": "Text",
-      "member": "getBoxQuads/1",
-      "why": "dictionary BoxQuadOptions has no member a C struct can carry"
     },
     {
       "interface": "Document",
@@ -2220,11 +2185,6 @@
       "interface": "Document",
       "member": "exitPictureInPicture/0",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "Document",
-      "member": "getBoxQuads/1",
-      "why": "dictionary BoxQuadOptions has no member a C struct can carry"
     },
     {
       "interface": "Document",
@@ -3777,16 +3737,6 @@
       "why": "dictionary member of type optional Window?"
     },
     {
-      "interface": "KeyboardEventInit",
-      "member": "code",
-      "why": "dictionary member of type optional DOMString"
-    },
-    {
-      "interface": "KeyboardEventInit",
-      "member": "key",
-      "why": "dictionary member of type optional DOMString"
-    },
-    {
       "interface": "DOMRectReadOnly",
       "member": "toJSON/0",
       "why": "result type object"
@@ -4213,11 +4163,6 @@
     },
     {
       "interface": "InputEventInit",
-      "member": "inputType",
-      "why": "dictionary member of type optional DOMString"
-    },
-    {
-      "interface": "InputEventInit",
       "member": "targetRanges",
       "why": "dictionary member of type optional sequence<StaticRange>"
     },
@@ -4250,11 +4195,6 @@
       "interface": "PointerEventInit",
       "member": "height",
       "why": "dictionary member whose default 1 is not zero"
-    },
-    {
-      "interface": "PointerEventInit",
-      "member": "pointerType",
-      "why": "dictionary member of type optional DOMString"
     },
     {
       "interface": "PointerEventInit",
@@ -6412,16 +6352,6 @@
       "why": "parameter type ResizeObserverCallback"
     },
     {
-      "interface": "ResizeObserverOptions",
-      "member": "box",
-      "why": "dictionary member of type optional ResizeObserverBoxOptions"
-    },
-    {
-      "interface": "ResizeObserver",
-      "member": "observe/2",
-      "why": "dictionary ResizeObserverOptions has no member a C struct can carry"
-    },
-    {
       "interface": "IntersectionObserver",
       "member": "constructor/2",
       "why": "parameter type IntersectionObserverCallback"
@@ -6480,16 +6410,6 @@
       "interface": "CanvasRenderingContext2D",
       "member": "beginLayer/1",
       "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "ImageDataSettings",
-      "member": "colorSpace",
-      "why": "dictionary member of type optional PredefinedColorSpace"
-    },
-    {
-      "interface": "CanvasRenderingContext2D",
-      "member": "createImageData/3",
-      "why": "dictionary ImageDataSettings has no member a C struct can carry"
     },
     {
       "interface": "CanvasRenderingContext2D",
@@ -6570,11 +6490,6 @@
       "interface": "CanvasRenderingContext2D",
       "member": "getContextAttributes/0",
       "why": "result type CanvasRenderingContext2DSettings"
-    },
-    {
-      "interface": "CanvasRenderingContext2D",
-      "member": "getImageData/5",
-      "why": "dictionary ImageDataSettings has no member a C struct can carry"
     },
     {
       "interface": "CanvasRenderingContext2D",
@@ -7407,11 +7322,6 @@
       "why": "dictionary member of type optional Window?"
     },
     {
-      "interface": "CompositionEventInit",
-      "member": "data",
-      "why": "dictionary member of type optional DOMString"
-    },
-    {
       "interface": "TouchEventInit",
       "member": "sourceCapabilities",
       "why": "dictionary member of type optional InputDeviceCapabilities?"
@@ -7447,16 +7357,6 @@
       "why": "dictionary member of type optional DataTransfer?"
     },
     {
-      "interface": "AnimationEventInit",
-      "member": "animationName",
-      "why": "dictionary member of type optional DOMString"
-    },
-    {
-      "interface": "AnimationEventInit",
-      "member": "pseudoElement",
-      "why": "dictionary member of type optional DOMString"
-    },
-    {
       "interface": "AnimationEvent",
       "member": "get pseudoTarget",
       "why": "[RuntimeEnabled]"
@@ -7465,16 +7365,6 @@
       "interface": "AnimationEvent",
       "member": "get animation",
       "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "TransitionEventInit",
-      "member": "propertyName",
-      "why": "dictionary member of type optional DOMString"
-    },
-    {
-      "interface": "TransitionEventInit",
-      "member": "pseudoElement",
-      "why": "dictionary member of type optional DOMString"
     },
     {
       "interface": "TransitionEvent",
@@ -7502,29 +7392,9 @@
       "why": "[RuntimeEnabled]"
     },
     {
-      "interface": "HashChangeEventInit",
-      "member": "newURL",
-      "why": "dictionary member of type optional DOMString"
-    },
-    {
-      "interface": "HashChangeEventInit",
-      "member": "oldURL",
-      "why": "dictionary member of type optional DOMString"
-    },
-    {
       "interface": "ErrorEventInit",
       "member": "error",
       "why": "dictionary member of type optional any"
-    },
-    {
-      "interface": "ErrorEventInit",
-      "member": "filename",
-      "why": "dictionary member of type optional DOMString"
-    },
-    {
-      "interface": "ErrorEventInit",
-      "member": "message",
-      "why": "dictionary member of type optional DOMString"
     },
     {
       "interface": "ErrorEvent",
@@ -8043,11 +7913,6 @@
     },
     {
       "interface": "ImageData",
-      "member": "constructor/3",
-      "why": "dictionary ImageDataSettings has no member a C struct can carry"
-    },
-    {
-      "interface": "ImageData",
       "member": "constructor/4",
       "why": "parameter type Uint8ClampedArray"
     },
@@ -8228,28 +8093,13 @@
     },
     {
       "interface": "OptionalEffectTiming",
-      "member": "direction",
-      "why": "dictionary member of type optional PlaybackDirection"
-    },
-    {
-      "interface": "OptionalEffectTiming",
       "member": "duration",
       "why": "dictionary member of type optional (unrestricted double or CSSNumericValue or DOMString)"
     },
     {
       "interface": "OptionalEffectTiming",
-      "member": "easing",
-      "why": "dictionary member of type optional DOMString"
-    },
-    {
-      "interface": "OptionalEffectTiming",
       "member": "endDelay",
       "why": "dictionary member of type optional (double or CSSNumericValue)"
-    },
-    {
-      "interface": "OptionalEffectTiming",
-      "member": "fill",
-      "why": "dictionary member of type optional FillMode"
     },
     {
       "interface": "KeyframeEffect",

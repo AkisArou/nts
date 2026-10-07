@@ -13,8 +13,6 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/scheduler/web_scheduler_tracked_feature.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_shadow_root_init.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_shadow_root_mode.h"
 #include "third_party/blink/renderer/core/dom/abort_signal.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/mutation_observer.h"
@@ -25,7 +23,6 @@
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer_entry.h"
 #include "third_party/blink/renderer/core/resize_observer/resize_observer.h"
 #include "third_party/blink/renderer/core/resize_observer/resize_observer_entry.h"
-#include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_idle_request_options.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/scheduler/idle_deadline.h"
@@ -559,6 +556,28 @@ Entry::Entry(NtsDomContext *context)
 }
 Entry::~Entry() { entered = previous_; }
 
+// Everything a native callback that runs the program holds: the context as
+// the thread's entered one; the main world's V8 context, entered, with a
+// handle scope -- Blink code a DOM call reaches may ask for the current world
+// (Text::splitText's wrapper lookup does), as it may when page script's
+// bindings call it; and a microtask scope that checkpoints as the outermost
+// entry returns, as V8 does after a callback.
+class ProgramScope {
+  STACK_ALLOCATED();
+
+public:
+  explicit ProgramScope(NtsDomContext *context)
+      : entry_(context), script_(context->MainWorld()),
+        microtasks_(context->v8_isolate.get(),
+                    context->event_loop->microtask_queue(),
+                    v8::MicrotasksScope::kRunMicrotasks) {}
+
+private:
+  Entry entry_;
+  blink::ScriptState::Scope script_;
+  v8::MicrotasksScope microtasks_;
+};
+
 } // namespace nts_dom
 
 // A DOM exception a member reported, until the program takes its message:
@@ -763,10 +782,7 @@ void NtsDomContext::Dispatch(NtsDomCallback callback,
                              void *closure) {
   if (closed || !invoke)
     return;
-  Entry entry(this);
-  v8::HandleScope handles(v8_isolate);
-  v8::MicrotasksScope microtasks(v8_isolate, event_loop->microtask_queue(),
-                                 v8::MicrotasksScope::kRunMicrotasks);
+  nts_dom::ProgramScope scope(this);
   // On this stack for the call, as the program's own frames are: the event
   // is found here by Oilpan's stack scan, and is alive for the dispatch.
   struct Call {
@@ -827,10 +843,7 @@ void NtsDomContext::RunFrame(NtsDomFrameCallback callback, double time,
                              void *closure, NtsDomDestroy destroy) {
   if (closed || !invoke)
     return;
-  Entry entry(this);
-  v8::HandleScope handles(v8_isolate);
-  v8::MicrotasksScope microtasks(v8_isolate, event_loop->microtask_queue(),
-                                 v8::MicrotasksScope::kRunMicrotasks);
+  nts_dom::ProgramScope scope(this);
   struct Call {
     NtsDomFrameCallback callback;
     double time;
@@ -853,10 +866,7 @@ void NtsDomContext::RunIdleCallback(NtsDomIdleCallback callback,
                                     void *closure, NtsDomDestroy destroy) {
   if (closed || !invoke)
     return;
-  Entry entry(this);
-  v8::HandleScope handles(v8_isolate);
-  v8::MicrotasksScope microtasks(v8_isolate, event_loop->microtask_queue(),
-                                 v8::MicrotasksScope::kRunMicrotasks);
+  nts_dom::ProgramScope scope(this);
   // On this stack for the call: the deadline is found here by Oilpan's scan.
   struct Call {
     STACK_ALLOCATED();
@@ -948,20 +958,14 @@ void NtsDomContext::ClearTimer(int32_t id) {
 void NtsDomContext::RunCallback(void (*call)(void *), void *state) {
   if (closed || !invoke)
     return;
-  Entry entry(this);
-  v8::HandleScope handles(v8_isolate);
-  v8::MicrotasksScope microtasks(v8_isolate, event_loop->microtask_queue(),
-                                 v8::MicrotasksScope::kRunMicrotasks);
+  nts_dom::ProgramScope scope(this);
   invoke(invoke_host.get(), call, state);
 }
 
 void NtsDomContext::RunTimer(nts_dom::NtsTimer *timer) {
   if (closed || !invoke)
     return;
-  Entry entry(this);
-  v8::HandleScope handles(v8_isolate);
-  v8::MicrotasksScope microtasks(v8_isolate, event_loop->microtask_queue(),
-                                 v8::MicrotasksScope::kRunMicrotasks);
+  nts_dom::ProgramScope scope(this);
   // The timer is on this stack for the run, where Oilpan's scan finds it.
   timer_nesting = timer->nesting();
   invoke(
@@ -1138,6 +1142,7 @@ void NtsDomContext::Close() {
       GiveBack(destroy, closure);
   }
   closed = true;
+  main_world_.Clear();
   weak_factory.InvalidateWeakPtrs();
   for (auto &job : jobs)
     job->Drop();
@@ -1215,13 +1220,9 @@ void nts_blink_dom_set_invoker(NtsDomContext *context, NtsDomInvoke invoke,
 }
 int32_t nts_blink_dom_entry(NtsDomContext *context, NativeJob::Callback run,
                             void *state) {
-  Entry entry(context);
   if (context->closed || !context->document->IsActive())
     return 11; // InvalidStateError
-  v8::HandleScope handles(context->v8_isolate);
-  v8::MicrotasksScope microtasks(context->v8_isolate,
-                                 context->event_loop->microtask_queue(),
-                                 v8::MicrotasksScope::kRunMicrotasks);
+  nts_dom::ProgramScope scope(context);
   run(state);
   return 0;
 }
@@ -1344,26 +1345,6 @@ char *nts_dom_exception_take_message(NtsDomException *exception) {
   return message;
 }
 
-// `element.attachShadow({mode})`: ShadowRootInit's mode is a required enum,
-// which a dictionary struct cannot carry, so the mode is the argument; the
-// other members keep their defaults. Blink's own attachShadow decides the
-// rest (which elements may host one, a second attach).
-NtsDomShadowRoot *nts_dom_Element_attachShadow_mode(NtsDomElement *self,
-                                                    const char *mode,
-                                                    NtsDomException **error) {
-  NtsDomContext &context = nts_dom::Current();
-  Throws exception_state(error);
-  const auto value = nts_dom::EnumFrom<blink::V8ShadowRootMode>(mode);
-  if (!value) {
-    nts_dom::ThrowInvalidEnum<blink::V8ShadowRootMode>(context, mode,
-                                                       exception_state);
-    return nullptr;
-  }
-  auto *init = blink::ShadowRootInit::Create(context.v8_isolate.get());
-  init->setMode(*value);
-  return HandleOf<NtsDomShadowRoot>(
-      ObjectOf<blink::Element>(self)->attachShadow(init, exception_state));
-}
 NtsDomListener *nts_dom_listen(NtsDomEventTarget *target,
                                const NtsBorrowedString *type,
                                NtsDomCallback callback, void *closure,

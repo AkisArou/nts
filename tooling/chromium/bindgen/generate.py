@@ -256,11 +256,13 @@ class Generator:
         program writes as an object literal (`Fields<T>`, a zeroed compound
         literal in the caller's frame, nothing allocated), and the adapter's
         conversion to Blink's dictionary, which sets only what the literal
-        wrote. So a member binds only where zero is what leaving it out means:
-        a boolean whose default is false or absent, a number whose default is
-        0 or absent. Strings, handles, sequences, enums and other defaults are
-        left out, each recorded. The fields and the conversion's name, or
-        Skip when nothing binds."""
+        wrote. So a member binds where zero is what leaving it out means: a
+        boolean whose default is false or absent, a number whose default is 0
+        or absent, and a string or an enum, a StringView field lent for the
+        call whose NULL is left out (Blink's default applies). Handles,
+        sequences, nullable members and other defaults are left out, each
+        recorded. The fields, the conversion's name and whether it can throw,
+        or Skip when nothing binds."""
         identifier = dictionary.identifier
         if identifier in self.dictionaries:
             if isinstance(self.dictionaries[identifier], str):
@@ -285,6 +287,15 @@ class Generator:
             nullable = member.idl_type.does_include_nullable_type
             keyword = idl_type.keyword_typename
             literal = member.default_value.literal if member.default_value is not None else None
+            # A string or an enum is a StringView field, lent for the call;
+            # NULL is left out, so Blink's own default applies, whatever it
+            # is. An enum is matched when converted.
+            if not nullable and (keyword in STRINGS or idl_type.is_enumeration):
+                kind = "enum" if idl_type.is_enumeration else "string"
+                if kind == "enum":
+                    self.headers.add(PathManager(idl_type.type_definition_object).api_path(ext="h"))
+                fields.append((member.identifier, kind, idl_type, member.is_required))
+                continue
             if nullable or keyword not in ("boolean", *NUMERIC):
                 unbindable(member, f"dictionary member of type {member.idl_type.syntactic_form}")
                 continue
@@ -292,21 +303,45 @@ class Generator:
             if literal not in (None, zero) and not (keyword != "boolean" and literal in ("0.0", "0")):
                 unbindable(member, f"dictionary member whose default {literal} is not zero")
                 continue
-            fields.append((member.identifier, keyword, idl_type))
+            fields.append((member.identifier, keyword, idl_type, False))
         if not fields:
             self.dictionaries[identifier] = f"dictionary {identifier} has no member a C struct can carry"
             raise Skip(self.dictionaries[identifier])
         tag = f"NtsDom{identifier}"
         convert = f"NtsDomTo{identifier}"
         self.headers.add(PathManager(dictionary).api_path(ext="h"))
-        body = [f"blink::{identifier}* {convert}(v8::Isolate* isolate, const {tag}& from) {{",
+        # The conversion page script's binding makes reading a dictionary:
+        # a required string or enum left out, or an enum value outside the
+        # enum, throws its TypeError, word for word but for V8's prefix
+        # ("Failed to read the 'x' property from 'Y': ").
+        body = [f"blink::{identifier}* {convert}(NtsDomContext& context, const {tag}& from, "
+                f"blink::ExceptionState& exception_state) {{",
+                "  v8::Isolate* isolate = context.v8_isolate.get();",
                 f"  auto* to = blink::{identifier}::Create(isolate);"]
-        if any(keyword != "boolean" for _, keyword, _ in fields):
+        if any(keyword in NUMERIC and keyword != "unrestricted double" for _, keyword, _, _ in fields):
             body.append("  blink::DummyExceptionStateForTesting conversion;")
-        for name, keyword, idl_type in fields:
+        for name, keyword, idl_type, required in fields:
             setter = "set" + name[0].upper() + name[1:]
             field = self.safe(name)
-            if keyword == "boolean":
+            if keyword in ("string", "enum"):
+                if required:
+                    body.append(f"  if (!from.{field}) {{ exception_state.ThrowTypeError(\"Required member is undefined.\"); return nullptr; }}")
+                if keyword == "string":
+                    body.append(f"  if (from.{field}) to->{setter}({self.text(idl_type, 'from.' + field)});")
+                else:
+                    enumeration = idl_type.type_definition_object
+                    cls = f"blink::{blink_class_name(enumeration)}"
+                    body += [f"  if (from.{field}) {{",
+                             f"    const blink::String text = {self.text(idl_type, 'from.' + field)}.Text();",
+                             f"    const auto value = {cls}::Create(text);",
+                             "    if (!value) {",
+                             "      exception_state.ThrowTypeError(blink::StrCat({\"The provided value '\", text, "
+                             f"\"' is not a valid enum value of type {enumeration.identifier}.\"}}));",
+                             "      return nullptr;",
+                             "    }",
+                             f"    to->{setter}(*value);",
+                             "  }"]
+            elif keyword == "boolean":
                 body.append(f"  if (from.{field}) to->{setter}(true);")
             elif keyword == "unrestricted double":
                 body.append(f"  if (from.{field} != 0) to->{setter}(from.{field});")
@@ -316,7 +351,8 @@ class Generator:
                             f"isolate, v8::Number::New(isolate, from.{field}), conversion));")
         body += ["  return to;", "}"]
         self.statics.append("\n".join(body))
-        self.dictionaries[identifier] = (fields, convert)
+        throws = any(keyword == "enum" or required for _, keyword, _, required in fields)
+        self.dictionaries[identifier] = (fields, convert, throws)
         return self.dictionaries[identifier]
 
     def parameter(self, idl_type, identifier):
@@ -326,10 +362,15 @@ class Generator:
         or_null = " | null" if nullable else ""
         if unwrapped.is_dictionary and not nullable:
             dictionary = unwrapped.type_definition_object
-            fields, convert = self.dictionary(dictionary)
+            fields, convert, throws = self.dictionary(dictionary)
+            # Converted before the call, as the binding reads a dictionary
+            # argument; a dictionary that can fail (an enum, a required
+            # member) makes the function one that throws.
             return Param(name, f"NtsDom{dictionary.identifier} {name}",
                          f"{name}: ByValue<{dictionary.identifier}> | Fields<{dictionary.identifier}>",
-                         f"{convert}(context.v8_isolate.get(), {name})", True)
+                         f"{name}_converted", True,
+                         prelude=f"auto* {name}_converted = {convert}(context, {name}, {{exceptions}});",
+                         may_throw=throws)
         if unwrapped.is_interface:
             interface = self.bound_interface(idl_type)
             expr = self.node(interface, name)
@@ -1250,8 +1291,8 @@ class Generator:
         for identifier, entry in sorted(self.dictionaries.items()):
             if isinstance(entry, str):
                 continue
-            members = "; ".join(f"{name}: {'CBool<c_uint8>' if keyword == 'boolean' else 'c_double'}"
-                                for name, keyword, _ in entry[0])
+            ts = {"boolean": "CBool<c_uint8>", "string": "StringView", "enum": "StringView"}
+            members = "; ".join(f"{name}: {ts.get(keyword, 'c_double')}" for name, keyword, _, _ in entry[0])
             lines.append(f'  export type {identifier} = Struct<{{ {members} }}, "NtsDom{identifier}">;')
         return lines
 
@@ -1306,8 +1347,8 @@ class Generator:
         for identifier, entry in sorted(self.dictionaries.items()):
             if isinstance(entry, str):
                 continue
-            members = "".join(f"  {'uint8_t' if keyword == 'boolean' else 'double'} {self.safe(name)};\n"
-                              for name, keyword, _ in entry[0])
+            c = {"boolean": "uint8_t", "string": "const NtsBorrowedString*", "enum": "const NtsBorrowedString*"}
+            members = "".join(f"  {c.get(keyword, 'double')} {self.safe(name)};\n" for name, keyword, _, _ in entry[0])
             typedefs += f"\ntypedef struct NtsDom{identifier} {{\n{members}}} NtsDom{identifier};"
         prototypes = []
         accessors = self.sequence_functions()
@@ -1393,12 +1434,12 @@ bool nts_dom_is(const void* object, uint32_t interface_id) {{
             types.append(f"  export interface {identifier}OwnMethods {{")
             types.extend(self.members.get(identifier, []))
             types.append("  }")
-            # A mixin is an interface handle (GObjectInterface's shape): a
+            # A mixin is an interface handle (c:types' Interface): a
             # handle of its prerequisite class that C spells by its own tag,
             # which whatever includes it converts to.
             if isinstance(interface, MixinView):
                 types.append(f"  export type {identifier}Methods = {identifier}OwnMethods;")
-                types.append(f'  export type {identifier} = GObjectInterface<"{self.handle_tag(identifier)}", '
+                types.append(f'  export type {identifier} = Interface<"{self.handle_tag(identifier)}", '
                              f"{interface.prerequisite}> & {identifier}Methods;")
                 continue
             # What it includes, which its subclasses' Methods carry too.
@@ -1427,7 +1468,7 @@ bool nts_dom_is(const void* object, uint32_t interface_id) {{
         declarations = f"""// {banner.replace(chr(10), chr(10) + '// ')}
 /** @ntsHeader "dom_idl.h" */
 declare module "nts:dom" {{
-  import type {{ ByValue, CBool, Closure, CNumber, Fields, GObjectInterface, HostClass, Opaque, Ptr, StringView, Struct, c_double, c_uint8 }} from "c:types";
+  import type {{ ByValue, CBool, Closure, CNumber, Fields, HostClass, Interface, Opaque, Ptr, StringView, Struct, c_double, c_uint8 }} from "c:types";
   /** A DOM exception a member reported, thrown as an `Error` "Name: message". */
   export type DOMException = Opaque<"NtsDomException">;
 {chr(10).join(self.enum_types())}
