@@ -47,6 +47,17 @@ def interfaces(text):
     return found
 
 
+def void_methods(text):
+    """Per interface, the methods every lib.dom.d.ts overload of which
+    returns `void`."""
+    returns = collections.defaultdict(lambda: collections.defaultdict(set))
+    for match in re.finditer(r"^interface (\w+)(?:<[^>]*>)?(?: extends [^{]+)? \{\n(.*?)^\}", text, re.M | re.S):
+        for method in re.finditer(r"^\s{4}([A-Za-z_$][\w$]*)\??(?:<[^>]*>)?\((.*)\): ([^;]+);$", match.group(2), re.M):
+            returns[match.group(1)][method.group(1)].add(method.group(3).strip())
+    return {name: {method for method, types in methods.items() if types == {"void"}}
+            for name, methods in returns.items()}
+
+
 def bound_members(text):
     """What dom-idl.d.ts binds, per interface: methods and properties of each
     `XOwnMethods`, not the `_get_`/`_set_` methods behind properties."""

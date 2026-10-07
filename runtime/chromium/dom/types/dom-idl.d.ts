@@ -50,6 +50,7 @@ declare module "nts:dom" {
   export type GetRootNodeOptions = Struct<{ composed: CBool<c_uint8> }, "NtsDomGetRootNodeOptions">;
   export type HashChangeEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; newURL: StringView; oldURL: StringView }, "NtsDomHashChangeEventInit">;
   export type ImageDataSettings = Struct<{ colorSpace: StringView }, "NtsDomImageDataSettings">;
+  export type ImportNodeOptions = Struct<{ selfOnly: CBool<c_uint8> }, "NtsDomImportNodeOptions">;
   export type InputEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; inputType: StringView; isComposing: CBool<c_uint8> }, "NtsDomInputEventInit">;
   export type KeyboardEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8>; charCode: c_double; code: StringView; isComposing: CBool<c_uint8>; key: StringView; keyCode: c_double; location: c_double; repeat: CBool<c_uint8> }, "NtsDomKeyboardEventInit">;
   export type MouseEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8>; button: c_double; buttons: c_double; clientX: c_double; clientY: c_double; movementX: c_double; movementY: c_double; screenX: c_double; screenY: c_double }, "NtsDomMouseEventInit">;
@@ -60,8 +61,11 @@ declare module "nts:dom" {
   export type PointerEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8>; button: c_double; buttons: c_double; clientX: c_double; clientY: c_double; movementX: c_double; movementY: c_double; screenX: c_double; screenY: c_double; altitudeAngle: c_double; azimuthAngle: c_double; isPrimary: CBool<c_uint8>; persistentDeviceId: c_double; pointerId: c_double; pointerType: StringView; pressure: c_double; tangentialPressure: c_double; tiltX: c_double; tiltY: c_double; twist: c_double }, "NtsDomPointerEventInit">;
   export type ProgressEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; lengthComputable: CBool<c_uint8>; loaded: c_double; total: c_double }, "NtsDomProgressEventInit">;
   export type ResizeObserverOptions = Struct<{ box: StringView }, "NtsDomResizeObserverOptions">;
+  export type ScrollIntoViewOptions = Struct<{ behavior: StringView; block: StringView }, "NtsDomScrollIntoViewOptions">;
+  export type ScrollToOptions = Struct<{ behavior: StringView; left: c_double; top: c_double }, "NtsDomScrollToOptions">;
   export type ShadowRootInit = Struct<{ clonable: CBool<c_uint8>; delegatesFocus: CBool<c_uint8>; mode: StringView; serializable: CBool<c_uint8>; slotAssignment: StringView }, "NtsDomShadowRootInit">;
   export type SubmitEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8> }, "NtsDomSubmitEventInit">;
+  export type TogglePopoverOptions = Struct<{ force: CBool<c_uint8> }, "NtsDomTogglePopoverOptions">;
   export type TouchEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8> }, "NtsDomTouchEventInit">;
   export type TransitionEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; elapsedTime: c_double; propertyName: StringView; pseudoElement: StringView }, "NtsDomTransitionEventInit">;
   export type UIEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double }, "NtsDomUIEventInit">;
@@ -2117,6 +2121,48 @@ declare module "nts:dom" {
      */
     replaceWith(this: Element, error?: Ptr<DOMException | null>): void;
     /**
+     * @ntsSymbol nts_dom_Element_scroll_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scroll(this: Element, options: ByValue<ScrollToOptions> | Fields<ScrollToOptions>, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scroll_0
+     */
+    scroll(this: Element): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scroll_2
+     */
+    scroll(this: Element, x: CNumber<"double">, y: CNumber<"double">): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollBy_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollBy(this: Element, options: ByValue<ScrollToOptions> | Fields<ScrollToOptions>, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollBy_0
+     */
+    scrollBy(this: Element): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollBy_2
+     */
+    scrollBy(this: Element, x: CNumber<"double">, y: CNumber<"double">): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollIntoView_1_ScrollIntoViewOptions
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollIntoView(this: Element, arg: ByValue<ScrollIntoViewOptions> | Fields<ScrollIntoViewOptions>, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollIntoView_1_boolean
+     */
+    scrollIntoView(this: Element, arg: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollIntoView_0
+     */
+    scrollIntoView(this: Element): void;
+    /**
      * @ntsSymbol nts_dom_Element_scrollIntoViewIfNeeded_1
      */
     scrollIntoViewIfNeeded(this: Element, centerIfNeeded: boolean): void;
@@ -2124,6 +2170,20 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Element_scrollIntoViewIfNeeded_0
      */
     scrollIntoViewIfNeeded(this: Element): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollTo_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollTo(this: Element, options: ByValue<ScrollToOptions> | Fields<ScrollToOptions>, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollTo_0
+     */
+    scrollTo(this: Element): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollTo_2
+     */
+    scrollTo(this: Element, x: CNumber<"double">, y: CNumber<"double">): void;
     /**
      * @ntsSymbol nts_dom_Element_setAttribute_2
      * @ntsThrows error nts_dom_exception_take_message
@@ -4941,6 +5001,18 @@ declare module "nts:dom" {
      */
     hasFocus(this: Document): boolean;
     /**
+     * @ntsSymbol nts_dom_Document_importNode_2_ImportNodeOptions
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    importNode(this: Document, node: Node, options: ByValue<ImportNodeOptions> | Fields<ImportNodeOptions>, error?: Ptr<DOMException | null>): Node;
+    /**
+     * @ntsSymbol nts_dom_Document_importNode_2_boolean
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    importNode(this: Document, node: Node, options: boolean, error?: Ptr<DOMException | null>): Node;
+    /**
      * @ntsSymbol nts_dom_Document_importNode_1
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
@@ -7161,6 +7233,18 @@ declare module "nts:dom" {
      * @ntsNoEscape error
      */
     showPopover(this: HTMLElement, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_togglePopover_1_TogglePopoverOptions
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    togglePopover(this: HTMLElement, options: ByValue<TogglePopoverOptions> | Fields<TogglePopoverOptions>, error?: Ptr<DOMException | null>): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_togglePopover_1_boolean
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    togglePopover(this: HTMLElement, options: boolean, error?: Ptr<DOMException | null>): boolean;
     /**
      * @ntsSymbol nts_dom_HTMLElement_togglePopover_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -21802,6 +21886,48 @@ declare module "nts:dom" {
      */
     resizeTo(this: Window, x: CNumber<"double">, y: CNumber<"double">, error?: Ptr<DOMException | null>): void;
     /**
+     * @ntsSymbol nts_dom_Window_scroll_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scroll(this: Window, options: ByValue<ScrollToOptions> | Fields<ScrollToOptions>, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scroll_0
+     */
+    scroll(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scroll_2
+     */
+    scroll(this: Window, x: CNumber<"double">, y: CNumber<"double">): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scrollBy_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollBy(this: Window, options: ByValue<ScrollToOptions> | Fields<ScrollToOptions>, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scrollBy_0
+     */
+    scrollBy(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scrollBy_2
+     */
+    scrollBy(this: Window, x: CNumber<"double">, y: CNumber<"double">): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scrollTo_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollTo(this: Window, options: ByValue<ScrollToOptions> | Fields<ScrollToOptions>, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scrollTo_0
+     */
+    scrollTo(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scrollTo_2
+     */
+    scrollTo(this: Window, x: CNumber<"double">, y: CNumber<"double">): void;
+    /**
      * @ntsSymbol nts_dom_Window_stop
      */
     stop(this: Window): void;
@@ -21883,6 +22009,12 @@ declare module "nts:dom" {
      * @ntsNoEscape error
      */
     mark(this: Performance, markName: StringView, error?: Ptr<DOMException | null>): PerformanceMark;
+    /**
+     * @ntsSymbol nts_dom_Performance_measure_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    measure(this: Performance, measureName: StringView, error?: Ptr<DOMException | null>): PerformanceMeasure;
     /**
      * @ntsSymbol nts_dom_Performance_now
      */

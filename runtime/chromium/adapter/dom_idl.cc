@@ -319,6 +319,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_image_bitmap.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_image_data.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_image_data_settings.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_import_node_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_input_device_capabilities.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_input_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_input_event_init.h"
@@ -413,6 +414,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_performance_mark_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_performance_measure.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_performance_measure_conditional.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_measure_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_performance_navigation.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_performance_navigation_timing.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_performance_observer.h"
@@ -467,8 +469,12 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_scheduler.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_scheduling.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_screen.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_scroll_behavior.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_scroll_into_view_options.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_scroll_logical_position.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_scroll_restoration.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_scroll_timeline.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_scroll_to_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_security_policy_violation_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_selection.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_selection_mode.h"
@@ -614,6 +620,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_timeline_trigger_range.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_timeline_trigger_range_list.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_toggle_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_toggle_popover_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_touch.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_touch_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_touch_event_init.h"
@@ -633,12 +640,16 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_type_conversions.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_ui_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_ui_event_init.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_boolean_importnodeoptions.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_boolean_scrollintoviewoptions.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_boolean_string_unrestricteddouble.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_boolean_togglepopoveroptions.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_csspseudoelement_document_element_text.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_dompointinit_unrestricteddouble.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_element_text.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_htmloptgroupelement_htmloptionelement.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_node_string_trustedscript.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_performancemeasureoptions_string.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_string_trustedhtml.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_string_trustedscript.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_stringlegacynulltoemptystring_trustedhtml.h"
@@ -997,6 +1008,45 @@ blink::GetHTMLOptions* NtsDomToGetHTMLOptions(NtsDomContext& context, const NtsD
   if (from.serializableShadowRoots) to->setSerializableShadowRoots(true);
   return to;
 }
+blink::ScrollToOptions* NtsDomToScrollToOptions(NtsDomContext& context, const NtsDomScrollToOptions& from, blink::ExceptionState& exception_state) {
+  v8::Isolate* isolate = context.v8_isolate.get();
+  auto* to = blink::ScrollToOptions::Create(isolate);
+  if (from.behavior) {
+    const blink::String text = NtsText(context, from.behavior).Text();
+    const auto value = blink::V8ScrollBehavior::Create(text);
+    if (!value) {
+      exception_state.ThrowTypeError(blink::StrCat({"The provided value '", text, "' is not a valid enum value of type ScrollBehavior."}));
+      return nullptr;
+    }
+    to->setBehavior(*value);
+  }
+  if (from.left != 0) to->setLeft(from.left);
+  if (from.top != 0) to->setTop(from.top);
+  return to;
+}
+blink::ScrollIntoViewOptions* NtsDomToScrollIntoViewOptions(NtsDomContext& context, const NtsDomScrollIntoViewOptions& from, blink::ExceptionState& exception_state) {
+  v8::Isolate* isolate = context.v8_isolate.get();
+  auto* to = blink::ScrollIntoViewOptions::Create(isolate);
+  if (from.behavior) {
+    const blink::String text = NtsText(context, from.behavior).Text();
+    const auto value = blink::V8ScrollBehavior::Create(text);
+    if (!value) {
+      exception_state.ThrowTypeError(blink::StrCat({"The provided value '", text, "' is not a valid enum value of type ScrollBehavior."}));
+      return nullptr;
+    }
+    to->setBehavior(*value);
+  }
+  if (from.block) {
+    const blink::String text = NtsText(context, from.block).Text();
+    const auto value = blink::V8ScrollLogicalPosition::Create(text);
+    if (!value) {
+      exception_state.ThrowTypeError(blink::StrCat({"The provided value '", text, "' is not a valid enum value of type ScrollLogicalPosition."}));
+      return nullptr;
+    }
+    to->setBlock(*value);
+  }
+  return to;
+}
 blink::FullscreenOptions* NtsDomToFullscreenOptions(NtsDomContext& context, const NtsDomFullscreenOptions& from, blink::ExceptionState& exception_state) {
   v8::Isolate* isolate = context.v8_isolate.get();
   auto* to = blink::FullscreenOptions::Create(isolate);
@@ -1011,11 +1061,23 @@ blink::FullscreenOptions* NtsDomToFullscreenOptions(NtsDomContext& context, cons
   }
   return to;
 }
+blink::ImportNodeOptions* NtsDomToImportNodeOptions(NtsDomContext& context, const NtsDomImportNodeOptions& from, blink::ExceptionState& exception_state) {
+  v8::Isolate* isolate = context.v8_isolate.get();
+  auto* to = blink::ImportNodeOptions::Create(isolate);
+  if (from.selfOnly) to->setSelfOnly(true);
+  return to;
+}
 blink::FocusOptions* NtsDomToFocusOptions(NtsDomContext& context, const NtsDomFocusOptions& from, blink::ExceptionState& exception_state) {
   v8::Isolate* isolate = context.v8_isolate.get();
   auto* to = blink::FocusOptions::Create(isolate);
   if (from.focusVisible) to->setFocusVisible(true);
   if (from.preventScroll) to->setPreventScroll(true);
+  return to;
+}
+blink::TogglePopoverOptions* NtsDomToTogglePopoverOptions(NtsDomContext& context, const NtsDomTogglePopoverOptions& from, blink::ExceptionState& exception_state) {
+  v8::Isolate* isolate = context.v8_isolate.get();
+  auto* to = blink::TogglePopoverOptions::Create(isolate);
+  if (from.force) to->setForce(true);
   return to;
 }
 blink::EventInit* NtsDomToEventInit(NtsDomContext& context, const NtsDomEventInit& from, blink::ExceptionState& exception_state) {
@@ -8767,6 +8829,87 @@ void nts_dom_Element_replaceWith_0(NtsDomElement* self, NtsDomException** error)
   receiver->replaceWith(nodes_values, exception_state);
 }
 
+void nts_dom_Element_scroll_1(NtsDomElement* self, NtsDomScrollToOptions options, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  auto* options_converted = NtsDomToScrollToOptions(context, options, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Element_scroll_0(NtsDomElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Element>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, blink::ScrollToOptions::Create(context.v8_isolate.get()));
+}
+
+void nts_dom_Element_scroll_2(NtsDomElement* self, double x, double y) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Element>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, x, y);
+}
+
+void nts_dom_Element_scrollBy_1(NtsDomElement* self, NtsDomScrollToOptions options, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  auto* options_converted = NtsDomToScrollToOptions(context, options, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollBy(script_state, options_converted);
+}
+
+void nts_dom_Element_scrollBy_0(NtsDomElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Element>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollBy(script_state, blink::ScrollToOptions::Create(context.v8_isolate.get()));
+}
+
+void nts_dom_Element_scrollBy_2(NtsDomElement* self, double x, double y) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Element>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollBy(script_state, x, y);
+}
+
+void nts_dom_Element_scrollIntoView_1_ScrollIntoViewOptions(NtsDomElement* self, NtsDomScrollIntoViewOptions arg, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  auto* arg_converted = NtsDomToScrollIntoViewOptions(context, arg, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollIntoView(script_state, blink::MakeGarbageCollected<blink::V8UnionBooleanOrScrollIntoViewOptions>(arg_converted));
+}
+
+void nts_dom_Element_scrollIntoView_1_boolean(NtsDomElement* self, bool arg) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Element>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollIntoView(script_state, blink::MakeGarbageCollected<blink::V8UnionBooleanOrScrollIntoViewOptions>(arg));
+}
+
+void nts_dom_Element_scrollIntoView_0(NtsDomElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Element>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollIntoView(script_state, blink::MakeGarbageCollected<blink::V8UnionBooleanOrScrollIntoViewOptions>(blink::ScrollIntoViewOptions::Create(context.v8_isolate.get())));
+}
+
 void nts_dom_Element_scrollIntoViewIfNeeded_1(NtsDomElement* self, bool centerIfNeeded) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::Element>(self);
@@ -8777,6 +8920,33 @@ void nts_dom_Element_scrollIntoViewIfNeeded_0(NtsDomElement* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::Element>(self);
   receiver->scrollIntoViewIfNeeded();
+}
+
+void nts_dom_Element_scrollTo_1(NtsDomElement* self, NtsDomScrollToOptions options, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  auto* options_converted = NtsDomToScrollToOptions(context, options, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Element_scrollTo_0(NtsDomElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Element>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, blink::ScrollToOptions::Create(context.v8_isolate.get()));
+}
+
+void nts_dom_Element_scrollTo_2(NtsDomElement* self, double x, double y) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Element>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, x, y);
 }
 
 void nts_dom_Element_setAttribute_2(NtsDomElement* self, const NtsBorrowedString* name, const NtsBorrowedString* value, NtsDomException** error) {
@@ -13575,6 +13745,24 @@ bool nts_dom_Document_hasFocus(NtsDomDocument* self) {
   return static_cast<bool>(receiver->hasFocus());
 }
 
+NtsDomNode* nts_dom_Document_importNode_2_ImportNodeOptions(NtsDomDocument* self, NtsDomNode* node, NtsDomImportNodeOptions options, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  auto* options_converted = NtsDomToImportNodeOptions(context, options, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomNode>(receiver->importNode(ObjectOf<blink::Node>(node), blink::MakeGarbageCollected<blink::V8UnionBooleanOrImportNodeOptions>(options_converted), exception_state));
+}
+
+NtsDomNode* nts_dom_Document_importNode_2_boolean(NtsDomDocument* self, NtsDomNode* node, bool options, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomNode>(receiver->importNode(ObjectOf<blink::Node>(node), blink::MakeGarbageCollected<blink::V8UnionBooleanOrImportNodeOptions>(options), exception_state));
+}
+
 NtsDomNode* nts_dom_Document_importNode_1(NtsDomDocument* self, NtsDomNode* node, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
@@ -17533,6 +17721,22 @@ void nts_dom_HTMLElement_showPopover_0(NtsDomHTMLElement* self, NtsDomException*
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::HTMLElement>(self);
   receiver->showPopover(exception_state);
+}
+
+bool nts_dom_HTMLElement_togglePopover_1_TogglePopoverOptions(NtsDomHTMLElement* self, NtsDomTogglePopoverOptions options, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::HTMLElement>(self);
+  auto* options_converted = NtsDomToTogglePopoverOptions(context, options, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return static_cast<bool>(receiver->togglePopover(blink::MakeGarbageCollected<blink::V8UnionBooleanOrTogglePopoverOptions>(options_converted), exception_state));
+}
+
+bool nts_dom_HTMLElement_togglePopover_1_boolean(NtsDomHTMLElement* self, bool options, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::HTMLElement>(self);
+  return static_cast<bool>(receiver->togglePopover(blink::MakeGarbageCollected<blink::V8UnionBooleanOrTogglePopoverOptions>(options), exception_state));
 }
 
 bool nts_dom_HTMLElement_togglePopover_0(NtsDomHTMLElement* self, NtsDomException** error) {
@@ -33539,6 +33743,87 @@ void nts_dom_Window_resizeTo(NtsDomWindow* self, double x, double y, NtsDomExcep
   receiver->resizeTo(x_converted, y_converted, exception_state);
 }
 
+void nts_dom_Window_scroll_1(NtsDomWindow* self, NtsDomScrollToOptions options, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  auto* options_converted = NtsDomToScrollToOptions(context, options, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Window_scroll_0(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, blink::ScrollToOptions::Create(context.v8_isolate.get()));
+}
+
+void nts_dom_Window_scroll_2(NtsDomWindow* self, double x, double y) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, x, y);
+}
+
+void nts_dom_Window_scrollBy_1(NtsDomWindow* self, NtsDomScrollToOptions options, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  auto* options_converted = NtsDomToScrollToOptions(context, options, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollBy(script_state, options_converted);
+}
+
+void nts_dom_Window_scrollBy_0(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollBy(script_state, blink::ScrollToOptions::Create(context.v8_isolate.get()));
+}
+
+void nts_dom_Window_scrollBy_2(NtsDomWindow* self, double x, double y) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollBy(script_state, x, y);
+}
+
+void nts_dom_Window_scrollTo_1(NtsDomWindow* self, NtsDomScrollToOptions options, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  auto* options_converted = NtsDomToScrollToOptions(context, options, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Window_scrollTo_0(NtsDomWindow* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, blink::ScrollToOptions::Create(context.v8_isolate.get()));
+}
+
+void nts_dom_Window_scrollTo_2(NtsDomWindow* self, double x, double y) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, x, y);
+}
+
 void nts_dom_Window_stop(NtsDomWindow* self) {
   nts_dom::AssertEntered();
   auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
@@ -33663,6 +33948,15 @@ NtsDomPerformanceMark* nts_dom_Performance_mark_1(NtsDomPerformance* self, const
   blink::ScriptState* script_state = context.MainWorld();
   blink::ScriptState::Scope script_scope(script_state);
   return HandleOf<NtsDomPerformanceMark>(receiver->mark(script_state, NtsText(context, markName), blink::PerformanceMarkOptions::Create(context.v8_isolate.get()), exception_state));
+}
+
+NtsDomPerformanceMeasure* nts_dom_Performance_measure_1(NtsDomPerformance* self, const NtsBorrowedString* measureName, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Performance>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomPerformanceMeasure>(receiver->measure(script_state, NtsText(context, measureName), blink::MakeGarbageCollected<blink::V8UnionPerformanceMeasureOptionsOrString>(blink::PerformanceMeasureOptions::Create(context.v8_isolate.get())), exception_state));
 }
 
 double nts_dom_Performance_now(NtsDomPerformance* self) {

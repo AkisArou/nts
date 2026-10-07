@@ -1,5 +1,5 @@
 {
-  "bound": 4770,
+  "bound": 4796,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -417,39 +417,9 @@
       "why": "result type Promise<undefined>"
     },
     {
-      "interface": "Element",
-      "member": "scroll/1",
-      "why": "result type Promise<ScrollResult>"
-    },
-    {
-      "interface": "Element",
-      "member": "scroll/2",
-      "why": "result type Promise<ScrollResult>"
-    },
-    {
-      "interface": "Element",
-      "member": "scrollBy/1",
-      "why": "result type Promise<ScrollResult>"
-    },
-    {
-      "interface": "Element",
-      "member": "scrollBy/2",
-      "why": "result type Promise<ScrollResult>"
-    },
-    {
-      "interface": "Element",
-      "member": "scrollIntoView/1",
-      "why": "result type Promise<ScrollResult>"
-    },
-    {
-      "interface": "Element",
-      "member": "scrollTo/1",
-      "why": "result type Promise<ScrollResult>"
-    },
-    {
-      "interface": "Element",
-      "member": "scrollTo/2",
-      "why": "result type Promise<ScrollResult>"
+      "interface": "ScrollIntoViewOptions",
+      "member": "inline",
+      "why": "dictionary member named by the C keyword `inline`"
     },
     {
       "interface": "Element",
@@ -2147,9 +2117,9 @@
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
-      "interface": "Document",
-      "member": "importNode/2",
-      "why": "parameter type optional (boolean or ImportNodeOptions)"
+      "interface": "ImportNodeOptions",
+      "member": "customElementRegistry",
+      "why": "dictionary member of type optional CustomElementRegistry"
     },
     {
       "interface": "Document",
@@ -3517,9 +3487,9 @@
       "why": "result type Promise<undefined>"
     },
     {
-      "interface": "HTMLElement",
-      "member": "togglePopover/1",
-      "why": "parameter type optional (TogglePopoverOptions or boolean)"
+      "interface": "TogglePopoverOptions",
+      "member": "source",
+      "why": "dictionary member of type optional HTMLElement"
     },
     {
       "interface": "HTMLInputElement",
@@ -5958,36 +5928,6 @@
     },
     {
       "interface": "Window",
-      "member": "scroll/1",
-      "why": "result type Promise<ScrollResult>"
-    },
-    {
-      "interface": "Window",
-      "member": "scroll/2",
-      "why": "result type Promise<ScrollResult>"
-    },
-    {
-      "interface": "Window",
-      "member": "scrollBy/1",
-      "why": "result type Promise<ScrollResult>"
-    },
-    {
-      "interface": "Window",
-      "member": "scrollBy/2",
-      "why": "result type Promise<ScrollResult>"
-    },
-    {
-      "interface": "Window",
-      "member": "scrollTo/1",
-      "why": "result type Promise<ScrollResult>"
-    },
-    {
-      "interface": "Window",
-      "member": "scrollTo/2",
-      "why": "result type Promise<ScrollResult>"
-    },
-    {
-      "interface": "Window",
       "member": "setInterval/3",
       "why": "variadic any..."
     },
@@ -6115,11 +6055,6 @@
       "interface": "Performance",
       "member": "measure/2",
       "why": "parameter type optional (DOMString or PerformanceMeasureOptions)"
-    },
-    {
-      "interface": "Performance",
-      "member": "measure/1",
-      "why": "default `{}` of argument startOrMeasureOptions"
     },
     {
       "interface": "Performance",

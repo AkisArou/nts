@@ -768,6 +768,37 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   const elementWheel = outcome(outer, "wheel");
   outer.removeEventListener("wheel", prevent);
   log("passive", passiveGiven + "|" + activeGiven + "|" + documentWheel + "|" + documentWheelActive + "|" + elementWheel);
+
+  // Scrolling. Blink answers scrollTo/scrollBy/scrollIntoView with a promise
+  // lib.dom spells `void`; the call is made and the promise dropped, as page
+  // script drops it. A 50px box over 400px of content, read after each.
+  const scroller = d.createElement("div");
+  scroller.setAttribute("style", "height: 50px; overflow: auto");
+  const tall = d.createElement("div");
+  tall.setAttribute("style", "height: 400px");
+  const mark = d.createElement("p");
+  mark.setAttribute("style", "margin: 0; position: relative; top: 300px; height: 10px");
+  tall.appendChild(mark);
+  scroller.appendChild(tall);
+  root.appendChild(scroller);
+  const offsets: string[] = [];
+  scroller.scrollTo(0, 40);
+  offsets.push("" + scroller.scrollTop);
+  scroller.scrollBy(0, 30);
+  offsets.push("" + scroller.scrollTop);
+  scroller.scrollTo({ top: 10 });
+  offsets.push("" + scroller.scrollTop);
+  mark.scrollIntoView(true);
+  offsets.push("" + scroller.scrollTop);
+  mark.scrollIntoView({ block: "center" });
+  offsets.push("" + scroller.scrollTop);
+  mark.scrollIntoView(false);
+  offsets.push("" + scroller.scrollTop);
+  root.removeChild(scroller);
+  // scrollIntoView scrolls every scrolling ancestor, the page too: put the
+  // page back where the later input events expect it.
+  window().scrollTo(0, 0);
+  log("scrolling", offsets.join("|"));
   const pointed = newMouseEvent("click", { clientX: 12.5, clientY: -3, button: 2, ctrlKey: true, detail: 7 });
   log("mouseInit", pointed.clientX + "|" + pointed.clientY + "|" + pointed.button + "|" + (pointed.ctrlKey ? "ctrl" : "-") + (pointed.shiftKey ? "shift" : "-") + "|" + pointed.detail);
 

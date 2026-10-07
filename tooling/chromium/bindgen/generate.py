@@ -107,6 +107,15 @@ STRINGS = {"DOMString", "CSSOMString", "USVString"}
 
 # Words a parameter cannot be named in TypeScript or C++, and the one the
 # error slot takes.
+# C's own keywords and those C++ adds, which a struct field the program writes
+# by name cannot take.
+C_KEYWORDS = set("""
+    auto break case char const continue default do double else enum extern
+    float for goto if inline int long register restrict return short signed
+    sizeof static struct switch typedef union unsigned void volatile while
+    _Bool _Complex _Imaginary bool true false
+""".split())
+
 RESERVED = set("""
     break case catch class const continue debugger default delete do else enum
     export extends false finally for function if import in instanceof new null
@@ -197,6 +206,9 @@ class Generator:
         # Interfaces of Blink's modules component the adapter binds (it
         # links modules for them): only their members are taken from there.
         self.modules = set(allowlist.get("modules", []))
+        # Methods lib.dom.d.ts declares `void` in every overload (operation_result).
+        import libdom
+        self.lib_dom_void = libdom.void_methods(open(libdom.LIB_DOM).read())
         self.skipped = []
         self.functions = []
         self.members = {}  # interface identifier -> TypeScript member lines
@@ -287,10 +299,18 @@ class Generator:
                 raise Skip(reason)
             self.skipped.append({"interface": identifier, "member": member.identifier, "why": why})
 
+        implemented = {}
         for member in dictionary.members:
             label = f"{identifier}.{member.identifier}"
             if "RuntimeEnabled" in member.extended_attributes:
                 continue
+            # The program writes the struct's fields by the member's name, so
+            # it must be a C identifier (`ScrollIntoViewOptions.inline` is not).
+            if member.identifier in C_KEYWORDS:
+                unbindable(member, f"dictionary member named by the C keyword `{member.identifier}`")
+                continue
+            # `[ImplementedAs=inlinePosition]`: Blink's accessors take that name.
+            implemented[member.identifier] = member.extended_attributes.value_of("ImplementedAs") or member.identifier
             idl_type = member.idl_type.unwrap(typedef=True)
             nullable = member.idl_type.does_include_nullable_type
             keyword = idl_type.keyword_typename
@@ -329,7 +349,8 @@ class Generator:
         if any(keyword in NUMERIC and keyword != "unrestricted double" for _, keyword, _, _ in fields):
             body.append("  blink::DummyExceptionStateForTesting conversion;")
         for name, keyword, idl_type, required in fields:
-            setter = "set" + name[0].upper() + name[1:]
+            blink_name = implemented[name]
+            setter = "set" + blink_name[0].upper() + blink_name[1:]
             field = self.safe(name)
             if keyword in ("string", "enum"):
                 if required:
@@ -449,29 +470,43 @@ class Generator:
                          f"\"{identifier}\"); {{return}}; }}")
 
     def union_arms(self, idl_type):
-        """The bound interfaces of a union whose members are all interfaces,
-        or None: `(HTMLImageElement or HTMLCanvasElement or ...)`. Members
-        not bound are left out, so their arm is not offered."""
+        """The arms a union argument is offered by, one overload each, or
+        None: a union whose members are interfaces, dictionaries or
+        `boolean` -- `(HTMLImageElement or HTMLCanvasElement or ...)`,
+        `(ScrollIntoViewOptions or boolean)`. Interfaces not bound are left
+        out, so their arm is not offered."""
         if idl_type.does_include_nullable_type:
             return None
         unwrapped = idl_type.unwrap(typedef=True)
         if not unwrapped.is_union:
             return None
         members = [t.unwrap(typedef=True) for t in unwrapped.flattened_member_types]
-        if not all(t.is_interface for t in members):
+        if not all(t.is_interface or t.is_dictionary or t.keyword_typename == "boolean" for t in members):
             return None
-        arms = sorted({t.type_definition_object.identifier for t in members} & self.bound)
+        arms = sorted({t.type_definition_object.identifier for t in members if t.is_interface} & self.bound)
+        arms += sorted(t.type_definition_object.identifier for t in members if t.is_dictionary)
+        arms += ["boolean"] if any(t.keyword_typename == "boolean" for t in members) else []
         if not arms:
             raise Skip(f"parameter type {idl_type.syntactic_form}: no member is bound")
         return arms
 
     def arm_parameter(self, idl_type, identifier, arm):
-        """One arm of a union-of-interfaces argument: the handle, made into
-        Blink's union as V8's binding makes it from that member."""
+        """One arm of a union argument: the handle, the dictionary or the
+        boolean, made into Blink's union as V8's binding makes it from that
+        member."""
         name = self.safe(identifier)
         unwrapped = idl_type.unwrap(typedef=True)
         self.headers.add(PathManager(unwrapped.union_definition_object).api_path(ext="h"))
         union = blink_type_info(unwrapped).typename
+        member = next((t for t in members_of(unwrapped)
+                       if (t.unwrap(typedef=True).keyword_typename == "boolean" and arm == "boolean")
+                       or (t.unwrap(typedef=True).is_dictionary
+                           and t.unwrap(typedef=True).type_definition_object.identifier == arm)), None)
+        if member is not None:
+            param = self.parameter(member, identifier)
+            param.expr = f"blink::MakeGarbageCollected<blink::{union}>({param.expr})"
+            param.arm = arm
+            return param
         interface = self.database.find(arm)
         param = Param(name, f"{self.handle_tag(arm)}* {name}", f"{name}: {arm}",
                       f"blink::MakeGarbageCollected<blink::{union}>({self.node(interface, name)})", False)
@@ -547,6 +582,16 @@ class Generator:
             dictionary = unwrapped.type_definition_object
             self.headers.add(PathManager(dictionary).api_path(ext="h"))
             return f"blink::{dictionary.identifier}::Create(context.v8_isolate.get())"
+        # `optional (ScrollIntoViewOptions or boolean) arg = {}`: the union
+        # holding an empty dictionary, the arm V8's conversion of `{}` picks.
+        if literal == "{}" and unwrapped.is_union:
+            dictionaries = [t.unwrap(typedef=True) for t in members_of(unwrapped) if t.unwrap(typedef=True).is_dictionary]
+            if len(dictionaries) == 1:
+                dictionary = dictionaries[0].type_definition_object
+                self.headers.add(PathManager(dictionary).api_path(ext="h"))
+                self.headers.add(PathManager(unwrapped.union_definition_object).api_path(ext="h"))
+                union = blink_type_info(unwrapped).typename
+                return f"blink::MakeGarbageCollected<blink::{union}>(blink::{dictionary.identifier}::Create(context.v8_isolate.get()))"
         # `(sequence<...> or USVString) init = ""`: the union holding that
         # string, the arm V8's conversion of the default picks.
         if (unwrapped.is_union and literal is not None and re.fullmatch(r'"[ -!#-~]*"', literal)
@@ -896,11 +941,20 @@ class Generator:
         used.add(symbol)
         return symbol
 
+    def operation_result(self, interface, name, operation):
+        """An operation's result. A promise lib.dom.d.ts spells `void`
+        (`scrollTo`, `scrollIntoView`: Blink answers a Promise<ScrollResult>
+        page script may ignore, and lib.dom predates it) is dropped, as such a
+        caller drops it: the call is made, and nothing comes back."""
+        if operation.return_type.unwrap().is_promise and name in self.lib_dom_void.get(interface.identifier, set()):
+            return Result("void", "void", "void")
+        return self.result(operation.return_type)
+
     def operation(self, interface, group):
         name = group.identifier
         if not name:
             return
-        variants = self.variants(interface, name, group, lambda operation: self.result(operation.return_type))
+        variants = self.variants(interface, name, group, lambda operation: self.operation_result(interface, name, operation))
         host = getattr(interface, "host", interface)
         base = CodeGenContext(interface=host, class_name="V8" + host.identifier)
         lines = self.members.setdefault(interface.identifier, [])
