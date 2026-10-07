@@ -8,7 +8,7 @@
 //! frontend decoded, so the answer is read from the snapshot rather than asked
 //! of the checker.
 use nts_semantic_schema::binding::{module_declarations, parse};
-use nts_semantic_schema::{NodeId, NodeKind, SemanticSnapshot, TypeId, syntax};
+use nts_semantic_schema::{NodeId, NodeKind, SemanticSnapshot, TypeId, TypeKind, syntax};
 use rustc_hash::FxHashMap;
 
 /// Every `@ntsBoundBy` interface whose bound type exists, as `used -> bound`.
@@ -39,7 +39,22 @@ pub(crate) fn bound_types(snapshot: &SemanticSnapshot) -> FxHashMap<TypeId, Type
         }
     }
     instantiations(snapshot, &mut bound);
+    intersections(snapshot, &mut bound);
     bound
+}
+
+/// Every intersection with exactly one bound part, bound as that part is:
+/// lib.dom's `window` is `Window & typeof globalThis`, and the object is the
+/// `Window`. A member only another part declares (`window.Array`) is none of
+/// the handle's, and refused where it is read.
+fn intersections(snapshot: &SemanticSnapshot, bound: &mut FxHashMap<TypeId, TypeId>) {
+    for (at, record) in snapshot.types.iter().enumerate() {
+        let (TypeKind::Intersection(parts), Ok(at)) = (&record.kind, u32::try_from(at)) else { continue };
+        let targets: Vec<TypeId> = parts.iter().filter_map(|part| bound.get(part).copied()).collect();
+        if let [target] = targets[..] {
+            bound.entry(TypeId(at)).or_insert(target);
+        }
+    }
 }
 
 /// Every instantiation of a bound generic interface, bound as the interface

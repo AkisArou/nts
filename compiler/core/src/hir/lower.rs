@@ -56704,8 +56704,8 @@ impl<'a> FuncBuilder<'a> {
         {
             return provided;
         }
-        if let Some(function) = self.delegated_function(callee_node) {
-            return self.lower_delegated_call(id, function, &arguments);
+        if let Some(lowered) = self.lower_bound_global_call(id, callee_node, &arguments) {
+            return lowered;
         }
         if target.callee.is_none() {
             // Three different failures wore one sentence. A name the checker
@@ -57337,8 +57337,47 @@ impl<'a> FuncBuilder<'a> {
         arguments: &[NodeId],
     ) -> Option<(NodeId, nts_semantic_schema::SignatureRecord)> {
         let bound = self.delegated_type(*self.snapshot.node_types.get(&receiver_node)?)?;
-        let name = self.literal_name(member)?;
-        let property = super::native::schema::property(self.snapshot, bound, &name)?;
+        self.method_of_bound(bound, &self.literal_name(member)?, arguments)
+    }
+
+    /// A call of a lib.dom global a binding implements: a function it names
+    /// (`requestAnimationFrame(f)`, [`Self::delegated_function`]), or a method
+    /// of the global object (`getComputedStyle(el)`, [`Self::window_global`]).
+    fn lower_bound_global_call(&mut self, id: NodeId, callee: NodeId, arguments: &[NodeId]) -> Option<Result<ValueId, Diagnostic>> {
+        if let Some(function) = self.delegated_function(callee) {
+            return Some(self.lower_delegated_call(id, function, arguments));
+        }
+        let (function, name, window) = self.window_global(callee)?;
+        let method = self.method_of_bound(window, self.node(callee).text.as_deref()?, arguments)?;
+        Some(self.call_foreign_declaration(id, function, &name, Vec::new()).and_then(|receiver| {
+            self.lower_native_method_call_as(id, (receiver, callee), method, callee, arguments)
+        }))
+    }
+
+    /// The global object, where a binding implements it and `name` names one
+    /// of lib.dom's globals no binding names by itself: page script's
+    /// `location` is `window.location`, and `getComputedStyle(el)` is
+    /// `window.getComputedStyle(el)`, so each is read from what `window`'s
+    /// binding answers (`/** @ntsBoundBy "nts:dom" window */ declare var
+    /// window`) where the type implementing it declares the member. Only a name
+    /// declared where nothing was decoded -- lib.dom -- so a program's own
+    /// global is never taken for one. The bound function, its name, and the
+    /// type implementing the global object.
+    fn window_global(&self, name: NodeId) -> Option<(NodeId, String, TypeId)> {
+        let symbol = self.denoted_symbol(self.node(name).symbol?);
+        if !self.snapshot.symbols.get(symbol.0 as usize)?.declarations.is_empty() {
+            return None;
+        }
+        let (function, bound) = self.module.bound.values().find(|(_, bound)| bound == "window")?.clone();
+        let TypeKind::Function(signature) = self.snapshot.types.get(self.snapshot.node_types.get(&function)?.0 as usize)?.kind else { return None };
+        let returned = self.snapshot.signatures.get(signature.0 as usize)?.return_type;
+        Some((function, bound, returned))
+    }
+
+    /// [`Self::delegated_method`] on the type implementing the receiver's:
+    /// the method `name` of `bound`, its overload chosen by `arguments`.
+    fn method_of_bound(&self, bound: TypeId, name: &str, arguments: &[NodeId]) -> Option<(NodeId, nts_semantic_schema::SignatureRecord)> {
+        let property = super::native::schema::property(self.snapshot, bound, name)?;
         let first = property.declaration?;
         // **Every overload, chosen by the call's arguments.** A binding spells
         // one lib.dom member as several C functions where its parameters have
@@ -66749,6 +66788,16 @@ impl<'a> FuncBuilder<'a> {
         // `document` is a getter on the global object.
         if let Some((function, name)) = self.module.bound.get(&symbol.0).cloned() {
             return self.call_foreign_declaration(id, function, &name, Vec::new());
+        }
+        // `location`: a property of the global object.
+        if let Some((function, name, window)) = self.window_global(id) {
+            let property = &self.snapshot.symbols[symbol.0 as usize].name;
+            if let Some(getter) = super::native::schema::property(self.snapshot, window, property)
+                .and_then(|property| self.node(property.declaration?).native.as_deref()?.get.clone())
+            {
+                let receiver = self.call_foreign_declaration(id, function, &name, Vec::new())?;
+                return self.lower_accessor_on(id, receiver, window, &getter, None);
+            }
         }
         let origin = self.origin(id);
         if let Some(constant) = self.module.constants.get(&symbol.0).copied() {
