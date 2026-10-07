@@ -17952,6 +17952,12 @@ struct FuncBuilder<'a> {
     /// signature. A bare `Option<TypeId>` would have been inherited by every
     /// nested call in the argument list.
     callee_signature: Option<(NodeId, TypeId)>,
+    /// A delegated call's own signature (`delegated_method`): one overload of
+    /// a bound member, which no type in the snapshot carries -- a function
+    /// type records its first signature only -- so it is built from the
+    /// overload's parameters and held here, keyed by its call as
+    /// `callee_signature` is, and asked first.
+    delegated_signature: Option<(NodeId, nts_semantic_schema::SignatureRecord)>,
     /// The receiver, in a method.
     this: Option<ValueId>,
     /// The type this function's `return` statements must produce.
@@ -18343,6 +18349,7 @@ impl<'a> FuncBuilder<'a> {
             returns: HirType::Void,
             layouts: Vec::new(),
             callee_signature: None,
+            delegated_signature: None,
             this: None,
             suffix: String::new(),
             qualified: rustc_hash::FxHashMap::default(),
@@ -28471,6 +28478,11 @@ impl<'a> FuncBuilder<'a> {
     /// The signature this call's arguments answer to, when it is not the one
     /// the call node resolved to. See [`Self::callee_signature`].
     fn overriding_signature(&self, call: NodeId) -> Option<&nts_semantic_schema::SignatureRecord> {
+        if let Some((node, record)) = &self.delegated_signature
+            && *node == call
+        {
+            return Some(record);
+        }
         let (node, ty) = self.callee_signature?;
         if node != call {
             return None;
@@ -54698,13 +54710,13 @@ impl<'a> FuncBuilder<'a> {
         if let Some(method) = self.native_method(id) {
             return self.lower_native_method_call(id, (receiver, receiver_node), method, member, arguments).map(Some);
         }
-        if let Some((method, ty)) = self.delegated_method(receiver_node, member) {
+        if let Some((declaration, record)) = self.delegated_method(receiver_node, member, arguments) {
             // The call's arguments are the bound member's -- its optional
             // parameters, its `@ntsDefault`s, its ABI types -- and not the ones
             // lib.dom.d.ts declares, which the checker resolved the call to.
-            let outer = self.callee_signature.replace((id, ty));
-            let answer = self.lower_native_method_call(id, (receiver, receiver_node), method, member, arguments);
-            self.callee_signature = outer;
+            let outer = self.delegated_signature.replace((id, record.clone()));
+            let answer = self.lower_native_method_call_as(id, (receiver, receiver_node), (declaration, record), member, arguments);
+            self.delegated_signature = outer;
             return answer.map(Some);
         }
         if let Some(function) = self.called_method(id)? {
@@ -57037,17 +57049,90 @@ impl<'a> FuncBuilder<'a> {
         &self,
         receiver_node: NodeId,
         member: NodeId,
-    ) -> Option<((NodeId, nts_semantic_schema::SignatureId), TypeId)> {
+        arguments: &[NodeId],
+    ) -> Option<(NodeId, nts_semantic_schema::SignatureRecord)> {
         let bound = self.delegated_type(*self.snapshot.node_types.get(&receiver_node)?)?;
         let name = self.literal_name(member)?;
         let property = super::native::schema::property(self.snapshot, bound, &name)?;
-        let declaration = property.declaration?;
-        let TypeKind::Function(signature) = self.snapshot.types.get(property.ty.0 as usize)?.kind else {
-            return None;
+        let first = property.declaration?;
+        // **Every overload, chosen by the call's arguments.** A binding spells
+        // one lib.dom member as several C functions where its parameters have
+        // more than one native form: `append(...nodes: (Node | string)[])` is
+        // eight `append` overloads, `nts_dom_Element_append_nns` among them,
+        // one per arity and arm. The first whose parameters fit what the call
+        // passes is the one; with none, the first, so its own coercion says
+        // which argument does not.
+        let overloads: Vec<NodeId> = self
+            .name_node(first)
+            .and_then(|name| self.node(name).symbol)
+            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
+            .map_or_else(|| vec![first], |record| record.declarations.clone());
+        let TypeKind::Function(merged) = self.snapshot.types.get(property.ty.0 as usize)?.kind else { return None };
+        let merged = &self.snapshot.signatures[merged.0 as usize];
+        let method = |declaration: NodeId| -> Option<(NodeId, nts_semantic_schema::SignatureRecord)> {
+            let tagged = self.node(declaration).native.as_ref().is_some_and(|n| n.symbol.is_some() || n.listener.is_some());
+            let record = self.overload_signature(declaration, merged);
+            (tagged && self.is_native_instance_method(declaration, &record)).then_some((declaration, record))
         };
-        let tagged = self.node(declaration).native.as_ref().is_some_and(|n| n.symbol.is_some() || n.listener.is_some());
-        let record = &self.snapshot.signatures[signature.0 as usize];
-        (tagged && self.is_native_instance_method(declaration, record)).then_some(((declaration, signature), property.ty))
+        let candidates: Vec<_> = overloads.into_iter().filter_map(method).collect();
+        if candidates.len() > 1
+            && let Some(at) = candidates.iter().position(|(_, record)| self.arguments_fit(record, arguments))
+        {
+            return candidates.into_iter().nth(at);
+        }
+        candidates.into_iter().next().or_else(|| method(first))
+    }
+
+    /// One overload's own signature, from its declaration's parameters: the
+    /// snapshot's function type for an overloaded member carries the first
+    /// overload's only. Each parameter node carries its annotated type, and
+    /// the `this` parameter is the receiver's; the result is the member's,
+    /// which a binding's overloads of one member share.
+    fn overload_signature(&self, declaration: NodeId, merged: &nts_semantic_schema::SignatureRecord) -> nts_semantic_schema::SignatureRecord {
+        let mut record = merged.clone();
+        let mut parameters = Vec::new();
+        for parameter in self.children(declaration).into_iter().filter(|child| self.kind_of(*child) == Some(syntax::PARAMETER)) {
+            let Some(&ty) = self.snapshot.node_types.get(&parameter) else { return merged.clone() };
+            let name = self.name_node(parameter).and_then(|name| self.node(name).text.clone()).unwrap_or_default();
+            if name == "this" {
+                record.this_type = Some(ty);
+                continue;
+            }
+            let children = self.children(parameter);
+            let rest = children.iter().any(|child| self.kind_of(*child) == Some(syntax::DOT_DOT_DOT_TOKEN));
+            let optional = children.iter().any(|child| self.kind_of(*child) == Some(syntax::QUESTION_TOKEN));
+            parameters.push(nts_semantic_schema::ParameterRecord { name, ty, optional, rest });
+        }
+        record.parameters = parameters;
+        record
+    }
+
+    /// Whether a call's written arguments fit a native signature: as many as
+    /// it takes, less its optional tail, and each of the kind its parameter
+    /// is -- a string where it takes a string or a `StringView`, a handle
+    /// where it takes that handle or one it extends, a number where a number.
+    /// A parameter of any other type takes anything, which its coercion then
+    /// decides.
+    fn arguments_fit(&self, record: &nts_semantic_schema::SignatureRecord, arguments: &[NodeId]) -> bool {
+        let required = record.parameters.iter().filter(|parameter| !parameter.optional && !parameter.rest).count();
+        if arguments.len() < required || arguments.len() > record.parameters.len() {
+            return false;
+        }
+        record.parameters.iter().zip(arguments).all(|(parameter, argument)| {
+            let Some(&given) = self.snapshot.node_types.get(argument) else { return true };
+            let taken = parameter.ty;
+            if super::native::string_encoding(self.snapshot, taken).is_some() || super::native::is_string(self.snapshot, taken) {
+                return matches!(self.represent(given), Some(HirType::Managed(ManagedType::String)));
+            }
+            if let Some(super::native::Pointee::Opaque(want)) = super::native::pointer(self.snapshot, taken) {
+                return matches!(super::native::pointer(self.snapshot, given),
+                    Some(super::native::Pointee::Opaque(have)) if have == want || have.upcasts_to(&want));
+            }
+            if matches!(self.represent(taken), Some(HirType::Float { .. } | HirType::Int { .. })) {
+                return matches!(self.represent(given), Some(HirType::Float { .. } | HirType::Int { .. }));
+            }
+            true
+        })
     }
 
     /// The function implementing a call's callee, where a binding implements
@@ -57478,7 +57563,21 @@ impl<'a> FuncBuilder<'a> {
         member: NodeId,
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
-        let mut with_this = self.snapshot.signatures[signature.0 as usize].clone();
+        let record = self.snapshot.signatures[signature.0 as usize].clone();
+        self.lower_native_method_call_as(id, (receiver, receiver_node), (declaration, record), member, arguments)
+    }
+
+    /// As [`Self::lower_native_method_call`], at a signature in hand: a
+    /// delegated overload's, which the snapshot does not intern.
+    fn lower_native_method_call_as(
+        &mut self,
+        id: NodeId,
+        (receiver, receiver_node): (ValueId, NodeId),
+        (declaration, record): (NodeId, nts_semantic_schema::SignatureRecord),
+        member: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let mut with_this = record;
         let chained = self.without_chain_absence(id, with_this.return_type);
         // In a chain, the message's value is the method's type; the branch
         // around it makes the chain's.

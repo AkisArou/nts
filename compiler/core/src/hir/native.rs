@@ -3890,7 +3890,7 @@ fn bridged_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Bridged> {
 /// `const char *`, which is what C's "nullable" means. `string | undefined` is
 /// not the same: two absences make it an erased value, which is not the
 /// `NtsString *` the conversion reads, so it is left refused.
-fn is_string(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+pub(crate) fn is_string(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
     string_encoding(snapshot, ty) == Some(Encoding::Utf8)
 }
 
@@ -3929,7 +3929,7 @@ pub(crate) fn is_branded_string(snapshot: &SemanticSnapshot, ty: TypeId) -> bool
 /// How a `string` parameter crosses, or `None` for anything that is not one:
 /// `string` as UTF-8 and `Utf16String` -- `string` with the optional
 /// `__c_utf16` brand -- as UTF-16, either one optionally `| null`.
-fn string_encoding(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Encoding> {
+pub(crate) fn string_encoding(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Encoding> {
     let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
     match kind(ty)? {
         TypeKind::String => Some(Encoding::Utf8),
