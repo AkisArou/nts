@@ -13215,6 +13215,7 @@ pub fn lower_with(
     // functions in one order.
     lower_wanted_closures(snapshot, foreign, &shared, &closures, &mut lowered, &mut wanted);
 
+    lay_out_held_signatures(snapshot, &mut lowered.program);
     relate_closures_to_signatures(snapshot, &closures, &hierarchy, &mut lowered.program);
     declare_uniform_entries(snapshot, &hierarchy, &mut lowered.program, &shared);
 
@@ -15148,6 +15149,85 @@ fn relate_closures_to_signatures(
     }
     for (at, ty, _) in relate {
         program.layouts[at].base = Some(ty);
+    }
+}
+
+/// Lay out every function type the program holds a value of.
+///
+/// A layout is discovered by whatever asks `layout_of`, and a signature is
+/// asked about where a signature mentions it (`materialize`). A *value* can
+/// have a function type no signature mentions: a generic call's erased result
+/// unerased to `const functionIdentity: (value: (n: number) => number) => (n:
+/// number) => number = identity`'s declared result type, one of three ids the
+/// checker made for `(n: number) => number` in that program and the one
+/// nothing asked about. The backend then declined the function -- "an object
+/// type with no layout" -- and the JVM, given a layout, would still have
+/// failed its `checkcast` had the closure's class not extended it.
+///
+/// So each such id gets [`signature_layout`] through `collect_layouts`, which
+/// merges it into the layout already holding that signature -- they are named
+/// by `signature_key` -- or adds it. Before `relate_closures_to_signatures`,
+/// which then makes every closure of the signature extend it.
+fn lay_out_held_signatures(snapshot: &SemanticSnapshot, program: &mut Program) {
+    let laid: rustc_hash::FxHashSet<TypeId> =
+        program.layouts.iter().flat_map(|layout| layout.types.iter().copied()).collect();
+    let mut held: Vec<TypeId> = Vec::new();
+    let mut note = |ty: &HirType| objects_in(ty, &mut held);
+    for func in &program.funcs {
+        note(&func.return_type);
+        func.params.iter().for_each(|param| note(&param.ty));
+        func.values.iter().for_each(|value| note(&value.ty));
+    }
+    for layout in &program.layouts {
+        layout.fields.iter().for_each(|field| note(&field.ty));
+    }
+    held.sort_by_key(|ty| ty.0);
+    held.dedup();
+    let unlaid: Vec<Layout> = held
+        .into_iter()
+        .filter(|ty| !laid.contains(ty) && signature_key(snapshot, *ty).is_some())
+        .map(|ty| signature_layout(snapshot, ty))
+        .collect();
+    collect_layouts(program, unlaid);
+}
+
+/// A function type's layout: no fields, and no methods until a closure
+/// declares its `call` there (`relate_closures_to_signatures`).
+///
+/// A function type has no fields because two closures of one type differ by
+/// what they captured, and that is their own class's business.
+fn signature_layout(snapshot: &SemanticSnapshot, ty: TypeId) -> Layout {
+    Layout {
+        types: vec![ty],
+        name: signature_name(snapshot, ty),
+        interfaces: Vec::new(),
+        fields: Vec::new(),
+        methods: Vec::new(),
+        // A function type is a signature, not a class.
+        base: None,
+    }
+}
+
+/// Every object type id in `ty`, the ones inside a container included.
+fn objects_in(ty: &HirType, into: &mut Vec<TypeId>) {
+    let HirType::Managed(managed) = ty else { return };
+    match managed {
+        ManagedType::Object(id) => into.push(*id),
+        ManagedType::Array(inner) | ManagedType::Promise(inner) | ManagedType::Set(inner) | ManagedType::View(inner) => {
+            objects_in(inner, into);
+        }
+        ManagedType::Map(key, value) | ManagedType::Table(key, value) => {
+            objects_in(key, into);
+            objects_in(value, into);
+        }
+        ManagedType::String
+        | ManagedType::BoxedBigInt
+        | ManagedType::Template
+        | ManagedType::Date
+        | ManagedType::Buffer
+        | ManagedType::AnyView
+        | ManagedType::DataView
+        | ManagedType::Symbol => {}
     }
 }
 
@@ -45769,18 +45849,8 @@ impl<'a> FuncBuilder<'a> {
             self.snapshot.types.get(ty.0 as usize).ok_or_else(|| {
                 self.unsupported(id, "an object type that is not in the snapshot")
             })?;
-        // A function type has no fields: two closures of one type differ by what
-        // they captured, and that is their own class's business.
         if matches!(record.kind, TypeKind::Function(_)) {
-            let layout = Layout {
-                types: vec![ty],
-                name: signature_name(self.snapshot, ty),
-                interfaces: Vec::new(),
-                fields: Vec::new(),
-                methods: Vec::new(),
-                // A function type is a signature, not a class.
-                base: None,
-            };
+            let layout = signature_layout(self.snapshot, ty);
             self.layouts.push(layout.clone());
             return Ok(layout);
         }
