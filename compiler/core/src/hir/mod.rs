@@ -57,6 +57,7 @@ pub mod monomorphize;
 pub mod narrow;
 pub mod native;
 mod dispatch;
+mod bridges;
 mod native_callback;
 mod native_storage;
 /// Who owns what, and for how long: one answer per value, which the counting
@@ -5300,7 +5301,7 @@ fn settle(lowered: &mut lower::Lowered) {
     // about, which the JVM has refused as `NTS4009` since it was written while
     // C and LLVM read the pointer and trust it.
     let mut unreachable_calls = rustc_hash::FxHashSet::default();
-    for (at, value, why) in dispatch::check(&lowered.program) {
+    for (at, value, why) in dispatch::check(&lowered.program).into_iter().chain(bridges::check(&lowered.program)) {
         let func = &lowered.program.funcs[at];
         lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
             "NTS1001",
