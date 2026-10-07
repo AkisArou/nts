@@ -73,29 +73,23 @@ else await check();
 function build(): void {
   mkdirSync(work, { recursive: true });
   // The build's configuration, so the app directory needs none: every
-  // TypeScript file in it, compiled against the nts:dom surface.
+  // TypeScript file in it. target.chromium() supplies the rest: the DOM
+  // surface (nts:dom, and lib.dom bound to it) and the DOM's native half.
   const sources = typescriptFiles(app);
-  // The product's entry is a module here that re-exports the app's: the
-  // build takes a package's native code from the configuration above its
-  // files, and this one must be above one of them.
-  const reexport = resolve(work, "entry.ts");
-  writeFileSync(reexport, `// Written by tooling/chromium/app.ts: the app's entry, re-exported.\nexport * from ${JSON.stringify(entry)};\n`);
   writeFileSync(resolve(work, "tsconfig.json"), `${JSON.stringify({
     extends: resolve(root, "tsconfig.fixtures.json"),
-    files: [reexport, ...sources, resolve(lane, "dom/types/dom-idl.d.ts"), resolve(lane, "dom/types/dom-abi.d.ts"),
-      resolve(root, "runtime/native/libc.d.ts")],
+    files: sources,
   }, null, 2)}\n`);
   const product = backend === "c" ? "app" : "app-llvm";
   writeFileSync(resolve(work, "nts.config.ts"), `// Written by tooling/chromium/app.ts for ${relative(root, app)}.
-import { defineConfig, library, sources, target } from ${JSON.stringify(resolve(root, "tooling/config/src/index.ts"))};
+import { defineConfig, library, target } from ${JSON.stringify(resolve(root, "tooling/config/src/index.ts"))};
 export default defineConfig({
   products: {
     ${JSON.stringify(product)}: library.staticNative({
-      targets: [target.linux({ backend: ${JSON.stringify(backend)} })],
-      entry: "./entry.ts",
+      targets: [target.chromium({ backend: ${JSON.stringify(backend)} })],
+      entry: ${JSON.stringify(relative(work, entry))},
     }),
   },
-  native: [sources({ dir: ${JSON.stringify(relative(work, resolve(lane, "dom/abi")))} })],
 });
 `);
   const nts = resolve(root, process.env.NTS_BIN ?? "target/release/nts");

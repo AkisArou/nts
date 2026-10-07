@@ -23,14 +23,14 @@ shared tooling.
 | 12 | The `hidden` getter is not bound. | generator (`report.json`) | its Blink side builds a V8 value from a ScriptState; it needs a union result | a union result type, or a hand-written getter | L |
 | 17 | Members taking `any` are not bound (`history.pushState(data, ...)`, `CustomEvent.detail`, `AbortController.abort(reason)` beyond its no-argument form). | generator (`report.json`) | a host function cannot take or return `any` | `any` crosses to C (an erased value with its tag) | C |
 | 20 | An uncaught throw in a listener, a timer or an app's `main` ends the renderer (Chromium's crash page), and `console.*` writes to the process's stdout/stderr, not DevTools. The app examples and vectors throw nothing uncaught. | runtime, every callback | request 11: no host hook for console output or uncaught throws (`nts_uncaught` calls `exit(1)` inside a callback) | request 11 delivered, and the lane wires both into Blink | C |
-| 23 | A lib.dom vector's `forEach` callback collects into a captured array, not a captured `let`, and each case is a block of its own. | `tests/lib-dom-vectors.ts` | an RC use-after-free: with an owned host handle local earlier in the function, a captured `let` read after an inlined (delegated) `forEach` is read after the last-use release of its cell's value, which ran on the cell while the read goes through the loop's copy of it (`" left "` read back as `" -remo"`). 7-line reduction, control and emitted C in `~/.cache/nts-park/chromium-rc-cell-uaf/`, sent to MainClaude 2026-10-07 for a fixture | that reduction releases after the read | C |
+| 23 | The `live-forEach-append` lib.dom vector collects into a captured array, not a captured `let`. | `tests/lib-dom-vectors.ts` | an RC use-after-free left after dfbfed72e: a captured `let` passed directly as a closure call's argument after an inlined forEach is retained only after its cell's value is released (with an owned host handle local earlier in the function). Reduction, control and emitted C in `~/.cache/nts-park/chromium-rc-cell-uaf-2/`, sent to MainClaude 2026-10-07 | that reduction retains before the release | C |
+| 24 | The notes example declares each nested helper above its callers. | `examples/notes/notes.ts` | a nested function called before its declaration is refused: blocker `a-nested-function-calls-a-later-sibling` (fixed on MainClaude's claude/hoist, db709ecc1) | the fix is on main: declare them in reading order | C |
 
 ## Waiting on shared tooling
 
 | # | Workaround | Where | Cause | Remove when | Owner |
 |---|---|---|---|---|---|
 | 13 | `app.ts` reads `main`'s C symbol (`main_`) and its ownership from `program.h` comments. | `tooling/chromium/app.ts` (`appEntry`) | the `prefix` option of `library.staticNative` (`tooling/config/src/product.ts`) is documented but not applied | `prefix` works, or `program.h` names symbols in a machine-readable form | T |
-| 14 | `app.ts` builds behind a generated `entry.ts` that re-exports the app's `main.ts`. | `tooling/chromium/app.ts` (`build`) | `nts build` takes native code only from the `nts.config.ts` above a program file, so a config beside the program cannot add `dom/abi` | a config can name native code for files outside its directory, or the target supplies the DOM ABI (the lib.dom overlay plan) | T |
 
 ## Lane debt (no external cause)
 

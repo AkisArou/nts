@@ -1,0 +1,22 @@
+<!doctype html>
+<meta charset="utf-8">
+<!-- Opts this page in: nts_app runs the app's main(document) once it has loaded. -->
+<meta name="nts-app">
+<title>notes</title>
+<link rel="stylesheet" href="styles.css">
+<main id="app">
+  <aside>
+    <input id="search" type="search" placeholder="Search" aria-label="search">
+    <ul id="list"></ul>
+    <button id="new">New note</button>
+  </aside>
+  <section id="editor">
+    <input id="title" placeholder="Title" aria-label="title">
+    <textarea id="body" placeholder="Write something" aria-label="body"></textarea>
+    <footer>
+      <output id="saved">saved</output>
+      <button id="delete">Delete</button>
+    </footer>
+  </section>
+</main>
+<footer class="about">Compiled TypeScript typed by the stock lib.dom.d.ts, no nts:dom import. Application scripts: zero.</footer>

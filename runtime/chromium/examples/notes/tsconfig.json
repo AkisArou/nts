@@ -1,0 +1,5 @@
+{
+  "//": "For the editor: the app's sources, typed by lib.dom alone. tooling/chromium/app.ts writes the build's own configuration, for target.chromium().",
+  "extends": "../../../../tsconfig.fixtures.json",
+  "files": ["main.ts", "notes.ts", "../../dom/types/dom-idl.d.ts", "../../dom/types/dom-abi.d.ts", "../../dom/types/lib-dom-bindings.d.ts", "../../../native/libc.d.ts"]
+}

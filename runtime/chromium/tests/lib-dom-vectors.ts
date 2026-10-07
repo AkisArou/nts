@@ -30,9 +30,10 @@ export function libDomTranscript(): string {
     root.appendChild(ul);
     return ul;
   };
-  // A forEach callback collects into an array it captures, not into a `let`:
-  // under RC a captured `let` read after the inlined forEach is read after its
-  // release (contracts/workarounds.md, 23). Each case is a block of its own.
+  // Each case is a block of its own. A forEach case's callback appends to a
+  // `let` it captures, read after the forEach: with `root`, an owned handle,
+  // above it, this is the shape whose read once followed its release under RC
+  // (blockers/a-captured-let-read-after-a-bound-for-each).
   const rest = (ul: HTMLUListElement): string => {
     let text = "";
     for (const child of ul.childNodes) text += "," + child.textContent;
@@ -51,12 +52,12 @@ export function libDomTranscript(): string {
   }
   {
     const ul = list(5);
-    const seen: string[] = [];
+    let visited = "";
     ul.childNodes.forEach((child: ChildNode): void => {
-      seen.push("," + child.textContent);
+      visited += "," + child.textContent;
       ul.removeChild(child);
     });
-    log("live-forEach-remove", seen.join("") + " left " + rest(ul));
+    log("live-forEach-remove", visited + " left " + rest(ul));
   }
 
   // A static NodeList (querySelectorAll): every node it was made with.
@@ -71,12 +72,12 @@ export function libDomTranscript(): string {
   }
   {
     const ul = list(5);
-    const seen: string[] = [];
+    let visited = "";
     ul.querySelectorAll("li").forEach((item: HTMLLIElement): void => {
-      seen.push("," + item.textContent);
+      visited += "," + item.textContent;
       ul.removeChild(item);
     });
-    log("static-forEach-remove", seen.join("") + " left " + rest(ul));
+    log("static-forEach-remove", visited + " left " + rest(ul));
   }
 
   // A live HTMLCollection (children), each visited element removed.
@@ -106,6 +107,7 @@ export function libDomTranscript(): string {
   }
   {
     const ul = list(2);
+    // A captured array, not a `let`: contracts/workarounds.md, 23.
     const seen: string[] = [];
     ul.childNodes.forEach((child: ChildNode): void => {
       seen.push("," + child.textContent);

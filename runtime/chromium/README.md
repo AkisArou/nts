@@ -25,7 +25,11 @@ what does not yet is listed with its reason in
 
 An app is a directory with an `index.html` that opts in with
 `<meta name="nts-app">` and a `main.ts` that exports `main(document:
-Document)` (and, if it needs one, `unload()`), written against `nts:dom`:
+Document)` (and, if it needs one, `unload()`). It is written against the
+stock lib.dom.d.ts, as page script is, with no import -- the build targets
+`target.chromium()`, which binds lib.dom to the generated bindings
+(docs/lib-dom.md) -- or against `nts:dom` directly, the bindings' own
+spelling:
 
 ```ts
 import { setTimeout } from "nts:dom";
@@ -46,8 +50,11 @@ timer callbacks, and observers (mutation, resize, intersection). `unload()`
 runs when the document ends in a renderer that goes on (reload, navigation); closing the window may end the process without it, as
 with page script's `unload`. Keep the app's state in what `main` creates.
 Module-level state is not per document yet, and the build refuses it
-(contracts/compiler-requests.md, 10). [`examples/todo`](examples/todo) is
-TodoMVC, the same app the TodoMVC benchmark measures.
+(contracts/compiler-requests.md, 10). [`examples/notes`](examples/notes) is
+written against lib.dom alone (localStorage, a debounced save, search,
+keyboard shortcuts); [`examples/todo`](examples/todo) is TodoMVC against
+`nts:dom`, the same app the TodoMVC benchmark measures; and
+[`examples/paint`](examples/paint) draws on the 2D canvas.
 
 ```sh
 node tooling/chromium/app.ts build runtime/chromium/examples/todo [--backend c|llvm]

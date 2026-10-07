@@ -1,0 +1,18 @@
+:root { --bg: #fafafa; --fg: #1d1d1f; --line: #d9d9de; --pick: #e8eefc; --accent: #2f6fd6; }
+:root.dark { --bg: #1c1c1e; --fg: #f2f2f7; --line: #3a3a3c; --pick: #26324a; --accent: #6ea0ff; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+#app { display: grid; grid-template-columns: 240px 1fr; height: calc(100vh - 32px); }
+aside { border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 8px; gap: 8px; }
+#list { list-style: none; margin: 0; padding: 0; flex: 1; overflow: auto; }
+#list li { padding: 6px 8px; border-radius: 6px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#list li.chosen { background: var(--pick); }
+#list li.hidden { display: none; }
+#editor { display: flex; flex-direction: column; padding: 12px; gap: 8px; }
+#title { font-size: 20px; font-weight: 600; border: 0; background: transparent; color: inherit; }
+#body { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 6px; padding: 8px; background: transparent; color: inherit; font: inherit; }
+#editor footer { display: flex; justify-content: space-between; align-items: center; }
+#saved { opacity: 0.6; font-size: 13px; }
+button { border: 1px solid var(--line); background: transparent; color: var(--accent); border-radius: 6px; padding: 4px 10px; }
+input[type=search] { padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; }
+.about { height: 32px; padding: 6px 12px; font-size: 12px; opacity: 0.6; }
