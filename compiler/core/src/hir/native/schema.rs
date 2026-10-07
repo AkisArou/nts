@@ -12,6 +12,15 @@ pub(crate) fn property<'a>(snapshot: &'a SemanticSnapshot, ty: TypeId, name: &st
     }
 }
 
+/// Every property of `ty`, its intersection's parts' in order.
+pub(crate) fn properties(snapshot: &SemanticSnapshot, ty: TypeId) -> Vec<&PropertyRecord> {
+    match snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
+        Some(TypeKind::Object { properties }) => properties.iter().collect(),
+        Some(TypeKind::Intersection(parts)) => parts.iter().flat_map(|part| properties(snapshot, *part)).collect(),
+        _ => Vec::new(),
+    }
+}
+
 fn marker(snapshot: &SemanticSnapshot, ty: TypeId, name: &str) -> Option<TypeId> {
     let p = property(snapshot, ty, name)?;
     (p.readonly && !p.optional && p.kind == MemberKind::Field).then_some(p.ty)

@@ -39468,12 +39468,23 @@ impl<'a> FuncBuilder<'a> {
     /// The setter of a bound property a binding spells per type of the value
     /// written -- `_set_hidden_boolean` for `el.hidden = true`, and for
     /// `el.onclick = f` `_set_onclick_void` or `_boolean` by `f`'s result,
-    /// `_set_onclick_null` for `null` -- where the bound type declares no
-    /// `@ntsSet` for it. The bound type, the method, and whether it takes the
-    /// value.
-    fn delegated_typed_setter(&self, object: NodeId, member: NodeId, assigned: TypeId) -> Option<(TypeId, String, bool)> {
+    /// `_set_onclick_null` for `null` -- where the bound type's `@ntsSet`
+    /// does not take it, or it has none. A value of a bound interface takes
+    /// the setter whose parameter it fits: `ctx.fillStyle = gradient` is
+    /// `_set_fillStyle_gradient`. The bound type, the method, and whether it
+    /// takes the value.
+    fn delegated_typed_setter(&self, object: NodeId, member: NodeId, value: NodeId) -> Option<(TypeId, String, bool)> {
         let bound = self.delegated_type(*self.snapshot.node_types.get(&object)?)?;
         let name = self.literal_name(member)?;
+        let assigned = *self.snapshot.node_types.get(&value)?;
+        if super::native::pointer(self.snapshot, assigned).is_some() {
+            let prefix = format!("_set_{name}_");
+            let method = super::native::schema::properties(self.snapshot, bound)
+                .into_iter()
+                .filter(|property| property.name.starts_with(&prefix))
+                .find(|property| self.method_takes(property, value))?;
+            return Some((bound, method.name.clone(), true));
+        }
         let kind = match &self.snapshot.types.get(assigned.0 as usize)?.kind {
             TypeKind::Null => "null",
             TypeKind::Boolean | TypeKind::Literal(nts_semantic_schema::LiteralValue::Boolean(_)) => "boolean",
@@ -39494,17 +39505,25 @@ impl<'a> FuncBuilder<'a> {
         Some((bound, method, kind != "null"))
     }
 
-    /// The static type of what a plain `=` assigns to `target`: the right side
-    /// of `target = value`. `None` for anything else -- a compound assignment
+    /// What a plain `=` assigns to `target`: the right side of
+    /// `target = value`. `None` for anything else -- a compound assignment
     /// reads before it writes, and a destructuring target is not one place.
-    fn assigned_type(&self, target: NodeId) -> Option<TypeId> {
+    fn assigned_value(&self, target: NodeId) -> Option<NodeId> {
         let assignment = self.node(target).parent?;
         let [left, operator, right] = self.syntax_children_of(assignment)[..] else { return None };
         (self.kind_of(assignment) == Some(syntax::BINARY_EXPRESSION)
             && left == target
             && self.kind_of(operator) == Some(syntax::EQUALS_TOKEN))
-        .then(|| self.snapshot.node_types.get(&right).copied())
-        .flatten()
+        .then_some(right)
+    }
+
+    /// Whether a bound method -- a setter -- takes `value` as its one
+    /// argument, by [`Self::arguments_fit`].
+    fn method_takes(&self, method: &nts_semantic_schema::PropertyRecord, value: NodeId) -> bool {
+        let Some(TypeKind::Function(signature)) = self.snapshot.types.get(method.ty.0 as usize).map(|record| &record.kind) else {
+            return false;
+        };
+        self.snapshot.signatures.get(signature.0 as usize).is_some_and(|record| self.arguments_fit(record, &[value]))
     }
 
     fn is_accessor_property(&self, member: NodeId) -> bool {
@@ -40145,13 +40164,21 @@ impl<'a> FuncBuilder<'a> {
     /// (`el.hidden = true`); or through the named-property methods
     /// (`el.dataset.id = v`). `None` for any other property.
     fn delegated_place(&mut self, target: NodeId, object: NodeId, member: NodeId) -> Result<Option<Place>, Diagnostic> {
-        if let Some((bound, setter)) = self.delegated_accessor(object, member, true) {
+        // The property's own setter, unless what a plain `=` assigns is not
+        // what it takes: `fillStyle`'s takes a string, and a gradient is
+        // written through the setter that takes one.
+        let assigned = self.assigned_value(target);
+        if let Some((bound, setter)) = self.delegated_accessor(object, member, true)
+            && assigned.is_none_or(|value| {
+                super::native::schema::property(self.snapshot, bound, &setter).is_some_and(|method| self.method_takes(method, value))
+            })
+        {
             let getter = self.delegated_accessor(object, member, false).map(|(_, getter)| getter);
             let receiver = self.lower_expression(object)?;
             return Ok(Some(Place::NativeAccessor { receiver, ty: bound, getter, setter, takes_value: true }));
         }
-        if let Some(assigned) = self.assigned_type(target)
-            && let Some((bound, setter, takes_value)) = self.delegated_typed_setter(object, member, assigned)
+        if let Some(value) = assigned
+            && let Some((bound, setter, takes_value)) = self.delegated_typed_setter(object, member, value)
         {
             let receiver = self.lower_expression(object)?;
             return Ok(Some(Place::NativeAccessor { receiver, ty: bound, getter: None, setter, takes_value }));
@@ -58304,6 +58331,31 @@ impl<'a> FuncBuilder<'a> {
     /// with `nts_string_view`: no call and nothing to give back. The pointer
     /// holds no count of its own, so it leans on the string, and the string's
     /// release is placed after the call that reads it.
+    /// A string argument lent as [`Self::lend_string`] lends it.
+    ///
+    /// **A string is lent, and only a string.** A call's own types vouch for
+    /// that everywhere but a member lib.dom declares wider than the binding
+    /// implementing it: `ctx.fillStyle = gradient` reached
+    /// `_set_fillStyle_string(StringView)`, and the gradient's handle was lent
+    /// as the string -- a pointer cast, which compiled. Refused here, where
+    /// every native call's string passes, rather than at each way of reaching
+    /// one.
+    fn lend_string_argument(
+        &mut self,
+        id: NodeId,
+        string: ValueId,
+        encoding: super::native::Encoding,
+        representation: HirType,
+        lent: &mut Vec<Lent>,
+        origin: Origin,
+    ) -> Result<ValueId, Diagnostic> {
+        let have = &self.values[string.0 as usize].ty;
+        if !matches!(have, HirType::Managed(ManagedType::String)) && *have != representation {
+            return Err(self.unsupported(id, "a value that is not a string, where the native function takes a string"));
+        }
+        Ok(self.lend_string(string, encoding, representation, lent, origin))
+    }
+
     fn lend_string(
         &mut self,
         string: ValueId,
@@ -59004,9 +59056,8 @@ impl<'a> FuncBuilder<'a> {
                 ),
                 Role::String(encoding) => {
                     let Some(string) = argument else { continue };
-                    let pointer =
-                        self.lend_string(string, encoding, target.parameters[at].representation(), &mut lent, origin.clone());
-                    c_args.push(pointer);
+                    let want = target.parameters[at].representation();
+                    c_args.push(self.lend_string_argument(id, string, encoding, want, &mut lent, origin.clone())?);
                 }
                 Role::Closure { lifetime, bridge, bridging } => {
                     let Some(closure) = argument else { continue };
