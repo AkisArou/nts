@@ -1325,7 +1325,7 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
                 let passed = bridge_argument(
                     compiled,
                     (at, parameter, foreign, from),
-                    (bridging.boxed(at), length, counted),
+                    (bridging.boxed(at), length, counted, bridging.sequence(at)),
                     (&mut body, &mut releases),
                 )?;
                 arguments.push(passed);
@@ -1415,10 +1415,19 @@ fn declare_types(program: &Program, bridging: &nts_core::hir::Bridging, types: &
     }
 }
 
+/// What a bridge argument is converted by: the boxed record, the array's
+/// length, whether the program counts, and the sequence made an array.
+type Conversions<'a> = (
+    Option<&'a nts_core::hir::BoxedParameter>,
+    Option<(usize, HirType)>,
+    bool,
+    Option<&'a nts_core::hir::SequenceParameter>,
+);
+
 fn bridge_argument(
     compiled: &Func,
     (at, parameter, foreign, from): (usize, usize, &nts_core::hir::native::Type, HirType),
-    (boxing, length, counted): (Option<&nts_core::hir::BoxedParameter>, Option<(usize, HirType)>, bool),
+    (boxing, length, counted, sequence): Conversions<'_>,
     (body, releases): (&mut String, &mut String),
 ) -> Result<String, Diagnostic> {
     let to = compiled.params[parameter + 1].ty.clone();
@@ -1428,6 +1437,16 @@ fn bridge_argument(
     // the copy and releases it after the call; anything that keeps the box
     // counts it, so one kept past the call outlives this release. Without
     // counting nothing is given back (see the C bridge).
+    // A sequence C passes, as the array the compiled function takes: made by
+    // the function lowering made for it (`Bridging::sequences`), and given
+    // back after the call under counting, as a boxed copy is.
+    if let Some(sequence) = sequence {
+        let _ = writeln!(body, "  %q{at} = call ptr {}(ptr %a{at})", symbol(&sequence.function));
+        if counted {
+            let _ = writeln!(releases, "  call void @nts_release(ptr %q{at})");
+        }
+        return Ok(format!("ptr %q{at}"));
+    }
     if let Some(boxing) = boxing {
         let _ = writeln!(body, "  %g{at} = call i64 @{}()", boxing.get_type);
         let _ = writeln!(body, "  %b{at} = call ptr @nts_gobject_boxed_copy(ptr %a{at}, i64 %g{at})");

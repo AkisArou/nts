@@ -863,6 +863,22 @@ pub struct HandleArrayParameter {
 pub struct Bridging {
     pub boxed: Vec<BoxedParameter>,
     pub arrays: Vec<HandleArrayParameter>,
+    /// Sequences C passes where the compiled function takes an array. Added
+    /// by lowering, which alone knows what the closure takes.
+    pub sequences: Vec<SequenceParameter>,
+}
+
+/// A parameter a bridge receives as a sequence -- nts:dom's
+/// `MutationRecordSequence`, `length` and `item` -- which the compiled
+/// function takes as an array: lib.dom's `MutationObserver` callback takes
+/// `MutationRecord[]`. `function`, a function of this program's that lowering
+/// made, makes the array -- a new one each call, as `WebIDL` makes one of a
+/// `sequence<T>` for page script -- and the bridge gives it back after the
+/// call, as it does a boxed copy.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SequenceParameter {
+    pub at: u32,
+    pub function: String,
 }
 
 impl Bridging {
@@ -890,9 +906,15 @@ impl Bridging {
         self.arrays.iter().find(|array| array.at as usize == at)
     }
 
+    /// The sequence C's argument `at` is, made an array, if it is one.
+    #[must_use]
+    pub fn sequence(&self, at: usize) -> Option<&SequenceParameter> {
+        self.sequences.iter().find(|sequence| sequence.at as usize == at)
+    }
+
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.boxed.is_empty() && self.arrays.is_empty()
+        self.boxed.is_empty() && self.arrays.is_empty() && self.sequences.is_empty()
     }
 }
 

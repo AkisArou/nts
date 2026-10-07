@@ -1,4 +1,12 @@
-// expect: NTS1001 a callback taking an array where its binding passes a `NtsDomMutationRecordSequence`, which the bridge does not make one of
+// expect: emit-c --rc -> emits-c nts_sequence_NtsDomMutationRecordSequence_as_NtsDomMutationRecord(
+//
+// **FIXED 2026-10-07, kept as a guard** (MainClaude): the bridge makes the
+// array, by a function lowering makes for the pair -- an array of the
+// sequence's items, a new one each call, retained -- and gives it back after
+// the call (`Bridging::sequences`, `with_sequence_arrays`), in both backends.
+// The report as filed, which expected the refusal below:
+//
+// expected: NTS1001 a callback taking an array where its binding passes a `NtsDomMutationRecordSequence`, which the bridge does not make one of
 //
 // lib.dom.d.ts bound by delegation (runtime/chromium/docs/lib-dom.md): lib.dom's
 // `MutationObserver` calls its callback with `MutationRecord[]`; nts:dom's

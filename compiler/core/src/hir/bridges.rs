@@ -44,6 +44,14 @@ pub(super) fn check(program: &Program) -> Vec<(usize, ValueId, String)> {
                     if bridging.array(c_at).is_some() || bridging.boxed(c_at).is_some() {
                         continue;
                     }
+                    // A sequence the bridge makes an array of, by a function
+                    // lowering made -- which has to be there to be called.
+                    if let Some(sequence) = bridging.sequence(c_at) {
+                        if !by_name.contains_key(sequence.function.as_str()) {
+                            problems.push((at, value, format!("a callback whose `{}` is passed as an array by `{}`, which did not compile", passed.tag, sequence.function)));
+                        }
+                        continue;
+                    }
                     let Some(taken) = bridging.parameter(c_at).and_then(|parameter| body.params.get(parameter + 1)) else { continue };
                     // And a string the bridge copies in: an `NSString` a block
                     // is given, as the program's string -- asked of the

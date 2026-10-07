@@ -57,6 +57,7 @@ impl FuncBuilder<'_> {
     fn harvest(&mut self, wanted: &mut impl Extend<usize>, arrivals: &mut Arrivals) {
         wanted.extend(self.used_closures.iter().copied());
         arrivals.at_signature.append(&mut self.arrivals.at_signature);
+        arrivals.sequence_arrays.append(&mut self.sequence_arrays);
     }
 }
 
@@ -69,6 +70,21 @@ pub struct Arrivals {
     /// disagree about and the pointer passes -- and the one thing that differs is
     /// the `#call` descriptor, which that predicate does not look at.
     pub at_signature: Vec<Arrival>,
+    /// Functions bridges call to make an array of a sequence C passes. See
+    /// [`SequenceArray`].
+    pub sequence_arrays: Vec<SequenceArray>,
+}
+
+/// A function a bridge calls to make an array of a sequence C passes
+/// (`Bridging::sequences`): requested where the bridge is made, and made once
+/// per name after every body is lowered (`lower_sequence_arrays`).
+#[derive(Debug)]
+pub struct SequenceArray {
+    pub name: String,
+    sequence: TypeId,
+    array: HirType,
+    /// The closure whose bridge asked, for what the function reports against.
+    site: NodeId,
 }
 
 /// Closures whose `#call` disagrees with a slot they were admitted into.
@@ -11823,6 +11839,33 @@ fn lower_module_initializer(
     }
 }
 
+/// The functions bridges call to make an array of a sequence C passes
+/// ([`SequenceArray`]), one per name. One that does not lower is uncompiled,
+/// and `bridges::check` refuses each bridge that would call it.
+fn lower_sequence_arrays(
+    snapshot: &SemanticSnapshot,
+    shared: &Shared,
+    lowered: &mut Lowered,
+    wanted: &mut std::collections::BTreeSet<usize>,
+) {
+    let mut made = rustc_hash::FxHashSet::default();
+    for request in std::mem::take(&mut lowered.arrivals.sequence_arrays) {
+        if !made.insert(request.name.clone()) {
+            continue;
+        }
+        let mut builder = shared.builder(snapshot, NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default), Copy::default());
+        match builder.lower_sequence_array(&request) {
+            Ok(func) => lowered.program.funcs.push(func),
+            Err(diagnostic) => {
+                lowered.program.uncompiled.push((request.name.clone(), diagnostic.message.clone()));
+                lowered.diagnostics.push(diagnostic);
+            }
+        }
+        builder.harvest(wanted, &mut lowered.arrivals);
+        collect_layouts(&mut lowered.program, builder.layouts);
+    }
+}
+
 /// Keep the module-scope statements that lower, and refuse the rest one by one.
 ///
 /// Each statement is tried alone, and one that cannot lower is dropped and named
@@ -13036,6 +13079,9 @@ fn lower_wanted_closures(
         builder.harvest(wanted, &mut lowered.arrivals);
         collect_layouts(&mut lowered.program, builder.layouts);
     }
+    // And the functions bridges call to make an array of a sequence, which
+    // a closure lowered just above may have asked for.
+    lower_sequence_arrays(snapshot, shared, lowered, wanted);
 }
 
 /// The `const` aliases a closure's body reads, which both of its builders need.
@@ -18246,6 +18292,9 @@ struct FuncBuilder<'a> {
     /// that declares one thing this compiler cannot represent should not be
     /// reported as failing on it unless something reaches it.
     used_closures: Vec<usize>,
+    /// Functions this body's bridges call to make an array of a sequence:
+    /// harvested into [`Arrivals::sequence_arrays`].
+    sequence_arrays: Vec<SequenceArray>,
     /// See [`Arrivals`]; drained by [`FuncBuilder::harvest`].
     arrivals: Arrivals,
 }
@@ -18410,6 +18459,7 @@ impl<'a> FuncBuilder<'a> {
             class_tokens: rustc_hash::FxHashMap::default(),
             written_order: rustc_hash::FxHashMap::default(),
             used_closures: Vec::new(),
+            sequence_arrays: Vec::new(),
             arrivals: Arrivals::default(),
             substitution: Substitution::default(),
             sources: super::generics::Sources::default(),
@@ -58296,7 +58346,10 @@ impl<'a> FuncBuilder<'a> {
         let answer = self.finish_call_typed(id, callee, args, lent, Some(declaration), typed)?;
         self.release_via(id, queried);
         match sequence {
-            Some(sequence) => self.array_of_sequence(id, answer, sequence),
+            Some(sequence) => {
+                let array = self.type_of(id).ok_or_else(|| self.unrepresentable(id, "an array made of a sequence"))?;
+                self.array_of_sequence(id, answer, sequence, array)
+            }
             None => Ok(answer),
         }
     }
@@ -58319,8 +58372,7 @@ impl<'a> FuncBuilder<'a> {
     /// kind of what `item` answers on the ground a `for...of` over a bound
     /// collection reads one ([`Self::delegated_walk`]). A sequence is a list
     /// made once, so its length does not move while it is copied.
-    fn array_of_sequence(&mut self, id: NodeId, sequence: ValueId, ty: TypeId) -> Result<ValueId, Diagnostic> {
-        let array_ty = self.type_of(id).ok_or_else(|| self.unrepresentable(id, "an array made of a sequence"))?;
+    fn array_of_sequence(&mut self, id: NodeId, sequence: ValueId, ty: TypeId, array_ty: HirType) -> Result<ValueId, Diagnostic> {
         let HirType::Managed(ManagedType::Array(element)) = &array_ty else {
             return Err(self.unsupported(id, "a sequence read as something other than an array"));
         };
@@ -59038,6 +59090,7 @@ impl<'a> FuncBuilder<'a> {
                 "a closure passed to C whose body is not known here: write the function or arrow at the call, or bind it with `const` in the same function",
             ));
         }
+        let bridging = self.with_sequence_arrays(closure, bridge, bridging);
         let bridged = self.push(
             OpKind::NativeBridge { closure, signature: bridge.clone(), context: true, once, bridging },
             HirType::NativePointer(super::native::Pointee::FnPointer(bridge.clone())),
@@ -59054,6 +59107,76 @@ impl<'a> FuncBuilder<'a> {
     /// closure lent for the call (a callee that keeps the block copies it and
     /// lends it again), and the block in this frame holding both.
     /// `None` for an argument the call does not pass.
+    /// `bridging`, with an array made for each sequence C passes where the
+    /// closure takes an array: lib.dom's `MutationObserver` callback
+    /// `(records: MutationRecord[]) => void`, where nts:dom passes a
+    /// `MutationRecordSequence`. The array is made by a function of this
+    /// program's ([`SequenceArray`], requested here and made once each), a new
+    /// one each call, as `WebIDL` makes one of a `sequence<T>` for page script.
+    ///
+    /// Read off the closure's arrow, its parameters as lib.dom types them: the
+    /// bridge carries only C's types, and what the closure takes is the
+    /// program's. A sequence whose type is not found, or whose element is not
+    /// a handle, is left as it was, and `bridges::check` refuses it.
+    fn with_sequence_arrays(&mut self, closure: ValueId, bridge: &super::native::FnPointer, mut bridging: super::Bridging) -> super::Bridging {
+        let HirType::Managed(ManagedType::Object(ty)) = self.values[closure.0 as usize].ty else { return bridging };
+        let Some(arrow) = self.closures.get(closure_index(ty)).map(|info| info.node) else { return bridging };
+        let Some(TypeKind::Function(signature)) =
+            self.snapshot.node_types.get(&arrow).and_then(|ty| self.snapshot.types.get(ty.0 as usize)).map(|record| &record.kind)
+        else {
+            return bridging;
+        };
+        let parameters = self.snapshot.signatures[signature.0 as usize].parameters.clone();
+        for (at, foreign) in bridge.parameters.iter().enumerate() {
+            let super::native::Type::Pointer(super::native::Pointee::Opaque(handle)) = foreign else { continue };
+            if bridging.boxed(at).is_some() || bridging.array(at).is_some() {
+                continue;
+            }
+            let Some(parameter) = bridging.parameter(at).and_then(|parameter| parameters.get(parameter)) else { continue };
+            let Some(array) = self.represent(parameter.ty) else { continue };
+            let HirType::Managed(ManagedType::Array(element)) = &array else { continue };
+            let HirType::NativePointer(super::native::Pointee::Opaque(element)) = &**element else { continue };
+            let Some(sequence) = self.sequence_type_of(handle) else { continue };
+            let function = format!("nts_sequence_{}_as_{}", handle.tag, element.tag);
+            if !self.sequence_arrays.iter().any(|request| request.name == function) {
+                self.sequence_arrays.push(SequenceArray { name: function.clone(), sequence, array, site: arrow });
+            }
+            bridging.sequences.push(super::SequenceParameter { at: u32::try_from(at).unwrap_or(u32::MAX), function });
+        }
+        bridging
+    }
+
+    /// The type whose handle `handle` is, where it is a sequence: `length`
+    /// and `item` (`array_of_sequence`). Searched rather than carried, since
+    /// a bridge holds C's types only; asked only for a bridge whose closure
+    /// takes an array where C passes a handle.
+    fn sequence_type_of(&self, handle: &super::native::Handle) -> Option<TypeId> {
+        (0..self.snapshot.types.len()).filter_map(|at| u32::try_from(at).ok().map(TypeId)).find(|ty| {
+            matches!(super::native::pointer(self.snapshot, *ty), Some(super::native::Pointee::Opaque(found)) if found.tag == handle.tag)
+                && self.walk_method(*ty, "item").is_some()
+                && self.walk_method(*ty, "_get_length").is_some()
+        })
+    }
+
+    /// A function made to turn a sequence into an array for a bridge
+    /// ([`Self::with_sequence_arrays`]): its one parameter the sequence, its
+    /// result the array of its items.
+    fn lower_sequence_array(&mut self, request: &SequenceArray) -> Result<Func, Diagnostic> {
+        let origin = self.origin(request.site);
+        let taken = self.represent(request.sequence).ok_or_else(|| self.unrepresentable(request.site, "a sequence a bridge passes"))?;
+        let params = vec![Param {
+            name: "sequence".to_owned(),
+            shape: ParamShape::Ordinary,
+            ty: taken.clone(),
+            origin: origin.clone(),
+            known: Facts::TOP,
+        }];
+        let sequence = self.push(OpKind::Param(0), taken, origin.clone());
+        let array = self.array_of_sequence(request.site, sequence, request.sequence, request.array.clone())?;
+        self.terminate(Terminator::Return(Some(array)));
+        Ok(self.finish(request.name.clone(), params, request.array.clone(), origin, false))
+    }
+
     fn lend_block(
         &mut self,
         id: NodeId,

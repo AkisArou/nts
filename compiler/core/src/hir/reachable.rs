@@ -444,6 +444,10 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
             // is a link error at best.
             match &op.kind {
                 OpKind::Call { callee: Callee::Direct(target), .. } => targets.push(target.as_str()),
+                // What a bridge calls to make an array of a sequence C passes.
+                OpKind::NativeBridge { bridging, .. } => {
+                    targets.extend(bridging.sequences.iter().map(|sequence| sequence.function.as_str()));
+                }
                 OpKind::Call { callee: Callee::Virtual { slot, .. } | Callee::Closure { slot }, .. } => targets.extend(
                     program
                         .layouts
