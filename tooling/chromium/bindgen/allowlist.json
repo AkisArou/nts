@@ -63,11 +63,20 @@
     "ResizeObserverEntry",
     "ResizeObserverSize",
     "IntersectionObserver",
-    "IntersectionObserverEntry"
+    "IntersectionObserverEntry",
+    "CanvasRenderingContext2D",
+    "CanvasGradient",
+    "Path2D",
+    "TextMetrics"
   ],
   "sequences": [
     "MutationRecord",
     "ResizeObserverEntry",
     "IntersectionObserverEntry"
+  ],
+  "modules": [
+    "CanvasRenderingContext2D",
+    "CanvasGradient",
+    "Path2D"
   ]
 }

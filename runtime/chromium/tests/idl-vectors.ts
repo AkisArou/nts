@@ -14,7 +14,7 @@
 // error reads as is passed in.
 import { newMutationObserver, newAbortController, newCustomEvent, newEvent, newKeyboardEvent, newMouseEvent, newURL, newURLSearchParams, window } from "nts:dom";
 import { asElement, asHTMLAnchorElement, asHTMLCanvasElement, asHTMLElement, asHTMLImageElement, asHTMLOListElement, asHTMLTableCellElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
-import type { Document, Element, Event, MutationObserver, MutationRecordSequence, Node, ScrollRestoration, SelectionMode, Text } from "nts:dom";
+import type { CanvasFillRule, Document, Element, Event, MutationObserver, MutationRecordSequence, Node, ScrollRestoration, SelectionMode, Text } from "nts:dom";
 
 export interface VectorHost {
   // "Name: message", the binding's own context prefix left out.
@@ -393,6 +393,55 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   thrown("enumInvalid", () => { ranged.setRangeText("W", 0, 1, ("inward" + "") as SelectionMode); });
   thrown("enumAfterRange", () => { ranged.setRangeText("W", 9, 1, ("inward" + "") as SelectionMode); });
   log("enumUnchanged", ranged.value);
+
+  // Canvas 2D: a drawing, then its pixels as PNG (toDataURL), hashed. The
+  // same Skia draws for both, so the hashes agree only if every call drew
+  // the same thing.
+  const surface = asHTMLCanvasElement(d.createElement("canvas"))!;
+  surface.width = 120;
+  surface.height = 60;
+  root.appendChild(surface);
+  const ctx = surface.getContext("2d")!;
+  log("canvasSame", ctx === surface.getContext("2d") ? "same" : "different");
+  ctx.fillStyle = "#336699";
+  ctx.fillRect(4, 4, 50, 30);
+  ctx.fillStyle = "not a color";
+  ctx.fillRect(60, 4, 10, 10);
+  ctx.strokeStyle = "rgb(200, 20, 20)";
+  ctx.lineWidth = 3;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(10, 50);
+  ctx.lineTo(110, 50);
+  ctx.arc(90, 25, 15, 0, Math.PI * 1.5, false);
+  ctx.stroke();
+  const gradient = ctx.createLinearGradient(0, 0, 120, 0);
+  gradient.addColorStop(0, "yellow");
+  gradient.addColorStop(1, "green");
+  ctx._set_fillStyle_gradient(gradient);
+  ctx.save();
+  ctx.translate(60, 30);
+  ctx.rotate(0.25);
+  ctx.fillRect(-10, -10, 20, 20);
+  ctx.restore();
+  ctx.beginPath();
+  ctx.rect(20, 20, 30, 30);
+  ctx.rect(25, 25, 10, 10);
+  ctx.fill("evenodd");
+  ctx.fillStyle = "black";
+  ctx.font = "12px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("nts", 60, 58);
+  const metrics = ctx.measureText("nts");
+  log("canvasState", ctx.textAlign + "|" + ctx.lineWidth + "|" + ctx.lineCap + "|" + ctx.font + "|" + (metrics.width > 0 ? "measured" : "zero"));
+  thrown("canvasArc", () => { ctx.arc(0, 0, -1, 0, 1, false); });
+  thrown("canvasFillRule", () => { ctx.fill(("inside" + "") as CanvasFillRule); });
+  const png = surface.toDataURL();
+  // A polynomial hash, exact in doubles (below 2^53 at every step), not
+  // FNV: Math.imul is refused (contracts/workarounds.md, 22).
+  let hash = 0;
+  for (let i = 0; i < png.length; i += 1) hash = (hash * 31 + png.charCodeAt(i)) % 2147483647;
+  log("canvasPixels", png.substring(0, 22) + "|" + png.length + "|" + hash);
 
   // URL: parsing, resolution against a base, its search parameters; an
   // invalid one throws.

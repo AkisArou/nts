@@ -4,7 +4,7 @@
 // the document an entry runs in, and listening with a compiled closure.
 // Contract: abi/dom_abi.h.
 declare module "nts:dom" {
-  import type { CNumber, Closure, HostClass, ScopedClosure, StringView } from "c:types";
+  import type { CNumber, Closure, HostClass, Ptr, ScopedClosure, StringView } from "c:types";
   /**
    * `requestAnimationFrame(callback)`: once, before the next frame, with its
    * time, in the queue page script's callbacks share.
@@ -67,6 +67,55 @@ declare module "nts:dom" {
    * @ntsSymbol nts_dom_window
    */
   export function window(): Window;
+  export interface HTMLCanvasElementOwnMethods {
+    /**
+     * `canvas.getContext("2d")`: the canvas's 2D context, made on first use;
+     * null if it already has a context of another kind.
+     * @ntsSymbol nts_dom_HTMLCanvasElement_getContext_2d
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    getContext(this: HTMLCanvasElement, contextId: "2d", error?: Ptr<DOMException | null>): CanvasRenderingContext2D | null;
+  }
+  export interface CanvasRenderingContext2DOwnMethods {
+    /**
+     * `ctx.fillStyle = color`: a CSS color; one that does not parse is
+     * ignored, as in page script.
+     * @ntsSymbol nts_dom_CanvasRenderingContext2D_set_fillStyle_string
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fillStyle_string(this: CanvasRenderingContext2D, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * `ctx.fillStyle = gradient`.
+     * @ntsSymbol nts_dom_CanvasRenderingContext2D_set_fillStyle_gradient
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_fillStyle_gradient(this: CanvasRenderingContext2D, value: CanvasGradient, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSet _set_fillStyle_string
+     */
+    set fillStyle(value: StringView);
+    /**
+     * `ctx.strokeStyle = color`.
+     * @ntsSymbol nts_dom_CanvasRenderingContext2D_set_strokeStyle_string
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_strokeStyle_string(this: CanvasRenderingContext2D, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * `ctx.strokeStyle = gradient`.
+     * @ntsSymbol nts_dom_CanvasRenderingContext2D_set_strokeStyle_gradient
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_strokeStyle_gradient(this: CanvasRenderingContext2D, value: CanvasGradient, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSet _set_strokeStyle_string
+     */
+    set strokeStyle(value: StringView);
+  }
   export interface EventTargetOwnMethods {
     /**
      * `addEventListener(type, listener)` for a compiled closure, called with

@@ -176,6 +176,32 @@ int32_t nts_dom_set_interval_default(void (*callback)(void* closure),
 void nts_dom_clear_timeout(int32_t id);
 void nts_dom_clear_interval(int32_t id);
 
+/* `canvas.getContext("2d")`: the canvas's 2D context, made on first use;
+ * null for another id, or if the canvas has a context of another kind. Throws
+ * InvalidStateError when the canvas transferred its control to offscreen. */
+NtsDomCanvasRenderingContext2D* nts_dom_HTMLCanvasElement_getContext_2d(
+    NtsDomHTMLCanvasElement* self,
+    const char* context_id,
+    NtsDomException** error);
+/* `ctx.fillStyle = value` and `ctx.strokeStyle = value`: a CSS color (an
+ * unparsable one is ignored, as in page script) or a gradient. */
+void nts_dom_CanvasRenderingContext2D_set_fillStyle_string(
+    NtsDomCanvasRenderingContext2D* self,
+    const NtsBorrowedString* value,
+    NtsDomException** error);
+void nts_dom_CanvasRenderingContext2D_set_strokeStyle_string(
+    NtsDomCanvasRenderingContext2D* self,
+    const NtsBorrowedString* value,
+    NtsDomException** error);
+void nts_dom_CanvasRenderingContext2D_set_fillStyle_gradient(
+    NtsDomCanvasRenderingContext2D* self,
+    NtsDomCanvasGradient* value,
+    NtsDomException** error);
+void nts_dom_CanvasRenderingContext2D_set_strokeStyle_gradient(
+    NtsDomCanvasRenderingContext2D* self,
+    NtsDomCanvasGradient* value,
+    NtsDomException** error);
+
 #ifdef __cplusplus
 }
 #endif

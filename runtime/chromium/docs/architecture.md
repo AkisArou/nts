@@ -277,12 +277,12 @@ An optional argument with a default is passed it, one without truncates the
 call (`num_of_args`), exactly as V8's binding does.
 
 It emits three files for an allowlist of interfaces
-(`bindgen/allowlist.json`: 22 today -- EventTarget and the node classes
-through HTMLInputElement, Event through KeyboardEvent, DOMTokenList,
-CSSStyleDeclaration, NodeList, HTMLCollection, DOMRect):
+(`bindgen/allowlist.json`: 67 today -- EventTarget and the node and element
+classes, the events, the window and its services, URL, the observers, and
+the 2D canvas):
 
 - `dom/abi/dom_idl.h`, one C function per member and arity;
-- `native/dom_idl.cc`, each one's body: Blink's call, inside Blink's namespace;
+- `adapter/dom_idl.cc`, each one's body: Blink's call, inside Blink's namespace;
 - `types/dom-idl.d.ts`, module `nts:dom` as a program writes it.
 
 The surface is GTK's (`nts bind-gir`), which is GJS's: an interface is a
@@ -295,10 +295,18 @@ page script would just use the node. Text is a `StringView` both ways,
 numbers are `CNumber`s (plain numbers converted at the call), a union with
 one string member takes the string, and `asX` narrows with Blink's
 `DynamicTo`. A variadic string tail (`classList.add(...tokens)`) binds at one to three
-arguments. A member whose types do not map yet (sequences, dictionaries,
-callbacks, enumerations, unbound interfaces, `[RuntimeEnabled]`, the modules
-component) is skipped and listed in `bindgen/report.json`, never guessed: 669
-functions bound, 769 members listed.
+arguments. An IDL enum is its literal union, matched against Blink's
+enum class before the call. A member whose types do not map yet (`any`,
+callbacks other than closures, unbound interfaces, `[RuntimeEnabled]`) is
+skipped and listed in `bindgen/report.json`, never guessed: 3760 functions
+bound, 1372 members listed.
+
+Blink's modules component is linked for the interfaces the allowlist names
+under `"modules"` (CanvasRenderingContext2D, CanvasGradient, Path2D); a
+modules member of any other interface stays skipped. What their IDL cannot
+say is hand-written in `adapter/dom_canvas.cc`: `getContext("2d")`, and the
+color and gradient arms of `fillStyle`/`strokeStyle`, which Blink types
+`any`.
 
 Any object the IDL hands out is a handle, not only a node: an event, a token
 list, a style declaration is a `ScriptWrappable` Oilpan owns and finds on the

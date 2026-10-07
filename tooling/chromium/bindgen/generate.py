@@ -157,6 +157,9 @@ class Generator:
         self.allowlist = allowlist
         self.interfaces = [database.find(name) for name in allowlist["interfaces"]]
         self.bound = {interface.identifier for interface in self.interfaces}
+        # Interfaces of Blink's modules component the adapter binds (it
+        # links modules for them): only their members are taken from there.
+        self.modules = set(allowlist.get("modules", []))
         self.skipped = []
         self.functions = []
         self.members = {}  # interface identifier -> TypeScript member lines
@@ -175,7 +178,7 @@ class Generator:
         # what `instanceof` can be asked of (nts_dom_is), bound or not.
         self.checkable = sorted((i for i in database.interfaces
                                  if web_idl.Component("core") in i.components and not i.is_mixin),
-                                key=lambda i: i.identifier)
+                                key=lambda i: i.identifier) + [database.find(name) for name in sorted(self.modules)]
         self.interface_id = {i.identifier: index for index, i in enumerate(self.checkable)}
 
     # -- types -----------------------------------------------------------
@@ -440,6 +443,12 @@ class Generator:
                 return "blink::ScriptValue::CreateNull(context.v8_isolate.get())"
             return "blink::String()" if unwrapped.keyword_typename in STRINGS else "nullptr"
         if literal is not None and re.fullmatch(r"-?[0-9.]+(e-?[0-9]+)?", literal):
+            # `(unrestricted double or DOMPointInit) radii = 0`: the union
+            # holding that number, as V8's conversion of the default makes.
+            if unwrapped.is_union:
+                self.headers.add(PathManager(unwrapped.union_definition_object).api_path(ext="h"))
+                union = blink_type_info(unwrapped).typename
+                return f"blink::MakeGarbageCollected<blink::{union}>({literal})"
             return literal
         if (literal is not None and re.fullmatch(r'"[ -!#-~]*"', literal)
                 and argument.idl_type.unwrap().keyword_typename in STRINGS):
@@ -476,7 +485,14 @@ class Generator:
             info = getattr(owner, "code_generator_info", None)
             if info is not None and info.blink_headers:
                 self.headers.update(path for path in info.blink_headers
-                                    if not path.startswith("third_party/blink/renderer/modules/"))
+                                    if self.from_modules(member)
+                                    or not path.startswith("third_party/blink/renderer/modules/"))
+
+    def from_modules(self, member):
+        """Whether a member belongs to a modules interface the allowlist
+        binds (`"modules"`): the canvas context's own and its mixins'."""
+        owner = getattr(member, "owner", None)
+        return owner is not None and owner.identifier in self.modules
 
     def check_member(self, member):
         ext = member.extended_attributes
@@ -484,8 +500,8 @@ class Generator:
             raise Skip("static")
         if "RuntimeEnabled" in ext:
             raise Skip("[RuntimeEnabled]")
-        if web_idl.Component("modules") in member.components:
-            raise Skip("defined in Blink's modules component; the adapter links core")
+        if web_idl.Component("modules") in member.components and not self.from_modules(member):
+            raise Skip("defined in Blink's modules component, on an interface the allowlist does not take from there")
         if "ThisValue" in ext.values_of("CallWith"):
             raise Skip("[CallWith=ThisValue] needs page script's receiver")
 
@@ -1222,28 +1238,6 @@ bool nts_dom_is(const void* object, uint32_t interface_id);
 #include "nts/dom_context.h"
 {includes}
 
-namespace {{
-// The ExceptionState of a member that may throw: Blink records the code and
-// message without V8 (DummyExceptionStateForTesting is an ExceptionState with
-// no isolate), and what it recorded is reported through the program's error
-// slot (@ntsThrows), which the compiler reads after the call and throws. A
-// NULL slot ignores it, as C's GError convention does.
-class Throws {{
-  STACK_ALLOCATED();
-
- public:
-  explicit Throws(NtsDomException** error) : error_(error) {{}}
-  ~Throws() {{
-    if (state_.HadException() && error_ && !*error_)
-      *error_ = nts_dom::Report(state_.Code(), state_.Message());
-  }}
-  operator blink::ExceptionState&() {{ return state_; }}
-
- private:
-  blink::DummyExceptionStateForTesting state_;
-  NtsDomException** error_;  // STACK_ALLOCATED: no BackupRefPtr per call
-}};
-}}  // namespace
 
 namespace {{
 {(chr(10)).join(self.statics)}

@@ -1,5 +1,5 @@
 {
-  "bound": 3631,
+  "bound": 3760,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -909,12 +909,12 @@
     {
       "interface": "Document",
       "member": "get pictureInPictureEnabled",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Document",
       "member": "get spellCheckCustomDictionary",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Document",
@@ -2059,7 +2059,7 @@
     {
       "interface": "Document",
       "member": "get onbeforexrselect",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Document",
@@ -2069,7 +2069,7 @@
     {
       "interface": "Document",
       "member": "set onbeforexrselect",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Document",
@@ -2134,7 +2134,7 @@
     {
       "interface": "Document",
       "member": "browsingTopics/1",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Document",
@@ -2224,7 +2224,7 @@
     {
       "interface": "Document",
       "member": "exitPictureInPicture/0",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Document",
@@ -2254,12 +2254,12 @@
     {
       "interface": "Document",
       "member": "hasStorageAccess/0",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Document",
       "member": "hasUnpartitionedCookieAccess/0",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Document",
@@ -2269,12 +2269,12 @@
     {
       "interface": "Document",
       "member": "requestStorageAccess/0",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Document",
       "member": "requestStorageAccess/1",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Document",
@@ -3539,7 +3539,7 @@
     {
       "interface": "HTMLElement",
       "member": "get onbeforexrselect",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "HTMLElement",
@@ -3549,7 +3549,7 @@
     {
       "interface": "HTMLElement",
       "member": "set onbeforexrselect",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "HTMLElement",
@@ -3729,7 +3729,7 @@
     {
       "interface": "HTMLInputElement",
       "member": "get webkitEntries",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "HTMLInputElement",
@@ -4039,7 +4039,7 @@
     {
       "interface": "HTMLCanvasElement",
       "member": "captureStream/1",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "HTMLCanvasElement",
@@ -4054,7 +4054,7 @@
     {
       "interface": "HTMLCanvasElement",
       "member": "getContext/2",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "HTMLCanvasElement",
@@ -4094,7 +4094,7 @@
     {
       "interface": "HTMLCanvasElement",
       "member": "transferControlToOffscreen/0",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "HTMLCanvasElement",
@@ -4569,7 +4569,7 @@
     {
       "interface": "Window",
       "member": "get onappinstalled",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -4579,12 +4579,12 @@
     {
       "interface": "Window",
       "member": "set onappinstalled",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "get onbeforeinstallprompt",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -4594,17 +4594,17 @@
     {
       "interface": "Window",
       "member": "set onbeforeinstallprompt",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "get cookieStore",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "get ondevicemotion",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -4614,12 +4614,12 @@
     {
       "interface": "Window",
       "member": "set ondevicemotion",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "get ondeviceorientation",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -4629,12 +4629,12 @@
     {
       "interface": "Window",
       "member": "set ondeviceorientation",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "get ondeviceorientationabsolute",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -4644,32 +4644,32 @@
     {
       "interface": "Window",
       "member": "set ondeviceorientationabsolute",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "get documentPictureInPicture",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "get launchQueue",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "get sharedStorage",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "get speechSynthesis",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "get subApps",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -5814,7 +5814,7 @@
     {
       "interface": "Window",
       "member": "get onbeforexrselect",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -5824,7 +5824,7 @@
     {
       "interface": "Window",
       "member": "set onbeforexrselect",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -6079,42 +6079,42 @@
     {
       "interface": "Window",
       "member": "get caches",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "get crypto",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "get indexedDB",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "get printing",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "get localStorage",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "get sessionStorage",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "createImageBitmap/2",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "createImageBitmap/6",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -6129,12 +6129,12 @@
     {
       "interface": "Window",
       "member": "getDigitalGoodsService/1",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "getScreenDetails/0",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -6144,12 +6144,12 @@
     {
       "interface": "Window",
       "member": "maximize/0",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "minimize/0",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -6174,7 +6174,7 @@
     {
       "interface": "Window",
       "member": "queryLocalFonts/1",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -6209,7 +6209,7 @@
     {
       "interface": "Window",
       "member": "restore/0",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -6254,7 +6254,7 @@
     {
       "interface": "Window",
       "member": "setResizable/1",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -6269,17 +6269,17 @@
     {
       "interface": "Window",
       "member": "showDirectoryPicker/1",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "showOpenFilePicker/1",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "showSaveFilePicker/1",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -6459,7 +6459,7 @@
     {
       "interface": "Screen",
       "member": "get orientation",
-      "why": "defined in Blink's modules component; the adapter links core"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "AbortController",
@@ -6570,6 +6570,296 @@
       "interface": "IntersectionObserver",
       "member": "get thresholds",
       "why": "result type FrozenArray<double>"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "get globalHDRHeadroom",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "set globalHDRHeadroom",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "get strokeStyle",
+      "why": "result type any"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "set strokeStyle",
+      "why": "parameter type any"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "get fillStyle",
+      "why": "result type any"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "set fillStyle",
+      "why": "parameter type any"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "beginLayer/0",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "beginLayer/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "createImageData/1",
+      "why": "interface ImageData is not bound"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "createImageData/2",
+      "why": "interface ImageData is not bound"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "createImageData/3",
+      "why": "interface ImageData is not bound"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "createMesh2DIndexBuffer/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "createMesh2DUVBuffer/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "createMesh2DVertexBuffer/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "createPattern/2",
+      "why": "interface CanvasPattern is not bound"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "drawElementImage/4",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "drawElementImage/6",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "drawElementImage/8",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "drawElementImage/10",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "drawImage/3",
+      "why": "parameter type CanvasImageSource"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "drawImage/5",
+      "why": "parameter type CanvasImageSource"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "drawImage/9",
+      "why": "parameter type CanvasImageSource"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "drawMesh/4",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "endLayer/0",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "fillTextCluster/3",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "fillTextCluster/4",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "getContextAttributes/0",
+      "why": "result type CanvasRenderingContext2DSettings"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "getImageData/4",
+      "why": "interface ImageData is not bound"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "getImageData/5",
+      "why": "interface ImageData is not bound"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "getLineDash/0",
+      "why": "result type sequence<unrestricted double>"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "getTransform/0",
+      "why": "interface DOMMatrix is not bound"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "putImageData/3",
+      "why": "interface ImageData is not bound"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "putImageData/7",
+      "why": "interface ImageData is not bound"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "roundRect/5",
+      "why": "parameter type sequence<(unrestricted double or DOMPointInit)>"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "roundRect/5",
+      "why": "parameter type optional (unrestricted double or DOMPointInit)"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "setLineDash/1",
+      "why": "parameter type sequence<unrestricted double>"
+    },
+    {
+      "interface": "DOMMatrixInit",
+      "member": "m33",
+      "why": "dictionary member whose default 1 is not zero"
+    },
+    {
+      "interface": "DOMMatrixInit",
+      "member": "m44",
+      "why": "dictionary member whose default 1 is not zero"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "strokeTextCluster/3",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
+      "member": "strokeTextCluster/4",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CanvasGradient",
+      "member": "get colorInterpolationMethod",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CanvasGradient",
+      "member": "set colorInterpolationMethod",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CanvasGradient",
+      "member": "get hueInterpolationMethod",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CanvasGradient",
+      "member": "set hueInterpolationMethod",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CanvasGradient",
+      "member": "get premultipliedAlpha",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "CanvasGradient",
+      "member": "set premultipliedAlpha",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "Path2D",
+      "member": "roundRect/5",
+      "why": "parameter type sequence<(unrestricted double or DOMPointInit)>"
+    },
+    {
+      "interface": "Path2D",
+      "member": "roundRect/5",
+      "why": "parameter type optional (unrestricted double or DOMPointInit)"
+    },
+    {
+      "interface": "TextMetrics",
+      "member": "get hangingBaseline",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "TextMetrics",
+      "member": "get alphabeticBaseline",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "TextMetrics",
+      "member": "get ideographicBaseline",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "TextMetrics",
+      "member": "get emHeightAscent",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "TextMetrics",
+      "member": "get emHeightDescent",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "TextMetrics",
+      "member": "getActualBoundingBox/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "TextMetrics",
+      "member": "getIndexFromOffset/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "TextMetrics",
+      "member": "getSelectionRects/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "TextMetrics",
+      "member": "getTextClusters/3",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "TextMetrics",
+      "member": "getTextClusters/1",
+      "why": "[RuntimeEnabled]"
     }
   ]
 }

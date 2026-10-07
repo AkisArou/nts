@@ -1793,6 +1793,7 @@ interface Text {}
  */
 interface TextEvent {}
 /**
+ * @ntsBoundBy "nts:dom" TextMetrics
  * @ntsIs nts_dom_is 537
  */
 interface TextMetrics {}
@@ -1983,6 +1984,21 @@ interface XPathResult {}
  * @ntsIs nts_dom_is 602
  */
 interface XSLTProcessor {}
+/**
+ * @ntsBoundBy "nts:dom" CanvasGradient
+ * @ntsIs nts_dom_is 603
+ */
+interface CanvasGradient {}
+/**
+ * @ntsBoundBy "nts:dom" CanvasRenderingContext2D
+ * @ntsIs nts_dom_is 604
+ */
+interface CanvasRenderingContext2D {}
+/**
+ * @ntsBoundBy "nts:dom" Path2D
+ * @ntsIs nts_dom_is 605
+ */
+interface Path2D {}
 /** @ntsBoundBy "nts:dom" document */
 declare var document: Document;
 /** @ntsBoundBy "nts:dom" requestAnimationFrame */

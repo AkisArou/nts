@@ -79,7 +79,7 @@ function stage(input: string, path: string): void {
 // embedder, the Blink adapter, the benchmark harnesses, the C ABI.
 const sources: Record<string, string[]> = {
   embedder: ["BUILD.gn", "probe.gni", "probe.c", "probe.h", "probe_main.cc", "probe_observer.cc", "probe_observer.h"],
-  adapter: ["dom_bridge.cc", "dom_bridge.h", "dom_bridge_bindings.h", "dom_context.h", "dom_idl.cc"],
+  adapter: ["dom_bridge.cc", "dom_bridge.h", "dom_bridge_bindings.h", "dom_canvas.cc", "dom_context.h", "dom_idl.cc"],
   "benchmarks/harness": ["binding_benchmark.cc", "binding_benchmark.h", "rows_benchmark.cc", "rows_benchmark.h", "kernels_benchmark.cc", "kernels_benchmark.h"],
   // dom_idl.h is generated from Blink's IDL (tooling/chromium/bindgen).
   "dom/abi": ["dom_abi.h", "dom_idl.h"],

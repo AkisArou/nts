@@ -446,7 +446,29 @@ void WarnInvalidEnum(NtsDomContext &context, const char *value,
 // A DOM exception a member reported, for the program to throw
 // (nts_dom_exception_take_message).
 NtsDomException *Report(blink::ExceptionCode code, const blink::String &message);
+
+// The ExceptionState of a member that may throw: Blink records the code and
+// message without V8 (DummyExceptionStateForTesting is an ExceptionState with
+// no isolate), and what it recorded is reported through the program's error
+// slot (@ntsThrows), which the compiler reads after the call and throws. A
+// NULL slot ignores it, as C's GError convention does.
+class Throws {
+  STACK_ALLOCATED();
+
+public:
+  explicit Throws(NtsDomException **error) : error_(error) {}
+  ~Throws() {
+    if (state_.HadException() && error_ && !*error_)
+      *error_ = Report(state_.Code(), state_.Message());
+  }
+  operator blink::ExceptionState &() { return state_; }
+
+private:
+  blink::DummyExceptionStateForTesting state_;
+  NtsDomException **error_; // STACK_ALLOCATED: no BackupRefPtr per call
+};
 } // namespace nts_dom
+using nts_dom::Throws;
 using nts_dom::NtsText;
 
 #endif  // NTS_CHROMIUM_DOM_CONTEXT_H_

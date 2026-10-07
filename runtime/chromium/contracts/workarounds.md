@@ -24,6 +24,7 @@ shared tooling.
 | 17 | Members taking `any` are not bound (`history.pushState(data, ...)`, `CustomEvent.detail`, `AbortController.abort(reason)` beyond its no-argument form). | generator (`report.json`) | a host function cannot take or return `any` | `any` crosses to C (an erased value with its tag) | C |
 | 20 | An uncaught throw in a listener, a timer or an app's `main` ends the renderer (Chromium's crash page), and `console.*` writes to the process's stdout/stderr, not DevTools. The app examples and vectors throw nothing uncaught. | runtime, every callback | request 11: no host hook for console output or uncaught throws (`nts_uncaught` calls `exit(1)` inside a callback) | request 11 delivered, and the lane wires both into Blink | C |
 | 21 | An IDL enum attribute reads as `StringView`, not its literal union (`ctx.textAlign`, `document.readyState`); only a parameter is typed (`ctx.fill("evenodd")`). | generated `dom/types/dom-idl.d.ts` | blocker `a-literal-union-returned-by-a-foreign-function`: a foreign function cannot return a string-literal union | the blocker reads FIXED | C |
+| 22 | The canvas vectors hash the PNG polynomially in doubles, not with FNV-1a. | `tests/idl-vectors.ts` (`canvasPixels`) | blocker `math-imul-is-not-a-member`: `Math.imul` is refused | the blocker reads FIXED | C |
 
 ## Waiting on shared tooling
 

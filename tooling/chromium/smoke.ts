@@ -236,6 +236,11 @@ try {
       for (const arm of ["void", "boolean"])
         HTMLElement.prototype["_set_onclick_" + arm] = function (handler) { this.onclick = handler; };
       HTMLElement.prototype._set_onclick_null = function () { this.onclick = null; };
+      // \`_set_fillStyle_gradient\` and its siblings: the canvas's \`any\`
+      // style attributes, per arm.
+      for (const style of ["fillStyle", "strokeStyle"])
+        for (const arm of ["string", "gradient"])
+          CanvasRenderingContext2D.prototype["_set_" + style + "_" + arm] = function (value) { this[style] = value; };
       // nts:dom spells addEventListener's options as trailing arguments
       // (capture, once, signal); page script, as a dictionary.
       const addEventListener = EventTarget.prototype.addEventListener;
