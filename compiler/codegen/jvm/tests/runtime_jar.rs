@@ -66,7 +66,10 @@ fn the_jar_matches_the_sources_it_was_built_from() {
     let rebuilt = if regenerate {
         checked_in.clone()
     } else {
-        std::env::temp_dir().join("nts-runtime-rebuilt.jar")
+        // Per process: two gates at once share a temporary directory, and a
+        // fixed name let one's `build.sh` overwrite the jar the other was
+        // comparing -- a red `tests` step on a jar that matched its sources.
+        std::env::temp_dir().join(format!("nts-runtime-rebuilt-{}.jar", std::process::id()))
     };
 
     let built = Command::new("sh")
@@ -84,6 +87,7 @@ fn the_jar_matches_the_sources_it_was_built_from() {
     }
 
     let theirs = std::fs::read(&rebuilt).expect("the rebuilt jar");
+    let _ = std::fs::remove_file(&rebuilt);
     let ours = std::fs::read(&checked_in).expect("the checked-in jar");
     assert_eq!(
         ours.len(),
