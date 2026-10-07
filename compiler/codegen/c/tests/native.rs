@@ -1119,13 +1119,12 @@ export function storeNaN(p: Ptr<c_int>): void { p[1] = NaN as c_int; }
     assert!(ran.status.success(), "{}", String::from_utf8_lossy(&ran.stdout));
 }
 
-/// A closure answering a host handle, which has no erased form yet: where a
-/// signature returning `void` admits it, a call through the signature drops
-/// the answer and runs; where a signature reads the answer *as the closure
-/// answers it*, the call takes the closure's typed entry and the handle passes
-/// unchanged; only where the signature reads it as another representation --
-/// which would take the erased entry as an adapter -- is the admission refused,
-/// where it is written. The void case had compiled clean and aborted at run
+/// A closure answering a host handle: where a signature returning `void`
+/// admits it, a call through the signature drops the answer and runs; where a
+/// signature reads the answer *as the closure answers it*, the call takes the
+/// closure's typed entry and the handle passes unchanged; where the signature
+/// reads it as a base, it is admitted too -- refused, where it is written,
+/// until host handles had an erased form (`NTS_TAG_HANDLE_HOST`). The void case had compiled clean and aborted at run
 /// time in the closure's erased entry (the Chromium lane's
 /// `blockers/a-handle-returning-closure-called-as-void`); the first fix refused
 /// every reading signature, which refused a local `const pick = (): Node =>
@@ -1188,9 +1187,16 @@ export function reads(): number { return read(() => leaf_at(1 as c_int)); }
 ") else {
         return;
     };
-    let diagnostics = adapted.expect("a refused admission leaves valid HIR").diagnostics;
+    // **Since `NTS_TAG_HANDLE_HOST` a host handle has an erased form**, so the
+    // admission is no longer refused ("no erased form, passed where a signature
+    // reads its result"), and the program it makes runs no refusing entry.
+    let adapted = adapted.expect("valid HIR");
     assert!(
-        diagnostics.iter().any(|d| d.message.contains("no erased form, passed where a signature reads its result")),
-        "{diagnostics:?}"
+        !adapted.diagnostics.iter().any(|d| d.message.contains("no erased form")),
+        "{:?}",
+        adapted.diagnostics
     );
+    let emitted = nts_codegen_c::emit(&adapted.program, nts_core::hir::native::NativeAbi::SysV);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    assert!(!emitted.writer.text().contains("nts_refused("), "a base reading reached a refusing entry");
 }

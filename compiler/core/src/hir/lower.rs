@@ -34214,6 +34214,15 @@ impl<'a> FuncBuilder<'a> {
             // A C handle -- `query_info_async`'s `GFileInfo *` -- into the
             // promise's own slot for one, never into its value, which the
             // collector reads.
+            // A host's object as a tagged value, which the promise keeps alive
+            // through the host's pair (`NTS_TAG_HANDLE_HOST`) -- the
+            // representation a host settling one uses too, so an `await` reads
+            // either the same way (`suspend::settled_reader`).
+            (HirType::NativePointer(pointee), Some(value)) if super::suspend::host_handle(pointee) => {
+                let erased = self.push(OpKind::Erase { value, absent: Absent::Impossible },
+                    HirType::Erased, origin.clone());
+                ("nts_promise_fulfill_value", vec![result.promise, erased])
+            }
             // A counted one boxed, so the promise holds a reference to it.
             (HirType::NativePointer(pointee), Some(value)) if pointee.counting().is_some() => {
                 let (boxed, boxed_ty) = self.box_handle(id, value, pointee)?;

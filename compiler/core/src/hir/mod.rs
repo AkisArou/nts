@@ -5303,6 +5303,67 @@ fn refuse_host_handles(lowered: &mut lower::Lowered) {
     }
 }
 
+/// What a host's handles need from the provider: counting, or a refusal.
+fn settle_host_handles(lowered: &mut lower::Lowered, provider: Provider) {
+    if provider == Provider::ReferenceCounting {
+        check_host_pairs(lowered);
+    } else {
+        refuse_host_handles(lowered);
+    }
+}
+
+/// One retain/release pair for every host class a program erases.
+///
+/// A host's objects share one tag (`NTS_TAG_HANDLE_HOST`), and a tag is one
+/// family to the runtime: `nts_value_retain` counts a tagged handle through the
+/// one pair the host registered. A host class declaring another pair, erased,
+/// would be counted through the wrong functions -- nts:dom's sequence adapters
+/// name `nts_dom_sequence_retain` where its wrappables name `nts_dom_retain`.
+/// The first pair the program erases (in function order) is the family's; a
+/// function erasing or unerasing a host handle of any other is refused, naming
+/// both.
+fn check_host_pairs(lowered: &mut lower::Lowered) {
+    let pair_of = |ty: &HirType| match ty {
+        HirType::NativePointer(pointee) => match pointee.family()? {
+            native::Family::Host(host) => Some((host.retain(), host.release())),
+            _ => None,
+        },
+        _ => None,
+    };
+    let crossing = |func: &Func, op: &Op| match op.kind {
+        OpKind::Erase { value, .. } => pair_of(&func.values[value.0 as usize].ty),
+        OpKind::Unerase { .. } => pair_of(&op.ty),
+        _ => None,
+    };
+    let mut family: Option<(&'static str, &'static str)> = None;
+    let mut refused = Vec::new();
+    for func in &lowered.program.funcs {
+        for op in &func.values {
+            let Some(pair) = crossing(func, op) else { continue };
+            let first = *family.get_or_insert(pair);
+            if pair != first {
+                refused.push((func.name.clone(), pair, first, op.origin.location));
+                break;
+            }
+        }
+    }
+    let mut names = rustc_hash::FxHashSet::default();
+    for (name, (retain, release), (first_retain, first_release), at) in refused {
+        let why = format!(
+            "a host handle counted by `{retain}`/`{release}` as a value, where this program's \
+             host handles are counted by `{first_retain}`/`{first_release}`: one tag \
+             (`NTS_TAG_HANDLE_HOST`) carries one pair"
+        );
+        lowered.diagnostics.push(nts_diagnostics::Diagnostic::error("NTS2006", why.clone(), at));
+        lowered.program.uncompiled.push((name.clone(), why));
+        names.insert(name);
+    }
+    if !names.is_empty() {
+        lowered.program.funcs.retain(|func| !names.contains(&func.name));
+        drop_callers_of_refused(lowered);
+    }
+}
+
 fn settle(lowered: &mut lower::Lowered) {
     // Before that: a branch whose condition is already a constant is not two
     // arms, and the arm nothing can enter may be code this compiler cannot
@@ -6085,9 +6146,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
         .map(|bound| (bound.key.clone(), bound.clone()))
         .collect();
     settle(&mut lowered);
-    if options.provider != Provider::ReferenceCounting {
-        refuse_host_handles(&mut lowered);
-    }
+    settle_host_handles(&mut lowered, options.provider);
     let mut program = lowered.program;
 
     // First, before anything expensive. Everything that survives here gets

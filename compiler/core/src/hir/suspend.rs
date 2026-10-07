@@ -1670,6 +1670,9 @@ pub(super) fn settled_reader(payload: &HirType) -> Option<&'static str> {
     Some(match payload {
         HirType::Void => return None,
         HirType::Managed(_) => "nts_promise_reference",
+        // A host's object, which the promise holds as a tagged value so its
+        // pair keeps it alive (`NTS_TAG_HANDLE_HOST`), read back by unerasing.
+        HirType::NativePointer(pointee) if host_handle(pointee) => "nts_promise_value",
         // A C handle, from the promise's slot for one.
         HirType::NativePointer(_) => "nts_promise_pointer",
         // `await x` with `x: unknown`, which the tag describes and no reader
@@ -1685,7 +1688,23 @@ pub(super) fn settled_reader(payload: &HirType) -> Option<&'static str> {
 /// The runtime payload's actual representation. `BigInt` is logically unboxed
 /// but travels through the tagged promise slot as an owned immutable box.
 pub(super) fn settled_storage(payload: &HirType) -> HirType {
-    if *payload == HirType::BigInt { HirType::Erased } else { payload.clone() }
+    if read_by_unerasing(payload) { HirType::Erased } else { payload.clone() }
+}
+
+/// Whether a handle is a host's (`HostClass`), which a promise holds as a value
+/// tagged `NTS_TAG_HANDLE_HOST` rather than in its slot for a C pointer.
+pub(super) fn host_handle(pointee: &super::native::Pointee) -> bool {
+    pointee.family().is_some_and(super::native::Family::stack_rooted)
+}
+
+/// Whether a payload travels through the promise's tagged value and is read back
+/// by unerasing: a `BigInt`'s box, and a host's handle.
+fn read_by_unerasing(payload: &HirType) -> bool {
+    match payload {
+        HirType::BigInt => true,
+        HirType::NativePointer(pointee) => host_handle(pointee),
+        _ => false,
+    }
 }
 
 fn read_settled(
@@ -1716,6 +1735,7 @@ fn read_settled(
     // converted back to what was awaited.
     if let HirType::NativePointer(pointee) = payload
         && pointee.counting().is_some()
+        && !host_handle(pointee)
         && let Some((boxed, root, _)) = pointee.family().and_then(super::native::handle_box)
     {
         let boxed_ty = HirType::Managed(ManagedType::Object(boxed));
@@ -1751,7 +1771,7 @@ fn read_settled(
         },
         settled_storage(payload),
     );
-    build.values[awaited.0 as usize].kind = if *payload == HirType::BigInt {
+    build.values[awaited.0 as usize].kind = if read_by_unerasing(payload) {
         OpKind::Unerase { value }
     } else { OpKind::Convert(value) };
     build.ops.push(awaited);

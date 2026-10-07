@@ -4128,6 +4128,7 @@ fn erased_tag(ty: &HirType) -> Option<(&'static str, &'static str)> {
             nts_core::hir::tags::HANDLE_GOBJECT => Some(("NTS_TAG_HANDLE_GOBJECT", "native")),
             nts_core::hir::tags::HANDLE_OBJC => Some(("NTS_TAG_HANDLE_OBJC", "native")),
             nts_core::hir::tags::HANDLE_COM => Some(("NTS_TAG_HANDLE_COM", "native")),
+            nts_core::hir::tags::HANDLE_HOST => Some(("NTS_TAG_HANDLE_HOST", "native")),
             _ => None,
         },
         _ => None,
@@ -5657,7 +5658,7 @@ mod tests {
                 erased_tag(&ty).is_some(),
                 "`erasable` and `erased_tag` disagree about a {family:?} handle"
             );
-            assert_eq!(erased_tag(&ty).is_some(), !matches!(family, Family::C | Family::Host(_)), "{family:?}");
+            assert_eq!(erased_tag(&ty).is_some(), !matches!(family, Family::C), "{family:?}");
         }
     }
 

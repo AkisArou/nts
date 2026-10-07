@@ -41,6 +41,10 @@ pub const NULL: u32 = 7;
 pub const HANDLE_GOBJECT: u32 = 8;
 pub const HANDLE_OBJC: u32 = 9;
 pub const HANDLE_COM: u32 = 10;
+/// A host's object (`HostClass`). One tag for the family, so one pair: the host
+/// registers it, and lowering refuses a program erasing host classes that name
+/// two (`check_host_pairs`).
+pub const HANDLE_HOST: u32 = 11;
 /// An erased `BigInt` payload. `typeof` answers `"bigint"`, so it sits above
 /// the handle block, outside [`OBJECT_BAND`]. Every backend erases one: the
 /// native runtime boxes the 128-bit value (`NtsBigIntBox`), and the JVM
@@ -57,7 +61,8 @@ pub fn handle_tag(family: super::native::Family) -> Option<u32> {
         super::native::Family::GObject => Some(HANDLE_GOBJECT),
         super::native::Family::Objc => Some(HANDLE_OBJC),
         super::native::Family::Com => Some(HANDLE_COM),
-        super::native::Family::C | super::native::Family::Host(_) => None,
+        super::native::Family::Host(_) => Some(HANDLE_HOST),
+        super::native::Family::C => None,
     }
 }
 
@@ -74,7 +79,7 @@ pub fn erased_handle_tag(pointee: &super::native::Pointee) -> Option<u32> {
 pub const HANDLE_BLOCK: u32 = 8;
 pub const HANDLE_BLOCK_SIZE: u32 = 8;
 const _: () = assert!(
-    HANDLE_BLOCK == NULL + 1 && HANDLE_GOBJECT == HANDLE_BLOCK && HANDLE_COM < HANDLE_BLOCK + HANDLE_BLOCK_SIZE,
+    HANDLE_BLOCK == NULL + 1 && HANDLE_GOBJECT == HANDLE_BLOCK && HANDLE_HOST < HANDLE_BLOCK + HANDLE_BLOCK_SIZE,
     "the handle block follows NULL, and every handle tag is inside it"
 );
 const _: () = assert!(BIGINT >= HANDLE_BLOCK + HANDLE_BLOCK_SIZE,
@@ -505,13 +510,12 @@ mod representation {
         assert_eq!(of_representation(&handle(Family::C)), super::NUMBER);
     }
 
-    /// Nor a host family yet: it is counted, but with a pair only its binding
-    /// names, so no erased value can hold one until the block has a place
-    /// that carries the pair.
+    /// A host family has one tag whatever its pair: the pair is the host's to
+    /// register, and lowering keeps a program to one (`check_host_pairs`).
     #[test]
-    fn a_host_handle_has_no_family_tag_yet() {
+    fn a_host_handle_has_the_host_tag() {
         let host = Family::Host(crate::hir::native::HostFamily::of("host_retain", "host_release"));
-        assert_eq!(handle_tag(host), None);
-        assert_eq!(of_representation(&handle(host)), super::NUMBER);
+        assert_eq!(handle_tag(host), Some(super::HANDLE_HOST));
+        assert_eq!(of_representation(&handle(host)), super::HANDLE_HOST);
     }
 }

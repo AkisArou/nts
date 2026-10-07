@@ -74,6 +74,7 @@ fn the_compiler_and_the_runtime_number_the_tags_alike() {
         ("NTS_TAG_HANDLE_GOBJECT", tags::HANDLE_GOBJECT),
         ("NTS_TAG_HANDLE_OBJC", tags::HANDLE_OBJC),
         ("NTS_TAG_HANDLE_COM", tags::HANDLE_COM),
+        ("NTS_TAG_HANDLE_HOST", tags::HANDLE_HOST),
         ("NTS_TAG_BIGINT", tags::BIGINT),
     ];
 

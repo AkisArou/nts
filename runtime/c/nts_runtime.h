@@ -605,6 +605,15 @@ typedef enum NtsTag {
   NTS_TAG_HANDLE_GOBJECT = 8,
   NTS_TAG_HANDLE_OBJC = 9,
   NTS_TAG_HANDLE_COM = 10,
+  /* An object a host's collector owns (`HostClass`: Blink's wrappables). One
+   * family, so one retain/release pair for every host class a program erases:
+   * the host registers it (`nts_handle_family_register`) as GLib's and the
+   * Objective-C runtime's support files register theirs, and the compiler
+   * refuses a program that erases host classes declaring two different pairs.
+   * A promise a host settles with one (`nts_promise_fulfill_value` over
+   * `nts_value_of_handle(object, NTS_TAG_HANDLE_HOST)`) keeps it alive through
+   * that pair until the promise dies. */
+  NTS_TAG_HANDLE_HOST = 11,
   /* A `bigint`, in an owned immutable box. Above the handle block, so outside
    * the "object" band: `typeof` answers "bigint". */
   NTS_TAG_BIGINT = 16
