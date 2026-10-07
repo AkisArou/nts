@@ -136,7 +136,7 @@ async function check(): Promise<void> {
   if (!existsSync(shell)) throw new Error(`No ${relative(root, shell)}; run: node tooling/chromium/app.ts build ${relative(root, app)}`);
   const expected = option("--expect", "");
   mkdirSync(work, { recursive: true });
-  const page = await openPage(shell, appUrl, { temporary: work, args: [...appArgs, ...shellFlags] });
+  const page = await openPage(shell, appUrl, { temporary: work, args: ["--enable-logging=stderr", ...appArgs, ...shellFlags] });
   const starts = (): number => page.log().match(/NTS_APP start/g)?.length ?? 0;
   const stops = (): number => page.log().match(/NTS_APP stop/g)?.length ?? 0;
   try {

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Renderer-local architecture measurements; CDP stays outside timed loops.
 import assert from "node:assert/strict";
+import { openPage } from "./browser.ts";
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
@@ -246,89 +247,26 @@ async function measure(run: number, mode: Mode): Promise<LaunchResult> {
   const fixture = url.href;
   // Suppress only spare-process prewarming, equally for both arms, to make
   // the measured tab's PID unambiguous. V8/JIT/Web-platform flags stay normal.
-  const args = ["--ozone-platform=x11", "--disable-features=SpareRendererForSitePerProcess", "--enable-logging=stderr", "--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1", `--user-data-dir=${profile}`];
+  const args = ["--disable-features=SpareRendererForSitePerProcess", "--enable-logging=stderr"];
   if (mode === "native") args.push(`--nts-probe-url=${fixture}`, `--nts-benchmark-order=${run % 3}`);
   if (mode === "native" && workload === "rows") args.push(`--nts-collection=${collection}`);
   const jsFlags = [...(traceGc ? ["--trace-gc"] : []), ...(diagnosticJsFlags ? [diagnosticJsFlags] : [])];
   if (jsFlags.length) args.push(`--js-flags=${jsFlags.join(" ")}`);
-  args.push(fixture);
-  const child = spawn("xvfb-run", ["-a", "-s", "-screen 0 1280x900x24", engine, ...args], {detached:true, stdio:["ignore","pipe","pipe"]});
-  let log = "";
-  let launchError: Error | undefined;
-  let exited = false;
-  child.on("error", error => { launchError = error; });
-  child.on("exit", () => { exited = true; });
-  child.stdout.on("data", chunk => { log += String(chunk); });
-  child.stderr.on("data", chunk => {
-    log += String(chunk);
-    if (/FATAL:/.test(log)) {
-      for (const entry of pending.values()) {clearTimeout(entry.timeout); entry.reject(new Error("Renderer check failed; see launch log"));}
-      pending.clear();
-    }
+  const page = await openPage(engine, fixture, {
+    profile, args, target: target => target.url === fixture,
+    failure: /FATAL:|Check failed|nts host: check failed|NTS_.*unexpectedly ran/,
+    callTimeout: 60_000, waitTimeout: 60_000,
   });
-  let socket: WebSocket | undefined;
-  const pending = new Map<number, {accept: (value: unknown) => void; reject: (error: Error) => void; timeout: ReturnType<typeof setTimeout>}>();
-  async function until<T>(predicate: () => Promise<T> | T): Promise<NonNullable<T>> {
-    const deadline = performance.now() + 60_000;
-    do {
-      if (launchError) throw launchError;
-      if (exited) throw new Error("Benchmark browser exited");
-      assert(!/FATAL:|NTS_.*unexpectedly ran/.test(log), "Renderer check failed; see launch log");
-      const value = await predicate();
-      if (value) return value as NonNullable<T>;
-      await delay(100);
-    } while (performance.now() < deadline);
-    throw new Error(`Benchmark timed out; see ${output}/launch-${run}-${mode}.log`);
-  }
+  const { cdp, evaluate } = page;
+  const until = <T>(predicate: () => T | Promise<T>): Promise<NonNullable<T>> => page.until(predicate, `the ${mode} benchmark (see ${output}/launch-${run}-${mode}.log)`);
+  let traceStream: string | undefined;
+  page.on("Tracing.tracingComplete", params => { traceStream = (params.stream as string | undefined) ?? ""; });
   try {
-    const endpoint = await until(() => log.match(/DevTools listening on (ws:\/\/[^\s]+)/)?.[1]);
-    const origin = `http://${new URL(endpoint).host}`;
-    const target = await until(async () => {
-      const pages = await (await fetch(`${origin}/json/list`)).json() as Array<{url:string; webSocketDebuggerUrl:string}>;
-      return pages.find(page => page.url === fixture);
-    });
-    const connection = new WebSocket(target.webSocketDebuggerUrl);
-    socket = connection;
-    await new Promise<void>((accept, reject) => {
-      const timeout = setTimeout(() => reject(new Error("CDP connection timed out")), 10_000);
-      connection.addEventListener("open", () => { clearTimeout(timeout); accept(); }, {once:true});
-      connection.addEventListener("error", () => { clearTimeout(timeout); reject(new Error("CDP connection failed")); }, {once:true});
-    });
-    let id = 0;
-    let traceStream: string | undefined;
-    connection.addEventListener("message", event => {
-      const message = JSON.parse(String(event.data)) as {id?:number; method?:string; params?:{stream?:string}; error?:unknown; result:unknown};
-      if (message.method === "Tracing.tracingComplete") traceStream = message.params?.stream ?? "";
-      if (!message.id) return;
-      const entry = pending.get(message.id);
-      if (!entry) return;
-      pending.delete(message.id); clearTimeout(entry.timeout);
-      if (message.error) entry.reject(new Error(JSON.stringify(message.error)));
-      else entry.accept(message.result);
-    });
-    function cdp<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
-      return new Promise((accept, reject) => {
-        const next = ++id;
-        const timeout = setTimeout(() => {pending.delete(next); reject(new Error(`CDP timeout: ${method}`));}, 60_000);
-        pending.set(next, {accept: value => accept(value as T), reject, timeout});
-        connection.send(JSON.stringify({id:next, method, params}));
-      });
-    }
-    connection.addEventListener("close", () => {
-      for (const entry of pending.values()) {clearTimeout(entry.timeout); entry.reject(new Error("Renderer connection closed; see launch log"));}
-      pending.clear();
-    });
-    async function evaluate<T>(expression: string): Promise<T> {
-      const result = await cdp<{exceptionDetails?:unknown; result:{value:T}}>("Runtime.evaluate", {expression, returnByValue:true});
-      assert(!result.exceptionDetails, JSON.stringify(result.exceptionDetails));
-      return result.result.value;
-    }
     await until(() => evaluate<boolean>(`location.href === ${JSON.stringify(fixture)} && document.querySelector('#benchmark-result')?.getAttribute('data-state') === 'ready'`));
-    assert(child.pid);
-    const renderers = await rendererDescendants(child.pid, engine);
+    const renderers = await rendererDescendants(page.pid, engine);
     assert.equal(renderers.length, 1, "Require an unambiguous measured renderer; do not guess among spare processes");
     const rendererPid = renderers[0];
-    if (mode === "native") assert.equal(rendererPid, Number(log.match(/^\[(\d+):[^\]]+\][^\n]*NTS_PROBE attach/m)?.[1]));
+    if (mode === "native") assert.equal(rendererPid, Number(page.log().match(/^\[(\d+):[^\]]+\][^\n]*NTS_PROBE attach/m)?.[1]));
     assert(Number.isSafeInteger(rendererPid) && rendererPid > 1);
     const command = (await readFile(`/proc/${rendererPid}/cmdline`, "utf8")).replaceAll("\0", " ");
     assert(command.startsWith(engine) && command.includes("--type=renderer"));
@@ -431,10 +369,8 @@ async function measure(run: number, mode: Mode): Promise<LaunchResult> {
     console.log(`Run ${run+1}/${runs}, ${mode}: ${result.samples.length} operation and ${result.entrySamples?.length ?? 0} entry samples; normal JIT, sandbox active`);
     return {result,executable:engine,fixture,args,rendererPid,rendererStatus,loadBefore,loadAfter:(await readFile("/proc/loadavg","utf8")).trim()};
   } finally {
-    for (const entry of pending.values()) {clearTimeout(entry.timeout); entry.reject(new Error("Benchmark closed"));}
-    pending.clear(); socket?.close();
-    if (child.pid) {try {process.kill(-child.pid,"SIGTERM");} catch(error) {if (!(error instanceof Error && "code" in error && error.code === "ESRCH")) throw error;}}
-    await writeFile(resolve(output, `launch-${run}-${mode}.log`), log);
+    page.kill();
+    await writeFile(resolve(output, `launch-${run}-${mode}.log`), page.log());
   }
 }
 for (let run = 0; run < runs; ++run) {

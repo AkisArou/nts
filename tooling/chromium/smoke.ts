@@ -1,19 +1,16 @@
 #!/usr/bin/env node
 // Exercise the actual content_shell under Xvfb, directly with Node 24.
 import assert from "node:assert/strict";
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
-import { mkdir, mkdtemp, readFile, readdir, readlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, readlink, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { setTimeout as delay } from "node:timers/promises";
+import { openPage } from "./browser.ts";
 
-interface PageTarget { type: string; url: string; webSocketDebuggerUrl: string }
-interface Evaluation { exceptionDetails?: unknown; result: { value?: unknown } }
 interface Layout { title: string; count: string; x: number; y: number; width: number; background: string }
-interface PendingCall { accept: (result: unknown) => void; reject: (error: Error) => void; timeout: ReturnType<typeof setTimeout> }
 const errorCode = (error: unknown): string => error instanceof Error && "code" in error ? String(error.code) : "unknown";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -77,35 +74,16 @@ const runtimeDeps = execFileSync(resolve(chromiumSource, "buildtools/linux64/gn"
   ["desc", relative(chromiumSource, dirname(executable)), targetLabel, "runtime_deps"], { cwd: chromiumSource, encoding: "utf8" });
 await writeFile(`${output}/runtime-deps.txt`, runtimeDeps);
 const nativeManifestSha256 = probeBackend ? createHash("sha256").update(await readFile(resolve(chromiumSource, "nts/manifest.json"))).digest("hex") : undefined;
-const profile = await mkdtemp(`${output}/profile-`);
 const launchLog = createWriteStream(`${output}/launch.log`);
 const started = performance.now();
-const args = ["--ozone-platform=x11", "--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1", `--user-data-dir=${profile}`, fixture];
-if (nativeDom) args.unshift("--js-flags=--expose-gc");
-if (probeBackend) args.unshift("--enable-logging=stderr", `--nts-probe-url=${fixture}`);
-const child = spawn("xvfb-run", ["-a", "-s", "-screen 0 1280x900x24", executable, ...args], {
-  detached: true, stdio: ["ignore", "pipe", "pipe"],
+const args: string[] = [];
+if (nativeDom) args.push("--js-flags=--expose-gc");
+if (probeBackend) args.push("--enable-logging=stderr", `--nts-probe-url=${fixture}`);
+const page = await openPage(executable, fixture, {
+  temporary: output, args, logTo: launchLog, callTimeout: 10_000,
+  target: target => target.type === "page" && target.url === fixture,
 });
-let log = "";
-let exited = false;
-let launchError: Error | undefined;
-child.on("error", (error) => { launchError = error; });
-child.on("exit", () => { exited = true; });
-for (const stream of [child.stdout, child.stderr]) {
-  stream.on("data", (chunk) => { log += chunk.toString(); launchLog.write(chunk); });
-}
-
-async function until<T>(predicate: () => T | Promise<T>, label: string, timeout = 30_000): Promise<NonNullable<T>> {
-  const deadline = performance.now() + timeout;
-  do {
-    if (launchError) throw launchError;
-    if (exited) throw new Error(`content_shell exited while waiting for ${label}; see ${output}/launch.log`);
-    const value = await predicate();
-    if (value) return value as NonNullable<T>;
-    await delay(100);
-  } while (performance.now() < deadline);
-  throw new Error(`Timed out waiting for ${label}; see ${output}/launch.log`);
-}
+const { cdp, evaluate, until, origin } = page;
 
 async function processes() {
   const records = [];
@@ -124,12 +102,12 @@ async function processes() {
       // Only this launch's descendants, including renderers forked by zygotes.
       let parent = Number(status.PPid);
       const seen = new Set();
-      while (parent > 1 && parent !== child.pid && !seen.has(parent)) {
+      while (parent > 1 && parent !== page.pid && !seen.has(parent)) {
         seen.add(parent);
         const parentStatus = await readFile(`/proc/${parent}/status`, "utf8");
         parent = Number(parentStatus.match(/^PPid:\s+(\d+)/m)?.[1] ?? 0);
       }
-      if (parent !== child.pid) continue;
+      if (parent !== page.pid) continue;
       const namespaces: Record<string, string> = {};
       for (const namespace of ["user", "pid", "net", "mnt"]) {
         try { namespaces[namespace] = await readlink(`/proc/${entry}/ns/${namespace}`); }
@@ -143,55 +121,9 @@ async function processes() {
   return records;
 }
 
-let socket: WebSocket | undefined;
 try {
-  const endpoint = await until(() => log.match(/DevTools listening on (ws:\/\/[^\s]+)/)?.[1], "DevTools");
-  const origin = `http://${new URL(endpoint).host}`;
-  const page = await until(async () => {
-    const pages = await (await fetch(`${origin}/json/list`)).json() as PageTarget[];
-    return pages.find((item) => item.type === "page" && item.url === fixture);
-  }, "fixture target");
-  const connection = new WebSocket(page.webSocketDebuggerUrl);
-  socket = connection;
-  await new Promise<void>((accept, reject) => {
-    const timeout = setTimeout(() => reject(new Error("Timed out opening DevTools")), 10_000);
-    connection.addEventListener("open", () => { clearTimeout(timeout); accept(); }, { once: true });
-    connection.addEventListener("error", () => { clearTimeout(timeout); reject(new Error("Cannot open DevTools")); }, { once: true });
-  });
-  let nextId = 0;
   let rendererCrashed = false;
-  const pending = new Map<number, PendingCall>();
-  connection.addEventListener("message", ({ data }) => {
-    const message = JSON.parse(String(data)) as { id?: number; method?: string; error?: unknown; result?: unknown };
-    if (message.method === "Inspector.targetCrashed") rendererCrashed = true;
-    if (!message.id) return;
-    const entry = pending.get(message.id);
-    if (!entry) return;
-    pending.delete(message.id);
-    clearTimeout(entry.timeout);
-    if (message.error) entry.reject(new Error(JSON.stringify(message.error)));
-    else entry.accept(message.result);
-  });
-  connection.addEventListener("close", () => {
-    for (const entry of pending.values()) {
-      clearTimeout(entry.timeout);
-      entry.reject(new Error("DevTools connection closed"));
-    }
-    pending.clear();
-  });
-  function cdp<T = unknown>(method: string, params: Record<string, unknown> = {}): Promise<T> {
-    return new Promise<T>((accept, reject) => {
-      const id = ++nextId;
-      const timeout = setTimeout(() => { pending.delete(id); reject(new Error(`Timed out: ${method}`)); }, 10_000);
-      pending.set(id, { accept: (value) => accept(value as T), reject, timeout });
-      connection.send(JSON.stringify({ id, method, params }));
-    });
-  }
-  async function evaluate<T>(expression: string): Promise<T> {
-    const result = await cdp<Evaluation>("Runtime.evaluate", { expression, returnByValue: true });
-    assert(!result.exceptionDetails, JSON.stringify(result.exceptionDetails));
-    return result.result.value as T;
-  }
+  page.on("Inspector.targetCrashed", () => { rendererCrashed = true; });
   await cdp("Page.enable");
   if (probeBackend) await cdp("Inspector.enable");
   // A target reports its requested URL while its initial about:blank document
@@ -335,7 +267,7 @@ try {
     }
     const visibleContent = await evaluate<string>(nativeDom ? readCount : `getComputedStyle(document.querySelector('${outputSelector}'), '::after').content`);
     assert.equal(visibleContent, nativeDom ? expectedCount(10) : '"10"', "Blink must display the native-updated counter");
-    if (!domOracle) await until(() => (log.match(mixedMicrotasks ? /NTS_ASYNC count=\d+ live=\d+/g : new RegExp(`NTS_COUNTER backend=${probeBackend} count=\\d+ live=1`, "g")) ?? []).length === 10, "native counter trace");
+    if (!domOracle) await until(() => (page.log().match(mixedMicrotasks ? /NTS_ASYNC count=\d+ live=\d+/g : new RegExp(`NTS_COUNTER backend=${probeBackend} count=\\d+ live=1`, "g")) ?? []).length === 10, "native counter trace");
     counter = { inputEvents: 10, applicationScripts: scripts, visibleContent, managedLiveObjectsPerEvent: domOracle || mixedMicrotasks ? undefined : 1, managedLiveObjectsAfterCheckpoint: !domOracle && mixedMicrotasks ? 1 : undefined };
   }
   let dom;
@@ -344,7 +276,7 @@ try {
     assert.deepEqual(exactUnits, [65, 0, 233, 937, 55296, 90, 56320, 55357, 56832]);
     const html = await evaluate<string>("document.querySelector('#native-dom').outerHTML");
     if (domOracle) assert.equal(await evaluate<number>("window.domWitness"), 0);
-    else await until(() => log.includes(`NTS_DOM backend=${probeBackend} result=0 roots=0`), "native DOM identity/error/string witnesses");
+    else await until(() => page.log().includes(`NTS_DOM backend=${probeBackend} result=0 roots=0`), "native DOM identity/error/string witnesses");
     dom = { html, exactUnits, result: 0, exceptionCodes: { SyntaxError: 12, HierarchyRequestError: 3, NotFoundError: 8, InvalidCharacterError: 5 }, execution: domOracle ? "v8" : probeBackend };
   }
   const capture = await cdp<{ data: string }>("Page.captureScreenshot", { format: "png" });
@@ -363,8 +295,8 @@ try {
   }
   let lifecycle;
   if (probeBackend) {
-    const attachments = () => (log.match(new RegExp(`NTS_PROBE attach backend=${probeBackend} scalar=50 text=native:probe live=0`, "g")) ?? []).length;
-    const disposals = () => (log.match(new RegExp(`NTS_PROBE dispose backend=${probeBackend}`, "g")) ?? []).length;
+    const attachments = () => (page.log().match(new RegExp(`NTS_PROBE attach backend=${probeBackend} scalar=50 text=native:probe live=0`, "g")) ?? []).length;
+    const disposals = () => (page.log().match(new RegExp(`NTS_PROBE dispose backend=${probeBackend}`, "g")) ?? []).length;
     await until(() => attachments() === 1, "first native attachment");
     for (let reload = 0; reload < 3; ++reload) {
       const priorAttachments = attachments();
@@ -385,7 +317,7 @@ try {
     // in the browser's process-lifetime handling. Avoid the debug Page.crash
     // path, which stalls in fatal/signal handling on this initial host.
     const nativePidPattern = new RegExp(`^\\[(\\d+):[^\\]]+\\][^\\n]*NTS_PROBE attach backend=${probeBackend}`, "gm");
-    const rendererPid = Number([...log.matchAll(nativePidPattern)].at(-1)?.[1]);
+    const rendererPid = Number([...page.log().matchAll(nativePidPattern)].at(-1)?.[1]);
     assert((await processes()).some((item) => item.pid === rendererPid && item.type === "renderer"), "native log PID must identify a live renderer before the crash");
     process.kill(rendererPid, "SIGKILL");
     await until(async () => {
@@ -398,9 +330,9 @@ try {
     lifecycle = { attachments: attachments(), disposals: disposals(), reloads: 3, rendererPid, terminationMethod: "SIGKILL to verified native-document renderer PID", rendererExited: true, inspectorCrashNotification: rendererCrashed, browserSurvivedRendererCrash: true };
   }
   if (mixedMicrotasks && !domOracle) {
-    assert.equal((log.match(/NTS_NATIVE_TASK drop live=1/g) ?? []).length, 4, "each document disposal must drop its managed host task");
-    assert.equal((log.match(/NTS_CHECKPOINT live=1/g) ?? []).length, 10, "each input must finish with one owned counter and no leaked jobs");
-    assert(!log.includes("NTS_TEARDOWN"), "teardown must neither run canceled work nor leave a pending await");
+    assert.equal((page.log().match(/NTS_NATIVE_TASK drop live=1/g) ?? []).length, 4, "each document disposal must drop its managed host task");
+    assert.equal((page.log().match(/NTS_CHECKPOINT live=1/g) ?? []).length, 10, "each input must finish with one owned counter and no leaked jobs");
+    assert(!page.log().includes("NTS_TEARDOWN"), "teardown must neither run canceled work nor leave a pending await");
   }
   const result = {
     executable, args, fixture, readyMs, before, after, processes: records,
@@ -410,7 +342,7 @@ try {
     nativeManifestSha256,
     runtimeResources: { targetLabel, manifest: `${output}/runtime-deps.txt`, method: "GN-declared runtime dependencies, including test fixtures; not a minimal distribution or a list of host system libraries." },
     probeBackend, lifecycle, counter, nativeDom, dom,
-    microtasks: mixedMicrotasks ? {traces: mixedTraces, observerSha256: createHash('sha256').update(mixedObserver).digest('hex'), canceledJobs: domOracle ? undefined : (log.match(/NTS_NATIVE_TASK drop/g) ?? []).length, endCheckpoints: domOracle ? undefined : (log.match(/NTS_CHECKPOINT live=1/g) ?? []).length} : undefined,
+    microtasks: mixedMicrotasks ? {traces: mixedTraces, observerSha256: createHash('sha256').update(mixedObserver).digest('hex'), canceledJobs: domOracle ? undefined : (page.log().match(/NTS_NATIVE_TASK drop/g) ?? []).length, endCheckpoints: domOracle ? undefined : (page.log().match(/NTS_CHECKPOINT live=1/g) ?? []).length} : undefined,
     rssSumKiB: records.reduce((sum, item) => sum + Number(item.status.VmRSS?.split(/\s+/)[0] ?? 0), 0),
     memoryMethod: "Sum of per-process VmRSS; shared pages may be counted more than once.",
     display: "Xvfb 1280x900x24", observedAt: new Date().toISOString(),
@@ -422,10 +354,6 @@ try {
   if (lifecycle) console.log(`PASS: ${probeBackend} native renderer execution, reload/navigation disposal, browser survives renderer crash`);
   if (counter) console.log(domOracle ? "PASS: V8 DOM counter oracle, identity/error/string witnesses and 10 input events" : "PASS: script-free native input counter, 10 events, one managed state object, resets on reload/navigation");
 } finally {
-  socket?.close();
-  if (child.pid) {
-    try { process.kill(-child.pid, "SIGTERM"); }
-    catch (error) { if (errorCode(error) !== "ESRCH") throw error; }
-  }
+  page.kill();
   launchLog.end();
 }
