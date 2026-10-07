@@ -27428,6 +27428,16 @@ impl<'a> FuncBuilder<'a> {
         self.layouts.push(self.cell_layout(index, ty));
         let cell = self.push(OpKind::ObjectNew { frame: false }, cell_ty, origin.clone());
         self.field_set(cell, 0, value, &origin);
+        // Opened here, by its declaration, so written as it is made: a guarded
+        // cell's flag says so at once. Until a nested function could be built
+        // before its declaration's statement (`bind_later_siblings`), a guarded
+        // cell was always opened empty by a closure above and written here
+        // through the arm before this one, and this arm left the flag clear --
+        // `first` calling `second` read "second" as not yet initialised.
+        if self.is_guarded(index) {
+            let ready = self.push(OpKind::ConstBool(true), HirType::Bool, origin.clone());
+            self.field_set(cell, 1, ready, &origin);
+        }
         cell
     }
 
@@ -46650,9 +46660,95 @@ impl<'a> FuncBuilder<'a> {
         if self.bindings.contains_key(&symbol.0) {
             return Ok(());
         }
+        let at = self.node(id).origin.location.span.start;
+        self.bind_later_siblings(id, at, &mut vec![id])?;
         let value = self.lower_arrow(id)?;
-        self.bindings.insert(symbol.0, value);
+        // Into its cell where a closure above captured it -- a sibling built
+        // before it, which named the cell rather than the closure.
+        let bound = self.open_cell(symbol.0, value, id);
+        self.bindings.insert(symbol.0, bound);
         Ok(())
+    }
+
+    /// The function declarations below `id` in its statement list that it
+    /// captures, built first, at `at` -- the position of the declaration being
+    /// built -- so `first` calling `second`, declared after it, captures a
+    /// closure rather than a name nothing has bound. JavaScript hoists both;
+    /// `second` is callable from `first`'s first call.
+    ///
+    /// **Only a sibling that could stand at `at`**: one whose own captures are
+    /// each declared before `at`, outside the list, or another such sibling.
+    /// That is [`Self::hoistable`]'s rule moved down the list rather than to its
+    /// top, for its reason: a closure built above a `let` it captures reads
+    /// the cell before anything wrote it. A sibling that cannot stands where it
+    /// is, and a capture of it is refused as before. So is a cycle -- `first`
+    /// and `second` each calling the other -- which `visiting` stops.
+    fn bind_later_siblings(&mut self, id: NodeId, at: u32, visiting: &mut Vec<NodeId>) -> Result<(), Diagnostic> {
+        let list = self.node(id).parent;
+        let captured: Vec<u32> = self
+            .closures
+            .iter()
+            .filter(|closure| closure.node == id)
+            .flat_map(|closure| closure.captures.iter().map(|capture| capture.symbol))
+            .collect();
+        for symbol in captured {
+            let Some(sibling) = self.later_sibling_function(symbol, list, at) else { continue };
+            if visiting.contains(&sibling) || self.bindings.contains_key(&symbol) {
+                continue;
+            }
+            // Refused here, by name, rather than left for the capture to find
+            // unbound: that refusal blamed a closure with no refusal of its own.
+            if !self.could_stand_at(sibling, list, at) {
+                let name = self.name_node(sibling).and_then(|name| self.node(name).text.clone()).unwrap_or_default();
+                return Err(self.unsupported(
+                    id,
+                    &format!(
+                        "a call of `{name}`, declared below this function, which captures a name declared after this \
+                         function's declaration -- built here, it would read that name before anything wrote it"
+                    ),
+                ));
+            }
+            visiting.push(sibling);
+            let built = self.bind_later_siblings(sibling, at, visiting);
+            visiting.pop();
+            built?;
+            if !self.bindings.contains_key(&symbol) && taken_as_a_closure(&self.closures, sibling) {
+                let value = self.lower_arrow(sibling)?;
+                // A name a closure above captured is a cell: the capture
+                // analysis boxed it for being read before its declaration.
+                let bound = self.open_cell(symbol, value, sibling);
+                self.bindings.insert(symbol, bound);
+            }
+        }
+        Ok(())
+    }
+
+    /// The function declaration `symbol` names, where it is a statement of
+    /// `list` declared after `at`.
+    fn later_sibling_function(&self, symbol: u32, list: Option<NodeId>, at: u32) -> Option<NodeId> {
+        self.snapshot.symbols.get(symbol as usize)?.declarations.iter().copied().find(|declaration| {
+            self.kind_of(*declaration) == Some(syntax::FUNCTION_DECLARATION)
+                && self.node(*declaration).parent == list
+                && self.node(*declaration).origin.location.span.start > at
+        })
+    }
+
+    /// Whether `sibling`'s closure could be built at `at` in `list`: each name
+    /// it captures is declared before `at`, outside `list`, or is itself a
+    /// later sibling function (built first, by the caller).
+    fn could_stand_at(&self, sibling: NodeId, list: Option<NodeId>, at: u32) -> bool {
+        let extent = list.map(|list| self.node(list).origin.location.span);
+        self.closures.iter().filter(|closure| closure.node == sibling).all(|closure| {
+            closure.captures.iter().all(|capture| {
+                self.later_sibling_function(capture.symbol, list, at).is_some()
+                    || self.snapshot.symbols.get(capture.symbol as usize).is_none_or(|record| {
+                        record.declarations.iter().all(|declaration| {
+                            let start = self.node(*declaration).origin.location.span.start;
+                            start < at || extent.is_none_or(|extent| start < extent.start || start >= extent.end)
+                        })
+                    })
+            })
+        })
     }
 
     fn lower_arrow(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {

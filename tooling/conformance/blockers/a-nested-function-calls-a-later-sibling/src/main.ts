@@ -1,4 +1,11 @@
-// expect: NTS1001 `second`, a declaration outside every walk
+// expect: nothing refused -- FIXED, kept as a guard
+//
+// **Fixed 2026-10-07** (MainClaude): `first`'s closure is built after the
+// later siblings it captures, at `first`'s own position, where everything
+// they capture is already declared (`bind_later_siblings`); `nts check`
+// agrees with node on 29 cases. A sibling that captures a `let` declared
+// below `first` still stands where it is and is refused, since building it
+// early would read the cell before anything wrote it. The report as filed:
 //
 // A function declaration nested in a function is hoisted to the top of its
 // body, so a sibling declared above it may call it. Here `first` calls
