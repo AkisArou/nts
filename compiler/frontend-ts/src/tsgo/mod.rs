@@ -26,6 +26,7 @@
 //! `third_party/typescript-go` is the source of truth it was read from.
 
 pub mod ast;
+mod bound;
 pub mod decompose;
 pub mod generated;
 pub mod proto;
@@ -1480,6 +1481,10 @@ impl SemanticSource for TsgoApi {
             &natively_implemented,
             cwd,
         )?;
+
+        // Last of the derived tables: it reads `node_types`, which `deepen` has
+        // just finished filling.
+        snapshot.bound_types = bound::bound_types(&snapshot);
 
         self.stats = tally(started.elapsed(), client.round_trips(), &snapshot, &deep);
 

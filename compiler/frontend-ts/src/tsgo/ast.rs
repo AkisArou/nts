@@ -335,6 +335,10 @@ fn decode_nodes(
             text = strings.source(raw.pos, raw.end).map(str::to_owned);
         }
 
+        if text.is_none() && !is_list {
+            text = module_name(&nodes, &raw, strings);
+        }
+
         // A template literal's text is in the *extended* section rather than
         // behind a tagged string index, and the first `u32` of its block is the
         // **cooked** string -- escapes processed, delimiters gone. Reading the
@@ -418,6 +422,21 @@ fn decode_nodes(
     }
 
     Ok(nodes)
+}
+
+/// **A module's name**, `declare module "nts:dom"`, which arrives with no
+/// string index. It is the one string literal whose value a binding has to
+/// read: `@ntsBoundBy "nts:dom" Element` names a declaration by the module that
+/// declares it. A module specifier has no escapes to cook, so its source text
+/// less the quotes is its value. The parent precedes its children in the
+/// arena, so it is already decoded.
+fn module_name(nodes: &[NodeRecord], raw: &RawNode, strings: &StringTable<'_>) -> Option<String> {
+    let parent = nodes.get((raw.parent as usize).checked_sub(1)?)?;
+    (raw.kind == u32::from(nts_semantic_schema::syntax::STRING_LITERAL)
+        && parent.kind == NodeKind::Syntax(nts_semantic_schema::syntax::MODULE_DECLARATION))
+    .then(|| strings.source(raw.pos, raw.end))
+    .flatten()
+    .map(|source| source.trim().trim_matches(['"', '\'']).to_owned())
 }
 
 /// The declarations a native tag can sit on: see the comment where

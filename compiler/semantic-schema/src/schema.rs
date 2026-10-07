@@ -54,7 +54,8 @@ use crate::origin::Origin;
 /// parameters a `GObject` override answers as a tuple. 42: `intrinsic`, the
 /// compiler-defined declaration a call names (`@ntsIntrinsic gobject.signal`).
 /// 43: `bound_by` and `is`, a declaration bound by delegation and its
-/// `instanceof` test (`@ntsBoundBy`, `@ntsIs`).
+/// `instanceof` test (`@ntsBoundBy`, `@ntsIs`), and `bound_types`, the types
+/// those bindings resolve to.
 pub const SCHEMA_VERSION: u32 = 43;
 
 /// A TypeScript symbol, as the checker resolved it.
@@ -152,6 +153,17 @@ pub struct SemanticSnapshot {
     /// queried, which is what keeps the frontend's round-trip count bounded by
     /// file count rather than node count.
     pub node_types: FxHashMap<NodeId, TypeId>,
+    /// Each type a program does not own but uses, mapped to the type that
+    /// implements it: lib.dom.d.ts's `Element` to `nts:dom`'s `Element`
+    /// handle, where an overlay says `/** @ntsBoundBy "nts:dom" Element */
+    /// interface Element {}`.
+    ///
+    /// Derived from the nodes and `node_types` once every file is in, so that
+    /// everything deciding a representation from the snapshot alone -- a
+    /// closure's signature, a native parameter, a local -- gives a bound type
+    /// one answer. runtime/chromium/docs/lib-dom.md, "bind by delegation".
+    #[serde(default)]
+    pub bound_types: FxHashMap<TypeId, TypeId>,
 }
 
 /// Modifiers written on a declaration.
@@ -990,6 +1002,11 @@ impl SemanticSnapshot {
             check(ty, "type", self.types.len())?;
         }
 
+        for (&TypeId(used), &TypeId(bound)) in &self.bound_types {
+            check(used, "type", self.types.len())?;
+            check(bound, "type", self.types.len())?;
+        }
+
         Ok(())
     }
 
@@ -1055,6 +1072,7 @@ impl SemanticSnapshot {
             call_targets,
             diagnostics,
             node_types,
+            bound_types,
         } = self;
         let mut bytes = Vec::new();
         encode(&mut bytes, schema_version)?;
@@ -1071,6 +1089,7 @@ impl SemanticSnapshot {
         encode(&mut bytes, &by_key(constants))?;
         encode(&mut bytes, &by_key(call_targets))?;
         encode(&mut bytes, &by_key(node_types))?;
+        encode(&mut bytes, &by_key(bound_types))?;
         Ok(xxhash_rust::xxh3::xxh3_128(&bytes).to_le_bytes())
     }
 }

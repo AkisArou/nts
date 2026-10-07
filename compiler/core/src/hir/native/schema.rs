@@ -551,6 +551,14 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
         let payload = if is_null(*a) { *b } else if is_null(*b) { *a } else { return None; };
         return pointer_within(snapshot, payload, visiting);
     }
+    // **A type the program uses and does not own is its binding's handle**:
+    // lib.dom.d.ts's `Element` is `nts:dom`'s `Element` wherever a
+    // representation is asked for (`SemanticSnapshot::bound_types`, from an
+    // overlay's `@ntsBoundBy`). After the union arm, so `Element | null` is the
+    // nullable handle, as `nts:dom`'s own `Element | null` is.
+    if let Some(bound) = snapshot.bound_types.get(&ty) {
+        return pointer_within(snapshot, *bound, visiting);
+    }
     if let Some(class) = objc_class(snapshot, ty) {
         return Some(class);
     }

@@ -2915,6 +2915,14 @@ fn print_types(tsconfig: &Utf8Path) -> Result<()> {
             signature.return_type.0
         );
     }
+    // And each type a binding implements (`@ntsBoundBy`), in id order: which
+    // lib.dom type is which `nts:dom` handle is a question this command should
+    // answer without a lowering to read it back from.
+    let mut bound: Vec<_> = snapshot.bound_types.iter().collect();
+    bound.sort();
+    for (used, by) in bound {
+        println!("bound #{} -> #{}", used.0, by.0);
+    }
     Ok(())
 }
 

@@ -227,6 +227,11 @@ struct ModuleScope {
     initialized: rustc_hash::FxHashMap<u32, u32>,
     /// Symbol to value, for a `const` this could evaluate.
     constants: rustc_hash::FxHashMap<u32, f64>,
+    /// Symbol to the foreign function a read of it calls, for a global the
+    /// program does not own and a binding implements: lib.dom.d.ts's `declare
+    /// var document`, `@ntsBoundBy "nts:dom" document`, is a call of
+    /// `nts:dom`'s `document()`. Not storage, so not in `variables`.
+    bound: rustc_hash::FxHashMap<u32, (NodeId, String)>,
     /// Symbol to index in [`Program::globals`].
     variables: rustc_hash::FxHashMap<u32, u32>,
     /// The type of each global, by the same index.
@@ -6890,6 +6895,20 @@ fn settle_by_binding(
     (kind, valueless, ty): (nts_semantic_schema::VariableKind, bool, &HirType),
 ) -> bool {
     let native = probe.node(probe.tagged_statement(id)).native.as_deref();
+    if let Some(binding) = native.and_then(|native| native.bound_by.as_deref()) {
+        let resolved = nts_semantic_schema::binding::parse(binding).and_then(|(module, name)| {
+            let function = nts_semantic_schema::binding::declared_in(probe.snapshot, module, name, syntax::FUNCTION_DECLARATION)?;
+            Some((function, name.to_owned()))
+        });
+        match resolved {
+            Some(bound) => drop(scope.bound.insert(symbol.0, bound)),
+            None => drop(scope.unsupported.insert(
+                symbol.0,
+                format!("`@ntsBoundBy {binding}`, which names no foreign function that module declares"),
+            )),
+        }
+        return true;
+    }
     if let Some(text) = native.and_then(|native| native.constant.as_deref()) {
         match text.trim().parse::<f64>().ok().filter(|value| value.is_finite()) {
             Some(value) => drop(scope.constants.insert(symbol.0, value)),
@@ -39259,6 +39278,17 @@ impl<'a> FuncBuilder<'a> {
             .flat_map(|symbol| symbol.declarations.iter().copied())
             .find(|node| self.kind_of(*node) == Some(syntax::FUNCTION_DECLARATION) && !self.has_a_body(*node))
             .ok_or_else(|| self.unsupported(id, &format!("a tag naming `{function}`, which no foreign function declares")))?;
+        self.call_foreign_declaration_absent(id, declaration, function, arguments)
+    }
+
+    /// As [`Self::call_foreign_named`], of a declaration already in hand -- one
+    /// a binding resolved within its module, where a name alone could find a
+    /// namesake in another.
+    fn call_foreign_declaration(&mut self, id: NodeId, declaration: NodeId, function: &str, arguments: Vec<ValueId>) -> Result<ValueId, Diagnostic> {
+        self.call_foreign_declaration_absent(id, declaration, function, arguments.into_iter().map(Some).collect())
+    }
+
+    fn call_foreign_declaration_absent(&mut self, id: NodeId, declaration: NodeId, function: &str, arguments: Vec<Option<ValueId>>) -> Result<ValueId, Diagnostic> {
         // Its own signature, as a call of it would resolve: a symbol's type is
         // its declaration's (`node_types`), which the frontend records there
         // rather than on the symbol.
@@ -40250,6 +40280,9 @@ impl<'a> FuncBuilder<'a> {
         }
         if self.module.constants.contains_key(&symbol.0) {
             return Err(self.unsupported(target, "assigning to a `const`"));
+        }
+        if self.module.bound.contains_key(&symbol.0) {
+            return Err(self.unsupported(target, "assigning to a global a binding implements"));
         }
         // **A function declaration's own name.** Every read of it is the one
         // function (`ClosureStatic`), so a write had nowhere a read would see:
@@ -66055,6 +66088,12 @@ impl<'a> FuncBuilder<'a> {
 
         // Declared at module scope. A constant is its value; a variable is a
         // load.
+        // A global a binding implements is a call of the function it names,
+        // made at every read: `document` is `document()`, as page script's
+        // `document` is a getter on the global object.
+        if let Some((function, name)) = self.module.bound.get(&symbol.0).cloned() {
+            return self.call_foreign_declaration(id, function, &name, Vec::new());
+        }
         let origin = self.origin(id);
         if let Some(constant) = self.module.constants.get(&symbol.0).copied() {
             // **At the name's own representation, and it was always a float.**

@@ -21,6 +21,7 @@
 //! the one property that cannot be retrofitted — once a lowering has run without
 //! it, the mapping back to source is gone.
 
+pub mod binding;
 pub mod origin;
 pub mod protocol;
 pub mod reachability;
