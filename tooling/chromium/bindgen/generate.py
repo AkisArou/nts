@@ -1368,11 +1368,19 @@ class Generator:
                 tags.insert(0, f'@ntsBoundBy "nts:dom" {bound}')
             lines.append("/**\n" + "".join(f" * {tag}\n" for tag in tags) + " */\n"
                          f"interface {identifier} {{}}")
-        globals_ = [
-            ("declare var document: Document;", "document"),
-            ("declare function requestAnimationFrame(callback: FrameRequestCallback): number;", "requestAnimationFrame"),
-            ("declare function cancelAnimationFrame(handle: number): void;", "cancelAnimationFrame"),
-        ]
+        # lib.dom's globals bound by name to nts:dom's (the window's other
+        # members read as window().X): each declaration as lib.dom writes it,
+        # read from lib.dom.d.ts so that it merges.
+        bound_globals = ["document", "window", "requestAnimationFrame", "cancelAnimationFrame",
+                         "setTimeout", "setInterval", "clearTimeout", "clearInterval",
+                         "requestIdleCallback", "cancelIdleCallback"]
+        globals_ = []
+        lib_dom_text = open(libdom.LIB_DOM).read()
+        for name in bound_globals:
+            declaration = re.search(rf"^declare (?:var|function) {name}\b[^\n]*;$", lib_dom_text, re.M)
+            if declaration is None:
+                raise SystemExit(f"lib.dom.d.ts declares no global {name}")
+            globals_.append((declaration.group(0), name))
         # lib.dom's generic collections (`NodeListOf<HTMLLIElement>`,
         # `HTMLCollectionOf<HTMLOptionElement>`) only narrow `X`'s element
         # type for TypeScript: each instantiation is an `X` handle. Bound

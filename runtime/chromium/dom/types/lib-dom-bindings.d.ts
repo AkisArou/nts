@@ -2094,7 +2094,21 @@ interface NonDocumentTypeChildNode {}
 interface ParentNode {}
 /** @ntsBoundBy "nts:dom" document */
 declare var document: Document;
+/** @ntsBoundBy "nts:dom" window */
+declare var window: Window & typeof globalThis;
 /** @ntsBoundBy "nts:dom" requestAnimationFrame */
 declare function requestAnimationFrame(callback: FrameRequestCallback): number;
 /** @ntsBoundBy "nts:dom" cancelAnimationFrame */
 declare function cancelAnimationFrame(handle: number): void;
+/** @ntsBoundBy "nts:dom" setTimeout */
+declare function setTimeout(handler: TimerHandler, timeout?: number, ...arguments: any[]): number;
+/** @ntsBoundBy "nts:dom" setInterval */
+declare function setInterval(handler: TimerHandler, timeout?: number, ...arguments: any[]): number;
+/** @ntsBoundBy "nts:dom" clearTimeout */
+declare function clearTimeout(id: number | undefined): void;
+/** @ntsBoundBy "nts:dom" clearInterval */
+declare function clearInterval(id: number | undefined): void;
+/** @ntsBoundBy "nts:dom" requestIdleCallback */
+declare function requestIdleCallback(callback: IdleRequestCallback, options?: IdleRequestOptions): number;
+/** @ntsBoundBy "nts:dom" cancelIdleCallback */
+declare function cancelIdleCallback(handle: number): void;
