@@ -137,7 +137,7 @@ pub fn snapshot<S: SemanticSource>(
     // the binary is relinked, so a gate whose `build` step is a no-op keeps
     // every entry, and a gate that rebuilt the compiler retakes them once --
     // which is the run whose answers were going to be wrong.
-    let built_by = compiler_stamp();
+    let built_by = compiler_stamp(&dir);
 
     if let Some(entry) = read_entry(&path)
         && entry.schema == SCHEMA_VERSION
@@ -328,20 +328,34 @@ fn sweep(dir: &Utf8Path, cap: u64) {
 
 /// What identifies the compiler that built a snapshot.
 ///
-/// The running executable's length and modification time, hashed. Not its
-/// contents: the binary is ~100MB and this is on the path of every compile,
-/// where the metadata read is two syscalls and changes on exactly the events
-/// that matter -- a relink.
+/// The running executable's *contents*, hashed -- looked up by its path,
+/// length and modification time so that the contents are read once per binary.
 ///
-/// Zero when the executable cannot be found or stat'd, which fails *closed* in
+/// **Identified by what it is, not where it is.** This hashed the path, length
+/// and mtime themselves, which changes on exactly the events that matter -- a
+/// relink -- and on one that does not: a copy. The gate pins a binary by copying
+/// it to a content-addressed path, and four of its tools (assembles,
+/// jvm-verifies, snapshot-cache, types) copy it again; each copy missed every
+/// entry and wrote its own, leaving dozens of dead ones per run.
+///
+/// Hashing ~100MB on every compile would cost more than the snapshot saves, so
+/// the hash is kept in `compilers/<stamp>` beside the entries, keyed by the old
+/// stamp: a relink changes the key and is hashed afresh, a copy is hashed once
+/// and then shares every entry with its original. Never staler than the old
+/// stamp, because a binary whose metadata did not change keeps its key.
+///
+/// Zero when the executable cannot be found or read, which fails *closed* in
 /// the sense that matters: every run that cannot identify itself agrees on one
 /// stamp, so entries are shared between them rather than an unreadable
 /// compiler silently getting its own cache.
-fn compiler_stamp() -> u128 {
-    let Ok(exe) = std::env::current_exe() else {
-        return 0;
-    };
-    let Ok(meta) = std::fs::metadata(&exe) else {
+fn compiler_stamp(dir: &Utf8Path) -> u128 {
+    std::env::current_exe().map_or(0, |exe| stamp_of(&exe, dir))
+}
+
+/// [`compiler_stamp`] for any executable: its contents' hash, remembered under
+/// `dir/compilers` by its path, length and modification time.
+fn stamp_of(exe: &std::path::Path, dir: &Utf8Path) -> u128 {
+    let Ok(meta) = std::fs::metadata(exe) else {
         return 0;
     };
     let modified = meta
@@ -349,7 +363,29 @@ fn compiler_stamp() -> u128 {
         .ok()
         .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
         .map_or(0, |since| since.as_nanos());
-    hash_of(&format!("{}:{}:{modified}", exe.display(), meta.len()).into_bytes())
+    let located = hash_of(&format!("{}:{}:{modified}", exe.display(), meta.len()).into_bytes());
+    let known = dir.join("compilers").join(format!("{located:032x}"));
+    if let Some(stamp) = std::fs::read_to_string(&known)
+        .ok()
+        .and_then(|text| u128::from_str_radix(text.trim(), 16).ok())
+    {
+        return stamp;
+    }
+    let Ok(bytes) = std::fs::read(exe) else {
+        return 0;
+    };
+    let stamp = hash_of(&bytes);
+    // Written beside and renamed into place, so a reader sees a whole hash or
+    // none. A failed write only costs the next run another read of the binary.
+    if let Some(parent) = known.parent()
+        && std::fs::create_dir_all(parent).is_ok()
+    {
+        let partial = known.with_extension(format!("{}.partial", std::process::id()));
+        if std::fs::write(&partial, format!("{stamp:032x}\n")).is_ok() {
+            drop(std::fs::rename(&partial, &known));
+        }
+    }
+    stamp
 }
 
 /// Where entries live, or `None` when the cache is switched off.
@@ -556,6 +592,34 @@ fn read_entry(path: &Utf8Path) -> Option<Entry> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A copy of the compiler is the same compiler, and a relink is not.
+    ///
+    /// The stamp was the path, length and mtime, so the gate's pinned copies
+    /// each wrote their own entries. Two copies of one file (different paths,
+    /// different mtimes) must share a stamp; a file whose bytes differ must
+    /// not; and the remembered hash must be what a second ask answers.
+    #[test]
+    fn a_copied_compiler_shares_its_stamp_and_a_changed_one_does_not() {
+        let root = std::env::temp_dir().join(format!("nts-stamp-{}", std::process::id()));
+        drop(std::fs::remove_dir_all(&root));
+        std::fs::create_dir_all(&root).expect("a scratch directory");
+        let dir = Utf8PathBuf::from_path_buf(root.join("cache")).expect("a UTF-8 temp path");
+        let original = root.join("nts");
+        std::fs::write(&original, b"a compiler, byte for byte").expect("the original");
+        let copy = root.join("pinned-nts");
+        std::fs::copy(&original, &copy).expect("the copy");
+        let other = root.join("relinked-nts");
+        std::fs::write(&other, b"a compiler, relinked").expect("the other");
+
+        let first = stamp_of(&original, &dir);
+        assert_ne!(first, 0, "a readable executable has a stamp");
+        assert_eq!(stamp_of(&copy, &dir), first, "a copy shares the original's entries");
+        assert_ne!(stamp_of(&other, &dir), first, "different bytes are a different compiler");
+        assert_eq!(stamp_of(&original, &dir), first, "the remembered hash answers again");
+        assert!(dir.join("compilers").is_dir(), "the hash is remembered beside the entries");
+        drop(std::fs::remove_dir_all(&root));
+    }
 
     /// The listing is what notices a source being **added**.
     ///
