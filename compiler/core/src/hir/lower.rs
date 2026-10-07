@@ -66834,10 +66834,31 @@ impl<'a> FuncBuilder<'a> {
         values: (ValueId, ValueId),
     ) -> Result<(ValueId, ValueId), Diagnostic> {
         let (lhs, rhs) = values;
-        if !matches!(
+        let strict = matches!(
             token,
             syntax::EQUALS_EQUALS_EQUALS_TOKEN | syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN
-        ) || self.values[lhs.0 as usize].ty == self.values[rhs.0 as usize].ty
+        );
+        // **A bigint against an erased value is compared erased.** The backends
+        // spell a mixed `Eq` for the primitives they have an arm for -- a
+        // string, a number, a boolean against an `NtsValue` -- and a bigint is
+        // not one of them: `items[1] === 1n << 100n` over an `unknown[]` emitted
+        // C's `==` between an `NtsValue` and an `__int128`, which clang refuses.
+        // Erasing the bigint makes it the erased comparison, which compares a
+        // bigint by value.
+        let (left, right) = (&self.values[lhs.0 as usize].ty, &self.values[rhs.0 as usize].ty);
+        if strict
+            && matches!(
+                (left, right),
+                (HirType::Erased, HirType::BigInt) | (HirType::BigInt, HirType::Erased)
+            )
+        {
+            return Ok((
+                self.coerce(lhs, &HirType::Erased, nodes[0])?,
+                self.coerce(rhs, &HirType::Erased, nodes[1])?,
+            ));
+        }
+        if !strict
+            || self.values[lhs.0 as usize].ty == self.values[rhs.0 as usize].ty
             || self.values[lhs.0 as usize].ty == HirType::Erased
             || self.values[rhs.0 as usize].ty == HirType::Erased
             || (self.values[lhs.0 as usize].ty.holds_a_pointer()
