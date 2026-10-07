@@ -264,11 +264,18 @@ mod tests {
     /// values files and nothing else: the check a package's `// @ts-nocheck`
     /// spares every program that uses it, made here once. Needs each SDK and
     /// Swift's graphs for it, and says nothing of a platform without them.
+    ///
+    /// One test per platform, so the two run at once: as one loop they were
+    /// the longest test binary's last two minutes (126-159 s of `tests`).
     #[test]
-    fn the_platform_packages_typecheck() {
-        for os in ["macos", "ios"] {
-            typechecks(os);
-        }
+    fn the_macos_packages_typecheck() {
+        typechecks("macos");
+    }
+
+    /// The same for iOS; see `the_macos_packages_typecheck`.
+    #[test]
+    fn the_ios_packages_typecheck() {
+        typechecks("ios");
     }
 
     fn typechecks(os: &str) {

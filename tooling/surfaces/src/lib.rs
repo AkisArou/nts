@@ -17,7 +17,7 @@
 //! editor type-checks a framework's declarations again for every program
 //! that names it: on a program naming `AppKit` that was an eighth of the
 //! frontend. What a binder generates must typecheck, and its tests say so
-//! (`apple_surface`'s `the_platform_packages_typecheck`). The pragma silences
+//! (`apple_surface`'s `the_macos_packages_typecheck` and its iOS twin). The pragma silences
 //! only diagnostics; the declarations bind and merge as before.
 
 use std::fmt::Write as _;

@@ -5,8 +5,9 @@
 //
 // cargo builds every test binary in parallel and then runs them **one after
 // another**: 173 of them in 315 s, of which the nts-cli unit binary alone is
-// 120 s (one test in it, `apple_surface::the_platform_packages_typecheck`, is
-// 135 s by itself). Run side by side they take about as long as the slowest.
+// 120 s (one test in it, `apple_surface::the_platform_packages_typecheck`, was
+// 135 s by itself; it is now one test per platform). Run side by side they
+// take about as long as the slowest.
 //
 // **How each binary is run is cargo's, not this file's.** The first pass is
 // cargo itself -- the same `cargo test --workspace --no-fail-fast` -- with

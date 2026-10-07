@@ -299,7 +299,7 @@ to the program through the same hook that adds the packages.
 every program that names it. The pragma silences diagnostics only; the
 declarations bind and merge as before. What a binder generates must
 typecheck, and a test of the binder's says so (Apple's is
-`the_platform_packages_typecheck`).
+`the_macos_packages_typecheck` and `the_ios_packages_typecheck`).
 
 **One `Binder` interface.** Each lane's generator implements it, and the build,
 `--watch` and the language server know only the interface:
