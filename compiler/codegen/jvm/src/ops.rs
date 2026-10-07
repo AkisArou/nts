@@ -3867,6 +3867,16 @@ impl Emitter<'_> {
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
         match kind {
+            // An erased array's length, after lowering's checked array-shape
+            // guard: by the actual representation at run time, never a cast to
+            // a wrapper the static type does not name. See
+            // `NtsValue.arrayLength`.
+            OpKind::Length(of) if self.ty(*of) == &HirType::Erased => {
+                self.load(code, pool, *of)?;
+                code.invoke_static(origin, pool, types::VALUE, "arrayLength", "(Lnts/rt/NtsValue;)I");
+                self.adapt_to(code, Kind::Int, value, origin)?;
+                Ok(Placed::OnStack)
+            }
             OpKind::Length(of) if self.ty(*of) == &HirType::Managed(ManagedType::Template) => {
                 self.load(code, pool, *of)?;
                 code.invoke_static(origin, pool, types::TEMPLATE, "count", "(Lnts/rt/NtsTemplate;)I");

@@ -522,6 +522,50 @@ public final class NtsValue {
      * negative index answers the same -- `a[1.5]` is a property read in
      * JavaScript and there is no property here.
      */
+    /**
+     * `array.length` where the array is erased -- `Length` of an erased operand,
+     * which lowering emits after its checked array-shape guard.
+     *
+     * <p>**Every representation by what it is, never by what it might be.** A
+     * wrapper's live count (its `length`, not its backing store's, which is
+     * larger after a `push`); a template's count; and a bare JVM array of any
+     * element type, through
+     * `java.lang.reflect.Array` for {@link #isArray}'s reason -- the element
+     * analysis picks `double[]`, `int[]`, `long[]`, `boolean[]` or `Object[]`,
+     * and a chain of the widths that exist today goes stale on the next.
+     * Anything else refuses by class name: the guard said "an array", so a value
+     * that is not one is a defect to report, not an `undefined` to answer.
+     *
+     * <p>**A tuple refuses, by name.** It is a struct with named fields here and
+     * carries no position count at run time -- nor does C's tuple header -- so
+     * its length is a protocol of its own (layout metadata every backend
+     * reads), not something this helper may guess at.
+     */
+    public static int arrayLength(NtsValue array) {
+        Object ref = array == null ? null : array.ref;
+        if (ref instanceof NtsArrayD) {
+            return ((NtsArrayD) ref).length;
+        }
+        if (ref instanceof NtsArrayL) {
+            return ((NtsArrayL) ref).length;
+        }
+        if (ref instanceof NtsArrayZ) {
+            return ((NtsArrayZ) ref).length;
+        }
+        if (ref instanceof NtsTemplate) {
+            return NtsTemplate.count((NtsTemplate) ref);
+        }
+        if (ref instanceof NtsTuple) {
+            throw new NtsRefusal("the length of an erased tuple, which carries no position count at run time");
+        }
+        if (ref != null && ref.getClass().isArray()) {
+            return java.lang.reflect.Array.getLength(ref);
+        }
+        throw new NtsRefusal("the length of an erased value held as "
+            + (ref == null ? "no reference" : ref.getClass().getName())
+            + ", which the array-shape guard should have refused");
+    }
+
     public static NtsValue arrayElement(NtsValue array, double index) {
         Object ref = array == null ? null : array.ref;
         if (ref == null) {

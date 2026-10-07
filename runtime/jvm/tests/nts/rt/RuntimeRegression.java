@@ -62,6 +62,35 @@ public final class RuntimeRegression {
     }
 
     /** An erased bigint (tag 16): every reader names it, and it is a value, not a reference. */
+    private static boolean lengthRefuses(Object storage) {
+        try {
+            NtsValue.arrayLength(storage == null ? null : NtsValue.ofObject(storage));
+            return false;
+        } catch (NtsRefusal expected) {
+            return true;
+        }
+    }
+
+    /** `Length` of an erased array: the live count of every actual representation, and named refusals. */
+    private static void testArrayLength() {
+        NtsArrayD grown = NtsArrayD.of(0);
+        for (int i = 0; i < 5; i++) NtsArrayD.push(grown, i);
+        check(grown.items.length > 5 && NtsValue.arrayLength(NtsValue.ofObject(grown)) == 5, "a wrapper's live count, not its capacity");
+        NtsArrayL refs = NtsArrayL.of(0);
+        NtsArrayL.push(refs, NtsValue.ofNumber(1));
+        NtsArrayL.push(refs, NtsValue.ofNumber(2));
+        check(NtsValue.arrayLength(NtsValue.ofObject(refs)) == 2, "NtsArrayL");
+        check(NtsValue.arrayLength(NtsValue.ofObject(NtsArrayZ.of(3))) == 3, "NtsArrayZ");
+        check(NtsValue.arrayLength(NtsValue.ofObject(NtsTemplate.of(new String[] {"a", "b"}))) == 2, "a template");
+        Object[] bare = {new double[4], new int[3], new long[2], new boolean[1], new Object[6], new NtsValue[7], new String[0]};
+        int[] want = {4, 3, 2, 1, 6, 7, 0};
+        for (int i = 0; i < bare.length; i++) {
+            check(NtsValue.arrayLength(NtsValue.ofObject(bare[i])) == want[i], "a bare " + bare[i].getClass().getSimpleName());
+        }
+        check(lengthRefuses(new NtsTuple() { }), "a tuple refuses by name: it carries no position count");
+        check(lengthRefuses("not an array") && lengthRefuses(new Object()) && lengthRefuses(null), "a non-array refuses");
+    }
+
     private static void testErasedBigInt() {
         NtsBigInt five = NtsBigInt.fromLong(5);
         NtsValue a = NtsValue.ofBigInt(NtsBigInt.add(NtsBigInt.fromLong(2), NtsBigInt.fromLong(3)));
@@ -912,6 +941,7 @@ public final class RuntimeRegression {
         testBigInt();
         testBigIntCompareString();
         testRefusalLines();
+        testArrayLength(); System.out.println("erased array length passed");
         testErasedBigInt(); System.out.println("bigint randomized tests passed");
         testMap(); System.out.println("map randomized and cursor tests passed");
         testMapAsJavaMap(); System.out.println("NtsMap as java.util.Map passed");
