@@ -1,4 +1,9 @@
-// expect: NTS1001 `Math.imul`, not a member of this compiler's `Math` is not supported by this lowering yet
+// expect: nothing refused -- FIXED, kept as a guard
+//
+// **FIXED 2026-10-07 (`Math.imul`), and kept as a guard**: a runtime helper,
+// `nts_math_imul`, exact on every lane; examples/math-imul-multiplies-in-32-bits
+// checks it against node on C, C+RC, LLVM and JVM. What follows is the
+// fixture as it was written.
 //
 // `Math.imul` (ES2015) is refused. It is the 32-bit multiply every string
 // hash written for JavaScript uses -- FNV-1a, Murmur, xxhash's JS ports --
