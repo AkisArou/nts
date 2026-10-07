@@ -176,6 +176,21 @@ int32_t nts_dom_set_interval_default(void (*callback)(void* closure),
 void nts_dom_clear_timeout(int32_t id);
 void nts_dom_clear_interval(int32_t id);
 
+/* `requestIdleCallback(callback, {timeout})`: once, in an idle period or once
+ * the timeout (ms; 0 is none) passes, with the IdleDeadline, in the queue
+ * page script's idle callbacks use. Answers the id cancelIdleCallback takes.
+ * The closure goes back when it has run, is cancelled, or the document ends. */
+int32_t nts_dom_request_idle_callback(void (*callback)(NtsDomIdleDeadline* deadline,
+                                                       void* closure),
+                                      void* closure,
+                                      void (*destroy)(void* closure),
+                                      double timeout);
+int32_t nts_dom_request_idle_callback_default(
+    void (*callback)(NtsDomIdleDeadline* deadline, void* closure),
+    void* closure,
+    void (*destroy)(void* closure));
+void nts_dom_cancel_idle_callback(int32_t id);
+
 /* `element.attachShadow({mode})`, mode "open" or "closed": the element's new
  * shadow root. Throws as Blink's attachShadow does (NotSupportedError for an
  * element that cannot host one or already does), and the binding's TypeError

@@ -5332,17 +5332,17 @@ declare module "nts:dom" {
      */
     dir: StringView;
     /**
-     * @ntsSymbol nts_dom_HTMLElement_set_hidden_boolean
+     * @ntsSymbol nts_dom_HTMLElement_set_hidden_number
      */
-    _set_hidden_boolean(this: HTMLElement, value: boolean): void;
+    _set_hidden_number(this: HTMLElement, value: CNumber<"double">): void;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_hidden_string
      */
     _set_hidden_string(this: HTMLElement, value: StringView): void;
     /**
-     * @ntsSymbol nts_dom_HTMLElement_set_hidden_number
+     * @ntsSymbol nts_dom_HTMLElement_set_hidden_boolean
      */
-    _set_hidden_number(this: HTMLElement, value: CNumber<"double">): void;
+    _set_hidden_boolean(this: HTMLElement, value: boolean): void;
     /**
      * @ntsSymbol nts_dom_HTMLElement_get_inert
      */
@@ -23330,41 +23330,11 @@ declare module "nts:dom" {
      */
     name: StringView;
     /**
-     * @ntsSymbol nts_dom_HTMLSlotElement_assign_ttt
+     * @ntsSymbol nts_dom_HTMLSlotElement_assign_eee
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    assign(this: HTMLSlotElement, nodes1: Text, nodes2: Text, nodes3: Text, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_HTMLSlotElement_assign_tte
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    assign(this: HTMLSlotElement, nodes1: Text, nodes2: Text, nodes3: Element, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_HTMLSlotElement_assign_tet
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    assign(this: HTMLSlotElement, nodes1: Text, nodes2: Element, nodes3: Text, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_HTMLSlotElement_assign_tee
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    assign(this: HTMLSlotElement, nodes1: Text, nodes2: Element, nodes3: Element, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_HTMLSlotElement_assign_ett
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    assign(this: HTMLSlotElement, nodes1: Element, nodes2: Text, nodes3: Text, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_HTMLSlotElement_assign_ete
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    assign(this: HTMLSlotElement, nodes1: Element, nodes2: Text, nodes3: Element, error?: Ptr<DOMException | null>): void;
+    assign(this: HTMLSlotElement, nodes1: Element, nodes2: Element, nodes3: Element, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_HTMLSlotElement_assign_eet
      * @ntsThrows error nts_dom_exception_take_message
@@ -23372,29 +23342,41 @@ declare module "nts:dom" {
      */
     assign(this: HTMLSlotElement, nodes1: Element, nodes2: Element, nodes3: Text, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_HTMLSlotElement_assign_eee
+     * @ntsSymbol nts_dom_HTMLSlotElement_assign_ete
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    assign(this: HTMLSlotElement, nodes1: Element, nodes2: Element, nodes3: Element, error?: Ptr<DOMException | null>): void;
+    assign(this: HTMLSlotElement, nodes1: Element, nodes2: Text, nodes3: Element, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_HTMLSlotElement_assign_tt
+     * @ntsSymbol nts_dom_HTMLSlotElement_assign_ett
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    assign(this: HTMLSlotElement, nodes1: Text, nodes2: Text, error?: Ptr<DOMException | null>): void;
+    assign(this: HTMLSlotElement, nodes1: Element, nodes2: Text, nodes3: Text, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_HTMLSlotElement_assign_te
+     * @ntsSymbol nts_dom_HTMLSlotElement_assign_tee
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    assign(this: HTMLSlotElement, nodes1: Text, nodes2: Element, error?: Ptr<DOMException | null>): void;
+    assign(this: HTMLSlotElement, nodes1: Text, nodes2: Element, nodes3: Element, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_HTMLSlotElement_assign_et
+     * @ntsSymbol nts_dom_HTMLSlotElement_assign_tet
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    assign(this: HTMLSlotElement, nodes1: Element, nodes2: Text, error?: Ptr<DOMException | null>): void;
+    assign(this: HTMLSlotElement, nodes1: Text, nodes2: Element, nodes3: Text, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLSlotElement_assign_tte
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    assign(this: HTMLSlotElement, nodes1: Text, nodes2: Text, nodes3: Element, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLSlotElement_assign_ttt
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    assign(this: HTMLSlotElement, nodes1: Text, nodes2: Text, nodes3: Text, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_HTMLSlotElement_assign_ee
      * @ntsThrows error nts_dom_exception_take_message
@@ -23402,17 +23384,35 @@ declare module "nts:dom" {
      */
     assign(this: HTMLSlotElement, nodes1: Element, nodes2: Element, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_HTMLSlotElement_assign_t
+     * @ntsSymbol nts_dom_HTMLSlotElement_assign_et
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    assign(this: HTMLSlotElement, nodes1: Text, error?: Ptr<DOMException | null>): void;
+    assign(this: HTMLSlotElement, nodes1: Element, nodes2: Text, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLSlotElement_assign_te
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    assign(this: HTMLSlotElement, nodes1: Text, nodes2: Element, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLSlotElement_assign_tt
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    assign(this: HTMLSlotElement, nodes1: Text, nodes2: Text, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_HTMLSlotElement_assign_e
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     assign(this: HTMLSlotElement, nodes1: Element, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLSlotElement_assign_t
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    assign(this: HTMLSlotElement, nodes1: Text, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_HTMLSlotElement_assign_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -27720,4 +27720,20 @@ declare module "nts:dom" {
   export type DocumentType = HostClass<"NtsDomDocumentType", Node> & DocumentTypeMethods;
   /** @ntsSymbol nts_dom_as_DocumentType */
   export function asDocumentType(node: Node): DocumentType | null;
+  export interface IdleDeadlineOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_IdleDeadline_get_didTimeout
+     */
+    _get_didTimeout(this: IdleDeadline): boolean;
+    /**
+     * @ntsGet _get_didTimeout
+     */
+    readonly didTimeout: boolean;
+    /**
+     * @ntsSymbol nts_dom_IdleDeadline_timeRemaining
+     */
+    timeRemaining(this: IdleDeadline): CNumber<"double">;
+  }
+  export type IdleDeadlineMethods = IdleDeadlineOwnMethods;
+  export type IdleDeadline = HostClass<"NtsDomIdleDeadline", null, "nts_dom_retain", "nts_dom_release"> & IdleDeadlineMethods;
 }

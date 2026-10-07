@@ -26,7 +26,10 @@
 #include "third_party/blink/renderer/core/resize_observer/resize_observer.h"
 #include "third_party/blink/renderer/core/resize_observer/resize_observer_entry.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_idle_request_options.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/scheduler/idle_deadline.h"
+#include "third_party/blink/renderer/core/scheduler/scripted_idle_task_controller.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/bindings/wrapper_type_info.h"
 #include "third_party/blink/renderer/platform/heap/prefinalizer.h"
@@ -206,6 +209,39 @@ private:
   NtsDomFrameCallback callback_;
   RAW_PTR_EXCLUSION void *closure_; // see PlainPointers
   NtsDomDestroy destroy_;
+};
+
+// A compiled closure to run in an idle period -- or once its timeout passes
+// -- in the queue page script's requestIdleCallback uses
+// (ScriptedIdleTaskController). It runs once and gives the closure back; a
+// cancelled one, or one the document's end leaves, gives it back unrun.
+class NtsIdle final : public blink::IdleTask {
+public:
+  NtsIdle(NtsDomContext *context, NtsDomIdleCallback callback, void *closure,
+          NtsDomDestroy destroy)
+      : context_(context), callback_(callback), closure_(closure),
+        destroy_(destroy) {}
+
+  void invoke(blink::IdleDeadline *deadline) override;
+  void set_id(int32_t id) { id_ = id; }
+  int32_t id() const { return id_; }
+
+  // What gives the closure back, once; nothing after.
+  NtsDomDestroy Take(void *&closure) {
+    if (!callback_)
+      return nullptr;
+    callback_ = nullptr;
+    context_ = nullptr;
+    closure = std::exchange(closure_, nullptr);
+    return std::exchange(destroy_, nullptr);
+  }
+
+private:
+  RAW_PTR_EXCLUSION NtsDomContext *context_; // see PlainPointers
+  NtsDomIdleCallback callback_;
+  RAW_PTR_EXCLUSION void *closure_; // see PlainPointers
+  NtsDomDestroy destroy_;
+  int32_t id_ = 0;
 };
 
 // A compiled closure to run after a delay, once or every interval: HTML's
@@ -415,6 +451,7 @@ public:
   void Trace(blink::Visitor *visitor) const {
     visitor->Trace(set);
     visitor->Trace(frames);
+    visitor->Trace(idle);
     visitor->Trace(by_target);
     visitor->Trace(handlers);
     visitor->Trace(timers);
@@ -446,6 +483,8 @@ public:
   }
   blink::HeapHashSet<blink::Member<NtsListener>> set;
   blink::HeapHashSet<blink::Member<NtsFrame>> frames;
+  // Idle callbacks that can still run.
+  blink::HeapHashSet<blink::Member<NtsIdle>> idle;
   blink::HeapHashMap<blink::Member<blink::EventTarget>,
                      blink::Member<TargetListeners>>
       by_target;
@@ -687,6 +726,17 @@ void NtsListener::Watch(blink::AbortSignal *signal) {
       blink::WrapWeakPersistent(this)));
 }
 
+void NtsIdle::invoke(blink::IdleDeadline *deadline) {
+  NtsDomContext *context = context_;
+  const NtsDomIdleCallback callback = callback_;
+  void *closure = nullptr;
+  const NtsDomDestroy destroy = Take(closure);
+  if (!context)
+    return;
+  context->listeners->idle.erase(this);
+  context->RunIdleCallback(callback, deadline, closure, destroy);
+}
+
 void NtsFrame::Invoke(double time) {
   NtsDomContext *context = context_;
   const NtsDomFrameCallback callback = callback_;
@@ -792,6 +842,37 @@ void NtsDomContext::RunFrame(NtsDomFrameCallback callback, double time,
       [](void *state) {
         auto *call = static_cast<Call *>(state);
         call->callback(call->time, call->closure);
+        if (call->destroy)
+          call->destroy(call->closure);
+      },
+      &call);
+}
+
+void NtsDomContext::RunIdleCallback(NtsDomIdleCallback callback,
+                                    blink::IdleDeadline *deadline,
+                                    void *closure, NtsDomDestroy destroy) {
+  if (closed || !invoke)
+    return;
+  Entry entry(this);
+  v8::HandleScope handles(v8_isolate);
+  v8::MicrotasksScope microtasks(v8_isolate, event_loop->microtask_queue(),
+                                 v8::MicrotasksScope::kRunMicrotasks);
+  // On this stack for the call: the deadline is found here by Oilpan's scan.
+  struct Call {
+    STACK_ALLOCATED();
+
+  public:
+    NtsDomIdleCallback callback;
+    blink::IdleDeadline *deadline;
+    void *closure;
+    NtsDomDestroy destroy;
+  } call{callback, deadline, closure, destroy};
+  invoke(
+      invoke_host.get(),
+      [](void *state) {
+        auto *call = static_cast<Call *>(state);
+        call->callback(HandleOf<NtsDomIdleDeadline>(call->deadline),
+                       call->closure);
         if (call->destroy)
           call->destroy(call->closure);
       },
@@ -1046,6 +1127,16 @@ void NtsDomContext::Close() {
     if (auto destroy = frame->Take(closure))
       GiveBack(destroy, closure);
   }
+  blink::HeapVector<blink::Member<nts_dom::NtsIdle>> idle(listeners->idle);
+  listeners->idle.clear();
+  for (auto &task : idle) {
+    if (auto *window = document->domWindow())
+      blink::ScriptedIdleTaskController::From(*window).CancelCallback(
+          task->id());
+    void *closure = nullptr;
+    if (auto destroy = task->Take(closure))
+      GiveBack(destroy, closure);
+  }
   closed = true;
   weak_factory.InvalidateWeakPtrs();
   for (auto &job : jobs)
@@ -1141,6 +1232,7 @@ NtsDomNode *nts_blink_dom_element_by_id(NtsDomContext *context,
 }
 size_t nts_blink_dom_held_closures(NtsDomContext *context) {
   return context->listeners->set.size() + context->listeners->frames.size() +
+         context->listeners->idle.size() +
          context->listeners->timers.size() +
          context->listeners->held.size();
 }
@@ -1443,6 +1535,53 @@ int32_t nts_dom_set_interval_default(NtsDomTimerCallback callback,
 // either kind.
 void nts_dom_clear_timeout(int32_t id) { nts_dom::Current().ClearTimer(id); }
 void nts_dom_clear_interval(int32_t id) { nts_dom::Current().ClearTimer(id); }
+
+// `requestIdleCallback(callback, {timeout})`, in the queue page script's
+// uses; the id cancelIdleCallback takes. WebIDL's `unsigned long timeout`
+// is ToUint32, as page script's binding converts it; 0 is no timeout.
+int32_t nts_dom_request_idle_callback(NtsDomIdleCallback callback,
+                                      void *closure, NtsDomDestroy destroy,
+                                      double timeout) {
+  NtsDomContext &context = nts_dom::Current();
+  CHECK(context.invoke);
+  blink::LocalDOMWindow *window = context.document->domWindow();
+  CHECK(window);
+  blink::DummyExceptionStateForTesting conversion;
+  auto *options = blink::IdleRequestOptions::Create(context.v8_isolate.get());
+  options->setTimeout(
+      blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(
+          context.v8_isolate.get(),
+          v8::Number::New(context.v8_isolate.get(), timeout), conversion));
+  auto *task = blink::MakeGarbageCollected<nts_dom::NtsIdle>(
+      &context, callback, closure, destroy);
+  context.listeners->idle.insert(task);
+  const int32_t id =
+      blink::ScriptedIdleTaskController::From(*window).RegisterCallback(
+          task, options);
+  task->set_id(id);
+  return id;
+}
+int32_t nts_dom_request_idle_callback_default(NtsDomIdleCallback callback,
+                                              void *closure,
+                                              NtsDomDestroy destroy) {
+  return nts_dom_request_idle_callback(callback, closure, destroy, 0);
+}
+void nts_dom_cancel_idle_callback(int32_t id) {
+  NtsDomContext &context = nts_dom::Current();
+  for (auto &task : context.listeners->idle) {
+    if (task->id() != id)
+      continue;
+    if (auto *window = context.document->domWindow())
+      blink::ScriptedIdleTaskController::From(*window).CancelCallback(id);
+    nts_dom::NtsIdle *cancelled = task.Get();
+    context.listeners->idle.erase(cancelled);
+    void *closure = nullptr;
+    // Inside the program's call: its environment is entered already.
+    if (auto destroy = cancelled->Take(closure))
+      destroy(closure);
+    return;
+  }
+}
 
 void nts_dom_cancel_animation_frame(int32_t id) {
   NtsDomContext &context = nts_dom::Current();

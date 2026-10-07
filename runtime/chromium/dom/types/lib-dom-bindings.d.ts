@@ -976,6 +976,7 @@ interface HighlightRegistry {}
  */
 interface History {}
 /**
+ * @ntsBoundBy "nts:dom" IdleDeadline
  * @ntsIs nts_dom_is 272
  */
 interface IdleDeadline {}

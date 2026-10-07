@@ -216,6 +216,10 @@ try {
       pre.id = 'native-timers';
       window.document.querySelector('#native-dom').appendChild(pre);
       const document = () => window.document;
+      // nts:dom takes requestIdleCallback's timeout itself, page script its
+      // IdleRequestOptions.
+      const requestIdleCallback = (callback, timeout) =>
+        window.requestIdleCallback(callback, timeout === undefined ? undefined : { timeout });
       ${timerNarrowings}
       ${timerVectors}
       startTimerVectors();

@@ -14,6 +14,20 @@ declare module "nts:dom" {
   /** @ntsSymbol nts_dom_cancel_animation_frame */
   export function cancelAnimationFrame(id: CNumber<"int32">): void;
   /**
+   * `requestIdleCallback(callback, { timeout })`: once, in an idle period or
+   * once the timeout (ms) passes, with the deadline. Answers the id
+   * cancelIdleCallback takes.
+   * @ntsSymbol nts_dom_request_idle_callback
+   */
+  export function requestIdleCallback(callback: Closure<(deadline: IdleDeadline) => void>, timeout: CNumber<"double">): CNumber<"int32">;
+  /**
+   * `requestIdleCallback(callback)`: no timeout.
+   * @ntsSymbol nts_dom_request_idle_callback_default
+   */
+  export function requestIdleCallback(callback: Closure<(deadline: IdleDeadline) => void>): CNumber<"int32">;
+  /** @ntsSymbol nts_dom_cancel_idle_callback */
+  export function cancelIdleCallback(id: CNumber<"int32">): void;
+  /**
    * `setTimeout(handler, timeout)`: once, after the timeout, as HTML's timer
    * steps schedule it. Answers the id clearTimeout takes.
    * @ntsSymbol nts_dom_set_timeout

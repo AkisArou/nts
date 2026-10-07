@@ -55,6 +55,10 @@
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "v8/include/v8.h"
 
+namespace blink {
+class IdleDeadline;
+} // namespace blink
+
 namespace nts_dom {
 
 // The context of the entry running on this thread: what every DOM call the
@@ -71,6 +75,7 @@ using NtsDomCallback = void (*)(NtsDomEvent *, void *);
 using NtsDomCancelCallback = bool (*)(NtsDomEvent *, void *);
 using NtsDomDestroy = void (*)(void *);
 using NtsDomFrameCallback = void (*)(double, void *);
+using NtsDomIdleCallback = void (*)(NtsDomIdleDeadline *, void *);
 using NtsDomTimerCallback = void (*)(void *);
 
 // Whether an event handler attribute write by the program is in progress
@@ -203,6 +208,7 @@ using nts_dom::NtsDomCallback;
 using nts_dom::NtsDomCancelCallback;
 using nts_dom::NtsDomDestroy;
 using nts_dom::NtsDomFrameCallback;
+using nts_dom::NtsDomIdleCallback;
 using nts_dom::NtsDomTimerCallback;
 
 
@@ -228,6 +234,10 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
   // closure goes back once it has run.
   void RunFrame(NtsDomFrameCallback callback, double time, void *closure,
                 NtsDomDestroy destroy);
+  // A compiled idle callback's call, the same with the IdleDeadline.
+  void RunIdleCallback(NtsDomIdleCallback callback,
+                       blink::IdleDeadline *deadline, void *closure,
+                       NtsDomDestroy destroy);
   // `setTimeout`/`setInterval` for a compiled closure, as HTML's timer
   // initialization steps run them (dom_bridge.cc); the id clearTimer takes.
   int32_t SetTimer(NtsDomTimerCallback callback, void *closure,

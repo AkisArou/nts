@@ -130,7 +130,8 @@
     "DOMImplementation",
     "CDATASection",
     "ProcessingInstruction",
-    "DocumentType"
+    "DocumentType",
+    "IdleDeadline"
   ],
   "sequences": [
     "MutationRecord",

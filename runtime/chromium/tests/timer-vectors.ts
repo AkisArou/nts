@@ -5,8 +5,8 @@
 // smoke waits for before it reads the page. Nothing here keeps a node: each
 // callback finds the transcript when it runs, and an interval keeps its id
 // and count in attributes, so no handle is rooted while the timers wait.
-import { asHTMLElement, clearInterval, clearTimeout, document, newIntersectionObserver, newMutationObserver, newResizeObserver, setInterval, setTimeout } from "nts:dom";
-import type { Event, IntersectionObserver, IntersectionObserverEntrySequence, MutationObserver, MutationRecordSequence, ResizeObserver, ResizeObserverEntrySequence } from "nts:dom";
+import { asHTMLElement, cancelIdleCallback, clearInterval, clearTimeout, document, newIntersectionObserver, newMutationObserver, newResizeObserver, requestIdleCallback, setInterval, setTimeout } from "nts:dom";
+import type { Event, IdleDeadline, IntersectionObserver, IntersectionObserverEntrySequence, MutationObserver, MutationRecordSequence, ResizeObserver, ResizeObserverEntrySequence } from "nts:dom";
 
 function log(text: string): void {
   const pre = document().querySelector("#native-timers");
@@ -146,6 +146,18 @@ function observeResize(): void {
 
 // IntersectionObserver: an element at the top of the page intersects the
 // viewport, wholly.
+// requestIdleCallback: once, in an idle period or by its timeout, with a
+// deadline no longer than an idle period's 50 ms; a cancelled one never runs.
+// Whether it ran by the timeout depends on the machine, so it is not logged.
+function observeIdle(): void {
+  cancelIdleCallback(requestIdleCallback((): void => { note("data-idle", "cancelled-ran"); }));
+  requestIdleCallback((deadline: IdleDeadline): void => {
+    const remaining = deadline.timeRemaining();
+    note("data-idle", remaining >= 0 && remaining <= 50 ? "deadline" : "deadline-out-of-range");
+    note("data-idle", "done");
+  }, 1000);
+}
+
 function observeIntersection(): void {
   const target = document().createElement("div");
   target.id = "intersected";
@@ -169,7 +181,9 @@ function finish(): void {
   remember("data-waited", waited);
   const resized = pre.getAttribute("data-resize");
   const intersected = pre.getAttribute("data-intersection");
-  const settled = resized !== null && resized.endsWith("done;") && intersected !== null && intersected.endsWith("done;");
+  const idled = pre.getAttribute("data-idle");
+  const settled = resized !== null && resized.endsWith("done;") && intersected !== null && intersected.endsWith("done;")
+    && idled !== null && idled.endsWith("done;");
   if (!settled && waited < 100) {
     setTimeout(finish, 20);
     return;
@@ -190,6 +204,7 @@ export function startTimerVectors(): void {
   if (pre !== null) {
     pre.setAttribute("data-resize", "");
     pre.setAttribute("data-intersection", "");
+    pre.setAttribute("data-idle", "");
   }
   remember("data-ticks", 0);
   remember("data-interval", 0);
@@ -200,7 +215,7 @@ export function startTimerVectors(): void {
   // is 0, and a 0 runs before a 5 and a 20.
   setTimeout((): void => { log("t20"); intervals(); }, 20);
   setTimeout((): void => { log("t5"); }, 5);
-  setTimeout((): void => { log("t0"); clickSelfRemoval(); observeMutations(); observeResize(); observeIntersection(); }, 0);
+  setTimeout((): void => { log("t0"); clickSelfRemoval(); observeMutations(); observeResize(); observeIntersection(); observeIdle(); }, 0);
   setTimeout((): void => { log("tNegative"); }, -5);
   setTimeout((): void => { log("tNaN"); }, 0 / 0);
   setTimeout((): void => { log("tDefault"); });
