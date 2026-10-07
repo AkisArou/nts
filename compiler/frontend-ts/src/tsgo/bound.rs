@@ -7,7 +7,7 @@
 //! type alias declared in the ambient module `"nts:dom"`. Both are nodes this
 //! frontend decoded, so the answer is read from the snapshot rather than asked
 //! of the checker.
-use nts_semantic_schema::binding::{declared_name, enclosing_module, parse};
+use nts_semantic_schema::binding::{module_declarations, parse};
 use nts_semantic_schema::{NodeId, NodeKind, SemanticSnapshot, TypeId, syntax};
 use rustc_hash::FxHashMap;
 
@@ -17,7 +17,7 @@ use rustc_hash::FxHashMap;
 /// out, not guessed at: the interface then has no representation and lowering
 /// refuses it by name, as it does today.
 pub(crate) fn bound_types(snapshot: &SemanticSnapshot) -> FxHashMap<TypeId, TypeId> {
-    let declared = module_types(snapshot);
+    let declared = module_declarations(snapshot);
     let mut bound = FxHashMap::default();
     for (at, node) in snapshot.nodes.iter().enumerate() {
         if node.kind != NodeKind::Syntax(syntax::INTERFACE_DECLARATION) {
@@ -27,7 +27,11 @@ pub(crate) fn bound_types(snapshot: &SemanticSnapshot) -> FxHashMap<TypeId, Type
             continue;
         };
         let Ok(at) = u32::try_from(at) else { continue };
-        let (Some(used), Some(target)) = (snapshot.node_types.get(&NodeId(at)), declared.get(&binding)) else {
+        let (module, name) = binding;
+        let target = declared
+            .get(&(module, name, syntax::TYPE_ALIAS_DECLARATION))
+            .and_then(|alias| snapshot.node_types.get(alias));
+        let (Some(used), Some(target)) = (snapshot.node_types.get(&NodeId(at)), target) else {
             continue;
         };
         if used != target {
@@ -35,25 +39,4 @@ pub(crate) fn bound_types(snapshot: &SemanticSnapshot) -> FxHashMap<TypeId, Type
         }
     }
     bound
-}
-
-/// The type of every type alias declared in an ambient module, by the module's
-/// name and the alias's. Indexed once rather than asked per binding: there are
-/// hundreds of each.
-fn module_types(snapshot: &SemanticSnapshot) -> FxHashMap<(&str, &str), TypeId> {
-    let mut declared = FxHashMap::default();
-    for (at, node) in snapshot.nodes.iter().enumerate() {
-        if node.kind != NodeKind::Syntax(syntax::TYPE_ALIAS_DECLARATION) {
-            continue;
-        }
-        let Ok(at) = u32::try_from(at) else { continue };
-        let at = NodeId(at);
-        let (Some(module), Some(name), Some(ty)) =
-            (enclosing_module(snapshot, at), declared_name(snapshot, at), snapshot.node_types.get(&at))
-        else {
-            continue;
-        };
-        declared.entry((module, name)).or_insert(*ty);
-    }
-    declared
 }

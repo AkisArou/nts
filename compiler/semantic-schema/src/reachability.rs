@@ -114,7 +114,12 @@ pub fn for_frontend(snapshot: &SemanticSnapshot) -> Reachability {
             .into_iter()
             .flat_map(|root| root.children.iter().copied())
     });
-    from_roots(snapshot, exports, statements.chain(foreign_functions(snapshot)))
+    // And what a binding names (`@ntsBoundBy "nts:dom" ChildNode`): lowering
+    // represents a lib.dom type as that declaration's type, so it has to be
+    // resolved in depth -- a placeholder has no handle to be -- though nothing
+    // in the program names it. The same reason `foreign_functions` gives.
+    let bound = crate::binding::bound_declarations(snapshot);
+    from_roots(snapshot, exports, statements.chain(foreign_functions(snapshot)).chain(bound))
 }
 
 /// Every function a declaration file declares: a foreign function, which

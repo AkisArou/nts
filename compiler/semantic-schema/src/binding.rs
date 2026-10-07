@@ -7,6 +7,8 @@
 //! global or function. In this crate, as [`crate::reachability`] is, because it
 //! is a pure question about a snapshot and the frontend must not depend on the
 //! IR crate.
+use rustc_hash::FxHashMap;
+
 use crate::{NodeId, NodeKind, SemanticSnapshot, syntax};
 
 /// `"nts:dom" Element` as its module and its name. `None` for anything else:
@@ -56,6 +58,47 @@ pub fn declared_in(snapshot: &SemanticSnapshot, module: &str, name: &str, kind: 
             && enclosing_module(snapshot, at) == Some(module))
         .then_some(at)
     })
+}
+
+/// Every type alias, interface and function an ambient module declares, by
+/// module, name and kind: one pass over the nodes, for the many bindings a
+/// generated overlay holds.
+#[must_use]
+pub fn module_declarations(snapshot: &SemanticSnapshot) -> FxHashMap<(&str, &str, u16), NodeId> {
+    let mut declared = FxHashMap::default();
+    for (at, node) in snapshot.nodes.iter().enumerate() {
+        let NodeKind::Syntax(kind @ (syntax::TYPE_ALIAS_DECLARATION | syntax::INTERFACE_DECLARATION | syntax::FUNCTION_DECLARATION)) =
+            node.kind
+        else {
+            continue;
+        };
+        let Ok(at) = u32::try_from(at) else { continue };
+        let at = NodeId(at);
+        if let (Some(module), Some(name)) = (enclosing_module(snapshot, at), declared_name(snapshot, at)) {
+            declared.entry((module, name, kind)).or_insert(at);
+        }
+    }
+    declared
+}
+
+/// The declaration each `@ntsBoundBy` names: a type alias for an interface, a
+/// function for a `declare var` or a `declare function`. What lowering reaches
+/// without the program naming it, as it reaches a foreign function by name.
+#[must_use]
+pub fn bound_declarations(snapshot: &SemanticSnapshot) -> Vec<NodeId> {
+    let declared = module_declarations(snapshot);
+    snapshot
+        .nodes
+        .iter()
+        .filter_map(|node| {
+            let (module, name) = parse(node.native.as_deref()?.bound_by.as_deref()?)?;
+            let kind = match node.kind {
+                NodeKind::Syntax(syntax::INTERFACE_DECLARATION) => syntax::TYPE_ALIAS_DECLARATION,
+                _ => syntax::FUNCTION_DECLARATION,
+            };
+            declared.get(&(module, name, kind)).copied()
+        })
+        .collect()
 }
 
 #[cfg(test)]
