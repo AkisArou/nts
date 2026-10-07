@@ -156,7 +156,13 @@ const STEPS = [
   // lose (see the comment above its step line in all.sh); it ran alone, last,
   // for that reason. Lanes inside it: apple VM, windows VM, and one local lane
   // per worker, taking projects from one queue, longest first.
-  { name: "interop", elastic: true, slots: 12, min: 3, mem: 3, nts: true, fe: true, favoured: true, doc: "interop projects build and run" },
+  //
+  // Six local lanes, not twelve: a GTK project's `nts build` binds its GIR
+  // closure one thread per namespace, each a clang run, so one token is a
+  // burst of ten or more cores. At twelve lanes the step's CPU time was 13,429
+  // s against 5,137 at three (2026-10-07) -- the same work, inflated by
+  // contention -- and it ended the run.
+  { name: "interop", elastic: true, slots: 6, min: 3, mem: 3, nts: true, fe: true, favoured: true, doc: "interop projects build and run" },
 ];
 const BY_NAME = new Map(STEPS.map((s) => [s.name, s]));
 
