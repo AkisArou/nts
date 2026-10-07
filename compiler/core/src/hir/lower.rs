@@ -47483,6 +47483,13 @@ impl<'a> FuncBuilder<'a> {
             ));
         }
 
+        // A class a binding implements is constructed by the binding's
+        // constructor function: `new URL(href)` is `nts:dom`'s `newURL`.
+        let arguments = self.arguments_of(id);
+        if let Some(constructor) = self.delegated_constructor(id, &arguments) {
+            return self.lower_delegated_construction(id, constructor, &arguments);
+        }
+
         let ty = self.type_of(id);
         let ty = self.widened(id, ty.ok_or_else(|| self.unrepresentable(id, "a `new`"))?);
         // The three the runtime builds rather than the program: a class's `new`
@@ -57447,6 +57454,50 @@ impl<'a> FuncBuilder<'a> {
         let outer = self.callee_signature.replace((id, ty));
         let lowered = self.lower_call_arguments(id, &callee, arguments, None);
         self.callee_signature = outer;
+        let (args, lent) = lowered?;
+        self.finish_call(id, callee, args, lent, Some(function))
+    }
+
+    /// The function constructing the class a `new` builds, where a binding
+    /// implements the class: `new URL(href, base)` is `nts:dom`'s `newURL`,
+    /// declared beside the type it binds and named for it. One declaration
+    /// per constructor overload and arity, as `append`'s arms are, chosen by
+    /// the arguments as a delegated method's are ([`Self::delegated_method`]).
+    ///
+    /// The binding is read from the interface that names it
+    /// (`/** @ntsBoundBy "nts:dom" URL */ interface URL {}`), which is where
+    /// `bound_types` reads it too.
+    fn delegated_constructor(&self, id: NodeId, arguments: &[NodeId]) -> Option<(NodeId, nts_semantic_schema::SignatureRecord)> {
+        let built = *self.snapshot.node_types.get(&id)?;
+        self.snapshot.bound_types.get(&built)?;
+        let symbol = self.snapshot.types.get(built.0 as usize)?.symbol?;
+        let (module, name) = self.snapshot.symbols.get(symbol.0 as usize)?.declarations.iter().find_map(|declaration| {
+            (self.kind_of(*declaration) == Some(syntax::INTERFACE_DECLARATION))
+                .then(|| nts_semantic_schema::binding::parse(self.node(*declaration).native.as_deref()?.bound_by.as_deref()?))
+                .flatten()
+        })?;
+        let first = nts_semantic_schema::binding::declared_in(self.snapshot, module, &format!("new{name}"), syntax::FUNCTION_DECLARATION)?;
+        let TypeKind::Function(merged) = self.snapshot.types.get(self.snapshot.node_types.get(&first)?.0 as usize)?.kind else { return None };
+        let merged = &self.snapshot.signatures[merged.0 as usize];
+        let overloads: Vec<NodeId> = self
+            .name_node(first)
+            .and_then(|name| self.node(name).symbol)
+            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
+            .map_or_else(|| vec![first], |record| record.declarations.clone());
+        let candidates: Vec<_> = overloads.into_iter().map(|declaration| (declaration, self.overload_signature(declaration, merged))).collect();
+        let at = candidates.iter().position(|(_, record)| self.arguments_fit(record, arguments)).unwrap_or(0);
+        candidates.into_iter().nth(at)
+    }
+
+    /// A `new` of a class a binding implements, as a call of its constructor
+    /// function ([`Self::delegated_constructor`]) at that overload's
+    /// parameters.
+    fn lower_delegated_construction(&mut self, id: NodeId, (function, record): (NodeId, nts_semantic_schema::SignatureRecord), arguments: &[NodeId]) -> Result<ValueId, Diagnostic> {
+        let name = nts_semantic_schema::binding::declared_name(self.snapshot, function).unwrap_or_default().to_owned();
+        let callee = self.native_callee(id, Some(function), name, &record)?;
+        let outer = self.delegated_signature.replace((id, record));
+        let lowered = self.lower_call_arguments(id, &callee, arguments, None);
+        self.delegated_signature = outer;
         let (args, lent) = lowered?;
         self.finish_call(id, callee, args, lent, Some(function))
     }
