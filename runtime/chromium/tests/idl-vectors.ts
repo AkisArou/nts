@@ -12,9 +12,9 @@
 // Page script has no `asText`/`asHTMLElement`/`asHTMLInputElement`; the
 // oracle defines them (`instanceof`) where the import stood. What a caught
 // error reads as is passed in.
-import { newAbortController, newCustomEvent, newEvent, newKeyboardEvent, newMouseEvent, newURL, newURLSearchParams, window } from "nts:dom";
+import { newMutationObserver, newAbortController, newCustomEvent, newEvent, newKeyboardEvent, newMouseEvent, newURL, newURLSearchParams, window } from "nts:dom";
 import { asElement, asHTMLAnchorElement, asHTMLCanvasElement, asHTMLElement, asHTMLImageElement, asHTMLOListElement, asHTMLTableCellElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
-import type { Document, Element, Event, Node, Text } from "nts:dom";
+import type { Document, Element, Event, MutationObserver, MutationRecordSequence, Node, Text } from "nts:dom";
 
 export interface VectorHost {
   // "Name: message", the binding's own context prefix left out.
@@ -446,6 +446,28 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   log("eventInit", canceled.phase + "|" + (proceeded ? "proceeded" : "canceled") + "|" + (bubbled.defaultPrevented ? "prevented" : "no") + "|" + (bubbled.composed ? "composed" : "closed"));
   const pointed = newMouseEvent("click", { clientX: 12.5, clientY: -3, button: 2, ctrlKey: true, detail: 7 });
   log("mouseInit", pointed.clientX + "|" + pointed.clientY + "|" + pointed.button + "|" + (pointed.ctrlKey ? "ctrl" : "-") + (pointed.shiftKey ? "shift" : "-") + "|" + pointed.detail);
+
+  // MutationObserver: the records of a child list and an attribute change,
+  // taken before delivery; a sequence of interfaces, read by index.
+  const watched = d.createElement("div");
+  root.appendChild(watched);
+  const unused = (records: MutationRecordSequence, observer: MutationObserver): void => {};
+  const mutations = newMutationObserver(unused);
+  mutations.observe(watched, { childList: true, attributes: true, attributeOldValue: true, subtree: true });
+  watched.setAttribute("data-state", "one");
+  watched.setAttribute("data-state", "two");
+  const added = d.createElement("b");
+  watched.appendChild(added);
+  added.remove();
+  const records = mutations.takeRecords();
+  let described = "";
+  for (let i = 0; i < records.length; i += 1) {
+    const record = records.item(i)!;
+    described += record.type + ":" + shown(record.attributeName) + ":" + shown(record.oldValue) + ":" +
+      record.addedNodes.length + "/" + record.removedNodes.length + ";";
+  }
+  mutations.disconnect();
+  log("mutations", records.length + "|" + described + "|" + (records.item(99) === null ? "end" : "more"));
 
   // AbortController: a signal that aborts once.
   const controller = newAbortController();

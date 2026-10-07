@@ -5,8 +5,8 @@
 // smoke waits for before it reads the page. Nothing here keeps a node: each
 // callback finds the transcript when it runs, and an interval keeps its id
 // and count in attributes, so no handle is rooted while the timers wait.
-import { asHTMLElement, clearInterval, clearTimeout, document, setInterval, setTimeout } from "nts:dom";
-import type { Event } from "nts:dom";
+import { asHTMLElement, clearInterval, clearTimeout, document, newMutationObserver, setInterval, setTimeout } from "nts:dom";
+import type { Event, MutationObserver, MutationRecordSequence } from "nts:dom";
 
 function log(text: string): void {
   const pre = document().querySelector("#native-timers");
@@ -92,6 +92,24 @@ function clickSelfRemoval(): void {
   clearing.remove();
 }
 
+// A mutation observer's delivery: the records reach the callback at the
+// checkpoint after the change, with the observer itself.
+function observeMutations(): void {
+  const target = document().createElement("div");
+  target.id = "observed";
+  const body = document().body;
+  if (body !== null) body.appendChild(target);
+  const observer = newMutationObserver((records: MutationRecordSequence, self: MutationObserver): void => {
+    let kinds = "";
+    for (let i = 0; i < records.length; i += 1) kinds += records.item(i)!.type + ",";
+    log("delivered" + records.length + ":" + kinds);
+    self.disconnect();
+  });
+  observer.observe(target, { childList: true, attributes: true });
+  target.setAttribute("data-x", "1");
+  target.appendChild(document().createElement("i"));
+}
+
 // Three phases, each started by the one before, so no ordering in the
 // transcript rests on how two timers due at nearby times race.
 export function startTimerVectors(): void {
@@ -101,7 +119,7 @@ export function startTimerVectors(): void {
   // is 0, and a 0 runs before a 5 and a 20.
   setTimeout((): void => { log("t20"); intervals(); }, 20);
   setTimeout((): void => { log("t5"); }, 5);
-  setTimeout((): void => { log("t0"); clickSelfRemoval(); }, 0);
+  setTimeout((): void => { log("t0"); clickSelfRemoval(); observeMutations(); }, 0);
   setTimeout((): void => { log("tNegative"); }, -5);
   setTimeout((): void => { log("tNaN"); }, 0 / 0);
   setTimeout((): void => { log("tDefault"); });

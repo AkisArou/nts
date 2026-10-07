@@ -9,6 +9,7 @@
 #include "nts/dom_bridge_bindings.h"
 #include "nts/dom_abi.h"
 
+#include <cmath>
 #include <limits>
 #include <utility>
 
@@ -148,6 +149,38 @@ inline blink::String CopyView(NtsStringView view) {
   return CopyLatin1(static_cast<const uint8_t *>(view.units), view.length);
 }
 
+// A `sequence<T>` a member answered, as the program holds it: the vector
+// Blink answered, read by index (dom_idl.cc's `TSequence` accessors). Its
+// handle is its address; the program roots it like a node
+// (nts_dom_sequence_retain) when it keeps one off the stack.
+class NtsSequence final : public blink::GarbageCollected<NtsSequence> {
+public:
+  template <class T>
+  explicit NtsSequence(const blink::HeapVector<blink::Member<T>> &items) {
+    items_.reserve(items.size());
+    for (const auto &item : items)
+      items_.push_back(item.Get());
+  }
+  double length() const { return items_.size(); }
+  // WebIDL's `unsigned long index`: ToUint32, then null past the end.
+  blink::ScriptWrappable *item(double index) const {
+    double whole = std::isfinite(index) ? std::trunc(index) : 0;
+    whole = std::fmod(whole, 4294967296.0);
+    if (whole < 0)
+      whole += 4294967296.0;
+    return whole < items_.size() ? items_[static_cast<blink::wtf_size_t>(whole)].Get()
+                                 : nullptr;
+  }
+  void Trace(blink::Visitor *visitor) const { visitor->Trace(items_); }
+
+private:
+  blink::HeapVector<blink::Member<blink::ScriptWrappable>> items_;
+};
+template <class T>
+NtsSequence *Sequence(const blink::HeapVector<blink::Member<T>> &items) {
+  return blink::MakeGarbageCollected<NtsSequence>(items);
+}
+
 } // namespace nts_dom
 
 using nts_dom::CopyView;
@@ -195,6 +228,10 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
   void ClearTimer(int32_t id);
   // A timer's run: its own entry, like a frame callback's.
   void RunTimer(nts_dom::NtsTimer *timer);
+  // A native callback into the program -- an observer's delivery -- as its
+  // own entry: `call(state)` runs where the program's environment is
+  // entered, and the microtasks it queues run as it returns.
+  void RunCallback(void (*call)(void *), void *state);
   // Gives a closure back where the program's environment is entered.
   void GiveBack(NtsDomDestroy destroy, void *closure);
   // The document's main-world script state: what a member Blink's IDL marks

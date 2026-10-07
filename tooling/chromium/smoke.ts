@@ -217,6 +217,10 @@ try {
     const vectors = stripTypeScriptTypes(source).replace(/^\s*import\s[^;]*;\s*$/gm, "").replace(/^export /gm, "");
     await evaluate(`(() => {
       ${narrowings}
+      // A sequence a member answers is page script's array: \`item(i)\` as the
+      // program's sequences have it.
+      Object.defineProperty(Array.prototype, "item", { configurable: true,
+        value(index) { const value = this[Math.trunc(index)]; return value === undefined ? null : value; } });
       // \`_named_get\` and its siblings are the bindings' names for an
       // interface's named properties: here, page script's property access.
       for (const named of [DOMStringMap, HTMLCollection]) {
@@ -259,8 +263,9 @@ try {
     // global.
     const timerSource = await readFile(resolve(root, "runtime/chromium/tests/timer-vectors.ts"), "utf8");
     const timerVectors = stripTypeScriptTypes(timerSource).replace(/^\s*import\s[^;]*;\s*$/gm, "").replace(/^export /gm, "");
-    const timerNarrowings = [...(/import \{([^}]*)\} from "nts:dom"/.exec(timerSource)?.[1] ?? "").matchAll(/\bas(\w+)/g)]
-      .map(([, name]) => `const as${name} = (node) => node instanceof ${name} ? node : null;`).join("\n");
+    const timerNarrowings = [...timerSource.matchAll(/import \{([^}]*)\} from "nts:dom"/g)].flatMap(match => match[1].split(",").map(name => name.trim()))
+      .map(name => /^as(\w+)$/.test(name) ? `const ${name} = (node) => node instanceof ${name.slice(2)} ? node : null;`
+        : /^new(\w+)$/.test(name) ? `const ${name} = (...args) => new ${name.slice(3)}(...args);` : "").join("\n");
     await evaluate(`(() => {
       const pre = window.document.createElement('pre');
       pre.id = 'native-timers';

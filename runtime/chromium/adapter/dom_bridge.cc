@@ -13,6 +13,8 @@
 #include "third_party/blink/public/common/scheduler/web_scheduler_tracked_feature.h"
 #include "third_party/blink/renderer/core/dom/abort_signal.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
+#include "third_party/blink/renderer/core/dom/mutation_observer.h"
+#include "third_party/blink/renderer/core/dom/mutation_record.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/bindings/wrapper_type_info.h"
@@ -36,6 +38,18 @@ public:
 Roots &HeldObjects() {
   DEFINE_STATIC_LOCAL(blink::Persistent<Roots>, roots,
                       (blink::MakeGarbageCollected<Roots>()));
+  return *roots;
+}
+
+// Sequences the program keeps off the stack, as Roots for objects.
+class SequenceRoots final : public blink::GarbageCollected<SequenceRoots> {
+public:
+  void Trace(blink::Visitor *visitor) const { visitor->Trace(counts); }
+  blink::HeapHashCountedSet<blink::Member<nts_dom::NtsSequence>> counts;
+};
+SequenceRoots &HeldSequences() {
+  DEFINE_STATIC_LOCAL(blink::Persistent<SequenceRoots>, roots,
+                      (blink::MakeGarbageCollected<SequenceRoots>()));
   return *roots;
 }
 
@@ -246,6 +260,51 @@ private:
   bool cleared_ = false;
 };
 
+// `new MutationObserver(callback)` for a compiled closure: Blink's own
+// observer, with a native delegate where page script's has V8's. Each
+// delivery is an entry calling the closure with the records and the
+// observer. The context holds the delegate, and with it the closure, until the
+// document ends -- as long as page script's observer can be reached -- and a
+// give-back asked for during a delivery waits for it to return.
+class NtsMutationDelegate final : public blink::MutationObserver::Delegate {
+public:
+  using Callback = void (*)(NtsDomMutationRecordSequence *,
+                            NtsDomMutationObserver *, void *);
+  NtsMutationDelegate(NtsDomContext *context, Callback callback, void *closure,
+                      NtsDomDestroy destroy)
+      : context_(context), callback_(callback), closure_(closure),
+        destroy_(destroy) {}
+
+  blink::ExecutionContext *GetExecutionContext() const override {
+    return context_ ? context_->document->GetExecutionContext() : nullptr;
+  }
+  void Deliver(const blink::MutationRecordVector &records,
+               blink::MutationObserver &observer) override;
+
+  // What gives the closure back, once; nothing while a delivery runs (it
+  // gives it back when it returns).
+  NtsDomDestroy Take(void *&closure) {
+    if (!callback_)
+      return nullptr;
+    callback_ = nullptr;
+    if (running_) {
+      taken_while_running_ = true;
+      return nullptr;
+    }
+    context_ = nullptr;
+    closure = closure_.ExtractAsDangling();
+    return std::exchange(destroy_, nullptr);
+  }
+
+private:
+  raw_ptr<NtsDomContext> context_;
+  Callback callback_;
+  raw_ptr<void> closure_;
+  NtsDomDestroy destroy_;
+  int running_ = 0;
+  bool taken_while_running_ = false;
+};
+
 // What a context's program has asked Blink to call -- listeners until each is
 // removed, frames until each runs -- and so what gives every closure back
 // when the document goes.
@@ -265,6 +324,7 @@ public:
     visitor->Trace(by_target);
     visitor->Trace(handlers);
     visitor->Trace(timers);
+    visitor->Trace(observers);
   }
   // The listener added for (type, closure, capture) on `target`, or null.
   NtsListener *Find(blink::EventTarget *target, const blink::AtomicString &type,
@@ -302,6 +362,8 @@ public:
       handlers;
   // Timers that can still run, by id.
   blink::HeapHashMap<int32_t, blink::Member<NtsTimer>> timers;
+  // Mutation observers' delegates, until the document ends.
+  blink::HeapHashSet<blink::Member<NtsMutationDelegate>> observers;
 };
 
 // Listener handles the program keeps off the stack, as Roots for objects.
@@ -408,6 +470,38 @@ void NtsListener::Invoke(blink::ExecutionContext *, blink::Event *event) {
   if (--running_ || !detached_while_running_)
     return;
   detached_while_running_ = false;
+  context_ = nullptr;
+  context->GiveBack(std::exchange(destroy_, nullptr),
+                    closure_.ExtractAsDangling());
+}
+
+void NtsMutationDelegate::Deliver(const blink::MutationRecordVector &records,
+                                  blink::MutationObserver &observer) {
+  if (!callback_ || !context_)
+    return;
+  scoped_refptr<NtsDomContext> context(context_.get());
+  // On this stack for the call, where Oilpan's scan finds what it holds.
+  struct Call {
+    STACK_ALLOCATED();
+
+  public:
+    Callback callback;
+    NtsDomMutationRecordSequence *records;
+    NtsDomMutationObserver *observer;
+    void *closure;
+  } call{callback_,
+         reinterpret_cast<NtsDomMutationRecordSequence *>(Sequence(records)),
+         HandleOf<NtsDomMutationObserver>(&observer), closure_.get()};
+  ++running_;
+  context->RunCallback(
+      [](void *state) {
+        auto *call = static_cast<Call *>(state);
+        call->callback(call->records, call->observer, call->closure);
+      },
+      &call);
+  if (--running_ || !taken_while_running_)
+    return;
+  taken_while_running_ = false;
   context_ = nullptr;
   context->GiveBack(std::exchange(destroy_, nullptr),
                     closure_.ExtractAsDangling());
@@ -630,6 +724,16 @@ void NtsDomContext::ClearTimer(int32_t id) {
     destroy(closure);
 }
 
+void NtsDomContext::RunCallback(void (*call)(void *), void *state) {
+  if (closed || !invoke)
+    return;
+  Entry entry(this);
+  v8::HandleScope handles(v8_isolate);
+  v8::MicrotasksScope microtasks(v8_isolate, event_loop->microtask_queue(),
+                                 v8::MicrotasksScope::kRunMicrotasks);
+  invoke(invoke_host.get(), call, state);
+}
+
 void NtsDomContext::RunTimer(nts_dom::NtsTimer *timer) {
   if (closed || !invoke)
     return;
@@ -787,6 +891,14 @@ void NtsDomContext::Close() {
     if (auto destroy = timer->Take(closure))
       GiveBack(destroy, closure);
   }
+  blink::HeapVector<blink::Member<nts_dom::NtsMutationDelegate>> observers(
+      listeners->observers);
+  listeners->observers.clear();
+  for (auto &observer : observers) {
+    void *closure = nullptr;
+    if (auto destroy = observer->Take(closure))
+      GiveBack(destroy, closure);
+  }
   blink::HeapVector<blink::Member<NtsFrame>> frames(listeners->frames);
   listeners->frames.clear();
   for (auto &frame : frames) {
@@ -889,7 +1001,8 @@ NtsDomNode *nts_blink_dom_element_by_id(NtsDomContext *context,
 }
 size_t nts_blink_dom_held_closures(NtsDomContext *context) {
   return context->listeners->set.size() + context->listeners->frames.size() +
-         context->listeners->timers.size();
+         context->listeners->timers.size() +
+         context->listeners->observers.size();
 }
 size_t nts_blink_dom_roots(void) { return HeldObjects().counts.size(); }
 // Logs each root left, as "Interface xcount": what a handle the program
@@ -954,6 +1067,16 @@ void nts_blink_dom_end_checkpoint(NtsDomContext *context,
 // The hand-written half of the DOM ABI (ffi/dom_abi.h); the members are
 // generated (dom_idl.cc). Each runs inside an entry, whose context it finds
 // itself, as the generated ones do.
+void *nts_dom_sequence_retain(void *sequence) {
+  nts_dom::HeldSequences().counts.insert(static_cast<nts_dom::NtsSequence *>(sequence));
+  return sequence;
+}
+void nts_dom_sequence_release(void *sequence) {
+  auto &counts = nts_dom::HeldSequences().counts;
+  const auto found = counts.find(static_cast<nts_dom::NtsSequence *>(sequence));
+  CHECK(found != counts.end());
+  counts.erase(found);
+}
 void *nts_dom_retain(void *node) {
   HeldObjects().counts.insert(WrappableOf(node));
   return node;
@@ -1088,6 +1211,19 @@ int32_t nts_dom_request_animation_frame(NtsDomFrameCallback callback,
   return context.document->RequestAnimationFrame(
       frame, blink::FrameCallbackType::kWebExposed);
 }
+NtsDomMutationObserver *nts_dom_new_mutation_observer(
+    void (*callback)(NtsDomMutationRecordSequence *, NtsDomMutationObserver *,
+                     void *),
+    void *closure, void (*destroy)(void *)) {
+  NtsDomContext &context = nts_dom::Current();
+  CHECK(context.invoke);
+  auto *delegate = blink::MakeGarbageCollected<nts_dom::NtsMutationDelegate>(
+      &context, callback, closure, destroy);
+  context.listeners->observers.insert(delegate);
+  return HandleOf<NtsDomMutationObserver>(
+      blink::MutationObserver::Create(delegate));
+}
+
 int32_t nts_dom_set_timeout(NtsDomTimerCallback callback, void *closure,
                             NtsDomDestroy destroy, double timeout) {
   return nts_dom::Current().SetTimer(callback, closure, destroy, timeout,

@@ -166,6 +166,7 @@ class Generator:
                         "third_party/blink/renderer/core/frame/local_dom_window.h"}
         self.statics = []  # adapter-level definitions the functions use
         self.dictionaries = {}  # identifier -> (fields, conversion function name)
+        self.sequences = set()  # element interfaces answered as `sequence<T>`
         # Every interface Blink's core component defines, in a fixed order:
         # what `instanceof` can be asked of (nts_dom_is), bound or not.
         self.checkable = sorted((i for i in database.interfaces
@@ -338,6 +339,15 @@ class Generator:
         if unwrapped.is_interface:
             interface = self.bound_interface(idl_type)
             return Result(f"{self.handle_tag(interface.identifier)}*", interface.identifier + or_null, "node")
+        # `sequence<MutationRecord>`, `FrozenArray<Element>`: a TSequence handle
+        # over the vector Blink answered (nts_dom::NtsSequence).
+        if (unwrapped.is_sequence or unwrapped.is_frozen_array) and not nullable:
+            element = unwrapped.element_type.unwrap(nullable=True, typedef=True)
+            if not element.is_interface or element.does_include_nullable_type:
+                raise Skip(f"result type {idl_type.syntactic_form}")
+            identifier = self.bound_interface(element).identifier
+            self.sequences.add(identifier)
+            return Result(f"NtsDom{identifier}Sequence*", f"{identifier}Sequence", "sequence")
         keyword = unwrapped.keyword_typename
         if keyword in STRINGS:
             return Result("const NtsStringView*", "StringView" + or_null, "string", nullable)
@@ -993,6 +1003,8 @@ class Generator:
             lines.append(f"  {expression};")
         elif kind == "node":
             lines.append(f"  return HandleOf<{function.result.c[:-1]}>({expression});")
+        elif kind == "sequence":
+            lines.append(f"  return reinterpret_cast<{function.result.c}>(nts_dom::Sequence({expression}));")
         elif kind == "string":
             nullable = "true" if function.result.nullable else "false"
             lines.append(f"  return context.Lend(nts_dom::AsString({expression}), {nullable});")
@@ -1002,6 +1014,43 @@ class Generator:
             lines.append(f"  return static_cast<{function.result.c}>({expression});")
         lines.append("}")
         return "\n".join(lines)
+
+    def sequence_functions(self):
+        """Each TSequence's `length` and `item(index)`, typed for its
+        elements, over one adapter class."""
+        functions = []
+        for identifier in sorted(self.sequences):
+            handle = f"NtsDom{identifier}Sequence"
+            length = Function(None, f"nts_dom_{identifier}Sequence_get_length", [],
+                              Result("double", 'CNumber<"double">', "scalar"),
+                              "reinterpret_cast<nts_dom::NtsSequence*>(self)->length()", False, False)
+            item = Function(None, f"nts_dom_{identifier}Sequence_item",
+                            [Param("index", "double index", 'index: CNumber<"double">', "index", False)],
+                            Result(f"{self.handle_tag(identifier)}*", f"{identifier} | null", "node"),
+                            "reinterpret_cast<nts_dom::NtsSequence*>(self)->item(index)", False, False)
+            for function in (length, item):
+                function.receiver = False
+                function.sequence_of = identifier
+                function.params = [Param("self", f"{handle}* self", "", "", False)] + function.params
+            functions += [length, item]
+        return functions
+
+    def sequence_types(self):
+        lines = []
+        for identifier in sorted(self.sequences):
+            name = f"{identifier}Sequence"
+            lines += [
+                f'  export type {name} = HostClass<"NtsDom{name}", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & {name}Methods;',
+                f"  export interface {name}Methods {{",
+                f"    /** @ntsSymbol nts_dom_{name}_get_length */",
+                f'    _get_length(this: {name}): CNumber<"double">;',
+                f"    /** @ntsGet _get_length */",
+                f'    readonly length: CNumber<"double">;',
+                f"    /** @ntsSymbol nts_dom_{name}_item */",
+                f'    item(this: {name}, index: CNumber<"double">): {identifier} | null;',
+                "  }",
+            ]
+        return lines
 
     def dictionary_types(self):
         """Each bound dictionary as a C struct type, written at a call site as
@@ -1055,6 +1104,8 @@ class Generator:
                   "Do not edit; regenerate.")
         typedefs = "\n".join(f"typedef struct {self.handle_tag(i.identifier)} {self.handle_tag(i.identifier)};"
                              for i in self.interfaces)
+        for identifier in sorted(self.sequences):
+            typedefs += f"\ntypedef struct NtsDom{identifier}Sequence NtsDom{identifier}Sequence;"
         # A dictionary as the program writes it: zero is what leaving a member
         # out means (generate.py, dictionary).
         for identifier, entry in sorted(self.dictionaries.items()):
@@ -1064,7 +1115,8 @@ class Generator:
                               for name, keyword, _ in entry[0])
             typedefs += f"\ntypedef struct NtsDom{identifier} {{\n{members}}} NtsDom{identifier};"
         prototypes = []
-        for function in self.functions:
+        accessors = self.sequence_functions()
+        for function in self.functions + accessors:
             c_params = ([f"{self.handle_tag(function.interface.identifier)}* self"] if function.receiver else []) + \
                 [p.c for p in function.params] + ([ERROR_C] if function.throws else [])
             prototypes.append(f"{function.result.c} {function.symbol}({', '.join(c_params)});")
@@ -1157,7 +1209,7 @@ bool nts_dom_is(const void* object, uint32_t interface_id) {{
   return object && ToWrapperTypeInfo(WrappableOf(object))->IsSubclass(kInterfaces[interface_id]);
 }}
 
-{(chr(10) * 2).join(self.adapter_function(function) for function in self.functions)}
+{(chr(10) * 2).join(self.adapter_function(function) for function in self.functions + accessors)}
 }}  // extern "C"
 }}  // namespace blink
 """
@@ -1194,6 +1246,7 @@ declare module "nts:dom" {{
   /** A DOM exception a member reported, thrown as an `Error` "Name: message". */
   export type DOMException = Opaque<"NtsDomException">;
 {chr(10).join(self.dictionary_types())}
+{chr(10).join(self.sequence_types())}
 {chr(10).join(types)}
 }}
 """

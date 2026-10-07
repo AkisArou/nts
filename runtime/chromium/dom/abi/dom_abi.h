@@ -103,6 +103,10 @@ void nts_dom_remove_event_listener(NtsDomEventTarget* target,
 void nts_dom_unlisten(NtsDomListener* listener);
 void* nts_dom_listener_retain(void* listener);
 void nts_dom_listener_release(void* listener);
+/* A sequence a member answered (dom_idl.h's `TSequence` handles), rooted
+ * while the program keeps it off the stack. */
+void* nts_dom_sequence_retain(void* sequence);
+void nts_dom_sequence_release(void* sequence);
 
 /* `requestAnimationFrame(callback)` for a compiled closure: called once, with
  * the frame's time, in the queue page script's callbacks share, then given
@@ -113,6 +117,16 @@ int32_t nts_dom_request_animation_frame(void (*callback)(double time,
                                         void* closure,
                                         void (*destroy)(void* closure));
 void nts_dom_cancel_animation_frame(int32_t id);
+
+/* `new MutationObserver(callback)` for a compiled closure: Blink's own
+ * observer, delivering to the closure with the records and the observer.
+ * The closure is held until the document ends. */
+NtsDomMutationObserver* nts_dom_new_mutation_observer(
+    void (*callback)(NtsDomMutationRecordSequence* records,
+                     NtsDomMutationObserver* observer,
+                     void* closure),
+    void* closure,
+    void (*destroy)(void* closure));
 
 /* `setTimeout(callback, timeout)` and `setInterval` for a compiled closure,
  * as HTML's timer initialization steps run them: the timeout is WebIDL's

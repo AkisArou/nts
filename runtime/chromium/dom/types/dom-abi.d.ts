@@ -38,6 +38,14 @@ declare module "nts:dom" {
   export function clearTimeout(id: CNumber<"int32">): void;
   /** @ntsSymbol nts_dom_clear_interval */
   export function clearInterval(id: CNumber<"int32">): void;
+  /**
+   * `new MutationObserver(callback)`: Blink's own observer, delivering to
+   * the closure with the records and the observer, at the microtask
+   * checkpoint page script's are delivered at. Observe with `observe(target,
+   * {childList: true, ...})`.
+   * @ntsSymbol nts_dom_new_mutation_observer
+   */
+  export function newMutationObserver(callback: Closure<(records: MutationRecordSequence, observer: MutationObserver) => void>): MutationObserver;
   /** The document the running code is part of. */
   /** @ntsSymbol nts_dom_document */
   export function document(): Document;

@@ -1024,10 +1024,12 @@ interface MessagePort {}
  */
 interface MouseEvent {}
 /**
+ * @ntsBoundBy "nts:dom" MutationObserver
  * @ntsIs nts_dom_is 319
  */
 interface MutationObserver {}
 /**
+ * @ntsBoundBy "nts:dom" MutationRecord
  * @ntsIs nts_dom_is 320
  */
 interface MutationRecord {}

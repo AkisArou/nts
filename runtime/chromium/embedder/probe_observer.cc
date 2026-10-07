@@ -190,8 +190,11 @@ class ProbeObserver final : public content::RenderFrameObserver {
       return;
     }
     const auto result = nts_chromium_probe_counter_increment(probe_.get());
-    CHECK(result.live_objects_before == 1);
-    CHECK(result.live_objects_after == 1);
+    // The counter's state, and the closures Blink holds for the program
+    // (observers and listeners it has not removed): an event adds nothing.
+    const size_t held = dom_ ? nts_blink_dom_held_closures(dom_.get()) : 0;
+    CHECK_EQ(result.live_objects_before, 1 + held);
+    CHECK_EQ(result.live_objects_after, 1 + held);
     if (dom_) {
       nts_chromium_probe_dom_counter(probe_.get(), dom_.get(), result.count);
     } else {
@@ -201,7 +204,7 @@ class ProbeObserver final : public content::RenderFrameObserver {
     }
     LOG(INFO) << "NTS_COUNTER backend=" << NTS_CHROMIUM_PROBE_BACKEND
               << " count=" << result.count
-              << " live=" << result.live_objects_after;
+              << " live=" << result.live_objects_after - held;
   }
 
   void RunRows(blink::WebDOMEvent) {

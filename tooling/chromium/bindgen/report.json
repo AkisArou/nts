@@ -1,5 +1,5 @@
 {
-  "bound": 3579,
+  "bound": 3596,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -354,7 +354,7 @@
     {
       "interface": "Element",
       "member": "getAnimations/1",
-      "why": "result type sequence<Animation>"
+      "why": "interface Animation is not bound"
     },
     {
       "interface": "Element",
@@ -374,7 +374,7 @@
     {
       "interface": "Element",
       "member": "getBoxQuads/1",
-      "why": "result type sequence<DOMQuad>"
+      "why": "interface DOMQuad is not bound"
     },
     {
       "interface": "Element",
@@ -679,7 +679,7 @@
     {
       "interface": "Text",
       "member": "getBoxQuads/1",
-      "why": "result type sequence<DOMQuad>"
+      "why": "interface DOMQuad is not bound"
     },
     {
       "interface": "Document",
@@ -2223,11 +2223,6 @@
     },
     {
       "interface": "Document",
-      "member": "elementsFromPoint/2",
-      "why": "result type sequence<Element>"
-    },
-    {
-      "interface": "Document",
       "member": "evaluate/5",
       "why": "interface XPathResult is not bound"
     },
@@ -2244,12 +2239,12 @@
     {
       "interface": "Document",
       "member": "getAnimations/0",
-      "why": "result type sequence<Animation>"
+      "why": "interface Animation is not bound"
     },
     {
       "interface": "Document",
       "member": "getBoxQuads/1",
-      "why": "result type sequence<DOMQuad>"
+      "why": "interface DOMQuad is not bound"
     },
     {
       "interface": "Document",
@@ -3787,11 +3782,6 @@
       "why": "[RuntimeEnabled]"
     },
     {
-      "interface": "Event",
-      "member": "composedPath/0",
-      "why": "result type sequence<EventTarget>"
-    },
-    {
       "interface": "UIEventInit",
       "member": "sourceCapabilities",
       "why": "dictionary member of type optional InputDeviceCapabilities?"
@@ -4334,7 +4324,7 @@
     {
       "interface": "InputEvent",
       "member": "getTargetRanges/0",
-      "why": "result type sequence<StaticRange>"
+      "why": "interface StaticRange is not bound"
     },
     {
       "interface": "PointerEventInit",
@@ -4380,16 +4370,6 @@
       "interface": "PointerEventInit",
       "member": "width",
       "why": "dictionary member whose default 1 is not zero"
-    },
-    {
-      "interface": "PointerEvent",
-      "member": "getCoalescedEvents/0",
-      "why": "result type sequence<PointerEvent>"
-    },
-    {
-      "interface": "PointerEvent",
-      "member": "getPredictedEvents/0",
-      "why": "result type sequence<PointerEvent>"
     },
     {
       "interface": "WheelEventInit",
@@ -6399,17 +6379,17 @@
     {
       "interface": "Performance",
       "member": "getEntries/0",
-      "why": "result type PerformanceEntryList"
+      "why": "interface PerformanceEntry is not bound"
     },
     {
       "interface": "Performance",
       "member": "getEntriesByName/2",
-      "why": "result type PerformanceEntryList"
+      "why": "interface PerformanceEntry is not bound"
     },
     {
       "interface": "Performance",
       "member": "getEntriesByType/1",
-      "why": "result type PerformanceEntryList"
+      "why": "interface PerformanceEntry is not bound"
     },
     {
       "interface": "Performance",
@@ -6590,6 +6570,16 @@
       "interface": "URLSearchParams",
       "member": "getAll/1",
       "why": "result type sequence<USVString>"
+    },
+    {
+      "interface": "MutationObserver",
+      "member": "constructor/1",
+      "why": "parameter type MutationCallback"
+    },
+    {
+      "interface": "MutationObserverInit",
+      "member": "attributeFilter",
+      "why": "dictionary member of type optional sequence<DOMString>"
     }
   ]
 }

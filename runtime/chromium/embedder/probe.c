@@ -182,9 +182,12 @@ static void end_checkpoint(void* state) {
   ProbeScope scope = enter(probe);
   probe->collector_queued = false;
   nts_collect_cycles();
-  if (probe->pending || nts_live_count() != 1)
+  /* The counter's state, beside the closures Blink holds for the program
+     (the witness's observers and listeners): nothing else survives. */
+  const size_t held = nts_blink_dom_held_closures(probe->dom);
+  if (probe->pending || nts_live_count() != 1 + held)
     PROBE_FAIL();
-  fprintf(stderr, "NTS_CHECKPOINT live=%zu\n", nts_live_count());
+  fprintf(stderr, "NTS_CHECKPOINT live=%zu\n", nts_live_count() - held);
   leave(&scope);
 }
 static void drop_checkpoint(void* state) {
@@ -251,7 +254,8 @@ static void finish_counter(void* state) {
   nts_release((NtsHeader*)probe->pending);
   probe->pending = NULL;
   nts_release((NtsHeader*)completion);
-  fprintf(stderr, "NTS_ASYNC count=%.0f live=%zu\n", count, nts_live_count());
+  fprintf(stderr, "NTS_ASYNC count=%.0f live=%zu\n", count,
+          nts_live_count() - nts_blink_dom_held_closures(probe->dom));
 }
 static void drop_finish(void* state) {
   nts_release((NtsHeader*)state);
