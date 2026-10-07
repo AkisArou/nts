@@ -175,11 +175,11 @@ try {
         for (const arm of ["string", "gradient", "pattern"])
           CanvasRenderingContext2D.prototype["_set_" + style + "_" + arm] = function (value) { this[style] = value; };
       // nts:dom spells addEventListener's options as trailing arguments
-      // (capture, once, signal); page script, as a dictionary.
+      // (capture, once, signal, passive); page script, as a dictionary.
       const addEventListener = EventTarget.prototype.addEventListener;
-      EventTarget.prototype.addEventListener = function (type, listener, capture, once, signal) {
+      EventTarget.prototype.addEventListener = function (type, listener, capture, once, signal, passive) {
         return addEventListener.call(this, type, listener, typeof capture === "object" ? capture
-          : { capture: !!capture, once: !!once, ...(signal ? { signal } : {}) });
+          : { capture: !!capture, once: !!once, ...(signal ? { signal } : {}), ...(passive === undefined ? {} : { passive }) });
       };
       ${vectors}
       // V8's message carries the binding's context ("Failed to execute 'x'

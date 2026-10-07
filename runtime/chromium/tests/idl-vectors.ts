@@ -14,7 +14,7 @@
 // error reads as is passed in.
 import { newBlob, newDataTransfer, newDOMParser, newDOMPoint, newDragEvent, newFormData, newMutationObserver, newProgressEvent, newXMLSerializer, newAbortController, newCustomEvent, newEvent, newKeyboardEvent, newMouseEvent, newURL, newURLSearchParams, window } from "nts:dom";
 import { asCSSStyleSheet, asElement, asHTMLFormElement, asHTMLVideoElement, asHTMLAnchorElement, asHTMLCanvasElement, asHTMLDetailsElement, asHTMLDialogElement, asHTMLProgressElement, asHTMLSlotElement, asHTMLElement, asHTMLImageElement, asHTMLOListElement, asHTMLTableCellElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
-import type { CanvasFillRule, ChildNode, Document, Element, Event, MutationObserver, MutationRecordSequence, Node, ParentNode, ScrollRestoration, SelectionMode, Text } from "nts:dom";
+import type { CanvasFillRule, ChildNode, Document, Element, Event, EventTarget, MutationObserver, MutationRecordSequence, Node, ParentNode, ScrollRestoration, SelectionMode, Text } from "nts:dom";
 
 export interface VectorHost {
   // "Name: message", the binding's own context prefix left out.
@@ -744,6 +744,30 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   const proceeded = inner.dispatchEvent(bubbled);
   outer.removeEventListener("bubbled", cancel);
   log("eventInit", canceled.phase + "|" + (proceeded ? "proceeded" : "canceled") + "|" + (bubbled.defaultPrevented ? "prevented" : "no") + "|" + (bubbled.composed ? "composed" : "closed"));
+  // `passive`: a passive listener's preventDefault() does nothing, so a
+  // cancelable dispatch is not canceled. Left out, Blink makes a wheel
+  // listener on the document passive, and one on an element not.
+  const prevent = (event: Event): void => {
+    event.preventDefault();
+  };
+  const outcome = (target: EventTarget, type: string): string =>
+    target.dispatchEvent(newEvent(type, { cancelable: true })) ? "ran" : "canceled";
+  outer.addEventListener("hush", prevent, false, false, null, true);
+  const passiveGiven = outcome(outer, "hush");
+  outer.removeEventListener("hush", prevent);
+  outer.addEventListener("hush", prevent, false, false, null, false);
+  const activeGiven = outcome(outer, "hush");
+  outer.removeEventListener("hush", prevent);
+  d.addEventListener("wheel", prevent);
+  const documentWheel = outcome(d, "wheel");
+  d.removeEventListener("wheel", prevent);
+  d.addEventListener("wheel", prevent, false, false, null, false);
+  const documentWheelActive = outcome(d, "wheel");
+  d.removeEventListener("wheel", prevent);
+  outer.addEventListener("wheel", prevent);
+  const elementWheel = outcome(outer, "wheel");
+  outer.removeEventListener("wheel", prevent);
+  log("passive", passiveGiven + "|" + activeGiven + "|" + documentWheel + "|" + documentWheelActive + "|" + elementWheel);
   const pointed = newMouseEvent("click", { clientX: 12.5, clientY: -3, button: 2, ctrlKey: true, detail: 7 });
   log("mouseInit", pointed.clientX + "|" + pointed.clientY + "|" + pointed.button + "|" + (pointed.ctrlKey ? "ctrl" : "-") + (pointed.shiftKey ? "shift" : "-") + "|" + pointed.detail);
 

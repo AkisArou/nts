@@ -154,13 +154,19 @@ declare module "nts:dom" {
     /**
      * `addEventListener` as the DOM defines it: an equal listener -- same
      * type, capture and function -- is added once. `once` removes it before
-     * its first call; aborting `signal` removes it. (`passive` waits for
-     * dictionary arguments, which can leave it unspecified, as Blink's
-     * defaults for touch and wheel listeners need: contracts/workarounds.md.)
+     * its first call; aborting `signal` removes it. `passive` left out is
+     * Blink's to default: true for touch and wheel listeners on the window,
+     * the document and its root and body.
      * @ntsSymbol nts_dom_add_event_listener
      * @ntsDefault capture=0 once=0 signal=null
      */
     addEventListener(this: EventTarget, type: StringView, listener: Closure<(event: Event) => void>, capture?: boolean, once?: boolean, signal?: AbortSignal | null): void;
+    /**
+     * The same with `passive` given: a passive listener's preventDefault()
+     * does nothing.
+     * @ntsSymbol nts_dom_add_event_listener_passive
+     */
+    addEventListener(this: EventTarget, type: StringView, listener: Closure<(event: Event) => void>, capture: boolean, once: boolean, signal: AbortSignal | null, passive: boolean): void;
     /**
      * @ntsSymbol nts_dom_remove_event_listener
      * @ntsDefault capture=0

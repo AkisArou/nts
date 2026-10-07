@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <limits>
 #include <string>
+#include <optional>
 
 #include "base/check.h"
 #include "base/memory/raw_ptr_exclusion.h"
@@ -15,6 +16,7 @@
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"
 #include "third_party/blink/renderer/core/dom/abort_signal.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
+#include "third_party/blink/renderer/core/dom/events/add_event_listener_options_resolved.h"
 #include "third_party/blink/renderer/core/dom/mutation_observer.h"
 #include "third_party/blink/renderer/core/dom/mutation_record.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_intersection_observer_init.h"
@@ -1361,14 +1363,20 @@ NtsDomListener *nts_dom_listen(NtsDomEventTarget *target,
   context.listeners->set.insert(listener);
   return reinterpret_cast<NtsDomListener *>(listener);
 }
-// `target.addEventListener(type, f, capture)` as the DOM defines it: adding
-// the listener an equal one already is does nothing -- and the closure
-// reference the call brought goes straight back, since nothing keeps it.
-void nts_dom_add_event_listener(NtsDomEventTarget *handle,
-                                const NtsBorrowedString *type,
-                                NtsDomCallback callback, void *closure,
-                                NtsDomDestroy destroy, bool capture, bool once,
-                                NtsDomAbortSignal *signal_handle) {
+}  // extern "C"
+
+namespace {
+
+// `target.addEventListener(type, f, {capture, once, signal, passive})` as the
+// DOM defines it: adding the listener an equal one already is does nothing --
+// and the closure reference the call brought goes straight back, since
+// nothing keeps it. `passive` left out is Blink's to default: true for touch
+// and wheel listeners on the window, the document and its root and body.
+void AddEventListener(NtsDomEventTarget *handle, const NtsBorrowedString *type,
+                      NtsDomCallback callback, void *closure,
+                      NtsDomDestroy destroy, bool capture, bool once,
+                      NtsDomAbortSignal *signal_handle,
+                      std::optional<bool> passive) {
   NtsDomContext &context = nts_dom::Current();
   CHECK(context.invoke);
   auto *target = ObjectOf<blink::EventTarget>(handle);
@@ -1388,7 +1396,12 @@ void nts_dom_add_event_listener(NtsDomEventTarget *handle,
       &context, target, name, capture, callback, closure, destroy);
   if (once)
     listener->SetOnce();
-  target->addEventListener(name, listener, capture);
+  auto *options =
+      blink::MakeGarbageCollected<blink::AddEventListenerOptionsResolved>();
+  options->setCapture(capture);
+  if (passive)
+    options->setPassive(*passive);
+  target->addEventListener(name, listener, options);
   if (signal)
     listener->Watch(signal);
   context.listeners->set.insert(listener);
@@ -1396,6 +1409,28 @@ void nts_dom_add_event_listener(NtsDomEventTarget *handle,
   if (!bucket)
     bucket = blink::MakeGarbageCollected<nts_dom::TargetListeners>();
   bucket->listeners.push_back(listener);
+}
+
+}  // namespace
+
+extern "C" {
+
+void nts_dom_add_event_listener(NtsDomEventTarget *handle,
+                                const NtsBorrowedString *type,
+                                NtsDomCallback callback, void *closure,
+                                NtsDomDestroy destroy, bool capture, bool once,
+                                NtsDomAbortSignal *signal) {
+  AddEventListener(handle, type, callback, closure, destroy, capture, once,
+                   signal, std::nullopt);
+}
+void nts_dom_add_event_listener_passive(NtsDomEventTarget *handle,
+                                        const NtsBorrowedString *type,
+                                        NtsDomCallback callback, void *closure,
+                                        NtsDomDestroy destroy, bool capture,
+                                        bool once, NtsDomAbortSignal *signal,
+                                        bool passive) {
+  AddEventListener(handle, type, callback, closure, destroy, capture, once,
+                   signal, passive);
 }
 // `target.removeEventListener(type, f, capture)`: the listener added with
 // the same closure, if any, comes off and gives its closure back.

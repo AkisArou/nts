@@ -90,6 +90,19 @@ void nts_dom_add_event_listener(NtsDomEventTarget* target,
                                 bool capture,
                                 bool once,
                                 NtsDomAbortSignal* signal);
+/* The same with `passive` given. Left out (the call above), Blink defaults it:
+ * true for touch and wheel listeners on the window, the document and its root
+ * and body. A passive listener's preventDefault() does nothing. */
+void nts_dom_add_event_listener_passive(NtsDomEventTarget* target,
+                                        const NtsBorrowedString* type,
+                                        void (*callback)(NtsDomEvent* event,
+                                                         void* closure),
+                                        void* closure,
+                                        void (*destroy)(void* closure),
+                                        bool capture,
+                                        bool once,
+                                        NtsDomAbortSignal* signal,
+                                        bool passive);
 /* `target.removeEventListener(type, listener, capture)`: the listener added
  * with the same closure comes off and its closure goes back; none, nothing. */
 void nts_dom_remove_event_listener(NtsDomEventTarget* target,
