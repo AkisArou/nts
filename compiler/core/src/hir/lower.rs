@@ -8474,11 +8474,7 @@ impl Structural {
                 for (call, (suffix, bindings)) in calls {
                     builder.generic_calls.insert(*call, suffix.clone());
                     builder.structural_calls.insert(*call, bindings.clone());
-                    let raises = builder
-                        .snapshot
-                        .call_targets
-                        .get(call)
-                        .and_then(|target| target.callee)
+                    let raises = planned_callee(builder, *call)
                         .is_some_and(|callee| self.raising.contains(&(callee, suffix.clone())));
                     if raises {
                         builder.raising_specializations.insert(*call);
@@ -8489,6 +8485,34 @@ impl Structural {
             }
         }
     }
+}
+
+/// The declaration a call's structural copy is planned for: the function the
+/// call names as call lowering resolves it (`FuncBuilder::direct_callee`), not
+/// always the checker's callee.
+///
+/// They differ for a call through a `const` holding a function: the checker
+/// resolves `boxIdentity(box)` with `const boxIdentity: (value: Box) => Box =
+/// identity` to the *annotation*, a signature with no body, while the call
+/// names `identity`. Planned against the annotation, the call was given a copy
+/// `identity@0obj6` that nothing builds -- a signature is never copied -- and
+/// `wire_calls` let that suffix override the generic pin the call needed
+/// (`identity<value-obj4@4>`): "nothing in this program defines" it. Planned
+/// against `identity`, a generic function, the structural planner stands back
+/// as it does for every generic callee, and a plain function gets a copy that
+/// is actually lowered.
+fn planned_callee(probe: &FuncBuilder, call: NodeId) -> Option<NodeId> {
+    let checker = probe.snapshot.call_targets.get(&call)?.callee?;
+    let named = probe
+        .children(call)
+        .first()
+        .filter(|callee| probe.kind_of(**callee) == Some(syntax::IDENTIFIER))
+        .and_then(|callee| probe.node(*callee).symbol)
+        .and_then(|symbol| match probe.initializer_settles(symbol.0) {
+            Settled::Names(declaration) => Some(declaration),
+            Settled::Unsettled | Settled::NotAVariable => None,
+        });
+    Some(named.unwrap_or(checker))
 }
 
 /// A copy whose body has yet to be walked for the calls it makes.
@@ -8517,8 +8541,8 @@ fn structural_instantiations(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy)
     // is what the checker says it is.
     let mut calls: Vec<(NodeId, NodeId)> = snapshot
         .call_targets
-        .iter()
-        .filter_map(|(call, target)| target.callee.map(|callee| (*call, callee)))
+        .keys()
+        .filter_map(|call| Some((*call, planned_callee(&probe, *call)?)))
         .collect();
     calls.sort_by_key(|(call, _)| call.0);
     let mut planner = StructuralPlanner {
@@ -8552,7 +8576,7 @@ fn structural_instantiations(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy)
     while let Some(copy) = planner.pending.pop() {
         let symbols = retyped_symbols_of(&probe, copy.declaration, &copy.retyped);
         for call in calls_in_the_body_of(&probe, copy.declaration) {
-            let Some(callee) = snapshot.call_targets.get(&call).and_then(|it| it.callee) else {
+            let Some(callee) = planned_callee(&probe, call) else {
                 continue;
             };
             let actual = |argument: NodeId| {
