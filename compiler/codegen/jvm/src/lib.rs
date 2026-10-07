@@ -2276,18 +2276,16 @@ fn dispatch_forwarders(
             )
         })?;
         if let Some(bridge) = bridge {
-            // Byte-for-byte the forwarder, under the descriptor the base
-            // declared -- with slots for the arguments it drops, where it
-            // drops any, because a method's frame starts with every parameter
-            // its descriptor names. `ACC_BRIDGE` is what tells a reader, and
-            // any tool reading these classes, that the duplicate is deliberate.
-            let body = if bridge.dropped.is_empty() {
-                rendered.clone()
-            } else {
-                let mut locals = code_locals.clone();
-                locals.extend(bridge.dropped);
-                dropping_bridge(package, pool, target, func_name, &full, locals, &origin)?
-            };
+            // Under the descriptor the base declared -- with slots for the
+            // arguments it drops, because a method's frame starts with every
+            // parameter its descriptor names -- calling the override
+            // virtually (`forwarding_bridge`). `ACC_BRIDGE` is what tells a
+            // reader, and any tool reading these classes, that the duplicate
+            // is deliberate.
+            let mut locals = code_locals.clone();
+            locals.extend(bridge.dropped);
+            let class = types::class_name(package, layout);
+            let body = forwarding_bridge(pool, &class, target, &member, &descriptor, locals, &origin)?;
             builder.method(
                 access::PUBLIC | access::BRIDGE | access::SYNTHETIC,
                 member.clone(),
@@ -2452,15 +2450,25 @@ fn member_forwarders(
     Ok(())
 }
 
-/// The body of a bridge that receives the base's parameters and forwards only
-/// those the override declares: `locals` is the whole frame, the dropped
-/// arguments' slots included, and nothing reads them.
-fn dropping_bridge(
-    package: &str,
+/// The body of a covariant or parameter-dropping bridge: receive the base's
+/// parameters, forward those the override declares, and call the override
+/// **virtually** at its own descriptor. `locals` is the whole frame, the
+/// dropped arguments' slots included, and nothing reads them.
+///
+/// **Virtually, as javac's bridges do, not the forwarder's static call.** A
+/// subclass that re-overrides the method at the *narrower* descriptor gets no
+/// bridge of its own -- it agrees with its parent -- so it is reached through
+/// this one. A bridge that byte-copied the forwarder's `invokestatic` ran the
+/// parent's body instead: `Ring.copy(): Circle` over `Circle.copy(): Circle`
+/// over `Shape.copy(): Shape`, called through a `Shape`, answered "circle"
+/// where node answers "ring" (examples/a-re-overridden-covariant-method-
+/// through-its-root). Ported from Codex 67fe165df.
+fn forwarding_bridge(
     pool: &mut Pool,
+    class: &str,
     target: &nts_core::hir::Func,
-    func_name: &str,
-    full: &str,
+    member: &str,
+    derived: &str,
     locals: Vec<VType>,
     origin: &nts_semantic_schema::Origin,
 ) -> Result<nts_jvm_emitter::code::Body, Diagnostic> {
@@ -2473,12 +2481,12 @@ fn dropping_bridge(
         code.load(origin, kind, at);
         at += kind.words();
     }
-    code.invoke_static(origin, pool, &body::program_class(package), &body::method_name(func_name), full);
+    code.invoke_virtual(origin, pool, class, member, derived);
     code.ret(origin, types::kind(&target.return_type));
     code.finish(pool).map_err(|error| {
         Diagnostic::error(
             "NTS4008",
-            format!("the bridge for `{func_name}` could not be written: {error}"),
+            format!("the bridge for `{member}` on `{class}` could not be written: {error}"),
             origin.location,
         )
     })
