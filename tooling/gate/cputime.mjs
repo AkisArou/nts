@@ -55,8 +55,9 @@ export function followCpu(child) {
 // cpu_atom), and a process the scheduler leaves on the slow kind uses about
 // twice the CPU time for the same work. Under a gate's load one module's
 // lowering read 2.2x its recorded CPU time with nothing changed (2026-10-07),
-// which a 2x tripwire cannot live with. Its instruction count across three
-// runs, on whatever cores they landed: 275.0, 275.5 and 274.5 G.
+// which a 2x tripwire cannot live with. Raw instruction counts (PERF_ARGS)
+// over ten runs each at once, on whatever cores they landed: child_process
+// 551.6-551.8 G, assert 293.7 G every time.
 //
 // Attached, not wrapped, for the reason above: the caller keeps its own
 // process, signals and timeout. perf exits when the process does. A process
@@ -65,18 +66,40 @@ export function followCpu(child) {
 // `instructionsWork()`.
 // ---------------------------------------------------------------------------
 
-/** Sum of each core kind's raw count (perf scales by the share of time the counter ran). */
+/**
+ * The arguments every count is taken with: the process's own user-space
+ * instructions (`--no-inherit`: not the children it forks after perf attaches
+ * -- an `sh` the compiler starts counted 1.69 G), **raw** (`--no-scale`).
+ *
+ * **Raw, because the scaled count cannot be undone.** On this box's two core
+ * kinds perf counts each kind only while the process runs on it, and by
+ * default prints each count scaled up by enabled/running time, with that
+ * share beside it rounded to a whole percent. Undoing the scaling with the
+ * printed share works until a kind ran under half a percent of the time:
+ * then the share prints as "0.00", the scaled count -- the work of a whole
+ * run extrapolated from a sliver -- cannot be told from a raw one, and adding
+ * it made runtime/node/events read 420.6 G and 360.1 G in two of six runs
+ * whose raw counts were 281.6-281.7 G every time (2026-10-07). It shows on a
+ * quiet box, where a process stays on the fast cores, not under load.
+ */
+export const PERF_ARGS = ["stat", "--no-inherit", "--no-scale", "-x,", "-e", "instructions:u"];
+
+/**
+ * The raw instruction count in `perf stat --no-scale -x,` output: the sum of
+ * every core kind's count. A kind the process never ran on prints
+ * `<not counted>` and adds nothing. No count line at all is null.
+ */
 export function parsePerf(text) {
   let total = 0;
   let seen = false;
   for (const line of text.split("\n")) {
     const f = line.split(",");
-    if (f.length < 5 || !/instructions/.test(f[2] ?? "")) continue;
-    seen = true;
+    if (f.length < 3 || !/instructions/.test(f[2] ?? "")) continue;
+    if (f[0] === "<not counted>") { seen = true; continue; }
     const value = Number(f[0]);
-    const pct = Number(f[4]);
-    if (!Number.isFinite(value)) continue; // <not counted>: never ran on that kind
-    total += Number.isFinite(pct) && pct > 0 ? (value * pct) / 100 : value;
+    if (f[0] === "" || !Number.isFinite(value)) continue; // <not supported> and the like
+    seen = true;
+    total += value;
   }
   return seen ? total : null;
 }
@@ -85,7 +108,7 @@ let probed;
 /** Whether `perf stat -p` can count a process of ours here; the reason when not. */
 export function instructionsWork() {
   if (probed !== undefined) return probed;
-  const r = spawnSync("sh", ["-c", 'sleep 0.5 & p=$!; perf stat --no-inherit -x, -e instructions:u -p "$p" 2>&1 >/dev/null; wait'], { encoding: "utf8" });
+  const r = spawnSync("sh", ["-c", `sleep 0.5 & p=$!; perf ${PERF_ARGS.join(" ")} -p "$p" 2>&1 >/dev/null; wait`], { encoding: "utf8" });
   probed = r.error ? `no perf (${r.error.message})` : parsePerf(r.stdout + r.stderr) === null ? `perf stat -p counted nothing: ${(r.stdout + r.stderr).trim().split("\n").pop()}` : null;
   return probed;
 }
@@ -93,11 +116,7 @@ export function instructionsWork() {
 /** Follow `child` until it exits; resolves to its user-space instructions, or null. */
 export function followInstructions(child) {
   const out = join(tmpdir(), `nts-instructions-${process.pid}-${child.pid}.txt`);
-  // --no-inherit: the process's own instructions. `-p` otherwise counts every
-  // child forked after perf attaches -- an `sh` the compiler starts counted
-  // 1.69 G, and one module read 34.4 G inherited against 31.9 G without. The
-  // frontend was left out only because it happened to start first.
-  const perf = spawn("perf", ["stat", "--no-inherit", "-x,", "-e", "instructions:u", "-p", String(child.pid), "-o", out], { stdio: "ignore" });
+  const perf = spawn("perf", [...PERF_ARGS, "-p", String(child.pid), "-o", out], { stdio: "ignore" });
   let stopper;
   child.on("exit", () => { stopper = setTimeout(() => perf.kill("SIGINT"), 5000); });
   return new Promise((resolve) => {
