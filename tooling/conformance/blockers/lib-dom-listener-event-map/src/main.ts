@@ -1,4 +1,4 @@
-// expect: emit-c --rc -> `addEventListener` on an opaque C pointer, which has no method table here is not supported by this lowering yet
+// expect: emit-c --rc -> emits-c Closure0__call((NtsObj_Closure0 *)a1, (struct NtsDomMouseEvent *)a0)
 //
 // lib.dom.d.ts bound by delegation (runtime/chromium/docs/lib-dom.md): a listener typed by lib.dom.d.ts's event map (`(event: MouseEvent)`) passed where the binding's closure takes an `Event` is a trusted downcast of the same handle.
 // Filed 2026-10-06 by the Chromium lane with the compiler lane's agreed
@@ -7,9 +7,12 @@
 // table maps it -- so each moves to its own refusal as the table lands, and
 // goes clean with its own piece.
 //
-// **Moved 2026-10-07**: the type now has its representation (`bound_types`),
-// so this stops at its own piece -- members and properties, step 3 of
-// MainClaude's plan.
+// **Compiles 2026-10-07, kept as a guard on what it does today**: the
+// listener is bridged at the binding's `(event: Event)`, and the bridge casts
+// the event to the `MouseEvent` its body takes -- the trusted downcast, as a C
+// cast. Not yet named or checked: a pass comparing each bridge with its
+// closure's parameters (a downcast along one handle's chain trusted, anything
+// else refused) is the open half of this piece.
 //
 // Control, one difference: the same program against the generated nts:dom
 // module the overlay names, which compiles today (emit-c --napi --rc, clean):

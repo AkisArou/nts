@@ -1,4 +1,4 @@
-// expect: emit-c --rc -> `addEventListener` on an opaque C pointer, which has no method table here is not supported by this lowering yet
+// expect: emit-c --rc -> emits-c nts_dom_remove_event_listener(
 //
 // lib.dom.d.ts bound by delegation (runtime/chromium/docs/lib-dom.md): `removeEventListener(type, f)` with the function `addEventListener` was given reaches the adapter as the same closure context (it does today: lending answers the closure itself), through lib.dom.d.ts's declarations.
 // Filed 2026-10-06 by the Chromium lane with the compiler lane's agreed
@@ -7,9 +7,9 @@
 // table maps it -- so each moves to its own refusal as the table lands, and
 // goes clean with its own piece.
 //
-// **Moved 2026-10-07**: the type now has its representation (`bound_types`),
-// so this stops at its own piece -- members and properties, step 3 of
-// MainClaude's plan.
+// **FIXED 2026-10-07, and kept as a guard**: both calls are the bound
+// `nts:dom` members, with their `@ntsDefault`s, and the same function value
+// reaches both; its `go` is the control's, byte for byte.
 //
 // Control, one difference: the same program against the generated nts:dom
 // module the overlay names, which compiles today (emit-c --napi --rc, clean):

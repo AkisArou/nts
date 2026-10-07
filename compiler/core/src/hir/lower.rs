@@ -39392,6 +39392,9 @@ impl<'a> FuncBuilder<'a> {
 
     /// A read of a binding's property: `None` for any other member.
     fn accessor_read(&mut self, id: NodeId, object: NodeId, member: NodeId) -> Option<Result<ValueId, Diagnostic>> {
+        if let Some((bound, method)) = self.delegated_accessor(object, member, false) {
+            return Some(self.lower_expression(object).and_then(|receiver| self.lower_accessor_on(id, receiver, bound, &method, None)));
+        }
         if !self.is_accessor_property(member) {
             return None;
         }
@@ -39399,6 +39402,20 @@ impl<'a> FuncBuilder<'a> {
             Some(method) => self.lower_accessor(id, object, member, &method, None),
             None => Err(self.unsupported(id, "a read of a native property no @ntsGet names a method for")),
         })
+    }
+
+    /// A property of a type a binding implements, read or written through the
+    /// accessor its bound property's `@ntsGet` or `@ntsSet` names: lib.dom's
+    /// `div.childElementCount` is `nts:dom`'s `_get_childElementCount`. The
+    /// bound type and the accessor's name; [`Self::delegated_method`] for a
+    /// method.
+    fn delegated_accessor(&self, object: NodeId, member: NodeId, write: bool) -> Option<(TypeId, String)> {
+        let bound = self.delegated_type(*self.snapshot.node_types.get(&object)?)?;
+        let name = self.literal_name(member)?;
+        let property = super::native::schema::property(self.snapshot, bound, &name)?;
+        let native = self.node(property.declaration?).native.as_deref()?;
+        let method = if write { native.set.clone() } else { native.get.clone() }?;
+        Some((bound, method))
     }
 
     fn is_accessor_property(&self, member: NodeId) -> bool {
@@ -49201,7 +49218,10 @@ impl<'a> FuncBuilder<'a> {
             };
             // A binding's property, read through the method its tag names.
             let accessor = self.kind_of(id) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
-                && children.last().is_some_and(|member| self.is_accessor_property(*member));
+                && children.last().is_some_and(|member| {
+                    self.is_accessor_property(*member)
+                        || children.first().is_some_and(|object| self.delegated_accessor(*object, *member, false).is_some())
+                });
             // An Objective-C property, read with its getter -- here only as
             // `a?.b`, whose arm sends it; the plain read is sent before this.
             let accessor = accessor
@@ -54656,6 +54676,15 @@ impl<'a> FuncBuilder<'a> {
         if let Some(method) = self.native_method(id) {
             return self.lower_native_method_call(id, (receiver, receiver_node), method, member, arguments).map(Some);
         }
+        if let Some((method, ty)) = self.delegated_method(receiver_node, member) {
+            // The call's arguments are the bound member's -- its optional
+            // parameters, its `@ntsDefault`s, its ABI types -- and not the ones
+            // lib.dom.d.ts declares, which the checker resolved the call to.
+            let outer = self.callee_signature.replace((id, ty));
+            let answer = self.lower_native_method_call(id, (receiver, receiver_node), method, member, arguments);
+            self.callee_signature = outer;
+            return answer.map(Some);
+        }
         if let Some(function) = self.called_method(id)? {
             return self.lower_called_method(id, Some(receiver), function, arguments).map(Some);
         }
@@ -56970,6 +56999,44 @@ impl<'a> FuncBuilder<'a> {
     /// declares (`@ntsProtocol`), called on a value of the protocol's type:
     /// Swift's `dataSource?.tableView(table, numberOfRowsInSection: 0)`, a
     /// message to whatever object conforms.
+    /// A method of a type the program uses and does not own, as the same-named
+    /// method of the type implementing it (`SemanticSnapshot::bound_types`):
+    /// `document.createElement("div")` is `nts:dom`'s `createElement`.
+    ///
+    /// The checker resolved the call to lib.dom.d.ts's declaration, which the
+    /// frontend never decodes, so the call has no callee to read tags from; the
+    /// receiver's binding is where the method is. Its members are found
+    /// through the bound type's intersection, so an inherited one (`Node`'s,
+    /// `EventTarget`'s) is found as the program's own call resolves it.
+    fn delegated_method(
+        &self,
+        receiver_node: NodeId,
+        member: NodeId,
+    ) -> Option<((NodeId, nts_semantic_schema::SignatureId), TypeId)> {
+        let bound = self.delegated_type(*self.snapshot.node_types.get(&receiver_node)?)?;
+        let name = self.literal_name(member)?;
+        let property = super::native::schema::property(self.snapshot, bound, &name)?;
+        let declaration = property.declaration?;
+        let TypeKind::Function(signature) = self.snapshot.types.get(property.ty.0 as usize)?.kind else {
+            return None;
+        };
+        let tagged = self.node(declaration).native.as_ref().is_some_and(|n| n.symbol.is_some() || n.listener.is_some());
+        let record = &self.snapshot.signatures[signature.0 as usize];
+        (tagged && self.is_native_instance_method(declaration, record)).then_some(((declaration, signature), property.ty))
+    }
+
+    /// The type implementing `ty`, where a binding implements it -- through a
+    /// `| null`, as the representation's own arm reads it.
+    fn delegated_type(&self, ty: TypeId) -> Option<TypeId> {
+        if let Some(bound) = self.snapshot.bound_types.get(&ty) {
+            return Some(*bound);
+        }
+        let TypeKind::Union(parts) = &self.snapshot.types.get(ty.0 as usize)?.kind else { return None };
+        let is_null = |part: &&TypeId| matches!(self.snapshot.types.get(part.0 as usize).map(|t| &t.kind), Some(TypeKind::Null));
+        let [payload] = parts.iter().filter(|part| !is_null(part)).collect::<Vec<_>>()[..] else { return None };
+        self.snapshot.bound_types.get(payload).copied()
+    }
+
     fn objc_protocol_member(&self, declaration: NodeId) -> bool {
         self.kind_of(declaration) == Some(syntax::METHOD_SIGNATURE) && self.declaring_protocol(declaration).is_some()
     }

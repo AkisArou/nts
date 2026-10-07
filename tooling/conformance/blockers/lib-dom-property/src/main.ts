@@ -1,4 +1,4 @@
-// expect: emit-c --rc -> a property read through a native pointer is not supported by this lowering yet
+// expect: emit-c --rc -> emits-c nts_dom_Document_get_childElementCount(
 //
 // lib.dom.d.ts bound by delegation (runtime/chromium/docs/lib-dom.md): a lib.dom.d.ts property read on a bound type lowers through the bound type's @ntsGet accessor of the same name.
 // Filed 2026-10-06 by the Chromium lane with the compiler lane's agreed
@@ -7,9 +7,9 @@
 // table maps it -- so each moves to its own refusal as the table lands, and
 // goes clean with its own piece.
 //
-// **Moved 2026-10-07**: the type now has its representation (`bound_types`),
-// so this stops at its own piece -- members and properties, step 3 of
-// MainClaude's plan.
+// **FIXED 2026-10-07, and kept as a guard**: `document.childElementCount` reads
+// `nts:dom`'s `_get_childElementCount` through the bound property's `@ntsGet`;
+// its `go` is the control's, byte for byte.
 //
 // Control, one difference: the same program against the generated nts:dom
 // module the overlay names, which compiles today (emit-c --napi --rc, clean):
