@@ -1,4 +1,8 @@
-// expect: NTS1001 a parameter of unrepresentable type (the type parameter `S`)
+// expect: nothing refused -- FIXED, kept as a guard
+//
+// **FIXED by landing-1 (20eaa7d74, 2026-10-06), and kept as a guard**: it
+// lowers and agrees with node on every case. The record follows unchanged.
+//
 //
 // A generic function handed to another function **as a value** never gets a copy
 // at the substitution its receiving parameter implies. `updateReducer`'s

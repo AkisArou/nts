@@ -1,4 +1,8 @@
-// expect: NTS1001 a generic function no call pins down (the type parameters `S`, `A`)
+// expect: nothing refused -- FIXED, kept as a guard
+//
+// **FIXED by landing-1 (20eaa7d74, 2026-10-06), and kept as a guard**: it
+// lowers and agrees with node on every case. The record follows unchanged.
+//
 //
 // **A generic caller that pins a generic callee with an explicit type argument
 // built as a union from its own type parameter pins nothing.** `update<S>` calls
