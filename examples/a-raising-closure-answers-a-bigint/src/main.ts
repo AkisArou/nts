@@ -20,11 +20,11 @@ function attempt(f: () => bigint): string {
 export function big(n: number): number {
   return attempt(() => {
     if (n > 2) throw new Error("x");
-    return BigInt(Math.trunc(n)) * 3n;
+    return BigInt(n | 0) * 3n;
   }).length;
 }
 
 /** The control: the same closure with no `throw`, which needs no raising copy. */
 export function plain(n: number): number {
-  return attempt(() => BigInt(Math.trunc(n)) * 3n).length;
+  return attempt(() => BigInt(n | 0) * 3n).length;
 }
