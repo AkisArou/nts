@@ -13232,15 +13232,7 @@ pub fn lower_with(
             eprintln!("  ARRIVAL {call}: {why}");
         }
     }
-    declare_interface_methods(&hierarchy, &mut lowered.program);
-    // **After the interface declarations, and the order is the whole of it.** A member's
-    // raising slot is filled from each layout's own ordinary entry, and for an *interface*
-    // root that entry is a declaration this pass has only just made -- so filling first
-    // found no `Sink#take` to suffix, fell back to the ordinary name, and left
-    // `Sink#take@raises` reachable from nothing for `reachable::prune` to remove. The
-    // backend then said `NTS2006 no declaration for `Sink#take@raises` to take a signature
-    // from`, which is the sentence `declare_interface_methods` exists to prevent.
-    fill_raising_member_slots(&hierarchy, &mut lowered.program);
+    finish_dispatch_tables(snapshot, &hierarchy, &mut lowered.program);
 
     publish_surface(&mut lowered, snapshot, &shared.naming, &module, entry);
 
@@ -13272,6 +13264,24 @@ pub fn lower_with(
     // program had not finished answering.
     lowered.program.record_parents = record_parents(snapshot, &hierarchy, &lowered.program);
     lowered
+}
+
+/// The last three steps of the dispatch tables, in the one order that works:
+/// the interfaces' declarations, then the raising slots filled from them, then
+/// every member slot's results made to agree.
+fn finish_dispatch_tables(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy, program: &mut Program) {
+    declare_interface_methods(hierarchy, program);
+    // **After the interface declarations, and the order is the whole of it.** A member's
+    // raising slot is filled from each layout's own ordinary entry, and for an *interface*
+    // root that entry is a declaration this pass has only just made -- so filling first
+    // found no `Sink#take` to suffix, fell back to the ordinary name, and left
+    // `Sink#take@raises` reachable from nothing for `reachable::prune` to remove. The
+    // backend then said `NTS2006 no declaration for `Sink#take@raises` to take a signature
+    // from`, which is the sentence `declare_interface_methods` exists to prevent.
+    fill_raising_member_slots(hierarchy, program);
+    // After both: a slot's entries -- the interface declarations and the raising
+    // copies among them -- are final, and every call through one is lowered.
+    virtual_returns::bridge(snapshot, hierarchy, program);
 }
 
 /// Give a nested function of a refused function its enclosing function's name,
@@ -14158,6 +14168,14 @@ fn closure_result_absent(snapshot: &SemanticSnapshot, closure: NodeId, returns: 
     let Some(result) = signature.map(|signature| signature.return_type) else {
         return Absent::Impossible;
     };
+    absent_of_result(snapshot, result)
+}
+
+/// What a null pointer standing for a value of the checker's type `result`
+/// means: `null` where its absences are `null` alone, `undefined` where
+/// `undefined` alone, and `Impossible` otherwise. A closure's signature and a
+/// virtual bridge's method (`virtual_returns`) both ask it.
+fn absent_of_result(snapshot: &SemanticSnapshot, result: TypeId) -> Absent {
     let members = match snapshot.types.get(result.0 as usize).map(|record| &record.kind) {
         Some(TypeKind::Union(members)) => members.clone(),
         _ => vec![result],
@@ -69156,6 +69174,7 @@ mod tests {
 
 mod assertions;
 mod bigint;
+mod virtual_returns;
 mod gobject;
 mod initialization;
 mod native_memory;
